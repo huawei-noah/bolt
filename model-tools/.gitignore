@@ -1,0 +1,7 @@
+build/*
+bin/*
+lib/*
+*.bolt
+*.prototxt
+*.caffemodel
+*.pyc

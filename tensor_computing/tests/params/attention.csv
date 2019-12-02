@@ -1,0 +1,3 @@
+#batch	seq_len	num_attention
+32	80	12
+1	100	12
