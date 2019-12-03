@@ -63,7 +63,7 @@ Before compilation,  you need to install some dependencies and set environment v
 
 Two ways of compilation are provided. For direct compilation, you can compile Bolt on arm devices directly binding the dependent libraries as dynamic libraries. For cross compilation, you can compile Bolt on x86 devices binding the dependent libraries as static libraries.
 
-More compilation details, please refer to INSTALL.md.
+More compilation details, please refer to [INSTALL.md](https://github.com/huawei-noah/bolt/blob/master/INSTALL.md).
 
 
 
@@ -85,51 +85,58 @@ Sequential model is a linear model. You can self-define a personalized model and
 
 ```c++
 int main(int argc, char* argv[]) {
-    if(2 != argc) {
+    char* imageDir = (char*)"";
+    if(argc != 2) {
         print_help(argv);
-    } else {
-        auto dir = argv[1];
+    }
+    else
+        imageDir = argv[1];
 
-        DataType dt = DT_F16;
-        const Arch A = NEON;
-        auto model = Sequential<A>(dt, "lenet");
+    const Arch A = ARM_A76;
+    DataType dt = DT_F16;
+    auto model = Sequential<A>(dt, "lenet");
 
-        auto op = Factory::createConvolutionActivation<A>(dt, 96, 11, 4, 5, Relu, Max, 3, 2, 0);
-        model.add(op);
+    auto op = Factory::createConvolution<A>(dt, 8, 5, 1, 2, ACTIVATION_NULL, ACTIVATION_NULL, Convolution_Pointwise, 1, 1);
+    model.add(op);
 
-        op = Factory::createConvolutionActivation<A>(dt, 256, 5, 1, 2, Relu, Max, 3, 2, 0);
-        model.add(op);
+    op = Factory::createPooling<A>(PoolingMode::Max, 2, 2, 0, RoundMode::CEIL);
+    model.add(op);
 
-        op = Factory::createConvolutionActivation<A>(dt, 384, 3, 1, 1, Relu);
-        model.add(op);
+    op = Factory::createConvolution<A>(dt, 8, 3, 1, 1, ACTIVATION_NULL, ACTIVATION_NULL, Convolution_Pointwise, 1, 1);
+    model.add(op);
 
-        op = Factory::createConvolutionActivation<A>(dt, 384, 3, 1, 1, Relu);
-        model.add(op);
+    op = Factory::createPooling<A>(PoolingMode::Max, 2, 2, 0, RoundMode::CEIL);
+    model.add(op);
 
-        op = Factory::createConvolutionActivation<A>(dt, 256, 3, 1, 1, Relu, Max, 3, 2, 0);
-        model.add(op);
+    op = Factory::createFullyConnectedEltwise<A>(dt, 10);
+    model.add(op);
 
-        op = Factory::createFullyConnected<A>(dt, 4096, Relu);
-        model.add(op);
+    op = Factory::createSoftmax<A>(dt);
+    model.add(op);
 
-        op = Factory::createFullyConnected<A>(dt, 1000);
-        model.add(op);
+    TensorDesc imageDesc = tensor4df(DT_F16, DF_NCHW, 1, 1, 8, 8);
 
-        op = Factory::createSoftmax<A>(dt);
-        model.add(op);
+    auto weight = (F16*)operator new(256*256*256*sizeof(F16));
+    for (int i = 0; i < 256*256*256; i++) {
+        weight[i] = 1;
+    }
+    U8* wPtr = (U8*)weight;
+    std::shared_ptr<U8> modelPtr(wPtr);
+    model.ready({imageDesc}, modelPtr);
 
-        auto desc = tensor3d(dt, 1, 256, 256);
-        U32 numBtyes = 0;
-        shared_ptr<U8> modelPtr;
-        model.ready({desc}, numBtyes, modelPtr);
+    // load images
+    Vec<Tensor> images;
+    load_images(imageDir, imageDesc, &images, BGR, 1.0);
 
-        auto inputs = model.get_input_tensors();
+    for (auto image: images) {
+        Vec<Tensor> input;
+        input.push_back(image);
+        model.set_input_tensors(input);
+
+        model.run();
+
         auto outputs = model.get_output_tensors();
-
-        for(auto file: list(dir)) {
-            load_image(file, &inputs);
-            model.run();
-        }
+        outputs[0].print<F16>();
     }
 
     return 0;
@@ -144,7 +151,7 @@ You can also load a trained cnn model, and deploy it on bolt.
 
 ```c++
 int main(int argc, char* argv[]){
-	// pass the file parameter upon on personalized situation 
+    // pass the file parameter upon on personalized situation 
 
     const Arch A = NEON;
     ModelSpec ms;
@@ -235,7 +242,7 @@ To the best of our knowledge, Bolt proves to be the fastest inference framework.
 
 Everyone can self-define new operators in Bolt. We welcome the community to contribute functionalities in tensor_computing, engine and model-tools to make Bolt more and more versatile.
 
-For more details, you can refer to DEVELOPER.md. We appreciate your contributions! Anyone who has contributed to Bolt will be recorded into the CONTRIBUTORS.md.
+For more details, you can refer to [DEVELOPER.md](https://github.com/huawei-noah/bolt/blob/master/DEVELOPER.md). We appreciate your contributions! Anyone who has contributed to Bolt will be recorded into the [CONTRIBUTORS.md](https://github.com/huawei-noah/bolt/blob/master/CONTRIBUTORS.md).
 
 
 
