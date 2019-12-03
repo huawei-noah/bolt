@@ -282,7 +282,8 @@ A: For the time being, Bolt only supports post-training int8 quantization. If qu
 
 Bolt refers to the following projects: [caffe](https://github.com/BVLC/caffe), [onnx](https://github.com/onnx/onnx), [protobuf](https://github.com/protocolbuffers/protobuf), [flatbuffers](https://github.com/google/flatbuffers), [ncnn](https://github.com/Tencent/ncnn), [mnn](https://github.com/alibaba/MNN), [dabnn](https://github.com/JDAI-CV/dabnn).
 
-
+## QQ Technology Group
+833345709
 
 ## License
 
