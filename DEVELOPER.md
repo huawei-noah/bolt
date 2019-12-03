@@ -96,73 +96,72 @@ In the tensor_computing project, you need to implement the actual "pooling" oper
 
 
    ```c++
-#include <cmath>
-#include "sys.h"
-#include "type.h"
-#include "tensor_desc.h"
-#include "error.h"
-#include "tensor_computing.h"
-#include "cpu/general/tensor_computing_general.h"
-#include "cpu/arm/tensor_computing_arm.h"
+    #include <cmath>
+    #include "sys.h"
+    #include "type.h"
+    #include "tensor_desc.h"
+    #include "error.h"
+    #include "tensor_computing.h"
+    #include "cpu/general/tensor_computing_general.h"
+    #include "cpu/arm/tensor_computing_arm.h"
 
-EE pooling_infer_output_size(TensorDesc inputDesc, PoolingDesc poolingDesc, TensorDesc* outputDesc)
-{
-    if (nullptr == outputDesc) {
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
+    EE pooling_infer_output_size(TensorDesc inputDesc, PoolingDesc poolingDesc, TensorDesc* outputDesc)
+    {
+        if (nullptr == outputDesc) {
+            CHECK_STATUS_WITH_RETURN(NULL_POINTER);
+        }
+        DataType idt;
+        DataFormat idf;
+        U32 in, ic, ih, iw;
+        CHECK_STATUS_WITH_RETURN(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+        U32 stride = poolingDesc.stride;
+        U32 padding = poolingDesc.padding;
+        U32 kernelSize = poolingDesc.kernelSize;
+        RoundMode rm = poolingDesc.rm;
+        U32 oh = 0, ow = 0;
+        switch (rm) {
+            case CEIL: {
+                oh = (U32)(ceil((double(ih + 2.0 * padding - kernelSize) / stride))) + 1;
+                ow = (U32)(ceil((double(iw + 2.0 * padding - kernelSize) / stride))) + 1;
+                break;
+            }
+            case FLOOR: {
+                oh = (U32)(floor((double(ih + 2.0 * padding - kernelSize) / stride))) + 1;
+                ow = (U32)(floor((double(iw + 2.0 * padding - kernelSize) / stride))) + 1;
+                break;
+            }
+            default: {
+                CHECK_STATUS_WITH_RETURN(NOT_SUPPORTED);
+            }
+        }
+        *outputDesc = tensor4df(idt, idf, in, ic, oh, ow);
+        return SUCCESS;
     }
-    DataType idt;
-    DataFormat idf;
-    U32 in, ic, ih, iw;
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    U32 stride = poolingDesc.stride;
-    U32 padding = poolingDesc.padding;
-    U32 kernelSize = poolingDesc.kernelSize;
-    RoundMode rm = poolingDesc.rm;
-    U32 oh = 0, ow = 0;
-    switch (rm) {
-        case CEIL: {
-            oh = (U32)(ceil((double(ih + 2.0 * padding - kernelSize) / stride))) + 1;
-            ow = (U32)(ceil((double(iw + 2.0 * padding - kernelSize) / stride))) + 1;
-            break;
-        }
-        case FLOOR: {
-            oh = (U32)(floor((double(ih + 2.0 * padding - kernelSize) / stride))) + 1;
-            ow = (U32)(floor((double(iw + 2.0 * padding - kernelSize) / stride))) + 1;
-            break;
-        }
-        default: {
-            CHECK_STATUS_WITH_RETURN(NOT_SUPPORTED);
-        }
-    }
-    *outputDesc = tensor4df(idt, idf, in, ic, oh, ow);
-    return SUCCESS;
-}
 
-EE pooling(TensorDesc inputDesc, const void* input, PoolingDesc poolingDesc, const void* scale, TensorDesc outputDesc, void* output, Arch arch)
-{
-    EE ret = SUCCESS;
-    switch (arch) {
-        case CPU_GENERAL:
-            ret = pooling_general(inputDesc, input,
-                                  poolingDesc,
+    EE pooling(TensorDesc inputDesc, const void* input, PoolingDesc poolingDesc, const void* scale, TensorDesc outputDesc, void* output, Arch arch)
+    {
+        EE ret = SUCCESS;
+        switch (arch) {
+            case CPU_GENERAL:
+                ret = pooling_general(inputDesc, input,
+                                      poolingDesc,
+                                      outputDesc, output);
+                break;
+            case ARM_A55:
+                ret = pooling_arm(inputDesc, input,
+                                  poolingDesc, scale,
                                   outputDesc, output);
-            break;
-        case ARM_A55:
-            ret = pooling_arm(inputDesc, input,
-                              poolingDesc, scale,
-                              outputDesc, output);
-            break;
-        case ARM_A76:
-            ret = pooling_arm(inputDesc, input,
-                              poolingDesc, scale,
-                              outputDesc, output);
-            break;
-        default:
-            ret = NOT_SUPPORTED;
+                break;
+            case ARM_A76:
+                ret = pooling_arm(inputDesc, input,
+                                  poolingDesc, scale,
+                                  outputDesc, output);
+                break;
+            default:
+                ret = NOT_SUPPORTED;
+        }
+        return ret;
     }
-    return ret;
-}
-
    ```
 
 - Thirdly, we encourage you to first implement a naive version and make sure your logical understanding is correct. You need to add a function declaration in `src/cpu/general/tensor_computing_general.h`:
