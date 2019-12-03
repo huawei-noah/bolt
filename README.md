@@ -51,7 +51,7 @@ fp16, int8, binary
 
 Bolt supports common neural networks such as Sequential, CNN, LSTM etc.
 
-Verified CV models include [squeezenet](https://github.com/Tencent/ncnn/tree/master/examples), [resnet50](https://github.com/KaimingHe/deep-residual-networks#models), [mobilenet_v1](https://github.com/shicai/MobileNet-Caffe), [mobilenet_v2](https://github.com/shicai/MobileNet-Caffe), [mobilenet_v3](https://github.com/jixing0415/caffe-mobilenet-v3), [birealnet18](https://github.com/JDAI-CV/dabnn) etc.
+Verified CV models include [squeezenet](https://github.com/forresti/SqueezeNet), [resnet50](https://github.com/KaimingHe/deep-residual-networks#models), [mobilenet_v1](https://github.com/shicai/MobileNet-Caffe), [mobilenet_v2](https://github.com/shicai/MobileNet-Caffe), [mobilenet_v3](https://github.com/jixing0415/caffe-mobilenet-v3), [birealnet18](https://github.com/JDAI-CV/dabnn) etc.
 
 Verified NLP models include lstm, [bert](https://github.com/google-research/bert), tinybert, [albert](https://github.com/google-research/google-research/tree/master/albert) etc. 
 
