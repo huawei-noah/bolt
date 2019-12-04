@@ -36,7 +36,7 @@ inline void mvm_row_tail(U32 N, U32 K, F16* matrix, F16* vector, F16* result) {
 
         vst1q_f16(tmp, res);
 
-        U32 sum = 0;
+        F16 sum = 0;
         for (U32 p = 0; p < 8; p++) {
             sum += tmp[p];
         }
