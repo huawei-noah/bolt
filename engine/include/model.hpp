@@ -73,6 +73,7 @@ public:
                     std::cerr << "\n[ERROR] encounter nan" << std::endl;
                     exit(0);
                 }
+                outputTensorPtr++;
             }
             std::cout << std::endl;
 #endif
