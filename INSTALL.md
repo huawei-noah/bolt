@@ -1,6 +1,14 @@
-# bolt build guide
+# Bolt build guide
 
 ## Prerequisites
+
+### cmake
+
+We use [cmake](https://cmake.org/) and [GNU make](https://www.gnu.org/software/make/) to build project.We have tested it on cmake v3.15.1 and GNU make v3.81.If your software is not the latest version, you can solve this problem by downloading latest software or modifying the bolt.cmake below and releated CMakeLists.txt.
+
+### compiler
+
+We use ARM 64bit compiler to compiler the project. You can compile the project on ARM development board by using direct compilation. You can also compile the project on X86 server by using crossing compilation and push the program to the android phone by using [ADB](https://developer.android.google.cn/studio/command-line/adb) tool. If you want to use cross compilation, you can download cross compiler from https://developer.arm.com/tools-and-software/open-source-software/developer-tools/gnu-toolchain/gnu-a/downloads, we use gcc-arm-8.3-2019.03-x86_64-aarch64-linux-gnu.
 
 ### image project prerequisites
 
@@ -8,21 +16,13 @@
 
 Download the CImg header file from [Github](https://github.com/dtschump/CImg), and set the **CImg_ROOT** shell enviroment variable.
 
-```bash
+```
 export CImg_ROOT=<directory>
 ```
 
-Please make sure you have installed **png, jpeg, X11, Xau, xcb, zlib** libraries.
+Please make sure you have installed **png, jpeg, X11, Xau, xcb, zlib** libraries. If you use direct compilation, you can install dependency library by using apt-get or yum. If you use cross compilation, you can refer the [build_dependency.sh](https://github.com/huawei-noah/bolt/blob/master/image/dependency/build_dependency.sh) in image project. You need to set these shell environment variables after installation.
 
-##### direct compile
-
-to be implemented
-
-##### cross compile
-
-You can refer the [dependency/build_dependency.sh]() in image project. You need to set these shell environment variables after install.
-
-```bash
+```
 export ZLIB_ROOT=<directory>
 export XAU_ROOT=<directory>
 export XCB_PROTO_ROOT=<directory>
@@ -36,54 +36,38 @@ export LD_LIBRARY_PATH=${ZLIB_ROOT}/lib:${XAU_ROOT}/lib:${XCB_PROTO_ROOT}/lib:${
 
 ### model-tools project prerequisites
 
-Please make sure you have install **protobuf** library and **protoc** exe.
+Please make sure you have installed **protobuf** library and **protoc** program. If you use direct compilation, you can install dependency library by using apt-get or yum. If you use cross compilation, you can refer the [build_dependency.sh](https://github.com/huawei-noah/bolt/blob/master/model-tools/dependency/build_dependency.sh) in model-tools project. You need to set these shell environment variables after installation.
 
-#### direct compile
-
-to be implemented
-
-#### cross compile
-
-You can refer the [dependency/build_dependency.sh]() in model-tools project. You need to set these shell environment variables after installation.
-
-```bash
+```
 export PROTOC_ROOT=<directory>
 export Protobuf_ROOT=<directory>
 
 export PATH=${PROTOC_ROOT}/bin:$PATH
 export PATH=${Protobuf_ROOT}/bin:$PATH
 export LD_LIBRARY_PATH=${Protobuf_ROOT}/lib:$LD_LIBRARY_PATH
-
 ```
 
 ## Download and Build
 
 ### Download
 
-```bash
-mkdir bolt
+```
+git clone https://github.com/huawei-noah/bolt.git
 cd bolt
 export BOLT_ROOT=`PWD`
-
-git clone https://gitlab.huawei.com/ee/universal/uni
-git clone https://gitlab.huawei.com/ee/deployment/model-tools
-git clone https://gitlab.huawei.com/ee/computing/image
-git clone https://gitlab.huawei.com/ee/computing/blas-enhance
-git clone https://gitlab.huawei.com/ee/computing/tensor_computing
-git clone https://gitlab.huawei.com/ee/deployment/engine
 ```
 
 **please checkout to specific branch after download.**
 
 ## Configure
 
-Please add these files.
+Please modify these configure files according to your environment.
 
 ### bolt.cmake
 
 content
 
-```bash
+```
 option(USE_CROSS_COMPILE "set use cross compile or not" ON)
 option(USE_DEBUG "set use debug information or not" OFF)
 option(USE_DYNAMIC_LIBRARY "set use dynamic library or not" OFF)
@@ -109,49 +93,10 @@ function (set_policy)
     cmake_policy(SET CMP0074 NEW)
 endfunction(set_policy)
 ```
-### CMakeLists.txt
-
-content
-
-```bash
-cmake_minimum_required(VERSION 3.2)
-
-file(GLOB BOLT_CONFIGURE_FILE $ENV{BOLT_ROOT}/bolt.cmake ${BOLT_ROOT}/bolt.cmake)
-if (BOLT_CONFIGURE_FILE)
-    include(${BOLT_CONFIGURE_FILE})
-endif (BOLT_CONFIGURE_FILE)
-
-
-project(bolt C CXX)
-
-
-add_subdirectory(blas-enhance)
-add_subdirectory(model-tools)
-add_subdirectory(tensor_computing)
-add_subdirectory(image)
-add_subdirectory(engine)
-
-add_dependencies(tensor_computing blas-enhance)
-add_dependencies(tensor_computing_static blas-enhance_static)
-add_dependencies(model-tools model-tools_caffe)
-add_dependencies(model-tools_static model-tools_caffe_static)
-add_dependencies(engine tensor_computing model-tools image)
-add_dependencies(engine_static tensor_computing_static model-tools_static image_static)
-
-install(TARGETS blas-enhance blas-enhance_static tensor_computing tensor_computing_static
-                model-tools model-tools_static model-tools_caffe model-tools_caffe_static
-                image image_static
-                engine engine_static
-                test_completeUT
-                classification
-        RUNTIME DESTINATION bin
-        LIBRARY DESTINATION lib
-        ARCHIVE DESTINATION lib)
-```
 
 ### Build
 
-```bash
+```
 mkdir build
 cd build
 cmake .. -DCMAKE_INSTALL_PREFIX=${BOLT_ROOT}
