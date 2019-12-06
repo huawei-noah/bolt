@@ -4,7 +4,7 @@
 
 ### cmake
 
-We use [cmake](https://cmake.org/) and [GNU make](https://www.gnu.org/software/make/) to build project.We have tested it on cmake v3.15.1 and GNU make v3.81.If your software is not the latest version, you can solve this problem by downloading latest software or modifying the bolt.cmake below and releated CMakeLists.txt.
+We use [cmake](https://cmake.org/) and [GNU make](https://www.gnu.org/software/make/) to build project.We have tested it on cmake v3.15.1 and GNU make v3.81. If your software is not the latest version, you may download the latest software or modify the bolt.cmake below as well as the releated CMakeLists.txt
 
 ### compiler
 
