@@ -14,34 +14,32 @@ caffe, onnx, tflite, pytorch (via onnx), tensorflow (via onnx).
 
 ### 2.2 Supported Operators
 
-| Operator       | Note |
-| -------------- | ---- |
-| Attention      |      |
-| BatchNorm      |      |
-| Clip           |      |
-| Concat         |      |
-| Convolution    |      |
-| Eltwise        |      |
-| Embedding      |      |
-| FullyConnected |      |
-| Gelu           |      |
-| HSigmoid       |      |
-| HSwish         |      |
-| LayerNorm      |      |
-| LSTM           |      |
-| MatMul         |      |
-| Multiply       |      |
-| Pad            |      |
-| Pooling        |      |
-| Relu           |      |
-| Relu6          |      |
-| Reshape        |      |
-| Scale          |      |
-| Sigmoid        |      |
-| Slice          |      |
-| Softmax        |      |
-| TanH           |      |
-| Transpose      |      |
+- Attention
+- BatchNorm
+- Clip
+- Concat
+- Convolution
+- Eltwise
+- Embedding
+- FullyConnected
+- Gelu
+- HSigmoid
+- HSwish
+- LayerNorm
+- LSTM
+- MatMul
+- Multiply
+- Pad
+- Pooling
+- Relu
+- Relu6
+- Reshape
+- Scale
+- Sigmoid
+- Slice
+- Softmax
+- TanH
+- ranspose
 
 ### 2.3 Supported Inference Precision Types
 
@@ -217,7 +215,7 @@ As mentioned above, you can get the classification results in 3 steps.
 
 ### 5.2 speed
 
-To the best of our knowledge, Bolt proves to be the fastest inference framework. Here we list the single-thread execution time measured on Kirin 810.
+We are trying our best to make Bolt the fastest inference framework. Here we list the single-thread execution time measured on Kirin 810.
 
 | model\speed  | fp16 on A55 | fp16 on A76 | int8 on A55   | int8 on A76  |
 | ------------ | ----------- | ----------- | ------------- | ------------ |
