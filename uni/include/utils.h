@@ -43,20 +43,24 @@ typedef enum UT_RANDOM_TYPE{
 // generate random data
 template<typename T>
 inline T ut_init_s(UT_RANDOM_TYPE type) {
-    if (type == UT_INIT_ZERO)
+    if (type == UT_INIT_ZERO) {
         return 0;
+    }
 
-    T s = 0;
+    T s = (T)0.5;
 
-    if (typeid(T) == typeid(F16) || typeid(T) == typeid(float))
+    if (s == 0.5) {
         s = rand() % 1000 / 1000.0 - 0.5;
-    if (typeid(T) == typeid(int))
+    } else {
         s = rand() % 100 - 50;
+    }
 
-    if (type == UT_INIT_NEG)
+    if (type == UT_INIT_NEG) {
         s = (s > 0) ? (s * -1) : s;
-    if (type == UT_INIT_POS)
+    }
+    if (type == UT_INIT_POS) {
         s = (s < 0) ? (s * -1) : s;
+    }
     return s;
 }
 
@@ -148,16 +152,9 @@ inline double ut_gflops(double ops, double time_ms) {
 // uniform log message
 template<typename T>
 inline void ut_log(char *call, double ops, double time_ms) {
-    char type[8];
-    if (typeid(T) == typeid(F16))
-        sprintf(type, "%s", "F16");
-    if (typeid(T) == typeid(INT8))
-        sprintf(type, "%s", "INT8");
-    if (typeid(T) == typeid(BIN8))
-        sprintf(type, "%s", "BNN");
     char buffer[200];
-    sprintf(buffer, "%s, %s,\tTIME %10.6lfms,\tGFLOPS %10.6lf",
-            type, call, time_ms,
+    sprintf(buffer, "%dbit, %s,\tTIME %10.6lfms,\tGFLOPS %10.6lf",
+            sizeof(T)*8, call, time_ms,
             ut_gflops(ops, time_ms));
     std::cout << buffer << std::endl;
 }

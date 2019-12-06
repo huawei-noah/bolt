@@ -18,7 +18,9 @@
 #include "error.h"
 #include "cpu/arm/tensor_computing_arm.h"
 #include "cpu/arm/fp16/convolution_fp16.h"
+#ifdef _USE_INT8
 #include "cpu/arm/int8/convolution_int8.h"
+#endif
 #include "cpu/arm/bnn/convolution_bnn.h"
 
 EE convolution_infer_forward_algorithm_arm(TensorDesc inputDesc, TensorDesc filterDesc, TensorDesc outputDesc,
@@ -32,10 +34,12 @@ EE convolution_infer_forward_algorithm_arm(TensorDesc inputDesc, TensorDesc filt
             ret = convolution_infer_forward_algorithm_fp16(inputDesc, filterDesc, outputDesc, convDesc, policy, algorithm);
             break;
         }
+#ifdef _USE_INT8
         case DT_I8: {
             ret = convolution_infer_forward_algorithm_fp16(inputDesc, filterDesc, outputDesc, convDesc, policy, algorithm);
             break;
         }
+#endif
         case DT_DOREFA: {
             ret = convolution_infer_forward_algorithm_bnn(inputDesc, filterDesc, outputDesc, convDesc, policy, algorithm);
             break;
@@ -60,10 +64,12 @@ EE convolution_transform_filter_bytes_arm(TensorDesc filterDesc, ConvolutionForw
             ret = convolution_transform_filter_bytes_fp16(filterDesc, algorithm, bytes);
             break;
         }
+#ifdef _USE_INT8
         case DT_I8: {
             ret = convolution_transform_filter_bytes_int8(filterDesc, algorithm, bytes);
             break;
         }
+#endif
         case DT_DOREFA: {
             ret = convolution_transform_filter_bytes_bnn(filterDesc, algorithm, bytes);
             break;
@@ -89,6 +95,7 @@ EE convolution_transform_filter_arm(TensorDesc filterDesc, const void* filter,
             ret = convolution_transform_filter_fp16(filterDesc, (F16*)filter, algorithm, ftmDesc, (F16*)filterTransformed);
             break;
         }
+#ifdef _USE_INT8
         case DT_I8: {
             ret = convolution_transform_filter_int8(filterDesc, filter, algorithm, ftmDesc, filterTransformed);
             break;
@@ -97,6 +104,7 @@ EE convolution_transform_filter_arm(TensorDesc filterDesc, const void* filter,
             ret = convolution_transform_filter_int8(filterDesc, filter, algorithm, ftmDesc, filterTransformed);
             break;
         }
+#endif
         case DT_DOREFA: {
             ret = convolution_transform_filter_bnn(filterDesc, (BIN8*)filter, ftmDesc, (BIN8*)filterTransformed);
             break;
@@ -123,10 +131,12 @@ EE convolution_infer_forward_tmp_bytes_arm(TensorDesc inputDesc, TensorDesc filt
             ret = convolution_infer_forward_tmp_bytes_fp16(inputDesc, filterDesc, outputDesc, convDesc, algorithm, bytes);
             break;
         }
+#ifdef _USE_INT8
         case DT_I8: {
             ret = convolution_infer_forward_tmp_bytes_int8(inputDesc, filterDesc, outputDesc, convDesc, algorithm, bytes);
             break;
         }
+#endif
         case DT_DOREFA: {
             ret = convolution_infer_forward_tmp_bytes_bnn(inputDesc, filterDesc, outputDesc, convDesc, algorithm, bytes);
             break;
@@ -168,6 +178,7 @@ EE convolution_arm(TensorDesc inputDesc, void* input,
                                    arch);
             break;
         }
+#ifdef _USE_INT8
         case DT_I8: {
             ret = convolution_int8(inputDesc, (INT8*)input,
                                    filterDesc, (INT8*)filter,
@@ -181,6 +192,7 @@ EE convolution_arm(TensorDesc inputDesc, void* input,
                                    arch);
             break;
         }
+#endif
         case DT_DOREFA: {
             ret = convolution_bnn(inputDesc, (F16*)input,
                                          filterDesc, (BIN8*)filter,

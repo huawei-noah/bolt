@@ -18,7 +18,9 @@
 #include "error.h"
 #include "cpu/arm/tensor_computing_arm.h"
 #include "cpu/arm/fp16/concat_fp16.h"
+#ifdef _USE_INT8
 #include "cpu/arm/int8/concat_int8.h"
+#endif
 
 EE concat_arm(std::vector<TensorDesc> inputDesc, std::vector<void*> input, std::vector<F16> inputScale,
     TensorDesc outputDesc, void* output, F16* outputScale, U32 concatDim)
@@ -31,12 +33,14 @@ EE concat_arm(std::vector<TensorDesc> inputDesc, std::vector<void*> input, std::
                               concatDim);
             break;
         }
+#ifdef _USE_INT8
         case DT_I8: {
             ret = concat_int8(inputDesc, input, inputScale,
                               outputDesc, output, outputScale,
                               concatDim);
             break;
         }
+#endif
         default:
             ret = NOT_SUPPORTED;
             break;

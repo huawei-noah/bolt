@@ -18,7 +18,9 @@
 #include "error.h"
 #include "cpu/arm/tensor_computing_arm.h"
 #include "cpu/arm/fp16/pooling_fp16.h"
+#ifdef _USE_INT8
 #include "cpu/arm/int8/pooling_int8.h"
+#endif
 
 EE pooling_arm(TensorDesc inputDesc, const void* input, PoolingDesc poolingDesc, const void* scale, TensorDesc outputDesc, void* output)
 {
@@ -30,12 +32,14 @@ EE pooling_arm(TensorDesc inputDesc, const void* input, PoolingDesc poolingDesc,
                                outputDesc, output);
             break;
         }
+#ifdef _USE_INT8
         case DT_I8: {
             ret = pooling_int8(inputDesc, input, (F16*)scale,
                                poolingDesc,
                                outputDesc, output, ((F16*)scale)+1);
             break;
         }
+#endif
         default:
             ret = NOT_SUPPORTED;
             break;

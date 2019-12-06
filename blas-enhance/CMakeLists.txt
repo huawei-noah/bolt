@@ -37,4 +37,6 @@ if (USE_MALI)
 endif(USE_MALI)
 
 add_subdirectory(src)
-add_subdirectory(tests)
+if (BUILD_TEST)
+    add_subdirectory(tests)
+endif(BUILD_TEST)

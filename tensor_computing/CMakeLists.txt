@@ -38,4 +38,6 @@ elseif (USE_NEON)
 endif(USE_INT8)
 
 add_subdirectory(src)
-add_subdirectory(tests)
+if (BUILD_TEST)
+    add_subdirectory(tests)
+endif(BUILD_TEST)

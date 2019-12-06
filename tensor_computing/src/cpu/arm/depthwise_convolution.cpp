@@ -18,7 +18,9 @@
 #include "error.h"
 #include "cpu/arm/tensor_computing_arm.h"
 #include "cpu/arm/fp16/depthwise_convolution_fp16.h"
+#ifdef _USE_INT8
 #include "cpu/arm/int8/depthwise_convolution_int8.h"
+#endif
 
 EE depthwise_convolution_infer_forward_algorithm_arm(TensorDesc inputDesc, TensorDesc filterDesc, TensorDesc outputDesc,
     ConvolutionDesc convDesc, ConvolutionPolicy policy, DepthwiseConvolutionForwardAlgorithm *algorithm, DataType targetDataType)
@@ -31,10 +33,12 @@ EE depthwise_convolution_infer_forward_algorithm_arm(TensorDesc inputDesc, Tenso
             ret = depthwise_convolution_infer_forward_algorithm_fp16(inputDesc, filterDesc, outputDesc, convDesc, policy, algorithm);
             break;
         }
+#ifdef _USE_INT8
         case DT_I8: {
             ret = depthwise_convolution_infer_forward_algorithm_int8(inputDesc, filterDesc, outputDesc, convDesc, policy, algorithm);
             break;
         }
+#endif
         default:
             ret = NOT_SUPPORTED;
             break;
@@ -51,10 +55,12 @@ EE depthwise_convolution_transform_filter_bytes_arm(TensorDesc filterDesc, Depth
             ret = depthwise_convolution_transform_filter_bytes_fp16(filterDesc, algorithm, bytes);
             break;
         }
+#ifdef _USE_INT8
         case DT_I8: {
             ret = depthwise_convolution_transform_filter_bytes_int8(filterDesc, algorithm, bytes);
             break;
         }
+#endif
         default:
             ret = NOT_SUPPORTED;
             break;
@@ -72,10 +78,12 @@ EE depthwise_convolution_transform_filter_arm(TensorDesc filterDesc, const void*
             ret = depthwise_convolution_transform_filter_fp16(filterDesc, (F16*)filter, algorithm, ftmDesc, (F16*)filterTransformed);
             break;
         }
+#ifdef _USE_INT8
         case DT_I8: {
             ret = depthwise_convolution_transform_filter_int8(filterDesc, (INT8*)filter, algorithm, ftmDesc, (INT8*)filterTransformed);
             break;
         }
+#endif
         default:
             ret = NOT_SUPPORTED;
             break;
@@ -94,10 +102,12 @@ EE depthwise_convolution_infer_forward_tmp_bytes_arm(TensorDesc inputDesc, Tenso
             ret = depthwise_convolution_infer_forward_tmp_bytes_fp16(inputDesc, filterDesc, outputDesc, convDesc, algorithm, bytes);
             break;
         }
+#ifdef _USE_INT8
         case DT_I8: {
             ret = depthwise_convolution_infer_forward_tmp_bytes_int8(inputDesc, filterDesc, outputDesc, convDesc, algorithm, bytes);
             break;
         }
+#endif
         default:
             ret = NOT_SUPPORTED;
             break;
@@ -132,6 +142,7 @@ EE depthwise_convolution_arm(TensorDesc inputDesc, void* input,
                                    arch);
             break;
         }
+#ifdef _USE_INT8
         case DT_I8: {
             ret = depthwise_convolution_int8(inputDesc, (INT8*)input,
                                    filterDesc, (INT8*)filter,
@@ -145,6 +156,7 @@ EE depthwise_convolution_arm(TensorDesc inputDesc, void* input,
                                    arch);
             break;
         }
+#endif
         default:
             ret = NOT_SUPPORTED;
             break;
