@@ -191,7 +191,7 @@ inline EE convolution_transform_filter_fp16(TensorDesc filterDesc, const F16* fi
             ftmDataFormat = DF_HWNCN16;
             break;
         case CONVOLUTION_ALGORITHM_DIRECT:
-            ftmDataFormat = DF_NHWCN16;
+            ftmDataFormat = DF_NCHWN16;
             break;
         case CONVOLUTION_ALGORITHM_GEMM:
             ftmDataFormat = DF_NHWCN16;
