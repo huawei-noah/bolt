@@ -2,13 +2,13 @@
 
 ## 1 Introduction
 
-Bolt is a light-weight inference framework for mobile devices. Bolt, as a universal deployment platform for all kinds of neural networks, aims to minimize the inference runtime as much as possible. Higher speed, better security and more efficient memory management are the advantages that Bolt strives to provide.
+Bolt is a light-weight inference toolbox for mobile devices. Bolt, as a universal deployment tool for all kinds of neural networks, aims to minimize the inference runtime as much as possible. Higher speed, better security and more efficient memory management are the advantages that Bolt strives to provide.
 
 
 
 ## 2 Features
 
-### 2.1 Supported Frameworks
+### 2.1 Supported Deep Learning Platform
 
 caffe, onnx, tflite, pytorch (via onnx), tensorflow (via onnx). 
 
@@ -215,7 +215,7 @@ As mentioned above, you can get the classification results in 3 steps.
 
 ### 5.2 speed
 
-We are working to make Bolt the fastest inference framework. Here we list the single-thread execution time measured on Kirin 810.
+Here we list the single-thread execution time measured on Kirin 810.
 
 | model\speed  | fp16 on A55 | fp16 on A76 | int8 on A55   | int8 on A76  |
 | ------------ | ----------- | ----------- | ------------- | ------------ |
