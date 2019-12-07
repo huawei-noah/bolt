@@ -39,7 +39,7 @@ caffe, onnx, tflite, pytorch (via onnx), tensorflow (via onnx).
 - Slice
 - Softmax
 - TanH
-- ranspose
+- Transpose
 
 ### 2.3 Supported Inference Precision Types
 
@@ -215,7 +215,7 @@ As mentioned above, you can get the classification results in 3 steps.
 
 ### 5.2 speed
 
-We are trying our best to make Bolt the fastest inference framework. Here we list the single-thread execution time measured on Kirin 810.
+We are working to make Bolt the fastest inference framework. Here we list the single-thread execution time measured on Kirin 810.
 
 | model\speed  | fp16 on A55 | fp16 on A76 | int8 on A55   | int8 on A76  |
 | ------------ | ----------- | ----------- | ------------- | ------------ |
