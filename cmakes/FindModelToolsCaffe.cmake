@@ -1,0 +1,33 @@
+set(MODEL_TOOLS_PROJECT_NAME "model-tools")
+unset(MODEL_TOOLS_ROOT)
+find_path(MODEL_TOOLS_ROOT NAMES ${MODEL_TOOLS_PROJECT_NAME} HINTS ${BOLT_ROOT} $ENV{BOLT_ROOT})
+set(MODEL_TOOLS_ROOT "${MODEL_TOOLS_ROOT}/${MODEL_TOOLS_PROJECT_NAME}")
+
+if (USE_DYNAMIC_LIBRARY)
+    set(MODEL_TOOLS_CAFFE_LIBRARY "${MODEL_TOOLS_ROOT}/lib/lib${MODEL_TOOLS_PROJECT_NAME}_caffe.so")
+else (USE_DYNAMIC_LIBRARY)
+    set(MODEL_TOOLS_CAFFE_LIBRARY "${MODEL_TOOLS_ROOT}/lib/lib${MODEL_TOOLS_PROJECT_NAME}_caffe.a")
+endif (USE_DYNAMIC_LIBRARY)
+
+if (MODEL_TOOLS_CAFFE_LIBRARY)
+    set(MODEL_TOOLS_CAFFE_FOUND true)
+endif (MODEL_TOOLS_CAFFE_LIBRARY)
+
+find_package(Protobuf)
+
+if (MODEL_TOOLS_CAFFE_FOUND)
+    if (USE_GNU_GCC)
+        set(MODEL_TOOLS_CAFFE_LIBRARIES "${MODEL_TOOLS_CAFFE_LIBRARY};${Protobuf_LIBRARY};-lpthread")
+    endif(USE_GNU_GCC)
+    if (USE_LLVM_CLANG)
+        set(MODEL_TOOLS_CAFFE_LIBRARIES "${MODEL_TOOLS_CAFFE_LIBRARY};${Protobuf_LIBRARY};-lz")
+    endif(USE_LLVM_CLANG)
+
+    include_directories(include ${Protobuf_INCLUDE_DIR})
+    message(STATUS "Found ${MODEL_TOOLS_PROJECT_NAME}_caffe: ${MODEL_TOOLS_CAFFE_LIBRARY}")
+else (MODEL_TOOLS_CAFFE_FOUND)
+    message(FATAL_ERROR "
+FATAL: can not find lib${MODEL_TOOLS_PROJECT_NAME}_caffe.* library in <BOLT_ROOT>/model-tools/lib directory,
+       please set shell or cmake environment variable BOLT_ROOT.
+    ")
+endif (MODEL_TOOLS_CAFFE_FOUND)

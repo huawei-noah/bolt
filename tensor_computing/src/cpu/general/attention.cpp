@@ -13,17 +13,30 @@
 
 
 #include "cpu/general/tensor_computing_general.h"
+#include "cpu/general/common_general.h"
 
-EE attention(U32 batch, U32 attentionNum, I32 sequenceLength, const F16 *input, F16 *output)
+template<typename T>
+EE attention(U32 batch, U32 numHeads, U32 fromSequenceLength, U32 toSequenceLength, const T *input, T *output)
 {
-    for (U32 n = 0; n < batch; n++) {
-        for (U32 i = 0; i < attentionNum; i++) {
-            for (I32 j = 0; j < sequenceLength; j++) {
-                for (I32 k = 0; k < sequenceLength; k++) {
-                    F16 value = input[k];
+    if (nullptr == input || nullptr == output)
+        CHECK_STATUS(NULL_POINTER);
 
-                    U32 index = (((n * attentionNum + i)*sequenceLength + j)*sequenceLength + k);
-                    output[index] = (1 - value) * -10000.0;
+    T minValue = -10000.0;
+    U32 count = array_sum<T>(input, toSequenceLength);
+    U32 valid = UNI_MIN(count, fromSequenceLength);
+    for (U32 n = 0; n < batch; n++) {
+        for (U32 i = 0; i < numHeads; i++) {
+            for (U32 j = 0; j < valid; j++) {
+                for (U32 k = 0; k < toSequenceLength; k++) {
+                    T value = input[n*toSequenceLength + k];
+                    U32 index = (((n * numHeads + i)*fromSequenceLength + j)*toSequenceLength + k);
+                    output[index] = (1 - value) * minValue;
+                }
+            }
+            for (U32 j = valid; j < fromSequenceLength; j++) {
+                for (U32 k = 0; k < toSequenceLength; k++) {
+                    U32 index = (((n * numHeads + i)*fromSequenceLength + j)*toSequenceLength + k);
+                    output[index] = minValue;
                 }
             }
         }
@@ -33,23 +46,27 @@ EE attention(U32 batch, U32 attentionNum, I32 sequenceLength, const F16 *input, 
 
 EE attention_general(TensorDesc inputDesc, const void *input, TensorDesc outputDesc, void *output)
 {
-    if (nullptr == input || nullptr == output)
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
-
     DataType dt;
     DataFormat df;
-    U32 batch, attentionNum, fromSequenceLength, toSequenceLength;
+    U32 batch, numHeads, fromSequenceLength, toSequenceLength;
     CHECK_REQUIREMENT(tensorIs2d(inputDesc));
     CHECK_REQUIREMENT(tensorIs4d(outputDesc));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(outputDesc, &dt, &df, &batch, &attentionNum, &fromSequenceLength, &toSequenceLength));
-    CHECK_REQUIREMENT(fromSequenceLength == toSequenceLength);
+    CHECK_STATUS(tensor4dGet(outputDesc, &dt, &df, &batch, &numHeads, &fromSequenceLength, &toSequenceLength));
 
     EE ret = SUCCESS;
     switch (dt) {
+#ifdef _USE_FP16
         case DT_F16: {
-            ret = attention(batch, attentionNum, fromSequenceLength, (const F16*)input, (F16*)output);
+            ret = attention<F16>(batch, numHeads, fromSequenceLength, toSequenceLength, (const F16*)input, (F16*)output);
             break;
         }
+#endif
+#ifdef _USE_FP32
+        case DT_F32: {
+            ret = attention<F32>(batch, numHeads, fromSequenceLength, toSequenceLength, (const F32*)input, (F32*)output);
+            break;
+        }
+#endif
         default:
             ret = NOT_SUPPORTED;
             break;

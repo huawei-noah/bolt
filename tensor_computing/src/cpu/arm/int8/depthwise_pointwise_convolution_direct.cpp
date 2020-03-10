@@ -12,12 +12,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#include "sys.h"
-#include "type.h"
-#include "error.h"
-#include "tensor_desc.h"
-
-#include "cpu/arm/int8/depthwise_convolution_int8.h"
+#ifdef _USE_INT8
+#include "cpu/arm/int8/depthwise_convolution.h"
 
 EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
     TensorDesc filterDesc, const INT8* filterArray,
@@ -38,22 +34,26 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
     U32 in, ic, ih, iw;
     U32 fn, fc, fh, fw;
     U32 on, oc, oh, ow;
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
-    U32 stride = convDesc.stride;
-    U32 padding = convDesc.padding;
+    CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+    CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
+    CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
+    U32 strideH = convDesc.stride_h;
+    U32 strideW = convDesc.stride_w;
+    U32 paddingT = convDesc.padding_top;
+    U32 paddingB = convDesc.padding_bottom;
+    U32 paddingL = convDesc.padding_left;
+    U32 paddingR = convDesc.padding_right;
+    U32 dilateH = convDesc.dilatedRate_h;
+    U32 dilateW = convDesc.dilatedRate_w;
 
     if (fdf != DF_CHWC8_NCN8C4)
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
-    if (!(ic == fc && oc == fn))
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
+        CHECK_STATUS(NOT_MATCH);
 
     oc /= 8;
     ic /= 8;
 
-    U32 ih_pad = ih + 2*padding;
-    U32 iw_pad = iw + 2*padding;
+    U32 ih_pad = ih + paddingT + paddingB;
+    U32 iw_pad = iw + paddingL + paddingR;
     U32 ihiw = ih*iw;
     I32 ohow = oh*ow;
     INT8 *pwArray = (INT8*)tmp + ic*ih_pad*iw_pad*8;
@@ -65,20 +65,20 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
         INT8 *inArray_pad_mov = inArray_pad;
         INT8 *inArray_mov = inArray + n*ic*ihiw*8;
         for (U32 c = 0; c < ic; c++) {
-            for (U32 h = 0; h < padding; h++) {
+            for (U32 h = 0; h < paddingT; h++) {
                 memset(inArray_pad_mov, 0, iw_pad*8*bytesOf(idt));
                 inArray_pad_mov += iw_pad*8;
             }
-            for (U32 h = padding; h < ih_pad - padding; h++) {
-                memset(inArray_pad_mov, 0, padding*8*bytesOf(idt));
-                inArray_pad_mov += padding*8;
+            for (U32 h = paddingT; h < ih_pad - paddingB; h++) {
+                memset(inArray_pad_mov, 0, paddingL*8*bytesOf(idt));
+                inArray_pad_mov += paddingL*8;
                 memcpy(inArray_pad_mov, inArray_mov, iw*8*bytesOf(idt));
                 inArray_pad_mov += iw*8;
                 inArray_mov += iw*8;
-                memset(inArray_pad_mov, 0, padding*8*bytesOf(idt));
-                inArray_pad_mov += padding*8;
+                memset(inArray_pad_mov, 0, paddingR*8*bytesOf(idt));
+                inArray_pad_mov += paddingR*8;
             }
-            for (U32 h = ih_pad - padding; h < ih_pad; h++) {
+            for (U32 h = ih_pad - paddingB; h < ih_pad; h++) {
                 memset(inArray_pad_mov, 0, iw_pad*8*bytesOf(idt));
                 inArray_pad_mov += iw_pad*8;
             }
@@ -92,30 +92,30 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
 
             // ohow / 12
             for (I32 hw = 0; hw < ohow-11; hw+=12) {
-                U32 in_h_0 = hw/ow*stride;
-                U32 in_w_0 = hw%ow*stride;
-                U32 in_h_1 = (hw+1)/ow*stride;
-                U32 in_w_1 = (hw+1)%ow*stride;
-                U32 in_h_2 = (hw+2)/ow*stride;
-                U32 in_w_2 = (hw+2)%ow*stride;
-                U32 in_h_3 = (hw+3)/ow*stride;
-                U32 in_w_3 = (hw+3)%ow*stride;
-                U32 in_h_4 = (hw+4)/ow*stride;
-                U32 in_w_4 = (hw+4)%ow*stride;
-                U32 in_h_5 = (hw+5)/ow*stride;
-                U32 in_w_5 = (hw+5)%ow*stride;
-                U32 in_h_6 = (hw+6)/ow*stride;
-                U32 in_w_6 = (hw+6)%ow*stride;
-                U32 in_h_7 = (hw+7)/ow*stride;
-                U32 in_w_7 = (hw+7)%ow*stride;
-                U32 in_h_8 = (hw+8)/ow*stride;
-                U32 in_w_8 = (hw+8)%ow*stride;
-                U32 in_h_9 = (hw+9)/ow*stride;
-                U32 in_w_9 = (hw+9)%ow*stride;
-                U32 in_h_10 = (hw+10)/ow*stride;
-                U32 in_w_10 = (hw+10)%ow*stride;
-                U32 in_h_11 = (hw+11)/ow*stride;
-                U32 in_w_11 = (hw+11)%ow*stride;
+                U32 in_h_0 = hw/ow*strideH;
+                U32 in_w_0 = hw%ow*strideW;
+                U32 in_h_1 = (hw+1)/ow*strideH;
+                U32 in_w_1 = (hw+1)%ow*strideW;
+                U32 in_h_2 = (hw+2)/ow*strideH;
+                U32 in_w_2 = (hw+2)%ow*strideW;
+                U32 in_h_3 = (hw+3)/ow*strideH;
+                U32 in_w_3 = (hw+3)%ow*strideW;
+                U32 in_h_4 = (hw+4)/ow*strideH;
+                U32 in_w_4 = (hw+4)%ow*strideW;
+                U32 in_h_5 = (hw+5)/ow*strideH;
+                U32 in_w_5 = (hw+5)%ow*strideW;
+                U32 in_h_6 = (hw+6)/ow*strideH;
+                U32 in_w_6 = (hw+6)%ow*strideW;
+                U32 in_h_7 = (hw+7)/ow*strideH;
+                U32 in_w_7 = (hw+7)%ow*strideW;
+                U32 in_h_8 = (hw+8)/ow*strideH;
+                U32 in_w_8 = (hw+8)%ow*strideW;
+                U32 in_h_9 = (hw+9)/ow*strideH;
+                U32 in_w_9 = (hw+9)%ow*strideW;
+                U32 in_h_10 = (hw+10)/ow*strideH;
+                U32 in_w_10 = (hw+10)%ow*strideW;
+                U32 in_h_11 = (hw+11)/ow*strideH;
+                U32 in_w_11 = (hw+11)%ow*strideW;
 
                 I32 *pw_pack_0 = dw_out + hw*ic*8 + c*12*8;
                 I32 *pw_pack_1 = pw_pack_0 + 48; // Second half
@@ -127,22 +127,6 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                     "ldr d30, [%[b], #16]\n"       //b_1
                     "ldr  x2, [%[b], #24]\n"
                     "ins v30.d[1], x2\n"
-            /* Layout
-            5   6
-            7   8
-            9   10
-            11  12
-
-            13  14
-            15  16
-            17  18
-            19  20
-            
-            21  22
-            23  24
-            25  26
-            27  28
-            */
                     "mov  v5.16b, v29.16b\n"
                     "mov  v7.16b, v29.16b\n"
                     "mov  v9.16b, v29.16b\n"
@@ -170,13 +154,13 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                     "mov  v28.16b, v30.16b\n"
                     :
                     :[b]"r"(b)
-                    :"memory", "cc", "q5", "q6", "q7", "q8", "q9", "q10", "q11", "q12", "q13", "q14", "q15", "q16", "q17", "q18", "q19", "q20", "q21", "q22", "q23", "q24", "q25", "q26", "q27", "q28", "q29", "q30", "x1", "x2"
+                    :"memory", "cc", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23", "v24", "v25", "v26", "v27", "v28", "v29", "v30", "x1", "x2"
                 );
 
                 for (U32 fh_idx = 0; fh_idx < fh; fh_idx++) {
                     for (U32 fw_idx = 0; fw_idx < fw; fw_idx++) {
                         const INT8 *f_0 = f + fh_idx*fw*8 + fw_idx*8;
-                        INT8 *in_idx = in_pad + fh_idx*iw_pad*8 + fw_idx*8;
+                        INT8 *in_idx = in_pad + fh_idx*dilateH*iw_pad*8 + fw_idx*dilateW*8;
                         INT8 *in_0 = in_idx + in_h_0*iw_pad*8 + in_w_0*8;
                         INT8 *in_1 = in_idx + in_h_1*iw_pad*8 + in_w_1*8;
                         INT8 *in_2 = in_idx + in_h_2*iw_pad*8 + in_w_2*8;
@@ -257,7 +241,7 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                              [in10]"r"(in_10),
                              [in11]"r"(in_11),
                              [f0]"r"(f_0)
-                            :"memory", "cc", "q0", "q1", "q2", "q5", "q6", "q7", "q8", "q9", "q10", "q11", "q12", "q13", "q14", "q15", "q16", "q17", "q18", "q19", "q20", "q21", "q22", "q23", "q24", "q25", "q26", "q27", "q28", "q29", "q30"
+                            :"memory", "cc", "v0", "v1", "v2", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23", "v24", "v25", "v26", "v27", "v28", "v29", "v30"
                         );
                     }
                 }
@@ -297,7 +281,7 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                             "smax v28.4s, v0.4s, v28.4s\n"
                             :
                             :
-                            :"memory", "cc", "q0", "q5", "q6", "q7", "q8", "q9", "q10", "q11", "q12", "q13", "q14", "q15", "q16", "q17", "q18", "q19", "q20", "q21", "q22", "q23", "q24", "q25", "q26", "q27", "q28"
+                            :"memory", "cc", "v0", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23", "v24", "v25", "v26", "v27", "v28"
                         );
                         break;
                     }
@@ -437,7 +421,7 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                             :
                             :[in0]"r"(pw_in0),
                              [in1]"r"(pw_in1)
-                            :"memory", "cc", "q0", "q5", "q6", "q7", "q8", "q9", "q10", "q11", "q12", "q13", "q14", "q15", "q16", "q17", "q18", "q19", "q20", "q21", "q22", "q23", "q24", "q25", "q26", "q27", "q28", "q30"
+                            :"memory", "cc", "v0", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23", "v24", "v25", "v26", "v27", "v28", "v30"
                         );
                         break;
                     }
@@ -475,7 +459,7 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                         :
                         :[pw0]"r"(pw_pack_0),
                          [pw1]"r"(pw_pack_1)
-                        :"memory", "cc", "q5", "q6", "q7", "q8", "q9", "q10", "q11", "q12", "q13", "q14", "q15", "q16", "q17", "q18", "q19", "q20", "q21", "q22", "q23", "q24", "q25", "q26", "q27", "q28"
+                        :"memory", "cc", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23", "v24", "v25", "v26", "v27", "v28"
                     );
                 }
             }
@@ -486,22 +470,22 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
 
             if (ohow_tail >= 8) {
                 U32 hw = ohow_s;
-                U32 in_h_0 = hw/ow*stride;
-                U32 in_w_0 = hw%ow*stride;
-                U32 in_h_1 = (hw+1)/ow*stride;
-                U32 in_w_1 = (hw+1)%ow*stride;
-                U32 in_h_2 = (hw+2)/ow*stride;
-                U32 in_w_2 = (hw+2)%ow*stride;
-                U32 in_h_3 = (hw+3)/ow*stride;
-                U32 in_w_3 = (hw+3)%ow*stride;
-                U32 in_h_4 = ((hw+4)/ow)*stride;
-                U32 in_w_4 = ((hw+4)%ow)*stride;
-                U32 in_h_5 = ((hw+5)/ow)*stride;
-                U32 in_w_5 = ((hw+5)%ow)*stride;
-                U32 in_h_6 = ((hw+6)/ow)*stride;
-                U32 in_w_6 = ((hw+6)%ow)*stride;
-                U32 in_h_7 = ((hw+7)/ow)*stride;
-                U32 in_w_7 = ((hw+7)%ow)*stride;
+                U32 in_h_0 = hw/ow*strideH;
+                U32 in_w_0 = hw%ow*strideW;
+                U32 in_h_1 = (hw+1)/ow*strideH;
+                U32 in_w_1 = (hw+1)%ow*strideW;
+                U32 in_h_2 = (hw+2)/ow*strideH;
+                U32 in_w_2 = (hw+2)%ow*strideW;
+                U32 in_h_3 = (hw+3)/ow*strideH;
+                U32 in_w_3 = (hw+3)%ow*strideW;
+                U32 in_h_4 = ((hw+4)/ow)*strideH;
+                U32 in_w_4 = ((hw+4)%ow)*strideW;
+                U32 in_h_5 = ((hw+5)/ow)*strideH;
+                U32 in_w_5 = ((hw+5)%ow)*strideW;
+                U32 in_h_6 = ((hw+6)/ow)*strideH;
+                U32 in_w_6 = ((hw+6)%ow)*strideW;
+                U32 in_h_7 = ((hw+7)/ow)*strideH;
+                U32 in_w_7 = ((hw+7)%ow)*strideW;
                 I32 *pw_pack_0 = dw_out + hw*ic*8 + c*8*8;
                 I32 *pw_pack_1 = pw_pack_0 + 32;
                 //TODO handle asm combined with c. No guarantee that compile will not use vec reg in c.
@@ -512,17 +496,6 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                     "ldr d30, [%[b], #16]\n"       //b_1
                     "ldr  x2, [%[b], #24]\n"
                     "ins v30.d[1], x2\n"
-            /* Layout
-            5   6
-            7   8
-            9   10
-            11  12
-
-            13  14
-            15  16
-            17  18
-            19  20
-            */
                     "mov  v5.16b, v29.16b\n"
                     "mov  v7.16b, v29.16b\n"
                     "mov  v9.16b, v29.16b\n"
@@ -542,13 +515,13 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                     "mov  v20.16b, v30.16b\n"
                     :
                     :[b]"r"(b)
-                    :"memory", "cc", "q5", "q6", "q7", "q8", "q9", "q10", "q11", "q12", "q13", "q14", "q15", "q16", "q17", "q18", "q19", "q20", "q29", "q30", "x1", "x2"
+                    :"memory", "cc", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20", "v29", "v30", "x1", "x2"
                 );
 
                 for (U32 fh_idx = 0; fh_idx < fh; fh_idx++) {
                     for (U32 fw_idx = 0; fw_idx < fw; fw_idx++) {
                         const INT8 *f_0 = f + fh_idx*fw*8 + fw_idx*8;
-                        INT8 *in_idx = in_pad + fh_idx*iw_pad*8 + fw_idx*8;
+                        INT8 *in_idx = in_pad + fh_idx*dilateH*iw_pad*8 + fw_idx*dilateW*8;
                         INT8 *in_0 = in_idx + in_h_0*iw_pad*8 + in_w_0*8;
                         INT8 *in_1 = in_idx + in_h_1*iw_pad*8 + in_w_1*8;
                         INT8 *in_2 = in_idx + in_h_2*iw_pad*8 + in_w_2*8;
@@ -604,7 +577,7 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                              [in6]"r"(in_6),
                              [in7]"r"(in_7),
                              [f0]"r"(f_0)
-                            :"memory", "cc", "q0", "q1", "q2", "q5", "q6", "q7", "q8", "q9", "q10", "q11", "q12", "q13", "q14", "q15", "q16", "q17", "q18", "q19", "q20", "q29", "q30"
+                            :"memory", "cc", "v0", "v1", "v2", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20", "v29", "v30"
                         );
                     }
                 }
@@ -636,7 +609,7 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                             "smax v20.4s, v0.4s, v20.4s\n"
                             :
                             :
-                            :"memory", "cc", "q0", "q5", "q6", "q7", "q8", "q9", "q10", "q11", "q12", "q13", "q14", "q15", "q16", "q17", "q18", "q19", "q20"
+                            :"memory", "cc", "v0", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20"
                         );
                         break;
                     }
@@ -737,7 +710,7 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                             :
                             :[in0]"r"(pw_in0),
                              [in1]"r"(pw_in1)
-                            :"memory", "cc", "q0", "q5", "q6", "q7", "q8", "q9", "q10", "q11", "q12", "q13", "q14", "q15", "q16", "q17", "q18", "q19", "q20", "q30"
+                            :"memory", "cc", "v0", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20", "v30"
                         );
                         break;
                     }
@@ -767,7 +740,7 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                         :
                         :[pw0]"r"(pw_pack_0),
                          [pw1]"r"(pw_pack_1)
-                        :"memory", "cc", "q5", "q6", "q7", "q8", "q9", "q10", "q11", "q12", "q13", "q14", "q15", "q16", "q17", "q18", "q19", "q20"
+                        :"memory", "cc", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20"
                     );
                 }
                 ohow_s += 8;
@@ -776,14 +749,14 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
 
             if (ohow_tail >= 4) {
                 U32 hw = ohow_s;
-                U32 in_h_0 = hw/ow*stride;
-                U32 in_w_0 = hw%ow*stride;
-                U32 in_h_1 = (hw+1)/ow*stride;
-                U32 in_w_1 = (hw+1)%ow*stride;
-                U32 in_h_2 = (hw+2)/ow*stride;
-                U32 in_w_2 = (hw+2)%ow*stride;
-                U32 in_h_3 = (hw+3)/ow*stride;
-                U32 in_w_3 = (hw+3)%ow*stride;
+                U32 in_h_0 = hw/ow*strideH;
+                U32 in_w_0 = hw%ow*strideW;
+                U32 in_h_1 = (hw+1)/ow*strideH;
+                U32 in_w_1 = (hw+1)%ow*strideW;
+                U32 in_h_2 = (hw+2)/ow*strideH;
+                U32 in_w_2 = (hw+2)%ow*strideW;
+                U32 in_h_3 = (hw+3)/ow*strideH;
+                U32 in_w_3 = (hw+3)%ow*strideW;
                 I32 *pw_pack_0 = dw_out + hw*ic*8 + c*4*8;
                 I32 *pw_pack_1 = pw_pack_0 + 16;
                 //TODO handle asm combined with c. No guarantee that compile will not use vec reg in c.
@@ -794,12 +767,6 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                     "ldr d30, [%[b], #16]\n"       //b_1
                     "ldr  x2, [%[b], #24]\n"
                     "ins v30.d[1], x2\n"
-            /* Layout
-            5   6
-            7   8
-            9   10
-            11  12
-            */
                     "mov  v5.16b, v29.16b\n"
                     "mov  v7.16b, v29.16b\n"
                     "mov  v9.16b, v29.16b\n"
@@ -811,13 +778,13 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                     "mov  v12.16b, v30.16b\n"
                     :
                     :[b]"r"(b)
-                    :"memory", "cc", "q5", "q6", "q7", "q8", "q9", "q10", "q11", "q12", "q29", "q30", "x1", "x2"
+                    :"memory", "cc", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v29", "v30", "x1", "x2"
                 );
 
                 for (U32 fh_idx = 0; fh_idx < fh; fh_idx++) {
                     for (U32 fw_idx = 0; fw_idx < fw; fw_idx++) {
                         const INT8 *f_0 = f + fh_idx*fw*8 + fw_idx*8;
-                        INT8 *in_idx = in_pad + fh_idx*iw_pad*8 + fw_idx*8;
+                        INT8 *in_idx = in_pad + fh_idx*dilateH*iw_pad*8 + fw_idx*dilateW*8;
                         INT8 *in_0 = in_idx + in_h_0*iw_pad*8 + in_w_0*8;
                         INT8 *in_1 = in_idx + in_h_1*iw_pad*8 + in_w_1*8;
                         INT8 *in_2 = in_idx + in_h_2*iw_pad*8 + in_w_2*8;
@@ -848,7 +815,7 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                              [in2]"r"(in_2),
                              [in3]"r"(in_3),
                              [f0]"r"(f_0)
-                            :"memory", "cc", "q0", "q1", "q2", "q5", "q6", "q7", "q8", "q9", "q10", "q11", "q12", "q29", "q30"
+                            :"memory", "cc", "v0", "v1", "v2", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v29", "v30"
                         );
                     }
                 }
@@ -872,7 +839,7 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                             "smax v12.4s, v0.4s, v12.4s\n"
                             :
                             :
-                            :"memory", "cc", "q0", "q5", "q6", "q7", "q8", "q9", "q10", "q11", "q12"
+                            :"memory", "cc", "v0", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12"
                         );
                         break;
                     }
@@ -932,7 +899,7 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                             :
                             :[in0]"r"(pw_in0),
                              [in1]"r"(pw_in1)
-                            :"memory", "cc", "q0", "q5", "q6", "q7", "q8", "q9", "q10", "q11", "q12", "q30"
+                            :"memory", "cc", "v0", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v30"
                         );
                         break;
                     }
@@ -954,7 +921,7 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                         :
                         :[pw0]"r"(pw_pack_0),
                          [pw1]"r"(pw_pack_1)
-                        :"memory", "cc", "q5", "q6", "q7", "q8", "q9", "q10", "q11", "q12"
+                        :"memory", "cc", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12"
                     );
                 }
                 ohow_s += 4;
@@ -963,8 +930,8 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
 
             // ohow_reminder % 4
             for (I32 hw = ohow_s; hw < ohow; hw++) {
-                U32 in_h_0 = hw/ow*stride;
-                U32 in_w_0 = hw%ow*stride;
+                U32 in_h_0 = hw/ow*strideH;
+                U32 in_w_0 = hw%ow*strideW;
                 I32 *pw_pack_0 = dw_out + hw*ic*8 + c*8;
                 I32 *pw_pack_1 = pw_pack_0 + 4;
                 //TODO handle asm combined with c. No guarantee that compile will not use vec reg in c.
@@ -975,18 +942,15 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                     "ldr d6, [%[b], #16]\n"       //b_1
                     "ldr  x2, [%[b], #24]\n"
                     "ins v6.d[1], x2\n"
-            /* Layout
-            5   6
-            */
                     :
                     :[b]"r"(b)
-                    :"memory", "cc", "q5", "q6", "x1", "x2"
+                    :"memory", "cc", "v5", "v6", "x1", "x2"
                 );
 
                 for (U32 fh_idx = 0; fh_idx < fh; fh_idx++) {
                     for (U32 fw_idx = 0; fw_idx < fw; fw_idx++) {
                         const INT8 *f_0 = f + fh_idx*fw*8 + fw_idx*8;
-                        INT8 *in_idx = in_pad + fh_idx*iw_pad*8 + fw_idx*8;
+                        INT8 *in_idx = in_pad + fh_idx*dilateH*iw_pad*8 + fw_idx*dilateW*8;
                         INT8 *in_0 = in_idx + in_h_0*iw_pad*8 + in_w_0*8;
                         __asm__ __volatile__(
                             "ldr d29, [%[f0]]\n"
@@ -998,7 +962,7 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                             :
                             :[in0]"r"(in_0),
                              [f0]"r"(f_0)
-                            :"memory", "cc", "q0", "q5", "q6", "q29"
+                            :"memory", "cc", "v0", "v5", "v6", "v29"
                         );
                     }
                 }
@@ -1016,7 +980,7 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                             "smax v6.4s, v0.4s, v6.4s\n"
                             :
                             :
-                            :"memory", "cc", "q0", "q5", "q6"
+                            :"memory", "cc", "v0", "v5", "v6"
                         );
                         break;
                     }
@@ -1043,7 +1007,7 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                             "str d5, [%[in0]]\n"
                             :
                             :[in0]"r"(pw_in0)
-                            :"memory", "cc", "q0", "q5", "q6", "q30"
+                            :"memory", "cc", "v0", "v5", "v6", "v30"
                         );
                         break;
                     }
@@ -1058,7 +1022,7 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                         :
                         :[pw0]"r"(pw_pack_0),
                          [pw1]"r"(pw_pack_1)
-                        :"memory", "cc", "q5", "q6"
+                        :"memory", "cc", "v5", "v6"
                     );
                 }
             }
@@ -1152,8 +1116,8 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                 :[factor]"r"(factor_v),
                  [dw_out]"r"(dw_out),
                  [pw_in]"r"(pwArray),
-                 [num]"r"(ohow*ic*8)
-                :"memory", "cc", "q0", "q1", "q2", "x0", "x1", "x2"
+                 [num]"r"((I64)ohow*ic*8)
+                :"memory", "cc", "v0", "v1", "v2", "x0", "x1", "x2"
             );
         }
 
@@ -1178,22 +1142,6 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                 const I32 *b_0 = b0;
                 const I32 *b_1 = b1;
                 __asm__ __volatile__(
-            /* Layout
-            5   6
-            7   8
-            9   10
-            11  12
-
-            13  14
-            15  16
-            17  18
-            19  20
-            
-            21  22
-            23  24
-            25  26
-            27  28
-            */
                     // Bias should be applied after scaling
                     "eor v5.16b, v5.16b, v5.16b\n"
                     "ldr  d1, [%[in_0]]\n"           //in_0
@@ -1240,22 +1188,22 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                     "0:\n"
                     "sdot v5.4s, v0.16b, v1.4b[0]\n"
                     "ldr d2, [x3, 32]\n"
-                    "ldr x18, [x3, 40]\n"
+                    "ldr x16, [x3, 40]\n"
                     "sdot v7.4s, v0.16b, v1.4b[1]\n"
                     "ldr d29, [x0, 16]\n"
                     "ldr x17, [x0, 24]\n"
                     "sdot v9.4s, v0.16b, v1.4b[2]\n"
-                    "ins v2.d[1], x18\n"
+                    "ins v2.d[1], x16\n"
                     "ldr d30, [x3, 48]!\n"
                     "sdot v11.4s, v0.16b, v1.4b[3]\n"
                     "ins v29.d[1], x17\n"
 
                     "sdot v13.4s, v0.16b, v3.4b[0]\n"
-                    "ldr x18, [x3, 8]\n"
+                    "ldr x16, [x3, 8]\n"
                     "subs x2, x2, #4\n"
                     "sdot v15.4s, v0.16b, v3.4b[1]\n"
                     "sdot v17.4s, v0.16b, v3.4b[2]\n"
-                    "ins v30.d[1], x18\n"
+                    "ins v30.d[1], x16\n"
                     "sdot v19.4s, v0.16b, v3.4b[3]\n"
 
                     "sdot v21.4s, v0.16b, v2.4b[0]\n"
@@ -1273,12 +1221,12 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                     "sdot v6.4s, v29.16b, v1.4b[0]\n"
                     "sdot v8.4s, v29.16b, v1.4b[1]\n"
                     "ldr d3, [x3, 16]\n"
-                    "ldr x18, [x3, 24]\n"
+                    "ldr x16, [x3, 24]\n"
                     "sdot v10.4s, v29.16b, v1.4b[2]\n"
                     "sdot v12.4s, v29.16b, v1.4b[3]\n"
 
                     "ins v0.d[1], x17\n"
-                    "ins v3.d[1], x18\n"          
+                    "ins v3.d[1], x16\n"          
 
                     "sdot v22.4s, v29.16b, v2.4b[0]\n"
                     "mov v1.16b, v30.16b\n"
@@ -1480,14 +1428,14 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                     :[out_0]"+r"(out_o0hw0),
                      [in_0]"+r"(in_hw0),
                      [f_0]"+r"(f_o0c0)
-                    :[ic]"r"(ic*8),
+                    :[ic]"r"((I64)ic*8),
                      [b_0]"r"(b_0),
                      [b_1]"r"(b_1),
-                     [pointwiseActivationMode]"r"(pointwiseActivationMode),
-                     [am_relu]"r"(ACTIVATION_RELU),
-                     [am_relu6]"r"(ACTIVATION_RELU6),
+                     [pointwiseActivationMode]"r"((I64)pointwiseActivationMode),
+                     [am_relu]"r"((I64)ACTIVATION_RELU),
+                     [am_relu6]"r"((I64)ACTIVATION_RELU6),
                      [scale]"r"(scale_v)
-                    :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10", "q11", "q12", "q13", "q14", "q15", "q16", "q17", "q18", "q19", "q20", "q21", "q22", "q23", "q24", "q25", "q26", "q27", "q28", "q29", "q30", "x0", "x1", "x2", "x3","x17","x18"
+                    :"memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23", "v24", "v25", "v26", "v27", "v28", "v29", "v30", "x0", "x1", "x2", "x3","x17","x16"
                 );
                 b0 += 8;
                 b1 += 8;
@@ -1511,17 +1459,6 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                 const I32 *b_0 = b0;
                 const I32 *b_1 = b1;
                 __asm__ __volatile__(
-            /* Layout
-            5   6
-            7   8
-            9   10
-            11  12
-
-            13  14
-            15  16
-            17  18
-            19  20
-            */
                     // Bias should be applied after scaling
                     "eor v5.16b, v5.16b, v5.16b\n"
                     "ldr  d1, [%[in_0]]\n"           //in_0
@@ -1556,22 +1493,22 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                     "0:\n"
                     "sdot v5.4s, v0.16b, v1.4b[0]\n"
                     "ldr d3, [x3, 16]!\n"
-                    "ldr x18, [x3, 8]\n"
+                    "ldr x16, [x3, 8]\n"
                     "sdot v7.4s, v0.16b, v1.4b[1]\n"
                     "ldr d29, [x0, 16]\n"
                     "ldr x17, [x0, 24]\n"
                     "sdot v9.4s, v0.16b, v1.4b[2]\n"
-                    "ins v3.d[1], x18\n"
+                    "ins v3.d[1], x16\n"
                     "ldr d30, [x3, 16]!\n"
                     "sdot v11.4s, v0.16b, v1.4b[3]\n"
                     "ins v29.d[1], x17\n"
 
                     "sdot v13.4s, v0.16b, v3.4b[0]\n"
-                    "ldr x18, [x3, 8]\n"
+                    "ldr x16, [x3, 8]\n"
                     "subs x2, x2, #4\n"
                     "sdot v15.4s, v0.16b, v3.4b[1]\n"
                     "sdot v17.4s, v0.16b, v3.4b[2]\n"
-                    "ins v30.d[1], x18\n"
+                    "ins v30.d[1], x16\n"
                     "sdot v19.4s, v0.16b, v3.4b[3]\n"
 
                     "sdot v6.4s, v29.16b, v1.4b[0]\n"
@@ -1727,14 +1664,14 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                     :[out_0]"+r"(out_o0hw0),
                      [in_0]"+r"(in_hw0),
                      [f_0]"+r"(f_o0c0)
-                    :[ic]"r"(ic*8),
+                    :[ic]"r"((I64)ic*8),
                      [b_0]"r"(b_0),
                      [b_1]"r"(b_1),
-                     [pointwiseActivationMode]"r"(pointwiseActivationMode),
-                     [am_relu]"r"(ACTIVATION_RELU),
-                     [am_relu6]"r"(ACTIVATION_RELU6),
+                     [pointwiseActivationMode]"r"((I64)pointwiseActivationMode),
+                     [am_relu]"r"((I64)ACTIVATION_RELU),
+                     [am_relu6]"r"((I64)ACTIVATION_RELU6),
                      [scale]"r"(scale_v)
-                    :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10", "q11", "q12", "q13", "q14", "q15", "q16", "q17", "q18", "q19", "q20", "q29", "q30", "x0", "x1", "x2", "x3","x17","x18"
+                    :"memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20", "v29", "v30", "x0", "x1", "x2", "x3","x17","x16"
                 );
                 b0 += 8;
                 b1 += 8;
@@ -1756,12 +1693,6 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                 const I32 *b_0 = b0;
                 const I32 *b_1 = b1;
                 __asm__ __volatile__(
-            /* Layout
-            5   6
-            7   8
-            9   10
-            11  12
-            */
                     // Bias should be applied after scaling
                     "eor v5.16b, v5.16b, v5.16b\n"
                     "ldr  d1, [%[in_0]]\n"           //in_0
@@ -1790,12 +1721,12 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                     "ldr x17, [x0, 24]\n"
                     "sdot v5.4s, v0.16b, v1.4b[0]\n"
                     "ldr d3, [x3, 16]!\n"
-                    "ldr x18, [x3, 8]\n"
+                    "ldr x16, [x3, 8]\n"
                     "sdot v7.4s, v0.16b, v1.4b[1]\n"
                     "ins v29.d[1], x17\n"
                     "subs x2, x2, #4\n"
                     "sdot v9.4s, v0.16b, v1.4b[2]\n"
-                    "ins v3.d[1], x18\n"
+                    "ins v3.d[1], x16\n"
                     "sdot v11.4s, v0.16b, v1.4b[3]\n"
 
                     "sdot v6.4s, v29.16b, v1.4b[0]\n"
@@ -1890,14 +1821,14 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                     :[out_0]"+r"(out_o0hw0),
                      [in_0]"+r"(in_hw0),
                      [f_0]"+r"(f_o0c0)
-                    :[ic]"r"(ic*8),
+                    :[ic]"r"((I64)ic*8),
                      [b_0]"r"(b_0),
                      [b_1]"r"(b_1),
-                     [pointwiseActivationMode]"r"(pointwiseActivationMode),
-                     [am_relu]"r"(ACTIVATION_RELU),
-                     [am_relu6]"r"(ACTIVATION_RELU6),
+                     [pointwiseActivationMode]"r"((I64)pointwiseActivationMode),
+                     [am_relu]"r"((I64)ACTIVATION_RELU),
+                     [am_relu6]"r"((I64)ACTIVATION_RELU6),
                      [scale]"r"(scale_v)
-                    :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10", "q11", "q12", "q29", "q30", "x0", "x1", "x2", "x3","x17","x18"
+                    :"memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v29", "v30", "x0", "x1", "x2", "x3","x17","x16"
                 );
                 b0 += 8;
                 b1 += 8;
@@ -1927,11 +1858,11 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                     res[0] = vdotq_lane_s32(res[0], f_8o[0], in_2, 0);
                     res[1] = vdotq_lane_s32(res[1], f_8o[1], in_2, 0);
 
-                    f_8o[3] = vld1q_s8(f_o+32);
-                    f_8o[4] = vld1q_s8(f_o+48);
+                    f_8o[2] = vld1q_s8(f_o+32);
+                    f_8o[3] = vld1q_s8(f_o+48);
                     f_o += 64;
-                    res[0] = vdotq_lane_s32(res[0], f_8o[3], in_2, 1);
-                    res[1] = vdotq_lane_s32(res[1], f_8o[4], in_2, 1);
+                    res[0] = vdotq_lane_s32(res[0], f_8o[2], in_2, 1);
+                    res[1] = vdotq_lane_s32(res[1], f_8o[3], in_2, 1);
                 }
 
                 if (pointwiseActivationMode!=ACTIVATION_RELU6 && scale!=1) { // Scale
@@ -1976,3 +1907,4 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
     }
     return SUCCESS;
 }
+#endif

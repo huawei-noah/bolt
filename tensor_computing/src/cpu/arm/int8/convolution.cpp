@@ -12,70 +12,43 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#include "tensor_desc.h"
-#include "type.h"
-#include "error.h"
+#ifdef _USE_INT8
 #include "tensor_computing_type.h"
-#include "cpu/arm/int8/convolution_int8.h"
+#include "cpu/arm/int8/tensor_computing_int8.h"
 
 #include "cpu/arm/int8/convolution_winograd.h"
 #include "cpu/arm/int8/convolution_gemm.h"
-
-EE convolution_infer_forward_algorithm_int8(TensorDesc inputDesc, TensorDesc filterDesc, TensorDesc outputDesc,
-    ConvolutionDesc convDesc, ConvolutionPolicy policy, ConvolutionForwardAlgorithm *algorithm)
-{
-    UNUSED(policy);
-
-    if (nullptr == algorithm)
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
-    DataType idt, fdt, odt;
-    DataFormat idf, fdf, odf;
-    U32 in, ic, ih, iw;
-    U32 fn, fc, fh, fw;
-    U32 on, oc, oh, ow;
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
-    U32 stride = convDesc.stride;
-    U32 padding = convDesc.padding;
-
-    if (ic == 3 || ic == 1) {
-        *algorithm = CONVOLUTION_ALGORITHM_GEMM_IC1OR3;
-    } else if (fh == 3 && fw == 3 && stride == 1 && padding == 1) {
-        *algorithm = CONVOLUTION_ALGORITHM_WINOGRAD;
-    } else {
-        *algorithm = CONVOLUTION_ALGORITHM_GEMM;
-    }
-    return SUCCESS;
-}
 
 EE convolution_infer_forward_tmp_bytes_int8(TensorDesc inputDesc, TensorDesc filterDesc, TensorDesc outputDesc,
     ConvolutionDesc convDesc, ConvolutionForwardAlgorithm algorithm, U32 *bytes)
 {
     if (nullptr == bytes)
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
+        CHECK_STATUS(NULL_POINTER);
     DataType idt, fdt, odt;
     DataFormat idf, fdf, odf;
     U32 in, ic, ih, iw;
     U32 fn, fc, fh, fw;
     U32 on, oc, oh, ow;
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
-    U32 padding = convDesc.padding;
+    CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+    CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
+    CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
+    U32 paddingT = convDesc.padding_top;
+    U32 paddingB = convDesc.padding_bottom;
+    U32 paddingL = convDesc.padding_left;
+    U32 paddingR = convDesc.padding_right;
 
-    U32 ih_pad = ih + 2*padding;
-    U32 iw_pad = iw + 2*padding;
+    U32 ih_pad = ih + paddingT + paddingB;
+    U32 iw_pad = iw + paddingL + paddingR;
 
     EE ret = SUCCESS;
     switch (algorithm) {
         case CONVOLUTION_ALGORITHM_WINOGRAD: {
             U32 tile_h = (oh + 3) / 4;
             U32 tile_w = (ow + 3) / 4;
-            U32 pad_left = padding;
-            U32 pad_right = padding + (tile_h*4 - ow);
-            U32 pad_top = padding;
-            U32 pad_bottom = padding + (tile_w*4 - oh);
+            U32 pad_left = paddingL;
+            U32 pad_right = paddingR + (tile_w*4 - ow);
+            U32 pad_top = paddingT;
+            U32 pad_bottom = paddingB + (tile_h*4 - oh);
             ih_pad = ih + pad_top + pad_bottom;
             iw_pad = iw + pad_left + pad_right;
 
@@ -94,16 +67,12 @@ EE convolution_infer_forward_tmp_bytes_int8(TensorDesc inputDesc, TensorDesc fil
             }
             break;
         }
-        case CONVOLUTION_ALGORITHM_GEMM_IC1OR3: {
-            U32 fhfw4 = ((fh * fw) / 4 + 1) * 4;  // Assume fh and fw are both odd
-            *bytes = ic * ih_pad * iw_pad + 12 * fhfw4 * ic;
-            break;
-        }
         default: {
             ret = NOT_MATCH;
             break;
         }
     }
+    *bytes += 32;
     return ret;
 }
 
@@ -117,27 +86,27 @@ EE convolution_int8(TensorDesc inputDesc, const INT8* input,
     Arch arch)
 {
     if (nullptr == input || nullptr == filter || nullptr == output || nullptr == bias || nullptr == tmp) {
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
+        CHECK_STATUS(NULL_POINTER);
     }
     DataType idt, fdt, odt;
     DataFormat idf, fdf, odf;
     U32 in, ic, ih, iw;
     U32 fn, fc, fh, fw;
     U32 on, oc, oh, ow;
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
+    CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+    CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
+    CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
 
     if (idt != DT_I8 && idt != DT_F16)
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
+        CHECK_STATUS(NOT_MATCH);
     if ( fdt != DT_I8 )
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
+        CHECK_STATUS(NOT_MATCH);
     if (odt != DT_F16 && odt != DT_I8)
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
-    if (fh != fw)
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
+        CHECK_STATUS(NOT_MATCH);
     if (!((idf == DF_NCHWC8 || (idf == DF_NCHW && (ic == 3 || ic == 1))) && odf == DF_NCHWC8))
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
+        CHECK_STATUS(NOT_MATCH);
+    if (!(ic == fc && oc == fn))
+        CHECK_STATUS(NOT_MATCH);
 
     EE ret = SUCCESS;
     switch (algorithm) {
@@ -155,3 +124,4 @@ EE convolution_int8(TensorDesc inputDesc, const INT8* input,
     }
     return ret;
 }
+#endif

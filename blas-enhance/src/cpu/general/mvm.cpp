@@ -20,17 +20,17 @@ template<typename T1, typename T2>
 inline void mvm(U32 M, U32 K, bool transpose, T1* mat, T1 *vec, T2* res) {
     if (! transpose) {
         for (U32 i = 0; i < M; i++) {
-            T2 out_f = 0;
+            F32 out_f = 0;
             for (U32 j = 0; j < K; j++) {
                 out_f += mat[i * K + j] * vec[j];
             }
             res[i] += out_f;
         }
     } else {
-        for (U32 i = 0; i < K; i++) {
-            T2 out_f = 0;
-            for (U32 j = 0; j < M; j++) {
-                out_f += mat[j * K + i] * vec[j];
+        for (U32 i = 0; i < M; i++) {
+            F32 out_f = 0;
+            for (U32 j = 0; j < K; j++) {
+                out_f += mat[j * M + i] * vec[j];
             }
             res[i] += out_f;
         }
@@ -40,12 +40,21 @@ inline void mvm(U32 M, U32 K, bool transpose, T1* mat, T1 *vec, T2* res) {
 EE mvm_general(U32 row, U32 col, DataType dt, bool transpose, const void *matrix, const void *vector, void *result) {
     EE ret = SUCCESS;
     switch (dt) {
+#ifdef _USE_FP16
         case DT_F16:
             mvm<F16, F16>(row, col, transpose, (F16*)matrix, (F16*)vector, (F16*)result);
             break;
+#endif
+#ifdef _USE_INT8
         case DT_I8:
             mvm<INT8, I32>(row, col, transpose, (INT8*)matrix, (INT8*)vector, (I32*)result);
             break;
+#endif
+#ifdef _USE_FP32
+        case DT_F32:
+            mvm<F32, F32>(row, col, transpose, (F32*)matrix, (F32*)vector, (F32*)result);
+            break;
+#endif
         default:
             ret = NOT_SUPPORTED;
             break;

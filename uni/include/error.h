@@ -18,6 +18,7 @@
 #include <assert.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <iostream>
 
 #ifdef __cplusplus
 extern "C" {
@@ -25,19 +26,13 @@ extern "C" {
 
     #define CHECK_REQUIREMENT(status) if (! (status)) {\
                  printf("[ERROR] %s %s line %d requirement mismatch\n", __FILE__, __func__, __LINE__);\
-                 assert(0);\
+                 exit(1);\
              }
     #define CHECK_STATUS(ee) {\
                  EE status = (ee); \
                  if (status != SUCCESS) {\
                      printf("[ERROR] %s %s line %d got an error: %s\n", __FILE__, __func__, __LINE__, ee2str(status));\
-                 }\
-             }
-    #define CHECK_STATUS_WITH_RETURN(ee) {\
-                 EE status = (ee); \
-                 if (status != SUCCESS) {\
-                     printf("[ERROR] %s %s line %d got an error: %s\n", __FILE__, __func__, __LINE__, ee2str(status));\
-                     return status; \
+                     exit(1);\
                  }\
              }
 
@@ -45,10 +40,11 @@ extern "C" {
         SUCCESS = 0,
         NULL_POINTER = 1,
         NOT_MATCH = 2,
-        NOT_FOUND =3 ,
+        NOT_FOUND = 3,
         ALLOC_FAILED = 4,
         NOT_IMPLEMENTED = 50,
         NOT_SUPPORTED = 51,
+        GCL_ERROR = 52,
         UNKNOWN = 99
     } EE;
 
@@ -79,6 +75,14 @@ extern "C" {
         }
         return ret;
     }
+
+    #define CI_info(x) do { std::cout << x << std::endl; } while (0)
+    
+    #ifdef _DEBUG
+    #define DEBUG_info(x) do { std::cout << x << std::endl; } while (0)
+    #else
+    #define DEBUG_info(x) do { } while (0)
+    #endif
 
 #ifdef __cplusplus
 }

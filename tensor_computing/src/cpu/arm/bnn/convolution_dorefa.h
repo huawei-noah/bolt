@@ -15,6 +15,7 @@
 #ifndef _H_CONVOLUTION_DOREFA
 #define _H_CONVOLUTION_DOREFA
 
+#ifdef _USE_FP16
 #include <string.h>
 #include <cmath>
 #include "sys.h"
@@ -24,6 +25,15 @@
 #include "tensor_computing_type.h"
 
 EE convolution_dorefa_A55(TensorDesc inputDesc, const F16* input,
+    TensorDesc filterDesc, const BIN8* filterArray,
+    ConvolutionDesc convDesc,
+    TensorDesc scaleDesc, const F16* scaleArray,
+    TensorDesc biasDesc, const F16* biasArray,
+    U32 tmpBytes, void* tmp,
+    TensorDesc outputDesc, F16* outArray,
+    ActivationMode activationMode);
+
+EE convolution_dorefa_A76(TensorDesc inputDesc, const F16* input,
     TensorDesc filterDesc, const BIN8* filterArray,
     ConvolutionDesc convDesc,
     TensorDesc scaleDesc, const F16* scaleArray,
@@ -55,7 +65,7 @@ inline EE convolution_dorefa(TensorDesc inputDesc, const F16* input,
                                          activationMode);
             break;
         case ARM_A76:
-            ret = convolution_dorefa_A55(inputDesc, input,
+            ret = convolution_dorefa_A76(inputDesc, input,
                                          filterDesc, filter,
                                          convDesc,
                                          scaleDesc, scale,
@@ -69,4 +79,5 @@ inline EE convolution_dorefa(TensorDesc inputDesc, const F16* input,
     }
     return ret;
 }
+#endif
 #endif

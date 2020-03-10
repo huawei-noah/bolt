@@ -1,4 +1,5 @@
 file(GLOB_RECURSE srcs ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
+include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
 # shared library 
 ADD_LIBRARY(${PROJECT_NAME} SHARED ${srcs}) 

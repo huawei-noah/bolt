@@ -15,11 +15,13 @@
 #ifndef _H_MMM_COMMON
 #define _H_MMM_COMMON
 
+#ifdef _USE_INT8
 #include <string.h> 
 #include <arm_neon.h>
 
 #include "type.h"
 #include "error.h"
+#include "cpu/arm/arm_neon_expand.h"
 
 inline void matrix1_trans_n8(U32 blockK, U32 K, INT8* src, INT8* dst)
 {
@@ -118,7 +120,7 @@ inline void matrix1_trans_int8(U32 size, U32 blockK, U32 K, INT8* src, INT8* dst
                 asm volatile(
                     "prfm pldl2keep, [%0, %1]\n"
                     :"+r"(src1)
-                    :"r"(offset)
+                    :"r"((I64)offset)
                     :"memory","cc" 
                 );
             }
@@ -138,7 +140,7 @@ inline void matrix2_trans_m12(U32 blockK, U32 M, INT8* src, INT8* dst)
         asm volatile(
             "prfm pldl2keep, [%0, %1]\n"
             :"+r"(src1)
-            :"r"(offset)
+            :"r"((I64)offset)
             :"memory","cc" 
         );
 
@@ -197,7 +199,7 @@ inline void matrix2_trans_int8(U32 size, U32 blockK, U32 M, INT8* src, INT8* dst
         asm volatile(
             "prfm pldl2keep, [%0, %1]\n"
             :"+r"(src1)
-            :"r"(offset)
+            :"r"((I64)offset)
             :"memory","cc" 
         );
         for(U32 j = 0; j < size; j++){
@@ -213,9 +215,9 @@ inline void matrix2_trans_int8(U32 size, U32 blockK, U32 M, INT8* src, INT8* dst
 
 inline void mmm_N8_MTail(U32 MInner, U32 M, U32 K, INT8* matrix1, INT8* matrix2, I32* result)
 {
-    int8x16_t mat1[2] = {0};
-    int8x16_t mat2 = {0};
-    int32x4_t res[4][2] = {0};
+    int8x16_t mat1[2];
+    int8x16_t mat2;
+    int32x4_t res[4][2] = {{0}};
     I32 tmp[8] = {0};
 
     CHECK_REQUIREMENT(MInner < 4);
@@ -224,11 +226,11 @@ inline void mmm_N8_MTail(U32 MInner, U32 M, U32 K, INT8* matrix1, INT8* matrix2,
         mat1[0] = vld1q_s8(matrix1 + i * 8);
         mat1[1] = vld1q_s8(matrix1 + i * 8 + 16);
 
-        mat2 = vld1q_s8(matrix2 + i * MInner); //
+        mat2 = vld1q_s8(matrix2 + i * MInner);
 
         for(U32 j = 0; j < MInner; j++){
-            res[j][0] = vdotq_laneq_s32(res[j][0], mat1[0], mat2, j);
-            res[j][1] = vdotq_laneq_s32(res[j][1], mat1[1], mat2, j);
+            res[j][0] = vdotq_laneq_s32_builtin(res[j][0], mat1[0], mat2, j);
+            res[j][1] = vdotq_laneq_s32_builtin(res[j][1], mat1[1], mat2, j);
         }
     }
     for(U32 p = 0; p < MInner; p++){
@@ -254,10 +256,10 @@ inline void mmm_N4_MTail(U32 MInner, U32 M, U32 K, INT8* matrix1, INT8* matrix2,
     for(U32 i = 0; i < K; i+=4){
         mat1 = vld1q_s8(matrix1 + i * 8);
 
-        mat2 = vld1q_s8(matrix2 + i * MInner); //
+        mat2 = vld1q_s8(matrix2 + i * MInner);
 
         for(U32 j = 0; j < MInner; j++){
-            res[j] = vdotq_laneq_s32(res[j], mat1, mat2, j);
+            res[j] = vdotq_laneq_s32_builtin(res[j], mat1, mat2, j);
         }
     }
     for(U32 p = 0; p < MInner; p++){
@@ -272,7 +274,7 @@ inline void mmm_N4_MTail(U32 MInner, U32 M, U32 K, INT8* matrix1, INT8* matrix2,
 inline void mmm_NTail_M12(U32 M, U32 N, U32 K, INT8* matrix1, INT8* matrix2, I32* result) {
     int8x16_t mat1 = {0};
     int8x16_t mat2[3] = {0};
-    int32x4_t res[4][3] = {0};
+    int32x4_t res[4][3] = {{0}};
 
     for (U32 i = 0; i < N; i++) {
         res[i][0] = vld1q_s32(result + i*M);
@@ -288,9 +290,9 @@ inline void mmm_NTail_M12(U32 M, U32 N, U32 K, INT8* matrix1, INT8* matrix2, I32
         mat2[2] = vld1q_s8(matrix2 + q*12 + 32);
 
         for (U32 n=0; n<N; n++) {
-            res[n][0] = vdotq_laneq_s32(res[n][0], mat2[0], mat1, n);
-            res[n][1] = vdotq_laneq_s32(res[n][1], mat2[1], mat1, n);
-            res[n][2] = vdotq_laneq_s32(res[n][2], mat2[2], mat1, n);
+            res[n][0] = vdotq_laneq_s32_builtin(res[n][0], mat2[0], mat1, n);
+            res[n][1] = vdotq_laneq_s32_builtin(res[n][1], mat2[1], mat1, n);
+            res[n][2] = vdotq_laneq_s32_builtin(res[n][2], mat2[2], mat1, n);
         }
     }
 
@@ -304,7 +306,7 @@ inline void mmm_NTail_M12(U32 M, U32 N, U32 K, INT8* matrix1, INT8* matrix2, I32
 inline void mmm_NTail_M8(U32 M, U32 N, U32 K, INT8* matrix1, INT8* matrix2, I32* result) {
     int8x16_t mat1 = {0};
     int8x16_t mat2[2] = {0};
-    int32x4_t res[4][2] = {0};
+    int32x4_t res[4][2] = {{0}};
 
     for (U32 i = 0; i < N; i++) {
         res[i][0] = vld1q_s32(result + i*M);
@@ -318,8 +320,8 @@ inline void mmm_NTail_M8(U32 M, U32 N, U32 K, INT8* matrix1, INT8* matrix2, I32*
         mat2[1] = vld1q_s8(matrix2 + q*8 + 16);
 
         for (U32 n=0; n<N; n++) {
-            res[n][0] = vdotq_laneq_s32(res[n][0], mat2[0], mat1, n);
-            res[n][1] = vdotq_laneq_s32(res[n][1], mat2[1], mat1, n);
+            res[n][0] = vdotq_laneq_s32_builtin(res[n][0], mat2[0], mat1, n);
+            res[n][1] = vdotq_laneq_s32_builtin(res[n][1], mat2[1], mat1, n);
         }
     }
 
@@ -344,7 +346,7 @@ inline void mmm_NTail_M4(U32 M, U32 N, U32 K, INT8* matrix1, INT8* matrix2, I32*
         mat2 = vld1q_s8(matrix2 + q*4);
 
         for (U32 n=0; n<N; n++) {
-            res[n] = vdotq_laneq_s32(res[n], mat2, mat1, n);
+            res[n] = vdotq_laneq_s32_builtin(res[n], mat2, mat1, n);
         }
     }
 
@@ -362,4 +364,5 @@ inline void mmm_NTail_M(U32 MInner, U32 M, U32 N, U32 K, INT8* matrix1, INT8* ma
         }
     }
 }
+#endif
 #endif

@@ -28,6 +28,9 @@ EE transpose(TensorDesc inputDesc, void *input, TensorDesc outputDesc, void *out
         case ARM_A76:
             ret = transpose_arm(inputDesc, input, outputDesc, output, dim);
             break;
+        case ARM_V8:
+            ret = transpose_arm(inputDesc, input, outputDesc, output, dim);
+            break;
         default:
             ret = NOT_SUPPORTED;
             break;
@@ -37,7 +40,7 @@ EE transpose(TensorDesc inputDesc, void *input, TensorDesc outputDesc, void *out
 
 EE transpose_infer_output_size(TensorDesc inputDesc, TensorDesc *outputDesc, U32 *dim) {
     if (nullptr == outputDesc || nullptr == dim)
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
+        CHECK_STATUS(NULL_POINTER);
 
     *outputDesc = inputDesc;
     U32 inputDim = inputDesc.nDims;

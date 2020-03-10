@@ -12,47 +12,36 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#include <arm_neon.h>
 #include "cpu/arm/tensor_computing_arm.h"
-
-EE scale_fp16(F16* alpha, F16* beta, F16* data, U32 in, U32 ic, U32 elements_per_channel)
-{
-    if (nullptr == data || nullptr == alpha)
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
-    const U32 align_size = 8;
-    float16x8_t in_vec, out_vec;
-    float16x8_t zero  = vdupq_n_f16(float16_t(0.));
-    ic = ic / align_size;
-    for (U32 n = 0; n < in; n++) {
-        for (U32 c = 0; c < ic; c++) {
-            float16x8_t alpha_vec = vld1q_f16(alpha + c * align_size);
-            float16x8_t beta_vec  = (beta == nullptr) ? zero : vld1q_f16(beta + c * align_size);
-            for (U32 i = 0; i < elements_per_channel; i++) {
-                U32 index = ((n * ic + c) * elements_per_channel + i) * align_size;
-                in_vec = vld1q_f16(data + index);
-                out_vec = vfmaq_f16(beta_vec, alpha_vec, in_vec);
-                vst1q_f16(data+index, out_vec);
-            }
-        }
-    }
-
-    return SUCCESS;
-}
+#ifdef _USE_FP32
+#include "cpu/arm/fp32/tensor_computing_fp32.h"
+#endif
+#ifdef _USE_FP16
+#include "cpu/arm/fp16/tensor_computing_fp16.h"
+#endif
 
 EE scale_arm(void *alpha, void *beta, TensorDesc inputDesc, void* data)
 {
     DataType idt;
     DataFormat idf;
     U32 in, ic, ih, iw;    
-    CHECK_REQUIREMENT(tensorIs4d(inputDesc));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+    CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+    CHECK_REQUIREMENT(idf == DF_NCHWC8);
     U32 elements_per_channel = ih * iw;
     EE ret = SUCCESS;
     switch (idt) {
-        case DT_F16: {
-            ret = scale_fp16((F16*)alpha, (F16*)beta, (F16*)data, in, ic, elements_per_channel);
+#ifdef _USE_FP32
+        case DT_F32: {
+            ret = scale_nchwc8_fp32((F32*)alpha, (F32*)beta, (F32*)data, in, ic, elements_per_channel);
             break;
         }
+#endif
+#ifdef _USE_FP16
+        case DT_F16: {
+            ret = scale_nchwc8_fp16((F16*)alpha, (F16*)beta, (F16*)data, in, ic, elements_per_channel);
+            break;
+        }
+#endif
         default:
             ret = NOT_SUPPORTED;
             break;

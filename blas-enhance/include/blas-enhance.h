@@ -29,8 +29,11 @@ extern "C" {
                               U32 bytes, void* tmp,
                               TensorDesc matrixCDesc, void* matrixC, Arch arch);
 
+    EE matrix_vector_multiply_tmp_bytes(TensorDesc matrixDesc, TensorDesc vectorDesc, U32* bytes, Arch);
+
     EE matrix_vector_multiply(TensorDesc matrixDesc, const void* matrix,
                               TensorDesc vectorDesc, const void* vector,
+                              U32 bytes, void* tmp,
                               TensorDesc resultDesc, void* result, Arch arch);
 
 #ifdef __cplusplus

@@ -15,9 +15,14 @@
 #include "cpu/general/tensor_computing_general.h"
 
 template<typename T>
-EE multiply(T* input, T* output, U32 len, T alpha, T beta) {
+EE multiply(T* input, T* output, U32 len, F32 alpha, F32 beta)
+{
+    if (nullptr == input
+        || nullptr == output)
+        CHECK_STATUS(NULL_POINTER);
+
     for (U32 i = 0; i < len; i++) {
-        T value = input[i];
+        F32 value = input[i];
         output[i] = alpha * value + beta;
     }
     return SUCCESS;
@@ -28,15 +33,29 @@ EE multiply_general(void *alpha, void *beta, TensorDesc inputDesc, void* input, 
     UNUSED(outputDesc);
 
     if (nullptr == alpha
-        || nullptr == beta
-        || nullptr == input
-        || nullptr == output)
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
+        || nullptr == beta)
+        CHECK_STATUS(NULL_POINTER);
 
     EE ret = SUCCESS;
     switch (inputDesc.dt) {
+#ifdef _USE_FP32
+        case DT_F32: {
+            ret = multiply<F32>((F32 *)input, (F32 *)output, tensorNumElements(inputDesc), *((F32 *)alpha), *((F32 *)beta));
+            break;
+        }
+#endif
+#ifdef _USE_FP16
         case DT_F16: {
-            ret = multiply<F16>((F16 *)input, (F16 *)output, tensorNumElements(inputDesc), *((F16 *)alpha), *((F16 *)beta));
+            ret = multiply<F16>((F16 *)input, (F16 *)output, tensorNumElements(inputDesc), *((F32 *)alpha), *((F32 *)beta));
+            break;
+        }
+#endif
+        case DT_I32: {
+            ret = multiply<I32>((I32 *)input, (I32 *)output, tensorNumElements(inputDesc), *((F32 *)alpha), *((F32 *)beta));
+            break;
+        }
+        case DT_U32: {
+            ret = multiply<U32>((U32 *)input, (U32 *)output, tensorNumElements(inputDesc), *((F32 *)alpha), *((F32 *)beta));
             break;
         }
         default:

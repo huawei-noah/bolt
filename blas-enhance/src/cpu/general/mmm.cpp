@@ -21,7 +21,7 @@ template<typename T1, typename T2>
 inline void mmm(U32 N, U32 M, U32 K, T1* in, T1* w, T2* out) {
    for (U32 i =0; i < M; i++) {
        for (U32 n = 0; n < N; n++) {
-            T2 out_f = 0;
+            F32 out_f = 0;
             for (U32 j = 0; j < K; j++) {
                 out_f += in[i * K + j] * w[j * N + n];
             }
@@ -37,14 +37,24 @@ EE mmm_general(U32 matrixC_N, U32 matrixC_M, U32 matrixA_K,
 {
     EE ret = SUCCESS;
     switch (dt) {
+#ifdef _USE_FP16
         case DT_F16: {
             mmm<F16, F16>(matrixC_N, matrixC_M, matrixA_K, (F16*)matrixAData, (F16*)matrixBData, (F16*)matrixCData);
             break;
         }
+#endif
+#ifdef _USE_INT8
         case DT_I8: {
             mmm<INT8, I32>(matrixC_N, matrixC_M, matrixA_K, (INT8*)matrixAData, (INT8*)matrixBData, (I32*)matrixCData);
             break;
         }
+#endif
+#ifdef _USE_FP32
+        case DT_F32: {
+            mmm<F32, F32>(matrixC_N, matrixC_M, matrixA_K, (F32*)matrixAData, (F32*)matrixBData, (F32*)matrixCData);
+            break;
+        }
+#endif
         default:
             ret = NOT_SUPPORTED;
             break;

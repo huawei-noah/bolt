@@ -17,8 +17,8 @@
 
 
 template<typename T>
-T array_max(const T* input, U32 len) {
-    T tmp = input[0];
+F32 array_max(const T* input, U32 len) {
+    F32 tmp = input[0];
     for (U32 i = 1; i < len; i++) {
         if(input[i] > tmp)
             tmp = input[i];
@@ -31,22 +31,21 @@ EE softmax(TensorDesc inputDesc, const T* input,
     TensorDesc outputDesc, T* output)
 {
     UNUSED(outputDesc);
+    if (nullptr == input || nullptr == output)
+        CHECK_STATUS(NULL_POINTER);
 
     U32 size = tensorNumElements(inputDesc);
     U32 loop_inner = inputDesc.dims[0];
     U32 loop_outer = size / loop_inner;
 
-    if (nullptr == input || nullptr == output)
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
-
     for (U32 loop = 0; loop < loop_outer; loop++) {
         const T *in = input + loop * loop_inner;
         T *out = output + loop * loop_inner;
 
-        T max_value = array_max<T>(in, loop_inner);
-        T sum = 0;
+        F32 max_value = array_max<T>(in, loop_inner);
+        F32 sum = 0;
         for (U32 i = 0; i < loop_inner; i++) {
-            T tmp = exp(in[i] - max_value);
+            F32 tmp = exp(in[i] - max_value);
             sum += tmp;
             out[i] = tmp;
         }
@@ -61,15 +60,21 @@ EE softmax(TensorDesc inputDesc, const T* input,
 EE softmax_general(TensorDesc inputDesc, const void* input,
     TensorDesc outputDesc, void* output)
 {
-    if (nullptr == input || nullptr == output)
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
     DataType idt = inputDesc.dt;
     EE ret = SUCCESS;
     switch (idt) {
+#ifdef _USE_FP16
         case DT_F16: {
             ret = softmax<F16>(inputDesc, (const F16*)input, outputDesc, (F16*)output);
             break;
         }
+#endif
+#ifdef _USE_FP32
+        case DT_F32: {
+            ret = softmax<F32>(inputDesc, (const F32*)input, outputDesc, (F32*)output);
+            break;
+        }
+#endif
         default:
             ret = NOT_SUPPORTED;
             break;

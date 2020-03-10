@@ -12,6 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
+#ifdef _USE_FP16
 #include "sys.h"
 #include "type.h"
 #include "tensor_desc.h"
@@ -38,22 +39,26 @@ EE convolution_dorefa_A55(TensorDesc inputDesc, const F16* input,
     U32 in, ic, ih, iw;
     U32 fn, fc, fh, fw;
     U32 on, oc, oh, ow;
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
-    U32 stride = convDesc.stride;
-    U32 padding = convDesc.padding;
+    CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+    CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
+    CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
+    U32 strideH = convDesc.stride_h;
+    U32 strideW = convDesc.stride_w;
+    U32 paddingT = convDesc.padding_top;
+    U32 paddingB = convDesc.padding_bottom;
+    U32 paddingL = convDesc.padding_left;
+    U32 paddingR = convDesc.padding_right;
 
     if (fdf != DF_NCHWN16C8)
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
+        CHECK_STATUS(NOT_MATCH);
     if (!(ic == fc && oc == fn))
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
+        CHECK_STATUS(NOT_MATCH);
 
     oc /= 8;
     ic /= 8;
 
-    U32 ih_pad = ih + 2*padding;
-    U32 iw_pad = iw + 2*padding;
+    U32 ih_pad = ih + paddingT + paddingB;
+    U32 iw_pad = iw + paddingL + paddingR;
     U32 ohow = oh*ow;
     U32 ihiw = ih_pad*iw_pad;
 
@@ -71,7 +76,7 @@ EE convolution_dorefa_A55(TensorDesc inputDesc, const F16* input,
             inArray[i] = temp;
         }
 
-        if (padding == 0) {
+        if (paddingT == 0 && paddingB == 0 && paddingL == 0 && paddingR == 0) {
             inArray_pad = inArray + n*ic*ih*iw;  // ic has been divided by 8
         } else {
             // copy input into a input with padding
@@ -79,21 +84,21 @@ EE convolution_dorefa_A55(TensorDesc inputDesc, const F16* input,
             BIN8 *inArray_pad_mov = inArray_pad;
             BIN8 *inArray_mov = inArray + n*ic*ih*iw;
             for (U32 c = 0; c < ic; c++) {  // All divide by 8
-                for (U32 h = 0; h < padding; h++) {
-                    memset(inArray_pad_mov, 0, iw_pad*bytesOf(DT_DOREFA));
+                for (U32 h = 0; h < paddingT; h++) {
+                    memset(inArray_pad_mov, 0, iw_pad*bytesOf(DT_BIN01));
                     inArray_pad_mov += iw_pad;
                 }
-                for (U32 h = padding; h < ih_pad - padding; h++) {
-                    memset(inArray_pad_mov, 0, padding*bytesOf(DT_DOREFA));
-                    inArray_pad_mov += padding;
-                    memcpy(inArray_pad_mov, inArray_mov, iw*bytesOf(DT_DOREFA));
+                for (U32 h = paddingT; h < ih_pad - paddingB; h++) {
+                    memset(inArray_pad_mov, 0, paddingL*bytesOf(DT_BIN01));
+                    inArray_pad_mov += paddingL;
+                    memcpy(inArray_pad_mov, inArray_mov, iw*bytesOf(DT_BIN01));
                     inArray_pad_mov += iw;
                     inArray_mov += iw;
-                    memset(inArray_pad_mov, 0, padding*bytesOf(DT_DOREFA));
-                    inArray_pad_mov += padding;
+                    memset(inArray_pad_mov, 0, paddingR*bytesOf(DT_BIN01));
+                    inArray_pad_mov += paddingR;
                 }
-                for (U32 h = ih_pad - padding; h < ih_pad; h++) {
-                    memset(inArray_pad_mov, 0, iw_pad*bytesOf(DT_DOREFA));
+                for (U32 h = ih_pad - paddingB; h < ih_pad; h++) {
+                    memset(inArray_pad_mov, 0, iw_pad*bytesOf(DT_BIN01));
                     inArray_pad_mov += iw_pad;
                 }
             }
@@ -109,8 +114,8 @@ EE convolution_dorefa_A55(TensorDesc inputDesc, const F16* input,
             U32 in_h[8];
             U32 in_w[8];
             for (U32 i = 0; i < 8; i++) {
-                in_h[i] = ((hw+i)/ow)*stride;
-                in_w[i] = ((hw+i)%ow)*stride;
+                in_h[i] = ((hw+i)/ow)*strideH;
+                in_w[i] = ((hw+i)%ow)*strideW;
             }
             for (U32 c = 0; c < ic; c++) {
                 for (U32 fh_idx = 0; fh_idx < fh; fh_idx++) {
@@ -425,13 +430,13 @@ EE convolution_dorefa_A55(TensorDesc inputDesc, const F16* input,
                      [out_1]"+r"(out_o1hw0),
                      [in_0]"+r"(in_hw0),
                      [f_0]"+r"(f_o0c0)
-                    :[ic]"r"(ic*8),
-                     [fhfw]"r"(fh*fw),
+                    :[ic]"r"((I64)ic*8),
+                     [fhfw]"r"((I64)fh*fw),
                      [s_0]"r"(s_o0),
                      [s_1]"r"(s_o1),
                      [b_0]"r"(b_o0),
                      [b_1]"r"(b_o1)
-                    :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10", "q11", "q12", "q13", "q14", "q15", "q16", "q17", "q18", "q19", "q20", "q21", "q22", "q23", "q24", "q25", "q26", "q27", "q28", "q29", "q30", "x0", "x1", "x2", "x3", "x4", "x9"
+                    :"memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23", "v24", "v25", "v26", "v27", "v28", "v29", "v30", "x0", "x1", "x2", "x3", "x4", "x9"
                 );
                 s0 += 16;
                 s1 += 16;
@@ -453,8 +458,8 @@ EE convolution_dorefa_A55(TensorDesc inputDesc, const F16* input,
             U32 in_h[4];
             U32 in_w[4];
             for (U32 i = 0; i < 4; i++) {
-                in_h[i] = ((hw+i)/ow)*stride;
-                in_w[i] = ((hw+i)%ow)*stride;
+                in_h[i] = ((hw+i)/ow)*strideH;
+                in_w[i] = ((hw+i)%ow)*strideW;
             }
             for (U32 c = 0; c < ic; c++) {
                 for (U32 fh_idx = 0; fh_idx < fh; fh_idx++) {
@@ -664,13 +669,13 @@ EE convolution_dorefa_A55(TensorDesc inputDesc, const F16* input,
                      [out_1]"+r"(out_o1hw0),
                      [in_0]"+r"(in_hw0),
                      [f_0]"+r"(f_o0c0)
-                    :[ic]"r"(ic*8),
-                     [fhfw]"r"(fh*fw),
+                    :[ic]"r"((I64)ic*8),
+                     [fhfw]"r"((I64)fh*fw),
                      [s_0]"r"(s_o0),
                      [s_1]"r"(s_o1),
                      [b_0]"r"(b_o0),
                      [b_1]"r"(b_o1)
-                    :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10", "q11", "q12", "q13", "q14", "q15", "q16", "q21", "q22", "q23", "q24", "q29", "q30", "x0", "x1", "x2", "x3", "x4", "x9"
+                    :"memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v21", "v22", "v23", "v24", "v29", "v30", "x0", "x1", "x2", "x3", "x4", "x9"
                 );
                 s0 += 16;
                 s1 += 16;
@@ -688,8 +693,8 @@ EE convolution_dorefa_A55(TensorDesc inputDesc, const F16* input,
             BIN8 *in_order = ((BIN8*)tmp) + ic*ih_pad*iw_pad;  // ic has been divided by 8
             // reorder input
             // NCHWc8 => NHWChw1c8 + im2col
-            U32 in_h_0 = (hw/ow)*stride;
-            U32 in_w_0 = (hw%ow)*stride;
+            U32 in_h_0 = (hw/ow)*strideH;
+            U32 in_w_0 = (hw%ow)*strideW;
             for (U32 c = 0; c < ic; c++) {
                 for (U32 fh_idx = 0; fh_idx < fh; fh_idx++) {
                     for (U32 fw_idx = 0; fw_idx < fw; fw_idx++) {
@@ -769,3 +774,4 @@ EE convolution_dorefa_A55(TensorDesc inputDesc, const F16* input,
     }
     return SUCCESS;
 }
+#endif

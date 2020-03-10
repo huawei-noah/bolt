@@ -12,9 +12,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#ifndef _H_WINOGRAD_TRANSFORM_INT8
-#define _H_WINOGRAD_TRANSFORM_INT8
+#ifndef _H_CONVOLUTION_WINOGRAD_TRANSFORM
+#define _H_CONVOLUTION_WINOGRAD_TRANSFORM
 
+#ifdef _USE_INT8
 #include <math.h>
 #include <string.h>
 #include "type.h"
@@ -299,4 +300,5 @@ inline void trans_O(F16* const Ow[36], F16 *O[16], const F16* bias,
     vst1q_f16(max, max_v);
     vst1q_f16(min, min_v);
 }
+#endif
 #endif

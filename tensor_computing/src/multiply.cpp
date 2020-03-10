@@ -29,6 +29,9 @@ EE multiply(void *alpha, void *beta, TensorDesc inputDesc, void* input, TensorDe
         case ARM_A76:
             ret = multiply_arm(alpha, beta, inputDesc, input, outputDesc, output);
             break;
+        case ARM_V8:
+            ret = multiply_arm(alpha, beta, inputDesc, input, outputDesc, output);
+            break;
         default:
             ret = NOT_SUPPORTED;
     }
@@ -38,7 +41,7 @@ EE multiply(void *alpha, void *beta, TensorDesc inputDesc, void* input, TensorDe
 EE multiply_infer_output_size(TensorDesc inputDesc, TensorDesc *outputDesc)
 {
     if (nullptr == outputDesc)
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
+        CHECK_STATUS(NULL_POINTER);
     *outputDesc = inputDesc;
     return SUCCESS;
 }

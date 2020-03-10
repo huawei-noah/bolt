@@ -29,7 +29,7 @@ inline void calc_eight_channel_elements(I32 hw,
     I32 fh, I32 fw,
     I32 ow,
     F16 *inArray,
-    I32 stride, I32 padding,
+    I32 strideH, I32 strideW, I32 paddingT, I32 paddingL,
     const F16 *filterArray,
     float16x8_t bias,
     F16 *output)
@@ -37,8 +37,8 @@ inline void calc_eight_channel_elements(I32 hw,
     I32 h = hw / ow;
     I32 w = hw % ow;
     float16x8_t v0 = bias;
-    I32 ih_start = h * stride - padding;
-    I32 iw_start = w * stride - padding;
+    I32 ih_start = h * strideH - paddingT;
+    I32 iw_start = w * strideW - paddingL;
     I32 fh_start = 0;
     if (ih_start < 0)  {
         fh_start -= ih_start;

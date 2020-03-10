@@ -18,151 +18,93 @@
 #include "error.h"
 #include "type.h"
 #include "tensor_desc.h"
+#include "op_type.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#define NAME_LEN 128
-
-    typedef enum{
+    typedef enum {
         F32_to_F32,
         F32_to_F16,
         F32_to_I8
     } DataConvertType;
 
-    // TODO: please add OperatorType and OperatorTypeName at the same time
-    typedef enum {
-        OT_Conv,
-        OT_FC,
-        OT_Pooling,
-        OT_Relu,
-        OT_Relu6,
-        OT_HSwish,
-        OT_HSigmoid,
-        OT_Eltwise,
-        OT_Softmax,
-        OT_Concat,
-        OT_MaxOut,
-        OT_BatchNorm,
-        OT_Sigmoid,
-        OT_Scale,
-        OT_Clip,
-        OT_LSTM,
-        OT_Embedding,
-        OT_SoftmaxWithLoss,
-        OT_Pad,
-        OT_Gelu,
-        OT_TanH,
-        OT_LayerNorm, 
-        OT_MatMul,
-        OT_Multiply,
-        OT_Reshape,
-        OT_Slice,
-        OT_Transpose,
-        OT_Attention,
-        OT_Input,
-        OT_Squeeze,
-        OT_Gather,
-        OT_Unsqueeze,
-        OT_Upsample,
-        OT_Cast,
-        OT_Logistic,
-        OT_ResizeBilinear,
-        OT_None
-    } OperatorType;
+    typedef struct {
+        U32 height;
+        U32 width;
+    } InterpParamSpec;
 
-    inline const char * const *OperatorTypeName() {
-        static const char * const names[] = {
-            "OT_Conv",
-            "OT_FC",
-            "OT_Pooling",
-            "OT_Relu",
-            "OT_Relu6",
-            "OT_HSwish",
-            "OT_HSigmoid",
-            "OT_Eltwise",
-            "OT_Softmax",
-            "OT_Concat",
-            "OT_MaxOut",
-            "OT_BatchNorm",
-            "OT_Sigmoid",
-            "OT_Scale",
-            "OT_Clip",
-            "OT_LSTM",
-            "OT_Embedding",
-            "OT_SoftmaxWithLoss",
-            "OT_Pad",
-            "OT_Gelu",
-            "OT_TanH",
-            "OT_LayerNorm",
-            "OT_MatMul",
-            "OT_Multiply",
-            "OT_Reshape", 
-            "OT_Slice",
-            "OT_Transpose",
-            "OT_Attention",
-            "OT_Input",
-            "OT_Squeeze",
-            "OT_Gather",
-            "OT_Unsqueeze",
-            "OT_Upsample",
-            "OT_Cast",
-            "OT_Logistic",
-            "OT_ResizeBilinear",
-            "OT_None"
-        };
-        return names;
-    }
+    typedef struct {
+        int axis;
+    } FlattenParamSpec;
 
-    typedef struct {    // 20191119
+    typedef struct {
         int gather_axis;
     } GatherParamSpec;
 
     typedef struct {
+        int axis;
+        int squeeze_axes[8];
+        int axes_num;
+    } SqueezeParamSpec;
+
+    typedef struct {
+        int axis;
         int unsqueeze_axes[8];
         int axes_num;
     } UnsqueezeParamSpec;
 
     typedef struct {
         char upsample_mode[NAME_LEN];
+        F32 scale[4];
     } UpsampleParamSpec;
 
     typedef struct {
         int cast_to;
     } CastParamSpec;
 
-    typedef struct{
-        float neg_slope;
-    }ReLUParamSpec;
+    typedef struct {
+        int num_concat;
+    } ScaleParamSpec;
 
-    typedef struct{
+    typedef struct {
+        float neg_slope;
+    } ReLUParamSpec;
+
+    typedef struct {
         int coeff_size;
         float* coeff_values;
-    }EltwiseSumSpec;
+    } EltwiseSumSpec;
 
-    typedef struct{
+    typedef struct {
         EltwiseMode elt_mode;
-        EltwiseSumSpec elt_sum_spec;   // only sum mode need to feed it
-    }EltwiseParamSpec;
+        EltwiseSumSpec elt_sum_spec;
+    } EltwiseParamSpec;
 
-    typedef struct{
+    typedef struct {
         float min;
         float max;
-    }ClipParamSpec;
+    } ClipParamSpec;
 
-    typedef union{
+    typedef union {
         ReLUParamSpec relu_spec;
         ClipParamSpec clip_spec;
-    }ActivationSpec;
+    } ActivationSpec;
 
     typedef struct {
         U32 num_kernels;
-        U32 kernel_size;
-        U32 stride;
-        U32 padding;
+        U32 kernel_size_h;
+        U32 kernel_size_w;
+        U32 stride_h;
+        U32 stride_w;
+        U32 padding_top;
+        U32 padding_bottom;
+        U32 padding_left;
+        U32 padding_right;
         U32 group;
-        U32 dilation;
+        U32 dilatedRate_h;
+        U32 dilatedRate_w;
         ConvolutionMode convolution_type;
         ActivationMode dw_activation_type;
         ActivationMode pw_activation_type;
@@ -170,9 +112,14 @@ extern "C" {
     } ConvolutionParamSpec;
 
     typedef struct {
-        U32 kernel_size;
-        U32 stride;
-        U32 padding;
+        U32 kernel_size_h;
+        U32 kernel_size_w;
+        U32 stride_h;
+        U32 stride_w;
+        U32 padding_top;
+        U32 padding_bottom;
+        U32 padding_left;
+        U32 padding_right;
         RoundMode rm;
         PoolingMode mode;
     } PoolingParamSpec;
@@ -182,7 +129,7 @@ extern "C" {
     } FullyConnectedParamSpec;
 
     typedef struct{
-        F32 eps;     // from prototxt
+        F32 eps;
     } BatchNormParamSpec;
 
     typedef struct {
@@ -198,10 +145,12 @@ extern "C" {
         U32 input_dim;
         U32 num_output;
         bool bias_term;
+        bool transpose;
     } EmbedParamSpec;
 
     typedef struct {
         float scale;
+        float bias;
     } MultiplyParamSpec;
 
     typedef struct {
@@ -223,19 +172,63 @@ extern "C" {
     } TransposeParamSpec;
 
     typedef struct {
-        int num_attention;
+        U32 num_heads;
+        U32 from_sequence_length;
+        U32 to_sequence_length;
     } AttentionParamSpec;
 
     typedef struct {
         U32 num_output;
-    } LstmParamSpec;
+        I32 steps;
+    } LSTMParamSpec;
 
-    typedef union {
-        ConvolutionParamSpec conv_param_spec;
-        PoolingParamSpec pooling_param_spec;
-        FullyConnectedParamSpec ip_param_spec;
-        BatchNormParamSpec bn_param_spec;
-        EltwiseParamSpec eltwise_param_spec;
+    typedef struct {
+        U32 coefficient_len;
+        bool has_offset;
+        BilateralSliceApplyMode mode;
+    } BilateralSliceApplyParamSpec;
+    typedef struct {
+        I32 axis;
+    } AxisMeanParamSpec;
+
+    typedef struct {
+        I32 axis;
+    } ArgMaxParamSpec;
+
+    typedef struct {
+        U32 src_dims[3];
+        U32 dst_dims[3];
+        U32 length;
+    } CopyParamSpec;
+
+    typedef struct {
+        CheckMode check_mode;
+    } CheckParamSpec;
+
+    typedef struct {
+        int loops;
+    } RepeatParamSpec;
+
+    typedef struct {
+        TensorDesc desc;
+    } PreAllocatedMemoryParamSpec;
+
+    typedef struct {
+        TensorDesc desc;
+    } SharedWeightParamSpec;
+    
+    typedef struct {
+        bool transpose_a;
+        bool transpose_b;
+    } MatMulParamSpec;
+
+    typedef union ParameterSpec {
+        ParameterSpec() {}
+        ConvolutionParamSpec conv_spec;
+        PoolingParamSpec pooling_spec;
+        FullyConnectedParamSpec fc_spec;
+        BatchNormParamSpec bn_spec;
+        EltwiseParamSpec eltwise_spec;
         ReLUParamSpec relu_spec;
         ClipParamSpec clip_spec;
         PadParamSpec pad_spec;
@@ -245,11 +238,24 @@ extern "C" {
         SliceParamSpec slice_spec;
         TransposeParamSpec transpose_spec;
         AttentionParamSpec attention_spec;
-        LstmParamSpec lstm_spec;
+        LSTMParamSpec lstm_spec;
         GatherParamSpec gather_spec;
         UnsqueezeParamSpec unsqueeze_spec;
+        SqueezeParamSpec squeeze_spec;
         UpsampleParamSpec upsample_spec;
         CastParamSpec cast_spec;
+        BilateralSliceApplyParamSpec bilateral_slice_apply_spec;
+        ScaleParamSpec scale_spec;
+        AxisMeanParamSpec axis_mean_spec;
+        CopyParamSpec copy_spec;
+        CheckParamSpec check_spec;
+        RepeatParamSpec repeat_spec;
+        PreAllocatedMemoryParamSpec preallocated_memory_spec;
+        SharedWeightParamSpec shared_weight_spec;
+        ArgMaxParamSpec argmax_spec;
+        MatMulParamSpec matmul_spec;
+        InterpParamSpec interp_spec;
+        FlattenParamSpec flatten_spec;
     } ParameterSpec;
 
     typedef struct {
@@ -259,15 +265,16 @@ extern "C" {
         I8 **input_tensors_name;
         U32 num_outputs;
         I8 **output_tensors_name;
+        I32 *tensor_positions;
         ParameterSpec ps;
     } OperatorSpec;
 
     typedef struct {
         I8 op_name[NAME_LEN];
-        DataType mdt;
-        U32 bytes_of_weight;
+        DataType mdt = DT_U8;
+        U32 bytes_of_weight = 0;
         U8* weight;
-        U32 bytes_of_vec;
+        U32 bytes_of_vec = 0;
         U8* vec;
     } WeightSpec;
 
@@ -315,15 +322,15 @@ extern "C" {
     }
 
     inline I32 mt_magic_number(){
-        static const I32 magic_number = 1141119;   // bolt
+        static const I32 magic_number = 1141119;
         return magic_number;
     }
 
-    //you must invoke this before use md
+    // you must invoke this before use md
     EE mt_create_model(ModelSpec* md);
     EE mt_load(CI8* dir, CI8* mfn, ModelSpec* md);
     EE mt_store(CI8* dir, CI8* mfn, const ModelSpec* md);
-    //you must invoke this before exit to clean up resource usage
+    // you must invoke this before exit to clean up resource usage
     EE mt_destroy_model(ModelSpec* md);
 
     

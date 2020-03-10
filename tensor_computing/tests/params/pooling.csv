@@ -1,2 +1,0 @@
-#in_n	in_c	in_h	in_w	f_n	f_c	f_h	f_w	stride	padding	out_n	out_c	out_h	out_w
-1	16	100	100	1	1	2	2	2	0	1	16	50	50

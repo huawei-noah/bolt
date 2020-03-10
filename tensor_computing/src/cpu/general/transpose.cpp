@@ -18,11 +18,11 @@
 
 EE transpose_general(TensorDesc inputDesc, void *input, TensorDesc outputDesc, void *output, U32 *dim) {
     if (nullptr == input || nullptr == output || nullptr == dim)
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
+        CHECK_STATUS(NULL_POINTER);
 
     U32 inputDim = inputDesc.nDims;
     U32 outputDim = outputDesc.nDims;
-    assert(inputDim == outputDim);
+    CHECK_REQUIREMENT(inputDim == outputDim);
 
     U32 outputSize = tensorNumElements(outputDesc);
     CHECK_REQUIREMENT(inputDim == outputDim);

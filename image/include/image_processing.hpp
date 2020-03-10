@@ -20,10 +20,8 @@
 #include "tensor_desc.h"
 #include "error.h"
 
-EE print_image(std::string imagePath);
-
 std::shared_ptr<U8> load_fake_image(TensorDesc inputDesc);
 
-std::shared_ptr<U8> load_resize_image(std::string imagePath, TensorDesc imageDesc, ImageType targetImageType, float scaleValue);
+std::shared_ptr<U8> load_resize_image(TensorDesc rgbDesc, void* rgb, TensorDesc imageDesc, ImageFormat targetImageFormat, float scaleValue);
 
 #endif

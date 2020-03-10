@@ -13,11 +13,6 @@
 
 
 #include <string.h>
-
-#include "type.h"
-#include "error.h"
-#include "tensor_desc.h"
-
 #include "cpu/arm/fp16/convolution_gemm.h"
 
 EE convolution_gemm_A76(TensorDesc inputDesc, F16* inArray,
@@ -36,18 +31,22 @@ EE convolution_gemm_A76(TensorDesc inputDesc, F16* inArray,
     U32 in, ic, ih, iw;
     U32 fn, fc, fh, fw;
     U32 on, oc, oh, ow;
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
-    U32 stride = convDesc.stride;
-    U32 padding = convDesc.padding;
+    CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+    CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
+    CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
+    U32 strideH = convDesc.stride_h;
+    U32 strideW = convDesc.stride_w;
+    U32 paddingT = convDesc.padding_top;
+    U32 paddingB = convDesc.padding_bottom;
+    U32 paddingL = convDesc.padding_left;
+    U32 paddingR = convDesc.padding_right;
+    U32 dilateH = convDesc.dilatedRate_h;
+    U32 dilateW = convDesc.dilatedRate_w;
 
     if (fdf != DF_NHWCN16)
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
-    if (!(ic == fc && oc == fn))
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
+        CHECK_STATUS(NOT_MATCH);
 
-    int activation = 0;
+    I64 activation = 0;
     switch (activationMode) {
         case ACTIVATION_NULL:
             activation = 0;
@@ -60,14 +59,14 @@ EE convolution_gemm_A76(TensorDesc inputDesc, F16* inArray,
     }
     oc /= 8;
     ic /= 8;
-    U32 ih_pad = ih + 2*padding;
-    U32 iw_pad = iw + 2*padding;
+    U32 ih_pad = ih + paddingT + paddingB;
+    U32 iw_pad = iw + paddingL + paddingR;
     I32 ohow = oh*ow;
     U32 ihiw = ih_pad*iw_pad;
     F16 *inArray_pad;
     EE ret = SUCCESS;
     for (U32 n = 0; n < in; n++) {
-        if (padding == 0) {
+        if (paddingT == 0 && paddingB == 0 && paddingL == 0 && paddingR == 0) {
             inArray_pad = inArray + n*ic*ih*iw*8;
         } else {
             // copy input into a input with padding
@@ -75,20 +74,20 @@ EE convolution_gemm_A76(TensorDesc inputDesc, F16* inArray,
             F16 *inArray_pad_mov = inArray_pad;
             F16 *inArray_mov = inArray + n*ic*ih*iw*8;
             for (U32 c = 0; c < ic; c++) {
-                for (U32 h = 0; h < padding; h++) {
+                for (U32 h = 0; h < paddingT; h++) {
                     memset(inArray_pad_mov, 0, iw_pad*8*bytesOf(idt));
                     inArray_pad_mov += iw_pad*8;
                 }
-                for (U32 h = padding; h < ih_pad - padding; h++) {
-                    memset(inArray_pad_mov, 0, padding*8*bytesOf(idt));
-                    inArray_pad_mov += padding*8;
+                for (U32 h = paddingT; h < ih_pad - paddingB; h++) {
+                    memset(inArray_pad_mov, 0, paddingL*8*bytesOf(idt));
+                    inArray_pad_mov += paddingL*8;
                     memcpy(inArray_pad_mov, inArray_mov, iw*8*bytesOf(idt));
                     inArray_pad_mov += iw*8;
                     inArray_mov += iw*8;
-                    memset(inArray_pad_mov, 0, padding*8*bytesOf(idt));
-                    inArray_pad_mov += padding*8;
+                    memset(inArray_pad_mov, 0, paddingR*8*bytesOf(idt));
+                    inArray_pad_mov += paddingR*8;
                 }
-                for (U32 h = ih_pad - padding; h < ih_pad; h++) {
+                for (U32 h = ih_pad - paddingB; h < ih_pad; h++) {
                     memset(inArray_pad_mov, 0, iw_pad*8*bytesOf(idt));
                     inArray_pad_mov += iw_pad*8;
                 }
@@ -102,26 +101,26 @@ EE convolution_gemm_A76(TensorDesc inputDesc, F16* inArray,
             F16 *in_pack = ((F16*)tmp) + ic*ih_pad*iw_pad*8;
             // pack input
             // NCHWc8 => NHWChw8 + im2col
-            U32 in_h_0 = (hw/ow)*stride;
-            U32 in_w_0 = (hw%ow)*stride;
-            U32 in_h_1 = ((hw+1)/ow)*stride;
-            U32 in_w_1 = ((hw+1)%ow)*stride;
-            U32 in_h_2 = ((hw+2)/ow)*stride;
-            U32 in_w_2 = ((hw+2)%ow)*stride;
-            U32 in_h_3 = ((hw+3)/ow)*stride;
-            U32 in_w_3 = ((hw+3)%ow)*stride;
-            U32 in_h_4 = ((hw+4)/ow)*stride;
-            U32 in_w_4 = ((hw+4)%ow)*stride;
-            U32 in_h_5 = ((hw+5)/ow)*stride;
-            U32 in_w_5 = ((hw+5)%ow)*stride;
-            U32 in_h_6 = ((hw+6)/ow)*stride;
-            U32 in_w_6 = ((hw+6)%ow)*stride;
-            U32 in_h_7 = ((hw+7)/ow)*stride;
-            U32 in_w_7 = ((hw+7)%ow)*stride;
+            U32 in_h_0 = (hw/ow)*strideH;
+            U32 in_w_0 = (hw%ow)*strideW;
+            U32 in_h_1 = ((hw+1)/ow)*strideH;
+            U32 in_w_1 = ((hw+1)%ow)*strideW;
+            U32 in_h_2 = ((hw+2)/ow)*strideH;
+            U32 in_w_2 = ((hw+2)%ow)*strideW;
+            U32 in_h_3 = ((hw+3)/ow)*strideH;
+            U32 in_w_3 = ((hw+3)%ow)*strideW;
+            U32 in_h_4 = ((hw+4)/ow)*strideH;
+            U32 in_w_4 = ((hw+4)%ow)*strideW;
+            U32 in_h_5 = ((hw+5)/ow)*strideH;
+            U32 in_w_5 = ((hw+5)%ow)*strideW;
+            U32 in_h_6 = ((hw+6)/ow)*strideH;
+            U32 in_w_6 = ((hw+6)%ow)*strideW;
+            U32 in_h_7 = ((hw+7)/ow)*strideH;
+            U32 in_w_7 = ((hw+7)%ow)*strideW;
             for (U32 c = 0; c < ic; c++) {
                 for (U32 fh_idx = 0; fh_idx < fh; fh_idx++) {
                     for (U32 fw_idx = 0; fw_idx < fw; fw_idx++) {
-                        F16 *in_hw8c8 = inArray_pad + c*ihiw*8 + fh_idx*iw_pad*8+ fw_idx*8;
+                        F16 *in_hw8c8 = inArray_pad + c*ihiw*8 + fh_idx*dilateH*iw_pad*8+ fw_idx*dilateW*8;
                         F16 *in_0 = in_hw8c8 + in_h_0*iw_pad*8 + in_w_0*8;
                         F16 *in_1 = in_hw8c8 + in_h_1*iw_pad*8 + in_w_1*8;
                         F16 *in_2 = in_hw8c8 + in_h_2*iw_pad*8 + in_w_2*8;
@@ -298,13 +297,13 @@ EE convolution_gemm_A76(TensorDesc inputDesc, F16* inArray,
                      [out_1]"+r"(out_o1hw0),
                      [in_0]"+r"(in_hw0),
                      [f_0]"+r"(f_o0c0)
-                    :[ic]"r"(ic*8*fh*fw),
+                    :[ic]"r"((I64)ic*8*fh*fw),
                      [b_0]"r"(b_o0),
                      [b_1]"r"(b_o1),
                      [activation]"r"(activation)
-                    :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10",
-                        "q11", "q12", "q13", "q14", "q15", "q16", "q17", "q18", "q19", "q20",
-                        "q21", "q22", "q23", "x0"
+                    :"memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10",
+                        "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20",
+                        "v21", "v22", "v23", "x0"
                 );
                 b0 += 16;
                 b1 += 16;
@@ -377,17 +376,17 @@ EE convolution_gemm_A76(TensorDesc inputDesc, F16* inArray,
                     :[out_0]"+r"(out_o0hw0),
                      [in_0]"+r"(in_hw0),
                      [f_0]"+r"(f_r)
-                    :[ic]"r"(ic*8*fh*fw),
+                    :[ic]"r"((I64)ic*8*fh*fw),
                      [b_0]"r"(b_o0),
                      [activation]"r"(activation)
-                    :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10", "q11", "q12", "x0"
+                    :"memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "x0"
                 );
             }
         }
 
         // ohow_reminder % 8 / 4
         U32 ohow_s = (ohow / 8) * 8;
-        //U32 ohow_s = (ohow/8)*8;
+
         for (I32 hw = ohow_s; hw < ohow-3; hw+=4) {
             const F16 *b0 = biasArray;
             const F16 *b1 = biasArray + 8;
@@ -395,18 +394,18 @@ EE convolution_gemm_A76(TensorDesc inputDesc, F16* inArray,
             F16 *in_pack = ((F16*)tmp) + ic*ih_pad*iw_pad*8;
             // pack input
             // NCHWc8 => NHWChw4 + im2col
-            U32 in_h_0 = (hw/ow)*stride;
-            U32 in_w_0 = (hw%ow)*stride;
-            U32 in_h_1 = ((hw+1)/ow)*stride;
-            U32 in_w_1 = ((hw+1)%ow)*stride;
-            U32 in_h_2 = ((hw+2)/ow)*stride;
-            U32 in_w_2 = ((hw+2)%ow)*stride;
-            U32 in_h_3 = ((hw+3)/ow)*stride;
-            U32 in_w_3 = ((hw+3)%ow)*stride;
+            U32 in_h_0 = (hw/ow)*strideH;
+            U32 in_w_0 = (hw%ow)*strideW;
+            U32 in_h_1 = ((hw+1)/ow)*strideH;
+            U32 in_w_1 = ((hw+1)%ow)*strideW;
+            U32 in_h_2 = ((hw+2)/ow)*strideH;
+            U32 in_w_2 = ((hw+2)%ow)*strideW;
+            U32 in_h_3 = ((hw+3)/ow)*strideH;
+            U32 in_w_3 = ((hw+3)%ow)*strideW;
             for (U32 c = 0; c < ic; c++) {
                 for (U32 fh_idx = 0; fh_idx < fh; fh_idx++) {
                     for (U32 fw_idx = 0; fw_idx < fw; fw_idx++) {
-                        F16 *in_hw4c8 = inArray_pad + c*ihiw*8 + fh_idx*iw_pad*8 + fw_idx*8;
+                        F16 *in_hw4c8 = inArray_pad + c*ihiw*8 + fh_idx*dilateH*iw_pad*8 + fw_idx*dilateW*8;
                         F16 *in_0 = in_hw4c8 + in_h_0*iw_pad*8 + in_w_0*8;
                         F16 *in_1 = in_hw4c8 + in_h_1*iw_pad*8 + in_w_1*8;
                         F16 *in_2 = in_hw4c8 + in_h_2*iw_pad*8 + in_w_2*8;
@@ -432,7 +431,7 @@ EE convolution_gemm_A76(TensorDesc inputDesc, F16* inArray,
                              [in_1]"r"(in_1),
                              [in_2]"r"(in_2),
                              [in_3]"r"(in_3)
-                            :"memory", "cc", "q0", "q1", "q2", "q3"
+                            :"memory", "cc", "v0", "v1", "v2", "v3"
                         );
                     }
                 }
@@ -512,11 +511,11 @@ EE convolution_gemm_A76(TensorDesc inputDesc, F16* inArray,
                      [out_1]"+r"(out_o1hw0),
                      [in_0]"+r"(in_hw0),
                      [f_0]"+r"(f_o0c0)
-                    :[ic]"r"(ic*8*fh*fw),
+                    :[ic]"r"((I64)ic*8*fh*fw),
                      [b_0]"r"(b_o0),
                      [b_1]"r"(b_o1),
                      [activation]"r"(activation)
-                    :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q10", "q11", "q12", "q13", "q18", "q19", "q20", "q21", "q22", "q23", "x0"
+                    :"memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v10", "v11", "v12", "v13", "v18", "v19", "v20", "v21", "v22", "v23", "x0"
                 );
                 b0 += 16;
                 b1 += 16;
@@ -569,10 +568,10 @@ EE convolution_gemm_A76(TensorDesc inputDesc, F16* inArray,
                     :[out_0]"+r"(out_o0hw0),
                      [in_0]"+r"(in_hw0),
                      [f_0]"+r"(f_r)
-                    :[ic]"r"(ic*8*fh*fw),
+                    :[ic]"r"((I64)ic*8*fh*fw),
                      [b_0]"r"(b_o0),
                      [activation]"r"(activation)
-                    :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q18", "q20", "q22", "x0"
+                    :"memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v18", "v20", "v22", "x0"
                 );
             }
         }
@@ -586,12 +585,12 @@ EE convolution_gemm_A76(TensorDesc inputDesc, F16* inArray,
             F16 *in_pack = ((F16*)tmp) + ic*ih_pad*iw_pad*8;
             // pack input
             // NCHWc8 => NHWChw4 + im2col
-            U32 in_h_0 = (hw/ow)*stride;
-            U32 in_w_0 = (hw%ow)*stride;
+            U32 in_h_0 = (hw/ow)*strideH;
+            U32 in_w_0 = (hw%ow)*strideW;
             for (U32 c = 0; c < ic; c++) {
                 for (U32 fh_idx = 0; fh_idx < fh; fh_idx++) {
                     for (U32 fw_idx = 0; fw_idx < fw; fw_idx++) {
-                        F16 *in_hw1c8 = inArray_pad + c*ihiw*8 + fh_idx*iw_pad*8 + fw_idx*8;
+                        F16 *in_hw1c8 = inArray_pad + c*ihiw*8 + fh_idx*dilateH*iw_pad*8 + fw_idx*dilateW*8;
                         F16 *in_0 = in_hw1c8 + in_h_0*iw_pad*8 + in_w_0*8;
                         F16 *in_pack_c8hw1 = in_pack + fh_idx*fw*ic*8 + fw_idx*ic*8 + c*8;
                         /*
@@ -648,11 +647,11 @@ EE convolution_gemm_A76(TensorDesc inputDesc, F16* inArray,
                      [out_1]"+r"(out_o1hw0),
                      [in_0]"+r"(in_hw0),
                      [f_0]"+r"(f_o0c0)
-                    :[ic]"r"(ic*8*fh*fw),
+                    :[ic]"r"((I64)ic*8*fh*fw),
                      [b_0]"r"(b_o0),
                      [b_1]"r"(b_o1),
                      [activation]"r"(activation)
-                    :"memory", "cc", "q0", "q1", "q2", "q10", "q18", "q19", "q20", "q21", "q22", "q23", "x0"
+                    :"memory", "cc", "v0", "v1", "v2", "v10", "v18", "v19", "v20", "v21", "v22", "v23", "x0"
                 );
                 b0 += 16;
                 b1 += 16;
@@ -690,10 +689,10 @@ EE convolution_gemm_A76(TensorDesc inputDesc, F16* inArray,
                     :[out_0]"+r"(out_o0hw0),
                      [in_0]"+r"(in_hw0),
                      [f_0]"+r"(f_r)
-                    :[ic]"r"(ic*8*fh*fw),
+                    :[ic]"r"((I64)ic*8*fh*fw),
                      [b_0]"r"(b_o0),
                      [activation]"r"(activation)
-                    :"memory", "cc", "q0", "q1", "q2", "q10", "q18", "q20", "q22", "x0"
+                    :"memory", "cc", "v0", "v1", "v2", "v10", "v18", "v20", "v22", "x0"
                 );
             }
         }

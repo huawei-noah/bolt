@@ -12,31 +12,43 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#include "sys.h"
-#include "type.h"
-#include "tensor_desc.h"
-#include "error.h"
 #include "cpu/arm/tensor_computing_arm.h"
-#include "cpu/arm/fp16/pooling_fp16.h"
+#ifdef _USE_FP32
+#include "cpu/arm/fp32/tensor_computing_fp32.h"
+#endif
+#ifdef _USE_FP16
+#include "cpu/arm/fp16/tensor_computing_fp16.h"
+#endif
 #ifdef _USE_INT8
-#include "cpu/arm/int8/pooling_int8.h"
+#include "cpu/arm/int8/tensor_computing_int8.h"
 #endif
 
 EE pooling_arm(TensorDesc inputDesc, const void* input, PoolingDesc poolingDesc, const void* scale, TensorDesc outputDesc, void* output)
 {
     EE ret = SUCCESS;
     switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = pooling_fp16(inputDesc, input,
+#ifdef _USE_FP32
+        case DT_F32: {
+            UNUSED(scale);
+            ret = pooling_fp32(inputDesc, (const F32*)input,
                                poolingDesc,
-                               outputDesc, output);
+                               outputDesc, (F32*)output);
             break;
         }
+#endif
+#ifdef _USE_FP16
+        case DT_F16: {
+            ret = pooling_fp16(inputDesc, (const F16*)input,
+                               poolingDesc,
+                               outputDesc, (F16*)output);
+            break;
+        }
+#endif
 #ifdef _USE_INT8
         case DT_I8: {
-            ret = pooling_int8(inputDesc, input, (F16*)scale,
+            ret = pooling_int8(inputDesc, (const INT8*)input, (F16*)scale,
                                poolingDesc,
-                               outputDesc, output, ((F16*)scale)+1);
+                               outputDesc, (INT8*)output, ((F16*)scale)+1);
             break;
         }
 #endif

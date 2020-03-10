@@ -12,12 +12,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#include "sys.h"
-#include "type.h"
-#include "error.h"
-#include "tensor_desc.h"
 #include "cpu/arm/fp16/depthwise_pointwise_convolution_direct_no_padding.h"
-#include "cpu/arm/common_arm.h"
+#include "cpu/arm/fp16/arm_neon_expand_fp16.h"
 
 EE depthwise_pointwise_convolution_direct_no_padding_A55(TensorDesc inputDesc, F16* inArray,
     TensorDesc filterDesc, const F16* filterArray,
@@ -36,16 +32,16 @@ EE depthwise_pointwise_convolution_direct_no_padding_A55(TensorDesc inputDesc, F
     U32 in, ic, ih, iw;
     U32 fn, fc, fh, fw;
     U32 on, oc, oh, ow;
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
-    U32 stride = convDesc.stride;
-    U32 padding = convDesc.padding;
+    CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+    CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
+    CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
+    U32 strideH = convDesc.stride_h;
+    U32 strideW = convDesc.stride_w;
+    U32 paddingT = convDesc.padding_top;
+    U32 paddingL = convDesc.padding_left;
 
     if (fdf != DF_CHWC8_NCN16)
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
-    if (!(ic == fc && oc == fn))
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
+        CHECK_STATUS(NOT_MATCH);
 
     oc /= 8;
     ic /= 8;
@@ -72,11 +68,11 @@ EE depthwise_pointwise_convolution_direct_no_padding_A55(TensorDesc inputDesc, F
                         fh, fw,
                         ow,
                         inArray,
-                        stride, padding,
+                        strideH, strideW, paddingT, paddingL,
                         f,
                         vv0,
                         buffer);
-                    CHECK_STATUS_WITH_RETURN(activation_fp16(buffer, 8, depthwiseActivationMode));
+                    CHECK_STATUS(activation_fp16(buffer, 8, depthwiseActivationMode));
                     U32 out_index = out_base + j;
                     for (I32 i = 0; i < 8; i++, out_index+=8) {
                         pwArray[out_index] = buffer[i];
@@ -93,11 +89,11 @@ EE depthwise_pointwise_convolution_direct_no_padding_A55(TensorDesc inputDesc, F
                         fh, fw,
                         ow,
                         inArray,
-                        stride, padding,
+                        strideH, strideW, paddingT, paddingL,
                         f,
                         vv0,
                         buffer);
-                    CHECK_STATUS_WITH_RETURN(activation_fp16(buffer, 8, depthwiseActivationMode));
+                    CHECK_STATUS(activation_fp16(buffer, 8, depthwiseActivationMode));
                     U32 out_index = out_base + j;
                     for (I32 i = 0; i < 8; i++, out_index+=4) {
                         pwArray[out_index] = buffer[i];
@@ -114,11 +110,11 @@ EE depthwise_pointwise_convolution_direct_no_padding_A55(TensorDesc inputDesc, F
                         fh, fw,
                         ow,
                         inArray,
-                        stride, padding,
+                        strideH, strideW, paddingT, paddingL,
                         f,
                         vv0,
                         buffer);
-                    CHECK_STATUS_WITH_RETURN(activation_fp16(buffer, 8, depthwiseActivationMode));
+                    CHECK_STATUS(activation_fp16(buffer, 8, depthwiseActivationMode));
                     U32 out_index = out_base + j;
                     for (I32 i = 0; i < 8; i++, out_index++) {
                         pwArray[out_index] = buffer[i];
@@ -386,16 +382,16 @@ EE depthwise_pointwise_convolution_direct_no_padding_A55(TensorDesc inputDesc, F
                      [out_1]"+r"(out_o1hw0),
                      [in_0]"+r"(in_hw0),
                      [f_0]"+r"(f_o0c0)
-                    :[ic]"r"(ic*8),
+                    :[ic]"r"((I64)ic*8),
                      [b_0]"r"(b_o0),
                      [b_1]"r"(b_o1),
-                     [pointwiseActivationMode]"r"(pointwiseActivationMode),
-                     [am_relu]"r"(ACTIVATION_RELU),
-                     [am_relu6]"r"(ACTIVATION_RELU6),
-                     [am_h_swish]"r"(ACTIVATION_H_SWISH)
-                    :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10",
-                                     "q11", "q12", "q13", "q14", "q15", "q16", "q17", "q18", "q19", "q20",
-                                     "q21", "q22", "q23", "q24", "q25", "q26", "x0", "x1", "x2", "x3"
+                     [pointwiseActivationMode]"r"((I64)pointwiseActivationMode),
+                     [am_relu]"r"((I64)ACTIVATION_RELU),
+                     [am_relu6]"r"((I64)ACTIVATION_RELU6),
+                     [am_h_swish]"r"((I64)ACTIVATION_H_SWISH)
+                    :"memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10",
+                                     "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20",
+                                     "v21", "v22", "v23", "v24", "v25", "v26", "x0", "x1", "x2", "x3"
                 );
                 b0 += 16;
                 b1 += 16;
@@ -552,14 +548,14 @@ EE depthwise_pointwise_convolution_direct_no_padding_A55(TensorDesc inputDesc, F
                     :[out_0]"+r"(out_o0hw0),
                      [in_0]"+r"(in_hw0),
                      [f_0]"+r"(f_r)
-                    :[ic]"r"(ic*8),
+                    :[ic]"r"((I64)ic*8),
                      [b_0]"r"(b_o0),
-                     [pointwiseActivationMode]"r"(pointwiseActivationMode),
-                     [am_relu]"r"(ACTIVATION_RELU),
-                     [am_relu6]"r"(ACTIVATION_RELU6),
-                     [am_h_swish]"r"(ACTIVATION_H_SWISH)
-                    :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10",
-                                     "q11", "q12", "q13", "q14", "q15", "q16", "q17", "q18", "x0", "x1", "x2"
+                     [pointwiseActivationMode]"r"((I64)pointwiseActivationMode),
+                     [am_relu]"r"((I64)ACTIVATION_RELU),
+                     [am_relu6]"r"((I64)ACTIVATION_RELU6),
+                     [am_h_swish]"r"((I64)ACTIVATION_H_SWISH)
+                    :"memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10",
+                                     "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "x0", "x1", "x2"
                 );
             }
         }
@@ -732,15 +728,15 @@ EE depthwise_pointwise_convolution_direct_no_padding_A55(TensorDesc inputDesc, F
                      [out_1]"+r"(out_o1hw0),
                      [in_0]"+r"(in_hw0),
                      [f_0]"+r"(f_o0c0)
-                    :[ic]"r"(ic*8),
+                    :[ic]"r"((I64)ic*8),
                      [b_0]"r"(b_o0),
                      [b_1]"r"(b_o1),
-                     [pointwiseActivationMode]"r"(pointwiseActivationMode),
-                     [am_relu]"r"(ACTIVATION_RELU),
-                     [am_relu6]"r"(ACTIVATION_RELU6),
-                     [am_h_swish]"r"(ACTIVATION_H_SWISH)
-                    :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10",
-                                     "q11", "q12", "q13", "q18", "q19", "q20", "q21", "q22", "q23", "x0", "x1", "x2", "x3"
+                     [pointwiseActivationMode]"r"((I64)pointwiseActivationMode),
+                     [am_relu]"r"((I64)ACTIVATION_RELU),
+                     [am_relu6]"r"((I64)ACTIVATION_RELU6),
+                     [am_h_swish]"r"((I64)ACTIVATION_H_SWISH)
+                    :"memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10",
+                                     "v11", "v12", "v13", "v18", "v19", "v20", "v21", "v22", "v23", "x0", "x1", "x2", "x3"
                 );
                 b0 += 16;
                 b1 += 16;
@@ -845,14 +841,14 @@ EE depthwise_pointwise_convolution_direct_no_padding_A55(TensorDesc inputDesc, F
                     :[out_0]"+r"(out_o0hw0),
                      [in_0]"+r"(in_hw0),
                      [f_0]"+r"(f_r)
-                    :[ic]"r"(ic*8),
+                    :[ic]"r"((I64)ic*8),
                      [b_0]"r"(b_o0),
-                     [pointwiseActivationMode]"r"(pointwiseActivationMode),
-                     [am_relu]"r"(ACTIVATION_RELU),
-                     [am_relu6]"r"(ACTIVATION_RELU6),
-                     [am_h_swish]"r"(ACTIVATION_H_SWISH)
-                    :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", 
-                                     "q18", "q20", "q22", "x0", "x1", "x2"
+                     [pointwiseActivationMode]"r"((I64)pointwiseActivationMode),
+                     [am_relu]"r"((I64)ACTIVATION_RELU),
+                     [am_relu6]"r"((I64)ACTIVATION_RELU6),
+                     [am_h_swish]"r"((I64)ACTIVATION_H_SWISH)
+                    :"memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", 
+                                     "v18", "v20", "v22", "x0", "x1", "x2"
                 );
             }
         }
@@ -953,14 +949,14 @@ EE depthwise_pointwise_convolution_direct_no_padding_A55(TensorDesc inputDesc, F
                      [out_1]"+r"(out_o1hw0),
                      [in_0]"+r"(in_hw0),
                      [f_0]"+r"(f_o0c0)
-                    :[ic]"r"(ic*8),
+                    :[ic]"r"((I64)ic*8),
                      [b_0]"r"(b_o0),
                      [b_1]"r"(b_o1),
-                     [pointwiseActivationMode]"r"(pointwiseActivationMode),
-                     [am_relu]"r"(ACTIVATION_RELU),
-                     [am_relu6]"r"(ACTIVATION_RELU6),
-                     [am_h_swish]"r"(ACTIVATION_H_SWISH)
-                    :"memory", "cc", "q0", "q1", "q2", "q10", "q18", "q19", "q20", "q21", "q22", "q23", "x0", "x1", "x2", "x3"
+                     [pointwiseActivationMode]"r"((I64)pointwiseActivationMode),
+                     [am_relu]"r"((I64)ACTIVATION_RELU),
+                     [am_relu6]"r"((I64)ACTIVATION_RELU6),
+                     [am_h_swish]"r"((I64)ACTIVATION_H_SWISH)
+                    :"memory", "cc", "v0", "v1", "v2", "v10", "v18", "v19", "v20", "v21", "v22", "v23", "x0", "x1", "x2", "x3"
                 );
                 b0 += 16;
                 b1 += 16;
@@ -1029,13 +1025,13 @@ EE depthwise_pointwise_convolution_direct_no_padding_A55(TensorDesc inputDesc, F
                     :[out_0]"+r"(out_o0hw0),
                      [in_0]"+r"(in_hw0),
                      [f_0]"+r"(f_r)
-                    :[ic]"r"(ic*8),
+                    :[ic]"r"((I64)ic*8),
                      [b_0]"r"(b_o0),
-                     [pointwiseActivationMode]"r"(pointwiseActivationMode),
-                     [am_relu]"r"(ACTIVATION_RELU),
-                     [am_relu6]"r"(ACTIVATION_RELU6),
-                     [am_h_swish]"r"(ACTIVATION_H_SWISH)
-                    :"memory", "cc", "q0", "q1", "q2", "q10", "q18", "q20", "q22", "x0", "x1", "x2"
+                     [pointwiseActivationMode]"r"((I64)pointwiseActivationMode),
+                     [am_relu]"r"((I64)ACTIVATION_RELU),
+                     [am_relu6]"r"((I64)ACTIVATION_RELU6),
+                     [am_h_swish]"r"((I64)ACTIVATION_H_SWISH)
+                    :"memory", "cc", "v0", "v1", "v2", "v10", "v18", "v20", "v22", "x0", "x1", "x2"
                 );
             }
         }

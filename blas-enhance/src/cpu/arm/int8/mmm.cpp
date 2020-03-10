@@ -21,6 +21,7 @@
 void matrix_matrix_multiply_tmp_bytes_int8(U32 row1, U32 col1, U32 row2, U32 col2, DataType dt, U32 *bytes) {
     *bytes = row1 * col1 + row2 * col2;
     *bytes *= bytesOf(dt);
+    *bytes += 32;
 }
 
 EE mmm_int8(int M, int N, int K, INT8* matrix1, INT8* matrix2, INT8* tmp, I32* result, Arch arch) {

@@ -15,9 +15,13 @@
 #include "cpu/general/tensor_computing_general.h"
 
 template<typename T>
-EE clip(T* input, T* output, U32 len, T min_value, T max_value) {
+EE clip(T* input, T* output, U32 len, F32 min_value, F32 max_value) {
+    if (nullptr == input
+       || nullptr == output)
+        CHECK_STATUS(NULL_POINTER);
+
     for (U32 i = 0; i < len; i++) {
-        T value = input[i];
+        F32 value = input[i];
         value = (value > min_value) ? value : min_value;
         value = (value < max_value) ? value : max_value;
         output[i] = value;
@@ -30,17 +34,23 @@ EE clip_general(void *minValue, void *maxValue, TensorDesc inputDesc, void* inpu
     UNUSED(outputDesc);
 
     if (nullptr == minValue
-       || nullptr == maxValue
-       || nullptr == input
-       || nullptr == output)
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
+       || nullptr == maxValue)
+        CHECK_STATUS(NULL_POINTER);
 
     EE ret = SUCCESS;
     switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = clip<F16>((F16 *)input, (F16 *)output, tensorNumElements(inputDesc), *((F16 *)minValue), *((F16 *)maxValue));
+#ifdef _USE_FP32
+        case DT_F32: {
+            ret = clip<F32>((F32 *)input, (F32 *)output, tensorNumElements(inputDesc), *((F32 *)minValue), *((F32 *)maxValue));
             break;
         }
+#endif
+#ifdef _USE_FP16
+        case DT_F16: {
+            ret = clip<F16>((F16 *)input, (F16 *)output, tensorNumElements(inputDesc), *((F32 *)minValue), *((F32 *)maxValue));
+            break;
+        }
+#endif
         default:
             ret = NOT_SUPPORTED;
             break;

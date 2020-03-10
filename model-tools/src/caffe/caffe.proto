@@ -432,6 +432,80 @@ message LayerParameter {
   optional GeluParameter gelu_param = 153;
   optional LayerNormParameter layer_norm_param = 154;
   optional MatMulParameter matmul_param = 155;
+
+  optional PreAllocatedMemoryParameter preallocated_memory_param = 156;
+  optional SharedWeightParameter shared_weight_param = 157;
+  optional CopyParameter copy_param = 158;
+  optional SqueezeParameter squeeze_param = 159;
+  optional UnsqueezeParameter unsqueeze_param = 160;
+  optional AxisMeanParameter axis_mean_param = 161;
+  optional CheckParameter check_param = 162;
+  optional RepeatParameter repeat_param = 163;
+  optional LSTMParameter lstm_param = 164;
+  optional InterpParameter interp_param = 165;
+}
+
+message InterpParameter {
+  required uint32 height = 1;
+  required uint32 width = 2;
+}
+
+message PreAllocatedMemoryParameter {
+  enum DataType {
+    FLOAT32 = 0;
+    INT32 = 1;
+    UINT32 = 2;
+  }
+  optional DataType data_type = 1;
+  optional BlobShape shape = 2;
+}
+
+message SharedWeightParameter {
+  enum DataType {
+    FLOAT32 = 0;
+    INT32 = 1;
+    UINT32 = 2;
+  }
+  optional DataType data_type = 1;
+  optional BlobShape shape = 2;
+}
+
+message CopyParameter {
+  optional uint32 src_batch_stride = 1;
+  optional uint32 src_stride = 2;
+  optional uint32 src_offset = 3;
+  optional uint32 dst_batch_stride = 4;
+  optional uint32 dst_stride = 5;
+  optional uint32 dst_offset = 6;
+  optional uint32 length = 7;
+}
+
+message SqueezeParameter {
+  optional int32 axis = 1;
+}
+
+message UnsqueezeParameter {
+  optional int32 axis = 1;
+}
+
+message AxisMeanParameter {
+  optional int32 axis = 1;
+}
+
+message CheckParameter {
+  enum CheckOp {
+    EQUAL = 0;
+  }
+  optional CheckOp operation = 1;
+}
+
+message RepeatParameter {
+  optional int32 loops = 1;
+}
+
+message LSTMParameter {
+  optional uint32 num_output = 1;
+  optional int32 steps = 2 [default = -1];
 }
 
 // Message that stores parameters used to apply transformation
@@ -761,7 +835,7 @@ message EmbedParameter {
   optional bool bias_term = 3 [default = true]; // Whether to use a bias term
   optional FillerParameter weight_filler = 4; // The filler for the weight
   optional FillerParameter bias_filler = 5; // The filler for the bias
-
+  optional bool transpose = 6 [default = false]; // Whether to use transpose dict
 }
 
 // Message that stores parameters used by ExpLayer
@@ -1464,11 +1538,14 @@ message TransposeParameter {
 }
 
 message MultiplyParameter {
-  optional float scale = 1;
+  optional float scale = 1 [default = 1];
+  optional float bias = 2 [default = 0];
 }
 
 message AttentionParameter {
-  optional int32 num_attention = 1;
+  optional uint32 num_heads = 1;
+  optional uint32 from_sequence_length = 2;
+  optional uint32 to_sequence_length = 3;
 }
 
 message GeluParameter {
@@ -1477,4 +1554,6 @@ message GeluParameter {
 message LayerNormParameter {
 }
 message MatMulParameter {
+  optional bool transpose_a = 1 [default = false]; // Whether to use transpose matrixA
+  optional bool transpose_b = 2 [default = false]; // Whether to use transpose matrixB
 }

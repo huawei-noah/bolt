@@ -22,17 +22,15 @@
 #endif
 
 
-EE matrix_matrix_multiply_tmp_bytes(TensorDesc matrixADesc, TensorDesc matrixBDesc, U32* bytes, Arch arch) {
-    if (nullptr == bytes)
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
-
+EE matrix_matrix_multiply_tmp_bytes(TensorDesc matrixADesc, TensorDesc matrixBDesc, U32* bytes, Arch arch)
+{
     DataType matrixADataType, matrixBDataType;
     U32 matrixA_M, matrixA_K, matrixB_K, matrixB_N;
-    CHECK_STATUS_WITH_RETURN(tensor2dGet(matrixADesc, &matrixADataType, &matrixA_M, &matrixA_K));
-    CHECK_STATUS_WITH_RETURN(tensor2dGet(matrixBDesc, &matrixBDataType, &matrixB_K, &matrixB_N));
+    CHECK_STATUS(tensor2dGet(matrixADesc, &matrixADataType, &matrixA_M, &matrixA_K));
+    CHECK_STATUS(tensor2dGet(matrixBDesc, &matrixBDataType, &matrixB_K, &matrixB_N));
 
     EE ret = SUCCESS;
-    if (arch == ARM_A55 || arch == ARM_A76)
+    if (arch == ARM_A55 || arch == ARM_A76 || arch == ARM_V8)
 #ifdef _USE_NEON
         ret = matrix_matrix_multiply_tmp_bytes_arm(matrixA_M, matrixA_K, matrixB_K, matrixB_N, matrixADataType, bytes);
 #else
@@ -50,23 +48,27 @@ EE matrix_matrix_multiply(TensorDesc matrixADesc, const void* matrixAData,
      TensorDesc matrixCDesc, void* matrixCData,
      Arch arch)
 {
-    if (bytes != 0 && tmp == nullptr)
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
+    if (bytes != 0 && tmp == nullptr) {
+        CHECK_STATUS(NULL_POINTER);
+    }
+    if (nullptr == matrixAData || nullptr == matrixBData || nullptr == matrixCData) {
+        CHECK_STATUS(NULL_POINTER);
+    }
     
     DataType matrixADataType, matrixBDataType, matrixCDataType;
     U32 matrixA_M, matrixA_K, matrixB_K, matrixB_N, matrixC_M, matrixC_N;
-    CHECK_STATUS_WITH_RETURN(tensor2dGet(matrixADesc, &matrixADataType, &matrixA_M, &matrixA_K));
-    CHECK_STATUS_WITH_RETURN(tensor2dGet(matrixBDesc, &matrixBDataType, &matrixB_K, &matrixB_N));
-    CHECK_STATUS_WITH_RETURN(tensor2dGet(matrixCDesc, &matrixCDataType, &matrixC_M, &matrixC_N));
+    CHECK_STATUS(tensor2dGet(matrixADesc, &matrixADataType, &matrixA_M, &matrixA_K));
+    CHECK_STATUS(tensor2dGet(matrixBDesc, &matrixBDataType, &matrixB_K, &matrixB_N));
+    CHECK_STATUS(tensor2dGet(matrixCDesc, &matrixCDataType, &matrixC_M, &matrixC_N));
 
     if (matrixADataType != matrixBDataType)
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
+        CHECK_STATUS(NOT_MATCH);
     if (matrixADataType != matrixCDataType)
         if (matrixADataType != DT_I8 || matrixCDataType != DT_I32)
-            CHECK_STATUS_WITH_RETURN(NOT_MATCH);
+            CHECK_STATUS(NOT_MATCH);
 
     if (matrixA_M != matrixC_M || matrixB_N != matrixC_N || matrixA_K != matrixB_K)
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
+        CHECK_STATUS(NOT_MATCH);
     
     EE ret = SUCCESS;
     if (arch == CPU_GENERAL)

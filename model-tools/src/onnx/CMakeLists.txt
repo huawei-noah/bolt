@@ -5,6 +5,7 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 protobuf_generate_cpp(ONNX_PROTO_SRCS ONNX_PROTO_HDRS onnx.proto)
 
 include_directories(${PROTOBUF_INCLUDE_DIR} ${CMAKE_CURRENT_BINARY_DIR})
+include_directories(../)
 
 # shared library
 ADD_LIBRARY(${PROJECT_NAME}_onnx SHARED ${srcs} ${ONNX_PROTO_HDRS} ${ONNX_PROTO_SRCS})

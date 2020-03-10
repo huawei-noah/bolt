@@ -16,7 +16,8 @@
 #include "cpu/general/tensor_computing_general.h"
 #include "cpu/arm/tensor_computing_arm.h"
 
-EE attention(TensorDesc inputDesc, const void *input, TensorDesc outputDesc, void *output, Arch arch)
+EE attention(TensorDesc inputDesc, const void *input,
+    TensorDesc outputDesc, void *output, Arch arch)
 {
     EE ret = SUCCESS;
     switch (arch) {
@@ -29,25 +30,27 @@ EE attention(TensorDesc inputDesc, const void *input, TensorDesc outputDesc, voi
         case ARM_A76:
             ret = attention_arm(inputDesc, input, outputDesc, output);
             break;
+        case ARM_V8:
+            ret = attention_arm(inputDesc, input, outputDesc, output);
+            break;
         default:
             ret = NOT_SUPPORTED;
     }
     return ret;
 }
 
-EE attention_infer_output_size(TensorDesc inputDesc, I32 num_attention, TensorDesc *outputDesc)
+EE attention_infer_output_size(TensorDesc inputDesc,
+    U32 numHeads, U32 fromSequenceLength, U32 toSequenceLength,
+    TensorDesc *outputDesc)
 {
     if (nullptr == outputDesc)
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
-
-    if (inputDesc.dt != DT_F16 || !tensorIs2d(inputDesc))
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
+        CHECK_STATUS(NULL_POINTER);
 
     DataType dt;
-    U32 batch, seq_len;
-    CHECK_STATUS_WITH_RETURN(tensor2dGet(inputDesc, &dt, &batch, &seq_len));
+    U32 batch, sequenceLength;
+    CHECK_STATUS(tensor2dGet(inputDesc, &dt, &batch, &sequenceLength));
 
-    *outputDesc = tensor4df(DT_F16, DF_NCHW, batch, num_attention, seq_len, seq_len);
+    *outputDesc = tensor4df(dt, DF_NCHW, batch, numHeads, fromSequenceLength, toSequenceLength);
 
     return SUCCESS;
 }

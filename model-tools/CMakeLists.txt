@@ -3,37 +3,32 @@ cmake_minimum_required(VERSION 3.2)
 file(GLOB BOLT_CONFIGURE_FILE $ENV{BOLT_ROOT}/bolt.cmake ${BOLT_ROOT}/bolt.cmake)
 if (BOLT_CONFIGURE_FILE)
     include(${BOLT_CONFIGURE_FILE})
+else (BOLT_CONFIGURE_FILE)
+    message(FATAL_ERROR "
+FATAL: can not find bolt.cmake in <BOLT_ROOT> directory,
+       please set shell or cmake environment variable BOLT_ROOT.
+    ")
 endif (BOLT_CONFIGURE_FILE)
-
 
 project(model-tools)
 
-
 set_policy()
-SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/../uni/cmakes")
-SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${PROJECT_SOURCE_DIR}/cmakes")
+
+SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${BOLT_ROOT}/cmakes")
 find_package(Uni)
+find_package(ModelTools)
 
-SET(EXECUTABLE_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/bin)
-SET(LIBRARY_OUTPUT_PATH ${PROJECT_SOURCE_DIR}/lib)
+set_project_install_directory()
 
-set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17 -Wall -Wextra -O2")
-
-if (USE_DEBUG)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -g")
-endif(USE_DEBUG)
-
-if (USE_CAFFE)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_USE_CAFFE_MODEL")
-    find_package(ModelTools)
-endif()
-
-if (USE_ONNX)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -D_USE_ONNX_MODEL")
-    find_package(ModelTools)
-endif()
+set_c_cxx_flags()
 
 add_subdirectory(src)
-add_subdirectory(src/caffe)
-add_subdirectory(src/onnx)
-add_subdirectory(tests)
+if (USE_CAFFE)
+    add_subdirectory(src/caffe)
+endif(USE_CAFFE)
+if (USE_ONNX)
+    add_subdirectory(src/onnx)
+endif(USE_ONNX)
+if (USE_TFLITE)
+    add_subdirectory(src/tflite)
+endif(USE_TFLITE)

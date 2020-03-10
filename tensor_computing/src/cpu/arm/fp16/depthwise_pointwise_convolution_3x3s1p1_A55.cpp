@@ -12,10 +12,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#include "sys.h"
-#include "type.h"
-#include "error.h"
-#include "tensor_desc.h"
 #include "cpu/arm/fp16/depthwise_pointwise_convolution_3x3s1p1.h"
 
 EE depthwise_pointwise_convolution_3x3s1p1_A55(TensorDesc inputDesc, F16* inArray,
@@ -36,14 +32,12 @@ EE depthwise_pointwise_convolution_3x3s1p1_A55(TensorDesc inputDesc, F16* inArra
     U32 in, ic, ih, iw;
     U32 fn, fc, fh, fw;
     U32 on, oc, oh, ow;
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
+    CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+    CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
+    CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
 
     if (fdf != DF_CHWC8_NCN16)
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
-    if (!(ic == fc && oc == fn))
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
+        CHECK_STATUS(NOT_MATCH);
 
     oc /= 8;
     ic /= 8;
@@ -384,14 +378,14 @@ EE depthwise_pointwise_convolution_3x3s1p1_A55(TensorDesc inputDesc, F16* inArra
                  [in_1]"+r"(in1)
                 :[f]"r"(f),
                  [b]"r"(b),
-                 [w]"r"(ow-8),
-                 [depthwiseActivationMode]"r"(depthwiseActivationMode),
-                 [am_relu]"r"(ACTIVATION_RELU),
-                 [am_relu6]"r"(ACTIVATION_RELU6),
-                 [am_h_swish]"r"(ACTIVATION_H_SWISH)
-                :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10",
-                                 "q11", "q12", "q13", "q14", "q15", "q16", "q17", "q18", "q19", "q20",
-                                 "q21", "q22", "q23", "q24", "q25", "q26", "q27", "q28", "q29", "q30", "q31", "x0", "x1", "x2", "x3"
+                 [w]"r"((I64)ow-8),
+                 [depthwiseActivationMode]"r"((I64)depthwiseActivationMode),
+                 [am_relu]"r"((I64)ACTIVATION_RELU),
+                 [am_relu6]"r"((I64)ACTIVATION_RELU6),
+                 [am_h_swish]"r"((I64)ACTIVATION_H_SWISH)
+                :"memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10",
+                                 "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20",
+                                 "v21", "v22", "v23", "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31", "x0", "x1", "x2", "x3"
             );
 
             for (U32 h = 0; h < oh-2; h++) {
@@ -789,14 +783,14 @@ EE depthwise_pointwise_convolution_3x3s1p1_A55(TensorDesc inputDesc, F16* inArra
                      [in_2]"+r"(in2)
                     :[f]"r"(f),
                      [b]"r"(b),
-                     [w]"r"(ow-8),
-                     [depthwiseActivationMode]"r"(depthwiseActivationMode),
-                     [am_relu]"r"(ACTIVATION_RELU),
-                     [am_relu6]"r"(ACTIVATION_RELU6),
-                     [am_h_swish]"r"(ACTIVATION_H_SWISH)
-                    :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10",
-                                     "q11", "q12", "q13", "q14", "q15", "q16", "q17", "q18", "q19", "q20",
-                                     "q21", "q22", "q23", "q24", "q25", "q26", "q27", "q28", "q29", "q30", "q31", "x0", "x1", "x2", "x3"
+                     [w]"r"((I64)ow-8),
+                     [depthwiseActivationMode]"r"((I64)depthwiseActivationMode),
+                     [am_relu]"r"((I64)ACTIVATION_RELU),
+                     [am_relu6]"r"((I64)ACTIVATION_RELU6),
+                     [am_h_swish]"r"((I64)ACTIVATION_H_SWISH)
+                    :"memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10",
+                                     "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20",
+                                     "v21", "v22", "v23", "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31", "x0", "x1", "x2", "x3"
                 );
             }
             in0 = in_c + (ih-2)*iw*8;
@@ -1127,14 +1121,14 @@ EE depthwise_pointwise_convolution_3x3s1p1_A55(TensorDesc inputDesc, F16* inArra
                  [in_1]"+r"(in1)
                 :[f]"r"(f),
                  [b]"r"(b),
-                 [w]"r"(ow-8),
-                 [depthwiseActivationMode]"r"(depthwiseActivationMode),
-                 [am_relu]"r"(ACTIVATION_RELU),
-                 [am_relu6]"r"(ACTIVATION_RELU6),
-                 [am_h_swish]"r"(ACTIVATION_H_SWISH)
-                :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10",
-                                 "q11", "q12", "q13", "q14", "q15", "q16", "q17", "q18", "q19", "q20",
-                                 "q21", "q22", "q23", "q24", "q25", "q26", "q27", "q28", "q29", "q30", "q31", "x0", "x1", "x2", "x3"
+                 [w]"r"((I64)ow-8),
+                 [depthwiseActivationMode]"r"((I64)depthwiseActivationMode),
+                 [am_relu]"r"((I64)ACTIVATION_RELU),
+                 [am_relu6]"r"((I64)ACTIVATION_RELU6),
+                 [am_h_swish]"r"((I64)ACTIVATION_H_SWISH)
+                :"memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10",
+                                 "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20",
+                                 "v21", "v22", "v23", "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31", "x0", "x1", "x2", "x3"
             );
         }
 
@@ -1463,16 +1457,16 @@ EE depthwise_pointwise_convolution_3x3s1p1_A55(TensorDesc inputDesc, F16* inArra
                      [out_1]"+r"(out_o1hw0),
                      [in_0]"+r"(in_hw0),
                      [f_0]"+r"(f_o0c0)
-                    :[ic]"r"(ic*8),
+                    :[ic]"r"((I64)ic*8),
                      [b_0]"r"(b_o0),
                      [b_1]"r"(b_o1),
-                     [pointwiseActivationMode]"r"(pointwiseActivationMode),
-                     [am_relu]"r"(ACTIVATION_RELU),
-                     [am_relu6]"r"(ACTIVATION_RELU6),
-                     [am_h_swish]"r"(ACTIVATION_H_SWISH)
-                    :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10",
-                                     "q11", "q12", "q13", "q14", "q15", "q16", "q17", "q18", "q19", "q20",
-                                     "q21", "q22", "q23", "q24", "q25", "q26", "x0", "x1", "x2", "x3"
+                     [pointwiseActivationMode]"r"((I64)pointwiseActivationMode),
+                     [am_relu]"r"((I64)ACTIVATION_RELU),
+                     [am_relu6]"r"((I64)ACTIVATION_RELU6),
+                     [am_h_swish]"r"((I64)ACTIVATION_H_SWISH)
+                    :"memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10",
+                                     "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20",
+                                     "v21", "v22", "v23", "v24", "v25", "v26", "x0", "x1", "x2", "x3"
                 );
                 b0 += 16;
                 b1 += 16;
@@ -1629,14 +1623,14 @@ EE depthwise_pointwise_convolution_3x3s1p1_A55(TensorDesc inputDesc, F16* inArra
                     :[out_0]"+r"(out_o0hw0),
                      [in_0]"+r"(in_hw0),
                      [f_0]"+r"(f_r)
-                    :[ic]"r"(ic*8),
+                    :[ic]"r"((I64)ic*8),
                      [b_0]"r"(b_o0),
-                     [pointwiseActivationMode]"r"(pointwiseActivationMode),
-                     [am_relu]"r"(ACTIVATION_RELU),
-                     [am_relu6]"r"(ACTIVATION_RELU6),
-                     [am_h_swish]"r"(ACTIVATION_H_SWISH)
-                    :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10",
-                                     "q11", "q12", "q13", "q14", "q15", "q16", "q17", "q18", "x0", "x1", "x2"
+                     [pointwiseActivationMode]"r"((I64)pointwiseActivationMode),
+                     [am_relu]"r"((I64)ACTIVATION_RELU),
+                     [am_relu6]"r"((I64)ACTIVATION_RELU6),
+                     [am_h_swish]"r"((I64)ACTIVATION_H_SWISH)
+                    :"memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10",
+                                     "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "x0", "x1", "x2"
                 );
             }
         }

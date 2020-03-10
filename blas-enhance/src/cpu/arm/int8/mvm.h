@@ -15,7 +15,9 @@
 #ifndef _H_MVM
 #define _H_MVM
 
+#ifdef _USE_INT8
 #include <arm_neon.h> 
+#include <string.h>
 
 
 inline void mvm_col_tail(U32 N, U32 K, INT8* matrix, INT8* vector, I32* result) {
@@ -96,7 +98,7 @@ inline void mvm_row_kernel(U32 Nbatch, U32 K, INT8* matrix, INT8* vector, I32* r
      }
 }
 
-inline void mvm_col(U32 numRows, U32 numColumns, INT8* matrix, INT8* vector, I32* result) {
+inline void mvm_col(U32 numRows, U32 numColumns, INT8* matrix, INT8* vector, I32*tmp, I32* result) {
     //Actual layout is KN, and vector is K
     U32 N = numRows;
     U32 K = numColumns;
@@ -104,7 +106,7 @@ inline void mvm_col(U32 numRows, U32 numColumns, INT8* matrix, INT8* vector, I32
     U32 NInner = N - NTail;
 
     for (U32 n = 0; n < NInner; n+=64) {
-        I32 tmp[64] = {0};
+        memset(tmp, 0, sizeof(I32)*64);
         for (U32 k = 0; k < K; k++) {
             for(U32 i = 0; i < 64; i++) {
                 tmp[i] += vector[k] * matrix[k * N + n + i];
@@ -116,7 +118,7 @@ inline void mvm_col(U32 numRows, U32 numColumns, INT8* matrix, INT8* vector, I32
         }
     }
 
-    I32 tmp[64] = {0};
+    memset(tmp, 0, sizeof(I32)*64);
     for (U32 k = 0; k < K; k++) {
         for(U32 i = 0; i < NTail; i++) {
             tmp[i] += vector[k] * matrix[k * N + NInner + i];
@@ -140,4 +142,5 @@ inline void mvm_row(U32 numRows, U32 numColumns, INT8* matrix, INT8* vector, I32
         mvm_row_tail(NTail, K, matrix + (N - NTail) * K, vector, result + N - NTail);
     }
 }
+#endif
 #endif

@@ -23,32 +23,19 @@ extern "C" {
 #endif
 
 #ifdef _USE_CAFFE_MODEL
-    EE mt_load_caffe(CI8* dir, CI8* mfn, ModelSpec* ms);
-    EE mt_store_caffe(CI8* dir, CI8* mfn, const ModelSpec* ms);
-    EE mt_to_caffe(CI8* dir, CI8* mtFn, CI8* caffeFn);
-    EE mt_from_caffe(CI8* dir, CI8* caffeFn, CI8* mtFn);
-    EE caffe_model_info_check(CI8* dir, CI8* mfn);
+    EE caffe_converter(std::string dir, std::string mfn, ModelSpec* ms);
 #endif
 
 #ifdef _USE_TENSORFLOW_MODEL
-    EE mt_load_tensorflow(CI8* dir, CI8* mfn, ModelSpec* ms);
-    EE mt_store_tensorflow(CI8* dir, CI8* mfn, const ModelSpec* ms);
-    EE mt_to_tf(CI8* dir, CI8* mtFn, CI8* tfFn);
-    EE mt_from_tf(CI8* dir, CI8* tfFn, CI8* mtFn);
+    EE tensorflow_converter(std::string dir, std::string mfn, ModelSpec* ms);
 #endif
 
 #ifdef _USE_ONNX_MODEL
-    EE mt_load_onnx(CI8* dir, CI8* mfn, ModelSpec* ms, int removePreprocessOpNum, TensorDesc inputDesc);
-    EE mt_store_onnx(CI8* dir, CI8* mfn, const ModelSpec* ms);
-    EE mt_to_onnx(CI8* dir, CI8* mtFn, CI8* tfFn);
-    EE mt_from_onnx(CI8* dir, CI8* tfFn, CI8* mtFn);
+    EE onnx_converter(std::string dir, std::string mfn, int removePreprocessOpNum, TensorDesc inputDesc, ModelSpec* ms);
 #endif
 
 #ifdef _USE_TFLITE_MODEL
-    EE mt_load_tflite(CI8* dir, CI8* mfn, ModelSpec* ms);
-    EE mt_store_tflite(CI8* dir, CI8* mfn, const ModelSpec* ms);
-    EE mt_to_tflite(CI8* dir, CI8* mtFn, CI8* tfFn);
-    EE mt_from_tflite(CI8* dir, CI8* tfFn, CI8* mtFn);
+    EE tflite_converter(std::string dir, std::string mfn, ModelSpec* ms);
 #endif
 
 #ifdef __cplusplus

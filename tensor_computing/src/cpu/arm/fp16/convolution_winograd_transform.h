@@ -15,10 +15,10 @@
 #ifndef _H_WINOGRAD_TRANSFORM
 #define _H_WINOGRAD_TRANSFORM
 
+#ifdef _USE_FP16
 #include <math.h>
 #include <string.h>
-#include "type.h"
-#include "error.h"
+#include "cpu/arm/fp16/arm_neon_expand_fp16.h"
 
 inline void trans_W_4x4_3x3(F16 *Fw[36], F16* const F[9]) {
     F16 T[6][3][8];
@@ -177,6 +177,24 @@ inline EE trans_O_4x4_3x3(F16* const Ow[36], F16 *O[16], const F16* bias,
                 }
                 break;
             }
+            case ACTIVATION_SIGMOID: {
+                if (pad_w_mod_4 == 0) {
+                    vst1q_f16(O[i*4+0], vsigmoidq_f16(vaddq_f16(v_O0, v_b)));
+                    vst1q_f16(O[i*4+1], vsigmoidq_f16(vaddq_f16(v_O1, v_b)));
+                    vst1q_f16(O[i*4+2], vsigmoidq_f16(vaddq_f16(v_O2, v_b)));
+                    vst1q_f16(O[i*4+3], vsigmoidq_f16(vaddq_f16(v_O3, v_b)));
+                } else if (pad_w_mod_4 == 1) {
+                    vst1q_f16(O[i*4+0], vsigmoidq_f16(vaddq_f16(v_O0, v_b)));
+                    vst1q_f16(O[i*4+1], vsigmoidq_f16(vaddq_f16(v_O1, v_b)));
+                    vst1q_f16(O[i*4+2], vsigmoidq_f16(vaddq_f16(v_O2, v_b)));
+                } else if (pad_w_mod_4 == 2) {
+                    vst1q_f16(O[i*4+0], vsigmoidq_f16(vaddq_f16(v_O0, v_b)));
+                    vst1q_f16(O[i*4+1], vsigmoidq_f16(vaddq_f16(v_O1, v_b)));
+                } else if (pad_w_mod_4 == 3) {
+                    vst1q_f16(O[i*4+0], vsigmoidq_f16(vaddq_f16(v_O0, v_b)));
+                }
+                break;
+            }
             default:
                 return NOT_SUPPORTED;
         }
@@ -185,7 +203,8 @@ inline EE trans_O_4x4_3x3(F16* const Ow[36], F16 *O[16], const F16* bias,
 }
 
 
-inline void trans_I_4x4_3x3(F16 *Iw[36], F16* const I[36]) {
+inline void trans_I_4x4_3x3(F16 *Iw[36], F16* const I[36])
+{
     F16 T[6][6][8];
 
     float16x8_t v_4 = vmovq_n_f16(4);
@@ -247,20 +266,20 @@ inline void trans_I_4x4_3x3(F16 *Iw[36], F16* const I[36]) {
 
         F16 max = vmaxvq_f16(v_Iw0);
         F16 min = vminvq_f16(v_Iw0);
-        if (std::isnan(max) || std::isinf(max) || std::isnan(min) || std::isinf(min)) {
+        if (UNI_ISNAN(max) || UNI_ISINF(max) || UNI_ISNAN(min) || UNI_ISINF(min)) {
             F16 check[8];
             vst1q_f16(check, v_Iw0);
             for (U32 c = 0; c < 8; c++) {
                 F16 tmp = check[c];
-                if (std::isinf(tmp)) {
+                if (UNI_ISINF(tmp)) {
                     if (tmp > 0) {
                         check[c] = 65504;  // FMAX for F16
                     } else {
                         check[c] = -65504;
                     }
-                } else if (std::isnan(tmp)) {
+                } else if (UNI_ISNAN(tmp)) {
                     tmp = (T[i][0][c] - T[i][2][c]) * 4;
-                    if (std::isinf(tmp)) {
+                    if (UNI_ISINF(tmp)) {
                         if (tmp > 0) {
                             tmp = 65504;  // FMAX for F16
                         } else {
@@ -269,7 +288,7 @@ inline void trans_I_4x4_3x3(F16 *Iw[36], F16* const I[36]) {
                     }
                     F16 diff = T[i][4][c] - T[i][2][c];
                     tmp += diff;
-                    if (std::isinf(tmp)) {
+                    if (UNI_ISINF(tmp)) {
                         if (diff > 0) {
                             tmp = 65504;
                         } else {
@@ -286,20 +305,20 @@ inline void trans_I_4x4_3x3(F16 *Iw[36], F16* const I[36]) {
         
         max = vmaxvq_f16(v_Iw1);
         min = vminvq_f16(v_Iw1);
-        if (std::isnan(max) || std::isinf(max) || std::isnan(min) || std::isinf(min)) {
+        if (UNI_ISNAN(max) || UNI_ISINF(max) || UNI_ISNAN(min) || UNI_ISINF(min)) {
             F16 check[8];
             vst1q_f16(check, v_Iw1);
             for (U32 c = 0; c < 8; c++) {
                 F16 tmp = check[c];
-                if (std::isinf(tmp)) {
+                if (UNI_ISINF(tmp)) {
                     if (tmp > 0) {
                         check[c] = 65504;  // FMAX for F16
                     } else {
                         check[c] = -65504;
                     }
-                } else if (std::isnan(tmp)) {
+                } else if (UNI_ISNAN(tmp)) {
                     tmp = (T[i][1][c] + T[i][2][c]) * -4;
-                    if (std::isinf(tmp)) {
+                    if (UNI_ISINF(tmp)) {
                         if (tmp > 0) {
                             tmp = 65504;  // FMAX for F16
                         } else {
@@ -308,7 +327,7 @@ inline void trans_I_4x4_3x3(F16 *Iw[36], F16* const I[36]) {
                     }
                     F16 sum = T[i][3][c] + T[i][4][c];
                     tmp += sum;
-                    if (std::isinf(tmp)) {
+                    if (UNI_ISINF(tmp)) {
                         if (sum > 0) {
                             tmp = 65504;
                         } else {
@@ -325,20 +344,20 @@ inline void trans_I_4x4_3x3(F16 *Iw[36], F16* const I[36]) {
         
         max = vmaxvq_f16(v_Iw2);
         min = vminvq_f16(v_Iw2);
-        if (std::isnan(max) || std::isinf(max) || std::isnan(min) || std::isinf(min)) {
+        if (UNI_ISNAN(max) || UNI_ISINF(max) || UNI_ISNAN(min) || UNI_ISINF(min)) {
             F16 check[8];
             vst1q_f16(check, v_Iw2);
             for (U32 c = 0; c < 8; c++) {
                 F16 tmp = check[c];
-                if (std::isinf(tmp)) {
+                if (UNI_ISINF(tmp)) {
                     if (tmp > 0) {
                         check[c] = 65504;  // FMAX for F16
                     } else {
                         check[c] = -65504;
                     }
-                } else if (std::isnan(tmp)) {
+                } else if (UNI_ISNAN(tmp)) {
                     tmp = (T[i][1][c] - T[i][2][c]) * 4;
-                    if (std::isinf(tmp)) {
+                    if (UNI_ISINF(tmp)) {
                         if (tmp > 0) {
                             tmp = 65504;  // FMAX for F16
                         } else {
@@ -347,7 +366,7 @@ inline void trans_I_4x4_3x3(F16 *Iw[36], F16* const I[36]) {
                     }
                     F16 diff = T[i][4][c] - T[i][3][c];
                     tmp += diff;
-                    if (std::isinf(tmp)) {
+                    if (UNI_ISINF(tmp)) {
                         if (diff > 0) {
                             tmp = 65504;
                         } else {
@@ -364,20 +383,20 @@ inline void trans_I_4x4_3x3(F16 *Iw[36], F16* const I[36]) {
         
         max = vmaxvq_f16(v_Iw3);
         min = vminvq_f16(v_Iw3);
-        if (std::isnan(max) || std::isinf(max) || std::isnan(min) || std::isinf(min)) {
+        if (UNI_ISNAN(max) || UNI_ISINF(max) || UNI_ISNAN(min) || UNI_ISINF(min)) {
             F16 check[8];
             vst1q_f16(check, v_Iw3);
             for (U32 c = 0; c < 8; c++) {
                 F16 tmp = check[c];
-                if (std::isinf(tmp)) {
+                if (UNI_ISINF(tmp)) {
                     if (tmp > 0) {
                         check[c] = 65504;  // FMAX for F16
                     } else {
                         check[c] = -65504;
                     }
-                } else if (std::isnan(tmp)) {
+                } else if (UNI_ISNAN(tmp)) {
                     tmp = (T[i][3][c] - T[i][1][c]) * 2;
-                    if (std::isinf(tmp)) {
+                    if (UNI_ISINF(tmp)) {
                         if (tmp > 0) {
                             tmp = 65504;  // FMAX for F16
                         } else {
@@ -386,7 +405,7 @@ inline void trans_I_4x4_3x3(F16 *Iw[36], F16* const I[36]) {
                     }
                     F16 diff = T[i][4][c] - T[i][2][c];
                     tmp += diff;
-                    if (std::isinf(tmp)) {
+                    if (UNI_ISINF(tmp)) {
                         if (diff > 0) {
                             tmp = 65504;
                         } else {
@@ -403,20 +422,20 @@ inline void trans_I_4x4_3x3(F16 *Iw[36], F16* const I[36]) {
         
         max = vmaxvq_f16(v_Iw4);
         min = vminvq_f16(v_Iw4);
-        if (std::isnan(max) || std::isinf(max) || std::isnan(min) || std::isinf(min)) {
+        if (UNI_ISNAN(max) || UNI_ISINF(max) || UNI_ISNAN(min) || UNI_ISINF(min)) {
             F16 check[8];
             vst1q_f16(check, v_Iw4);
             for (U32 c = 0; c < 8; c++) {
                 F16 tmp = check[c];
-                if (std::isinf(tmp)) {
+                if (UNI_ISINF(tmp)) {
                     if (tmp > 0) {
                         check[c] = 65504;  // FMAX for F16
                     } else {
                         check[c] = -65504;
                     }
-                } else if (std::isnan(tmp)) {
+                } else if (UNI_ISNAN(tmp)) {
                     tmp = (T[i][1][c] - T[i][3][c]) * 2;
-                    if (std::isinf(tmp)) {
+                    if (UNI_ISINF(tmp)) {
                         if (tmp > 0) {
                             tmp = 65504;  // FMAX for F16
                         } else {
@@ -425,7 +444,7 @@ inline void trans_I_4x4_3x3(F16 *Iw[36], F16* const I[36]) {
                     }
                     F16 diff = T[i][4][c] - T[i][2][c];
                     tmp += diff;
-                    if (std::isinf(tmp)) {
+                    if (UNI_ISINF(tmp)) {
                         if (diff > 0) {
                             tmp = 65504;
                         } else {
@@ -442,20 +461,20 @@ inline void trans_I_4x4_3x3(F16 *Iw[36], F16* const I[36]) {
         
         max = vmaxvq_f16(v_Iw5);
         min = vminvq_f16(v_Iw5);
-        if (std::isnan(max) || std::isinf(max) || std::isnan(min) || std::isinf(min)) {
+        if (UNI_ISNAN(max) || UNI_ISINF(max) || UNI_ISNAN(min) || UNI_ISINF(min)) {
             F16 check[8];
             vst1q_f16(check, v_Iw5);
             for (U32 c = 0; c < 8; c++) {
                 F16 tmp = check[c];
-                if (std::isinf(tmp)) {
+                if (UNI_ISINF(tmp)) {
                     if (tmp > 0) {
                         check[c] = 65504;  // FMAX for F16
                     } else {
                         check[c] = -65504;
                     }
-                } else if (std::isnan(tmp)) {
+                } else if (UNI_ISNAN(tmp)) {
                     tmp = (T[i][1][c] - T[i][3][c]) * 4;
-                    if (std::isinf(tmp)) {
+                    if (UNI_ISINF(tmp)) {
                         if (tmp > 0) {
                             tmp = 65504;  // FMAX for F16
                         } else {
@@ -464,7 +483,7 @@ inline void trans_I_4x4_3x3(F16 *Iw[36], F16* const I[36]) {
                     }
                     F16 diff = T[i][5][c] - T[i][3][c];
                     tmp += diff;
-                    if (std::isinf(tmp)) {
+                    if (UNI_ISINF(tmp)) {
                         if (diff > 0) {
                             tmp = 65504;
                         } else {
@@ -480,4 +499,5 @@ inline void trans_I_4x4_3x3(F16 *Iw[36], F16* const I[36]) {
         }
     }
 }
+#endif
 #endif

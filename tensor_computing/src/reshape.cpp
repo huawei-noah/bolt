@@ -31,6 +31,9 @@ EE reshape(TensorDesc inputDesc, void* input,
         case ARM_A76:
             ret = reshape_arm(inputDesc, input, outputDesc, output);
             break;
+        case ARM_V8:
+            ret = reshape_arm(inputDesc, input, outputDesc, output);
+            break;
         default:
             ret = NOT_SUPPORTED;
             break;
@@ -46,6 +49,10 @@ EE reshape_infer_output_size(TensorDesc inputDesc, TensorDesc* outputDesc, I32 *
 
     *outputDesc = inputDesc;
     (*outputDesc).nDims = shape_size;
+    if (shape_size == 2)
+        (*outputDesc).df = DF_NORMAL;
+    if (shape_size == 4)
+        (*outputDesc).df = DF_NCHW;
 
     U32 factor = 1;
     I32 count = 0;

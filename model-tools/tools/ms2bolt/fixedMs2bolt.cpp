@@ -19,22 +19,23 @@
 #include "model_serialize_deserialize.hpp"
 #include "converter.h"
 
-int main() {
+int main()
+{
     ModelSpec fixedMs;
     
     std::string modelName = "leNet";
     DataType dt = DT_F32;
     str_copy(fixedMs.modelName, modelName.c_str(), NAME_LEN);
     fixedMs.dt = dt;
-    std::cerr << "group1 " << std::endl;
+    std::cout << "group1 " << std::endl;
 
     int numInputs = 1;
     char* inputNames = "data";
-    std::cerr << "inputNames[0] " << inputNames[0] << std::endl;
+    std::cout << "inputNames[0] " << inputNames[0] << std::endl;
     fixedMs.inputNames = {"data"};
 
-    std::cerr << "memcpy success " << std::endl;
-    fixedMs.input_dims = (TensorDesc*)mt_malloc(sizeof(TensorDesc) * numInputs);
+    std::cout << "memcpy success " << std::endl;
+    fixedMs.input_dims = (TensorDesc*)mt_new_storage(sizeof(TensorDesc) * numInputs);
     fixedMs.input_dims[0].dt = DT_F32;
     fixedMs.input_dims[0].df = DF_NCHW;
     fixedMs.input_dims[0].nDims = 4;
@@ -43,12 +44,12 @@ int main() {
     fixedMs.input_dims[0].dims[2] = 28;
     fixedMs.input_dims[0].dims[3] = 28;
     fixedMs.numInputs = numInputs;
-    std::cerr << "group2 " << std::endl;
+    std::cout << "group2 " << std::endl;
 
     int numOutputs = 1;
     fixedMs.output_names = {"prob"};
     fixedMs.numOutputs = numOutputs;
-    std::cerr << "group3 " << std::endl;
+    std::cout << "group3 " << std::endl;
 
     int numOperatorSpecs = 7;
     OperatorSpec opsArr[7];
@@ -71,7 +72,7 @@ int main() {
     opsArr[0].input_tensors_name = opInputTensorsName0;
     opsArr[0].numOutputs = opNumOutputs0;
     opsArr[0].output_tensors_name = opOutputTensorsName0;
-    opsArr[0].ps.conv_param_spec = convCps1;
+    opsArr[0].ps.conv_spec = convCps1;
 
     std::string opName1 = "pooling1";
     OperatorType opType1 = OT_Pooling;
@@ -90,7 +91,7 @@ int main() {
     opsArr[1].input_tensors_name = opInputTensorsName1;
     opsArr[1].numOutputs = opNumOutputs1;
     opsArr[1].output_tensors_name = opOutputTensorsName1;
-    opsArr[1].ps.pooling_param_spec = poolingPps1;
+    opsArr[1].ps.pooling_spec = poolingPps1;
 
     std::string opName2 = "conv2";
     OperatorType opType2 = OT_Conv;
@@ -109,7 +110,7 @@ int main() {
     opsArr[2].input_tensors_name = opInputTensorsName2;
     opsArr[2].numOutputs = opNumOutputs2;
     opsArr[2].output_tensors_name = opOutputTensorsName2;
-    opsArr[2].ps.conv_param_spec = convCps2;
+    opsArr[2].ps.conv_spec = convCps2;
 
     std::string opName3 = "pooling2";
     OperatorType opType3 = OT_Pooling;
@@ -128,7 +129,7 @@ int main() {
     opsArr[3].input_tensors_name = opInputTensorsName3;
     opsArr[3].numOutputs = opNumOutputs3;
     opsArr[3].output_tensors_name = op_output_tensors_name_3;
-    opsArr[3].ps.pooling_param_spec = poolingPps2;
+    opsArr[3].ps.pooling_spec = poolingPps2;
 
     std::string opName4 = "fc1";
     OperatorType opType4 = OT_FC;
@@ -144,7 +145,7 @@ int main() {
     opsArr[4].input_tensors_name = opInputTensorsName4;
     opsArr[4].numOutputs = opNumOutputs4;
     opsArr[4].output_tensors_name = opOutputTensorsName4;
-    opsArr[4].ps.ip_param_spec = fcps1;
+    opsArr[4].ps.fc_spec = fcps1;
 
     std::string opName5 = "fc2";
     OperatorType opType5 = OT_FC;
@@ -160,7 +161,7 @@ int main() {
     opsArr[5].input_tensors_name = opInputTensorsName5;
     opsArr[5].numOutputs = opNumOutputs5;
     opsArr[5].output_tensors_name = opOutputTensorsName5;
-    opsArr[5].ps.ip_param_spec = fcps2;
+    opsArr[5].ps.fc_spec = fcps2;
 
     std::string opName6 = "prob";
     OperatorType opType6 = OT_Softmax;
@@ -177,7 +178,7 @@ int main() {
 
     fixedMs.numOperatorSpecs = numOperatorSpecs;
     fixedMs.ops = &opsArr[0];
-    std::cerr << "group4 " << std::endl;
+    std::cout << "group4 " << std::endl;
 
     // weight op 信息
     I32 numWeightSpecs = 4;
@@ -188,12 +189,12 @@ int main() {
     std::string weigthOpNameConv1 = "conv1";
     DataType mdtConv1 = DT_F32;
     U32 bytesOfWeightConv1 = 1*5*5*20*bytesOf(mdtConv1);
-    F32* conv1WeightPtr = (F32*)mt_malloc(bytesOfWeightConv1);
+    F32* conv1WeightPtr = (F32*)mt_new_storage(bytesOfWeightConv1);
     for (int i = 0; i < 1*5*5*20; i++) {
         conv1WeightPtr[i] = 1.0;
     }
     U32 bytesOfVecConv1 = 20*bytesOf(mdtConv1);
-    F32* convVecPtr1 = (F32*)mt_malloc(bytesOfVecConv1);
+    F32* convVecPtr1 = (F32*)mt_new_storage(bytesOfVecConv1);
     for (int i = 0; i < 20; i++) {
         convVecPtr1[i] = 1.0;
     }
@@ -207,12 +208,12 @@ int main() {
     std::string weightOpNameConv2 = "conv2";
     DataType mdtConv2 = DT_F32;
     U32 bytesOfWeightConv2 = 64*5*5*32*bytesOf(mdtConv2);
-    F32* conv2WeightPtr = (F32*)mt_malloc(bytesOfWeightConv2);
+    F32* conv2WeightPtr = (F32*)mt_new_storage(bytesOfWeightConv2);
     for (int i = 0; i < 64*5*5*32; i++) {
         conv2WeightPtr[i] = 1.0;
     }
     U32 bytesOfVecConv2 = 32 * bytesOf(mdtConv2);
-    F32* convVecPtr2 = (F32*)mt_malloc(bytesOfVecConv2);
+    F32* convVecPtr2 = (F32*)mt_new_storage(bytesOfVecConv2);
     for (int i=0; i<32; i++) {
         convVecPtr2[i] = 1.0;
     }
@@ -226,12 +227,12 @@ int main() {
     std::string weightOpNameFc1 = "fc1";
     DataType mdtFc1 = DT_F32;
     U32 bytesOfWeightFc1 = 32*4*4*bytesOf(mdtFc1);
-    F32* fcWeightPtr1 = (F32*)mt_malloc(bytesOfWeightFc1);
+    F32* fcWeightPtr1 = (F32*)mt_new_storage(bytesOfWeightFc1);
     for (int i=0; i<32*4*4; i++) {
         fcWeightPtr1[i] = 1.0;
     }
     U32 bytesOfVecFc1 = 100*bytesOf(mdtFc1);
-    F32* fcVecPtr1 = (F32*)mt_malloc(bytesOfVecFc1);
+    F32* fcVecPtr1 = (F32*)mt_new_storage(bytesOfVecFc1);
     for (int i = 0; i < 100; i++) {
         fcVecPtr1[i] = 1.0;
     }
@@ -245,12 +246,12 @@ int main() {
     std::string weightOpNameFc2 = "fc2";
     DataType mdtFc2 = DT_F32;
     U32 bytesOfWeightFc2 = 100*10*bytesOf(mdtFc2);
-    F32* fcWeightPtr2 = (F32*)mt_malloc(bytesOfWeightFc2);
+    F32* fcWeightPtr2 = (F32*)mt_new_storage(bytesOfWeightFc2);
     for (int i = 0; i < 100*10; i++) {
         fcWeightPtr2[i] = 1.0;
     }
     U32 bytesOfVecFc2 = 10 * bytesOf(mdtFc2);
-    F32* fcVecPtr2 = (F32*)mt_malloc(bytesOfVecFc2);
+    F32* fcVecPtr2 = (F32*)mt_new_storage(bytesOfVecFc2);
     for (int i = 0; i < 10; i++) {
         fcVecPtr2[i] = 1.0;
     }

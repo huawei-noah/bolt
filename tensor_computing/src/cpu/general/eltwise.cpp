@@ -14,13 +14,14 @@
 
 #include "cpu/general/tensor_computing_general.h"
 
+template<typename T>
 EE eltwise(std::vector<void*>input, U32 num, U32 len, void *output, EltwiseMode eltwiseMode){
-    F16 value_s, tmp_s;
+    F32 value_s, tmp_s;
     for (U32 i = 0; i < len; i++) {
-        tmp_s = *((F16*)(input[0]) + i);
+        tmp_s = *((T*)(input[0]) + i);
 
         for (U32 j = 1; j < num; j++) {
-            value_s = *((F16*)(input[j]) + i);
+            value_s = *((T*)(input[j]) + i);
             switch (eltwiseMode) {
                 case ELTWISE_SUM:
                     tmp_s = value_s + tmp_s;
@@ -35,7 +36,7 @@ EE eltwise(std::vector<void*>input, U32 num, U32 len, void *output, EltwiseMode 
                     return NOT_SUPPORTED;
             }
         }
-        *((F16*)output + i) = tmp_s;
+        *((T*)output + i) = tmp_s;
     }
     return SUCCESS;
 }
@@ -43,20 +44,75 @@ EE eltwise(std::vector<void*>input, U32 num, U32 len, void *output, EltwiseMode 
 EE eltwise_general(std::vector<TensorDesc> inputDesc, std::vector<void*> input,
     TensorDesc outputDesc, void* output, EltwiseMode eltwiseMode)
 {
-    int num = inputDesc.size();
+    U32 num = inputDesc.size();
     if(num <= 1) return NOT_MATCH;
+    U32 batch = outputDesc.dims[outputDesc.nDims - 1];
+    std::vector<U32> batchs(num, 1);
+    for (U32 i = 0; i < num; i++) {
+        if (inputDesc[i].dims[inputDesc[i].nDims - 1] != batch)
+            batchs[i] = 0;
+    }
 
+    U32 arrayDimMin = 0;
+    for (U32 i = 1; i < num; i++) {
+        if (inputDesc[i].nDims < inputDesc[arrayDimMin].nDims)
+            arrayDimMin = i;
+    }
+    U32 sameDim = 0;
+    for (U32 i = 0; i < inputDesc[arrayDimMin].nDims; i++) {
+        bool various = false;
+        for (U32 j = 1; j < num; j++) {
+            if (inputDesc[j].dims[i] != inputDesc[0].dims[i])
+                various = true;
+        }
+        if (various)
+            break;
+        else
+            sameDim++;
+    }
+    U32 loopInner = 1;
+    for (U32 i = 0; i < sameDim; i++) {
+        loopInner *= inputDesc[0].dims[i];
+    }
     U32 len = tensorNumElements(outputDesc);
+    U32 loopOuter = len / batch / loopInner;
+    std::vector<U32> loopOuters(num);
+    for (U32 i = 0; i < num; i++) {
+        if (batchs[i] != 0)
+            loopOuters[i] = tensorNumElements(inputDesc[i]) / batch / loopInner;
+        else
+            loopOuters[i] = tensorNumElements(inputDesc[i]) / loopInner;
+    }
 
     EE ret = SUCCESS;
-    switch (outputDesc.dt) {
-        case DT_F16: {
-            ret = eltwise(input, num, len, output, eltwiseMode);
-            break;
+    for (U32 i = 0; i < batch; i++) {
+        for (U32 j = 0; j < loopOuter; j++) {
+            std::vector<void*> currentInput(num, nullptr);
+            void *currentOutput = (U8*)output + ((i * loopOuter + j) * loopInner) * bytesOf(outputDesc.dt);
+            for (U32 k = 0; k < num; k++) {
+                U32 curJ = 0;
+                if (j < loopOuters[k])
+                    curJ = j;
+                currentInput[k] = (U8*)input[k] + ((i * batchs[k] * loopOuters[k] + curJ) * loopInner) * bytesOf(inputDesc[k].dt);
+            }
+            switch (outputDesc.dt) {
+#ifdef _USE_FP32
+                case DT_F32: {
+                    ret = eltwise<F32>(currentInput, num, loopInner, currentOutput, eltwiseMode);
+                    break;
+                }
+#endif
+#ifdef _USE_FP16
+                case DT_F16: {
+                    ret = eltwise<F16>(currentInput, num, loopInner, currentOutput, eltwiseMode);
+                    break;
+                }
+#endif
+                default:
+                    ret = NOT_SUPPORTED;
+                    break;
+            }
         }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
     }
     return ret;
 }

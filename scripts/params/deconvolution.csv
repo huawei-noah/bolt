@@ -1,0 +1,2 @@
+#in_n	in_c	in_h	in_w	f_n	f_c	f_h	f_w	stride	padding	out_n	out_c	out_h	out_w
+1	128	32	32	128	128	2	2	2	0	1	128	64	64

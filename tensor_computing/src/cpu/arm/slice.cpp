@@ -21,14 +21,14 @@ EE slice_arm(TensorDesc inputDesc, void* input,
 {
     UNUSED(inputDesc);
     if (nullptr == input)
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
+        CHECK_STATUS(NULL_POINTER);
     U32 num = outputDesc.size();
     if (num < 1) return NOT_MATCH;
 
     U8 *ptr = (U8 *)input;
     for (U32 i = 0; i < num; i++) {
         if (nullptr == (*output)[i])
-            CHECK_STATUS_WITH_RETURN(NULL_POINTER);
+            CHECK_STATUS(NULL_POINTER);
         memcpy((*output)[i], ptr, tensorNumBytes(outputDesc[i]));
         ptr += tensorNumBytes(outputDesc[i]);
     }

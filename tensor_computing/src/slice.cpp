@@ -20,6 +20,9 @@
 
 EE slice_infer_output_size(TensorDesc inputDesc, std::vector<TensorDesc>* outputDesc, U32 axis, U32 *slice_point)
 {
+    if (nullptr == outputDesc)
+        CHECK_STATUS(NULL_POINTER);
+
     U32 num = (*outputDesc).size();
     I32 target_axis = inputDesc.nDims - 1 - axis;
     for (U32 i = 0; i < num; i++) {
@@ -48,6 +51,9 @@ EE slice(TensorDesc inputDesc, void* input,
             ret = slice_arm(inputDesc, input, outputDesc, output);
             break;
         case ARM_A76:
+            ret = slice_arm(inputDesc, input, outputDesc, output);
+            break;
+        case ARM_V8:
             ret = slice_arm(inputDesc, input, outputDesc, output);
             break;
         default:

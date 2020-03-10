@@ -12,431 +12,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
+#ifdef _USE_INT8
 #include <string.h>
-#include "sys.h"
-#include "type.h"
-#include "error.h"
-#include "tensor_desc.h"
-
-#include "cpu/arm/int8/convolution_int8.h"
-
-EE quantize_I32(U32 num_v, I32* out_d, I32 factor, F16 scale, INT8* out_q)
-{ // num_v is the number of q-form vectors (I32)
-    I32 *arr_d = out_d;
-    I32 fact = factor;
-    INT8 *arr_q = out_q;
-    U32 i28 = num_v / 28; // The number of iterations, each handling 28 vectors
-
-    if (i28 > 0) {
-        __asm__ __volatile__(
-            "ld4 {v1.4s, v2.4s, v3.4s, v4.4s}, [%[out_d]], #64\n"
-            "ldr s0, [%[factor]]\n"
-            "ld4 {v5.4s, v6.4s, v7.4s, v8.4s}, [%[out_d]], #64\n"
-            "mov x1, %[i]\n"
-            "ld4 {v9.4s, v10.4s, v11.4s, v12.4s}, [%[out_d]], #64\n"
-            "dup v0.4s, v0.s[0]\n"
-            "ld4 {v13.4s, v14.4s, v15.4s, v16.4s}, [%[out_d]], #64\n"
-            "ld4 {v17.4s, v18.4s, v19.4s, v20.4s}, [%[out_d]], #64\n"
-            "ld4 {v21.4s, v22.4s, v23.4s, v24.4s}, [%[out_d]], #64\n"
-
-            "0:\n"
-            "ld4 {v25.4s, v26.4s, v27.4s, v28.4s}, [%[out_d]], #64\n"
-            "subs x1, x1, #1\n"
-            
-            "mul v4.4s, v4.4s, v0.4s\n"
-            "mul v3.4s, v3.4s, v0.4s\n"
-            "mul v2.4s, v2.4s, v0.4s\n"
-            "mul v1.4s, v1.4s, v0.4s\n"
-
-            "mul v8.4s, v8.4s, v0.4s\n"
-            "sri v4.4s, v3.4s, #8\n"
-            "mul v7.4s, v7.4s, v0.4s\n"
-            "sri v2.4s, v1.4s, #8\n"
-            "mul v6.4s, v6.4s, v0.4s\n"
-            "mul v5.4s, v5.4s, v0.4s\n"
-            "sri v4.4s, v2.4s, #16\n"
-
-            "mul v12.4s, v12.4s, v0.4s\n"
-            "sri v8.4s, v7.4s, #8\n"
-            "mul v11.4s, v11.4s, v0.4s\n"
-            "sri v6.4s, v5.4s, #8\n"
-            "mul v10.4s, v10.4s, v0.4s\n"
-            "str q4, [%[out_q]], #16\n"
-            "ld4 {v1.4s, v2.4s, v3.4s, v4.4s}, [%[out_d]], #64\n"
-            "mul v9.4s, v9.4s, v0.4s\n"
-            "sri v8.4s, v6.4s, #16\n"
-
-            "mul v16.4s, v16.4s, v0.4s\n"
-            "sri v12.4s, v11.4s, #8\n"
-            "mul v15.4s, v15.4s, v0.4s\n"
-            "sri v10.4s, v9.4s, #8\n"
-            "mul v14.4s, v14.4s, v0.4s\n"
-            "str q8, [%[out_q]], #16\n"
-            "ld4 {v5.4s, v6.4s, v7.4s, v8.4s}, [%[out_d]], #64\n"
-            "mul v13.4s, v13.4s, v0.4s\n"
-            "sri v12.4s, v10.4s, #16\n"
-
-            "mul v20.4s, v20.4s, v0.4s\n"
-            "sri v16.4s, v15.4s, #8\n"
-            "mul v19.4s, v19.4s, v0.4s\n"
-            "sri v14.4s, v13.4s, #8\n"
-            "mul v18.4s, v18.4s, v0.4s\n"
-            "str q12, [%[out_q]], #16\n"
-            "ld4 {v9.4s, v10.4s, v11.4s, v12.4s}, [%[out_d]], #64\n"
-            "mul v17.4s, v17.4s, v0.4s\n"
-            "sri v16.4s, v14.4s, #16\n"
-
-            "mul v24.4s, v24.4s, v0.4s\n"
-            "sri v20.4s, v19.4s, #8\n"
-            "mul v23.4s, v23.4s, v0.4s\n"
-            "sri v18.4s, v17.4s, #8\n"
-            "mul v22.4s, v22.4s, v0.4s\n"
-            "str q16, [%[out_q]], #16\n"
-            "ld4 {v13.4s, v14.4s, v15.4s, v16.4s}, [%[out_d]], #64\n"
-            "mul v21.4s, v21.4s, v0.4s\n"
-            "sri v20.4s, v18.4s, #16\n"
-
-            "mul v28.4s, v28.4s, v0.4s\n"
-            "sri v24.4s, v23.4s, #8\n"
-            "mul v27.4s, v27.4s, v0.4s\n"
-            "sri v22.4s, v21.4s, #8\n"
-            "mul v26.4s, v26.4s, v0.4s\n"
-            "str q20, [%[out_q]], #16\n"
-            "ld4 {v17.4s, v18.4s, v19.4s, v20.4s}, [%[out_d]], #64\n"
-            "mul v25.4s, v25.4s, v0.4s\n"
-            "sri v24.4s, v22.4s, #16\n"
-            
-            "sri v28.4s, v27.4s, #8\n"
-            "sri v26.4s, v25.4s, #8\n"
-            "str q24, [%[out_q]], #16\n"
-            "sri v28.4s, v26.4s, #16\n"
-            "ld4 {v21.4s, v22.4s, v23.4s, v24.4s}, [%[out_d]], #64\n"
-            "str q28, [%[out_q]], #16\n"
-            "bne 0b\n"
-            :[out_d]"+r"(arr_d),
-             [out_q]"+r"(arr_q)
-            :[factor]"r"(&fact),
-             [i]"r"(i28)
-            :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10", "q11", "q12", "q13", "q14", "q15", "q16", "q17", "q18", "q19", "q20", "q21", "q22", "q23", "q24", "q25", "q26", "q27", "q28", "x1"
-        );
-        arr_d -= 96; // Prefetched 24 extra vectors
-    }
-    
-    U32 remainder = num_v - i28 * 28;
-
-    if (remainder % 4) {
-        for (U32 i=0; i<8; i++) {
-            arr_q[i] = arr_d[i] * scale;
-        }
-        arr_d += 8;
-        arr_q += 8;
-        remainder -= 2;
-    }
-
-    switch(remainder) {
-        case 24: {
-            __asm__ __volatile__(
-                "ldr s0, [%[factor]]\n"
-                "dup v0.4s, v0.s[0]\n"
-
-                "ld4 {v1.4s, v2.4s, v3.4s, v4.4s}, [%[out_d]], #64\n"
-                "ld4 {v5.4s, v6.4s, v7.4s, v8.4s}, [%[out_d]], #64\n"
-                "ld4 {v9.4s, v10.4s, v11.4s, v12.4s}, [%[out_d]], #64\n"
-                "ld4 {v13.4s, v14.4s, v15.4s, v16.4s}, [%[out_d]], #64\n"
-                "ld4 {v17.4s, v18.4s, v19.4s, v20.4s}, [%[out_d]], #64\n"
-                "ld4 {v21.4s, v22.4s, v23.4s, v24.4s}, [%[out_d]], #64\n"
-                
-                "mul v4.4s, v4.4s, v0.4s\n"
-                "mul v3.4s, v3.4s, v0.4s\n"
-                "mul v2.4s, v2.4s, v0.4s\n"
-                "mul v1.4s, v1.4s, v0.4s\n"
-
-                "mul v8.4s, v8.4s, v0.4s\n"
-                "sri v4.4s, v3.4s, #8\n"
-                "mul v7.4s, v7.4s, v0.4s\n"
-                "sri v2.4s, v1.4s, #8\n"
-                "mul v6.4s, v6.4s, v0.4s\n"
-                "mul v5.4s, v5.4s, v0.4s\n"
-                "sri v4.4s, v2.4s, #16\n"
-
-                "mul v12.4s, v12.4s, v0.4s\n"
-                "sri v8.4s, v7.4s, #8\n"
-                "mul v11.4s, v11.4s, v0.4s\n"
-                "sri v6.4s, v5.4s, #8\n"
-                "mul v10.4s, v10.4s, v0.4s\n"
-                "str q4, [%[out_q]], #16\n"
-                "mul v9.4s, v9.4s, v0.4s\n"
-                "sri v8.4s, v6.4s, #16\n"
-
-                "mul v16.4s, v16.4s, v0.4s\n"
-                "sri v12.4s, v11.4s, #8\n"
-                "mul v15.4s, v15.4s, v0.4s\n"
-                "sri v10.4s, v9.4s, #8\n"
-                "mul v14.4s, v14.4s, v0.4s\n"
-                "str q8, [%[out_q]], #16\n"
-                "mul v13.4s, v13.4s, v0.4s\n"
-                "sri v12.4s, v10.4s, #16\n"
-
-                "mul v20.4s, v20.4s, v0.4s\n"
-                "sri v16.4s, v15.4s, #8\n"
-                "mul v19.4s, v19.4s, v0.4s\n"
-                "sri v14.4s, v13.4s, #8\n"
-                "mul v18.4s, v18.4s, v0.4s\n"
-                "str q12, [%[out_q]], #16\n"
-                "mul v17.4s, v17.4s, v0.4s\n"
-                "sri v16.4s, v14.4s, #16\n"
-
-                "mul v24.4s, v24.4s, v0.4s\n"
-                "sri v20.4s, v19.4s, #8\n"
-                "mul v23.4s, v23.4s, v0.4s\n"
-                "sri v18.4s, v17.4s, #8\n"
-                "mul v22.4s, v22.4s, v0.4s\n"
-                "str q16, [%[out_q]], #16\n"
-                "mul v21.4s, v21.4s, v0.4s\n"
-                "sri v20.4s, v18.4s, #16\n"
-
-                "sri v24.4s, v23.4s, #8\n"
-                "sri v22.4s, v21.4s, #8\n"
-                "str q20, [%[out_q]], #16\n"
-                "sri v24.4s, v22.4s, #16\n"
-
-                "str q24, [%[out_q]], #16\n"
-                :[out_d]"+r"(arr_d),
-                 [out_q]"+r"(arr_q)
-                :[factor]"r"(&fact)
-                :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10", "q11", "q12", "q13", "q14", "q15", "q16", "q17", "q18", "q19", "q20", "q21", "q22", "q23", "q24", "x1"
-            );
-            break;
-        }
-        case 20: {
-            __asm__ __volatile__(
-                "ldr s0, [%[factor]]\n"
-                "dup v0.4s, v0.s[0]\n"
-
-                "ld4 {v1.4s, v2.4s, v3.4s, v4.4s}, [%[out_d]], #64\n"
-                "ld4 {v5.4s, v6.4s, v7.4s, v8.4s}, [%[out_d]], #64\n"
-                "ld4 {v9.4s, v10.4s, v11.4s, v12.4s}, [%[out_d]], #64\n"
-                "ld4 {v13.4s, v14.4s, v15.4s, v16.4s}, [%[out_d]], #64\n"
-                "ld4 {v17.4s, v18.4s, v19.4s, v20.4s}, [%[out_d]], #64\n"
-                
-                "mul v4.4s, v4.4s, v0.4s\n"
-                "mul v3.4s, v3.4s, v0.4s\n"
-                "mul v2.4s, v2.4s, v0.4s\n"
-                "mul v1.4s, v1.4s, v0.4s\n"
-
-                "mul v8.4s, v8.4s, v0.4s\n"
-                "sri v4.4s, v3.4s, #8\n"
-                "mul v7.4s, v7.4s, v0.4s\n"
-                "sri v2.4s, v1.4s, #8\n"
-                "mul v6.4s, v6.4s, v0.4s\n"
-                "mul v5.4s, v5.4s, v0.4s\n"
-                "sri v4.4s, v2.4s, #16\n"
-
-                "mul v12.4s, v12.4s, v0.4s\n"
-                "sri v8.4s, v7.4s, #8\n"
-                "mul v11.4s, v11.4s, v0.4s\n"
-                "sri v6.4s, v5.4s, #8\n"
-                "mul v10.4s, v10.4s, v0.4s\n"
-                "str q4, [%[out_q]], #16\n"
-                "mul v9.4s, v9.4s, v0.4s\n"
-                "sri v8.4s, v6.4s, #16\n"
-
-                "mul v16.4s, v16.4s, v0.4s\n"
-                "sri v12.4s, v11.4s, #8\n"
-                "mul v15.4s, v15.4s, v0.4s\n"
-                "sri v10.4s, v9.4s, #8\n"
-                "mul v14.4s, v14.4s, v0.4s\n"
-                "str q8, [%[out_q]], #16\n"
-                "mul v13.4s, v13.4s, v0.4s\n"
-                "sri v12.4s, v10.4s, #16\n"
-
-                "mul v20.4s, v20.4s, v0.4s\n"
-                "sri v16.4s, v15.4s, #8\n"
-                "mul v19.4s, v19.4s, v0.4s\n"
-                "sri v14.4s, v13.4s, #8\n"
-                "mul v18.4s, v18.4s, v0.4s\n"
-                "str q12, [%[out_q]], #16\n"
-                "mul v17.4s, v17.4s, v0.4s\n"
-                "sri v16.4s, v14.4s, #16\n"
-
-                "sri v20.4s, v19.4s, #8\n"
-                "sri v18.4s, v17.4s, #8\n"
-                "str q16, [%[out_q]], #16\n"
-                "sri v20.4s, v18.4s, #16\n"
-
-                "str q20, [%[out_q]], #16\n"
-                :[out_d]"+r"(arr_d),
-                 [out_q]"+r"(arr_q)
-                :[factor]"r"(&fact)
-                :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10", "q11", "q12", "q13", "q14", "q15", "q16", "q17", "q18", "q19", "q20", "x1"
-            );
-            break;
-        }
-        case 16: {
-            __asm__ __volatile__(
-                "ldr s0, [%[factor]]\n"
-                "dup v0.4s, v0.s[0]\n"
-
-                "ld4 {v1.4s, v2.4s, v3.4s, v4.4s}, [%[out_d]], #64\n"
-                "ld4 {v5.4s, v6.4s, v7.4s, v8.4s}, [%[out_d]], #64\n"
-                "ld4 {v9.4s, v10.4s, v11.4s, v12.4s}, [%[out_d]], #64\n"
-                "ld4 {v13.4s, v14.4s, v15.4s, v16.4s}, [%[out_d]], #64\n"
-                
-                "mul v4.4s, v4.4s, v0.4s\n"
-                "mul v3.4s, v3.4s, v0.4s\n"
-                "mul v2.4s, v2.4s, v0.4s\n"
-                "mul v1.4s, v1.4s, v0.4s\n"
-
-                "mul v8.4s, v8.4s, v0.4s\n"
-                "sri v4.4s, v3.4s, #8\n"
-                "mul v7.4s, v7.4s, v0.4s\n"
-                "sri v2.4s, v1.4s, #8\n"
-                "mul v6.4s, v6.4s, v0.4s\n"
-                "mul v5.4s, v5.4s, v0.4s\n"
-                "sri v4.4s, v2.4s, #16\n"
-
-                "mul v12.4s, v12.4s, v0.4s\n"
-                "sri v8.4s, v7.4s, #8\n"
-                "mul v11.4s, v11.4s, v0.4s\n"
-                "sri v6.4s, v5.4s, #8\n"
-                "mul v10.4s, v10.4s, v0.4s\n"
-                "str q4, [%[out_q]], #16\n"
-                "mul v9.4s, v9.4s, v0.4s\n"
-                "sri v8.4s, v6.4s, #16\n"
-
-                "mul v16.4s, v16.4s, v0.4s\n"
-                "sri v12.4s, v11.4s, #8\n"
-                "mul v15.4s, v15.4s, v0.4s\n"
-                "sri v10.4s, v9.4s, #8\n"
-                "mul v14.4s, v14.4s, v0.4s\n"
-                "str q8, [%[out_q]], #16\n"
-                "mul v13.4s, v13.4s, v0.4s\n"
-                "sri v12.4s, v10.4s, #16\n"
-
-                "sri v16.4s, v15.4s, #8\n"
-                "sri v14.4s, v13.4s, #8\n"
-                "str q12, [%[out_q]], #16\n"
-                "sri v16.4s, v14.4s, #16\n"
-
-                "str q16, [%[out_q]], #16\n"
-                :[out_d]"+r"(arr_d),
-                 [out_q]"+r"(arr_q)
-                :[factor]"r"(&fact)
-                :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10", "q11", "q12", "q13", "q14", "q15", "q16", "x1"
-            );
-            break;
-        }
-        case 12: {
-            __asm__ __volatile__(
-                "ldr s0, [%[factor]]\n"
-                "dup v0.4s, v0.s[0]\n"
-
-                "ld4 {v1.4s, v2.4s, v3.4s, v4.4s}, [%[out_d]], #64\n"
-                "ld4 {v5.4s, v6.4s, v7.4s, v8.4s}, [%[out_d]], #64\n"
-                "ld4 {v9.4s, v10.4s, v11.4s, v12.4s}, [%[out_d]], #64\n"
-                
-                "mul v4.4s, v4.4s, v0.4s\n"
-                "mul v3.4s, v3.4s, v0.4s\n"
-                "mul v2.4s, v2.4s, v0.4s\n"
-                "mul v1.4s, v1.4s, v0.4s\n"
-
-                "mul v8.4s, v8.4s, v0.4s\n"
-                "sri v4.4s, v3.4s, #8\n"
-                "mul v7.4s, v7.4s, v0.4s\n"
-                "sri v2.4s, v1.4s, #8\n"
-                "mul v6.4s, v6.4s, v0.4s\n"
-                "mul v5.4s, v5.4s, v0.4s\n"
-                "sri v4.4s, v2.4s, #16\n"
-
-                "mul v12.4s, v12.4s, v0.4s\n"
-                "sri v8.4s, v7.4s, #8\n"
-                "mul v11.4s, v11.4s, v0.4s\n"
-                "sri v6.4s, v5.4s, #8\n"
-                "mul v10.4s, v10.4s, v0.4s\n"
-                "str q4, [%[out_q]], #16\n"
-                "mul v9.4s, v9.4s, v0.4s\n"
-                "sri v8.4s, v6.4s, #16\n"
-
-                "sri v12.4s, v11.4s, #8\n"
-                "sri v10.4s, v9.4s, #8\n"
-                "str q8, [%[out_q]], #16\n"
-                "sri v12.4s, v10.4s, #16\n"
-
-                "str q12, [%[out_q]], #16\n"
-                :[out_d]"+r"(arr_d),
-                 [out_q]"+r"(arr_q)
-                :[factor]"r"(&fact)
-                :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10", "q11", "q12", "x1"
-            );
-            break;
-        }
-        case 8: {
-            __asm__ __volatile__(
-                "ldr s0, [%[factor]]\n"
-                "dup v0.4s, v0.s[0]\n"
-
-                "ld4 {v1.4s, v2.4s, v3.4s, v4.4s}, [%[out_d]], #64\n"
-                "ld4 {v5.4s, v6.4s, v7.4s, v8.4s}, [%[out_d]], #64\n"
-                
-                "mul v4.4s, v4.4s, v0.4s\n"
-                "mul v3.4s, v3.4s, v0.4s\n"
-                "mul v2.4s, v2.4s, v0.4s\n"
-                "mul v1.4s, v1.4s, v0.4s\n"
-
-                "mul v8.4s, v8.4s, v0.4s\n"
-                "sri v4.4s, v3.4s, #8\n"
-                "mul v7.4s, v7.4s, v0.4s\n"
-                "sri v2.4s, v1.4s, #8\n"
-                "mul v6.4s, v6.4s, v0.4s\n"
-                "mul v5.4s, v5.4s, v0.4s\n"
-                "sri v4.4s, v2.4s, #16\n"
-
-                "sri v8.4s, v7.4s, #8\n"
-                "sri v6.4s, v5.4s, #8\n"
-                "str q4, [%[out_q]], #16\n"
-                "sri v8.4s, v6.4s, #16\n"
-
-                "str q8, [%[out_q]], #16\n"
-                :[out_d]"+r"(arr_d),
-                 [out_q]"+r"(arr_q)
-                :[factor]"r"(&fact)
-                :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "x1"
-            );
-            break;
-        }
-        case 4: {
-            __asm__ __volatile__(
-                "ldr s0, [%[factor]]\n"
-                "dup v0.4s, v0.s[0]\n"
-
-                "ld4 {v1.4s, v2.4s, v3.4s, v4.4s}, [%[out_d]], #64\n"
-                
-                "mul v4.4s, v4.4s, v0.4s\n"
-                "mul v3.4s, v3.4s, v0.4s\n"
-                "mul v2.4s, v2.4s, v0.4s\n"
-                "mul v1.4s, v1.4s, v0.4s\n"
-
-                "sri v4.4s, v3.4s, #8\n"
-                "sri v2.4s, v1.4s, #8\n"
-                "sri v4.4s, v2.4s, #16\n"
-
-                "str q4, [%[out_q]], #16\n"
-                :[out_d]"+r"(arr_d),
-                 [out_q]"+r"(arr_q)
-                :[factor]"r"(&fact)
-                :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "x1"
-            );
-            break;
-        }
-        case 0: {
-            break;
-        }
-        default: {
-            return UNKNOWN;
-        }
-    }
-    return SUCCESS;
-}
+#include "cpu/arm/int8/convolution_gemm.h"
 
 template<typename OT>
 EE convolution_gemm_A55(TensorDesc inputDesc, const void* input, F16* inputScale, TensorDesc filterDesc, const void* filter, F16* filterScale,
@@ -451,21 +29,24 @@ EE convolution_gemm_A55(TensorDesc inputDesc, const void* input, F16* inputScale
     U32 in, ic, ih, iw;
     U32 fn, fc, fh, fw;
     U32 on, oc, oh, ow;
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
-    U32 stride = convDesc.stride;
-    U32 padding = convDesc.padding;
+    CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+    CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
+    CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
+    U32 strideH = convDesc.stride_h;
+    U32 strideW = convDesc.stride_w;
+    U32 paddingT = convDesc.padding_top;
+    U32 paddingB = convDesc.padding_bottom;
+    U32 paddingL = convDesc.padding_left;
+    U32 paddingR = convDesc.padding_right;
+    U32 dilateH = convDesc.dilatedRate_h;
+    U32 dilateW = convDesc.dilatedRate_w;
 
     if (fdf != DF_NCHWN8C4) {
         return NOT_MATCH;
     }
-    if (!(ic == fc && oc == fn)) {
-        return NOT_MATCH;
-    }
 
-    int conv_relu_bool = (am == ACTIVATION_RELU) ? 1 : 0;
-    int out_f16_bool = (odt == DT_F16) ? 1 : 0;
+    I64 conv_relu_bool = (am == ACTIVATION_RELU) ? 1 : 0;
+    I64 out_f16_bool = (odt == DT_F16) ? 1 : 0;
 
     INT8* inArray = (INT8*)input; // It will be updated if there is quantization
     INT8* filterArray = (INT8*)filter;
@@ -477,8 +58,8 @@ EE convolution_gemm_A55(TensorDesc inputDesc, const void* input, F16* inputScale
     oc /= 8;
     ic /= 8;
 
-    U32 ih_pad = ih + 2*padding;
-    U32 iw_pad = iw + 2*padding;
+    U32 ih_pad = ih + paddingT + paddingB;
+    U32 iw_pad = iw + paddingL + paddingR;
     I32 ohow = oh*ow;
     U32 ihiw = ih_pad*iw_pad;
 
@@ -547,7 +128,7 @@ EE convolution_gemm_A55(TensorDesc inputDesc, const void* input, F16* inputScale
         }
 
         INT8 *inArray_pad;
-        if (padding == 0) {
+        if (paddingT == 0 && paddingB == 0 && paddingL == 0 && paddingR == 0) {
             inArray_pad = inArray + n*ic*ih*iw*8;// use this batch directly
         } else {
             // copy input into an input with padding
@@ -555,20 +136,20 @@ EE convolution_gemm_A55(TensorDesc inputDesc, const void* input, F16* inputScale
             INT8 *inArray_pad_mov = inArray_pad;
             INT8 *inArray_mov = inArray + n*ic*ih*iw*8;
             for (U32 c = 0; c < ic; c++) {// for each 8 channels
-                for (U32 h = 0; h < padding; h++) {// Upper rows of 0
+                for (U32 h = 0; h < paddingT; h++) {// Upper rows of 0
                     memset(inArray_pad_mov, 0, iw_pad*8*bytesOf(DT_I8));// 8 comes from C8
                     inArray_pad_mov += iw_pad*8;
                 }
-                for (U32 h = padding; h < ih_pad - padding; h++) {// for each middle-section rows
-                    memset(inArray_pad_mov, 0, padding*8*bytesOf(DT_I8));// padding on the left
-                    inArray_pad_mov += padding*8;// 8 comes from C8
+                for (U32 h = paddingT; h < ih_pad - paddingB; h++) {// for each middle-section rows
+                    memset(inArray_pad_mov, 0, paddingL*8*bytesOf(DT_I8));// padding on the left
+                    inArray_pad_mov += paddingL*8;// 8 comes from C8
                     memcpy(inArray_pad_mov, inArray_mov, iw*8*bytesOf(DT_I8));// Copy input row
                     inArray_pad_mov += iw*8;
                     inArray_mov += iw*8;
-                    memset(inArray_pad_mov, 0, padding*8*bytesOf(DT_I8)); // padding on the right
-                    inArray_pad_mov += padding*8;
+                    memset(inArray_pad_mov, 0, paddingR*8*bytesOf(DT_I8)); // padding on the right
+                    inArray_pad_mov += paddingR*8;
                 }
-                for (U32 h = ih_pad - padding; h < ih_pad; h++) {// Bottom rows of 0
+                for (U32 h = ih_pad - paddingB; h < ih_pad; h++) {// Bottom rows of 0
                     memset(inArray_pad_mov, 0, iw_pad*8*bytesOf(DT_I8));
                     inArray_pad_mov += iw_pad*8;
                 }
@@ -584,14 +165,14 @@ EE convolution_gemm_A55(TensorDesc inputDesc, const void* input, F16* inputScale
             U32 in_h[12];
             U32 in_w[12];
 
-            for (U32 i=0; i<12; i++) {
-                in_h[i] = ((hw+i)/ow)*stride;
-                in_w[i] = ((hw+i)%ow)*stride;
+            for (U32 i = 0; i < 12; i++) {
+                in_h[i] = ((hw+i)/ow)*strideH;
+                in_w[i] = ((hw+i)%ow)*strideW;
             }
             for (U32 c = 0; c < ic; c++) {// for each 8 channels
                 for (U32 fh_idx = 0; fh_idx < fh; fh_idx++) {
                     for (U32 fw_idx = 0; fw_idx < fw; fw_idx++) {
-                        INT8 *in_hw12c8 = inArray_pad + c*ihiw*8 + fh_idx*iw_pad*8 + fw_idx*8;
+                        INT8 *in_hw12c8 = inArray_pad + c*ihiw*8 + fh_idx*dilateH*iw_pad*8 + fw_idx*dilateW*8;
 
                         INT8 *in_0 = in_hw12c8 + in_h[0]*iw_pad*8 + in_w[0]*8;
                         INT8 *in_1 = in_hw12c8 + in_h[1]*iw_pad*8 + in_w[1]*8;
@@ -671,7 +252,7 @@ EE convolution_gemm_A55(TensorDesc inputDesc, const void* input, F16* inputScale
                             [in_9]"r"(in_9),
                             [in_10]"r"(in_10),
                             [in_11]"r"(in_11)
-                            :"memory", "cc", "q0", "q1", "q4", "q5", "q8", "q9", "q20", "q21", "q24", "q25", "q28", "q29", "x2", "x3", "x6", "x7", "x10", "x11"
+                            :"memory", "cc", "v0", "v1", "v4", "v5", "v8", "v9", "v20", "v21", "v24", "v25", "v28", "v29", "x2", "x3", "x6", "x7", "x10", "x11"
                         );
                     }
                 }
@@ -687,22 +268,6 @@ EE convolution_gemm_A55(TensorDesc inputDesc, const void* input, F16* inputScale
                 F16 *b_0 = b0;
                 I32 *b_0_s = b0_s;
                 __asm__ __volatile__(
-            /* Layout
-            5   6
-            7   8
-            9   10
-            11  12
-
-            13  14
-            15  16
-            17  18
-            19  20
-            
-            21  22
-            23  24
-            25  26
-            27  28
-            */
                     "cbz %[out_f16], 8f\n"
                     "eor v5.16b, v5.16b, v5.16b\n"
                     "ldr  d1, [%[in_0]]\n"           //in_0
@@ -788,22 +353,22 @@ EE convolution_gemm_A55(TensorDesc inputDesc, const void* input, F16* inputScale
                     "0:\n"
                     "sdot v5.4s, v0.16b, v1.4b[0]\n"
                     "ldr d2, [x3, 32]\n"
-                    "ldr x18, [x3, 40]\n"
+                    "ldr x16, [x3, 40]\n"
                     "sdot v7.4s, v0.16b, v1.4b[1]\n"
                     "ldr d29, [x0, 16]\n"
                     "ldr x17, [x0, 24]\n"
                     "sdot v9.4s, v0.16b, v1.4b[2]\n"
-                    "ins v2.d[1], x18\n"
+                    "ins v2.d[1], x16\n"
                     "ldr d30, [x3, 48]!\n"
                     "sdot v11.4s, v0.16b, v1.4b[3]\n"
                     "ins v29.d[1], x17\n"
 
                     "sdot v13.4s, v0.16b, v3.4b[0]\n"
-                    "ldr x18, [x3, 8]\n"
+                    "ldr x16, [x3, 8]\n"
                     "subs x2, x2, #4\n"
                     "sdot v15.4s, v0.16b, v3.4b[1]\n"
                     "sdot v17.4s, v0.16b, v3.4b[2]\n"
-                    "ins v30.d[1], x18\n"
+                    "ins v30.d[1], x16\n"
                     "sdot v19.4s, v0.16b, v3.4b[3]\n"
 
                     "sdot v21.4s, v0.16b, v2.4b[0]\n"
@@ -821,12 +386,12 @@ EE convolution_gemm_A55(TensorDesc inputDesc, const void* input, F16* inputScale
                     "sdot v6.4s, v29.16b, v1.4b[0]\n"
                     "sdot v8.4s, v29.16b, v1.4b[1]\n"
                     "ldr d3, [x3, 16]\n"
-                    "ldr x18, [x3, 24]\n"
+                    "ldr x16, [x3, 24]\n"
                     "sdot v10.4s, v29.16b, v1.4b[2]\n"
                     "sdot v12.4s, v29.16b, v1.4b[3]\n"
 
                     "ins v0.d[1], x17\n"
-                    "ins v3.d[1], x18\n"          
+                    "ins v3.d[1], x16\n"          
 
                     "sdot v22.4s, v29.16b, v2.4b[0]\n"
                     "mov v1.16b, v30.16b\n"
@@ -1076,7 +641,7 @@ EE convolution_gemm_A55(TensorDesc inputDesc, const void* input, F16* inputScale
                      [out_buf]"r"(out_buf),
                      [in_0]"r"(in_hw0),
                      [f_0]"r"(f_o0c0),
-                     [ic]"r"(ic*8*fh*fw),
+                     [ic]"r"((I64)ic*8*fh*fw),
                      [b_0]"r"(b_0),
                      [b_0_s]"r"(b_0_s),
                      [factor]"r"(factor_v),
@@ -1084,7 +649,7 @@ EE convolution_gemm_A55(TensorDesc inputDesc, const void* input, F16* inputScale
                      [min]"r"(min_i32),
                      [conv_relu]"r"(conv_relu_bool),
                      [out_f16]"r"(out_f16_bool)
-                    :"memory", "cc", "q0", "q1", "q2", "q3", "q5", "q6", "q7", "q8", "q9", "q10", "q11", "q12", "q13", "q14", "q15", "q16", "q17", "q18", "q19", "q20", "q21", "q22", "q23", "q24", "q25", "q26", "q27", "q28", "q29", "q30", "x0", "x1", "x2", "x3","x17","x18"
+                    :"memory", "cc", "v0", "v1", "v2", "v3", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23", "v24", "v25", "v26", "v27", "v28", "v29", "v30", "x0", "x1", "x2", "x3","x17","x16"
                 );
                 b0 += 8;
                 b0_s += 8;
@@ -1105,14 +670,14 @@ EE convolution_gemm_A55(TensorDesc inputDesc, const void* input, F16* inputScale
             U32 in_h[8];
             U32 in_w[8];
 
-            for (U32 i=0; i<8; i++) {
-                in_h[i] = ((hw+i)/ow)*stride;
-                in_w[i] = ((hw+i)%ow)*stride;
+            for (U32 i = 0; i < 8; i++) {
+                in_h[i] = ((hw+i)/ow)*strideH;
+                in_w[i] = ((hw+i)%ow)*strideW;
             }
             for (U32 c = 0; c < ic; c++) {
                 for (U32 fh_idx = 0; fh_idx < fh; fh_idx++) {
                     for (U32 fw_idx = 0; fw_idx < fw; fw_idx++) {
-                        INT8 *in_hw8c8 = inArray_pad + c*ihiw*8 + fh_idx*iw_pad*8 + fw_idx*8;
+                        INT8 *in_hw8c8 = inArray_pad + c*ihiw*8 + fh_idx*dilateH*iw_pad*8 + fw_idx*dilateW*8;
                         INT8 *in_0 = in_hw8c8 + in_h[0]*iw_pad*8 + in_w[0]*8;
                         INT8 *in_1 = in_hw8c8 + in_h[1]*iw_pad*8 + in_w[1]*8;
                         INT8 *in_2 = in_hw8c8 + in_h[2]*iw_pad*8 + in_w[2]*8;
@@ -1158,7 +723,7 @@ EE convolution_gemm_A55(TensorDesc inputDesc, const void* input, F16* inputScale
                             [in_5]"r"(in_5),
                             [in_6]"r"(in_6),
                             [in_7]"r"(in_7)
-                            :"memory", "cc", "q0", "q1", "q4", "q5", "q20", "q21", "q24", "q25", "x2", "x3", "x6", "x7"
+                            :"memory", "cc", "v0", "v1", "v4", "v5", "v20", "v21", "v24", "v25", "x2", "x3", "x6", "x7"
                         );
                     }
                 }
@@ -1174,17 +739,6 @@ EE convolution_gemm_A55(TensorDesc inputDesc, const void* input, F16* inputScale
                 F16 *b_0 = b0;
                 I32 *b_0_s = b0_s;
                 __asm__ __volatile__(
-            /* Layout
-            5   6
-            7   8
-            9   10
-            11  12
-
-            13  14
-            15  16
-            17  18
-            19  20
-            */
                     "cbz %[out_f16], 8f\n"
                     "eor v5.16b, v5.16b, v5.16b\n"
                     "ldr  d1, [%[in_0]]\n"           //in_0
@@ -1248,22 +802,22 @@ EE convolution_gemm_A55(TensorDesc inputDesc, const void* input, F16* inputScale
                     "0:\n"
                     "sdot v5.4s, v0.16b, v1.4b[0]\n"
                     "ldr d3, [x3, 16]!\n"
-                    "ldr x18, [x3, 8]\n"
+                    "ldr x16, [x3, 8]\n"
                     "sdot v7.4s, v0.16b, v1.4b[1]\n"
                     "ldr d29, [x0, 16]\n"
                     "ldr x17, [x0, 24]\n"
                     "sdot v9.4s, v0.16b, v1.4b[2]\n"
-                    "ins v3.d[1], x18\n"
+                    "ins v3.d[1], x16\n"
                     "ldr d30, [x3, 16]!\n"
                     "sdot v11.4s, v0.16b, v1.4b[3]\n"
                     "ins v29.d[1], x17\n"
 
                     "sdot v13.4s, v0.16b, v3.4b[0]\n"
-                    "ldr x18, [x3, 8]\n"
+                    "ldr x16, [x3, 8]\n"
                     "subs x2, x2, #4\n"
                     "sdot v15.4s, v0.16b, v3.4b[1]\n"
                     "sdot v17.4s, v0.16b, v3.4b[2]\n"
-                    "ins v30.d[1], x18\n"
+                    "ins v30.d[1], x16\n"
                     "sdot v19.4s, v0.16b, v3.4b[3]\n"
 
                     "sdot v6.4s, v29.16b, v1.4b[0]\n"
@@ -1452,7 +1006,7 @@ EE convolution_gemm_A55(TensorDesc inputDesc, const void* input, F16* inputScale
                      [out_buf]"r"(out_buf),
                      [in_0]"r"(in_hw0),
                      [f_0]"r"(f_o0c0),
-                     [ic]"r"(ic*8*fh*fw),
+                     [ic]"r"((I64)ic*8*fh*fw),
                      [b_0]"r"(b_0),
                      [b_0_s]"r"(b_0_s),
                      [factor]"r"(factor_v),
@@ -1460,7 +1014,7 @@ EE convolution_gemm_A55(TensorDesc inputDesc, const void* input, F16* inputScale
                      [min]"r"(min_i32),
                      [conv_relu]"r"(conv_relu_bool),
                      [out_f16]"r"(out_f16_bool)
-                    :"memory", "cc", "q0", "q1", "q3", "q5", "q6", "q7", "q8", "q9", "q10", "q11", "q12", "q13", "q14", "q15", "q16", "q17", "q18", "q19", "q20", "q29", "q30", "x0", "x1", "x2", "x3","x17","x18"
+                    :"memory", "cc", "v0", "v1", "v3", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20", "v29", "v30", "x0", "x1", "x2", "x3","x17","x16"
                 );
                 b0 += 8;
                 b0_s += 8;
@@ -1480,13 +1034,13 @@ EE convolution_gemm_A55(TensorDesc inputDesc, const void* input, F16* inputScale
             U32 in_w[4];
 
             for (U32 i=0; i<4; i++) {
-                in_h[i] = ((hw+i)/ow)*stride;
-                in_w[i] = ((hw+i)%ow)*stride;
+                in_h[i] = ((hw+i)/ow)*strideH;
+                in_w[i] = ((hw+i)%ow)*strideW;
             }
             for (U32 c = 0; c < ic; c++) {
                 for (U32 fh_idx = 0; fh_idx < fh; fh_idx++) {
                     for (U32 fw_idx = 0; fw_idx < fw; fw_idx++) {
-                        INT8 *in_hw4c8 = inArray_pad + c*ihiw*8 + fh_idx*iw_pad*8 + fw_idx*8;
+                        INT8 *in_hw4c8 = inArray_pad + c*ihiw*8 + fh_idx*dilateH*iw_pad*8 + fw_idx*dilateW*8;
                         INT8 *in_0 = in_hw4c8 + in_h[0]*iw_pad*8 + in_w[0]*8;
                         INT8 *in_1 = in_hw4c8 + in_h[1]*iw_pad*8 + in_w[1]*8;
                         INT8 *in_2 = in_hw4c8 + in_h[2]*iw_pad*8 + in_w[2]*8;
@@ -1512,7 +1066,7 @@ EE convolution_gemm_A55(TensorDesc inputDesc, const void* input, F16* inputScale
                             [in_1]"r"(in_1),
                             [in_2]"r"(in_2),
                             [in_3]"r"(in_3)
-                            :"memory", "cc", "q0", "q1", "q20", "q21", "x2", "x3"
+                            :"memory", "cc", "v0", "v1", "v20", "v21", "x2", "x3"
                         );
                     }
                 }
@@ -1528,12 +1082,6 @@ EE convolution_gemm_A55(TensorDesc inputDesc, const void* input, F16* inputScale
                 F16 *b_0 = b0;
                 I32 *b_0_s = b0_s;
                 __asm__ __volatile__(
-            /* Layout
-            5   6
-            7   8
-            9   10
-            11  12
-            */
                     "cbz %[out_f16], 8f\n"
                     "eor v5.16b, v5.16b, v5.16b\n"
                     "ldr  d1, [%[in_0]]\n"           //in_0
@@ -1584,12 +1132,12 @@ EE convolution_gemm_A55(TensorDesc inputDesc, const void* input, F16* inputScale
                     "ldr x17, [x0, 24]\n"
                     "sdot v5.4s, v0.16b, v1.4b[0]\n"
                     "ldr d3, [x3, 16]!\n"
-                    "ldr x18, [x3, 8]\n"
+                    "ldr x16, [x3, 8]\n"
                     "sdot v7.4s, v0.16b, v1.4b[1]\n"
                     "ins v29.d[1], x17\n"
                     "subs x2, x2, #4\n"
                     "sdot v9.4s, v0.16b, v1.4b[2]\n"
-                    "ins v3.d[1], x18\n"
+                    "ins v3.d[1], x16\n"
                     "sdot v11.4s, v0.16b, v1.4b[3]\n"
 
                     "sdot v6.4s, v29.16b, v1.4b[0]\n"
@@ -1705,7 +1253,7 @@ EE convolution_gemm_A55(TensorDesc inputDesc, const void* input, F16* inputScale
                      [out_buf]"r"(out_buf),
                      [in_0]"r"(in_hw0),
                      [f_0]"r"(f_o0c0),
-                     [ic]"r"(ic*8*fh*fw),
+                     [ic]"r"((I64)ic*8*fh*fw),
                      [b_0]"r"(b_0),
                      [b_0_s]"r"(b_0_s),
                      [factor]"r"(factor_v),
@@ -1713,7 +1261,7 @@ EE convolution_gemm_A55(TensorDesc inputDesc, const void* input, F16* inputScale
                      [min]"r"(min_i32),
                      [conv_relu]"r"(conv_relu_bool),
                      [out_f16]"r"(out_f16_bool)
-                    :"memory", "cc", "q0", "q1", "q2", "q3", "q5", "q6", "q7", "q8", "q9", "q10", "q11", "q12", "q29", "x0", "x1", "x2", "x3","x17","x18"
+                    :"memory", "cc", "v0", "v1", "v2", "v3", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v29", "x0", "x1", "x2", "x3","x17","x16"
                 );
                 b0 += 8;
                 b0_s += 8;
@@ -1727,12 +1275,12 @@ EE convolution_gemm_A55(TensorDesc inputDesc, const void* input, F16* inputScale
             INT8 *in_pack = ((INT8*)tmp) + ic*ih_pad*iw_pad*8;
             // pack input
             // NCHWc8 => NHWChw1c4 + im2col
-            U32 in_h_0 = (hw/ow)*stride;
-            U32 in_w_0 = (hw%ow)*stride;
+            U32 in_h_0 = (hw/ow)*strideH;
+            U32 in_w_0 = (hw%ow)*strideW;
             for (U32 c = 0; c < ic; c++) {
                 for (U32 fh_idx = 0; fh_idx < fh; fh_idx++) {
                     for (U32 fw_idx = 0; fw_idx < fw; fw_idx++) {
-                        INT8 *in_hw1c8 = inArray_pad + c*ihiw*8 + fh_idx*iw_pad*8 + fw_idx*8;
+                        INT8 *in_hw1c8 = inArray_pad + c*ihiw*8 + fh_idx*dilateH*iw_pad*8 + fw_idx*dilateW*8;
                         INT8 *in_0 = in_hw1c8 + in_h_0*iw_pad*8 + in_w_0*8;
                         INT8 *in_pack_0 = in_pack + c*fh*fw*8 + fh_idx*fw*4 + fw_idx*4;
                         INT8 *in_pack_1 = in_pack_0 + fh*fw*4;
@@ -1765,11 +1313,11 @@ EE convolution_gemm_A55(TensorDesc inputDesc, const void* input, F16* inputScale
                     res[0] = vdotq_lane_s32(res[0], f_8o[0], in_2, 0);
                     res[1] = vdotq_lane_s32(res[1], f_8o[1], in_2, 0);
 
-                    f_8o[3] = vld1q_s8(f_o+32);
-                    f_8o[4] = vld1q_s8(f_o+48);
+                    f_8o[2] = vld1q_s8(f_o+32);
+                    f_8o[3] = vld1q_s8(f_o+48);
                     f_o += 64;
-                    res[0] = vdotq_lane_s32(res[0], f_8o[3], in_2, 1);
-                    res[1] = vdotq_lane_s32(res[1], f_8o[4], in_2, 1);
+                    res[0] = vdotq_lane_s32(res[0], f_8o[2], in_2, 1);
+                    res[1] = vdotq_lane_s32(res[1], f_8o[3], in_2, 1);
                 }
                 if (out_f16_bool == 1) {
                     float32x4_t fac = vld1q_f32(factor_v);
@@ -1859,8 +1407,6 @@ EE convolution_gemm_A55(TensorDesc inputDesc, const void* input, F16* inputScale
     return ret;
 }
 
-// Two output types are allowed
-
 template EE convolution_gemm_A55<INT8>(TensorDesc inputDesc, const void* input, F16* inputScale, TensorDesc filterDesc, const void* filter, F16* filterScale,
     ConvolutionDesc convDesc, TensorDesc biasDesc, const void* bias, U32 tmpBytes, void* tmp, TensorDesc outputDesc,
     void* output, F16* outputScale, ActivationMode am);
@@ -1868,3 +1414,4 @@ template EE convolution_gemm_A55<INT8>(TensorDesc inputDesc, const void* input, 
 template EE convolution_gemm_A55<F16>(TensorDesc inputDesc, const void* input, F16* inputScale, TensorDesc filterDesc, const void* filter, F16* filterScale,
     ConvolutionDesc convDesc, TensorDesc biasDesc, const void* bias, U32 tmpBytes, void* tmp, TensorDesc outputDesc,
     void* output, F16* outputScale, ActivationMode am);
+#endif

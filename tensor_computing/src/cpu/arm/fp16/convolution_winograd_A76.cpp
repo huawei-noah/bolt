@@ -12,10 +12,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#include "sys.h"
-#include "type.h"
-#include "error.h"
-#include "tensor_desc.h"
 #include "cpu/arm/fp16/convolution_winograd_transform.h"
 #include "cpu/arm/fp16/convolution_winograd.h"
 
@@ -35,17 +31,18 @@ EE convolution_winograd_A76(TensorDesc inputDesc, F16* inArray,
     U32 in, ic, ih, iw;
     U32 fn, fc, fh, fw;
     U32 on, oc, oh, ow;
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
-    U32 padding = convDesc.padding;
+    CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+    CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
+    CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
+    U32 paddingT = convDesc.padding_top;
+    U32 paddingB = convDesc.padding_bottom;
+    U32 paddingL = convDesc.padding_left;
+    U32 paddingR = convDesc.padding_right;
 
     if (fdf != DF_HWNCN16)
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
-    if (!(ic == fc && oc == fn))
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
+        CHECK_STATUS(NOT_MATCH);
     if (!(fh == 6 && fw == 6))
-        CHECK_STATUS_WITH_RETURN(NOT_SUPPORTED);
+        CHECK_STATUS(NOT_SUPPORTED);
 
     oc /= 8;
     ic /= 8;
@@ -54,11 +51,11 @@ EE convolution_winograd_A76(TensorDesc inputDesc, F16* inArray,
     U32 tile_w = (ow + 3) / 4;
     // num of 6x6 tiles
     I32 tiles = tile_h * tile_w;
-    U32 pad_left = padding;
-    U32 pad_right = padding + (tile_w*4 - ow);
+    U32 pad_left = paddingL;
+    U32 pad_right = paddingR + (tile_w*4 - ow);
     U32 pad_w_mod_4 = tile_w*4 - ow;
-    U32 pad_top = padding;
-    U32 pad_bottom = padding + (tile_h*4 - oh);
+    U32 pad_top = paddingT;
+    U32 pad_bottom = paddingB + (tile_h*4 - oh);
     U32 pad_h_mod_4 = tile_h*4 - oh;
     U32 ih_pad = ih + pad_top + pad_bottom;
     U32 iw_pad = iw + pad_left + pad_right;
@@ -245,9 +242,9 @@ EE convolution_winograd_A76(TensorDesc inputDesc, F16* inArray,
                         :[out]"+r"(otm_0),
                          [in]"+r"(itm_0),
                          [f]"+r"(ftm_0)
-                        :[ic]"r"(ic*8)
-                        :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10",
-                            "q11", "q12", "q13", "q14", "q15", "q16", "q17", "q18", "q19", "q20", "q21", "x0"
+                        :[ic]"r"((I64)ic*8)
+                        :"memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10",
+                            "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20", "v21", "x0"
                     );
                 }
                 // out trans
@@ -274,8 +271,8 @@ EE convolution_winograd_A76(TensorDesc inputDesc, F16* inArray,
                             O_1[i*4 + j] = out_1 + i*ow*8 + j*8;
                         }
                     }
-                    CHECK_STATUS_WITH_RETURN(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationMode));
-                    CHECK_STATUS_WITH_RETURN(trans_O_4x4_3x3(Ow_1, O_1, b_1, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationMode));
+                    CHECK_STATUS(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationMode));
+                    CHECK_STATUS(trans_O_4x4_3x3(Ow_1, O_1, b_1, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationMode));
                 }
             }
             if (oc & 1) {
@@ -329,8 +326,8 @@ EE convolution_winograd_A76(TensorDesc inputDesc, F16* inArray,
                         :[out]"+r"(otm_0),
                          [in]"+r"(itm_0),
                          [f]"+r"(ftm_0)
-                        :[ic]"r"(ic*8)
-                        :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q18", "q20", "x0");
+                        :[ic]"r"((I64)ic*8)
+                        :"memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v18", "v20", "x0");
                 }
                 // out trans
                 // O*(6*6)*hw8*o8 => NOWHo8
@@ -350,7 +347,7 @@ EE convolution_winograd_A76(TensorDesc inputDesc, F16* inArray,
                             O_0[i*4 + j] = out_0 + i*ow*8 + j*8;
                         }
                     }
-                    CHECK_STATUS_WITH_RETURN(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationMode));
+                    CHECK_STATUS(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationMode));
                 }
             }
         }
@@ -427,7 +424,7 @@ EE convolution_winograd_A76(TensorDesc inputDesc, F16* inArray,
                          [in_1]"r"(Iw1[i]),
                          [in_2]"r"(Iw2[i]),
                          [in_3]"r"(Iw3[i])
-                        :"memory", "cc", "q0", "q1", "q2", "q3"
+                        :"memory", "cc", "v0", "v1", "v2", "v3"
                     );
                 }
             }
@@ -484,8 +481,8 @@ EE convolution_winograd_A76(TensorDesc inputDesc, F16* inArray,
                         :[out]"+r"(otm_0),
                          [in]"+r"(itm_0),
                          [f]"+r"(ftm_0)
-                        :[ic]"r"(ic*8)
-                        :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q18", "q19", "q20", "q21", "x0"
+                        :[ic]"r"((I64)ic*8)
+                        :"memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v18", "v19", "v20", "v21", "x0"
                     );
                 }
                 // out trans
@@ -512,8 +509,8 @@ EE convolution_winograd_A76(TensorDesc inputDesc, F16* inArray,
                             O_1[i*4 + j] = out_1 + i*ow*8 + j*8;
                         }
                     }
-                    CHECK_STATUS_WITH_RETURN(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationMode));
-                    CHECK_STATUS_WITH_RETURN(trans_O_4x4_3x3(Ow_1, O_1, b_1, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationMode));
+                    CHECK_STATUS(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationMode));
+                    CHECK_STATUS(trans_O_4x4_3x3(Ow_1, O_1, b_1, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationMode));
                 }
             }
             if (oc & 1) {
@@ -554,8 +551,8 @@ EE convolution_winograd_A76(TensorDesc inputDesc, F16* inArray,
                         :[out]"+r"(otm_0),
                          [in]"+r"(itm_0),
                          [f]"+r"(ftm_0)
-                        :[ic]"r"(ic*8)
-                        :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q18", "q20", "x0"
+                        :[ic]"r"((I64)ic*8)
+                        :"memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v18", "v20", "x0"
                     );
                 }
                 // out trans
@@ -576,7 +573,7 @@ EE convolution_winograd_A76(TensorDesc inputDesc, F16* inArray,
                             O_0[i*4 + j] = out_0 + i*ow*8 + j*8;
                         }
                     }
-                    CHECK_STATUS_WITH_RETURN(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationMode));
+                    CHECK_STATUS(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationMode));
                 }
             }
         }
@@ -648,8 +645,8 @@ EE convolution_winograd_A76(TensorDesc inputDesc, F16* inArray,
                         :[out]"+r"(otm_0),
                          [in]"+r"(itm_0),
                          [f]"+r"(ftm_0)
-                        :[ic]"r"(ic*8)
-                        :"memory", "cc", "q0", "q1", "q2", "q3", "q18", "q19", "q20", "q21", "x0"
+                        :[ic]"r"((I64)ic*8)
+                        :"memory", "cc", "v0", "v1", "v2", "v3", "v18", "v19", "v20", "v21", "x0"
                     );
                 }
                 // out trans
@@ -675,8 +672,8 @@ EE convolution_winograd_A76(TensorDesc inputDesc, F16* inArray,
                         O_1[i*4 + j] = out_1 + i*ow*8 + j*8;
                     }
                 }
-                CHECK_STATUS_WITH_RETURN(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationMode));
-                CHECK_STATUS_WITH_RETURN(trans_O_4x4_3x3(Ow_1, O_1, b_1, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationMode));
+                CHECK_STATUS(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationMode));
+                CHECK_STATUS(trans_O_4x4_3x3(Ow_1, O_1, b_1, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationMode));
             }
             if (oc & 1) {
                 F16 *itm_0 = itmArray;
@@ -707,8 +704,8 @@ EE convolution_winograd_A76(TensorDesc inputDesc, F16* inArray,
                         :[out]"+r"(otm_0),
                          [in]"+r"(itm_0),
                          [f]"+r"(ftm_0)
-                        :[ic]"r"(ic*8)
-                        :"memory", "cc", "q0", "q1", "q2", "q18", "q20", "x0"
+                        :[ic]"r"((I64)ic*8)
+                        :"memory", "cc", "v0", "v1", "v2", "v18", "v20", "x0"
                     );
                 }
                 // out trans
@@ -728,7 +725,7 @@ EE convolution_winograd_A76(TensorDesc inputDesc, F16* inArray,
                         O_0[i*4 + j] = out_0 + i*ow*8 + j*8;
                     }
                 }
-                CHECK_STATUS_WITH_RETURN(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationMode));
+                CHECK_STATUS(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationMode));
             }
         }
     }

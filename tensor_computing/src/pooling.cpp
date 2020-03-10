@@ -20,42 +20,67 @@
 #include "tensor_computing.h"
 #include "cpu/general/tensor_computing_general.h"
 #include "cpu/arm/tensor_computing_arm.h"
+#ifdef _USE_MALI 
+#include "gpu/mali/tensor_computing_mali.h"
+#endif
 
-EE pooling_infer_output_size(TensorDesc inputDesc, PoolingDesc poolingDesc, TensorDesc* outputDesc)
-{
+inline EE pooling_infer_output_size_cpu(TensorDesc inputDesc, PoolingDesc poolingDesc, TensorDesc* outputDesc){
     if (nullptr == outputDesc) {
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
+        CHECK_STATUS(NULL_POINTER);
     }
     DataType idt;
     DataFormat idf;
     U32 in, ic, ih, iw;
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    U32 stride = poolingDesc.stride;
-    U32 padding = poolingDesc.padding;
-    U32 kernelSize = poolingDesc.kernelSize;
+    CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+    U32 strideH = poolingDesc.stride_h;
+    U32 strideW = poolingDesc.stride_w;
+    U32 paddingT = poolingDesc.padding_top;
+    U32 paddingB = poolingDesc.padding_bottom;
+    U32 paddingL = poolingDesc.padding_left;
+    U32 paddingR = poolingDesc.padding_right;
+    U32 kernelSizeH = poolingDesc.kernelSize_h;
+    U32 kernelSizeW = poolingDesc.kernelSize_w;
     RoundMode rm = poolingDesc.rm;
     U32 oh = 0, ow = 0;
     switch (rm) {
         case CEIL: {
-            oh = (U32)(ceil((double(ih + 2.0 * padding - kernelSize) / stride))) + 1;
-            ow = (U32)(ceil((double(iw + 2.0 * padding - kernelSize) / stride))) + 1;
+            oh = (U32)(ceil((double(ih + paddingT + paddingB - kernelSizeH) / strideH))) + 1;
+            ow = (U32)(ceil((double(iw + paddingL + paddingR - kernelSizeW) / strideW))) + 1;
             break;
         }
         case FLOOR: {
-            oh = (U32)(floor((double(ih + 2.0 * padding - kernelSize) / stride))) + 1;
-            ow = (U32)(floor((double(iw + 2.0 * padding - kernelSize) / stride))) + 1;
+            oh = (U32)(floor((double(ih + paddingT + paddingB - kernelSizeH) / strideH))) + 1;
+            ow = (U32)(floor((double(iw + paddingL + paddingR - kernelSizeW) / strideW))) + 1;
             break;
         }
         default: {
-            CHECK_STATUS_WITH_RETURN(NOT_SUPPORTED);
+            CHECK_STATUS(NOT_SUPPORTED);
         }
     }
     *outputDesc = tensor4df(idt, idf, in, ic, oh, ow);
     return SUCCESS;
 }
-
-EE pooling(TensorDesc inputDesc, const void* input, PoolingDesc poolingDesc, const void* scale, TensorDesc outputDesc, void* output, Arch arch)
+EE pooling_infer_output_size(TensorDesc inputDesc, PoolingDesc poolingDesc, TensorDesc* outputDesc, Arch arch, ExtInfo_t extInfo)
 {
+#ifdef _USE_MALI
+    if(arch == MALI){
+        CHECK_STATUS(pooling_infer_output_size_mali(inputDesc, poolingDesc, outputDesc, extInfo->maliInfo.gclmemInputDesc, extInfo->maliInfo.gclmemOutputDesc));
+    } else {
+#endif
+        UNUSED(arch);
+        UNUSED(extInfo);
+        CHECK_STATUS(pooling_infer_output_size_cpu(inputDesc, poolingDesc, outputDesc));
+#ifdef _USE_MALI
+    }
+#endif
+    return SUCCESS;
+}
+
+EE pooling(TensorDesc inputDesc, const void* input, PoolingDesc poolingDesc, const void* scale, TensorDesc outputDesc, void* output, Arch arch, ExtInfo_t extInfo)
+{
+#ifndef _USE_MALI
+    UNUSED(extInfo);
+#endif    
     EE ret = SUCCESS;
     switch (arch) {
         case CPU_GENERAL:
@@ -73,6 +98,16 @@ EE pooling(TensorDesc inputDesc, const void* input, PoolingDesc poolingDesc, con
                               poolingDesc, scale,
                               outputDesc, output);
             break;
+        case ARM_V8:
+            ret = pooling_arm(inputDesc, input,
+                              poolingDesc, scale,
+                              outputDesc, output);
+            break;
+#ifdef _USE_MALI
+        case MALI:
+            ret = pooling_mali(extInfo->maliInfo.handle, inputDesc, (const GCLMem_t)input, poolingDesc, scale, outputDesc, (GCLMem_t)output);
+            break;
+#endif
         default:
             ret = NOT_SUPPORTED;
     }

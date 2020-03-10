@@ -12,6 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
+#ifdef _USE_INT8
 #include <arm_neon.h> 
 #include <math.h>
 
@@ -22,8 +23,8 @@ inline void mmm_4x4_A55(U32 offset, U32 K, INT8* in, INT8* w, I32* out) {
     asm volatile(
         //init in- > v1, w- > v0
         "ldr d1, [%0]\n"
-        "ldr x18, [%0, 8]\n"
-        "ins v1.d[1], x18\n"
+        "ldr x16, [%0, 8]\n"
+        "ins v1.d[1], x16\n"
 
         "ldr d0, [%1]\n"
         "ldr x17, [%1, 8]\n"
@@ -57,12 +58,12 @@ inline void mmm_4x4_A55(U32 offset, U32 K, INT8* in, INT8* w, I32* out) {
         "0:\n"
         
         "ldr d3, [x3, 16] !\n"
-        "ldr x18, [x3, 24]\n"
+        "ldr x16, [x3, 24]\n"
         "sdot v5.4s, v0.16b, v1.4b[0]\n"
         "ldr d29, [x0, 16] !\n"
         "ldr x17, [x0, 24]\n"
         "sdot v7.4s, v0.16b, v1.4b[1]\n"
-        "ins v3.d[1], x18\n"
+        "ins v3.d[1], x16\n"
         "subs x2, x2, #4\n"
         "sdot v9.4s, v0.16b, v1.4b[2]\n"
         "ins v29.d[1], x17\n"
@@ -90,36 +91,31 @@ inline void mmm_4x4_A55(U32 offset, U32 K, INT8* in, INT8* w, I32* out) {
         :"+r" (in),
          "+r" (w),
          "+r" (out)
-        :"r" (K),
-         "r" (offset)
-        :"memory","cc","v30","v29","v11","v9","v7","v5","v3","v1","v0","x26","x18","x17","x3","x2","x0"
+        :"r" ((I64)K),
+         "r" ((I64)offset)
+        :"memory","cc","v30","v29","v11","v9","v7","v5","v3","v1","v0","x26","x16","x17","x3","x2","x0"
     );
 }
 
 inline void mmm_8x4_A55(U32 offset, U32 K, INT8* in, INT8* w, I32* out) {
     asm volatile(
-        //init in- > v1, w- > v0
-        "ldr d1, [%0]\n"
-        "ldr x18, [%0, 8]\n"
-        "ins v1.d[1], x18\n"
+        // init in-> v1, w-> v0
+        "ldr q1, [%0]\n"
+        "ldr q0, [%1]\n"
 
-        "ldr d0, [%1]\n"
-        "ldr x17, [%1, 8]\n"
-        "ins v0.d[1], x17\n"
-
-        //give in address to x3
+        // give in address to x3
         "mov x3, %0\n"
 
-        //give w address to x0
+        // give w address to x0
         "mov x0, %1\n"
 
-        //K- > x2
+        // K-> x2
         "mov x2, %3\n"
 
-        //give out address to x26
+        // give out address to x26
         "mov x26, %2\n"
 
-        //load in bias
+        // load in bias
         "ldr q5, [x26]\n"
         "add x26, x26, %4\n"
 
@@ -147,21 +143,21 @@ inline void mmm_8x4_A55(U32 offset, U32 K, INT8* in, INT8* w, I32* out) {
         "0:\n"
         
         "ldr d3, [x3, 16]\n"
-        "ldr x18, [x3, 24]\n"
+        "ldr x16, [x3, 24]\n"
         "sdot v5.4s, v0.16b, v1.4b[0]\n"
-        "ldr d29, [x0, 16] !\n"
-        "ldr x17, [x0, 24]\n"
+        "ldr d29, [x0, 16]!\n"
+        "ldr x17, [x0, 8]\n"
         "sdot v7.4s, v0.16b, v1.4b[1]\n"
-        "ins v3.d[1], x18\n"
-        "ldr d30, [x3, 32] !\n"
+        "ins v3.d[1], x16\n"
+        "ldr d30, [x3, 32]!\n"
         "sdot v9.4s, v0.16b, v1.4b[2]\n"
         "ins v29.d[1], x17\n"
         "sdot v11.4s, v0.16b, v1.4b[3]\n"
         
-        "ldr x18, [x3, 8]\n"
+        "ldr x16, [x3, 8]\n"
         "subs x2, x2, #4\n"
         "sdot v13.4s, v0.16b, v3.4b[0]\n"
-        "ins v30.d[1], x18\n"
+        "ins v30.d[1], x16\n"
         "sdot v15.4s, v0.16b, v3.4b[1]\n"
         "sdot v17.4s, v0.16b, v3.4b[2]\n"
         "mov v1.16b, v30.16b\n"
@@ -198,10 +194,10 @@ inline void mmm_8x4_A55(U32 offset, U32 K, INT8* in, INT8* w, I32* out) {
         :"+r" (in),
          "+r" (w),
          "+r" (out)
-        :"r" (K),
-         "r" (offset)
+        :"r" ((I64)K),
+         "r" ((I64)offset)
         :"memory","cc","v30","v29","v19","v17","v15","v13","v11",
-            "v9","v7","v5","v3","v1","v0","x26","x18","x17","x3","x2","x0"
+            "v9","v7","v5","v3","v1","v0","x26","x16","x17","x3","x2","x0"
     );
 }
 
@@ -209,8 +205,8 @@ inline void mmm_4x8_A55(U32 offset, U32 K, INT8* in, INT8* w, I32* out) {
     asm volatile(
         //init in- > v1, w- > v0
         "ldr d1, [%0]\n"
-        "ldr x18, [%0, 8]\n"
-        "ins v1.d[1], x18\n"
+        "ldr x16, [%0, 8]\n"
+        "ins v1.d[1], x16\n"
 
         "ldr d0, [%1]\n"
         "ldr x17, [%1, 8]\n"
@@ -250,12 +246,12 @@ inline void mmm_4x8_A55(U32 offset, U32 K, INT8* in, INT8* w, I32* out) {
         "ldr x17, [x0, 24]\n"
         "sdot v5.4s, v0.16b, v1.4b[0]\n"
         "ldr d3, [x3, 16] !\n"
-        "ldr x18, [x3, 8]\n"
+        "ldr x16, [x3, 8]\n"
         "sdot v7.4s, v0.16b, v1.4b[1]\n"
         "ins v29.d[1], x17\n"
         "subs x2, x2, #4\n"
         "sdot v9.4s, v0.16b, v1.4b[2]\n"
-        "ins v3.d[1], x18\n"
+        "ins v3.d[1], x16\n"
         "sdot v11.4s, v0.16b, v1.4b[3]\n"
 
         "sdot v6.4s, v29.16b, v1.4b[0]\n"
@@ -282,10 +278,10 @@ inline void mmm_4x8_A55(U32 offset, U32 K, INT8* in, INT8* w, I32* out) {
         :"+r" (in),
          "+r" (w),
          "+r" (out)
-        :"r" (K),
-         "r" (offset)
+        :"r" ((I64)K),
+         "r" ((I64)offset)
         :"memory","cc","v29","v12","v11","v10","v9","v8","v7","v6","v5","v3","v1","v0",
-            "x26","x18","x17","x3","x2","x0"
+            "x26","x16","x17","x3","x2","x0"
     );
 }
 
@@ -293,8 +289,8 @@ inline void mmm_8x8_A55(U32 offset, U32 K, INT8* in, INT8* w, I32* out) {
     asm volatile(
         //init in- > v1, w- > v0
         "ldr d1, [%0]\n"
-        "ldr x18, [%0, 8]\n"
-        "ins v1.d[1], x18\n"
+        "ldr x16, [%0, 8]\n"
+        "ins v1.d[1], x16\n"
 
         "ldr d0, [%1]\n"
         "ldr x17, [%1, 8]\n"
@@ -346,22 +342,22 @@ inline void mmm_8x8_A55(U32 offset, U32 K, INT8* in, INT8* w, I32* out) {
         
         "sdot v5.4s, v0.16b, v1.4b[0]\n"
         "ldr d3, [x3, 16] !\n"
-        "ldr x18, [x3, 8]\n"
+        "ldr x16, [x3, 8]\n"
         "sdot v7.4s, v0.16b, v1.4b[1]\n"
         "ldr d29, [x0, 16]\n"
         "ldr x17, [x0, 24]\n"
         "sdot v9.4s, v0.16b, v1.4b[2]\n"
-        "ins v3.d[1], x18\n"
+        "ins v3.d[1], x16\n"
         "ldr d30, [x3, 16] !\n"
         "sdot v11.4s, v0.16b, v1.4b[3]\n"
         "ins v29.d[1], x17\n"
 
         "sdot v13.4s, v0.16b, v3.4b[0]\n"
-        "ldr x18, [x3, 8]\n"
+        "ldr x16, [x3, 8]\n"
         "subs x2, x2, #4\n"
         "sdot v15.4s, v0.16b, v3.4b[1]\n"
         "sdot v17.4s, v0.16b, v3.4b[2]\n"
-        "ins v30.d[1], x18\n"
+        "ins v30.d[1], x16\n"
         "sdot v19.4s, v0.16b, v3.4b[3]\n"
 
         "sdot v6.4s, v29.16b, v1.4b[0]\n"
@@ -402,11 +398,11 @@ inline void mmm_8x8_A55(U32 offset, U32 K, INT8* in, INT8* w, I32* out) {
         :"+r" (in),
          "+r" (w),
          "+r" (out)
-        :"r" (K),
-         "r" (offset)
+        :"r" ((I64)K),
+         "r" ((I64)offset)
         :"memory", "cc", "v30", "v29", "v20", "v19", "v18", "v17", "v16", "v15", "v14", "v13", "v12", "v11", "v10",
             "v9", "v8", "v7", "v6", "v5", "v3", "v1", "v0",
-            "x26", "x18", "x17", "x3", "x2", "x0"
+            "x26", "x16", "x17", "x3", "x2", "x0"
     );
 }
 
@@ -456,26 +452,26 @@ inline void mmm_4x12_A55(U32 offset, U32 K, INT8* in, INT8* w, I32* out)
             "sdot v5.4s, v0.16b, v1.4b[0]\n"
             "ldr d30, [x0, 32]\n"
             "sdot v8.4s, v0.16b, v1.4b[1]\n"
-            "ldr x18, [x0, 40]\n"
+            "ldr x16, [x0, 40]\n"
             "sdot v11.4s, v0.16b, v1.4b[2]\n"
             "ldr d2, [x3, 16]!\n" // input of next round
             "sdot v14.4s, v0.16b, v1.4b[3]\n"
             "ldr x17, [x3, 8]\n"
 
             "sdot v6.4s, v29.16b, v1.4b[0]\n"
-            "ins v30.d[1], x18\n"
+            "ins v30.d[1], x16\n"
             "sdot v9.4s, v29.16b, v1.4b[1]\n"
             "ldr d0, [x0, 48]!\n" // first w of next round
             "sdot v12.4s, v29.16b, v1.4b[2]\n"
             "ins v2.d[1], x17\n"
             "sdot v15.4s, v29.16b, v1.4b[3]\n"
-            "ldr x18, [x0, 8]\n"
+            "ldr x16, [x0, 8]\n"
 
             "sdot v7.4s, v30.16b, v1.4b[0]\n"
             "ldr d29, [x0, 16]\n"
             "sdot v10.4s, v30.16b, v1.4b[1]\n"
             "ldr x19, [x0, 24]\n"
-            "ins v0.d[1], x18\n"
+            "ins v0.d[1], x16\n"
             "sdot v13.4s, v30.16b, v1.4b[2]\n"
             "subs x2, x2, #4\n"
             "sdot v16.4s, v30.16b, v1.4b[3]\n"
@@ -498,9 +494,9 @@ inline void mmm_4x12_A55(U32 offset, U32 K, INT8* in, INT8* w, I32* out)
             :"+r"(in),
              "+r"(w),
              "+r"(out)
-            :"r"(K),
-             "r"(offset)
-            :"memory","cc","v30","v29","v16","v15","v14","v13","v12","v11","v10","v9","v8","v7","v6","v5","v3","v2","v1","v0","x26","x19","x18","x17","x3","x2","x0"
+            :"r"((I64)K),
+             "r"((I64)offset)
+            :"memory","cc","v30","v29","v16","v15","v14","v13","v12","v11","v10","v9","v8","v7","v6","v5","v3","v2","v1","v0","x26","x19","x16","x17","x3","x2","x0"
         );          
 }
 
@@ -563,25 +559,25 @@ inline void mmm_8x12_A55(U32 offset, U32 K, INT8* in, INT8* w, I32* out)
             "sdot v5.4s, v0.16b, v1.4b[0]\n"
             "ldr d30, [x0, 32]\n"
             "sdot v8.4s, v0.16b, v1.4b[1]\n"
-            "ldr x18, [x0, 40]\n"
+            "ldr x16, [x0, 40]\n"
             "sdot v11.4s, v0.16b, v1.4b[2]\n"
             "ldr d2, [x3, 16]\n"
             "sdot v14.4s, v0.16b, v1.4b[3]\n"
             "ldr x17, [x3, 24]\n"
 
             "sdot v6.4s, v29.16b, v1.4b[0]\n"
-            "ins v30.d[1], x18\n"
+            "ins v30.d[1], x16\n"
             "sdot v9.4s, v29.16b, v1.4b[1]\n"
             "ldr d3, [x0, 48]!\n" // first w of next round
             "sdot v12.4s, v29.16b, v1.4b[2]\n"
             "ins v2.d[1], x17\n"
             "sdot v15.4s, v29.16b, v1.4b[3]\n"
-            "ldr x18, [x0, 8]\n"
+            "ldr x16, [x0, 8]\n"
 
             "sdot v7.4s, v30.16b, v1.4b[0]\n"
             "subs x2, x2, #4\n"
             "sdot v10.4s, v30.16b, v1.4b[1]\n"
-            "ins v3.d[1], x18\n"
+            "ins v3.d[1], x16\n"
             "sdot v13.4s, v30.16b, v1.4b[2]\n"
             "sdot v16.4s, v30.16b, v1.4b[3]\n"
 
@@ -602,10 +598,10 @@ inline void mmm_8x12_A55(U32 offset, U32 K, INT8* in, INT8* w, I32* out)
             "sdot v19.4s, v30.16b, v2.4b[0]\n"
             "ldr d29, [x0, 16]\n"
             "sdot v22.4s, v30.16b, v2.4b[1]\n"
-            "ldr x18, [x0, 24]\n"
+            "ldr x16, [x0, 24]\n"
             "sdot v25.4s, v30.16b, v2.4b[2]\n"
             "sdot v28.4s, v30.16b, v2.4b[3]\n"
-            "ins v29.d[1], x18\n"
+            "ins v29.d[1], x16\n"
 
             "bne 0b\n"
 
@@ -631,13 +627,14 @@ inline void mmm_8x12_A55(U32 offset, U32 K, INT8* in, INT8* w, I32* out)
             :"+r"(in),
              "+r"(w),
              "+r"(out)
-            :"r"(K),
-             "r"(offset)
-            :"memory","cc","v30","v29","v28","v27","v26","v25","v24","v23","v22","v21","v20","v19","v18","v17","v16","v15","v14","v13","v12","v11","v10","v9","v8","v7","v6","v5","v3","v2","v1","v0","x26","x18","x17","x3","x2","x0"
+            :"r"((I64)K),
+             "r"((I64)offset)
+            :"memory","cc","v30","v29","v28","v27","v26","v25","v24","v23","v22","v21","v20","v19","v18","v17","v16","v15","v14","v13","v12","v11","v10","v9","v8","v7","v6","v5","v3","v2","v1","v0","x26","x16","x17","x3","x2","x0"
         );          
 }
 
-void mmm_A55(int M, int N, int K, INT8* matrix1, INT8* matrix2, INT8* tmp, I32* result) {
+void mmm_A55(int M, int N, int K, INT8* matrix1, INT8* matrix2, INT8* tmp, I32* result)
+{
     int blockK = K;
     int blockM = 96;
     INT8* matrix1Trans = tmp;
@@ -646,9 +643,9 @@ void mmm_A55(int M, int N, int K, INT8* matrix1, INT8* matrix2, INT8* tmp, I32* 
 
     int KInner, MInner, m, n;
     for (int k = 0; k < K; k += blockK) {
-        KInner = std::min(blockK, K - k);//K for this inner iteration
+        KInner = UNI_MIN(blockK, K - k);  //K for this inner iteration
         for (int i = 0; i < M; i+=blockM) {
-            MInner = std::min(blockM, M - i);//M for this inner iteration
+            MInner = UNI_MIN(blockM, M - i);  //M for this inner iteration
             for(n = 0; n <= N - 8; n+=8){
                 if(i == 0){
                     matrix1_trans_n8(KInner, K, matrix1 + n * K + k, matrix1Trans + n * KInner);
@@ -772,3 +769,4 @@ void mmm_A55(int M, int N, int K, INT8* matrix1, INT8* matrix2, INT8* tmp, I32* 
         }
     }
 }
+#endif

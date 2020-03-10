@@ -47,7 +47,7 @@ EE deserialize_model_from_file(const char* fn, ModelSpec* spec);
 
 EE str_copy(I8 *dst, const I8 *src, I32 src_len);
 
-void* mt_malloc(size_t size);
+void* mt_new_storage(size_t size);
 
 EE ms_datatype_converter(ModelSpec* original_ms, ModelSpec* target_ms, DataConvertType convert_mode);
 

@@ -12,128 +12,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#include <cmath>
-#include "sys.h"
-#include "type.h"
-#include "error.h"
-#include "tensor_desc.h"
-
+#ifdef _USE_INT8
 #include "cpu/arm/int8/convolution_winograd_transform.h"
-#include "cpu/arm/int8/convolution_int8.h"
-
-inline void apply_scale_f16(U32 numData, F16* array, F16 scale, INT8* qArray)
-{
-    for (U32 i = 0; i < numData; i++) {
-        F32 tmp = array[i] * scale;
-        qArray[i] = round(tmp);
-    }
-}
-
-void quantize_wino_input(F16* itmArray, U32 len_per_36, INT8* inQ, F32* inputScale)
-{
-    U32 numData = len_per_36;
-    F32 scale;
-
-    for (U32 idx = 0; idx < 36; idx++) {
-        F16* in = itmArray + idx*numData;
-        float16x8_t temp_v = vld1q_f16(in);
-        float16x8_t max_v = temp_v;
-        float16x8_t min_v = temp_v;
-
-        for (U32 i = 8; i < numData; i += 8) {
-            temp_v = vld1q_f16(in+i);
-            max_v = vmaxq_f16(max_v, temp_v);
-            min_v = vminq_f16(min_v, temp_v);
-        }
-
-        F16 max = vmaxvq_f16(max_v);
-        F16 min = vminvq_f16(min_v);
-
-        if (max == 0 && min == 0) {
-            inputScale[idx] = 0.0;  // We can skip this dotprod later
-            continue;
-        }
-        if (max > 0 && min < 0) {
-            F32 scale_max = 127.0 / max;
-            F32 scale_min = -128.0 / min;
-            scale = (scale_max < scale_min) ? scale_max : scale_min;
-        } else if (max < 0) {
-            scale = -128.0 / min;
-        } else {  // min > 0
-            scale = 127.0 / max;
-        }
-
-        INT8 *base = inQ + idx*numData;
-        apply_scale_f16(numData, in, scale, base);
-        inputScale[idx] = scale;
-    }
-}
-
-void quantize_wino_input_s16(short* itmArray, U32 len_per_36, INT8* inQ, F32* inputScale, F16 input_scale)
-{
-    U32 numData = len_per_36;
-    short factor;
-
-    for (U32 idx = 0; idx < 36; idx++) {
-        short* in = itmArray + idx*numData;
-        int16x8_t temp_v = vld1q_s16(in);
-        int16x8_t max_v = temp_v;
-        int16x8_t min_v = temp_v;
-
-        for (U32 i = 8; i < numData; i += 8) {
-            temp_v = vld1q_s16(in+i);
-            max_v = vmaxq_s16(max_v, temp_v);
-            min_v = vminq_s16(min_v, temp_v);
-        }
-
-        short max = vmaxvq_s16(max_v);
-        short min = vminvq_s16(min_v);
-
-        if (max == 0 && min == 0) {
-            inputScale[idx] = 0.0;  // We can skip this dotprod later
-            continue;
-        }
-        if (max > 0 && min < 0) {
-            short factor_max = 127 * 256 / max;
-            short factor_min = -128 * 256 / min;
-            factor = (factor_max < factor_min) ? factor_max : factor_min;
-        } else if (max < 0) {
-            factor = -128 * 256 / min;
-        } else {  // min > 0
-            factor = 127 * 256 / max;
-        }
-
-        INT8 *base = inQ + idx*numData;
-        int16x8_t d[4];
-        int8x8_t q[4];
-        U32 i = 0;
-        for (; i < numData-31; i += 32) {
-            for (U32 j = 0; j < 4; j++) {
-                d[j] = vld1q_s16(in+i+j*8);
-            }
-            for (U32 j = 0; j < 4; j++) {
-                d[j] = vmulq_n_s16(d[j], factor);
-            }
-            
-            q[0] = vshrn_n_s16(d[0], 8);
-            q[1] = vshrn_n_s16(d[1], 8);
-            q[2] = vshrn_n_s16(d[2], 8);
-            vst1_s8(base+i, q[0]);
-            q[3] = vshrn_n_s16(d[3], 8);
-            vst1_s8(base+i+8, q[1]);
-            vst1_s8(base+i+16, q[2]);
-            vst1_s8(base+i+24, q[3]);
-        }
-
-        for (; i < numData; i+=8) {
-            d[0] = vld1q_s16(in+i);
-            d[0] = vmulq_n_s16(d[0], factor);
-            q[0] = vshrn_n_s16(d[0], 8);
-            vst1_s8(base+i, q[0]);
-        }
-        inputScale[idx] = (F32)factor * input_scale / 256.0;
-    }
-}
+#include "cpu/arm/int8/convolution_winograd.h"
 
 template<typename OT>
 EE convolution_winograd_A55(TensorDesc inputDesc, const void* input, F16* input_scale, TensorDesc filterDesc, const void* filter, F16* filterScale,
@@ -149,15 +30,15 @@ EE convolution_winograd_A55(TensorDesc inputDesc, const void* input, F16* input_
     U32 in, ic, ih, iw;
     U32 fn, fc, fh, fw;
     U32 on, oc, oh, ow;
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
-    U32 padding = convDesc.padding;
+    CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+    CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
+    CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
+    U32 paddingT = convDesc.padding_top;
+    U32 paddingB = convDesc.padding_bottom;
+    U32 paddingL = convDesc.padding_left;
+    U32 paddingR = convDesc.padding_right;
 
     if (fdf != DF_HWNCN8C4) {
-        return NOT_MATCH;
-    }
-    if (!(ic == fc && oc == fn)) {
         return NOT_MATCH;
     }
     if (!(fh == 6 && fw == 6)) {
@@ -177,11 +58,11 @@ EE convolution_winograd_A55(TensorDesc inputDesc, const void* input, F16* input_
     U32 tile_h = (oh + 3) / 4;
     U32 tile_w = (ow + 3) / 4;
     I32 tiles = tile_h * tile_w;  // num of 6x6 tiles
-    U32 pad_left = padding;
-    U32 pad_right = padding + (tile_w*4 - ow);
+    U32 pad_left = paddingL;
+    U32 pad_right = paddingR + (tile_w*4 - ow);
     U32 pad_w_mod_4 = tile_w*4 - ow;
-    U32 pad_top = padding;
-    U32 pad_bottom = padding + (tile_h*4 - oh);
+    U32 pad_top = paddingT;
+    U32 pad_bottom = paddingB + (tile_h*4 - oh);
     U32 pad_h_mod_4 = tile_h*4 - oh;
     U32 ih_pad = ih + pad_top + pad_bottom;
     U32 iw_pad = iw + pad_left + pad_right;
@@ -510,7 +391,7 @@ EE convolution_winograd_A55(TensorDesc inputDesc, const void* input, F16* input_
                         [in_9]"r"(in_9),
                         [in_10]"r"(in_10),
                         [in_11]"r"(in_11)
-                        :"memory", "cc", "q0", "q1", "q4", "q5", "q8", "q9", "q20", "q21", "q24", "q25", "q28", "q29", "x2", "x3", "x6", "x7", "x10", "x11"
+                        :"memory", "cc", "v0", "v1", "v4", "v5", "v8", "v9", "v20", "v21", "v24", "v25", "v28", "v29", "x2", "x3", "x6", "x7", "x10", "x11"
                     );
                 }
             }
@@ -529,22 +410,6 @@ EE convolution_winograd_A55(TensorDesc inputDesc, const void* input, F16* input_
                     }
                     F32 *fac = factor_v[idx];
                     __asm__ __volatile__(
-                /* Layout
-                5   6
-                7   8
-                9   10
-                11  12
-
-                13  14
-                15  16
-                17  18
-                19  20
-                
-                21  22
-                23  24
-                25  26
-                27  28
-                */
                         "eor v5.16b, v5.16b, v5.16b\n"
                         "ldr  d1, [%[in_0]]\n"           //in_0
                         "eor v6.16b, v6.16b, v6.16b\n"
@@ -590,22 +455,22 @@ EE convolution_winograd_A55(TensorDesc inputDesc, const void* input, F16* input_
                         "0:\n"
                         "sdot v5.4s, v0.16b, v1.4b[0]\n"
                         "ldr d2, [x3, 32]\n"
-                        "ldr x18, [x3, 40]\n"
+                        "ldr x16, [x3, 40]\n"
                         "sdot v7.4s, v0.16b, v1.4b[1]\n"
                         "ldr d29, [x0, 16]\n"
                         "ldr x17, [x0, 24]\n"
                         "sdot v9.4s, v0.16b, v1.4b[2]\n"
-                        "ins v2.d[1], x18\n"
+                        "ins v2.d[1], x16\n"
                         "ldr d30, [x3, 48]!\n"
                         "sdot v11.4s, v0.16b, v1.4b[3]\n"
                         "ins v29.d[1], x17\n"
 
                         "sdot v13.4s, v0.16b, v3.4b[0]\n"
-                        "ldr x18, [x3, 8]\n"
+                        "ldr x16, [x3, 8]\n"
                         "subs x2, x2, #4\n"
                         "sdot v15.4s, v0.16b, v3.4b[1]\n"
                         "sdot v17.4s, v0.16b, v3.4b[2]\n"
-                        "ins v30.d[1], x18\n"
+                        "ins v30.d[1], x16\n"
                         "sdot v19.4s, v0.16b, v3.4b[3]\n"
 
                         "sdot v21.4s, v0.16b, v2.4b[0]\n"
@@ -623,12 +488,12 @@ EE convolution_winograd_A55(TensorDesc inputDesc, const void* input, F16* input_
                         "sdot v6.4s, v29.16b, v1.4b[0]\n"
                         "sdot v8.4s, v29.16b, v1.4b[1]\n"
                         "ldr d3, [x3, 16]\n"
-                        "ldr x18, [x3, 24]\n"
+                        "ldr x16, [x3, 24]\n"
                         "sdot v10.4s, v29.16b, v1.4b[2]\n"
                         "sdot v12.4s, v29.16b, v1.4b[3]\n"
 
                         "ins v0.d[1], x17\n"
-                        "ins v3.d[1], x18\n"          
+                        "ins v3.d[1], x16\n"          
 
                         "sdot v22.4s, v29.16b, v2.4b[0]\n"
                         "mov v1.16b, v30.16b\n"
@@ -732,9 +597,9 @@ EE convolution_winograd_A55(TensorDesc inputDesc, const void* input, F16* input_
                         :[out_0]"r"(out_o0hw0),
                         [in_0]"r"(in_hw0),
                         [f_0]"r"(f_o0c0),
-                        [ic]"r"(ic*8),
+                        [ic]"r"((I64)ic*8),
                         [factor]"r"(fac)
-                        :"memory", "cc", "q0", "q1", "q2", "q3", "q5", "q6", "q7", "q8", "q9", "q10", "q11", "q12", "q13", "q14", "q15", "q16", "q17", "q18", "q19", "q20", "q21", "q22", "q23", "q24", "q25", "q26", "q27", "q28", "q29", "q30", "x0", "x1", "x2", "x3","x17","x18"
+                        :"memory", "cc", "v0", "v1", "v2", "v3", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23", "v24", "v25", "v26", "v27", "v28", "v29", "v30", "x0", "x1", "x2", "x3","x17","x16"
                     );
                 }
                 // out trans
@@ -974,7 +839,7 @@ EE convolution_winograd_A55(TensorDesc inputDesc, const void* input, F16* input_
                         [in_5]"r"(in_5),
                         [in_6]"r"(in_6),
                         [in_7]"r"(in_7)
-                        :"memory", "cc", "q0", "q1", "q4", "q5", "q20", "q21", "q24", "q25", "x2", "x3", "x6", "x7"
+                        :"memory", "cc", "v0", "v1", "v4", "v5", "v20", "v21", "v24", "v25", "x2", "x3", "x6", "x7"
                     );
                 }
             }
@@ -993,17 +858,6 @@ EE convolution_winograd_A55(TensorDesc inputDesc, const void* input, F16* input_
                     }
                     F32 *fac = factor_v[idx];
                     __asm__ __volatile__(
-                /* Layout
-                5   6
-                7   8
-                9   10
-                11  12
-
-                13  14
-                15  16
-                17  18
-                19  20
-                */
                         // Bias should be applied after transform
                         "eor v5.16b, v5.16b, v5.16b\n"
                         "ldr  d1, [%[in_0]]\n"           //in_0
@@ -1038,22 +892,22 @@ EE convolution_winograd_A55(TensorDesc inputDesc, const void* input, F16* input_
                         "0:\n"
                         "sdot v5.4s, v0.16b, v1.4b[0]\n"
                         "ldr d3, [x3, 16]!\n"
-                        "ldr x18, [x3, 8]\n"
+                        "ldr x16, [x3, 8]\n"
                         "sdot v7.4s, v0.16b, v1.4b[1]\n"
                         "ldr d29, [x0, 16]\n"
                         "ldr x17, [x0, 24]\n"
                         "sdot v9.4s, v0.16b, v1.4b[2]\n"
-                        "ins v3.d[1], x18\n"
+                        "ins v3.d[1], x16\n"
                         "ldr d30, [x3, 16]!\n"
                         "sdot v11.4s, v0.16b, v1.4b[3]\n"
                         "ins v29.d[1], x17\n"
 
                         "sdot v13.4s, v0.16b, v3.4b[0]\n"
-                        "ldr x18, [x3, 8]\n"
+                        "ldr x16, [x3, 8]\n"
                         "subs x2, x2, #4\n"
                         "sdot v15.4s, v0.16b, v3.4b[1]\n"
                         "sdot v17.4s, v0.16b, v3.4b[2]\n"
-                        "ins v30.d[1], x18\n"
+                        "ins v30.d[1], x16\n"
                         "sdot v19.4s, v0.16b, v3.4b[3]\n"
 
                         "sdot v6.4s, v29.16b, v1.4b[0]\n"
@@ -1138,9 +992,9 @@ EE convolution_winograd_A55(TensorDesc inputDesc, const void* input, F16* input_
                         :[out_0]"r"(out_o0hw0),
                         [in_0]"r"(in_hw0),
                         [f_0]"r"(f_o0c0),
-                        [ic]"r"(ic*8),
+                        [ic]"r"((I64)ic*8),
                         [factor]"r"(fac)
-                        :"memory", "cc", "q0", "q1", "q3", "q5", "q6", "q7", "q8", "q9", "q10", "q11", "q12", "q13", "q14", "q15", "q16", "q17", "q18", "q19", "q20", "q29", "q30", "x0", "x1", "x2", "x3","x17","x18"
+                        :"memory", "cc", "v0", "v1", "v3", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20", "v29", "v30", "x0", "x1", "x2", "x3","x17","x16"
                     );
                 }
                 // out trans
@@ -1303,7 +1157,7 @@ EE convolution_winograd_A55(TensorDesc inputDesc, const void* input, F16* input_
                         [in_1]"r"(in_1),
                         [in_2]"r"(in_2),
                         [in_3]"r"(in_3)
-                        :"memory", "cc", "q0", "q1", "q20", "q21", "x2", "x3"
+                        :"memory", "cc", "v0", "v1", "v20", "v21", "x2", "x3"
                     );
                 }
             }
@@ -1322,12 +1176,6 @@ EE convolution_winograd_A55(TensorDesc inputDesc, const void* input, F16* input_
                     }
                     F32 *fac = factor_v[idx];
                     __asm__ __volatile__(
-                /* Layout
-                5   6
-                7   8
-                9   10
-                11  12
-                */
                         "eor v5.16b, v5.16b, v5.16b\n"
                         "ldr  d1, [%[in_0]]\n"           //in_0
                         "eor v6.16b, v6.16b, v6.16b\n"
@@ -1356,12 +1204,12 @@ EE convolution_winograd_A55(TensorDesc inputDesc, const void* input, F16* input_
                         "ldr x17, [x0, 24]\n"
                         "sdot v5.4s, v0.16b, v1.4b[0]\n"
                         "ldr d3, [x3, 16]!\n"
-                        "ldr x18, [x3, 8]\n"
+                        "ldr x16, [x3, 8]\n"
                         "sdot v7.4s, v0.16b, v1.4b[1]\n"
                         "ins v29.d[1], x17\n"
                         "subs x2, x2, #4\n"
                         "sdot v9.4s, v0.16b, v1.4b[2]\n"
-                        "ins v3.d[1], x18\n"
+                        "ins v3.d[1], x16\n"
                         "sdot v11.4s, v0.16b, v1.4b[3]\n"
 
                         "sdot v6.4s, v29.16b, v1.4b[0]\n"
@@ -1414,9 +1262,9 @@ EE convolution_winograd_A55(TensorDesc inputDesc, const void* input, F16* input_
                         :[out_0]"r"(out_o0hw0),
                         [in_0]"r"(in_hw0),
                         [f_0]"r"(f_o0c0),
-                        [ic]"r"(ic*8),
+                        [ic]"r"((I64)ic*8),
                         [factor]"r"(fac)
-                        :"memory", "cc", "q0", "q1", "q2", "q3", "q5", "q6", "q7", "q8", "q9", "q10", "q11", "q12", "q29", "x0", "x1", "x2", "x3","x17","x18"
+                        :"memory", "cc", "v0", "v1", "v2", "v3", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v29", "x0", "x1", "x2", "x3","x17","x16"
                     );
                 }
                 // out trans
@@ -1541,11 +1389,11 @@ EE convolution_winograd_A55(TensorDesc inputDesc, const void* input, F16* input_
                         res[0] = vdotq_lane_s32(res[0], f_8o[0], in_2, 0);
                         res[1] = vdotq_lane_s32(res[1], f_8o[1], in_2, 0);
 
-                        f_8o[3] = vld1q_s8(f_o+32);
-                        f_8o[4] = vld1q_s8(f_o+48);
+                        f_8o[2] = vld1q_s8(f_o+32);
+                        f_8o[3] = vld1q_s8(f_o+48);
                         f_o += 64;
-                        res[0] = vdotq_lane_s32(res[0], f_8o[3], in_2, 1);
-                        res[1] = vdotq_lane_s32(res[1], f_8o[4], in_2, 1);
+                        res[0] = vdotq_lane_s32(res[0], f_8o[2], in_2, 1);
+                        res[1] = vdotq_lane_s32(res[1], f_8o[3], in_2, 1);
                     }
                     float32x4_t fac = vld1q_f32(factor_v[idx]);
                     float32x4_t resf0 = vcvtq_f32_s32(res[0]);
@@ -1614,8 +1462,6 @@ EE convolution_winograd_A55(TensorDesc inputDesc, const void* input, F16* input_
     return SUCCESS;
 }
 
-// Two output types are allowed
-
 template EE convolution_winograd_A55<INT8>(TensorDesc inputDesc, const void* input, F16* input_scale, TensorDesc filterDesc, const void* filter, F16* filterScale,
     ConvolutionDesc convDesc, TensorDesc biasDesc, const void* bias, U32 tmpBytes, void* tmp, TensorDesc outputDesc,
     void* output, F16* outputScale, ActivationMode am);
@@ -1623,3 +1469,4 @@ template EE convolution_winograd_A55<INT8>(TensorDesc inputDesc, const void* inp
 template EE convolution_winograd_A55<F16>(TensorDesc inputDesc, const void* input, F16* input_scale, TensorDesc filterDesc, const void* filter, F16* filterScale,
     ConvolutionDesc convDesc, TensorDesc biasDesc, const void* bias, U32 tmpBytes, void* tmp, TensorDesc outputDesc,
     void* output, F16* outputScale, ActivationMode am);
+#endif

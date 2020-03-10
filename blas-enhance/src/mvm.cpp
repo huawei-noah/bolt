@@ -20,33 +20,59 @@
 #include "cpu/arm/blas_arm.h"
 
 
+EE matrix_vector_multiply_tmp_bytes(TensorDesc matrixDesc, TensorDesc vectorDesc, U32* bytes, Arch arch)
+{
+    UNUSED(vectorDesc);
+
+    bool transpose = (matrixDesc.df == DF_TRANSPOSE);
+
+    EE ret = SUCCESS;
+    if (arch == ARM_A55 || arch == ARM_A76 || arch == ARM_V8)
+#ifdef _USE_NEON
+        ret = matrix_vector_multiply_tmp_bytes_arm(transpose, matrixDesc.dt, bytes);
+#else
+        ret = NOT_SUPPORTED;
+#endif
+    else
+        ret = NOT_SUPPORTED;
+
+    return ret;
+}
+
 EE matrix_vector_multiply(TensorDesc matrixDesc, const void* matrix,
     TensorDesc vectorDesc, const void* vector,
+    U32 bytes, void* tmp,
     TensorDesc resultDesc, void* result,
-    Arch arch) {
-
+    Arch arch)
+{
+    if (bytes != 0 && tmp == nullptr) {
+        CHECK_STATUS(NULL_POINTER);
+    }
+    if (nullptr == matrix || nullptr == vector || nullptr == result) {
+        CHECK_STATUS(NULL_POINTER);
+    }
     DataType matrixDataType, vectorDataType, resultDataType;
     DataFormat matrixDataFormat;
     U32 matrixRow, matrixColumn, vectorColumn, resultColumn;
-    CHECK_STATUS_WITH_RETURN(tensor2dfGet(matrixDesc, &matrixDataType, &matrixDataFormat, &matrixRow, &matrixColumn));
-    CHECK_STATUS_WITH_RETURN(tensor1dGet(vectorDesc, &vectorDataType, &vectorColumn));
-    CHECK_STATUS_WITH_RETURN(tensor1dGet(resultDesc, &resultDataType, &resultColumn));
+    CHECK_STATUS(tensor2dfGet(matrixDesc, &matrixDataType, &matrixDataFormat, &matrixRow, &matrixColumn));
+    CHECK_STATUS(tensor1dGet(vectorDesc, &vectorDataType, &vectorColumn));
+    CHECK_STATUS(tensor1dGet(resultDesc, &resultDataType, &resultColumn));
 
     if (matrixDataType != vectorDataType)
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
+        CHECK_STATUS(NOT_MATCH);
     if (matrixDataType != resultDataType)
         if (matrixDataType != DT_I8 || resultDataType != DT_I32)
-            CHECK_STATUS_WITH_RETURN(NOT_MATCH);
+            CHECK_STATUS(NOT_MATCH);
 
     if (matrixRow != resultColumn || matrixColumn != vectorColumn)
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
+        CHECK_STATUS(NOT_MATCH);
 
     bool transpose = (matrixDataFormat == DF_TRANSPOSE);
     EE ret = SUCCESS;
     if (arch == CPU_GENERAL)
         ret = mvm_general(matrixRow, matrixColumn, matrixDataType, transpose, matrix, vector, result);
     else
-        ret = mvm_arm(matrixRow, matrixColumn, matrixDataType, transpose, matrix, vector, result, arch);
+        ret = mvm_arm(matrixRow, matrixColumn, matrixDataType, transpose, matrix, vector, tmp, result, arch);
         
     return ret;
 }

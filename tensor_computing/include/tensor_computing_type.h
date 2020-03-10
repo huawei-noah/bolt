@@ -16,43 +16,93 @@
 #define _H_TENSOR_COMPUTING_TYPE
 
 #include "type.h"
+#ifdef _USE_MALI
+#include "gcl.h"
+#endif
 
 typedef struct {
-    U32 stride;
-    U32 padding;
-    U32 dilatedRate;
+    U32 stride_h;
+    U32 stride_w;
+    U32 padding_top;
+    U32 padding_bottom;
+    U32 padding_left;
+    U32 padding_right;
+    U32 dilatedRate_h;
+    U32 dilatedRate_w;
 } ConvolutionDesc;
 
 typedef enum {
     CONVOLUTION_NO_TMP_MEM,
     CONVOLUTION_FASTEST,
+    CONVOLUTION_TUNNING,
+    CONVOLUTION_LIBRARY_SEARCH,
 } ConvolutionPolicy;
 
 typedef enum {
     CONVOLUTION_ALGORITHM_DIRECT,
     CONVOLUTION_ALGORITHM_GEMM,
-    CONVOLUTION_ALGORITHM_GEMM_IC1OR3,
-    CONVOLUTION_ALGORITHM_GEMM_DILATED,
+    CONVOLUTION_ALGORITHM_GEMM_ICNCHW,
     CONVOLUTION_ALGORITHM_WINOGRAD,
     CONVOLUTION_ALGORITHM_BNN,
+    CONVOLUTION_ALGORITHM_DIRECT_SPE_CK,
+    CONVOLUTION_ALGORITHM_NULL
 } ConvolutionForwardAlgorithm;
 
 typedef struct {
     PoolingMode pm;
-    U32 stride;
-    U32 padding;
-    U32 kernelSize;
+    U32 stride_h;
+    U32 stride_w;
+    U32 padding_top;
+    U32 padding_bottom;
+    U32 padding_left;
+    U32 padding_right;
+    U32 kernelSize_h;
+    U32 kernelSize_w;
     RoundMode rm;
 } PoolingDesc;
 
 typedef struct {
-    U32 num_output;
+    U32 numOutput;
+    F32 forgetBias;
+    ActivationMode activationMode;
 } LSTMDesc;
+
+typedef struct {
+    U32 coefficient_len;
+    bool has_offset;
+    BilateralSliceApplyMode mode;
+} BilateralSliceApplyDesc;
 
 typedef enum {
     DEPTHWISE_CONVOLUTION_ALGORITHM_DIRECT,
     DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_DIRECT,
     DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_DIRECT_NO_PADDING,
     DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_3X3S1P1,
+    DEPTHWISE_CONVOLUTION_ALGORITHM_NULL
 } DepthwiseConvolutionForwardAlgorithm;
+
+#ifdef _USE_MALI
+typedef struct {
+    I32  algorithm;
+    U32  best_ls;
+    U32  best_whck;
+} ForwardRunInfoMali;
+typedef ForwardRunInfoMali* ForwardRunInfoMali_t;
+
+typedef struct {
+    GCLHandle_t  handle;
+    GCLMemDesc_t gclmemInputDesc;
+    GCLMemDesc_t gclmemOutputDesc;
+    GCLMemDesc_t gclmemFilterDesc;
+    ForwardRunInfoMali_t forwardRunInfo;
+} MaliInfo;
+typedef MaliInfo* MaliInfo_t;
+#endif
+
+typedef union{
+#ifdef _USE_MALI
+    MaliInfo maliInfo;
+#endif
+} ExtInfo;
+typedef ExtInfo* ExtInfo_t;
 #endif

@@ -114,10 +114,10 @@ inline void mvm_row_kernel_A55(U32 N, U32 K, F16* matrix, F16* vector, F16* resu
          "+r" (w2),
          "+r" (w3),
          "+r" (result)
-        :"r" (KInner),
-         "r" (KTail),
-         "r" (N)
-        :"memory", "cc", "x18", "x19", "x20", "x21", "x22", "x23", "x24", "x15", "x16",
+        :"r" ((I64)KInner),
+         "r" ((I64)KTail),
+         "r" ((I64)N)
+        :"memory", "cc", "x19", "x20", "x21", "x22", "x23", "x24", "x15", "x16",
             "v0", "v1", "v2", "v3", "v4", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18"
     );
 }

@@ -31,7 +31,7 @@ inline void matrix1_trans(U32 size, U32 blockK, U32 K, F16* src, F16* dst) {
                 asm volatile(
                     "prfm pldl2keep, [%0, %1]\n"
                     :"+r" (src1)
-                    :"r" (offset)
+                    :"r"((I64)offset)
                     :"memory","cc"
                 );
             }

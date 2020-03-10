@@ -15,9 +15,40 @@
 #include "tensor_computing.h"
 #include "cpu/general/tensor_computing_general.h"
 #include "cpu/arm/tensor_computing_arm.h"
+#ifdef _USE_MALI 
+#include "gpu/mali/tensor_computing_mali.h"
+#endif
 
-EE activation(TensorDesc inputDesc, void* data, ActivationMode activationMode, Arch arch)
+inline EE activation_infer_output_size_cpu(TensorDesc inputDesc, TensorDesc *outputDesc)
 {
+    if (nullptr == outputDesc)
+        CHECK_STATUS(NULL_POINTER);
+
+    *outputDesc = inputDesc;
+    return SUCCESS;
+}
+
+EE activation_infer_output_size(TensorDesc inputDesc, TensorDesc *outputDesc, Arch arch, ExtInfo_t extInfo)
+{
+#ifdef _USE_MALI
+    if(arch == MALI){
+        CHECK_STATUS(activation_infer_output_size_mali(inputDesc, outputDesc, extInfo->maliInfo.gclmemInputDesc, extInfo->maliInfo.gclmemOutputDesc));
+    } else {
+#endif
+        UNUSED(arch);
+        UNUSED(extInfo);
+        CHECK_STATUS(activation_infer_output_size_cpu(inputDesc, outputDesc));
+#ifdef _USE_MALI
+    }
+#endif
+    return SUCCESS;
+}
+
+EE activation(TensorDesc inputDesc, void* data, ActivationMode activationMode, Arch arch, ExtInfo_t extInfo)
+{
+#ifndef _USE_MALI
+    UNUSED(extInfo);
+#endif 
     EE ret = SUCCESS;
     switch (arch) {
         case CPU_GENERAL:
@@ -29,17 +60,17 @@ EE activation(TensorDesc inputDesc, void* data, ActivationMode activationMode, A
         case ARM_A76:
             ret = activation_arm(inputDesc, data, activationMode);
             break;
+        case ARM_V8:
+            ret = activation_arm(inputDesc, data, activationMode);
+            break;
+#ifdef _USE_MALI
+        case MALI:
+            ret = activation_mali(extInfo->maliInfo.handle, inputDesc, (GCLMem_t)data, activationMode);
+            break;
+#endif
         default:
             ret = NOT_SUPPORTED;
     }
     return ret;
 }
 
-EE activation_infer_output_size(TensorDesc inputDesc, TensorDesc *outputDesc)
-{
-    if (nullptr == outputDesc)
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
-
-    *outputDesc = inputDesc;
-    return SUCCESS;
-}

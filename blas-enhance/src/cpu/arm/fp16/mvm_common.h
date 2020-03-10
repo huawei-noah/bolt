@@ -17,11 +17,10 @@
 
 #include <arm_neon.h>
 #include "type.h"
-
+#include "cpu/arm/arm_neon_expand.h"
 
 inline void mvm_row_tail(U32 N, U32 K, F16* matrix, F16* vector, F16* result) {
     float16x8_t vec, res, mat;
-    F16 tmp[8] = {0};
     U32 KTail = K % 8;
     U32 KInner = K - KTail;
     
@@ -33,14 +32,7 @@ inline void mvm_row_tail(U32 N, U32 K, F16* matrix, F16* vector, F16* result) {
             mat = vld1q_f16(&matrix[j + K * i]);
             res = vfmaq_f16(res, vec, mat);
         }
-
-        vst1q_f16(tmp, res);
-
-        F16 sum = 0;
-        for (U32 p = 0; p < 8; p++) {
-            sum += tmp[p];
-        }
-        result[i] += sum;
+        result[i] += vaddvq_f16(res);
         
         if (KTail != 0) {
             for (U32 p = 0; p < KTail; p+=1) {
@@ -154,7 +146,7 @@ inline void mvm_row_kernel(U32 N, U32 K, F16* matrix, F16* vector, F16* result) 
         tmp[5] = vpaddq_f16(tmp[4], tmp[3]);
         F16 addbias;
         for(U32 n = 0; n < 4; n++) {
-            vst1q_lane_f16(&addbias, tmp[5], n);
+            vst1q_lane_f16_builtin(&addbias, tmp[5], n);
             result[i + N * n] += addbias;
             res[n] = vdupq_n_f16(0);
         }

@@ -12,44 +12,36 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#include <arm_neon.h>
 #include "cpu/arm/tensor_computing_arm.h"
-
-inline EE clip_fp16(F16 *input, F16 *output, I32 len, F16 minValue, F16 maxValue) {
-    float16x8_t min_v = vdupq_n_f16(minValue);
-    float16x8_t max_v  = vdupq_n_f16(maxValue);
-
-    I32 i = 0;
-    for (i = 0; i < len - 7; i += 8) {
-        float16x8_t in = vld1q_f16(input + i);
-        float16x8_t tmp_v = vminq_f16(max_v, vmaxq_f16(min_v, in));
-        vst1q_f16(output+i, tmp_v);
-    }
-    for (; i < len; i++) {
-        F16 value = input[i];
-        value = (value > minValue) ? value : minValue;
-        value = (value < maxValue) ? value : maxValue;
-        output[i] = value;
-    }
-    return SUCCESS;
-}
+#ifdef _USE_FP32
+#include "cpu/arm/fp32/tensor_computing_fp32.h"
+#endif
+#ifdef _USE_FP16
+#include "cpu/arm/fp16/tensor_computing_fp16.h"
+#endif
 
 EE clip_arm(void *minValue, void *maxValue, TensorDesc inputDesc, void* input, TensorDesc outputDesc, void *output)
 {
     UNUSED(outputDesc);
 
     if (nullptr == minValue
-       || nullptr == maxValue
-       || nullptr == input
-       || nullptr == output)
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
+       || nullptr == maxValue)
+        CHECK_STATUS(NULL_POINTER);
 
     EE ret = SUCCESS;
     switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = clip_fp16((F16 *)input, (F16 *)output, tensorNumElements(inputDesc), *((F16 *)minValue), *((F16 *)maxValue));
+#ifdef _USE_FP32
+        case DT_F32: {
+            ret = clip_fp32((F32 *)input, (F32 *)output, tensorNumElements(inputDesc), *((F32 *)minValue), *((F32 *)maxValue));
             break;
         }
+#endif
+#ifdef _USE_FP16
+        case DT_F16: {
+            ret = clip_fp16((F16 *)input, (F16 *)output, tensorNumElements(inputDesc), *((F32 *)minValue), *((F32 *)maxValue));
+            break;
+        }
+#endif
         default:
             ret = NOT_SUPPORTED;
             break;

@@ -17,6 +17,9 @@
 template<typename T>
 EE scale(T* alpha, T* beta, T* data, U32 in, U32 ic, U32 elements_per_channel)
 {
+    if (nullptr == alpha || nullptr == beta || nullptr == data)
+        CHECK_STATUS(NULL_POINTER);
+
     U32 align_size = 8;
     ic = ic / align_size;
     for (U32 n = 0; n < in; n++) {
@@ -24,7 +27,7 @@ EE scale(T* alpha, T* beta, T* data, U32 in, U32 ic, U32 elements_per_channel)
             for (U32 i = 0; i < elements_per_channel; i++) {
                 for (U32 k = 0; k < align_size; k++) {
                     T alphaValue = alpha[c * align_size + k];
-                    T betaValue = beta[c * align_size + k];
+                    T betaValue = (nullptr == beta) ? 0 : beta[c * align_size + k];
                     U32 index = ((n * ic + c) * elements_per_channel + i) * align_size + k;
                     data[index] = alphaValue * data[index] + betaValue;
                 }
@@ -39,15 +42,22 @@ EE scale_general(void *alpha, void *beta, TensorDesc inputDesc, void* data)
     DataType idt;
     DataFormat idf;
     U32 in, ic, ih, iw;    
-    CHECK_REQUIREMENT(tensorIs4d(inputDesc));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+    CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
     U32 elements_per_channel = ih * iw;
     EE ret = SUCCESS;
     switch (idt) {
+#ifdef _USE_FP32
+        case DT_F32: {
+            ret = scale<F32>((F32*)alpha, (F32*)beta, (F32*)data, in, ic, elements_per_channel);
+            break;
+        }
+#endif
+#ifdef _USE_FP16
         case DT_F16: {
             ret = scale<F16>((F16*)alpha, (F16*)beta, (F16*)data, in, ic, elements_per_channel);
             break;
         }
+#endif
         default:
             ret = NOT_SUPPORTED;
             break;

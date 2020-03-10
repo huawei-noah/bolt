@@ -12,63 +12,37 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#include <arm_neon.h>
-#include <string.h>
 #include "cpu/arm/tensor_computing_arm.h"
-
-EE attention_fp16(U32 batch, U32 attentionNum, I32 sequenceLength, const F16 *input, F16 *output)
-{
-    F16 mask_s = -10000.0;
-    float16x8_t mask_v = vdupq_n_f16(float16_t(mask_s));
-    float16x8_t one_v = vdupq_n_f16(float16_t(1.0));
-    for(U32 n = 0; n < batch; n++){
-        I32 i = 0;
-        for (; i < sequenceLength-7; i+=8) {
-            float16x8_t in_v = vld1q_f16(input + i);
-            float16x8_t tmp_v = vsubq_f16(one_v, in_v);
-            tmp_v = vmulq_f16(tmp_v, mask_v);
-            vst1q_f16(output+i, tmp_v);
-        }
-        for (; i < sequenceLength; i++) {
-            F16 value = (1 - input[i]) * mask_s;
-            output[i] = value;
-        }
-
-        for (i = 1; i < sequenceLength; i++) {
-            memcpy(output+i*sequenceLength, output, sequenceLength*sizeof(F16));
-        }
-
-        // expand dim
-        for (U32 i = 1; i < attentionNum; i++) {
-            memcpy(output+i*sequenceLength*sequenceLength, output, sequenceLength*sequenceLength*sizeof(F16));
-        }
-
-        input += sequenceLength;
-        output += attentionNum * sequenceLength * sequenceLength;
-    }
-    return SUCCESS;
-}
-
+#ifdef _USE_FP32
+#include "cpu/arm/fp32/tensor_computing_fp32.h"
+#endif
+#ifdef _USE_FP16
+#include "cpu/arm/fp16/tensor_computing_fp16.h"
+#endif
 
 EE attention_arm(TensorDesc inputDesc, const void *input, TensorDesc outputDesc, void *output)
 {
-    if (nullptr == input || nullptr == output)
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
-
     DataType dt;
     DataFormat df;
-    U32 batch, attentionNum, fromSequenceLength, toSequenceLength;
+    U32 batch, numHeads, fromSequenceLength, toSequenceLength;
     CHECK_REQUIREMENT(tensorIs2d(inputDesc));
     CHECK_REQUIREMENT(tensorIs4d(outputDesc));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(outputDesc, &dt, &df, &batch, &attentionNum, &fromSequenceLength, &toSequenceLength));
-    CHECK_REQUIREMENT(fromSequenceLength == toSequenceLength);
+    CHECK_STATUS(tensor4dGet(outputDesc, &dt, &df, &batch, &numHeads, &fromSequenceLength, &toSequenceLength));
 
     EE ret = SUCCESS;
     switch (dt) {
-        case DT_F16: {
-            ret = attention_fp16(batch, attentionNum, fromSequenceLength, (const F16*)input, (F16*)output);
+#ifdef _USE_FP32
+        case DT_F32: {
+            ret = attention_fp32(batch, numHeads, fromSequenceLength, toSequenceLength, (const F32*)input, (F32*)output);
             break;
         }
+#endif
+#ifdef _USE_FP16
+        case DT_F16: {
+            ret = attention_fp16(batch, numHeads, fromSequenceLength, toSequenceLength, (const F16*)input, (F16*)output);
+            break;
+        }
+#endif
         default:
             ret = NOT_SUPPORTED;
             break;

@@ -12,10 +12,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#include "sys.h"
-#include "type.h"
-#include "error.h"
-#include "tensor_desc.h"
 #include "cpu/arm/fp16/depthwise_convolution_direct.h"
 
 EE depthwise_convolution_direct_A76(TensorDesc inputDesc, F16* inArray,
@@ -34,21 +30,25 @@ EE depthwise_convolution_direct_A76(TensorDesc inputDesc, F16* inArray,
     U32 in, ic, ih, iw;
     U32 fn, fc, fh, fw;
     U32 on, oc, oh, ow;
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
-    U32 stride = convDesc.stride;
-    U32 padding = convDesc.padding;
+    CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+    CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
+    CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
+    U32 strideH = convDesc.stride_h;
+    U32 strideW = convDesc.stride_w;
+    U32 paddingT = convDesc.padding_top;
+    U32 paddingB = convDesc.padding_bottom;
+    U32 paddingL = convDesc.padding_left;
+    U32 paddingR = convDesc.padding_right;
+    U32 dilateH = convDesc.dilatedRate_h;
+    U32 dilateW = convDesc.dilatedRate_w;
 
     if (fdf != DF_NCHWC8)
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
-    if (!(ic == fc && oc == fn))
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
+        CHECK_STATUS(NOT_MATCH);
 
     oc /= 8;
     ic /= 8;
-    U32 ih_pad = ih + 2*padding;
-    U32 iw_pad = iw + 2*padding;
+    U32 ih_pad = ih + paddingT + paddingB;
+    U32 iw_pad = iw + paddingL + paddingR;
     U32 ihiw = ih*iw;
     I32 ohow = oh*ow;
 
@@ -58,20 +58,20 @@ EE depthwise_convolution_direct_A76(TensorDesc inputDesc, F16* inArray,
         F16 *inArray_mov = inArray + n*ic*ihiw*8;
         for (U32 c = 0; c < ic; c++) {
             // copy input into a input with padding
-            for (U32 h = 0; h < padding; h++) {
+            for (U32 h = 0; h < paddingT; h++) {
                 memset(inArray_pad_mov, 0, iw_pad*8*sizeof(F16));
                 inArray_pad_mov += iw_pad*8;
             }
-            for (U32 h = padding; h < ih_pad - padding; h++) {
-                memset(inArray_pad_mov, 0, padding*8*sizeof(F16));
-                inArray_pad_mov += padding*8;
+            for (U32 h = paddingT; h < ih_pad - paddingB; h++) {
+                memset(inArray_pad_mov, 0, paddingL*8*sizeof(F16));
+                inArray_pad_mov += paddingL*8;
                 memcpy(inArray_pad_mov, inArray_mov, iw*8*sizeof(F16));
                 inArray_pad_mov += iw*8;
                 inArray_mov += iw*8;
-                memset(inArray_pad_mov, 0, padding*8*sizeof(F16));
-                inArray_pad_mov += padding*8;
+                memset(inArray_pad_mov, 0, paddingR*8*sizeof(F16));
+                inArray_pad_mov += paddingR*8;
             }
-            for (U32 h = ih_pad - padding; h < ih_pad; h++) {
+            for (U32 h = ih_pad - paddingB; h < ih_pad; h++) {
                 memset(inArray_pad_mov, 0, iw_pad*8*sizeof(F16));
                 inArray_pad_mov += iw_pad*8;
             }
@@ -81,22 +81,22 @@ EE depthwise_convolution_direct_A76(TensorDesc inputDesc, F16* inArray,
             const F16 *f = filterArray + c*fh*fw*8;
             // ohow / 8
             for (I32 hw = 0; hw < ohow-7; hw+=8) {
-                U32 in_h_0 = hw/ow*stride;
-                U32 in_w_0 = hw%ow*stride;
-                U32 in_h_1 = (hw+1)/ow*stride;
-                U32 in_w_1 = (hw+1)%ow*stride;
-                U32 in_h_2 = (hw+2)/ow*stride;
-                U32 in_w_2 = (hw+2)%ow*stride;
-                U32 in_h_3 = (hw+3)/ow*stride;
-                U32 in_w_3 = (hw+3)%ow*stride;
-                U32 in_h_4 = (hw+4)/ow*stride;
-                U32 in_w_4 = (hw+4)%ow*stride;
-                U32 in_h_5 = (hw+5)/ow*stride;
-                U32 in_w_5 = (hw+5)%ow*stride;
-                U32 in_h_6 = (hw+6)/ow*stride;
-                U32 in_w_6 = (hw+6)%ow*stride;
-                U32 in_h_7 = (hw+7)/ow*stride;
-                U32 in_w_7 = (hw+7)%ow*stride;
+                U32 in_h_0 = hw/ow*strideH;
+                U32 in_w_0 = hw%ow*strideW;
+                U32 in_h_1 = (hw+1)/ow*strideH;
+                U32 in_w_1 = (hw+1)%ow*strideW;
+                U32 in_h_2 = (hw+2)/ow*strideH;
+                U32 in_w_2 = (hw+2)%ow*strideW;
+                U32 in_h_3 = (hw+3)/ow*strideH;
+                U32 in_w_3 = (hw+3)%ow*strideW;
+                U32 in_h_4 = (hw+4)/ow*strideH;
+                U32 in_w_4 = (hw+4)%ow*strideW;
+                U32 in_h_5 = (hw+5)/ow*strideH;
+                U32 in_w_5 = (hw+5)%ow*strideW;
+                U32 in_h_6 = (hw+6)/ow*strideH;
+                U32 in_w_6 = (hw+6)%ow*strideW;
+                U32 in_h_7 = (hw+7)/ow*strideH;
+                U32 in_w_7 = (hw+7)%ow*strideW;
                 F16 *out_ptr = outArray + ((n * ic + c) * ohow + hw) * 8;
                 //TODO handle asm combined with c. No guarantee that compile will not use vec reg in c.
                 __asm__ __volatile__(
@@ -111,13 +111,13 @@ EE depthwise_convolution_direct_A76(TensorDesc inputDesc, F16* inArray,
                     "mov v7.16b, v8.16b\n"
                     :
                     :[b]"r"(b)
-                    :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8"
+                    :"memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8"
                 );
 
                 for (U32 fh_idx = 0; fh_idx < fh; fh_idx++) {
                     for (U32 fw_idx = 0; fw_idx < fw; fw_idx++) {
                         const F16 *f_0 = f + fh_idx*fw*8 + fw_idx*8;
-                        F16 *in_idx = in_pad + fh_idx*iw_pad*8 + fw_idx*8;
+                        F16 *in_idx = in_pad + fh_idx*dilateH*iw_pad*8 + fw_idx*dilateW*8;
                         F16 *in_0 = in_idx + in_h_0*iw_pad*8 + in_w_0*8;
                         F16 *in_1 = in_idx + in_h_1*iw_pad*8 + in_w_1*8;
                         F16 *in_2 = in_idx + in_h_2*iw_pad*8 + in_w_2*8;
@@ -154,7 +154,7 @@ EE depthwise_convolution_direct_A76(TensorDesc inputDesc, F16* inArray,
                              [in6]"r"(in_6),
                              [in7]"r"(in_7),
                              [f0]"r"(f_0)
-                            :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q9", "q10", "q11", "q12", "q13", "q14", "q15", "q16", "q17"
+                            :"memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17"
                         );
                     }
                 }
@@ -176,7 +176,7 @@ EE depthwise_convolution_direct_A76(TensorDesc inputDesc, F16* inArray,
                             "fmax v7.8h, v7.8h, v31.8h\n"
                             :
                             :
-                            :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q31"
+                            :"memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v31"
                         );
                         break;
                     }
@@ -202,7 +202,7 @@ EE depthwise_convolution_direct_A76(TensorDesc inputDesc, F16* inArray,
                             "fmin v7.8h, v7.8h, v30.8h\n"
                             :
                             :
-                            :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q30", "q31"
+                            :"memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v30", "v31"
                         );
                         break;
                     }
@@ -253,8 +253,8 @@ EE depthwise_convolution_direct_A76(TensorDesc inputDesc, F16* inArray,
                             "fmul  v7.8h,  v7.8h, v28.8h\n"
                             :
                             :
-                            :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7",
-                              "q21", "q22", "q23", "q24", "q25", "q26", "q27", "q28", "q29", "q30", "q31"
+                            :"memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7",
+                              "v21", "v22", "v23", "v24", "v25", "v26", "v27", "v28", "v29", "v30", "v31"
                         );
                         break;
                     }
@@ -273,22 +273,22 @@ EE depthwise_convolution_direct_A76(TensorDesc inputDesc, F16* inArray,
                     "str q7, [%[out], #112]\n"
                     :[out]"+r"(out_ptr)
                     :
-                    :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10",
-                      "q11", "q12", "q13", "q14", "q15", "q16", "q17", "q18", "q19"
+                    :"memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10",
+                      "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19"
                 );
             }
 
             // ohow_reminder % 8 / 4
             U32 ohow_s = (ohow / 8) * 8;
             for (I32 hw = ohow_s; hw < ohow-3; hw+=4) {
-                U32 in_h_0 = hw/ow*stride;
-                U32 in_w_0 = hw%ow*stride;
-                U32 in_h_1 = (hw+1)/ow*stride;
-                U32 in_w_1 = (hw+1)%ow*stride;
-                U32 in_h_2 = (hw+2)/ow*stride;
-                U32 in_w_2 = (hw+2)%ow*stride;
-                U32 in_h_3 = (hw+3)/ow*stride;
-                U32 in_w_3 = (hw+3)%ow*stride;
+                U32 in_h_0 = hw/ow*strideH;
+                U32 in_w_0 = hw%ow*strideW;
+                U32 in_h_1 = (hw+1)/ow*strideH;
+                U32 in_w_1 = (hw+1)%ow*strideW;
+                U32 in_h_2 = (hw+2)/ow*strideH;
+                U32 in_w_2 = (hw+2)%ow*strideW;
+                U32 in_h_3 = (hw+3)/ow*strideH;
+                U32 in_w_3 = (hw+3)%ow*strideW;
                 F16 *out_ptr = outArray + ((n * ic + c) * ohow + hw) * 8;
                 //TODO handle asm combined with c. No guarantee that compile will not use vec reg in c.
                 __asm__ __volatile__(
@@ -299,13 +299,13 @@ EE depthwise_convolution_direct_A76(TensorDesc inputDesc, F16* inArray,
                     "mov v3.16b, v8.16b\n"
                     :
                     :[b]"r"(b)
-                    :"memory", "cc", "q0", "q1", "q2", "q3", "q8"
+                    :"memory", "cc", "v0", "v1", "v2", "v3", "v8"
                 );
 
                 for (U32 fh_idx = 0; fh_idx < fh; fh_idx++) {
                     for (U32 fw_idx = 0; fw_idx < fw; fw_idx++) {
                         const F16 *f_0 = f + fh_idx*fw*8 + fw_idx*8;
-                        F16 *in_idx = in_pad + fh_idx*iw_pad*8 + fw_idx*8;
+                        F16 *in_idx = in_pad + fh_idx*dilateH*iw_pad*8 + fw_idx*dilateW*8;
                         F16 *in_0 = in_idx + in_h_0*iw_pad*8 + in_w_0*8;
                         F16 *in_1 = in_idx + in_h_1*iw_pad*8 + in_w_1*8;
                         F16 *in_2 = in_idx + in_h_2*iw_pad*8 + in_w_2*8;
@@ -326,7 +326,7 @@ EE depthwise_convolution_direct_A76(TensorDesc inputDesc, F16* inArray,
                              [in2]"r"(in_2),
                              [in3]"r"(in_3),
                              [f0]"r"(f_0)
-                            :"memory", "cc", "q0", "q1", "q2", "q3", "q9", "q10", "q11", "q12", "q17"
+                            :"memory", "cc", "v0", "v1", "v2", "v3", "v9", "v10", "v11", "v12", "v17"
                         );
                     }
                 }
@@ -344,7 +344,7 @@ EE depthwise_convolution_direct_A76(TensorDesc inputDesc, F16* inArray,
                             "fmax v3.8h, v3.8h, v31.8h\n"
                             :
                             :
-                            :"memory", "cc", "q0", "q1", "q2", "q3", "q31"
+                            :"memory", "cc", "v0", "v1", "v2", "v3", "v31"
                         );
                         break;
                     }
@@ -362,7 +362,7 @@ EE depthwise_convolution_direct_A76(TensorDesc inputDesc, F16* inArray,
                             "fmin v3.8h, v3.8h, v30.8h\n"
                             :
                             :
-                            :"memory", "cc", "q0", "q1", "q2", "q3", "q30", "q31"
+                            :"memory", "cc", "v0", "v1", "v2", "v3", "v30", "v31"
                         );
                         break;
                     }
@@ -393,7 +393,7 @@ EE depthwise_convolution_direct_A76(TensorDesc inputDesc, F16* inArray,
                             "fmul v3.8h,   v3.8h, v28.8h\n"
                             :
                             :
-                            :"memory", "cc", "q0", "q1", "q2", "q3", "q25", "q26", "q27", "q28", "q29", "q30", "q31"
+                            :"memory", "cc", "v0", "v1", "v2", "v3", "v25", "v26", "v27", "v28", "v29", "v30", "v31"
                         );
                         break;
                     }
@@ -402,18 +402,18 @@ EE depthwise_convolution_direct_A76(TensorDesc inputDesc, F16* inArray,
                 }
 
                 __asm__ __volatile__(
-                    "st4 {v0.8h, v1.8h, v2.8h, v3.8h}, [%[out]]\n"
+                    "st1 {v0.8h, v1.8h, v2.8h, v3.8h}, [%[out]]\n"
                     :[out]"+r"(out_ptr)
                     :
-                    :"memory", "cc", "q0", "q1", "q2", "q3"
+                    :"memory", "cc", "v0", "v1", "v2", "v3"
                 );
             }
 
             // ohow_reminder % 4
             ohow_s = (ohow / 4) * 4;
             for (I32 hw = ohow_s; hw < ohow; hw++) {
-                U32 in_h_0 = hw/ow*stride;
-                U32 in_w_0 = hw%ow*stride;
+                U32 in_h_0 = hw/ow*strideH;
+                U32 in_w_0 = hw%ow*strideW;
                 F16 *out_ptr = outArray + ((n * ic + c) * ohow + hw) * 8;
                 //TODO handle asm combined with c. No guarantee that compile will not use vec reg in c.
                 __asm__ __volatile__(
@@ -421,13 +421,13 @@ EE depthwise_convolution_direct_A76(TensorDesc inputDesc, F16* inArray,
                     "mov v0.16b, v8.16b\n"
                     :
                     :[b]"r"(b)
-                    :"memory", "cc", "q0"
+                    :"memory", "cc", "v0"
                 );
 
                 for (U32 fh_idx = 0; fh_idx < fh; fh_idx++) {
                     for (U32 fw_idx = 0; fw_idx < fw; fw_idx++) {
                         const F16 *f_0 = f + fh_idx*fw*8 + fw_idx*8;
-                        F16 *in_idx = in_pad + fh_idx*iw_pad*8 + fw_idx*8;
+                        F16 *in_idx = in_pad + fh_idx*dilateH*iw_pad*8 + fw_idx*dilateW*8;
                         F16 *in_0 = in_idx + in_h_0*iw_pad*8 + in_w_0*8;
                         __asm__ __volatile__(
                             "ldr q17, [%[f0]]\n"
@@ -436,7 +436,7 @@ EE depthwise_convolution_direct_A76(TensorDesc inputDesc, F16* inArray,
                             :
                             :[in0]"r"(in_0),
                              [f0]"r"(f_0)
-                            :"memory", "cc", "q0", "q9", "q17"
+                            :"memory", "cc", "v0", "v9", "v17"
                         );
                     }
                 }
@@ -451,7 +451,7 @@ EE depthwise_convolution_direct_A76(TensorDesc inputDesc, F16* inArray,
                             "fmax v0.8h, v0.8h, v31.8h\n"
                             :
                             :
-                            :"memory", "cc", "q0", "q31"
+                            :"memory", "cc", "v0", "v31"
                         );
                         break;
                     }
@@ -463,7 +463,7 @@ EE depthwise_convolution_direct_A76(TensorDesc inputDesc, F16* inArray,
                             "fmin v0.8h, v0.8h, v30.8h\n"
                             :
                             :
-                            :"memory", "cc", "q0", "q30", "q31"
+                            :"memory", "cc", "v0", "v30", "v31"
                         );
                         break;
                     }
@@ -479,7 +479,7 @@ EE depthwise_convolution_direct_A76(TensorDesc inputDesc, F16* inArray,
                             "fmul v0.8h,   v0.8h, v28.8h\n"
                             :
                             :
-                            :"memory", "cc", "q0", "q28", "q29", "q30", "q31"
+                            :"memory", "cc", "v0", "v28", "v29", "v30", "v31"
                         );
                         break;
                     }
@@ -491,7 +491,7 @@ EE depthwise_convolution_direct_A76(TensorDesc inputDesc, F16* inArray,
                     "str q0, [%[out]]\n"
                     :[out]"+r"(out_ptr)
                     :
-                    :"memory", "cc", "q0"
+                    :"memory", "cc", "v0"
                 );
             }
         }

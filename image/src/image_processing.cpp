@@ -14,76 +14,43 @@
 
 #include <iostream>
 #include <memory>
-#include <assert.h>
-#include "CImg.h"
+#include <cstring>
+#include "image.h"
 #include "tensor_desc.h"
 #include "type.h"
 #include "error.h"
 
-EE print_image(std::string imagePath) {
-    cimg_library::CImg<unsigned char> img(imagePath.c_str());
-    int width = img.width();
-    int height = img.height();
-    std::cout << width << "x" << height << std::endl;
-    for (int r = 0; r < height; r++) {
-        for (int c = 0; c < width; c++) {
-            std::cout << "(" << r << "," << c << ")="
-            << " R" << (float)img(c, r, 0, 0) << " " << (void*)(&img(c, r, 0, 0)) << "/"
-            << " G" << (float)img(c, r, 0, 1) << " " << (void*)(&img(c, r, 0, 1)) << "/"
-            << " B" << (float)img(c, r, 0, 2) << " " << (void*)(&img(c, r, 0, 2))
-            << std::endl;
-        } 
-    }
-    return SUCCESS;
-}
 
-// CImg load image to save in RGB format
-// OpenCV load image to save in BGR format
-// PIL load image to save in BGR format
-// scikit-image load image to save in RGB format
-// If you want to use other format, please set targetImageType
-// numpy use OpenCV to load image
-std::shared_ptr<U8> load_resize_image(std::string imagePath, TensorDesc imageDesc, ImageType targetImageType, float scaleValue) {
-    DataType imageDt;
-    DataFormat imageDf;
-    U32 imageNum, imageChannel, imageHeight, imageWidth;
-    EE ret = tensor4dGet(imageDesc, &imageDt, &imageDf, &imageNum, &imageChannel, &imageHeight, &imageWidth);
-    assert(ret == SUCCESS);
-    assert(imageDt == DT_F16);
-    assert(imageDf == DF_NCHW);
-    assert(imageNum == 1);
+template<typename T>
+std::shared_ptr<U8> get_resize_image(TensorDesc rgbDesc, void* rgb, TensorDesc imageDesc, ImageFormat targetImageFormat, float scaleValue)
+{
+    DataType rgbDt = DT_F16, imageDt = DT_F16;
+    DataFormat rgbDf = DF_RGB, imageDf = DF_RGB;
+    U32 rgbNum = 0, rgbChannel = 0, rgbHeight = 0, rgbWidth = 0;
+    U32 imageNum = 0, imageChannel = 0, imageHeight = 0, imageWidth = 0;
+    CHECK_STATUS(tensor4dGet(rgbDesc, &rgbDt, &rgbDf, &rgbNum, &rgbChannel, &rgbHeight, &rgbWidth));
+    CHECK_REQUIREMENT(rgbDf == DF_RGB);
+    CHECK_REQUIREMENT(rgbChannel == 3);
+    CHECK_REQUIREMENT(rgbNum == 1);
 
-    // load
-    cimg_library::CImg<unsigned char> img(imagePath.c_str());
-    U32 channel = imageChannel;
-    U32 depth   = img.depth();
-    U32 height  = imageHeight;
-    U32 width   = imageWidth;
-    assert(depth == 1);
+    CHECK_STATUS(tensor4dGet(imageDesc, &imageDt, &imageDf, &imageNum, &imageChannel, &imageHeight, &imageWidth));
+    CHECK_REQUIREMENT(imageDf == DF_NCHW);
+    CHECK_REQUIREMENT(imageNum == 1);
 
-    if (targetImageType == RGB_SC) {
-        height = img.height();
-        width = img.width();
-        U32 smaller = (height < width) ? height : width;
-        height = height * imageHeight / smaller;
-        width = width * imageHeight / smaller;
-        img.resize(width, height, 1, channel);
-    } else {
-        // resize
-        img.resize(width, height, 1, channel);
-        //img.save("/data/local/test/0.jpg");
-    }
+    U32 height  = rgbHeight;
+    U32 width   = rgbWidth;
     
     U32 totalBytes = tensorNumBytes(imageDesc);
-    F16 *transferSpacePtr = (F16 *)operator new(totalBytes);
-    F16 *transferSpacePtrMov = transferSpacePtr;
+    T *transferSpacePtr = (T *)operator new(totalBytes);
+    T *transferSpacePtrMov = transferSpacePtr;
 
     // magic number
     float meanRGB[3] = {122.6789143406786, 116.66876761696767, 104.0069879317889};
     float meanRGBSC[3] = {0.485, 0.456, 0.406};
     float stdRGBSC[3] = {0.229, 0.224, 0.225};
-    int transform[3];
-    switch (targetImageType) {
+
+    U32 transform[3];
+    switch (targetImageFormat) {
         case RGB:
             transform[0] = 0;
             transform[1] = 1;
@@ -94,68 +61,155 @@ std::shared_ptr<U8> load_resize_image(std::string imagePath, TensorDesc imageDes
             transform[1] = 1;
             transform[2] = 0;
             break;
+        case BGR_SC_RAW:
+            transform[0] = 2;
+            transform[1] = 1;
+            transform[2] = 0;
+            break;
         case RGB_SC:
             transform[0] = 0;
             transform[1] = 1;
             transform[2] = 2;
             break;
+        case RGB_RAW:
+            transform[0] = 0;
+            transform[1] = 1;
+            transform[2] = 2;
+            break;
+        case RGB_SC_RAW:
+            transform[0] = 0;
+            transform[1] = 1;
+            transform[2] = 2;
+            break;
         default:
-            std::cerr << "[ERROR] unsupported image type" << std::endl;
+            std::cerr << "[ERROR] unsupported image format" << std::endl;
             exit(1);
             return nullptr;
     }
     
     // consider the dataformat
-    if (targetImageType == RGB_SC) {
-        U32 hBase = 0;
-        U32 wBase = 0;
-        if (height > width) {
-            hBase = (height - imageHeight) / 2;
+    if (targetImageFormat == RGB_SC) {  // Specific for Birealnet18, scale short edge to 224 first
+        F32 scale = 224.0 / UNI_MIN(height, width);
+        if (height < width) {
+            height = 224;
+            width = (U32)(scale * width + 0.5);
         } else {
-            wBase = (width - imageWidth) / 2;
+            height = (U32)(scale * height + 0.5);
+            width = 224;
         }
+        TensorDesc scaledDesc = tensor4df(imageDt, imageDf, imageNum, imageChannel, height, width);
+        T *scaled = (T*)malloc(tensorNumBytes(scaledDesc));
+        resize(rgbDesc, rgb, scaledDesc, scaled, CPU_GENERAL);
+
+        U32 h0 = (U32)((height - 224) * 0.5);
+        U32 w0 = (U32)((width - 224) * 0.5);
+
         for (U32 c : transform) {
-            for (U32 h = hBase; h < hBase + imageHeight; h++) {
-                for (U32 w = wBase; w < wBase + imageWidth; w++) {
-                    F16 value = ((F16)(img(w, h, 0, c)) / 255 - meanRGBSC[c]) / stdRGBSC[c];
-                    assert(!std::isnan(value));
+            for (U32 h = h0; h < h0 + imageHeight; h++) {
+                for (U32 w = w0; w < w0 + imageWidth; w++) {
+                    T value = (scaled[c*height*width + h*width + w] / 255 - meanRGBSC[c]) / stdRGBSC[c];
+                    CHECK_REQUIREMENT(!UNI_ISNAN(value));
                     *transferSpacePtrMov = value;
                     transferSpacePtrMov++;
                 }
             }
         }
+        free(scaled);
+    } else if (targetImageFormat == RGB_RAW) {
+        resize(rgbDesc, rgb, imageDesc, transferSpacePtr, CPU_GENERAL);
+    } else if (targetImageFormat == RGB_SC_RAW || targetImageFormat == BGR_SC_RAW) {
+        F32 scale = 256.0 / UNI_MIN(height, width);
+        if (height < width) {
+            height = 256;
+            width = (U32)(scale * (F32)width + 0.5);
+        } else {
+            height = (U32)(scale * (F32)height + 0.5);
+            width = 256;
+        }
+        TensorDesc scaledDesc = tensor4df(imageDt, imageDf, imageNum, imageChannel, height, width);
+        T *scaled = (T*)malloc(tensorNumBytes(scaledDesc));
+        resize(rgbDesc, rgb, scaledDesc, scaled, CPU_GENERAL);
+
+        U32 h0 = (U32)((height - 224) * 0.5);
+        U32 w0 = (U32)((width - 224) * 0.5);
+
+        for (U32 c : transform) {
+            for (U32 h = h0; h < h0 + 224; h++) {
+                memcpy(transferSpacePtrMov, scaled + c*height*width + h*width + w0, 224*bytesOf(imageDt));
+                transferSpacePtrMov += 224;
+            }
+        }
+        free(scaled);
     } else {
+        T *resized = (T*)malloc(tensorNumBytes(imageDesc));
+        resize(rgbDesc, rgb, imageDesc, resized, CPU_GENERAL);
+
         for (U32 c : transform) {
             for (U32 h = 0; h < imageHeight; h++) {
                 for (U32 w = 0; w < imageWidth; w++) {
-                    F16 value = (F16)((img(w, h, 0, c) - 1.0*meanRGB[c]) * scaleValue);
-                    assert(!std::isnan(value));
+                    T value = (resized[c*imageHeight*imageWidth + h*imageWidth + w] - 1.0*meanRGB[c]) * scaleValue;
+                    CHECK_REQUIREMENT(!UNI_ISNAN(value));
                     *transferSpacePtrMov = value;
                     transferSpacePtrMov++;
                 }
             }
         }
+        free(resized);
     }
 
     std::shared_ptr<U8> val((U8*)transferSpacePtr);    
     return val;
 }
 
-std::shared_ptr<U8> load_fake_image(TensorDesc inputDesc) {
+// CImg load image to save in RGB format
+// OpenCV load image to save in BGR format
+// PIL load image to save in BGR format
+// scikit-image load image to save in RGB format
+// If you want to use other format, please set targetImageFormat
+// numpy use OpenCV to load image
+
+// Assume most networks require 224*224 inputs
+std::shared_ptr<U8> load_resize_image(TensorDesc rgbDesc, void* rgb, TensorDesc imageDesc, ImageFormat targetImageFormat, float scaleValue)
+{
+    DataType imageDt = DT_F32;
+    DataFormat imageDf;
+    U32 imageNum, imageChannel, imageHeight, imageWidth;
+
+    CHECK_STATUS(tensor4dGet(imageDesc, &imageDt, &imageDf, &imageNum, &imageChannel, &imageHeight, &imageWidth));
+
+    switch (imageDt) {
+#ifdef _USE_FP16
+        case DT_F16: {
+            return get_resize_image<F16>(rgbDesc, rgb, imageDesc, targetImageFormat, scaleValue);
+        }
+#endif
+#ifdef _USE_FP32
+        case DT_F32: {
+            return get_resize_image<F32>(rgbDesc, rgb, imageDesc, targetImageFormat, scaleValue);
+        }
+#endif
+        default: {
+            CHECK_STATUS(NOT_SUPPORTED);
+            return nullptr;
+        }
+    }
+}
+
+template<typename T>
+std::shared_ptr<U8> gen_fake_image(TensorDesc inputDesc)
+{
     DataType dt;
     DataFormat df;
-    U32 in, ic, ih, iw;
-    EE ret = tensor4dGet(inputDesc, &dt, &df, &in, &ic, &ih, &iw);
-    assert(ret == SUCCESS);
-    assert(df == DF_NCHW);
-    assert(dt == DT_F16);
-    assert(in == 1);
+    U32 in = 0, ic = 0, ih = 0, iw = 0;
+    CHECK_STATUS(tensor4dGet(inputDesc, &dt, &df, &in, &ic, &ih, &iw));
+    CHECK_REQUIREMENT(df == DF_NCHW);
+    CHECK_REQUIREMENT(in == 1);
 
     U32 totalBytes = tensorNumBytes(inputDesc);
 
     // upon on the data type, to malloc the corresponding space
-    F16 *transferSpacePtr = (F16 *)operator new(totalBytes);
-    F16 *transferSpacePtrMov = transferSpacePtr;
+    T *transferSpacePtr = (T *)operator new(totalBytes);
+    T *transferSpacePtrMov = transferSpacePtr;
 
     // consider the dataformat
     for (U32 c = 0; c < ic; c++) {
@@ -171,3 +225,27 @@ std::shared_ptr<U8> load_fake_image(TensorDesc inputDesc) {
     return val;
 }
 
+std::shared_ptr<U8> load_fake_image(TensorDesc inputDesc)
+{
+    DataType dt = DT_F32;
+    DataFormat df;
+    U32 in, ic, ih, iw;
+    CHECK_STATUS(tensor4dGet(inputDesc, &dt, &df, &in, &ic, &ih, &iw));
+
+    switch (dt) {
+#ifdef _USE_FP16
+        case DT_F16: {
+            return gen_fake_image<F16>(inputDesc);
+        }
+#endif
+#ifdef _USE_FP32
+        case DT_F32: {
+            return gen_fake_image<F32>(inputDesc);
+        }
+#endif
+        default: {
+            CHECK_STATUS(NOT_SUPPORTED);
+            return nullptr;
+        }
+    }
+}

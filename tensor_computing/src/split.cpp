@@ -20,6 +20,9 @@
 
 EE split_infer_output_size(TensorDesc inputDesc, std::vector<TensorDesc>* outputDesc)
 {
+    if (nullptr == outputDesc)
+        CHECK_STATUS(NULL_POINTER);
+
     for(U32 i = 0; i < (*outputDesc).size(); i++) {
         (*outputDesc)[i]  = inputDesc;
     }
@@ -38,6 +41,9 @@ EE split(TensorDesc inputDesc, void* input,
             ret = split_arm(inputDesc, input, outputDesc, output);
             break;
         case ARM_A76:
+            ret = split_arm(inputDesc, input, outputDesc, output);
+            break;
+        case ARM_V8:
             ret = split_arm(inputDesc, input, outputDesc, output);
             break;
         default:

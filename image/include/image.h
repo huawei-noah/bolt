@@ -16,20 +16,24 @@
 #define _H_IMAGE
 
 #include <error.h>
+#include "tensor_desc.h"
+#include "type.h"
+#include "sys.h"
 
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-#ifdef _USE_NEON
-    EE cvtColor_neon();
-    EE resize_neon();
-#endif
+    typedef struct {
+        DataType paramDT;
+    } ResizeDesc;
 
-#ifdef _USE_MALI
-    EE cvtColor_mali();
-    EE resize_mali();
-#endif
+    EE resize_infer_output_size(TensorDesc inputDesc, ResizeDesc resizeDesc, void* params,
+        TensorDesc* outputDesc, U32* outputBytes);
+
+    EE resize(TensorDesc inputDesc, void* input,
+            TensorDesc outputDesc, void* output,
+            Arch arch);
 
 #ifdef __cplusplus
 }

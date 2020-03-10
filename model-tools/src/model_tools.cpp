@@ -40,7 +40,8 @@ extern "C" EE mt_create_model(ModelSpec* ms) {
 }
 
 
-extern "C" EE mt_destroy_model(ModelSpec* ms) {
+extern "C" EE mt_destroy_model(ModelSpec* ms)
+{
     if (nullptr == ms) {
         return NULL_POINTER;
     }
@@ -48,27 +49,27 @@ extern "C" EE mt_destroy_model(ModelSpec* ms) {
     if (nullptr != ms->input_names) {
         for (int i = 0; i < ms->num_inputs; i++) {
             if (nullptr != ms->input_names[i]) {
-                free(ms->input_names[i]);
+                delete [] ms->input_names[i];
             }
             ms->input_names[i] = nullptr;
         }
-        free(ms->input_names);
+        delete [] ms->input_names;
         ms->input_names = nullptr;
     }
 
     if (nullptr != ms->input_dims) {
-        free(ms->input_dims);
+        delete [] ms->input_dims;
         ms->input_dims = nullptr;
     }
 
     if (nullptr != ms->output_names) {
         for (int i = 0; i < ms->num_outputs; i++) {
             if (nullptr != ms->output_names[i]) {
-                free(ms->output_names[i]);
+                delete [] ms->output_names[i];
             }
             ms->output_names[i] = nullptr;
         }
-        free(ms->output_names);
+        delete [] ms->output_names;
         ms->output_names = nullptr;
     }
 
@@ -78,38 +79,42 @@ extern "C" EE mt_destroy_model(ModelSpec* ms) {
             if (nullptr != ms->ops[i].input_tensors_name) {
                 for (U32 j = 0; j < ms->ops[i].num_inputs; j++) {
                     if (nullptr != ms->ops[i].input_tensors_name[j]) {
-                        free(ms->ops[i].input_tensors_name[j]);
+                        delete [] ms->ops[i].input_tensors_name[j];
                     }
                     ms->ops[i].input_tensors_name[j] = nullptr;
                 }
-                free(ms->ops[i].input_tensors_name);
+                delete [] ms->ops[i].input_tensors_name;
                 ms->ops[i].input_tensors_name = nullptr;
             }
             if (nullptr != ms->ops[i].output_tensors_name) {
                 for (U32 j = 0; j < ms->ops[i].num_outputs; j++) {
                     if (nullptr != ms->ops[i].output_tensors_name[j]) {
-                        free(ms->ops[i].output_tensors_name[j]);
+                        delete [] ms->ops[i].output_tensors_name[j];
                     }
                     ms->ops[i].output_tensors_name[j] = nullptr;
                 }
-                free(ms->ops[i].output_tensors_name);
+                delete [] ms->ops[i].output_tensors_name;
                 ms->ops[i].output_tensors_name = nullptr;
+            }
+
+            if (nullptr != ms->ops[i].tensor_positions) {
+                delete [] ms->ops[i].tensor_positions;
             }
 
             // process op memory
             switch (ms->ops[i].type) {
                 case OT_Eltwise: {
-                    if (nullptr != ms->ops[i].ps.eltwise_param_spec.elt_sum_spec.coeff_values) {
-                        free(ms->ops[i].ps.eltwise_param_spec.elt_sum_spec.coeff_values);
+                    if (nullptr != ms->ops[i].ps.eltwise_spec.elt_sum_spec.coeff_values) {
+                        delete [] ms->ops[i].ps.eltwise_spec.elt_sum_spec.coeff_values;
                     }
-                    ms->ops[i].ps.eltwise_param_spec.elt_sum_spec.coeff_values = nullptr;
+                    ms->ops[i].ps.eltwise_spec.elt_sum_spec.coeff_values = nullptr;
                     break;
                 }
                 default:
                     break;
             }
         }
-        free(ms->ops);
+        delete [] ms->ops;
         ms->ops = nullptr;
     }
 
@@ -117,15 +122,15 @@ extern "C" EE mt_destroy_model(ModelSpec* ms) {
         int weightOpNum = ms->num_weight_specs;
         for (int i = 0; i < weightOpNum; i++) {
             if (nullptr != ms->ws[i].weight) {
-                free(ms->ws[i].weight);
+                delete [] ms->ws[i].weight;
             }
             ms->ws[i].weight = nullptr;
             if (nullptr != ms->ws[i].vec) {
-                free(ms->ws[i].vec);
+                delete [] ms->ws[i].vec;
             }
             ms->ws[i].vec = nullptr;
         }
-        free(ms->ws);
+        delete [] ms->ws;
         ms->ws = nullptr;
     }
 
@@ -135,24 +140,24 @@ extern "C" EE mt_destroy_model(ModelSpec* ms) {
             if (nullptr != ms->op_relationship_entries[i].input_op_names) {
                 for (U32 j = 0; j < ms->op_relationship_entries[i].num_inputs; j++) {
                     if (nullptr != ms->op_relationship_entries[i].input_op_names[j]) {
-                        free(ms->op_relationship_entries[i].input_op_names[j]);
+                        delete [] ms->op_relationship_entries[i].input_op_names[j];
                     }
                     ms->op_relationship_entries[i].input_op_names[j] = nullptr;
                 }
-                free(ms->op_relationship_entries[i].input_op_names);
+                delete [] ms->op_relationship_entries[i].input_op_names;
                 ms->op_relationship_entries[i].input_op_names = nullptr;
             }
             if (nullptr != ms->op_relationship_entries[i].output_op_names) {
                 for (U32 j = 0; j < ms->op_relationship_entries[i].num_outputs; j++) {
                     if (nullptr != ms->op_relationship_entries[i].output_op_names[j])
-                        free(ms->op_relationship_entries[i].output_op_names[j]);
+                        delete [] ms->op_relationship_entries[i].output_op_names[j];
                     ms->op_relationship_entries[i].output_op_names[j] = nullptr;
                 }
-                free(ms->op_relationship_entries[i].output_op_names);
+                delete [] ms->op_relationship_entries[i].output_op_names;
                 ms->op_relationship_entries[i].output_op_names = nullptr;
             }
         }
-        free(ms->op_relationship_entries);
+        delete [] ms->op_relationship_entries;
         ms->op_relationship_entries = nullptr;
     }
 

@@ -17,80 +17,205 @@
 
 #include "cpu/general/tensor_computing_general.h"
 
-EE lstm_general(TensorDesc inputDesc, const void* input, TensorDesc filterDesc, const void* filter,
-    LSTMDesc lstmDesc, TensorDesc biasDesc, const void* bias, U32 tmpBytes, void* tmp,
-    TensorDesc outputDesc, void* output)
+template<typename T>
+EE lstmcell(TensorDesc xDesc, const void* currentX,
+    TensorDesc filterDesc, const void* filter,
+    TensorDesc biasDesc, const void* bias,
+    void *state,
+    U32 tmpBytes, void *tmp,
+    LSTMDesc lstmDesc, U32 batchStrideX, U32 batchStrideH,
+    TensorDesc hDesc, void* output)
 {
+    UNUSED(biasDesc);
     UNUSED(tmpBytes);
+    if (nullptr == currentX
+        || nullptr == filter
+        || nullptr == bias
+        || nullptr == state
+        || nullptr == tmp
+        || nullptr == output)
+        CHECK_STATUS(NULL_POINTER);
 
-    F16 *inArray = (F16*)input;
-    F16 *filterArray = (F16*)filter;
-    F16 *biasArray = (F16*)bias;
-    F16 *outArray = (F16*)output;
-
-    DataType idt, fdt, bdt, odt;
+    DataType idt, fdt, odt;
     DataFormat idf, fdf, odf;
-    U32 in_b, in_t, in_x;
-    U32 out_b, out_t, out_h;
+    U32 in, ix;
+    U32 on, oh;
     U32 fk, fn;
-    U32 bh;
-    CHECK_STATUS_WITH_RETURN(tensor3dGet(inputDesc, &idt, &idf, &in_b, &in_t, &in_x));
-    CHECK_STATUS_WITH_RETURN(tensor2dfGet(filterDesc, &fdt, &fdf, &fn, &fk));
-    CHECK_STATUS_WITH_RETURN(tensor1dGet(biasDesc, &bdt, &bh));
-    CHECK_STATUS_WITH_RETURN(tensor3dGet(outputDesc, &odt, &odf, &out_b, &out_t, &out_h));
-
-    U32 h_dim = lstmDesc.num_output;
-    U32 x_dim = in_x;
-    U32 step = in_t;
-    U32 batch = in_b;
-
-    if (!(idt == DT_F16 && fdt == DT_F16 && bdt == DT_F16 && odt == DT_F16)) {
-        return NOT_MATCH;
+    CHECK_STATUS(tensor2dfGet(xDesc, &idt, &idf, &in, &ix));
+    CHECK_STATUS(tensor2dfGet(filterDesc, &fdt, &fdf, &fn, &fk));
+    CHECK_STATUS(tensor2dfGet(hDesc, &odt, &odf, &on, &oh));
+    if(fdf != DF_NKN32) {
+        CHECK_STATUS(NOT_MATCH);
     }
 
-    if (!(h_dim == out_h && 4*h_dim == fn && bh == fn && (in_x+out_h) == fk && in_b == out_b && in_t == out_t)) {
-        return NOT_MATCH;
+    U32 batch = in;
+    U32 xDim  = ix;
+    U32 hDim  = lstmDesc.numOutput;
+    F32 forgetBias = lstmDesc.forgetBias;
+    ActivationMode activationMode = lstmDesc.activationMode;
+    if (activationMode != ACTIVATION_TANH)
+        CHECK_STATUS(NOT_SUPPORTED);
+
+    if (!(idt == fdt && idt == odt)) {
+        CHECK_STATUS(NOT_MATCH);
     }
 
-    F16 *cell_state = (F16*)tmp;
-    F16 *in_hx = cell_state + batch*h_dim;
-    F16 *out_4h = in_hx + batch*(h_dim+x_dim);
-    // initialize c_t, h_t
-    memset(cell_state, 0, batch*h_dim);
-    memset(in_hx, 0, batch*h_dim);
-
+    const T *currentXArray  = (const T*)currentX;
+    const T *filterArray    = (const T*)filter;
+    const T *biasArray      = (const T*)bias;
+    T *lastStateArray = (T*)state;
+    T *lastHArray     = lastStateArray + hDim;
+    T *tmpArray       = (T*)tmp;
+    T *currentStateArray = (T*)state;
+    T *currentHArray     = currentStateArray + hDim;
+    T *outputArray       = (T*)output;
+    T *xhArray           = tmpArray;
+    T *intermediateH     = xhArray + (xDim + hDim);
+    U32 lastStateStride    = 2 * hDim;
+    U32 lastHStride        = 2 * hDim;
+    U32 currentStateStride = 2 * hDim;
+    U32 currentHStride     = 2 * hDim;
     for (U32 m = 0; m < batch; m++) {
-        for (U32 t = 0; t < step; t++) {
-            memcpy(in_hx + m*(h_dim+x_dim), inArray + (m*step+t)*x_dim, x_dim*sizeof(F16));
-            // MVM
-            F16 *out = out_4h + m*fn;
-            F16 *in0 = in_hx + m*fk;
+        memcpy(xhArray, currentXArray+m*batchStrideX, xDim*sizeof(T));
+        memcpy(xhArray+xDim, lastHArray+m*lastHStride, hDim*sizeof(T));
 
-            for (U32 n = 0; n < fn; n++) {
-                F16 *in = in0;
+        // MVM
+        T *out = intermediateH;
+        for (U32 i = 0; i < fn/32; i++) {
+            for (U32 j = 0; j < 32; j++) {
+                T *in = xhArray;
+                U32 n = i * 32 + j;
+                F32 value = 0;
                 for (U32 k = 0; k < fk; k++) {
-                    out[n] += in[k] * filterArray[n*fk + k];
+                    value += in[k] * filterArray[(i * fk + k) * 32 + j];
                 }
-                out[n] += biasArray[n];
+                out[n] = value + biasArray[n];
             }
-            F16 *out_i = out_4h + m*fn;
-            F16 *out_f = out_i + h_dim;
-            F16 *out_o = out_i + h_dim*2;
-            F16 *out_g = out_i + h_dim*3;
-            F16 *cell = cell_state + m*h_dim;
-            F16 *out_hidden = in_hx + m*h_dim;
+        }
 
-            for (U32 h = 0; h < h_dim; h++) {
-                F16 I = 1.0f / (1.0f + exp(-out_i[h]));
-                F16 F = 1.0f / (1.0f + exp(-out_f[h]));
-                F16 O = 1.0f / (1.0f + exp(-out_o[h]));
-                F16 G = tanh(out_g[h]);
-                cell[h] = cell[h]*F + I*G;
-                out_hidden[h] = O*tanh(cell[h]);
-                outArray[t*batch*h_dim + m*h_dim + h] = out_hidden[h];
-            }
-
+        T *out_i = intermediateH;
+        T *out_g = out_i + hDim;
+        T *out_f = out_i + hDim * 2;
+        T *out_o = out_i + hDim * 3;
+        T *lastBatchState = lastStateArray + m * lastStateStride;
+        T *currentBatchState = currentStateArray + m * currentStateStride;
+        T *currentBatchH = currentHArray + m * currentHStride;
+        T *currentOutput = outputArray + m * batchStrideH;
+        for (U32 h = 0; h < hDim; h++) {
+            F32 C_s = lastBatchState[h];
+            F32 I_s = 1.0 / (1.0 + exp(-out_i[h]));
+            F32 G_s = tanh(out_g[h]);
+            F32 F_s = 1.0 / (1.0 + exp(-(out_f[h] + forgetBias)));
+            F32 O_s = 1.0 / (1.0 + exp(-out_o[h]));
+            C_s = C_s * F_s + I_s * G_s;
+            currentBatchState[h] = C_s;
+            F32 value = O_s * tanh(C_s);
+            currentBatchH[h] = value;
+            currentOutput[h] = value;
         }
     }
     return SUCCESS;
+}
+
+template<typename T>
+EE lstm(TensorDesc inputDesc, const void* input,
+    TensorDesc filterDesc, const void* filter,
+    TensorDesc biasDesc, const void* bias,
+    U32 tmpBytes, void* tmp,
+    LSTMDesc lstmDesc,
+    TensorDesc outputDesc, void* output)
+{
+    UNUSED(outputDesc);
+
+    if (nullptr == input
+        || nullptr == filter
+        || nullptr == bias
+        || nullptr == tmp
+        || nullptr == output)
+        CHECK_STATUS(NULL_POINTER);
+
+    DataType idt;
+    DataFormat idf;
+    U32 batch, step, xDim;
+    CHECK_STATUS(tensor3dGet(inputDesc,  &idt, &idf, &batch, &step, &xDim));
+    U32 hDim = lstmDesc.numOutput;
+
+    T *cellState = (T*)tmp;
+    T *tmpArray = cellState + batch * (hDim + hDim);
+    memset(cellState, 0, batch * (hDim + hDim) * sizeof(T));
+    U32 batchStrideX = step * xDim;
+    U32 batchStrideH = step * hDim;
+    TensorDesc xDesc = tensor2df(idt, DF_NORMAL, batch, xDim);
+    TensorDesc hDesc = tensor2df(idt, DF_NORMAL, batch, hDim);
+    const T *inputArray = (const T*)input;
+    T *outputArray = (T*)output;
+    for (U32 t = 0; t < step; t++) {
+        const T* currentX = inputArray + t * xDim;
+        T *currentH = outputArray + t * hDim;
+        CHECK_STATUS(lstmcell_general(xDesc, currentX,
+              filterDesc, filter,
+              biasDesc, bias,
+              cellState,
+              tmpBytes, tmpArray,
+              lstmDesc, batchStrideX, batchStrideH,
+              hDesc, currentH));
+    }
+    return SUCCESS;
+}
+
+EE lstmcell_general(TensorDesc xDesc, const void* currentX,
+    TensorDesc filterDesc, const void* filter,
+    TensorDesc biasDesc, const void* bias,
+    void *state,
+    U32 tmpBytes, void *tmp,
+    LSTMDesc lstmDesc, U32 batchStrideX, U32 batchStrideH,
+    TensorDesc hDesc, void* output)
+{
+    EE ret = SUCCESS;
+    switch (xDesc.dt) {
+#ifdef _USE_FP16
+        case DT_F16:
+            ret = lstmcell<F16>(xDesc, currentX, filterDesc, filter, biasDesc, bias,
+                                state, tmpBytes, tmp, lstmDesc, batchStrideX, batchStrideH, hDesc, output);
+            break;
+#endif
+#ifdef _USE_FP32
+        case DT_F32:
+            ret = lstmcell<F32>(xDesc, currentX, filterDesc, filter, biasDesc, bias,
+                                state, tmpBytes, tmp, lstmDesc, batchStrideX, batchStrideH, hDesc, output);
+            break;
+#endif
+        default:
+            ret = NOT_SUPPORTED;
+            break;
+    }
+    return ret;
+}
+
+EE lstm_general(TensorDesc inputDesc, const void* input,
+    TensorDesc filterDesc, const void* filter,
+    TensorDesc biasDesc, const void* bias,
+    U32 tmpBytes, void* tmp,
+    LSTMDesc lstmDesc,
+    TensorDesc outputDesc, void* output)
+{
+    EE ret = SUCCESS;
+    switch (inputDesc.dt) {
+#ifdef _USE_FP16
+        case DT_F16:
+            ret = lstm<F16>(inputDesc, input, filterDesc, filter, biasDesc, bias,
+                            tmpBytes, tmp, lstmDesc, outputDesc, output);
+            break;
+#endif
+#ifdef _USE_FP32
+        case DT_F32:
+            ret = lstm<F32>(inputDesc, input, filterDesc, filter, biasDesc, bias,
+                            tmpBytes, tmp, lstmDesc, outputDesc, output);
+            break;
+#endif
+        default:
+            ret = NOT_SUPPORTED;
+            break;
+    }
+    return ret;
 }

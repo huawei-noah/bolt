@@ -13,6 +13,7 @@
 
 
 #include "tensor_computing.h"
+#include "cpu/general/tensor_computing_general.h"
 #include "cpu/arm/tensor_computing_arm.h"
 
 EE layer_normalization(void *alpha, void *beta,
@@ -22,10 +23,16 @@ EE layer_normalization(void *alpha, void *beta,
 {
     EE ret = SUCCESS;
     switch (arch) {
+        case CPU_GENERAL:
+            ret = layer_normalization_general(alpha, beta, inputDesc, input, outputDesc, output);
+            break;
         case ARM_A55:
             ret = layer_normalization_arm(alpha, beta, inputDesc, input, outputDesc, output);
             break;
         case ARM_A76:
+            ret = layer_normalization_arm(alpha, beta, inputDesc, input, outputDesc, output);
+            break;
+        case ARM_V8:
             ret = layer_normalization_arm(alpha, beta, inputDesc, input, outputDesc, output);
             break;
         default:
@@ -37,7 +44,7 @@ EE layer_normalization(void *alpha, void *beta,
 EE normalization_infer_output_size(TensorDesc inputDesc, TensorDesc *outputDesc)
 {
     if (nullptr == outputDesc)
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
+        CHECK_STATUS(NULL_POINTER);
 
     *outputDesc = inputDesc;
     return SUCCESS;

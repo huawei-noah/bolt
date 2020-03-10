@@ -20,7 +20,7 @@ EE reshape_arm(TensorDesc inputDesc, void* input,
     TensorDesc outputDesc, void* output)
 {
     if (nullptr == input || nullptr == output)
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
+        CHECK_STATUS(NULL_POINTER);
 
     CHECK_REQUIREMENT(tensorNumElements(inputDesc) == tensorNumElements(outputDesc));
     memcpy(output, input, tensorNumBytes(inputDesc));

@@ -16,11 +16,13 @@
 #include "cpu/arm/tensor_computing_arm.h"
 #include "cpu/general/tensor_computing_general.h"
 
-EE lstm_transform_filter(TensorDesc filterDesc, const void* filter, TensorDesc *ftmDesc, void* filterTransformed, U32 x_dim, U32 h_dim, Arch arch)
+EE lstm_transform_filter(TensorDesc filterDesc, const void* filter,
+    TensorDesc *ftmDesc, void* filterTransformed,
+    U32 xDim, U32 hDim, Arch arch)
 {
     EE ret = SUCCESS;
-    if (arch == ARM_A55 || arch == ARM_A76)
-        ret = lstm_transform_filter_arm(filterDesc, filter, ftmDesc, filterTransformed, x_dim, h_dim);
+    if (arch == ARM_A55 || arch == ARM_A76 || arch == ARM_V8)
+        ret = lstm_transform_filter_arm(filterDesc, filter, ftmDesc, filterTransformed, xDim, hDim);
     else
         ret = NOT_SUPPORTED;
     return ret;
@@ -29,68 +31,179 @@ EE lstm_transform_filter(TensorDesc filterDesc, const void* filter, TensorDesc *
 EE lstm_transform_filter_bytes(TensorDesc filterDesc, U32* bytes, Arch arch)
 {
     EE ret = SUCCESS;
-    if (arch == ARM_A55 || arch == ARM_A76)
+    if (arch == ARM_A55 || arch == ARM_A76 || arch == ARM_V8)
         ret = lstm_transform_filter_bytes_arm(filterDesc, bytes);
     else
         ret = NOT_SUPPORTED;
     return ret;
 }
 
-EE lstm_infer_output_size(TensorDesc inputDesc, TensorDesc filterDesc, LSTMDesc lstmDesc, TensorDesc* outputDesc, U32* outputBytes)
+EE lstm_infer_output_size(TensorDesc inputDesc, TensorDesc filterDesc,
+    LSTMDesc lstmDesc,
+    TensorDesc* outputDesc, U32* outputBytes)
 {
     UNUSED(filterDesc);
 
     if (nullptr == outputDesc || nullptr == outputBytes)
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
+        CHECK_STATUS(NULL_POINTER);
     DataType idt;
     DataFormat idf;
-    U32 batch, step, x_dim;
-    CHECK_STATUS_WITH_RETURN(tensor3dGet(inputDesc, &idt, &idf, &batch, &step, &x_dim));
-    U32 h_dim = lstmDesc.num_output;
-    *outputDesc = tensor3df(idt, idf, batch, step, h_dim);
-    *outputBytes = batch * step * h_dim;
-    EE ret = SUCCESS;
-    switch(idt) {
-        case DT_F16:
-            *outputBytes *= sizeof(F16);
-            break;
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    U32 batch, step, xDim;
+    CHECK_STATUS(tensor3dGet(inputDesc, &idt, &idf, &batch, &step, &xDim));
+    U32 hDim = lstmDesc.numOutput;
+    *outputDesc = tensor3df(idt, idf, batch, step, hDim);
+    *outputBytes = batch * step * hDim * bytesOf(idt);
+    return SUCCESS;
 }
 
-EE lstm_infer_forward_tmp_bytes(TensorDesc inputDesc, TensorDesc filterDesc, TensorDesc outputDesc, LSTMDesc lstmDesc, U32 *bytes, Arch arch)
+EE lstm_infer_forward_tmp_bytes(TensorDesc inputDesc, TensorDesc filterDesc, TensorDesc outputDesc,
+    LSTMDesc lstmDesc,
+    U32 *bytes, Arch arch)
 {
     EE ret = SUCCESS;
-    if (arch == ARM_A55 || arch == ARM_A76)
+    if (arch == ARM_A55 || arch == ARM_A76 || arch == ARM_V8)
         ret = lstm_infer_forward_tmp_bytes_arm(inputDesc, filterDesc, outputDesc, lstmDesc, bytes);
     else
         ret = NOT_SUPPORTED;
     return ret;
 }
 
-EE lstm(TensorDesc inputDesc, const void* input, TensorDesc filterDesc, const void* filter,
-    LSTMDesc lstmDesc, TensorDesc biasDesc, const void* bias, U32 tmpBytes, void* tmp,
-    TensorDesc outputDesc, void* output, Arch arch)
+EE lstm(TensorDesc inputDesc, const void* input,
+    TensorDesc filterDesc, const void* filter,
+    TensorDesc biasDesc, const void* bias,
+    U32 tmpBytes, void* tmp,
+    LSTMDesc lstmDesc,
+    TensorDesc outputDesc, void* output,
+    Arch arch)
 {
     EE ret = SUCCESS;
     switch (arch) {
         case CPU_GENERAL: {
-            ret = lstm_general(inputDesc, input, filterDesc, filter, lstmDesc, biasDesc, bias, tmpBytes, tmp, outputDesc, output);
+            ret = lstm_general(inputDesc, input,
+                               filterDesc, filter,
+                               biasDesc, bias,
+                               tmpBytes, tmp,
+                               lstmDesc,
+                               outputDesc, output);
             break;
         }
         case ARM_A55: {
-            ret = lstm_arm(inputDesc, input, filterDesc, filter, lstmDesc, biasDesc, bias, tmpBytes, tmp, outputDesc, output);
+            ret = lstm_arm(inputDesc, input,
+                           filterDesc, filter,
+                           biasDesc, bias,
+                           tmpBytes, tmp,
+                           lstmDesc,
+                           outputDesc, output);
             break;
         }
         case ARM_A76: {
-            ret = lstm_arm(inputDesc, input, filterDesc, filter, lstmDesc, biasDesc, bias, tmpBytes, tmp, outputDesc, output);
+            ret = lstm_arm(inputDesc, input,
+                           filterDesc, filter,
+                           biasDesc, bias,
+                           tmpBytes, tmp,
+                           lstmDesc,
+                           outputDesc, output);
+            break;
+        }
+        case ARM_V8: {
+            ret = lstm_arm(inputDesc, input,
+                           filterDesc, filter,
+                           biasDesc, bias,
+                           tmpBytes, tmp,
+                           lstmDesc,
+                           outputDesc, output);
             break;
         }
         default:
             ret = NOT_SUPPORTED;
+    }
+    return ret;
+}
+
+EE lstmcell_infer_output_size(TensorDesc inputDesc, TensorDesc filterDesc,
+    LSTMDesc lstmDesc,
+    TensorDesc* outputDesc, U32* outputBytes)
+{
+    UNUSED(filterDesc);
+
+    if (nullptr == outputDesc || nullptr == outputBytes)
+        CHECK_STATUS(NULL_POINTER);
+    DataType idt;
+    DataFormat idf;
+    U32 batch, xDim;
+    CHECK_STATUS(tensor2dfGet(inputDesc, &idt, &idf, &batch, &xDim));
+    U32 hDim = lstmDesc.numOutput;
+    *outputDesc = tensor2df(idt, idf, batch, hDim);
+    *outputBytes = batch * hDim * bytesOf(idt);
+    return SUCCESS;
+}
+
+EE lstmcell_infer_forward_tmp_bytes(TensorDesc inputDesc, TensorDesc filterDesc, TensorDesc outputDesc,
+    LSTMDesc lstmDesc,
+    U32 *bytes, Arch arch)
+{
+    EE ret = SUCCESS;
+    if (arch == ARM_A55 || arch == ARM_A76 || arch == ARM_V8)
+        ret = lstmcell_infer_forward_tmp_bytes_arm(inputDesc, filterDesc, outputDesc, lstmDesc, bytes);
+    else
+        ret = NOT_SUPPORTED;
+    return ret;
+}
+
+EE lstmcell(TensorDesc xDesc, const void* currentX,
+    TensorDesc filterDesc, const void* filter,
+    TensorDesc biasDesc, const void* bias,
+    void *state,
+    U32 tmpBytes, void *tmp,
+    LSTMDesc lstmDesc, U32 batchStrideX, U32 batchStrideH,
+    TensorDesc hDesc, void* currentH,
+    Arch arch)
+{
+    EE ret = SUCCESS;
+    switch (arch) {
+        case CPU_GENERAL: {
+            ret = lstmcell_general(xDesc, currentX,
+                                   filterDesc, filter,
+                                   biasDesc, bias,
+                                   state,
+                                   tmpBytes, tmp,
+                                   lstmDesc, batchStrideX, batchStrideH,
+                                   hDesc, currentH);
+            break;
+        }
+        case ARM_A55: {
+            ret = lstmcell_arm(xDesc, currentX,
+                               filterDesc, filter,
+                               biasDesc, bias,
+                               state,
+                               tmpBytes, tmp,
+                               lstmDesc, batchStrideX, batchStrideH,
+                               hDesc, currentH);
+            break;
+        }
+        case ARM_A76: {
+            ret = lstmcell_arm(xDesc, currentX,
+                               filterDesc, filter,
+                               biasDesc, bias,
+                               state,
+                               tmpBytes, tmp,
+                               lstmDesc, batchStrideX, batchStrideH,
+                               hDesc, currentH);
+            break;
+        }
+        case ARM_V8: {
+            ret = lstmcell_arm(xDesc, currentX,
+                               filterDesc, filter,
+                               biasDesc, bias,
+                               state,
+                               tmpBytes, tmp,
+                               lstmDesc, batchStrideX, batchStrideH,
+                               hDesc, currentH);
+            break;
+        }
+        default:
+            ret = NOT_SUPPORTED;
+            break;
     }
     return ret;
 }

@@ -12,32 +12,28 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#include "sys.h"
-#include "tensor_desc.h"
-#include "type.h"
-#include "error.h"
-#include "tensor_computing_type.h"
+#ifdef _USE_INT8
+#include <cstring>
+#include "cpu/arm/int8/tensor_computing_int8.h"
 
-#include "cpu/arm/int8/concat_int8.h"
-
-EE concat_int8(std::vector<TensorDesc> inputDesc, std::vector<void*> input, std::vector<F16> inputScale,
-                    TensorDesc outputDesc, void* output, F16* outputScale, U32 concatDim)
+EE concat_int8(std::vector<TensorDesc> inputDesc, std::vector<void*> input, F32* inputScale,
+    TensorDesc outputDesc, void* output, F32* outputScale, U32 concatDim)
 {
     if (inputDesc.size() < 1) {
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
+        CHECK_STATUS(NOT_MATCH);
     }
     if(inputDesc.size() == 1) {
         memcpy(output, input[0], tensorNumBytes(outputDesc));
         return SUCCESS;
     }
     if (concatDim != 0 && concatDim != 1) {
-        CHECK_STATUS_WITH_RETURN(NOT_SUPPORTED);
+        CHECK_STATUS(NOT_SUPPORTED);
     }
 
-    F16 min_scale = inputScale[0];
+    F32 min_scale = inputScale[0];
     U32 min_idx = 0;
 
-    for (U32 i=1; i<inputScale.size(); i++) {
+    for (U32 i=1; i<input.size(); i++) {
         if (min_scale > inputScale[i]) {
             min_scale = inputScale[i];
             min_idx = i;
@@ -103,9 +99,9 @@ EE concat_int8(std::vector<TensorDesc> inputDesc, std::vector<void*> input, std:
     U32 copySize;
 
     if(tensorIs4d(outputDesc)) {
-        CHECK_STATUS_WITH_RETURN(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
+        CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
         if (odt != DT_I8) {
-            CHECK_STATUS_WITH_RETURN(NOT_MATCH);
+            CHECK_STATUS(NOT_MATCH);
         }
 
         INT8 *out_ptr = (INT8 *)output;   
@@ -124,9 +120,9 @@ EE concat_int8(std::vector<TensorDesc> inputDesc, std::vector<void*> input, std:
         if(concatDim == 1) {
             for(U32 j = 0; j < on; j++) {
                 for(U32 i = 0; i < inputDesc.size(); i++) {
-                    CHECK_STATUS_WITH_RETURN(tensor4dGet(inputDesc[i], &idt, &idf, &in, &ic, &ih, &iw));
+                    CHECK_STATUS(tensor4dGet(inputDesc[i], &idt, &idf, &in, &ic, &ih, &iw));
                     if (odf != idf) {
-                        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
+                        CHECK_STATUS(NOT_MATCH);
                     }
 
                     copySize = tensorNumElements(inputDesc[i]) / in * sizeof(INT8);
@@ -143,3 +139,4 @@ EE concat_int8(std::vector<TensorDesc> inputDesc, std::vector<void*> input, std:
     }
     return NOT_SUPPORTED;
 }
+#endif

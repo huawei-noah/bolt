@@ -15,13 +15,10 @@
 #ifndef _H_TENSOR_DESC
 #define _H_TENSOR_DESC
 #include <stdio.h>
-
+#include <limits.h>
+#include <string>
 #include "type.h"
 #include "error.h"
-
-#ifdef __cplusplus
-extern "C" {
-#endif
 
     typedef enum {
         DF_NCHW,
@@ -43,13 +40,22 @@ extern "C" {
         DF_CHW_NC, // dw_conv, CHW means dw part, NC means pw part
         DF_CHWC8_NCN16, // dw_conv, vectorized for C8 and N16
         DF_CHWC8_NCN8C4, // int8 dw_conv, vectorized for C4 and N8
+        DF_NCWHC4, //ocl mali input and output
+        DF_NCHWC3, //ocl mali support input rgb
+        DF_NHWC, //ocl mali support input/output
+        DF_NCHWN4C4, //ocl mali conv filter
+        DF_NCWHN4C4, //ocl mali fc   filter
+        DF_NHWCN4,  //ocl mali filter
+        DF_CHWC8_NCN8, // fp32 dw_conv, vectorized for C8 and N8
+        DF_RGB,
+        DF_HWNCN8  // fp32 filter for winograd
     } DataFormat;
 
     typedef struct {
         DataType dt;
         DataFormat df;
         U32 nDims = 0;
-        U32 dims[6];
+        U32 dims[6] = {0};
     } TensorDesc;
 
     /**
@@ -68,50 +74,66 @@ extern "C" {
         return ret;
     }
 
-    inline TensorDesc tensor4d(DataType dt, U32 num, U32 numChannels, U32 height, U32 width) {
+    inline TensorDesc tensor4d(DataType dt, U32 num, U32 numChannels, U32 height, U32 width)
+    {
         return tensor4df(dt, DF_NCHW, num, numChannels, height, width);
     }
 
-    inline TensorDesc tensor3df(DataType dt, DataFormat df, U32 numChannels, U32 height, U32 width) {
+    inline TensorDesc tensor3df(DataType dt, DataFormat df, U32 numChannels, U32 height, U32 width)
+    {
         TensorDesc ret = tensor4df(dt, df, 1, numChannels, height, width);
         ret.nDims = 3;
         return ret;
     }
 
-    inline TensorDesc tensor3d(DataType dt, U32 numChannels, U32 height, U32 width) {
+    inline TensorDesc tensor3d(DataType dt, U32 numChannels, U32 height, U32 width)
+    {
         return tensor3df(dt, DF_NCHW, numChannels, height, width);
     }
 
-    inline TensorDesc tensor2df(DataType dt, DataFormat df, U32 numRows, U32 numColumns) {
+    inline TensorDesc tensor2df(DataType dt, DataFormat df, U32 numRows, U32 numColumns)
+    {
         TensorDesc ret = tensor3df(dt, df, 1, numRows, numColumns);
         ret.nDims = 2;
         return ret;
     }
 
-    inline TensorDesc tensor2d(DataType dt, U32 numRows, U32 numColumns) {
+    inline TensorDesc tensor2d(DataType dt, U32 numRows, U32 numColumns)
+    {
         TensorDesc ret = tensor3d(dt, 1, numRows, numColumns);
         ret.nDims = 2;
         return ret;
     }
 
-    inline TensorDesc tensor1d(DataType dt, U32 len) {
+    inline TensorDesc tensor1d(DataType dt, U32 len)
+    {
         TensorDesc ret = tensor2d(dt, 1, len);
         ret.nDims = 1;
         return ret;
     }
 
-    inline EE tensor1dGet(TensorDesc desc, DataType* dt, U32* len) {
-        if(nullptr == len || nullptr == dt) return NULL_POINTER;
-        if(1 != desc.nDims) return NOT_MATCH;
+    inline EE tensor1dGet(TensorDesc desc, DataType* dt, U32* len)
+    {
+        if (nullptr == len || nullptr == dt) {
+            return NULL_POINTER;
+        }
+        if (1 != desc.nDims) {
+            return NOT_MATCH;
+        }
 
         *dt = desc.dt;
         *len = desc.dims[0];
         return SUCCESS;
     }
 
-    inline EE tensor2dfGet(TensorDesc desc, DataType* dt, DataFormat *df, U32* numRows, U32* numColumns) {
-        if(nullptr == numColumns || nullptr == numRows || nullptr == dt || nullptr == df) return NULL_POINTER;
-        if(2 != desc.nDims) return NOT_MATCH;
+    inline EE tensor2dfGet(TensorDesc desc, DataType* dt, DataFormat *df, U32* numRows, U32* numColumns)
+    {
+        if (nullptr == numColumns || nullptr == numRows || nullptr == dt || nullptr == df) {
+            return NULL_POINTER;
+        }
+        if (2 != desc.nDims) {
+            return NOT_MATCH;
+        }
 
         *df = desc.df;
         *dt = desc.dt;
@@ -120,9 +142,14 @@ extern "C" {
         return SUCCESS;
     }
 
-    inline EE tensor2dGet(TensorDesc desc, DataType* dt, U32* numRows, U32* numColumns) {
-        if(nullptr == numColumns || nullptr == numRows || nullptr == dt) return NULL_POINTER;
-        if(2 != desc.nDims) return NOT_MATCH;
+    inline EE tensor2dGet(TensorDesc desc, DataType* dt, U32* numRows, U32* numColumns)
+    {
+        if (nullptr == numColumns || nullptr == numRows || nullptr == dt) {
+            return NULL_POINTER;
+        }
+        if (2 != desc.nDims) {
+            return NOT_MATCH;
+        }
 
         *dt = desc.dt;
         *numColumns = desc.dims[0];
@@ -130,9 +157,14 @@ extern "C" {
         return SUCCESS;
     }
 
-    inline EE tensor3dGet(TensorDesc desc, DataType* dt, DataFormat *df, U32* numChannels, U32* height, U32* width) {
-        if(nullptr == numChannels || nullptr == height || nullptr == width || nullptr == dt || nullptr == df) return NULL_POINTER;
-        if(3 != desc.nDims) return NOT_MATCH;
+    inline EE tensor3dGet(TensorDesc desc, DataType* dt, DataFormat *df, U32* numChannels, U32* height, U32* width) 
+    {
+        if (nullptr == numChannels || nullptr == height || nullptr == width || nullptr == dt || nullptr == df) {
+            return NULL_POINTER;
+        }
+        if (3 != desc.nDims) {
+            return NOT_MATCH;
+        }
 
         *dt = desc.dt;
         *df = desc.df;
@@ -142,9 +174,14 @@ extern "C" {
         return SUCCESS;
     }
 
-    inline EE tensor4dGet(TensorDesc desc, DataType* dt, DataFormat *df, U32* num, U32* numChannels, U32* height, U32* width) {
-        if(nullptr == num || nullptr == numChannels || nullptr == height || nullptr == width || nullptr == dt || nullptr == df) return NULL_POINTER;
-        if(4 != desc.nDims) return NOT_MATCH;
+    inline EE tensor4dGet(TensorDesc desc, DataType* dt, DataFormat *df, U32* num, U32* numChannels, U32* height, U32* width)
+    {
+        if (nullptr == num || nullptr == numChannels || nullptr == height || nullptr == width || nullptr == dt || nullptr == df) {
+            return NULL_POINTER;
+        }
+        if (4 != desc.nDims) {
+            return NOT_MATCH;
+        }
 
         *dt = desc.dt;
         *df = desc.df;
@@ -154,20 +191,34 @@ extern "C" {
         *num = desc.dims[3];
         return SUCCESS;
     }
+ 
+    inline EE tensorSelectGet(TensorDesc desc, DataType* dt, DataFormat *df, U32* num, U32* numChannels, U32* height, U32* width)
+    {
+        if (dt)          *dt = desc.dt;
+        if (df)          *df = desc.df;
+        if (width)       *width = desc.dims[0];
+        if (height)      *height = desc.dims[1];
+        if (numChannels) *numChannels = desc.dims[2];
+        if (num)         *num = desc.dims[3];
+        return SUCCESS;
+    }
 
-    inline U32 tensorNumElements(TensorDesc desc) {
+    inline U32 tensorNumElements(TensorDesc desc)
+    {
+        if (desc.nDims == 0) return 0;
         U32 ret = 1;
-        if(1 <= desc.nDims) ret *= desc.dims[0];
-        if(2 <= desc.nDims) ret *= desc.dims[1];
-        if(3 <= desc.nDims) ret *= desc.dims[2];
-        if(4 <= desc.nDims) ret *= desc.dims[3];
-        if(5 <= desc.nDims) ret *= desc.dims[4];
+        if (1 <= desc.nDims) ret *= desc.dims[0];
+        if (2 <= desc.nDims) ret *= desc.dims[1];
+        if (3 <= desc.nDims) ret *= desc.dims[2];
+        if (4 <= desc.nDims) ret *= desc.dims[3];
+        if (5 <= desc.nDims) ret *= desc.dims[4];
 
         return ret;
     }
 
-    inline U32 tensorNumBytes(TensorDesc desc) {
-        if (desc.dt == DT_DOREFA || desc.dt == DT_XNOR) {
+    inline U32 tensorNumBytes(TensorDesc desc)
+    {
+        if (desc.dt == DT_BIN01 || desc.dt == DT_BIN11) {
             return tensorNumElements(desc) / 8;
         } else {
             return tensorNumElements(desc) * bytesOf(desc.dt);
@@ -189,20 +240,63 @@ extern "C" {
     inline U8 tensorIs4d(TensorDesc desc) {
         return 4 == desc.nDims;
     }
-    inline EE tensorDescPrint(TensorDesc desc) {
-        printf("dt:%d df:%d dims:%d(", desc.dt, desc.df, desc.nDims);
-        for (U32 i=0; i<desc.nDims; i++) {
-            if(i < desc.nDims-1)
-                printf("%d,", desc.dims[i]);
-            else
-                printf("%d)\n", desc.dims[i]);
+
+    inline std::string tensorDesc2Str(TensorDesc desc)
+    {
+        char buff[128];
+        snprintf(buff, sizeof(buff), "dt:%d df:%d dims:%d", desc.dt, desc.df, desc.nDims);
+        std::string descStr = buff;
+
+        if (desc.nDims > 0) {
+            descStr += "(";
+        }
+        for (I32 i = int(desc.nDims) - 1; i >= 0; i--) {
+            descStr += std::to_string(desc.dims[i]);
+            if (i > 0) {
+                descStr += ",";
+            } else {
+                descStr += ")";
+            }
         }
         
-        return SUCCESS;
+        return descStr;
     }
 
-#ifdef __cplusplus
-}
-#endif
+    inline int tensorDescIsValid(TensorDesc desc)
+    {
+        if (desc.dt < 0 || desc.dt >= 10)
+            return 0;
 
+        if (desc.df < 0 || desc.df >= 30)
+            return 0;
+
+        if (desc.nDims > 6)
+            return 0;
+
+        for (U32 i = 0; i < desc.nDims; i++) {
+            if (desc.dims[i] > INT_MAX)
+               return 0;
+        }
+
+        return 1;
+    }
+
+    inline DataFormat getTensorDefaultDataFormat(int nDims)
+    {
+        DataFormat df = DF_NORMAL;
+        switch (nDims) {
+            case 2:
+                df = DF_NORMAL;
+                break;
+            case 3:
+                df = DF_MTK;
+                break;
+            case 4:
+                df = DF_NCHW;
+                break;
+            default:
+                break;
+        }
+        return df;
+    }
 #endif

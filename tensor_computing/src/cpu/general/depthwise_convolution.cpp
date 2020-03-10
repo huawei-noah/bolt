@@ -33,18 +33,20 @@ inline EE depthwise_convolution(TensorDesc inputDesc, T1* inArray,
     U32 in, ic, ih, iw;
     U32 fn, fc, fh, fw;
     U32 on, oc, oh, ow;
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
-    U32 stride = convDesc.stride;
-    U32 padding = convDesc.padding;
+    CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+    CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
+    CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
+    U32 strideH = convDesc.stride_h;
+    U32 strideW = convDesc.stride_w;
+    U32 paddingT = convDesc.padding_top;
+    U32 paddingL = convDesc.padding_left;
     bool fuseDepthwisePointwise = (fdf == DF_CHW_NC) ? true : false;
 
     if (idf == DF_NCHWC8)
-        CHECK_STATUS_WITH_RETURN(from_nchwc8_to_nchw<T1>(&inputDesc, inArray));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+        CHECK_STATUS(from_nchwc8_to_nchw<T1>(&inputDesc, inArray));
+    CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
     if (idf != DF_NCHW)
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
+        CHECK_STATUS(NOT_MATCH);
 
     T3* pwArray;
     if (fuseDepthwisePointwise) {
@@ -63,8 +65,8 @@ inline EE depthwise_convolution(TensorDesc inputDesc, T1* inArray,
                 for (U32 w = 0; w < ow; w++) {
                     for (U32 fh_idx = 0; fh_idx < fh; fh_idx++) {
                         for (U32 fw_idx = 0; fw_idx < fw; fw_idx++) {
-                            I32 ih_idx = h * stride - padding + fh_idx;
-                            I32 iw_idx = w * stride - padding + fw_idx;
+                            I32 ih_idx = h * strideH - paddingT + fh_idx;
+                            I32 iw_idx = w * strideW - paddingL + fw_idx;
                             if (ih_idx >= 0 && ih_idx < (I32)ih && iw_idx >= 0 && iw_idx < (I32)iw) {
                                 pwArray[c*oh*ow + h*ow + w] +=
                                     inArray[n*ic*ih*iw + c*ih*iw + ih_idx*iw + iw_idx] *
@@ -81,7 +83,7 @@ inline EE depthwise_convolution(TensorDesc inputDesc, T1* inArray,
                 U32 pw_off = c*oh*ow + hw;
                 U32 b_off = c;
                 pwArray[pw_off] += biasArray[b_off];
-                CHECK_STATUS_WITH_RETURN(activation<T3>(depthwiseActivationMode, pwArray[pw_off], &pwArray[pw_off]));
+                CHECK_STATUS(activation<T3>(depthwiseActivationMode, pwArray[pw_off], &pwArray[pw_off]));
             }
         }
         if (fuseDepthwisePointwise) {
@@ -101,7 +103,7 @@ inline EE depthwise_convolution(TensorDesc inputDesc, T1* inArray,
                         U32 o_off = n*oc*oh*ow + o*oh*ow + h*ow + w;
                         U32 b_off = ic + o;
                         outArray[o_off] += biasArray[b_off];
-                        CHECK_STATUS_WITH_RETURN(activation<T3>(pointwiseActivationMode, outArray[o_off], &outArray[o_off]));
+                        CHECK_STATUS(activation<T3>(pointwiseActivationMode, outArray[o_off], &outArray[o_off]));
                     }
                 }
             }
@@ -113,7 +115,7 @@ inline EE depthwise_convolution(TensorDesc inputDesc, T1* inArray,
 
     if (odf == DF_NCHWC8) {
         outputDesc.df = DF_NCHW;
-        CHECK_STATUS_WITH_RETURN(from_nchw_to_nchwc8<T3>(&outputDesc, outArray));
+        CHECK_STATUS(from_nchw_to_nchwc8<T3>(&outputDesc, outArray));
     }
     return SUCCESS;
 }
@@ -130,6 +132,7 @@ EE depthwise_convolution_general(TensorDesc inputDesc, void* input,
 
     EE ret = SUCCESS;
     switch (inputDesc.dt) {
+#ifdef _USE_FP16
         case DT_F16:
             ret = depthwise_convolution<F16, F16, F16>(inputDesc, (F16*)input,
                                                        filterDesc, (F16*)filter,
@@ -139,6 +142,8 @@ EE depthwise_convolution_general(TensorDesc inputDesc, void* input,
                                                        depthwiseActivationMode,
                                                        pointwiseActivationMode);
             break;
+#endif
+#ifdef _USE_INT8
         case DT_I8:
             ret = depthwise_convolution<INT8, I32, I32>(inputDesc, (INT8*)input,
                                                         filterDesc, (I32*)filter,
@@ -148,6 +153,18 @@ EE depthwise_convolution_general(TensorDesc inputDesc, void* input,
                                                         depthwiseActivationMode,
                                                         pointwiseActivationMode);
             break;
+#endif
+#ifdef _USE_FP32
+        case DT_F32:
+            ret = depthwise_convolution<F32, F32, F32>(inputDesc, (F32*)input,
+                                                        filterDesc, (F32*)filter,
+                                                        convDesc,
+                                                        (F32*)bias,
+                                                        outputDesc, (F32*)output,
+                                                        depthwiseActivationMode,
+                                                        pointwiseActivationMode);
+            break;
+#endif
         default:
             return NOT_SUPPORTED;
     }

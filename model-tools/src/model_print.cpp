@@ -17,6 +17,7 @@
 #include "model_print.h"
 #include "model_optimizer.hpp"
 #include <bitset>
+#include "OPOptimizers/DeprecatedOPOptimizer.hpp"
 
 F32 convert_F32(void* ptr, int index, DataType dt){
     F32 value = 0;
@@ -25,6 +26,15 @@ F32 convert_F32(void* ptr, int index, DataType dt){
             value = ((F32*)ptr)[index];
             break;
         }
+        case DT_I32: {
+            value = ((I32*)ptr)[index];
+            break;
+        }
+        case DT_U32: {
+            value = ((U32*)ptr)[index];
+            break;
+        }
+#ifdef _USE_FP16
         case DT_F16: {
             value = ((F16*)ptr)[index];
             break;
@@ -33,18 +43,19 @@ F32 convert_F32(void* ptr, int index, DataType dt){
             value = ((F16*)ptr)[index];
             break;
         }
+#endif
         case DT_I8: {
             value = ((I8*)ptr)[index];
             break;
         }
-        case DT_DOREFA: {
+        case DT_BIN01: {
             std::bitset<8> Val(((BIN8*)ptr)[index / 8]);
             if (Val.test(7 - (index % 8))) {
                 value = 1.0;
             }
             break;
         }
-        case DT_XNOR: {
+        case DT_BIN11: {
             std::bitset<8> Val(((BIN8*)ptr)[index / 8]);
             if (Val.test(7 - (index % 8))) {
                 value = 1.0;
@@ -65,9 +76,9 @@ void print_header(const ModelSpec ms){
     printf("[Model] %s\n", ms.model_name);
     printf("    [Input]");
     for(int i = 0; i < ms.num_inputs; i++){
-        printf(" %s(%d,%d,%d,%d)", ms.input_names[i], ms.input_dims[i].dims[0],
-                            ms.input_dims[i].dims[1], ms.input_dims[i].dims[2],
-                            ms.input_dims[i].dims[3]);
+        printf(" %s(", ms.input_names[i]);
+        std::cout << tensorDesc2Str(ms.input_dims[i]);
+        printf(")");
     }
     printf("\n");
 
@@ -84,9 +95,14 @@ void print_operator_tensor_relationship(const ModelSpec ms, bool deleteDeprecate
     printf("    [Ops] %d\n", number);
     for(int i = 0; i < number; i++){
         if(deleteDeprecatedOp) {
-            if(DeprecatedOpOptimizer::isDeprecatedOp(ms.ops[i].type))
+            if(DeprecatedOPOptimizer::isDeprecatedOp(ms.ops[i].type))
                 continue;
         }
+#ifdef _DEBUG
+        if (OT_Conv == ms.ops[i].type) {
+            printf("Kernel shape is %d x %d\n", ms.ops[i].ps.conv_spec.kernel_size_h, ms.ops[i].ps.conv_spec.kernel_size_w);
+        }
+#endif
         printf("        Op %3d %32s %16s|", i, ms.ops[i].name, OperatorTypeName()[ms.ops[i].type]);
         for(U32 j = 0; j < ms.ops[i].num_inputs; j++){
             printf(" %s,", ms.ops[i].input_tensors_name[j]);
@@ -96,14 +112,22 @@ void print_operator_tensor_relationship(const ModelSpec ms, bool deleteDeprecate
             printf(" %s,", ms.ops[i].output_tensors_name[j]);
         }
         printf("\n");
+        if (nullptr != ms.ops[i].tensor_positions) {
+            printf("        Tensor Positions: ");
+            for (U32 j = 0; j < ms.ops[i].num_inputs + ms.ops[i].num_outputs; j++) {
+                printf("%d ", ms.ops[i].tensor_positions[j]);
+            }
+            printf("\n");
+        }
     }
 }
 
-void print_weights(const ModelSpec ms){
+void print_weights(const ModelSpec ms)
+{
     int number = ms.num_weight_specs;
     printf("    [Weights] %d\n", number);
-    for(int i = 0; i < number; i++){
-        if(DeprecatedOpOptimizer::isDeprecatedOpWeight(&ms, i)) {
+    for (int i = 0; i < number; i++) {
+        if (DeprecatedOPOptimizer::isDeprecatedOpWeight(&ms, i)) {
             printf("        Weight %3d %32s | Delete mdt %d weight: %p %uB bias: %p %uB\n", i, ms.ws[i].op_name, ms.ws[i].mdt,
                ms.ws[i].weight, ms.ws[i].bytes_of_weight, ms.ws[i].vec, ms.ws[i].bytes_of_vec);
             continue;
@@ -111,10 +135,10 @@ void print_weights(const ModelSpec ms){
 
         printf("        Weight %3d %32s | Retain mdt %d weight: %p %uB bias: %p %uB example: ", i, ms.ws[i].op_name, ms.ws[i].mdt,
            ms.ws[i].weight, ms.ws[i].bytes_of_weight, ms.ws[i].vec, ms.ws[i].bytes_of_vec);
-        if(ms.ws[i].bytes_of_weight > 0){
+        if (ms.ws[i].bytes_of_weight > 0 && ms.ws[i].weight != nullptr) {
             printf("%f", convert_F32(ms.ws[i].weight, 0, ms.ws[i].mdt));
         }
-        if(ms.ws[i].bytes_of_vec > 0){
+        if (ms.ws[i].bytes_of_vec > 0 && ms.ws[i].vec != nullptr) {
             printf(",%f", convert_F32(ms.ws[i].vec, 0, ms.ws[i].mdt));
         }
         printf("\n");

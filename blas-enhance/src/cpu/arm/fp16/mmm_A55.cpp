@@ -126,9 +126,9 @@ inline void mmm_4x24_A55(U32 M, U32 K, F16* w, F16* in, F16* out) {
         :"+r" (out),
          "+r" (in),
          "+r" (w)
-        :"r" (KInner),
-         "r" (M),
-         "r" (KTail)
+        :"r" ((I64)KInner),
+         "r" ((I64)M),
+         "r" ((I64)KTail)
         :"memory", "cc", "x0", "x20", "x21", "x22", "x23", "x24", "x25", "x26", "x27",
             "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16"
     );
@@ -274,9 +274,9 @@ inline void mmm_8x4_A55(U32 M, U32 K, F16* w, F16* in, F16* out) {
         :"+r" (out),
          "+r" (in),
          "+r" (w)
-        :"r" (KInner),
-         "r" (M),
-         "r" (KTail)
+        :"r" ((I64)KInner),
+         "r" ((I64)M),
+         "r" ((I64)KTail)
         :"memory", "cc", "x20","x24","x25","x26","x27", "v1", "v2", "v3","v4", "v5","v6", "v7", "v8"
     );
 }                                 
@@ -340,9 +340,9 @@ inline void mmm_4x8_A55(U32 M, U32 K, F16* w, F16* in, F16* out) {
         :"+r" (out),
          "+r" (in),
          "+r" (w)
-        :"r" (KInner),
-         "r" (M),
-         "r" (KTail)
+        :"r" ((I64)KInner),
+         "r" ((I64)M),
+         "r" ((I64)KTail)
         :"memory", "cc", "x20","x24","x25","x26","x27", "v1", "v2", "v3","v4", "v5","v6", "v7", "v8"
     );
 }                                 
@@ -400,9 +400,9 @@ inline void mmm_4x4_A55(U32 M, U32 K, F16* w, F16* in, F16* out) {
         :"+r" (out),
          "+r" (in),
          "+r" (w)
-        :"r" (KInner),
-         "r" (M),
-         "r" (KTail)
+        :"r" ((I64)KInner),
+         "r" ((I64)M),
+         "r" ((I64)KTail)
         :"memory", "cc", "x20","x26","v1", "v2", "v3","v4", "v5","v6", "v7", "v8"
     );
 }                                 
@@ -501,9 +501,9 @@ inline void mmm_8x8_A55(U32 M, U32 K, F16* w, F16* in, F16* out) {
         :"+r" (out),
          "+r" (in),
          "+r" (w)
-        :"r" (KInner),
-         "r" (M),
-         "r" (KTail)
+        :"r" ((I64)KInner),
+         "r" ((I64)M),
+         "r" ((I64)KTail)
         :"memory", "cc", "x20", "x21", "x22", "x23", "x24", "x25", "x26", "x27",
             "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12"
     );
@@ -679,9 +679,9 @@ inline void mmm_8x24_A55(U32 M, U32 K, F16* w, F16* in, F16* out) {
         :"+r" (out),
          "+r" (in),
          "+r" (w)
-        :"r" (KInner),
-         "r" (M),
-         "r" (KTail)
+        :"r" ((I64)KInner),
+         "r" ((I64)M),
+         "r" ((I64)KTail)
         :"memory", "cc", "x0", "x20", "x21", "x22", "x23", "x24", "x25", "x26", "x27",
             "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10",
             "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20",
@@ -697,10 +697,10 @@ void mmm_A55(int M, int N, int K, F16* matrix1, F16* matrix2, F16* tmp, F16* res
     F16* resultCurrent = result;
     int KInner, MInner, m, n;
     for(int k = 0; k < K; k += blockK) {
-        KInner = std::min(blockK, K - k);
+        KInner = UNI_MIN(blockK, K - k);
         for(int i = 0; i < M; i+=blockM) {
 
-            MInner = std::min(blockM, M - i);
+            MInner = UNI_MIN(blockM, M - i);
 
             for(n = 0; n <= N - 8; n+=8) {
                 if (i == 0) {

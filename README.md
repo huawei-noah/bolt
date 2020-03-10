@@ -1,288 +1,139 @@
-# Bolt
+# Introduction
 
-## 1 Introduction
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-Bolt is a light-weight inference toolbox for mobile devices. Bolt, as a universal deployment tool for all kinds of neural networks, aims to minimize the inference runtime as much as possible. Higher speed, better security and more efficient memory management are the advantages that Bolt strives to provide.
+Bolt is a light-weight library for mobile devices. Bolt, as a universal deployment tool for all kinds of neural networks, aims to minimize the inference runtime as much as possible. Higher speed, better security and more efficient memory management are the advantages that Bolt strives to provide. Feel free to make good use of issue submission, or join our QQ chatroom (Chinese): 833345709.
 
+# Features
 
+- ### Overview
 
-## 2 Features
+  Bolt is highly optimized for ARMv8.2 CPUs, supporting fast inference of FP16, INT8 and BNN networks. Recently, FP32 functionality has been integrated, which also works on ARMv8 devices.
+  
+  Bolt has its own format of model storage, which helps reduce the memory footprint by storing in FP16 and 1-bit representations when possible. We provide model converters for the following formats:
+  
+  - caffe
+  - onnx
+  - tflite
+  
+  For PyTorch and TensorFlow models, please try to convert them to the onnx format first. We also had some success in converting these models into customized caffe models.
+  
+- ### Verified Networks
 
-### 2.1 Supported Deep Learning Platform
+  Bolt has shown its high performance in the inference of common CV and NLP neural networks. Some of the representative networks that we have verified are listed below. You can find detailed benchmark information in [docs/BENCHMARK.md](docs/BENCHMARK.md).
+  
+  - Squeezenet (full-network int8 quantization)
+  - Mobilenet v1 - v3
+  - Resnet50, [Ghostnet](https://github.com/huawei-noah/ghostnet) (plus FPN detection)
+  - Birealnet18 (BNN)
+  - Bert, TinyBert, Albert
+  - Neural Machine Translation
 
-caffe, onnx, tflite, pytorch (via onnx), tensorflow (via onnx). 
+- ### Inference Graph Optimizers
 
-### 2.2 Supported Operators
+  Apart from the refined acceleration of convolutions and GeMM for the supported data precisions, Bolt has a sophisticated inference graph optimizer. As shown in [model-tools/include](model-tools/include), classic operator fusion is supported. Bolt is also equipped with a Memory Reuse Optmizer, which reassigns the space occupied by a feature map as soon as it is no longer needed as input or output. Most networks that we tested benefit from a two-third reduction in feature map storage.
 
-- Attention
-- BatchNorm
-- Clip
-- Concat
-- Convolution
-- Eltwise
-- Embedding
-- FullyConnected
-- Gelu
-- HSigmoid
-- HSwish
-- LayerNorm
-- LSTM
-- MatMul
-- Multiply
-- Pad
-- Pooling
-- Relu
-- Relu6
-- Reshape
-- Scale
-- Sigmoid
-- Slice
-- Softmax
-- TanH
-- Transpose
+- ### Thread Affinity Setting
 
-### 2.3 Supported Inference Precision Types
+  Users can specify the preferred policy (high-performance or low-power). Bolt will select the most suitable core and set the thread affinity.
 
-fp16, int8, binary
+- ### Algorithm Tuning
 
-### 2.4 Verified Networks
+  Bolt can tailor-make the algorithm configuration for your specific target device.
 
-Bolt supports common neural networks such as Sequential, CNN, LSTM etc.
+# Documentation
 
-Verified CV models include [squeezenet](https://github.com/forresti/SqueezeNet), [resnet50](https://github.com/KaimingHe/deep-residual-networks#models), [mobilenet_v1](https://github.com/shicai/MobileNet-Caffe), [mobilenet_v2](https://github.com/shicai/MobileNet-Caffe), [mobilenet_v3](https://github.com/jixing0415/caffe-mobilenet-v3), [birealnet18](https://github.com/JDAI-CV/dabnn) etc.
+- ### Installation
 
-Verified NLP models include lstm, [bert](https://github.com/google-research/bert), tinybert, [albert](https://github.com/google-research/google-research/tree/master/albert) etc. 
+Bolt provides [install.sh](install.sh) for fast installation. The major third-party dependency is protobuf, and some other may come from the original model format that you want to use. You may also need libjpeg for building [tests/classification](tests).
 
+After configuring [bolt.cmake](bolt.cmake), the compilation can be as simple as:
 
-
-## 3 Compilation and Installation
-
-Before compilation,  you need to install some dependencies and set environment variables accordingly.
-
-Two ways of compilation are provided. For direct compilation, you can compile Bolt on arm devices directly binding the dependent libraries as dynamic libraries. For cross compilation, you can compile Bolt on x86 devices binding the dependent libraries as static libraries.
-
-More compilation details, please refer to [INSTALL.md](https://github.com/huawei-noah/bolt/blob/master/INSTALL.md).
-
-
-
-## 4 User Guide
-
-The typical use case of Bolt can be summarized into the following 3 steps:
-
-(1) Compile Bolt. Two sets of executables shall be generated. The first set is for model converting, such as `caffe2bolt`, `onnx2bolt`, `tflite2bolt` etc. The other set is for the inference tasks, such as `classification`, `bert` etc.  The following steps use `caffe2bolt` and `classification` as example.
-
-(2) Use `caffe2bolt` to convert Caffe model (demo.prototxt / demo.caffemodel) to Bolt format (demo.bolt).
-
-(3) Run `classification` with the Bolt model and target inputs.
-
-More details can be found below in Section 4.2.
-
-### 4.1 How to implement a sequential model
-
-Sequential model is a linear model. You can self-define a personalized model and deploy it on Bolt. Here we take Lenet as a simple example:
-
-```c++
-int main(int argc, char* argv[]) {
-    char* imageDir = (char*)"";
-    if(argc != 2) {
-        print_help(argv);
-    }
-    else
-        imageDir = argv[1];
-
-    const Arch A = ARM_A76;
-    DataType dt = DT_F16;
-    auto model = Sequential<A>(dt, "lenet");
-
-    auto op = Factory::createConvolution<A>(dt, 8, 5, 1, 2, ACTIVATION_NULL, ACTIVATION_NULL, Convolution_Pointwise, 1, 1);
-    model.add(op);
-
-    op = Factory::createPooling<A>(PoolingMode::Max, 2, 2, 0, RoundMode::CEIL);
-    model.add(op);
-
-    op = Factory::createConvolution<A>(dt, 8, 3, 1, 1, ACTIVATION_NULL, ACTIVATION_NULL, Convolution_Pointwise, 1, 1);
-    model.add(op);
-
-    op = Factory::createPooling<A>(PoolingMode::Max, 2, 2, 0, RoundMode::CEIL);
-    model.add(op);
-
-    op = Factory::createFullyConnectedEltwise<A>(dt, 10);
-    model.add(op);
-
-    op = Factory::createSoftmax<A>(dt);
-    model.add(op);
-
-    TensorDesc imageDesc = tensor4df(DT_F16, DF_NCHW, 1, 1, 8, 8);
-
-    auto weight = (F16*)operator new(256*256*256*sizeof(F16));
-    for (int i = 0; i < 256*256*256; i++) {
-        weight[i] = 1;
-    }
-    U8* wPtr = (U8*)weight;
-    std::shared_ptr<U8> modelPtr(wPtr);
-    model.ready({imageDesc}, modelPtr);
-
-    // load images
-    Vec<Tensor> images;
-    load_images(imageDir, imageDesc, &images, BGR, 1.0);
-
-    for (auto image: images) {
-        Vec<Tensor> input;
-        input.push_back(image);
-        model.set_input_tensors(input);
-
-        model.run();
-
-        auto outputs = model.get_output_tensors();
-        outputs[0].print<F16>();
-    }
-
-    return 0;
-}
+```shell
+./install.sh -t 48 -c llvm
 ```
 
-You may also refer to `engine/tests/lenet.cpp` for details. When you compile the source code of Bolt, the `lenet` application will also be generated (`engine/bin/lenet` ).
+For more details, please refer to [docs/INSTALL.md](docs/INSTALL.md)
 
-### 4.2 How to convert and deploy a CNN model
+- ### User Guide
 
-You can also load a trained cnn model, and deploy it on bolt.
+As a user, what you are normally concerned about include the following 4 parts:
 
-```c++
-int main(int argc, char* argv[]){
-    // pass the file parameter upon on personalized situation 
+- API (We guarantee that the C API will not be changed in the future)
+- Model Preparation
+- Model Conversion
+- Model Inference
 
-    const Arch A = NEON;
-    ModelSpec ms;
-    deserialize_model_from_file(model_path, &ms);
-    auto cnn = createCNN<A>(&ms);
-    
-    // load images
-    Vec<Tensor> images;
-    HashMap<std::string, std::shared_ptr<Tensor>> in_map = cnn->get_inputs();
-    TensorDesc image_desc = (*(in_map.begin()->second)).get_desc();
-    Vec<std::string> iamge_paths = load_images(image_dir, image_desc, &image, scale_value);
-    
-    for(auto image: images){
-        // set input
-        Vec<Tensor> input;
-        input.push_back(image);
-        cnn->set_input_tensors(input);
-        
-        // run
-        cnn->run();
-        
-        // get result
-        HashMap<std::string, std::shared_ptr<Tensor>> out_map = cnn->get_outputs();
-        Tensor result = *(out_map.begin()->second);
-    }
-    return 0;
-}
-```
+For the details, please refer to [docs/USER_HANDBOOK.md](docs/USER_HANDBOOK.md)
 
-As mentioned above, you can get the classification results in 3 steps.
+- ### Developer Guide
 
-- Compile Bolt and get `model-tools/bin/caffe2bolt` and `engine/bin/classification`.
-- Secondly, you should convert the Caffe model like this:
+  We welcome all kinds of contribution. Before that, let's get familiar with the project structure.
 
-```
-./caffe2bolt /model_storage_path model_name
-```
+- ##### Project Structure
 
-`caffe2bolt` takes at least two arguments. One is the storage path of the Caffe model files. The other is the model name, and `caffe2bolt`  will look for model_name.prototxt and model_name.caffemodel in the specified directory.
+  - [uni](uni) hosts the common headers that are used in the project.
+  - [gcl](gcl) hosts the setup of MALI GPU environment.
+  - [image](image) hosts common preprocessing routines for image inputs (e.g. bilinear interpolation).
+  - [blas-enhance](blas-enhance) hosts the fast implementation of matrix-matrix multiplication and matrix-vector multiplication of FP32, FP16 and INT8. It is referenced by some of the operators in [tensor_computing](tensor_computing).
+  - [tensor_computing](tensor_computing) hosts the implementation for individual operators.
+  - [model-tools](model-tools) hosts everything related to model conversion and optimization.
+  - [inference](inference) hosts the inference engine of neural networks.
+  - Lastly, [tests](tests) include all the unit tests for the above functionalities.
 
-- Thirdly, set the Bolt model and the images as the inputs to `classification`, and run it like this:
+  To support your own network, you can first try to convert it with the provided tools. If an operator is missing, you can first add the conversion to [model-tools](model-tools). You may then implement the missing computation routine in [tensor_computing](tensor_computing). Please also define a class for your new operator in [inference](inference).
 
-```
-./classification  bolt_model_path  input_data_directory_path  image_style scale_value  TOPK  correct_label
-```
+- ##### Contribution
 
-`classification` takes 6 arguments. In addition to the paths  for the Bolt model and the image folder, you can select the preprocessing style required by the model. For example, you should set image_style to BGR for Caffe models, and set scale_value to 1 for resnet50 and 0.017 for mobilenets. If you want to get TOP5 accuracy, please set TOPK to 5. Lastly, please specify the correct label number for the input image folder.
+All contributions are welcomed. For the details, please refer to [docs/DEVELOPER.md](docs/DEVELOPER.md) 
 
+- ### Benchmark
 
+We provide a detailed benchmark report for your reference. For more testing information please refer to [docs/BENCHMARK.md](docs/BENCHMARK.md) .
 
-## 5 Benchmark
+# Road Map
 
-### 5.1 Accuracy
+#### v0.3.0
 
-| model\acc        | top1(official) | top1(bolt) | top5(official) | top5(bolt) |
-| ---------------- | -------------- | ---------- | -------------- | ---------- |
-| resnet50         | 75.30%         | 75.60%     | 92.20%         | 95.51%     |
-| mobilenet_v1     | 70.81%         | 70.13%     | 89.85%         | 92.23%     |
-| squeezenet       | 57.50%         | 61.61%     | 80.30%         | 87.69%     |
-| Birealnet18(BNN) | 56.40%         | 54.95%     | 79.50%         | 81.61%     |
+Future Release 2020-04-01
 
+- GPU
 
+# Who are using Bolt
 
-### 5.2 speed
+- HUAWEI CBG
+- HUAWEI PORTFOLIO
 
-Here we list the single-thread execution time measured on Kirin 810.
+# FAQ
 
-| model\speed  | fp16 on A55 | fp16 on A76 | int8 on A55   | int8 on A76  |
-| ------------ | ----------- | ----------- | ------------- | ------------ |
-| resnet50     | 393.89 ms   | 95.86 ms    | 289.95 ms (*) | /            |
-| mobilenet_v1 | 70.38 ms    | 19.85 ms    | /             | /            |
-| mobilenet_v2 | 69.4 ms     | 18.27 ms    | /             | /            |
-| squeezenet   | 46.97 ms    | 12.16 ms    | 40.15 ms      | 12.15 ms (*) |
-| bert         | 5359.9 ms   | 1520.26 ms  | /             | /            |
-| tinybert     | 45.63 ms    | 12.25 ms    | /             | /            |
-| albert_tiny  | 143 ms      | 39 ms       | /             | /            |
-| albert       | 1972 ms     | 488 ms      | /             | /            |
+1. More details about dependency libraries for cross-compilation?
 
-| model\speed | BNN on A55 | BNN on A76 |
-| ----------- | ---------- | ---------- |
-| Birealnet18 | 77.66 ms   | 30.70 ms   |
+   The major dependency is Protobuf. Protoc should be the x86 version but protbuf should be the ARM version.
 
-(*) Experimental support without mature optimization
+2. Requirements on tensor dimensions?
 
+   For optimal performance, Bolt requires the number of output channels to be divisible by 8. For compatibility, Bolt will try to pad the output channels of convolution layers to the nearest multiple of 8. You can turn on DEBUG in [bolt.cmake](bolt.cmake) to check the actual dimensions.
 
+3. Restrictions for BNN?
 
-## 6 Developer Guide
+   For BNN convolution layers, the number of output channels must be divisible by 32.
 
-Everyone can self-define new operators in Bolt. We welcome the community to contribute functionalities in tensor_computing, engine and model-tools to make Bolt more and more versatile.
+4. Restrictions on quantization (int8)?
 
-For more details, you can refer to [DEVELOPER.md](https://github.com/huawei-noah/bolt/blob/master/DEVELOPER.md). We appreciate your contributions! Anyone who has contributed to Bolt will be recorded into the [CONTRIBUTORS.md](https://github.com/huawei-noah/bolt/blob/master/CONTRIBUTORS.md).
+   For the time being, Bolt only supports post-training int8 quantization. If quantization is activated, the second convolution layer will quantize the tensors to 8-bit integers. For now, int8 operators include Convolution, Pooling and Concatenation (end-to-end support for Squeezenet). If your network includes other operators, you may need to add type casting in the front of those operators. The quantization method is symmetrical for both activation and weight.
 
+5. Requirements for fp16 and int8?
 
+   Only arm-v8.2 supports fp16 and int8 dotprod instructions. 
 
-## 7 FAQ
+6. Restrictions for MALI?
 
-(1) Q : What are the dependent libraries?
+   Only llvm compilation supports MALI computing.
 
-A : The two major dependencies are Protobuf and CImg. Please refer to `model-tools/dependency/` and `image/dependency/` for more details.
-
-
-
-(2) Q : Requirements on tensor dimensions?
-
-A : For optimal performance, Bolt requires the number of output channels to be divisible by 8.
-
-
-
-(3) Q : Restrictions for BNN?
-
-A : For BNN layers, the number of output channels must be divisible by 32.
-
-
-
-(4) Q : Restrictions on convolution and pooling?
-
-A : Currently, Bolt requires that the kernel_size / stride / padding should be the same in height and width dimension.
-
-
-
-(5) Q : Restrictions on quantization (int8)?
-
-A: For the time being, Bolt only supports post-training int8 quantization. If quantization is activated,  the second convolution layer will quantize the tensors to 8-bit integers. For now, int8 operators include Convolution, Pooling and Concatenation (end-to-end support for Squeezenet). If your network includes other operators, you may need to add type casting in the front of those operators. The quantization method is symmetrical for both activation and weight.
-
-
-
-## 8 Acknowledgement
+# Acknowledgement
 
 Bolt refers to the following projects: [caffe](https://github.com/BVLC/caffe), [onnx](https://github.com/onnx/onnx), [protobuf](https://github.com/protocolbuffers/protobuf), [flatbuffers](https://github.com/google/flatbuffers), [ncnn](https://github.com/Tencent/ncnn), [mnn](https://github.com/alibaba/MNN), [dabnn](https://github.com/JDAI-CV/dabnn).
 
-## QQ Technology Group
-833345709
-
-## License
+# License
 
 The MIT License(MIT)

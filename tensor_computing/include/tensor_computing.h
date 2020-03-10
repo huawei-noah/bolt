@@ -24,20 +24,71 @@
 extern "C" {
 #endif
     EE convolution_infer_output_size(TensorDesc inputDesc, TensorDesc filterDesc, ConvolutionDesc convDesc,
-        TensorDesc* outputDesc, DataType targetDataType, U32* outputBytes);
+        TensorDesc* outputDesc, DataType targetDataType, U32* outputBytes, Arch arch, ExtInfo_t extInfo = NULL);
 
     EE convolution_infer_forward_algorithm(TensorDesc inputDesc, TensorDesc filterDesc, TensorDesc outputDesc,
-        ConvolutionDesc convDesc, ConvolutionPolicy policy, ConvolutionForwardAlgorithm *algorithm, DataType targetDataType, Arch arch);
+        ConvolutionDesc convDesc, ConvolutionPolicy policy, ConvolutionForwardAlgorithm *algorithm, DataType targetDataType,
+        ActivationMode activationMode, Arch arch, ExtInfo_t extInfo = NULL);
 
-    EE convolution_transform_filter_bytes(TensorDesc filterDesc, ConvolutionForwardAlgorithm algorithm, U32* bytes, Arch arch);
+    EE convolution_transform_filter_bytes(TensorDesc filterDesc, ConvolutionForwardAlgorithm algorithm, U32* bytes, Arch arch, ExtInfo_t extInfo = NULL);
 
     EE convolution_transform_filter(TensorDesc filterDesc, const void* filter, ConvolutionForwardAlgorithm algorithm,
-        TensorDesc *ftmDesc, void* filterTransformed, Arch arch);
+        TensorDesc *ftmDesc, void* filterTransformed, Arch arch, ExtInfo_t extInfo = NULL);
 
     EE convolution_infer_forward_tmp_bytes(TensorDesc inputDesc, TensorDesc filterDesc, TensorDesc outputDesc,
-        ConvolutionDesc convDesc, ConvolutionForwardAlgorithm algorithm, U32 *bytes, Arch arch);
+        ConvolutionDesc convDesc, ConvolutionForwardAlgorithm algorithm, U32 *bytes, Arch arch, ExtInfo_t extInfo = NULL);
 
     EE convolution(TensorDesc inputDesc, void* input,
+            TensorDesc filterDesc, const void* filter,
+            ConvolutionDesc convDesc,
+            ConvolutionForwardAlgorithm algorithm,
+            TensorDesc scaleDesc, const void* scale,
+            TensorDesc biasDesc, const void* bias,
+            U32 tmpBytes, void* tmp,
+            TensorDesc outputDesc, void* output,
+            ActivationMode activationMode,
+            Arch arch, ExtInfo_t extInfo = NULL);
+
+    EE deconvolution_infer_output_size(TensorDesc inputDesc, TensorDesc filterDesc, ConvolutionDesc convDesc,
+        TensorDesc* outputDesc, DataType targetDataType, U32* outputBytes);
+
+    EE deconvolution_infer_forward_algorithm(TensorDesc inputDesc, TensorDesc filterDesc, TensorDesc outputDesc,
+        ConvolutionDesc convDesc, ConvolutionPolicy policy, ConvolutionForwardAlgorithm *algorithm, DataType targetDataType, Arch arch);
+
+    EE deconvolution_transform_filter_bytes(TensorDesc filterDesc, ConvolutionForwardAlgorithm algorithm, U32* bytes, Arch arch);
+
+    EE deconvolution_transform_filter(TensorDesc filterDesc, const void* filter, ConvolutionForwardAlgorithm algorithm,
+        TensorDesc *ftmDesc, void* filterTransformed, Arch arch);
+
+    EE deconvolution_infer_forward_tmp_bytes(TensorDesc inputDesc, TensorDesc filterDesc, TensorDesc outputDesc,
+        ConvolutionDesc convDesc, ConvolutionForwardAlgorithm algorithm, U32 *bytes, Arch arch);
+
+    EE deconvolution(TensorDesc inputDesc, void* input,
+            TensorDesc filterDesc, const void* filter,
+            ConvolutionDesc convDesc,
+            ConvolutionForwardAlgorithm algorithm,
+            TensorDesc scaleDesc, const void* scale,
+            TensorDesc biasDesc, const void* bias,
+            U32 tmpBytes, void* tmp,
+            TensorDesc outputDesc, void* output,
+            ActivationMode activationMode,
+            Arch arch);
+
+    EE deconvolution_infer_output_size(TensorDesc inputDesc, TensorDesc filterDesc, ConvolutionDesc convDesc,
+        TensorDesc* outputDesc, DataType targetDataType, U32* outputBytes);
+
+    EE deconvolution_infer_forward_algorithm(TensorDesc inputDesc, TensorDesc filterDesc, TensorDesc outputDesc,
+        ConvolutionDesc convDesc, ConvolutionPolicy policy, ConvolutionForwardAlgorithm *algorithm, DataType targetDataType, Arch arch);
+
+    EE deconvolution_transform_filter_bytes(TensorDesc filterDesc, ConvolutionForwardAlgorithm algorithm, U32* bytes, Arch arch);
+
+    EE deconvolution_transform_filter(TensorDesc filterDesc, const void* filter, ConvolutionForwardAlgorithm algorithm,
+        TensorDesc *ftmDesc, void* filterTransformed, Arch arch);
+
+    EE deconvolution_infer_forward_tmp_bytes(TensorDesc inputDesc, TensorDesc filterDesc, TensorDesc outputDesc,
+        ConvolutionDesc convDesc, ConvolutionForwardAlgorithm algorithm, U32 *bytes, Arch arch);
+
+    EE deconvolution(TensorDesc inputDesc, void* input,
             TensorDesc filterDesc, const void* filter,
             ConvolutionDesc convDesc,
             ConvolutionForwardAlgorithm algorithm,
@@ -49,18 +100,19 @@ extern "C" {
             Arch arch);
 
     EE depthwise_convolution_infer_output_size(TensorDesc inputDesc, TensorDesc filterDesc, ConvolutionDesc convDesc,
-        TensorDesc* outputDesc, DataType targetDataType, U32* outputBytes);
+        TensorDesc* outputDesc, DataType targetDataType, U32* outputBytes, Arch arch, ExtInfo_t extInfo = NULL);
     
     EE depthwise_convolution_infer_forward_algorithm(TensorDesc inputDesc, TensorDesc filterDesc, TensorDesc outputDesc,
-        ConvolutionDesc convDesc, ConvolutionPolicy policy, DepthwiseConvolutionForwardAlgorithm *algorithm, DataType targetDataType, Arch arch);
+        ConvolutionDesc convDesc, ConvolutionPolicy policy, DepthwiseConvolutionForwardAlgorithm *algorithm, DataType targetDataType, 
+        ActivationMode depthwiseActivationMode, ActivationMode pointwiseActivationMode, Arch arch, ExtInfo_t extInfo = NULL);
     
-    EE depthwise_convolution_transform_filter_bytes(TensorDesc filterDesc, DepthwiseConvolutionForwardAlgorithm algorithm, U32* bytes, Arch arch);
+    EE depthwise_convolution_transform_filter_bytes(TensorDesc filterDesc, DepthwiseConvolutionForwardAlgorithm algorithm, U32* bytes, Arch arch, ExtInfo_t extInfo = NULL);
     
     EE depthwise_convolution_transform_filter(TensorDesc filterDesc, const void* filter, DepthwiseConvolutionForwardAlgorithm algorithm,
-        TensorDesc *ftmDesc, void* filterTransformed, Arch arch);
+        TensorDesc *ftmDesc, void* filterTransformed, Arch arch, ExtInfo_t extInfo = NULL);
     
     EE depthwise_convolution_infer_forward_tmp_bytes(TensorDesc inputDesc, TensorDesc filterDesc, TensorDesc outputDesc,
-        ConvolutionDesc convDesc, DepthwiseConvolutionForwardAlgorithm algorithm, U32 *bytes, Arch arch);
+        ConvolutionDesc convDesc, DepthwiseConvolutionForwardAlgorithm algorithm, U32 *bytes, Arch arch, ExtInfo_t extInfo = NULL);
     
     EE depthwise_convolution(TensorDesc inputDesc, void* input,
             TensorDesc filterDesc, const void* filter,
@@ -71,44 +123,44 @@ extern "C" {
             TensorDesc outputDesc, void* output,
             ActivationMode depthwiseActivationMode,
             ActivationMode pointwiseActivationMode,
-            Arch arch);
+            Arch arch, ExtInfo_t extInfo = NULL);
 
-    EE pooling_infer_output_size(TensorDesc inputDesc, PoolingDesc poolingDesc, TensorDesc *outputDesc);
+    EE pooling_infer_output_size(TensorDesc inputDesc, PoolingDesc poolingDesc, TensorDesc *outputDesc, Arch arch, ExtInfo_t extInfo = NULL);
 
-    EE pooling(TensorDesc inputDesc, const void* input, PoolingDesc poolingDesc, const void* scale, TensorDesc outputDesc, void* output, Arch arch);
+    EE pooling(TensorDesc inputDesc, const void* input, PoolingDesc poolingDesc, const void* scale, TensorDesc outputDesc, void* output, Arch arch, ExtInfo_t extInfo = NULL);
 
-    EE activation_infer_output_size(TensorDesc inputDesc, TensorDesc *outputDesc);
+    EE activation_infer_output_size(TensorDesc inputDesc, TensorDesc *outputDesc, Arch arch, ExtInfo_t extInfo = NULL);
 
-    EE activation(TensorDesc inputDesc, void* data, ActivationMode mode, Arch arch);
+    EE activation(TensorDesc inputDesc, void* data, ActivationMode mode, Arch arch, ExtInfo_t extInfo = NULL);
 
-    EE concat_infer_output_size(std::vector<TensorDesc> inputDesc, TensorDesc* outputDesc, U32 concatDim);
+    EE concat_infer_output_size(std::vector<TensorDesc> inputDesc, TensorDesc* outputDesc, U32 concatDim, Arch arch, ExtInfo_t extInfo = NULL);
 
-    EE concat(std::vector<TensorDesc> inputDesc, std::vector<void*> input, std::vector<F16> inputScale,
-            TensorDesc outputDesc, void* output, F16* outputScale, U32 concatDim, Arch arch);
+    EE concat(std::vector<TensorDesc> inputDesc, std::vector<void*> input, void* inputScale,
+            TensorDesc outputDesc, void* output, void* outputScale, U32 concatDim, Arch arch, ExtInfo_t extInfo = NULL);
 
-    EE eltwise(std::vector<TensorDesc> inputDesc, std::vector<void*> input, TensorDesc outputDesc, void* output, EltwiseMode eltwiseMode, Arch arch);
+    EE eltwise(std::vector<TensorDesc> inputDesc, std::vector<void*> input, TensorDesc outputDesc, void* output, EltwiseMode eltwiseMode, Arch arch, ExtInfo_t extInfo = NULL);
 
-    EE eltwise_infer_output_size(std::vector<TensorDesc> inputDesc, TensorDesc* outputDesc);
+    EE eltwise_infer_output_size(std::vector<TensorDesc> inputDesc, TensorDesc* outputDesc, Arch arch, ExtInfo_t extInfo = NULL);
 
     EE split(TensorDesc inputDesc, void* input, std::vector<TensorDesc> outputDesc, std::vector<void*>* output, Arch arch);
 
     EE split_infer_output_size(TensorDesc inputDesc, std::vector<TensorDesc>* outputDesc);
 
-    EE fully_connected_infer_output_size(TensorDesc inputDesc, TensorDesc filterDesc, TensorDesc *outputDesc);
+    EE fully_connected_infer_output_size(TensorDesc inputDesc, TensorDesc filterDesc, TensorDesc *outputDesc, Arch arch, ExtInfo_t extInfo = NULL);
 
     EE fully_connected_infer_forward_tmp_bytes(TensorDesc inputDesc, TensorDesc filterDesc, U32 *bytes, Arch arch);
 
-    EE fully_connected_transform_filter_bytes(TensorDesc filterDesc, U32* bytes);
+    EE fully_connected_transform_filter_bytes(TensorDesc filterDesc, U32* bytes, Arch arch, ExtInfo_t extInfo = NULL);
 
     EE fully_connected_transform_filter(TensorDesc inputDesc, TensorDesc filterDesc, const void* filter,
-            TensorDesc *ftmDesc, void* filterTransformed);
+            TensorDesc *ftmDesc, void* filterTransformed, Arch arch, ExtInfo_t extInfo = NULL);
 
     EE fully_connected(TensorDesc inputDesc, const void* input, TensorDesc weightDesc, const void* weight, void* tmp, U32 bytes,
-            TensorDesc outputDesc, void* output, TensorDesc biasDesc, const void* bias, Arch arch);
+            TensorDesc outputDesc, void* output, TensorDesc biasDesc, const void* bias, Arch arch, ExtInfo_t extInfo = NULL);
 
-    EE softmax_infer_output_size(TensorDesc inputDesc, TensorDesc *outputDesc);
+    EE softmax_infer_output_size(TensorDesc inputDesc, TensorDesc *outputDesc, Arch arch, ExtInfo_t extInfo = NULL);
 
-    EE softmax(TensorDesc inputDesc, const void* input, TensorDesc outputDesc, void* output, Arch arch);
+    EE softmax(TensorDesc inputDesc, const void* input, TensorDesc outputDesc, void* output, Arch arch, ExtInfo_t extInfo = NULL);
 
     EE lstm_transform_filter(TensorDesc filterDesc,
             const void* filter,
@@ -117,6 +169,7 @@ extern "C" {
             U32 x_dim, U32 h_dim, Arch arch);
 
     EE lstm_transform_filter_bytes(TensorDesc filterDesc, U32* bytes, Arch arch);
+
 
     EE lstm_infer_output_size(TensorDesc inputDesc,
             TensorDesc filterDesc,
@@ -131,15 +184,37 @@ extern "C" {
             U32 *bytes, Arch arch);
 
     EE lstm(TensorDesc inputDesc, const void* input,
-            TensorDesc filterDesc, const void* filter,
-            LSTMDesc lstmDesc,
-            TensorDesc biasDesc, const void* bias,
-            U32 tmpBytes, void* tmp,
-            TensorDesc outputDesc, void* output, Arch arch);
+        TensorDesc filterDesc, const void* filter,
+        TensorDesc biasDesc, const void* bias,
+        U32 tmpBytes, void* tmp,
+        LSTMDesc lstmDesc,
+        TensorDesc outputDesc, void* output,
+        Arch arch);
 
-    EE scale(void *alpha, void *beta, TensorDesc inputDesc, void* data, Arch arch);
+    EE lstmcell_infer_output_size(TensorDesc inputDesc,
+            TensorDesc filterDesc,
+            LSTMDesc lstmDesc,
+            TensorDesc* outputDesc,
+            U32* outputBytes);
+
+    EE lstmcell_infer_forward_tmp_bytes(TensorDesc inputDesc,
+            TensorDesc filterDesc,
+            TensorDesc outputDesc,
+            LSTMDesc lstmDesc,
+            U32 *bytes, Arch arch);
+
+    EE lstmcell(TensorDesc xDesc, const void* currentX,
+        TensorDesc filterDesc, const void* filter,
+        TensorDesc biasDesc, const void* bias,
+        void *state,
+        U32 tmpBytes, void *tmp,
+        LSTMDesc lstmDesc, U32 batchStrideX, U32 batchStrideH,
+        TensorDesc hDesc, void* currentH,
+        Arch arch);
+
+    EE scale(void *alpha, void *beta, TensorDesc inputDesc, void* input, TensorDesc outputDesc, void* output, Arch arch, ExtInfo_t extInfo = NULL);
     
-    EE scale_infer_output_size(TensorDesc inputDesc, TensorDesc *outputDesc);
+    EE scale_infer_output_size(TensorDesc inputDesc, TensorDesc *outputDesc, Arch arch, ExtInfo_t extInfo = NULL);
 
     EE normalization_infer_output_size(TensorDesc inputDesc, TensorDesc *outputDesc);
 
@@ -155,12 +230,12 @@ extern "C" {
 
     EE transpose_infer_output_size(TensorDesc inputDesc, TensorDesc *outputDesc, U32 *dim);
 
-    EE matmul_infer_output_size(TensorDesc matrixADesc, TensorDesc matrixBDesc, TensorDesc *matrixCDesc);
+    EE matmul_infer_output_size(TensorDesc matrixADesc, bool transposeA, TensorDesc matrixBDesc, bool transposeB, TensorDesc *matrixCDesc);
 
-    EE matmul_infer_forward_tmp_bytes(TensorDesc matrixADesc, TensorDesc matrixBDesc, U32 *bytes, Arch arch);
+    EE matmul_infer_forward_tmp_bytes(TensorDesc matrixADesc, bool transposeA, TensorDesc matrixBDesc, bool transposeB, U32 *bytes, Arch arch);
 
-    EE matmul(TensorDesc matrixADesc, const void* matrixA,
-           TensorDesc matrixBDesc, const void* matrixB,
+    EE matmul(TensorDesc matrixADesc, bool transposeA, const void* matrixA,
+           TensorDesc matrixBDesc, bool transposeB, const void* matrixB,
            void* tmp, U32 bytes,
            TensorDesc matirxCDesc, void* matrixC, Arch arch);
 
@@ -169,9 +244,13 @@ extern "C" {
     EE reshape(TensorDesc inputDesc, void* input,
            TensorDesc outputDesc, void* output, Arch arch);
 
-    EE attention(TensorDesc inputDesc, const void *input, TensorDesc outputDesc, void *output, Arch arch);
+    EE attention(TensorDesc inputDesc, const void *input,
+           TensorDesc outputDesc, void *output,
+           Arch arch);
 
-    EE attention_infer_output_size(TensorDesc inputDesc, I32 num_attention, TensorDesc *outputDesc);
+    EE attention_infer_output_size(TensorDesc inputDesc,
+           U32 numHeads, U32 fromSequenceLength, U32 toSequenceLength,
+           TensorDesc *outputDesc);
 
     EE multiply(void *alpha, void *beta, TensorDesc inputDesc, void* input, TensorDesc outputDesc, void *output, Arch arch);
 
@@ -181,11 +260,45 @@ extern "C" {
 
     EE clip_infer_output_size(TensorDesc inputDesc, TensorDesc *outputDesc);
 
-    EE quantize_tensor(TensorDesc dDesc, const void* data, TensorDesc* qDesc, void* qData, F16 *scale);
+    EE quantize_tensor(TensorDesc dDesc, const void* data, TensorDesc* qDesc, void* qData, void *scale);
 
+    EE tensor_computing_set_input_infer_tmpBuf_size(void* input, TensorDesc hostDesc, U32* tmpBufSize, Arch arch);
+
+    EE tensor_computing_set_input(void* input, TensorDesc hostDesc, const void* hostPtr, void* tmpBuf, bool blocking, Arch arch, ExtInfo_t extInfo = NULL);
+
+    EE tensor_computing_get_output_infer_tmpBuf_size(const void* input, TensorDesc hostDesc, U32* tmpBufSize, Arch arch);
+
+    EE tensor_computing_get_output(const void* input, TensorDesc hostDesc, void** hostPtr, void* tmpBuf, bool blocking, Arch arch, ExtInfo_t extInfo = NULL);
+
+    EE bilateral_slice_apply_infer_output_size(TensorDesc inputDesc, TensorDesc guideDesc, TensorDesc gridDesc, BilateralSliceApplyDesc bilateralSliceApplyDesc,
+        TensorDesc* outputDesc, Arch arch, ExtInfo_t extInfo = NULL);
+
+    EE bilateral_slice_apply_infer_forward_tmp_bytes(TensorDesc inputDesc, TensorDesc guideDesc, TensorDesc gridDesc, BilateralSliceApplyDesc bilateralSliceApplyDesc,
+        U32* bytes, Arch arch, ExtInfo_t extInfo = NULL);
+
+    EE bilateral_slice_apply(TensorDesc inputDesc, const void* input, TensorDesc guideDesc, const void* guide, TensorDesc gridDesc, const void* grid, 
+        BilateralSliceApplyDesc bilateralSliceApplyDesc, U32 tmpBytes, const void* tmpBuf, TensorDesc outputDesc, const void* output, Arch arch, ExtInfo_t extInfo = NULL);
+
+    EE argmax(TensorDesc inputDesc, const void* input,
+        I32 axis,
+        TensorDesc outputDesc, void* output, Arch arch);
+
+    EE argmax_infer_output_size(TensorDesc inputDesc, int axis, TensorDesc *outputDesc);
+
+    EE axis_mean(TensorDesc inputDesc, const void* input,
+        I32 axis,
+        TensorDesc outputDesc, void* output, Arch arch);
+
+    EE axis_mean_infer_output_size(TensorDesc inputDesc, int axis, TensorDesc *outputDesc);
+
+    EE check(TensorDesc inputDescA, const void* inputA,
+        TensorDesc inputDescB, const void* inputB,
+        CheckMode checkMode,
+        TensorDesc outputDesc, void* output, Arch arch);
+
+    EE check_infer_output_size(TensorDesc inputDesc, TensorDesc *outputDesc);
 #ifdef __cplusplus
 }
 #endif
-
 #endif
 

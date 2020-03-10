@@ -18,12 +18,15 @@
 #include "mmm.h"
 
 
-void matrix_matrix_multiply_tmp_bytes_fp16(U32 row1, U32 col1, U32 row2, U32 col2, DataType dt, U32 *bytes) {
+void matrix_matrix_multiply_tmp_bytes_fp16(U32 row1, U32 col1, U32 row2, U32 col2, DataType dt, U32 *bytes)
+{
     *bytes = row1 * col1 + row2 * col2;
     *bytes *= bytesOf (dt);
+    *bytes += 32;
 }
 
-EE mmm_fp16(int M, int N, int K, F16* matrix1, F16* matrix2, F16* tmp, F16* result, Arch arch) {
+EE mmm_fp16(int M, int N, int K, F16* matrix1, F16* matrix2, F16* tmp, F16* result, Arch arch)
+{
     EE ret = SUCCESS;
     switch (arch) {
        case ARM_A55:

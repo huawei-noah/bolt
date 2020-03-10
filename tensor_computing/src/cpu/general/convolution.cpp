@@ -12,6 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
+#include <math.h>
 #include <bitset>
 #include "type.h"
 #include "tensor_desc.h"
@@ -35,20 +36,23 @@ inline EE convolution(TensorDesc inputDesc, T1* inArray,
     U32 in, ic, ih, iw;
     U32 fn, fc, fh, fw;
     U32 on, oc, oh, ow;
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
-    U32 stride = convDesc.stride;
-    U32 padding = convDesc.padding;
-    U32 dilatedRate = convDesc.dilatedRate;
+    CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+    CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
+    CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
+    U32 strideH = convDesc.stride_h;
+    U32 strideW = convDesc.stride_w;
+    U32 paddingT = convDesc.padding_top;
+    U32 paddingL = convDesc.padding_left;
+    U32 dilateH = convDesc.dilatedRate_h;
+    U32 dilateW = convDesc.dilatedRate_w;
 
     if (idf == DF_NCHWC8)
-        CHECK_STATUS_WITH_RETURN(from_nchwc8_to_nchw<T1>(&inputDesc, inArray));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+        CHECK_STATUS(from_nchwc8_to_nchw<T1>(&inputDesc, inArray));
+    CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
     if (idf != DF_NCHW)
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
+        CHECK_STATUS(NOT_MATCH);
 
-    // For BNN, accumulated values are always 0 or 1, which may lead to error if buf is FP16.
+    // For BNN, accumulated values are always 0 or 1, which may lead to error if buf is floating point.
     std::vector<T1> outBuf(tensorNumElements(outputDesc));
 
     for (U32 n = 0; n < in; n++) {
@@ -60,9 +64,8 @@ inline EE convolution(TensorDesc inputDesc, T1* inArray,
                     for (U32 c = 0; c < ic; c++) {
                         for (I32 fh_idx = 0; fh_idx < (I32)fh; fh_idx++) {
                             for (I32 fw_idx = 0; fw_idx < (I32)fw; fw_idx++) {
-                                I32 ih_idx = h * stride - padding + fh_idx*dilatedRate;
-                                I32 iw_idx = w * stride - padding + fw_idx*dilatedRate;
-                                //U32 o_off = n*oc*oh*ow + o*oh*ow + h*ow + w;
+                                I32 ih_idx = h * strideH - paddingT + fh_idx*dilateH;
+                                I32 iw_idx = w * strideW - paddingL + fw_idx*dilateW;
                                 U32 f_off = o*ic*fh*fw + c*fh*fw + fh_idx*fw + fw_idx;
                                 if (ih_idx >= 0 && ih_idx < (I32)ih && iw_idx >= 0 && iw_idx < (I32)iw) {
                                     U32 i_off = n*ic*ih*iw + c*ih*iw + ih_idx*iw + iw_idx;
@@ -94,7 +97,13 @@ inline EE convolution(TensorDesc inputDesc, T1* inArray,
                             break;
                         }
                         case ACTIVATION_RELU: {
-                            if(outArray[o_off] < 0) outArray[o_off] = 0;
+                            if(outArray[o_off] < 0) {
+                                outArray[o_off] = 0;
+                            }
+                            break;
+                        }
+                        case ACTIVATION_SIGMOID: {
+                            outArray[o_off] = 1.0f / (1.0f + exp(-1 * outArray[o_off]));
                             break;
                         }
                         default:
@@ -107,18 +116,19 @@ inline EE convolution(TensorDesc inputDesc, T1* inArray,
 
     if (odf == DF_NCHWC8) {
         outputDesc.df = DF_NCHW;
-        CHECK_STATUS_WITH_RETURN(from_nchw_to_nchwc8<T3>(&outputDesc, outArray));
+        CHECK_STATUS(from_nchw_to_nchwc8<T3>(&outputDesc, outArray));
     }
     return SUCCESS;
 }
 
+#ifdef _USE_FP16
 void bnn_input_process(TensorDesc inputDesc, F16 *input, DataType fdt, short *output) {
     F16 centerValue = 0.0;
-    if (fdt == DT_DOREFA) {
+    if (fdt == DT_BIN01) {
         centerValue = 0.5;
     }
     short zeroValue = 0;
-    if (fdt == DT_XNOR) {
+    if (fdt == DT_BIN11) {
         zeroValue = -1;
     }
     U32 len = tensorNumElements(inputDesc);
@@ -132,7 +142,7 @@ void bnn_input_process(TensorDesc inputDesc, F16 *input, DataType fdt, short *ou
 
 void bnn_filter_process(TensorDesc filterDesc, BIN8 *filter, short *filterTransformed) {
     short zeroValue = 0;
-    if (filterDesc.dt == DT_XNOR) {
+    if (filterDesc.dt == DT_BIN11) {
         zeroValue = -1;
     }
     U32 len = tensorNumElements(filterDesc);
@@ -147,6 +157,7 @@ void bnn_filter_process(TensorDesc filterDesc, BIN8 *filter, short *filterTransf
         }
     }
 }
+#endif
 
 EE convolution_general(TensorDesc inputDesc, void* input,
         TensorDesc filterDesc, const void* filter,
@@ -161,6 +172,18 @@ EE convolution_general(TensorDesc inputDesc, void* input,
     
     EE ret = SUCCESS;
     switch (filterDesc.dt) {
+#ifdef _USE_FP32
+        case DT_F32:
+            ret = convolution<F32, F32, F32, F32>(inputDesc, (F32*)input,
+                                                  filterDesc, (F32*)filter,
+                                                  convDesc,
+                                                  (F32*)bias,
+                                                  (F32*)scale,
+                                                  outputDesc, (F32*)output,
+                                                  activationMode);
+            break;
+#endif
+#ifdef _USE_FP16
         case DT_F16:
             ret = convolution<F16, F16, F16, F16>(inputDesc, (F16*)input,
                                                   filterDesc, (F16*)filter,
@@ -170,6 +193,8 @@ EE convolution_general(TensorDesc inputDesc, void* input,
                                                   outputDesc, (F16*)output,
                                                   activationMode);
             break;
+#endif
+#ifdef _USE_INT8
         case DT_I8:
             ret = convolution<INT8, F16, F16, F16>(inputDesc, (INT8*)input,
                                                    filterDesc, (F16*)filter,
@@ -179,7 +204,9 @@ EE convolution_general(TensorDesc inputDesc, void* input,
                                                    outputDesc, (F16*)output,
                                                    activationMode);
             break;
-        case DT_DOREFA: {
+#endif
+#ifdef _USE_FP16
+        case DT_BIN01: {
             std::vector<short> inputTransformed(tensorNumElements(inputDesc));
             std::vector<short> filterTransformed(tensorNumElements(filterDesc));
             bnn_input_process(inputDesc, (F16*)input, filterDesc.dt, inputTransformed.data());
@@ -193,7 +220,7 @@ EE convolution_general(TensorDesc inputDesc, void* input,
                                                       activationMode, 0);
             break;
         }
-        case DT_XNOR: {
+        case DT_BIN11: {
             std::vector<short> inputTransformed(tensorNumElements(inputDesc));
             std::vector<short> filterTransformed(tensorNumElements(filterDesc));
             bnn_input_process(inputDesc, (F16*)input, filterDesc.dt, inputTransformed.data());
@@ -207,6 +234,7 @@ EE convolution_general(TensorDesc inputDesc, void* input,
                                                       activationMode, -1);
             break;
         }
+#endif
         default:
             return NOT_SUPPORTED;
     }

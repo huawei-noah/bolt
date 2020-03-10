@@ -23,14 +23,14 @@
 template<typename T>
 inline EE from_nchwc8_to_nchw(TensorDesc *desc, T *data) {
     if (desc == nullptr || data == nullptr)
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
+        CHECK_STATUS(NULL_POINTER);
 
     DataType idt;
     DataFormat idf;
     U32 in, ic, ih, iw;
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(*desc, &idt, &idf, &in, &ic, &ih, &iw));
+    CHECK_STATUS(tensor4dGet(*desc, &idt, &idf, &in, &ic, &ih, &iw));
     if (idf != DF_NCHWC8)
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
+        CHECK_STATUS(NOT_MATCH);
 
     *desc = tensor4df(idt, DF_NCHW, in, ic, ih, iw);
 
@@ -53,14 +53,14 @@ inline EE from_nchwc8_to_nchw(TensorDesc *desc, T *data) {
 template<typename T>
 inline EE from_nchw_to_nchwc8(TensorDesc *desc, T *data) {
     if (desc == nullptr || data == nullptr)
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
+        CHECK_STATUS(NULL_POINTER);
 
     DataType idt;
     DataFormat idf;
     U32 in, ic, ih, iw;
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(*desc, &idt, &idf, &in, &ic, &ih, &iw));
+    CHECK_STATUS(tensor4dGet(*desc, &idt, &idf, &in, &ic, &ih, &iw));
     if (idf != DF_NCHW)
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
+        CHECK_STATUS(NOT_MATCH);
 
     *desc = tensor4df(idt, DF_NCHWC8, in, ic, ih, iw);
 
@@ -82,8 +82,8 @@ inline EE from_nchw_to_nchwc8(TensorDesc *desc, T *data) {
 
 
 template<typename T>
-EE activation(ActivationMode activationMode, T input, T* output){
-    T value, result;
+EE activation(ActivationMode activationMode, F32 input, T* output) {
+    F32 value, result;
     switch (activationMode){
         case ACTIVATION_NULL:{
             result = input;
@@ -118,7 +118,7 @@ EE activation(ActivationMode activationMode, T input, T* output){
         }
         case ACTIVATION_GELU:{
             value = input;
-            T two_div_PI_sqrt = sqrt(2 / 3.14159265358979323846);
+            F32 two_div_PI_sqrt = sqrt(2 / 3.14159265358979323846);
             value = two_div_PI_sqrt * (value + 0.044715 * pow(value, 3));
             value = 1.0 - 2.0 / (exp(2.0 * value) + 1.0);
             value = 0.5 * (1.0 + value);
@@ -137,4 +137,32 @@ EE activation(ActivationMode activationMode, T input, T* output){
     *output = result;
     return SUCCESS;
 }
+
+template<typename T>
+F32 array_sum(const T* array, U32 length) {
+    F32 sum = 0;
+    for (U32 i=0; i < length; i++)
+        sum += array[i];
+    return sum;
+}
+
+// array mean
+template<typename T>
+F32 array_mean(const T *data, I32 len) {
+    if(len <= 0) return 0;
+    return array_sum<T>(data, len) / len;
+}
+
+// array var
+template<typename T>
+F32 array_var(const T *data, I32 len, F32 mean) {
+    F32 sum_s = 0;
+    for(I32 i = 0; i < len; i++){
+        F32 in = data[i];
+        F32 tmp = in - mean;
+        sum_s += tmp * tmp;
+    }
+    return sum_s / len;
+}
+
 #endif

@@ -18,8 +18,14 @@
 #include "sys.h"
 #include "type.h"
 
+EE matrix_vector_multiply_tmp_bytes_arm(bool transpose,
+    DataType dt, U32 *bytes);
 
-EE mvm_arm(U32 row, U32 col, DataType dt, bool transpose, const void *matrix, const void *vector, void *result, Arch arch);
+EE mvm_arm(U32 row, U32 col, DataType dt, bool transpose,
+    const void *matrix, const void *vector,
+    void *tmp,
+    void *result,
+    Arch arch);
 
 EE matrix_matrix_multiply_tmp_bytes_arm(U32 matrixA_M, U32 matrixA_K, U32 matrixB_K, U32 matrixB_N,
     DataType dt, U32 *bytes);

@@ -18,21 +18,30 @@
 EE activation_general(TensorDesc inputDesc, void* data, ActivationMode activationMode)
 {
     if (nullptr == data)
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
+        CHECK_STATUS(NULL_POINTER);
     DataType idt = inputDesc.dt;
     EE ret = SUCCESS;
-    switch (idt) {
-        case DT_F16: {
-            U32 len = tensorNumElements(inputDesc);
-            F16* dataPtr = (F16 *)data;
-            for (U32 i = 0; i < len; i++) {
-                CHECK_STATUS_WITH_RETURN(activation<F16>(activationMode, dataPtr[i], &dataPtr[i]));
+    U32 len = tensorNumElements(inputDesc);
+    for (U32 i = 0; i < len; i++) {
+        switch (idt) {
+#ifdef _USE_FP16
+            case DT_F16: {
+                F16* dataPtr = (F16 *)data;
+                CHECK_STATUS(activation<F16>(activationMode, dataPtr[i], &dataPtr[i]));
+                break;
             }
-            break;
+#endif
+#ifdef _USE_FP32
+            case DT_F32: {
+                F32* dataPtr = (F32 *)data;
+                CHECK_STATUS(activation<F32>(activationMode, dataPtr[i], &dataPtr[i]));
+                break;
+            }
+#endif
+            default:
+                ret = NOT_SUPPORTED;
+                break;
         }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
     }
     return ret;
 }

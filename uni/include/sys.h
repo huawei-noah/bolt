@@ -24,7 +24,7 @@ extern "C" {
         ARM_A55 = 2,
         ARM_A76 = 3,
         MALI = 4,
-        NEON = 5,
+        ARM_V8 = 5,
     } Arch;
 
 #ifdef __cplusplus

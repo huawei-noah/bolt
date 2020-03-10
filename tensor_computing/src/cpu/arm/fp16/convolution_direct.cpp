@@ -14,12 +14,7 @@
 
 #include <string.h>
 
-#include "sys.h"
-#include "type.h"
-#include "error.h"
-#include "tensor_desc.h"
-
-#include "cpu/arm/fp16/convolution_fp16.h"
+#include "cpu/arm/fp16/convolution_direct.h"
 
 EE convolution_direct(TensorDesc inputDesc, F16* inArray,
     TensorDesc filterDesc, const F16* filterArray,
@@ -39,21 +34,23 @@ EE convolution_direct(TensorDesc inputDesc, F16* inArray,
     U32 in, ic, ih, iw;
     U32 fn, fc, fh, fw;
     U32 on, oc, oh, ow;
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
-    U32 stride = convDesc.stride;
-    U32 padding = convDesc.padding;
+    CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+    CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
+    CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
+    U32 strideH = convDesc.stride_h;
+    U32 strideW = convDesc.stride_w;
+    U32 paddingT = convDesc.padding_top;
+    U32 paddingB = convDesc.padding_bottom;
+    U32 paddingL = convDesc.padding_left;
+    U32 paddingR = convDesc.padding_right;
 
     if (fdf != DF_NCHWN16)
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
-    if (!(ic == fc && oc == fn))
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
+        CHECK_STATUS(NOT_MATCH);
 
     oc /= 8;
     ic /= 8;
-    U32 ih_pad = ih + 2*padding;
-    U32 iw_pad = iw + 2*padding;
+    U32 ih_pad = ih + paddingT + paddingB;
+    U32 iw_pad = iw + paddingL + paddingR;
 
     // naive, no blocking, in: NCHWc8, out: NOHWo8, filter: OCHWo16, no bias
 
@@ -64,20 +61,20 @@ EE convolution_direct(TensorDesc inputDesc, F16* inArray,
         F16 *inArray_pad_mov = inArray_pad;
         F16 *inArray_mov = inArray + n*ic*ih*iw*8;
         for (U32 c = 0; c < ic; c++) {
-            for (U32 h = 0; h < padding; h++) {
+            for (U32 h = 0; h < paddingT; h++) {
                 memset(inArray_pad_mov, 0, iw_pad*8*bytesOf(idt));
                 inArray_pad_mov += iw_pad*8;
             }
-            for (U32 h = padding; h < ih_pad - padding; h++) {
-                memset(inArray_pad_mov, 0, padding*8*bytesOf(idt));
-                inArray_pad_mov += padding*8;
+            for (U32 h = paddingT; h < ih_pad - paddingB; h++) {
+                memset(inArray_pad_mov, 0, paddingL*8*bytesOf(idt));
+                inArray_pad_mov += paddingL*8;
                 memcpy(inArray_pad_mov, inArray_mov, iw*8*bytesOf(idt));
                 inArray_pad_mov += iw*8;
                 inArray_mov += iw*8;
-                memset(inArray_pad_mov, 0, padding*8*bytesOf(idt));
-                inArray_pad_mov += padding*8;
+                memset(inArray_pad_mov, 0, paddingR*8*bytesOf(idt));
+                inArray_pad_mov += paddingR*8;
             }
-            for (U32 h = ih_pad - padding; h < ih_pad; h++) {
+            for (U32 h = ih_pad - paddingB; h < ih_pad; h++) {
                 memset(inArray_pad_mov, 0, iw_pad*8*bytesOf(idt));
                 inArray_pad_mov += iw_pad*8;
             }
@@ -105,13 +102,13 @@ EE convolution_direct(TensorDesc inputDesc, F16* inArray,
                 F16 *out_o1h1 = outo1h1;
 
                 F16 *in_h0w0 = inArray_pad + n*ic*ih_pad*iw_pad*8 + c*ih_pad*iw_pad*8;
-                F16 *in_h0w1 = in_h0w0 + stride*8;
-                F16 *in_h0w2 = in_h0w0 + stride*8*2;
-                F16 *in_h0w3 = in_h0w0 + stride*8*3;
-                F16 *in_h1w0 = in_h0w0 + stride*iw_pad*8;
-                F16 *in_h1w1 = in_h1w0 + stride*8;
-                F16 *in_h1w2 = in_h1w0 + stride*8*2;
-                F16 *in_h1w3 = in_h1w0 + stride*8*3;
+                F16 *in_h0w1 = in_h0w0 + strideW*8;
+                F16 *in_h0w2 = in_h0w0 + strideW*8*2;
+                F16 *in_h0w3 = in_h0w0 + strideW*8*3;
+                F16 *in_h1w0 = in_h0w0 + strideH*iw_pad*8;
+                F16 *in_h1w1 = in_h1w0 + strideW*8;
+                F16 *in_h1w2 = in_h1w0 + strideW*8*2;
+                F16 *in_h1w3 = in_h1w0 + strideW*8*3;
 
                 for (U32 h = 0; h < oh; h+=2) {
                     for (U32 w = 0; w < ow; w+=4) {
@@ -413,8 +410,7 @@ EE convolution_direct(TensorDesc inputDesc, F16* inArray,
                                      [f_c5]"r"(f_c5),
                                      [f_c6]"r"(f_c6),
                                      [f_c7]"r"(f_c7)
-                                    :"memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7", "q8", "q9", "q10", "q11", "q12", "q13", "q14", "q15", "q16", "q17", "q18", "q19", "q20", "q21", "q22", "q23", "q24", "q25", "x0", "x1", "x2", "x3", "x4", "x5"
-                                );
+                                    :"memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23", "v24", "v25", "x0", "x1", "x2", "x3", "x4", "x5"                                );
                                 f_c0 += 16;
                                 f_c1 += 16;
                                 f_c2 += 16;
@@ -441,27 +437,27 @@ EE convolution_direct(TensorDesc inputDesc, F16* inArray,
                             in_h1w2 += iw_pad*8 - fw*8;
                             in_h1w3 += iw_pad*8 - fw*8;
                         }
-                        in_h0w0 = in_h0w0 + 4*stride*8 - fh*iw_pad*8;
-                        in_h0w1 = in_h0w1 + 4*stride*8 - fh*iw_pad*8;
-                        in_h0w2 = in_h0w2 + 4*stride*8 - fh*iw_pad*8;
-                        in_h0w3 = in_h0w3 + 4*stride*8 - fh*iw_pad*8;
-                        in_h1w0 = in_h1w0 + 4*stride*8 - fh*iw_pad*8;
-                        in_h1w1 = in_h1w1 + 4*stride*8 - fh*iw_pad*8;
-                        in_h1w2 = in_h1w2 + 4*stride*8 - fh*iw_pad*8;
-                        in_h1w3 = in_h1w3 + 4*stride*8 - fh*iw_pad*8;
+                        in_h0w0 = in_h0w0 + 4*strideW*8 - fh*iw_pad*8;
+                        in_h0w1 = in_h0w1 + 4*strideW*8 - fh*iw_pad*8;
+                        in_h0w2 = in_h0w2 + 4*strideW*8 - fh*iw_pad*8;
+                        in_h0w3 = in_h0w3 + 4*strideW*8 - fh*iw_pad*8;
+                        in_h1w0 = in_h1w0 + 4*strideW*8 - fh*iw_pad*8;
+                        in_h1w1 = in_h1w1 + 4*strideW*8 - fh*iw_pad*8;
+                        in_h1w2 = in_h1w2 + 4*strideW*8 - fh*iw_pad*8;
+                        in_h1w3 = in_h1w3 + 4*strideW*8 - fh*iw_pad*8;
                         out_o0h0 += 32;
                         out_o1h0 += 32;
                         out_o0h1 += 32;
                         out_o1h1 += 32;
                     }
-                    in_h0w0 += 2*stride*iw_pad*8 - ow*stride*8;
-                    in_h0w1 += 2*stride*iw_pad*8 - ow*stride*8;
-                    in_h0w2 += 2*stride*iw_pad*8 - ow*stride*8;
-                    in_h0w3 += 2*stride*iw_pad*8 - ow*stride*8;
-                    in_h1w0 += 2*stride*iw_pad*8 - ow*stride*8;
-                    in_h1w1 += 2*stride*iw_pad*8 - ow*stride*8;
-                    in_h1w2 += 2*stride*iw_pad*8 - ow*stride*8;
-                    in_h1w3 += 2*stride*iw_pad*8 - ow*stride*8;
+                    in_h0w0 += 2*strideH*iw_pad*8 - ow*strideW*8;
+                    in_h0w1 += 2*strideH*iw_pad*8 - ow*strideW*8;
+                    in_h0w2 += 2*strideH*iw_pad*8 - ow*strideW*8;
+                    in_h0w3 += 2*strideH*iw_pad*8 - ow*strideW*8;
+                    in_h1w0 += 2*strideH*iw_pad*8 - ow*strideW*8;
+                    in_h1w1 += 2*strideH*iw_pad*8 - ow*strideW*8;
+                    in_h1w2 += 2*strideH*iw_pad*8 - ow*strideW*8;
+                    in_h1w3 += 2*strideH*iw_pad*8 - ow*strideW*8;
                     out_o0h0 += ow*8;
                     out_o1h0 += ow*8;
                     out_o0h1 += ow*8;

@@ -12,96 +12,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#include "sys.h"
-#include "tensor_desc.h"
-#include "type.h"
-#include "error.h"
-#include "tensor_computing_type.h"
-
-#include "cpu/arm/fp16/depthwise_convolution_fp16.h"
+#include "cpu/arm/fp16/tensor_computing_fp16.h"
 #include "cpu/arm/fp16/depthwise_convolution_direct.h"
 #include "cpu/arm/fp16/depthwise_pointwise_convolution_direct.h"
 #include "cpu/arm/fp16/depthwise_pointwise_convolution_direct_no_padding.h"
 #include "cpu/arm/fp16/depthwise_pointwise_convolution_3x3s1p1.h"
-
-EE depthwise_convolution_infer_forward_algorithm_fp16(TensorDesc inputDesc, TensorDesc filterDesc, TensorDesc outputDesc,
-    ConvolutionDesc convDesc, ConvolutionPolicy policy, DepthwiseConvolutionForwardAlgorithm *algorithm)
-{
-    UNUSED(policy);
-
-    if (nullptr == algorithm)
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
-    DataType idt, fdt, odt;
-    DataFormat idf, fdf, odf;
-    U32 in, ic, ih, iw;
-    U32 fn, fc, fh, fw;
-    U32 on, oc, oh, ow;
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
-    U32 stride = convDesc.stride;
-    U32 padding = convDesc.padding;
-
-    switch (fdf) {
-        case DF_NCHW:
-            *algorithm = DEPTHWISE_CONVOLUTION_ALGORITHM_DIRECT;
-            break;
-        case DF_CHW_NC: {
-            if (fh == 3 && fw == 3 && stride == 1 && padding == 1 && ow%4 == 0 && ow >= 12) {
-                *algorithm = DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_3X3S1P1;
-            } else if (fh == 3 && fw == 3 && stride == 2 && ow >= 28) {
-                *algorithm = DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_DIRECT_NO_PADDING;
-            } else {
-                *algorithm = DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_DIRECT;
-            }
-            break;
-        }
-        default:
-            return NOT_MATCH;
-    }
-    return SUCCESS;
-}
-
-EE depthwise_convolution_infer_forward_tmp_bytes_fp16(TensorDesc inputDesc, TensorDesc filterDesc, TensorDesc outputDesc,
-    ConvolutionDesc convDesc, DepthwiseConvolutionForwardAlgorithm algorithm, U32 *bytes)
-{
-    if (nullptr == bytes)
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
-    DataType idt, fdt, odt;
-    DataFormat idf, fdf, odf;
-    U32 in, ic, ih, iw;
-    U32 fn, fc, fh, fw;
-    U32 on, oc, oh, ow;
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
-    U32 padding = convDesc.padding;
-
-    U32 ih_pad = ih + 2*padding;
-    U32 iw_pad = iw + 2*padding;
-    EE ret = SUCCESS;
-    switch (algorithm) {
-        case DEPTHWISE_CONVOLUTION_ALGORITHM_DIRECT:
-            *bytes = ic * ih_pad * iw_pad;
-            break;
-        case DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_DIRECT:
-            *bytes = ic * ih_pad * iw_pad + ic * oh * ow;
-            break;
-        case DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_DIRECT_NO_PADDING:
-            *bytes = ic * oh * ow;
-            break;
-        case DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_3X3S1P1:
-            *bytes = ic * oh * ow + ic * 8;
-            break;
-        default: {
-            ret = NOT_MATCH;
-            *bytes = 0;
-            break;
-        }
-    }
-    *bytes *= bytesOf(idt);
-    return ret;
-}
 
 EE depthwise_convolution_fp16(TensorDesc inputDesc, F16* input,
     TensorDesc filterDesc, const F16* filter,
@@ -114,22 +29,22 @@ EE depthwise_convolution_fp16(TensorDesc inputDesc, F16* input,
     Arch arch)
 {
     if(nullptr == input || nullptr == filter || nullptr == output || nullptr == bias || nullptr == tmp)
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
+        CHECK_STATUS(NULL_POINTER);
     DataType idt, fdt, odt;
     DataFormat idf, fdf, odf;
     U32 in, ic, ih, iw;
     U32 fn, fc, fh, fw;
     U32 on, oc, oh, ow;
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
+    CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+    CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
+    CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
 
     if (!(idt == DT_F16 && fdt == DT_F16 && odt == DT_F16))
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
-    if (fh != fw)
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
+        CHECK_STATUS(NOT_MATCH);
     if (!(idf == DF_NCHWC8 && odf == DF_NCHWC8))
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
+        CHECK_STATUS(NOT_MATCH);
+    if (!(ic == fc && oc == fn))
+        CHECK_STATUS(NOT_MATCH);
 
     EE ret = SUCCESS;
     switch (algorithm) {

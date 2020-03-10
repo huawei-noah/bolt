@@ -19,7 +19,7 @@
 #include "type.h"
 #include "error.h"
 
-void mvm_int8(U32 row, U32 col, bool transpose, INT8* matrix, INT8* vector, I32* result);
+void mvm_int8(U32 row, U32 col, bool transpose, INT8* matrix, INT8* vector, I32* tmp, I32* result);
 
 void matrix_matrix_multiply_tmp_bytes_int8(U32 row1, U32 col1, U32 row2, U32 col2, DataType dt, U32 *bytes);
 

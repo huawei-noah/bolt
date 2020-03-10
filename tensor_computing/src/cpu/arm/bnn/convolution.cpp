@@ -12,43 +12,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#include "cpu/arm/bnn/convolution_bnn.h"
-#include "cpu/arm/bnn/convolution_xnor.h"
-#include "cpu/arm/bnn/convolution_dorefa.h"
-
-
-EE convolution_infer_forward_algorithm_bnn(TensorDesc inputDesc, TensorDesc filterDesc, TensorDesc outputDesc,
-    ConvolutionDesc convDesc, ConvolutionPolicy policy, ConvolutionForwardAlgorithm *algorithm)
-{
-    UNUSED(convDesc);
-    UNUSED(policy);
-
-    if (nullptr == algorithm)
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
-    DataType idt, fdt, odt;
-    DataFormat idf, fdf, odf;
-    U32 in, ic, ih, iw;
-    U32 fn, fc, fh, fw;
-    U32 on, oc, oh, ow;
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
-
-    if (DT_DOREFA != fdt && DT_XNOR != fdt) {
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
-    }
-
-    if (DT_F16 != idt && DT_F16 != odt) {
-        CHECK_STATUS_WITH_RETURN(NOT_SUPPORTED);
-    }
-
-    if (fn % 32 != 0) {
-        CHECK_STATUS_WITH_RETURN(NOT_SUPPORTED);
-    }
-
-    *algorithm = CONVOLUTION_ALGORITHM_BNN;
-    return SUCCESS;
-}
+#ifdef _USE_FP16
+#include "cpu/arm/bnn/tensor_computing_bnn.h"
 
 EE convolution_infer_forward_tmp_bytes_bnn(TensorDesc inputDesc, TensorDesc filterDesc, TensorDesc outputDesc,
     ConvolutionDesc convDesc, ConvolutionForwardAlgorithm algorithm, U32 *bytes)
@@ -56,17 +21,20 @@ EE convolution_infer_forward_tmp_bytes_bnn(TensorDesc inputDesc, TensorDesc filt
     UNUSED(outputDesc);
     
     if (nullptr == bytes)
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
+        CHECK_STATUS(NULL_POINTER);
     DataType idt, fdt;
     DataFormat idf, fdf;
     U32 in, ic, ih, iw;
     U32 fn, fc, fh, fw;
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-    U32 padding = convDesc.padding;
+    CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+    CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
+    U32 paddingT = convDesc.padding_top;
+    U32 paddingB = convDesc.padding_bottom;
+    U32 paddingL = convDesc.padding_left;
+    U32 paddingR = convDesc.padding_right;
 
-    U32 ih_pad = ih + 2*padding;
-    U32 iw_pad = iw + 2*padding;
+    U32 ih_pad = ih + paddingT + paddingB;
+    U32 iw_pad = iw + paddingL + paddingR;
     EE ret = SUCCESS;
     switch (algorithm) {
         case CONVOLUTION_ALGORITHM_BNN:
@@ -78,6 +46,7 @@ EE convolution_infer_forward_tmp_bytes_bnn(TensorDesc inputDesc, TensorDesc filt
     }
     *bytes /= 8;
     *bytes *= sizeof(BIN8);
+    *bytes += 32;
     return ret;
 }
 
@@ -92,28 +61,26 @@ EE convolution_bnn(TensorDesc inputDesc, const F16* input,
     Arch arch)
 {
     if(nullptr == input || nullptr == filter || nullptr == output || nullptr == scale || nullptr == bias || nullptr == tmp)
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
+        CHECK_STATUS(NULL_POINTER);
     DataType idt, fdt, odt;
     DataFormat idf, fdf, odf;
     U32 in, ic, ih, iw;
     U32 fn, fc, fh, fw;
     U32 on, oc, oh, ow;
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
+    CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+    CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
+    CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
 
     if (idt != DT_F16)
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
+        CHECK_STATUS(NOT_MATCH);
     if (odt != DT_F16)
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
-    if (fh != fw)
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
+        CHECK_STATUS(NOT_MATCH);
     if (idf != DF_NCHWC8 || odf != DF_NCHWC8)
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
+        CHECK_STATUS(NOT_MATCH);
 
     EE ret = SUCCESS;
     switch (fdt) {
-        case DT_DOREFA:
+        case DT_BIN01:
             ret = convolution_dorefa(inputDesc, (F16*)input,
                                          filterDesc, (BIN8*)filter,
                                          convDesc,
@@ -123,7 +90,7 @@ EE convolution_bnn(TensorDesc inputDesc, const F16* input,
                                          outputDesc, (F16*)output,
                                          activationMode, arch);
             break;
-        case DT_XNOR:
+        case DT_BIN11:
             ret = convolution_xnor(inputDesc, (F16*)input,
                                          filterDesc, (BIN8*)filter,
                                          convDesc,
@@ -139,3 +106,4 @@ EE convolution_bnn(TensorDesc inputDesc, const F16* input,
     }
     return ret;
 }
+#endif

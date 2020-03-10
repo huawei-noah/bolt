@@ -15,6 +15,7 @@
 #ifndef _H_CONVOLUTION_TRANSFORM_BNN
 #define _H_CONVOLUTION_TRANSFORM_BNN
 
+#ifdef _USE_FP16
 #include <bitset>
 #include <string.h>
 
@@ -23,26 +24,6 @@
 #include "error.h"
 #include "tensor_computing.h"
 
-
-inline EE convolution_transform_filter_bytes_bnn(TensorDesc filterDesc, ConvolutionForwardAlgorithm algorithm, U32* bytes)
-{
-    if (nullptr == bytes)
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
-    DataType fdt;
-    DataFormat fdf;
-    U32 fn, fc, fh, fw;
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-    switch (algorithm) {
-        case CONVOLUTION_ALGORITHM_BNN:
-            *bytes = fn * fc * fh * fw;
-            break;
-        default:
-            return NOT_SUPPORTED;
-    }
-    *bytes *= bytesOf(fdt);
-    *bytes /= 8;
-    return SUCCESS;
-}
 
 inline void bitwise_copy(BIN8 srcVal, U32 srcBit, BIN8* dest, U32 destBit) {
     std::bitset<8> Src(srcVal);
@@ -60,12 +41,12 @@ inline EE convolution_transform_filter_bnn(TensorDesc filterDesc, const BIN8* fi
      *  NCHW => (N/16)*(C/8)*(H*W)*n16*c8
      */
     if (nullptr == filterArray || nullptr == ftmDesc || nullptr == ftmArray)
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
+        CHECK_STATUS(NULL_POINTER);
 
     DataType fdt;
     DataFormat fdf;
     U32 fn, fc, fh, fw;
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
+    CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
     switch (fdf) {
         case DF_NCHWN16C8:
             // Everything is ready
@@ -104,4 +85,5 @@ inline EE convolution_transform_filter_bnn(TensorDesc filterDesc, const BIN8* fi
     *ftmDesc = tensor4df(fdt, DF_NCHWN16C8, fn, fc, fh, fw);
     return SUCCESS;
 }
+#endif
 #endif

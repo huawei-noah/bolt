@@ -7,10 +7,11 @@ protobuf_generate_cpp(CAFFE_PROTO_SRCS CAFFE_PROTO_HDRS caffe.proto)
 protobuf_generate_python(CAFFE_PROTO_PYTHON_SRCS caffe.proto)
 
 include_directories(${PROTOBUF_INCLUDE_DIR} ${CMAKE_CURRENT_BINARY_DIR})
+include_directories(../)
 
 add_custom_target(caffe_pb2.py ALL
                   DEPENDS ${CAFFE_PROTO_PYTHON_SRCS}
-                  COMMAND ${CMAKE_COMMAND} -E copy ${CAFFE_PROTO_PYTHON_SRCS} ${PROJECT_SOURCE_DIR}/tools/bert/Caffe)
+                  COMMAND ${CMAKE_COMMAND} -E copy ${CAFFE_PROTO_PYTHON_SRCS} ${PROJECT_SOURCE_DIR}/tools/tensorflow2caffe/Caffe)
 
 # shared library 
 ADD_LIBRARY(${PROJECT_NAME}_caffe SHARED ${srcs} ${CAFFE_PROTO_HDRS} ${CAFFE_PROTO_SRCS}) 

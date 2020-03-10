@@ -128,9 +128,9 @@ inline void mmm_4x24_A76(U32 M, U32 K, F16* w, F16* in, F16* out) {
         :"+r" (out),
          "+r" (in),
          "+r" (w)
-        :"r" (KInner),
-         "r" (M),
-         "r" (KTail)
+        :"r" ((I64)KInner),
+         "r" ((I64)M),
+         "r" ((I64)KTail)
         :"memory", "cc", "x20", "x26",
             "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10",
             "v11", "v12", "v13", "v14", "v15", "v16", "v29", "v30", "v31"
@@ -258,9 +258,9 @@ inline void mmm_8x4_A76(U32 M, U32 K, F16* w, F16* in, F16* out) {
         :"+r" (out),
          "+r" (in),
          "+r" (w)
-        :"r" (KInner),
-         "r" (M),
-         "r" (KTail)
+        :"r" ((I64)KInner),
+         "r" ((I64)M),
+         "r" ((I64)KTail)
         :"memory", "cc", "x20", "x26", "v0", "v1", "v4", "v29", "v5", "v8", "v11", "v14"
     );
 }                                 
@@ -270,7 +270,7 @@ inline void mmm_4x8_A76(U32 M, U32 K, F16* w, F16* in, F16* out) {
     U32 KInner = K - KTail;
     asm volatile(
         "ld1 {v1.8h}, [%1], #16\n"
-        "ld1 {v0.8h}, [%2], #16\n"
+        "ld1 {v0.4h}, [%2], #8\n"
         "mov x26, %0\n"
         "ld1 {v5.8h}, [x26]\n"
         "add x26, x26, %4\n"
@@ -284,10 +284,10 @@ inline void mmm_4x8_A76(U32 M, U32 K, F16* w, F16* in, F16* out) {
 
         "0:\n"
         "ld1 {v29.8h}, [%1], #16\n"
-        "ld1 {v4.8h}, [%2], #16\n"
+        "ld1 {v4.4h}, [%2], #8\n"
         MMM_FMA_4x8_V5V14s3_V1xV0
         "ld1 {v1.8h}, [%1], #16\n"
-        "ld1 {v0.8h}, [%2], #16\n"
+        "ld1 {v0.4h}, [%2], #8\n"
         MMM_FMA_4x8_V5V14s3_V29xV4
 
         "subs x20, x20, 0x2\n"
@@ -308,9 +308,9 @@ inline void mmm_4x8_A76(U32 M, U32 K, F16* w, F16* in, F16* out) {
         :"+r" (out),
          "+r" (in),
          "+r" (w)
-        :"r" (KInner),
-         "r" (M),
-         "r" (KTail)
+        :"r" ((I64)KInner),
+         "r" ((I64)M),
+         "r" ((I64)KTail)
         :"memory", "cc", "x20", "x26", "v0", "v1", "v4", "v5","v8", "v11","v14", "v29"
     );
 }                                 
@@ -358,9 +358,9 @@ inline void mmm_4x4_A76(U32 M, U32 K, F16* w, F16* in, F16* out) {
         :"+r" (out),
          "+r" (in),
          "+r" (w)
-        :"r" (KInner),
-         "r" (M),
-         "r" (KTail)
+        :"r" ((I64)KInner),
+         "r" ((I64)M),
+         "r" ((I64)KTail)
         :"memory", "cc", "x20", "x26", "v0", "v1", "v4", "v29", "v5", "v8", "v11", "v14"
     );
 }                                 
@@ -429,9 +429,9 @@ inline void mmm_8x8_A76(U32 M, U32 K, F16* w, F16* in, F16* out) {
         :"+r" (out),
          "+r" (in),
          "+r" (w)
-        :"r" (KInner),
-         "r" (M),
-         "r" (KTail)
+        :"r" ((I64)KInner),
+         "r" ((I64)M),
+         "r" ((I64)KTail)
         :"memory", "cc", "x20", "x26",
             "v1", "v0", "v29", "v4", "v5", "v8", "v11", "v14", "v17", "v20", "v23", "v26"
     );
@@ -525,9 +525,9 @@ inline void mmm_8x24_A76(U32 M, U32 K, F16* w, F16* in, F16* out) {
         :"+r" (out),
          "+r" (in),
          "+r" (w)
-        :"r" (KInner),
-         "r" (M),
-         "r" (KTail)
+        :"r" ((I64)KInner),
+         "r" ((I64)M),
+         "r" ((I64)KTail)
         :"memory", "cc", "x0", "x20", "x26",
             "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8", "v9", "v10",
             "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20",
@@ -535,7 +535,8 @@ inline void mmm_8x24_A76(U32 M, U32 K, F16* w, F16* in, F16* out) {
     );
 }
 
-void mmm_A76(int M, int N, int K, F16* matrix1, F16* matrix2, F16* tmp, F16* result) {
+void mmm_A76(int M, int N, int K, F16* matrix1, F16* matrix2, F16* tmp, F16* result)
+{
     int blockK = K;
     int blockM = 192;
     F16* matrix1Trans = tmp;
@@ -543,9 +544,9 @@ void mmm_A76(int M, int N, int K, F16* matrix1, F16* matrix2, F16* tmp, F16* res
     F16* resultCurrent = result;
     int KInner, MInner, m, n;
     for(int k = 0; k < K; k += blockK) {
-        KInner = std::min(blockK, K - k);
+        KInner = UNI_MIN(blockK, K - k);
         for(int i = 0; i < M; i+=blockM) {
-            MInner = std::min(blockM, M - i);
+            MInner = UNI_MIN(blockM, M - i);
             for(n = 0; n <= N - 8; n+=8) {
                 if (i == 0) {
                     matrix1_trans(8, KInner, K, matrix1 + n * K + k, matrix1Trans + n * KInner);

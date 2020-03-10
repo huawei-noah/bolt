@@ -1,0 +1,3 @@
+#batch	num_heads	from_seq_length	to_seq_length
+32	12	100	100
+1	12	11	11

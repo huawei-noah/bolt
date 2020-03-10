@@ -22,12 +22,12 @@ EE split_arm(TensorDesc inputDesc, void* input,
 {
     UNUSED(inputDesc);
     if (nullptr == input)
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
+        CHECK_STATUS(NULL_POINTER);
     if(outputDesc.size() <= 1) return NOT_MATCH;
 
     for(U32 i = 0; i < (*output).size(); i++) {
         if (nullptr == (*output)[i])
-            CHECK_STATUS_WITH_RETURN(NULL_POINTER);
+            CHECK_STATUS(NULL_POINTER);
         memcpy((*output)[i], input, tensorNumBytes(outputDesc[i]));
     }
     return SUCCESS;

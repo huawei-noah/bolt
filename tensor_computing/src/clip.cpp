@@ -29,6 +29,9 @@ EE clip(void *min_value, void *max_value, TensorDesc inputDesc, void* input, Ten
         case ARM_A76:
             ret = clip_arm(min_value, max_value, inputDesc, input, outputDesc, output);
             break;
+        case ARM_V8:
+            ret = clip_arm(min_value, max_value, inputDesc, input, outputDesc, output);
+            break;
         default:
             ret = NOT_SUPPORTED;
     }
@@ -38,7 +41,7 @@ EE clip(void *min_value, void *max_value, TensorDesc inputDesc, void* input, Ten
 EE clip_infer_output_size(TensorDesc inputDesc, TensorDesc *outputDesc)
 {
     if (nullptr == outputDesc)
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
+        CHECK_STATUS(NULL_POINTER);
     *outputDesc = inputDesc;
     return SUCCESS;
 }

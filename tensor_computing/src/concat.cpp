@@ -16,6 +16,9 @@
 #include <vector>
 #include "tensor_computing.h"
 #include "cpu/arm/tensor_computing_arm.h"
+#ifdef _USE_MALI
+#include "gpu/mali/tensor_computing_mali.h"
+#endif
 
 // Only Support NCHW or NCHWC8 for data concat
 // Here concatDim:
@@ -23,33 +26,33 @@
 //     1 is channel(c)
 //     2 is height(h)  NOT_SUPPORTED
 //     3 is width(w)   NOT_SUPPORTED
-EE concat_infer_output_size(std::vector<TensorDesc> inputDesc, TensorDesc* outputDesc, U32 concatDim)
+inline EE concat_infer_output_size_cpu(std::vector<TensorDesc> inputDesc, TensorDesc* outputDesc, U32 concatDim)
 {
     if (inputDesc.size() < 1) {
-        CHECK_STATUS_WITH_RETURN(NOT_MATCH);
+        CHECK_STATUS(NOT_MATCH);
     }
     if (inputDesc.size() == 1) {
         *outputDesc = inputDesc[0];
         return SUCCESS;
     }
     if (concatDim != 0 && concatDim != 1) {
-        CHECK_STATUS_WITH_RETURN(NOT_SUPPORTED);
+        CHECK_STATUS(NOT_SUPPORTED);
     }
 
     DataType idt, odt;
     DataFormat idf, odf;
     std::vector<U32> out_dim(4, 0), in_dim(4, 0);
 
-    CHECK_STATUS_WITH_RETURN(tensor4dGet(inputDesc[0], &odt, &odf, &out_dim[0], &out_dim[1], &out_dim[2], &out_dim[3]));
+    CHECK_STATUS(tensor4dGet(inputDesc[0], &odt, &odf, &out_dim[0], &out_dim[1], &out_dim[2], &out_dim[3]));
     if (odf != DF_NCHW && odf != DF_NCHWC8) {
-        CHECK_STATUS_WITH_RETURN(NOT_SUPPORTED);
+        CHECK_STATUS(NOT_SUPPORTED);
     }
 
     out_dim[concatDim] = 0;
     for (U32 i = 0; i < inputDesc.size(); i++) {
-        CHECK_STATUS_WITH_RETURN(tensor4dGet(inputDesc[i], &idt, &idf, &in_dim[0], &in_dim[1], &in_dim[2], &in_dim[3]));
+        CHECK_STATUS(tensor4dGet(inputDesc[i], &idt, &idf, &in_dim[0], &in_dim[1], &in_dim[2], &in_dim[3]));
         if (idf != odf) {
-            CHECK_STATUS_WITH_RETURN(NOT_MATCH);
+            CHECK_STATUS(NOT_MATCH);
         }
         out_dim[concatDim] += in_dim[concatDim];
     }
@@ -58,9 +61,28 @@ EE concat_infer_output_size(std::vector<TensorDesc> inputDesc, TensorDesc* outpu
     return SUCCESS;
 }
 
-EE concat(std::vector<TensorDesc> inputDesc, std::vector<void*> input, std::vector<F16> inputScale,
-          TensorDesc outputDesc, void* output, F16* outputScale, U32 concatDim, Arch arch)
+EE concat_infer_output_size(std::vector<TensorDesc> inputDesc, TensorDesc* outputDesc, U32 concatDim, Arch arch, ExtInfo_t extInfo)
 {
+#ifdef _USE_MALI
+    if(arch == MALI){
+        CHECK_STATUS(concat_infer_output_size_mali(inputDesc, outputDesc, concatDim, extInfo->maliInfo.gclmemInputDesc, extInfo->maliInfo.gclmemOutputDesc))
+    } else {
+#endif
+        UNUSED(arch);
+        UNUSED(extInfo);
+        CHECK_STATUS(concat_infer_output_size_cpu(inputDesc, outputDesc, concatDim));
+#ifdef _USE_MALI    
+    }    
+#endif    
+    return SUCCESS;
+}
+
+EE concat(std::vector<TensorDesc> inputDesc, std::vector<void*> input, void* inputScale,
+          TensorDesc outputDesc, void* output, void* outputScale, U32 concatDim, Arch arch, ExtInfo_t extInfo)
+{
+#ifndef _USE_MALI
+    UNUSED(extInfo);
+#endif    
     EE ret = SUCCESS;
     switch (arch) {
         case ARM_A55:
@@ -73,6 +95,16 @@ EE concat(std::vector<TensorDesc> inputDesc, std::vector<void*> input, std::vect
                              outputDesc, output, outputScale,
                              concatDim);
             break;
+        case ARM_V8:
+            ret = concat_arm(inputDesc, input, inputScale,
+                             outputDesc, output, outputScale,
+                             concatDim);
+            break;
+#ifdef _USE_MALI            
+        case MALI:
+            ret = concat_mali(extInfo->maliInfo.handle, inputDesc, input, NULL, outputDesc, (GCLMem_t)output, NULL, concatDim);
+            break;
+#endif            
         default:
             ret = NOT_SUPPORTED;
     }

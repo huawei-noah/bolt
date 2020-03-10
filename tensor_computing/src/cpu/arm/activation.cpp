@@ -12,24 +12,34 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#include <arm_neon.h>
-#include <math.h>
-#include "arm_neon_expand.h"
 #include "cpu/arm/tensor_computing_arm.h"
-#include "cpu/arm/common_arm.h"
+#ifdef _USE_FP32
+#include "cpu/arm/fp32/tensor_computing_fp32.h"
+#endif
+#ifdef _USE_FP16
+#include "cpu/arm/fp16/tensor_computing_fp16.h"
+#endif
 
 EE activation_arm(TensorDesc inputDesc, void* data, ActivationMode activationMode)
 {
     if (nullptr == data)
-        CHECK_STATUS_WITH_RETURN(NULL_POINTER);
+        CHECK_STATUS(NULL_POINTER);
     DataType idt = inputDesc.dt;
     EE ret = SUCCESS;
+    U32 len = tensorNumElements(inputDesc);
     switch (idt) {
+#ifdef _USE_FP32
+        case DT_F32: {
+            ret = activation_fp32((F32*)data, len, activationMode);
+            break;
+        }
+#endif
+#ifdef _USE_FP16
         case DT_F16: {
-            U32 len = tensorNumElements(inputDesc);
             ret = activation_fp16((F16*)data, len, activationMode);
             break;
         }
+#endif
         default:
             ret = NOT_SUPPORTED;
             break;

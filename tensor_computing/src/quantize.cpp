@@ -16,7 +16,7 @@
 #include "tensor_computing.h"
 #include "cpu/arm/tensor_computing_arm.h"
 
-EE quantize_tensor(TensorDesc dDesc, const void* data, TensorDesc* qDesc, void* qData, F16 *scale)
+EE quantize_tensor(TensorDesc dDesc, const void* data, TensorDesc* qDesc, void* qData, void *scale)
 {
     EE ret = quantize_tensor_arm(dDesc, data, qDesc, qData, scale);
     return ret;

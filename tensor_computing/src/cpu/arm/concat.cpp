@@ -12,31 +12,105 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#include "sys.h"
-#include "type.h"
-#include "tensor_desc.h"
-#include "error.h"
 #include "cpu/arm/tensor_computing_arm.h"
-#include "cpu/arm/fp16/concat_fp16.h"
 #ifdef _USE_INT8
-#include "cpu/arm/int8/concat_int8.h"
+#include "cpu/arm/int8/tensor_computing_int8.h"
 #endif
+#include <cstring>
 
-EE concat_arm(std::vector<TensorDesc> inputDesc, std::vector<void*> input, std::vector<F16> inputScale,
-    TensorDesc outputDesc, void* output, F16* outputScale, U32 concatDim)
+EE concat(std::vector<TensorDesc> inputDesc, std::vector<void*> input, TensorDesc outputDesc, void* output, U32 concatDim)
+{
+    if (nullptr == output)
+        CHECK_STATUS(NULL_POINTER);
+
+    if (inputDesc.size() < 1) {
+        CHECK_STATUS(NOT_MATCH);
+    }
+    if(inputDesc.size() == 1) {
+        memcpy(output, input[0], tensorNumBytes(outputDesc));
+        return SUCCESS;
+    }
+    if (concatDim != 0 && concatDim != 1) {
+        CHECK_STATUS(NOT_SUPPORTED);
+    }
+
+    DataType odt, idt;
+    DataFormat odf, idf;
+    U32 on = 0, oc = 0, oh = 0, ow = 0,
+        in = 0, ic = 0, ih = 0, iw = 0;
+    U32 copySize;
+
+    if(tensorIs4d(outputDesc)) {
+        CHECK_STATUS(tensor4dGet(inputDesc[0], &idt, &idf, &in, &ic, &ih, &iw));
+        CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
+        if (odt != idt) {
+            CHECK_STATUS(NOT_MATCH);
+        }
+
+        char *out_ptr = (char *)output;
+        //batch
+        if(concatDim == 0) {
+            for(U32 i = 0; i < inputDesc.size(); i++) {
+                copySize = tensorNumElements(inputDesc[i]) * bytesOf(idt);
+
+                memcpy(out_ptr, input[i], copySize);
+                out_ptr = out_ptr + copySize;
+            }
+            return SUCCESS;
+        }
+        //channel
+        if(concatDim == 1) {
+            for(U32 j = 0; j < on; j++) {
+                for(U32 i = 0; i < inputDesc.size(); i++) {
+                    CHECK_STATUS(tensor4dGet(inputDesc[i], &idt, &idf, &in, &ic, &ih, &iw));
+                    if (odf != idf) {
+                        CHECK_STATUS(NOT_MATCH);
+                    }
+
+                    copySize = tensorNumElements(inputDesc[i]) / in * bytesOf(idt);
+
+                    memcpy(out_ptr, (char *)input[i] + j * copySize, copySize);
+                    out_ptr = out_ptr + copySize;
+                }
+            }
+            return SUCCESS;
+        }
+    }
+    else{
+        return NOT_MATCH;
+    }
+    return NOT_SUPPORTED;
+}
+
+EE concat_arm(std::vector<TensorDesc> inputDesc, std::vector<void*> input, void* inputScale,
+    TensorDesc outputDesc, void* output, void* outputScale, U32 concatDim)
 {
     EE ret = SUCCESS;
     switch (outputDesc.dt) {
-        case DT_F16: {
-            ret = concat_fp16(inputDesc, input,
-                              outputDesc, output,
-                              concatDim);
+#ifdef _USE_FP32
+        case DT_F32: {
+            UNUSED(inputScale);
+            UNUSED(outputScale);
+            ret = concat(inputDesc, input,
+                         outputDesc, output,
+                         concatDim);
             break;
         }
+#endif
+#ifdef _USE_FP16
+        case DT_F16: {
+            UNUSED(inputScale);
+            UNUSED(outputScale);
+            ret = concat(inputDesc, input,
+                         outputDesc, output,
+                         concatDim);
+            break;
+        }
+#endif
 #ifdef _USE_INT8
         case DT_I8: {
-            ret = concat_int8(inputDesc, input, inputScale,
-                              outputDesc, output, outputScale,
+            ret = concat_int8(inputDesc, input, (F32*)inputScale,
+                              outputDesc, output, (F32*)outputScale,
                               concatDim);
             break;
         }
