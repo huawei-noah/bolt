@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.2)
+cmake_minimum_required(VERSION 3.15)
 
 file(GLOB BOLT_CONFIGURE_FILE $ENV{BOLT_ROOT}/bolt.cmake ${BOLT_ROOT}/bolt.cmake)
 if (BOLT_CONFIGURE_FILE)
@@ -22,7 +22,7 @@ add_subdirectory(image)
 add_subdirectory(inference)
 add_subdirectory(tests)
 add_custom_target(bolt_library ALL
-    COMMAND ./scripts/build_light_bolt.sh ${CMAKE_BINARY_DIR}
+    COMMAND ./scripts/build_light_bolt.sh ${CMAKE_BINARY_DIR} ${USE_MALI}
     WORKING_DIRECTORY $ENV{BOLT_ROOT})
 
 if (USE_MALI)
