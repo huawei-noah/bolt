@@ -18,8 +18,6 @@
 #include "error.h"
 #include "tensor_computing_type.h"
 #include "cpu/general/tensor_computing_general.h"
-#include "cpu/general/common_general.h"
-
 
 template<typename T>
 EE pooling(T *input, T* output,

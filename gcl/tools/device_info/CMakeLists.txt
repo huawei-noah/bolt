@@ -2,6 +2,10 @@ cmake_minimum_required(VERSION 3.2)
 
 file(GLOB BOLT_CONFIGURE_FILE $ENV{BOLT_ROOT}/bolt.cmake ${BOLT_ROOT}/bolt.cmake)
 if (BOLT_CONFIGURE_FILE)
+    set(USE_LLVM_CLANG ON)
+    set(USE_GNU_GCC OFF)
+    set(USE_MALI ON)
+    set(USE_DYNAMIC_LIBRARY OFF)
     include(${BOLT_CONFIGURE_FILE})
 else (BOLT_CONFIGURE_FILE)
     message(FATAL_ERROR "

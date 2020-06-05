@@ -41,8 +41,10 @@ int depthwiseConvolutionTest(int argc, char *argv[], DataFormat filterDataFormat
 
     CHECK_REQUIREMENT(in == 1 && on == 1);
 
-    ActivationMode dw_am = ACTIVATION_NULL;
-    ActivationMode pw_am = ACTIVATION_NULL;
+    ActivationDesc dwActivationDesc;
+    ActivationDesc pwActivationDesc;
+    dwActivationDesc.mode = ACTIVATION_NULL;
+    pwActivationDesc.mode = ACTIVATION_NULL;
 
     U32 filterLength = 0;
     U32 biasLength = 0;
@@ -94,7 +96,7 @@ int depthwiseConvolutionTest(int argc, char *argv[], DataFormat filterDataFormat
     // setup alg
     ConvolutionPolicy policy = CONVOLUTION_FASTEST;
     DepthwiseConvolutionForwardAlgorithm alg = DEPTHWISE_CONVOLUTION_ALGORITHM_NULL;
-    CHECK_STATUS(depthwise_convolution_infer_forward_algorithm(inputDesc, filterDesc, outputDesc, convDesc, policy, &alg, dt, dw_am, pw_am, UT_ARCH));
+    CHECK_STATUS(depthwise_convolution_infer_forward_algorithm(inputDesc, filterDesc, outputDesc, convDesc, policy, &alg, dt, dwActivationDesc, pwActivationDesc, UT_ARCH));
 
     // setup tmp
     U32 tmpBytes;
@@ -116,7 +118,7 @@ int depthwiseConvolutionTest(int argc, char *argv[], DataFormat filterDataFormat
                                            biasDesc, bias,
                                            tmpBytes, tmp,
                                            outputDesc, output,
-                                           dw_am, pw_am,
+                                           dwActivationDesc, pwActivationDesc,
                                            UT_ARCH));
 
         // naive implement
@@ -126,7 +128,7 @@ int depthwiseConvolutionTest(int argc, char *argv[], DataFormat filterDataFormat
                                            biasDesc, biasRef,
                                            tmpBytes, tmp,
                                            outputDesc, outputRef,
-                                           dw_am, pw_am,
+                                           dwActivationDesc, pwActivationDesc,
                                            CPU_GENERAL));
 
         // check
@@ -142,7 +144,7 @@ int depthwiseConvolutionTest(int argc, char *argv[], DataFormat filterDataFormat
                                            biasDesc, bias,
                                            tmpBytes, tmp,
                                            outputDesc, output,
-                                           dw_am, pw_am,
+                                           dwActivationDesc, pwActivationDesc,
                                            UT_ARCH));
     }
     double time_end = ut_time_ms();

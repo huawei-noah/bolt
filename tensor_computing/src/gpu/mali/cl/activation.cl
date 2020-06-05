@@ -71,6 +71,10 @@
     val.s1 = 0.797885 * (val.s1 + 0.044715 * pown(val.s1, 3));\
     val.s2 = 0.797885 * (val.s2 + 0.044715 * pown(val.s2, 3));\
     val.s3 = 0.797885 * (val.s3 + 0.044715 * pown(val.s3, 3));\
+    val.s0 = 1.0 - 2.0 / (exp(2.0 * val.s0) + 1.0);\
+    val.s1 = 1.0 - 2.0 / (exp(2.0 * val.s1) + 1.0);\
+    val.s2 = 1.0 - 2.0 / (exp(2.0 * val.s2) + 1.0);\
+    val.s3 = 1.0 - 2.0 / (exp(2.0 * val.s3) + 1.0);\
     val.s0 = (val.s0 + (T)1.0) * (T)0.5;\
     val.s1 = (val.s1 + (T)1.0) * (T)0.5;\
     val.s2 = (val.s2 + (T)1.0) * (T)0.5;\
@@ -186,6 +190,14 @@
     val.s5 = 0.797885 * (val.s5 + 0.044715 * pown(val.s5, 3));\
     val.s6 = 0.797885 * (val.s6 + 0.044715 * pown(val.s6, 3));\
     val.s7 = 0.797885 * (val.s7 + 0.044715 * pown(val.s7, 3));\
+    val.s0 = 1.0 - 2.0 / (exp(2.0 * val.s0) + 1.0);\
+    val.s1 = 1.0 - 2.0 / (exp(2.0 * val.s1) + 1.0);\
+    val.s2 = 1.0 - 2.0 / (exp(2.0 * val.s2) + 1.0);\
+    val.s3 = 1.0 - 2.0 / (exp(2.0 * val.s3) + 1.0);\
+    val.s4 = 1.0 - 2.0 / (exp(2.0 * val.s4) + 1.0);\
+    val.s5 = 1.0 - 2.0 / (exp(2.0 * val.s5) + 1.0);\
+    val.s6 = 1.0 - 2.0 / (exp(2.0 * val.s6) + 1.0);\
+    val.s7 = 1.0 - 2.0 / (exp(2.0 * val.s7) + 1.0);\
     val.s0 = (val.s0 + (T)1.0) * (T)0.5;\
     val.s1 = (val.s1 + (T)1.0) * (T)0.5;\
     val.s2 = (val.s2 + (T)1.0) * (T)0.5;\
@@ -228,14 +240,23 @@
 #endif
 #endif
 
-__kernel void MANGLE_NAME(activation_, AC, H)(const int h, const int ih_str, const int iw_str, const int ih_off, const int iw_off, __global T* data) {
+__kernel void MANGLE_NAME(activation_, AC, H)(const int h, const int w, const int cd4, const int ce4, const int ih_str, const int iw_str, const int ih_off, const int iw_off, const int oh_str, const int ow_str, const int oh_off, const int ow_off, __global T* input, __global T* output) {
     int idx = get_global_id(0);
     int idy = get_global_id(1);
     int idz = get_global_id(2);
+    if(idx >= h || idy >= w) return;
 
     T4  val;
-    int index = (idz * iw_str + idy + iw_off) * ih_str + idx + ih_off;
-    val = vload4(index, data);
+    int in_off = (idz * iw_str + idy + iw_off) * ih_str + idx + ih_off;
+    val = vload4(in_off, input);
     calCore(val);
-    vstore4(val, index, data);
+#if defined(USE_TANH) || defined(USE_SIGMOID) || defined(USE_HSIGMOID) || defined(USE_GELU)
+    if(idz == cd4 - 1) {
+        if(ce4 < 2) val.y = 0;
+        if(ce4 < 3) val.z = 0;
+        if(ce4 < 4) val.w = 0;
+    }
+#endif
+    int out_off = (idz * ow_str + idy + ow_off) * oh_str + idx + oh_off;
+    vstore4(val, out_off, output);
 }

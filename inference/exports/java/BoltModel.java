@@ -45,6 +45,7 @@ enum DataType {
 enum DataFormat {
     NCHW,    ///< batch->channel->high->width data order
     NHWC,    ///< batch->high->width->channel data order
+    MTK,     ///< batch->time->unit data order
     NORMAL   ///< vectorize input of row major
 }
 
@@ -63,9 +64,11 @@ public final class BoltModel {
     }
 
     static {
-	loadLibrary("/data/local/tmp/CI/java/libOpenCL.so", true);
-	loadLibrary("/data/local/tmp/CI/java/libkernelbin.so", true);
-	loadLibrary("/data/local/tmp/CI/java/libBoltModel.so", false);
+        loadLibrary("/data/local/tmp/CI/libc++_shared.so", true);
+        loadLibrary("/system/lib64/libOpenCL.so", true);
+	    //loadLibrary("/data/local/tmp/CI/java/libOpenCL.so", true);
+	    loadLibrary("/data/local/tmp/CI/java/libkernelbin.so", true);
+	    loadLibrary("/data/local/tmp/CI/java/libBoltModel.so", false);
     }
 
     private long modelAddr;
@@ -96,9 +99,9 @@ public final class BoltModel {
     public String AffinityMapping(AffinityType affinity) {
         String ret = "HIGH_PERFORMANCE";
         if (affinity == AffinityType.HIGH_PERFORMANCE) {
-	    ret = "HIGH_PERFORMANCE";
+            ret = "HIGH_PERFORMANCE";
         } else if (affinity == AffinityType.LOW_POWER) {
-	    ret = "LOW_POWER";
+            ret = "LOW_POWER";
         } else {
             System.err.println("[ERROR] unsupported CPU affinity in " + this.getClass().getName());
             System.exit(1);
@@ -109,9 +112,9 @@ public final class BoltModel {
     public String DeviceMapping(DeviceType device) {
         String ret = "CPU";
         if (device == DeviceType.CPU) {
-	    ret = "CPU";
-	} else if (device == DeviceType.GPU) {
-	    ret = "GPU";
+            ret = "CPU";
+        } else if (device == DeviceType.GPU) {
+            ret = "GPU";
         } else {
             System.err.println("[ERROR] unsupported device in " + this.getClass().getName());
             System.exit(1);
@@ -121,33 +124,35 @@ public final class BoltModel {
 
     public String DataTypeMapping(DataType data_type) {
         String ret = "FP32";
-	if (data_type == DataType.FP32) {
-	    ret = "FP32";
-	} else if (data_type == DataType.FP16) {
-	    ret = "FP16";
-	} else if (data_type == DataType.INT32) {
-	    ret = "INT32";
-	} else if (data_type == DataType.UINT32) {
-	    ret = "UINT32";
+        if (data_type == DataType.FP32) {
+            ret = "FP32";
+        } else if (data_type == DataType.FP16) {
+            ret = "FP16";
+        } else if (data_type == DataType.INT32) {
+            ret = "INT32";
+        } else if (data_type == DataType.UINT32) {
+            ret = "UINT32";
         } else {
             System.err.println("[ERROR] unsupported data type in " + this.getClass().getName());
             System.exit(1);
-	}
+        }
         return ret;
     }
 
     private String DataFormatMapping(DataFormat data_format) {
         String ret  = "NCHW";
-	if (data_format == DataFormat.NCHW) {
-	    ret = "NCHW";
-	} else if (data_format == DataFormat.NHWC) {
-	    ret = "NHWC";
+        if (data_format == DataFormat.NCHW) {
+            ret = "NCHW";
+        } else if (data_format == DataFormat.NHWC) {
+            ret = "NHWC";
+        } else if (data_format == DataFormat.MTK) {
+            ret = "MTK";
         } else if (data_format == DataFormat.NORMAL) {
-	    ret = "NORMAL";
-	} else {
+            ret = "NORMAL";
+        } else {
             System.err.println("[ERROR] unsupported data format in " + this.getClass().getName());
             System.exit(1);
-	}
+        }
         return ret;
     }
 
@@ -179,19 +184,19 @@ public final class BoltModel {
         DataType[] dts, DataFormat[] dfs)
     {
         String input_affinity = AffinityMapping(affinity);
-	String input_device = DeviceMapping(device);
-	String[] dts_str = new String[num_input];
-	String[] dfs_str = new String[num_input];
-	for (int i = 0; i < num_input; i++) {
-	    dts_str[i] = DataTypeMapping(dts[i]);
-	    dfs_str[i] = DataFormatMapping(dfs[i]);
-	}
+        String input_device = DeviceMapping(device);
+        String[] dts_str = new String[num_input];
+        String[] dfs_str = new String[num_input];
+        for (int i = 0; i < num_input; i++) {
+            dts_str[i] = DataTypeMapping(dts[i]);
+            dfs_str[i] = DataFormatMapping(dfs[i]);
+        }
 
-	this.modelAddr = model_create(modelPath, input_affinity, input_device);
+        this.modelAddr = model_create(modelPath, input_affinity, input_device);
 
-	model_ready(this.modelAddr, num_input, input_names, n, c, h, w, dts_str, dfs_str);
+        model_ready(this.modelAddr, num_input, input_names, n, c, h, w, dts_str, dfs_str);
 
-	this.IResult = IResult_malloc_all(this.modelAddr);
+        this.IResult = IResult_malloc_all(this.modelAddr);
     }
 
     /**
@@ -280,8 +285,8 @@ public final class BoltModel {
             dfs_str[i] = DataFormatMapping(dfs[i]);
         }
         model_resize_input(this.modelAddr, num_input, input_names, n, c, h, w, dts_str, dfs_str);
-	model_run(this.modelAddr, this.IResult, num_input, input_names, inputData);
-	BoltResult bolt_result = getOutput(this.IResult);
+        model_run(this.modelAddr, this.IResult, num_input, input_names, inputData);
+        BoltResult bolt_result = getOutput(this.IResult);
         return bolt_result;
     }
 
@@ -291,7 +296,7 @@ public final class BoltModel {
     * @return
     */
     public void Destructor() {
-	IResult_free(this.IResult);
-	destroyModel(this.modelAddr);
+        IResult_free(this.IResult);
+        destroyModel(this.modelAddr);
     }
 }

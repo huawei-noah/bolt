@@ -24,7 +24,7 @@ public:
     Convolution(DataType dt, U32 nf,
         U32 ksizeH, U32 ksizeW, U32 kstrideH, U32 kstrideW,
         U32 kpaddingT, U32 kpaddingB, U32 kpaddingL, U32 kpaddingR,
-        ActivationMode dwActiveMode, ActivationMode pwActiveMode,
+        ActivationDesc dwActivationDesc, ActivationDesc pwActivationDesc,
         ConvolutionMode convolutionType, U32 group, U32 dilateH, U32 dilateW)
     {
         this->dt = dt;
@@ -37,8 +37,8 @@ public:
         this->paddingB = kpaddingB;
         this->paddingL = kpaddingL;
         this->paddingR = kpaddingR;
-        this->dwActiveMode = dwActiveMode;
-        this->pwActiveMode = pwActiveMode;
+        this->dwActivationDesc = dwActivationDesc;
+        this->pwActivationDesc = pwActivationDesc;
         this->convolutionType = convolutionType;
         this->group = group;
         this->dilateH = dilateH;
@@ -67,7 +67,7 @@ public:
         return convDesc;
     }
     virtual EE init_weight_bias_from_model(U8** modelPtr) = 0;
-    virtual EE infer_forward_algorithm(HashMap<std::string, int> &algorithmMap) = 0;
+    virtual EE infer_forward_algorithm(HashMap<std::string, std::string> &algorithmMap) = 0;
     virtual EE transform_filter() = 0;
 public:
     U32 numFilters;
@@ -85,8 +85,8 @@ public:
     U32 dilateH;
     U32 dilateW;
 
-    ActivationMode dwActiveMode;
-    ActivationMode pwActiveMode;
+    ActivationDesc dwActivationDesc;
+    ActivationDesc pwActivationDesc;
 
     ConvolutionForwardAlgorithm pwAlg;
     DepthwiseConvolutionForwardAlgorithm dwAlg;

@@ -20,21 +20,45 @@
 #include <stdlib.h>
 #include <iostream>
 
+#if defined(_DEBUG) && defined(__ANDROID__)
+#include <android/log.h>
+#define LOG_TAG "Bolt"
+#define LOGD(...) __android_log_print(ANDROID_LOG_DEBUG, LOG_TAG, __VA_ARGS__)
+#else
+#define LOGD(...) printf(__VA_ARGS__)
+#endif
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
-    #define CHECK_REQUIREMENT(status) if (! (status)) {\
-                 printf("[ERROR] %s %s line %d requirement mismatch\n", __FILE__, __func__, __LINE__);\
-                 exit(1);\
-             }
+#if defined(_DEBUG) && defined(__ANDROID__)
+    #define CHECK_REQUIREMENT(status) if (!(status)) {\
+                LOGD("[ERROR] %s %s line %d requirement mismatch\n", __FILE__, __func__, __LINE__);\
+            }
+#else
+    #define CHECK_REQUIREMENT(status) if (!(status)) {\
+                LOGD("[ERROR] %s %s line %d requirement mismatch\n", __FILE__, __func__, __LINE__);\
+                exit(1);\
+            }
+#endif
+
+#if defined(_DEBUG) && defined(__ANDROID__)
     #define CHECK_STATUS(ee) {\
-                 EE status = (ee); \
-                 if (status != SUCCESS) {\
-                     printf("[ERROR] %s %s line %d got an error: %s\n", __FILE__, __func__, __LINE__, ee2str(status));\
-                     exit(1);\
-                 }\
-             }
+                EE status = (ee); \
+                if (status != SUCCESS) {\
+                    LOGD("[ERROR] %s %s line %d got an error: %s\n", __FILE__, __func__, __LINE__, ee2str(status));\
+                }\
+            }
+#else
+    #define CHECK_STATUS(ee) {\
+                EE status = (ee); \
+                if (status != SUCCESS) {\
+                    LOGD("[ERROR] %s %s line %d got an error: %s\n", __FILE__, __func__, __LINE__, ee2str(status));\
+                    exit(1);\
+                }\
+            }
+#endif
 
     typedef enum {
         SUCCESS = 0,
@@ -80,8 +104,10 @@ extern "C" {
     
     #ifdef _DEBUG
     #define DEBUG_info(x) do { std::cout << x << std::endl; } while (0)
+    #define DEBUG_info_s(x) do { std::cout << x << " "; } while (0)
     #else
     #define DEBUG_info(x) do { } while (0)
+    #define DEBUG_info_s(x) do { } while (0)
     #endif
 
 #ifdef __cplusplus

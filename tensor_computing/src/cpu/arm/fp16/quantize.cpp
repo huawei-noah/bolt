@@ -19,8 +19,15 @@
 inline void apply_scale_f16(U32 numData, F16* array, F16 scale, INT8* qArray)
 {
     for (U32 i=0; i<numData; i++) {
-        F32 tmp = array[i] * scale;
-        qArray[i] = round(tmp);
+        F32 tmp = array[i];
+        tmp *= scale;
+        if (tmp > 127.0) {
+            qArray[i] = 127;
+        } else if (tmp < -127.0) {
+            qArray[i] = -127;
+        } else {
+            qArray[i] = round(tmp);
+        }
     }
 }
 
@@ -32,7 +39,17 @@ EE quantize_tensor_fp16(TensorDesc dDesc, const void* data, TensorDesc* qDesc, v
     DataType dt;
     DataFormat df;
     U32 n, c, h, w;
-    CHECK_STATUS(tensor4dGet(dDesc, &dt, &df, &n, &c, &h, &w));
+    if (tensorIs2d(dDesc)) {
+        CHECK_STATUS(tensor2dfGet(dDesc, &dt, &df, &n, &w));
+        c = 1;
+        h = 1;
+    } else if (tensorIs3d(dDesc)) {
+        CHECK_STATUS(tensor3dGet(dDesc, &dt, &df, &n, &h, &w));
+        c = 1;
+    } else {
+        CHECK_STATUS(tensor4dGet(dDesc, &dt, &df, &n, &c, &h, &w));
+    }
+    
     switch (dt) {
         case DT_F16: {
             switch (df) {
@@ -55,14 +72,14 @@ EE quantize_tensor_fp16(TensorDesc dDesc, const void* data, TensorDesc* qDesc, v
                         F16 max = vmaxvq_f16(max_v);
                         F16 min = vminvq_f16(min_v);
                         if (max == 0 && min == 0) {
-                            return NOT_SUPPORTED;
+                            CHECK_STATUS(NOT_SUPPORTED);
                         }
                         if (max > 0 && min < 0) {
                             F16 scale_max = 127.0 / max;
-                            F16 scale_min = -128.0 / min;
+                            F16 scale_min = -127.0 / min;
                             scale[idx] = (scale_max < scale_min) ? scale_max : scale_min;
                         } else if (max < 0) {
-                            scale[idx] = -128.0 / min;
+                            scale[idx] = -127.0 / min;
                         } else { // min > 0
                             scale[idx] = 127.0 / max;
                         }
@@ -83,7 +100,9 @@ EE quantize_tensor_fp16(TensorDesc dDesc, const void* data, TensorDesc* qDesc, v
                     float16x8_t min_v = tmp_v;
 
                     U32 numData = n * c * h * w;
-                    for (U32 i=8; i<numData; i+=8) {
+                    CHECK_REQUIREMENT(numData >= 8);
+                    U32 i = 8;
+                    for (; i < numData - 7; i += 8) {
                         tmp_v = vld1q_f16(array+i);
                         max_v = vmaxq_f16(max_v, tmp_v);
                         min_v = vminq_f16(min_v, tmp_v);
@@ -91,32 +110,54 @@ EE quantize_tensor_fp16(TensorDesc dDesc, const void* data, TensorDesc* qDesc, v
 
                     F16 max = vmaxvq_f16(max_v);
                     F16 min = vminvq_f16(min_v);
-                    if (max == 0 && min == 0) {
-                        return NOT_SUPPORTED;
+
+                    for (; i < numData; i++) {
+                        F16 tmp = array[i];
+                        if (tmp > max) {
+                            max = tmp;
+                        }
+                        if (tmp < min) {
+                            min = tmp;
+                        }
                     }
+                    if (max == 0 && min == 0) {
+                        CHECK_STATUS(NOT_SUPPORTED);
+                    }
+                    F16 scaleRaw;
                     if (max > 0 && min < 0) {
-                        F16 scale_max = 127.0 / max;
-                        F16 scale_min = -128.0 / min;
-                        *scale = (scale_max < scale_min) ? scale_max : scale_min;
+                        F32 scale_max = 127.0 / max;
+                        F32 scale_min = -127.0 / min;
+                        scaleRaw = (scale_max < scale_min) ? scale_max : scale_min;
                     } else if (max < 0) {
-                        *scale = -128.0 / min;
+                        scaleRaw = -127.0 / min;
                     } else { // min > 0
-                        *scale = 127.0 / max;
+                        scaleRaw = 127.0 / max;
+                    }
+                    DEBUG_info(max << " is the max FP16 value, and min value is " << min);
+                    if (*scale < scaleRaw) {
+                        *scale = scaleRaw;
                     }
 
                     INT8* qArray = (INT8*)qData;
                     apply_scale_f16(numData, array, *scale, qArray);
 
-                    *qDesc = tensor4df(DT_I8, df, n, c, h, w);
+                    if (tensorIs2d(dDesc)) {
+                        *qDesc = tensor2df(DT_I8, df, n, w);
+                    } else if (tensorIs3d(dDesc)) {
+                        *qDesc = tensor3df(DT_I8, df, n, h, w);
+                    } else {
+                        *qDesc = tensor4df(DT_I8, df, n, c, h, w);
+                    }
                     break;
                 }
             }
             break;
         }
         default:{
-            return NOT_SUPPORTED;
+            CHECK_STATUS(NOT_SUPPORTED);
             break;
         }
     }
+    DEBUG_info(scale[0] << " is the quantization scale");
     return SUCCESS;
 }

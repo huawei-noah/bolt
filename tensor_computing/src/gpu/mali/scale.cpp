@@ -26,7 +26,7 @@ EE scale_infer_output_size_mali(TensorDesc   inputDesc,
                                 GCLMemDesc_t gclmemOutputDesc){
     /*tensorDesc record cpu org data format info*/
     /*gclmemDesc record gpu trans data format info*/
-    *outputDesc = inputDesc;
+    if(outputDesc) *outputDesc = inputDesc;
 
     DataType   idt;
     DataFormat idf;
@@ -36,7 +36,7 @@ EE scale_infer_output_size_mali(TensorDesc   inputDesc,
     if(idf == DF_NCHW) {
         U32 ih_align = (ih + 1) / 2 * 2;
         CHECK_STATUS(infer_gclmem_desc_ncwhc4(iw, ih_align, ic, 0, 0, iw, ih_align, ic, idt, idt, gclmemInputDesc, gclmemOutputDesc));
-        *gclmemOutputDesc = *gclmemInputDesc;//the input and output mem maybe the same
+        if(gclmemInputDesc && gclmemOutputDesc) *gclmemOutputDesc = *gclmemInputDesc;//the input and output mem maybe the same
         return SUCCESS;
     } 
     return NOT_SUPPORTED;

@@ -20,9 +20,9 @@
 
 class Concat: public Operator {
 public:
-    Concat(U32 concatDim)
+    Concat(int axis)
     {
-        this->concatDim = concatDim;
+        this->axis = axis;
     }
 
     OperatorType get_op_type() override
@@ -32,8 +32,7 @@ public:
 
 
 protected:
-    U32 concatDim;
-
+    I32 axis;
 };
 
 #endif //_CONCAT_H

@@ -31,7 +31,7 @@ extern "C" {
 #endif
 
 #ifdef _USE_ONNX_MODEL
-    EE onnx_converter(std::string dir, std::string mfn, int removePreprocessOpNum, TensorDesc inputDesc, ModelSpec* ms);
+    EE onnx_converter(std::string dir, std::string mfn, int removePreprocessOpNum, ModelSpec* ms);
 #endif
 
 #ifdef _USE_TFLITE_MODEL

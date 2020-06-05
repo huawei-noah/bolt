@@ -21,7 +21,7 @@
 
 #include "type.h"
 #include "error.h"
-#include "cpu/arm/arm_neon_expand.h"
+#include "arm_neon_expand.h"
 
 inline void matrix1_trans_n8(U32 blockK, U32 K, INT8* src, INT8* dst)
 {
@@ -33,7 +33,7 @@ inline void matrix1_trans_n8(U32 blockK, U32 K, INT8* src, INT8* dst)
         in[i] = (I32*)(src + i * K);
     }
     U32 k = 0;
-    for (; k<blockK-7; k+=8) {
+    for (; k < blockK - 7; k += 8) {
         if(k % 64 == 0){
             asm volatile(
                 "prfm pldl2keep, [%[in0], 64]\n"
@@ -97,9 +97,30 @@ inline void matrix1_trans_n8(U32 blockK, U32 K, INT8* src, INT8* dst)
         dst1 += 16;
     }
 
-    if (k != blockK) {
-        for (U32 i=0; i<8; i++) {
-            dst1[i] = in[i][0];
+    if (k < blockK - 3) {
+        for (U32 i = 0; i < 8; i++) {
+            dst1[0] = in[i][0];
+            dst1++;
+            in[i]++;
+        }
+        k += 4;
+    }
+
+    if (k < blockK) {
+        U32 kTail = blockK - k;
+        INT8 *dstI8 = (INT8*)dst1;
+        INT8 *inI[8];
+        for (U32 i = 0; i < 8; i++) {
+            inI[i] = (INT8*)in[i];
+        }
+        for (U32 i = 0; i < 8; i++) {
+            for (U32 j = 0; j < 4; j++) {
+                if (j < kTail) {
+                    dstI8[i * 4 + j] = inI[i][j];
+                } else {
+                    dstI8[i * 4 + j] = 0;
+                }
+            }
         }
     }
 }
@@ -112,8 +133,9 @@ inline void matrix1_trans_int8(U32 size, U32 blockK, U32 K, INT8* src, INT8* dst
     I32* dst1 = (I32*)dst;
     U32 offset = 64;
 
-    for(U32 i = 0; i < blockK/4; i++){
-        for(U32 j = 0; j < size; j++){
+    U32 i = 0;
+    for (; i < blockK/4; i++) {
+        for (U32 j = 0; j < size; j++) {
             src1 = (I32*)(src + j * K);
 
             if(i % 16 == 0){
@@ -127,6 +149,21 @@ inline void matrix1_trans_int8(U32 size, U32 blockK, U32 K, INT8* src, INT8* dst
             *dst1++ = *(src1 + i);
         }
     }
+    U32 kTail = blockK % 4;
+    if (kTail > 0) {
+        INT8 *srcI8;
+        INT8 *dstI8 = (INT8*)dst1;
+        for (U32 j = 0; j < size; j++) {
+            srcI8 = src + j * K + i * 4;
+            for (U32 k = 0; k < 4; k++) {
+                if (k < kTail) {
+                    dstI8[j * 4 + k] = srcI8[k];
+                } else {
+                    dstI8[j * 4 + k] = 0;
+                }
+            }
+        }
+    }
 }
 
 inline void matrix2_trans_m12(U32 blockK, U32 M, INT8* src, INT8* dst)
@@ -135,7 +172,8 @@ inline void matrix2_trans_m12(U32 blockK, U32 M, INT8* src, INT8* dst)
     INT8* dst1 = dst;
     U32 offset = 4 * M;
 
-    for (U32 i = 0; i < blockK; i+=4) {
+    U32 i = 0;
+    for (; i < blockK - 3; i += 4) {
         // Prefetch for the next iteration
         asm volatile(
             "prfm pldl2keep, [%0, %1]\n"
@@ -185,6 +223,52 @@ inline void matrix2_trans_m12(U32 blockK, U32 M, INT8* src, INT8* dst)
 
         dst1 += 48;
     }
+    if (i < blockK) {
+        U32 kTail = blockK - i;
+
+        INT8 *in12[4];
+        INT8 zero[12] = {0};
+        for (U32 j = 0; j < 4; j++) {
+            if (j < kTail) {
+                in12[j] = src1 + j * M;
+            } else {
+                in12[j] = zero;
+            }
+        }
+
+        asm volatile(
+            "ldr d0, [%[in0]]\n"
+            "ldr d1, [%[in1]]\n"
+            "ldr d2, [%[in2]]\n"
+            "ldr d3, [%[in3]]\n"
+            "zip1 v4.8b, v0.8b, v1.8b\n"
+            "zip2 v5.8b, v0.8b, v1.8b\n"
+            "zip1 v6.8b, v2.8b, v3.8b\n"
+            "zip2 v7.8b, v2.8b, v3.8b\n"
+
+            "zip1 v0.4h, v4.4h, v6.4h\n"
+            "zip2 v1.4h, v4.4h, v6.4h\n"
+            "zip1 v2.4h, v5.4h, v7.4h\n"
+            "zip2 v3.4h, v5.4h, v7.4h\n"
+            "str d0, [%[out]]\n"
+            "str d1, [%[out], 8]\n"
+            "str d2, [%[out], 16]\n"
+            "str d3, [%[out], 24]\n"
+            :
+            :[in0]"r"(in12[0]),
+             [in1]"r"(in12[1]),
+             [in2]"r"(in12[2]),
+             [in3]"r"(in12[3]),
+             [out]"r"(dst1)
+            :"memory","cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7"
+        );
+
+        for (U32 j = 0; j < 4; j++) {
+            for (U32 k = 0; k < 4; k++) {
+                dst1[32 + j * 4 + k] = in12[k][8 + j];
+            }
+        }
+    }
 }
 
 //Trans from KM to MKm(size)k4
@@ -194,7 +278,8 @@ inline void matrix2_trans_int8(U32 size, U32 blockK, U32 M, INT8* src, INT8* dst
     INT8* dst1 = dst;
     U32 offset = 4 * M;
 
-    for(U32 i = 0; i < blockK; i+=4){
+    U32 i = 0;
+    for(; i < blockK - 3; i += 4){
         src1 = src + i * M;
         asm volatile(
             "prfm pldl2keep, [%0, %1]\n"
@@ -204,10 +289,26 @@ inline void matrix2_trans_int8(U32 size, U32 blockK, U32 M, INT8* src, INT8* dst
         );
         for(U32 j = 0; j < size; j++){
             src1 = src + i * M + j;
-            for(U32 k=0; k<4; k++){
+            for (U32 k = 0; k < 4; k++){
                 *dst1 = *src1;
                 dst1++;
                 src1 += M;
+            }
+        }
+    }
+    if (i < blockK) {
+        U32 kTail = blockK - i;
+        for (U32 j = 0; j < size; j++) {
+            src1 = src + i * M + j;
+            for (U32 k = 0; k < 4; k++) {
+                if (k < kTail) {
+                    *dst1 = *src1;
+                    dst1++;
+                    src1 += M;
+                } else {
+                    *dst1 = 0;
+                    dst1++;
+                }
             }
         }
     }
@@ -355,12 +456,32 @@ inline void mmm_NTail_M4(U32 M, U32 N, U32 K, INT8* matrix1, INT8* matrix2, I32*
     }
 }
 
-inline void mmm_NTail_M(U32 MInner, U32 M, U32 N, U32 K, INT8* matrix1, INT8* matrix2, I32* result) {
-    for(U32 i = 0; i < N; i++) {
-        for(U32 j = 0; j < MInner; j++) {
-            for(U32 k = 0; k < K; k++) {
-                result[i * M + j] += matrix1[i*K + k] * matrix2[k*M + j];
-            }
+// matrix2 has been transformed to MKm(MInner)K4
+inline void mmm_NTail_M(U32 MInner, U32 M, U32 N, U32 K, INT8* matrix1, INT8* matrix2, I32* result)
+{
+    int8x16_t mat1 = {0};
+    int8x16_t mat2 = {0};
+    int32x4_t res[3] = {0};
+    I32 buf[4];
+
+    //for (U32 i = 0; i < N; i++) {
+    //    res[i] = vld1q_s32(result + i*M);
+   // }
+
+    for (U32 q = 0; q < K; q += 4) {
+        mat1 = vld1q_s8(matrix1 + q * N);
+
+        mat2 = vld1q_s8(matrix2 + q * MInner);
+
+        for (U32 n = 0; n < N; n++) {
+            res[n] = vdotq_laneq_s32_builtin(res[n], mat2, mat1, n);
+        }
+    }
+
+    for (U32 i = 0; i < N; i++) {
+        vst1q_s32(buf, res[i]);
+        for (U32 j = 0; j < MInner; j++) {
+            result[i * M + j] += buf[j];
         }
     }
 }

@@ -15,17 +15,33 @@
 #include "tensor_computing.h"
 #include "blas-enhance.h"
 #include <string.h>
+#ifdef _USE_MALI 
+#include "gpu/mali/tensor_computing_mali.h"
+#endif
 
-EE matmul_infer_output_size(TensorDesc matrixADesc, bool transposeA,
+EE matmul_infer_output_size_cpu(TensorDesc matrixADesc, bool transposeA,
     TensorDesc matrixBDesc, bool transposeB,
     TensorDesc *matrixCDesc)
 {
     if (matrixCDesc == nullptr)
         CHECK_STATUS(NULL_POINTER);
 
+    if (DT_I8 == matrixADesc.dt || DT_I8 == matrixBDesc.dt) {
+        matrixADesc.dt = DT_I8;
+        matrixBDesc.dt = DT_I8;
+    }
+
     if (matrixADesc.dt != matrixBDesc.dt
        || matrixADesc.nDims < 2) {
         CHECK_STATUS(NOT_MATCH);
+    }
+
+    if (DF_NCHWC8 == matrixADesc.df && 4 == matrixADesc.nDims) {
+        CHECK_REQUIREMENT(1 == matrixADesc.dims[1] && 1 == matrixADesc.dims[0]);
+    }
+
+    if (DF_NCHWC8 == matrixBDesc.df && 4 == matrixBDesc.nDims) {
+        CHECK_REQUIREMENT(1 == matrixBDesc.dims[1] && 1 == matrixBDesc.dims[0]);
     }
 
     int i = 0;
@@ -78,13 +94,70 @@ EE matmul_infer_output_size(TensorDesc matrixADesc, bool transposeA,
     return SUCCESS;
 }
 
+EE matmul_infer_output_size(TensorDesc matrixADesc, bool transposeA,
+    TensorDesc matrixBDesc, bool transposeB,
+    TensorDesc *matrixCDesc, Arch arch, ExtInfo_t extInfo)
+{
+#ifdef _USE_MALI
+    if(arch == MALI) {
+        GCLMemDesc_t gclmemMatrixADesc = NULL;
+        GCLMemDesc_t gclmemMatrixBDesc = NULL;
+        GCLMemDesc_t gclmemMatrixCDesc = NULL;
+        if(extInfo->maliInfo.gclmemInputDesc) {
+            gclmemMatrixADesc = &extInfo->maliInfo.gclmemInputDesc[0];
+            gclmemMatrixBDesc = &extInfo->maliInfo.gclmemInputDesc[1];
+        }
+        if(extInfo->maliInfo.gclmemOutputDesc) gclmemMatrixCDesc = extInfo->maliInfo.gclmemOutputDesc;
+        CHECK_STATUS(matmul_infer_output_size_mali(matrixADesc, transposeA, matrixBDesc, transposeB, matrixCDesc, gclmemMatrixADesc, gclmemMatrixBDesc, gclmemMatrixCDesc, extInfo->maliInfo.forwardRunInfo));
+    } else {
+#endif
+        UNUSED(arch);
+        UNUSED(extInfo);
+        CHECK_STATUS(matmul_infer_output_size_cpu(matrixADesc, transposeA, matrixBDesc, transposeB, matrixCDesc));
+#ifdef _USE_MALI    
+    }    
+#endif    
+    return SUCCESS;
+}
+
+EE matmul_infer_forward_algorithm(TensorDesc matrixADesc, bool transposeA, TensorDesc matrixBDesc, bool transposeB, TensorDesc matrixCDesc, Arch arch, ExtInfo_t extInfo) {
+#ifdef _USE_MALI
+    if(arch == MALI) {
+        CHECK_STATUS(matmul_infer_forward_algorithm_mali(extInfo->maliInfo.handle, matrixADesc, transposeA, matrixBDesc, transposeB, matrixCDesc, extInfo->maliInfo.forwardRunInfo));
+    } else {
+#endif
+        return NOT_SUPPORTED;
+#ifdef _USE_MALI    
+    }    
+#endif    
+    return SUCCESS;
+}
 
 EE matmul_infer_forward_tmp_bytes(TensorDesc matrixADesc, bool transposeA,
     TensorDesc matrixBDesc, bool transposeB,
-    U32 *bytes, Arch arch)
+    U32 *bytes, Arch arch, ExtInfo_t extInfo)
 {
     if (bytes == nullptr)
         CHECK_STATUS(NULL_POINTER);
+#ifdef _USE_MALI
+    if(arch == MALI) {
+        CHECK_STATUS(matmul_infer_forward_tmp_bytes_mali(matrixADesc, transposeA, matrixBDesc, transposeB, bytes, extInfo->maliInfo.forwardRunInfo));
+        return SUCCESS;
+    }
+#endif    
+    bool quantA = false;
+    bool quantB = false;
+    if (DT_I8 == matrixADesc.dt || DT_I8 == matrixBDesc.dt) {
+        if (DT_F16 == matrixADesc.dt) {
+            quantA = true;
+            matrixADesc.dt = DT_I8;
+        }
+
+        if (DT_F16 == matrixBDesc.dt) {
+            quantB = true;
+            matrixBDesc.dt = DT_I8;
+        }
+    }
 
     EE ret = SUCCESS;
     U32 kDimA, kDimB;
@@ -118,6 +191,13 @@ EE matmul_infer_forward_tmp_bytes(TensorDesc matrixADesc, bool transposeA,
         TensorDesc matrixB2Ddesc = tensor2df(matrixBDesc.dt, dataFormatB, matrixBDesc.dims[1], matrixBDesc.dims[0]);
         ret = matrix_matrix_multiply_tmp_bytes(matrixA2DDesc, matrixB2Ddesc, bytes, arch);
     }
+
+    if (quantA) {
+        *bytes += tensorNumBytes(matrixADesc);
+    }
+    if (quantB) {
+        *bytes += tensorNumBytes(matrixBDesc);
+    }
     return ret;
 }
 
@@ -125,10 +205,19 @@ EE matmul(TensorDesc matrixADesc, bool transposeA, const void* matrixA,
     TensorDesc matrixBDesc, bool transposeB, const void* matrixB,
     void* tmp, U32 bytes,
     TensorDesc matrixCDesc, void* matrixC,
-    Arch arch)
+    Arch arch, ExtInfo_t extInfo)
 {
-    if (matrixA == nullptr || matrixB == nullptr || matrixC == nullptr)
+    if (matrixA == nullptr || matrixB == nullptr || matrixC == nullptr) {
         CHECK_STATUS(NULL_POINTER);
+    }
+#ifdef _USE_MALI    
+    if(arch == MALI) {
+        CHECK_STATUS(matmul_mali(extInfo->maliInfo.handle, matrixADesc, transposeA, (GCLMem_t)matrixA, matrixBDesc, transposeB, (GCLMem_t)matrixB, (GCLMem_t) tmp, matrixCDesc, (GCLMem_t)matrixC, extInfo->maliInfo.forwardRunInfo));
+        return SUCCESS;
+    }
+#else
+    UNUSED(extInfo);
+#endif    
 
     U32 sizeA = tensorNumElements(matrixADesc);
     U32 loops = sizeA / (matrixADesc.dims[1] * matrixADesc.dims[0]);
@@ -205,6 +294,5 @@ EE matmul(TensorDesc matrixADesc, bool transposeA, const void* matrixA,
         matrixBPtr += matrixB2DBytes;
         matrixCPtr += matrixC2DBytes;
     }
-    
     return SUCCESS;
 }

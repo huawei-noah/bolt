@@ -23,10 +23,11 @@ public:
     /**
     @param mode
     */
-    Repeat(DataType dt, I32 loops, I32 jumpOperatorIndex, I32 currentOperatorIndex)
+    Repeat(DataType dt, I32 loops, I32 axis, I32 jumpOperatorIndex, I32 currentOperatorIndex)
     {
         this->dt = dt;
         this->loops = loops;
+        this->axis = axis;
         this->iter = 0;
         this->jumpOperatorIndex = jumpOperatorIndex;
         this->nextOperatorIndex = currentOperatorIndex + 1;
@@ -69,7 +70,18 @@ public:
     }
     EE infer_output_tensors_size(Vec<TensorDesc>inDims, Vec<TensorDesc>* outDims) override
     {
-        UNUSED(inDims);
+        this->iter = 0;
+        if (this->axis >= 0) {
+            int axisIndex = 0;
+            if (inDims.size() > 2)
+                axisIndex = 2;
+            else {
+                std::cerr << "[ERROR] set to use axis feature of Repeat must meet input tensors >= 3 requirement" << std::endl;
+                exit(1);
+            }
+            TensorDesc desc = inDims[axisIndex];
+            this->loops = desc.dims[desc.nDims-1-axis];
+        }
 
         (*outDims)[0].dt = this->dt;
         (*outDims)[0].nDims = 0;
@@ -78,6 +90,7 @@ public:
 
 private:
     int loops;
+    int axis;
     int iter;
     int jumpOperatorIndex;
     int nextOperatorIndex;

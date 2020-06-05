@@ -22,6 +22,7 @@
 
 
 EE softmax_arm(TensorDesc inputDesc, const void* input,
+    int axis,
     TensorDesc outputDesc, void* output)
 {
     DataType idt = inputDesc.dt;
@@ -29,13 +30,13 @@ EE softmax_arm(TensorDesc inputDesc, const void* input,
     switch (idt) {
 #ifdef _USE_FP32
         case DT_F32: {
-            ret = softmax_fp32(inputDesc, (const F32*)input, outputDesc, (F32*)output);
+            ret = softmax_fp32(inputDesc, (const F32*)input, axis, outputDesc, (F32*)output);
             break;
         }
 #endif
 #ifdef _USE_FP16
         case DT_F16: {
-            ret = softmax_fp16(inputDesc, (const F16*)input, outputDesc, (F16*)output);
+            ret = softmax_fp16(inputDesc, (const F16*)input, axis, outputDesc, (F16*)output);
             break;
         }
 #endif

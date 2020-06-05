@@ -21,10 +21,11 @@ extern "C" {
 
     typedef enum {
         CPU_GENERAL = 1,
-        ARM_A55 = 2,
-        ARM_A76 = 3,
-        MALI = 4,
-        ARM_V8 = 5,
+        MALI = 2,
+        ARM_V7 = 3,
+        ARM_V8 = 4,
+        ARM_A55 = 5,
+        ARM_A76 = 6,
     } Arch;
 
 #ifdef __cplusplus

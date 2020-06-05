@@ -13,35 +13,53 @@
 
 
 #include "tensor_computing.h"
+#ifdef _USE_GENERAL
 #include "cpu/general/tensor_computing_general.h"
+#endif
+#ifdef _USE_NEON
 #include "cpu/arm/tensor_computing_arm.h"
+#endif
+#ifdef _USE_MALI
+#include "gpu/mali/tensor_computing_mali.h"
+#endif
 
-EE clip(void *min_value, void *max_value, TensorDesc inputDesc, void* input, TensorDesc outputDesc, void *output, Arch arch)
-{
-    EE ret = SUCCESS;
-    switch (arch) {
-        case CPU_GENERAL:
-            ret = clip_general(min_value, max_value, inputDesc, input, outputDesc, output);
-            break;
-        case ARM_A55:
-            ret = clip_arm(min_value, max_value, inputDesc, input, outputDesc, output);
-            break;
-        case ARM_A76:
-            ret = clip_arm(min_value, max_value, inputDesc, input, outputDesc, output);
-            break;
-        case ARM_V8:
-            ret = clip_arm(min_value, max_value, inputDesc, input, outputDesc, output);
-            break;
-        default:
-            ret = NOT_SUPPORTED;
-    }
-    return ret;
-}
-
-EE clip_infer_output_size(TensorDesc inputDesc, TensorDesc *outputDesc)
+inline EE clip_infer_output_size_cpu(TensorDesc inputDesc, TensorDesc *outputDesc)
 {
     if (nullptr == outputDesc)
         CHECK_STATUS(NULL_POINTER);
     *outputDesc = inputDesc;
     return SUCCESS;
 }
+
+EE clip_infer_output_size(TensorDesc inputDesc, TensorDesc *outputDesc, Arch arch, ExtInfo_t extInfo)
+{
+    EE ret = NOT_SUPPORTED;
+    if(arch == MALI){
+#ifdef _USE_MALI
+        ret = clip_infer_output_size_mali(inputDesc, outputDesc, extInfo->maliInfo.gclmemInputDesc, extInfo->maliInfo.gclmemOutputDesc);
+#endif
+    } else {
+        ret = clip_infer_output_size_cpu(inputDesc, outputDesc);
+    }    
+    return ret;
+}
+
+EE clip(void *min_value, void *max_value, TensorDesc inputDesc, void* input, TensorDesc outputDesc, void *output, Arch arch, ExtInfo_t extInfo)
+{
+    EE ret = NOT_SUPPORTED;
+    if (arch == CPU_GENERAL) {
+#ifdef _USE_GENERAL
+        ret = clip_general(min_value, max_value, inputDesc, input, outputDesc, output);
+#endif
+#ifdef _USE_NEON
+    } else if (arch == ARM_A55 || arch == ARM_A76 || arch == ARM_V8 || arch == ARM_V7) {
+        ret = clip_arm(min_value, max_value, inputDesc, input, outputDesc, output);
+#endif
+#ifdef _USE_MALI
+    } else if (arch == MALI) {
+        ret = clip_mali(extInfo->maliInfo.handle, min_value, max_value, inputDesc, (GCLMem_t)input, outputDesc, (GCLMem_t)output);
+#endif
+    }
+    return ret;
+}
+

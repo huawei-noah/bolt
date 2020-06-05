@@ -23,8 +23,9 @@
 
 class LSTM: public LSTMCell {
 public:
-    LSTM(DataType dt, U32 numOutput, std::optional<EltwiseType> eltwiseType)
-        :LSTMCell(dt, numOutput, eltwiseType) {}
+    LSTM(DataType dt, U32 numOutput, U32 numProjection, F32 zoneoutCell, F32 zoneoutOutput, bool biDirection)
+        :LSTMCell(dt, numOutput, numProjection, zoneoutCell, zoneoutOutput, biDirection) {
+    }
 
     void run() override
     {
@@ -45,7 +46,7 @@ public:
         CHECK_STATUS(lstm(inputDesc, inputTensor.get_val(),
                           weightDesc, weightTensor.get_val(),
                           biasDesc, biasTensor.get_val(),
-                          this->lenOfTemp, this->temp.get(),
+                          this->lenOfTemp, this->temp->get_val(),
                           this->lstmDesc,
                           outputDesc, outputTensor.get_val(), this->schedule));
         UTIL_TIME_TOC(__CLASS_FUNCTION__)
@@ -59,10 +60,11 @@ public:
         DataFormat df;
         U32 iB, inT, iX;
         CHECK_STATUS(tensor3dGet(inDim, &dt, &df, &iB, &inT, &iX));
+        U32 column = (this->lstmDesc.numProjection > 0) ? this->lstmDesc.numProjection : this->lstmDesc.numOutput;
         this->xDim = iX;
-        this->filterRow = 4 * this->lstmDesc.numOutput;
-        this->filterCol = this->lstmDesc.numOutput + iX;
-        TensorDesc filter_dim = tensor2df(this->dt, DF_8NK, this->filterRow, this->filterCol);
+        this->filterRow = 4 * column;
+        this->filterCol = column + iX;
+        TensorDesc filter_dim = tensor2df(this->dt, DF_NK, this->filterRow, this->filterCol);
       	U32 outBytes = 0;
         CHECK_STATUS(lstm_infer_output_size(inDim, filter_dim, this->lstmDesc, &((*outDims)[0]), &outBytes));
         return SUCCESS;
@@ -70,9 +72,9 @@ public:
 
     U32 infer_tmp_memory_size() override
     {
-        TensorDesc inputDesc = (this->inputTensors[0]).desc;
-        TensorDesc filterDesc = (this->weightTensors[0]).desc;
-        TensorDesc outputDesc = (this->outputTensors[0]).desc;
+        TensorDesc inputDesc = (this->inputTensors[0]).get_desc();
+        TensorDesc filterDesc = (this->weightTensors[0]).get_desc();
+        TensorDesc outputDesc = (this->outputTensors[0]).get_desc();
         U32 bytes = 0;
         CHECK_STATUS(lstm_infer_forward_tmp_bytes(inputDesc, filterDesc, outputDesc, this->lstmDesc, &bytes, this->schedule));
         return bytes;

@@ -19,7 +19,9 @@
 #ifdef _USE_MALI
 #include "gcl.h"
 #endif
+#ifdef _BUILD_TEST
 #include "sequential.hpp"
+#endif
 #include "thread_affinity.h"
 #include "op_type.h"
 #include "model_serialize_deserialize.hpp"
@@ -28,15 +30,13 @@ typedef enum{
     d_GPU = 1
 } DeviceTypeIn;
 
-inline Vec<TensorDesc> extractInputDims(const ModelSpec *ms) {
-    Vec<TensorDesc> inputDims;
+inline HashMap<std::string, TensorDesc> extractInputDims(const ModelSpec *ms) {
+    HashMap<std::string, TensorDesc> inputDescMap;
     int inputNum = ms->num_inputs;
-    for (int i=0; i< inputNum; i++) {
-        TensorDesc tmpDim;
-        memcpy(&tmpDim, &(ms->input_dims[i]), sizeof(TensorDesc));
-        inputDims.push_back(tmpDim);
+    for (int i = 0; i < inputNum; i++) {
+        inputDescMap[ms->input_names[i]] = ms->input_dims[i];
     }
-    return inputDims;
+    return inputDescMap;
 }
 
 inline Arch getCpuArchInfo(const char *cpuAffinityPolicyName){
@@ -50,7 +50,8 @@ inline Arch getCpuArchInfo(const char *cpuAffinityPolicyName){
     return arch;
 }
 
-inline Arch getArch(const char *cpuAffinityPolicyName, DeviceTypeIn device){
+inline Arch getArch(const char *cpuAffinityPolicyName, DeviceTypeIn device)
+{
     Arch arch = CPU_GENERAL;
     if(device == d_CPU){
         arch = getCpuArchInfo(cpuAffinityPolicyName);
@@ -60,6 +61,35 @@ inline Arch getArch(const char *cpuAffinityPolicyName, DeviceTypeIn device){
         CHECK_STATUS(NOT_SUPPORTED);
     }
     return arch;
+}
+
+inline std::shared_ptr<CNN> createPipelinefromMs(Arch arch, ModelSpec* ms, const char *algorithmMapPath)
+{
+    CNN* cnn;
+    cnn = new CNN(arch, ms->dt, ms->model_name);
+
+    cnn->sort_operators_sequential(ms);
+    //TODO this function is not tested
+    //cnn ->sort_operators_tp(ms);
+
+    // create ops
+    cnn->initialize_ops(ms);
+
+    HashMap<std::string, TensorDesc> inputDescMap = extractInputDims(ms);
+
+    cnn->loadAlgorithmMapFromText(algorithmMapPath);
+
+    // assign space for output, tmp, bias, and trans_weight
+    cnn->ready(inputDescMap);
+
+    CHECK_STATUS(cnn->mark_input_output(ms));
+#ifdef _USE_MALI
+    if(arch == MALI) cnn->mali_prepare();
+#endif
+
+    cnn->saveAlgorithmMapToText(algorithmMapPath);
+
+    return std::shared_ptr<CNN>(cnn);
 }
 
 inline std::shared_ptr<CNN> createPipelineWithConfigure(const char *cpuAffinityPolicyName,
@@ -75,31 +105,10 @@ inline std::shared_ptr<CNN> createPipelineWithConfigure(const char *cpuAffinityP
     ModelSpec ms;
     deserialize_model_from_file(modelPath, &ms);
 
-    CNN* cnn;
-    cnn = new CNN(arch, ms.dt, ms.model_name);
+    std::shared_ptr<CNN> pipeline = createPipelinefromMs(arch, &ms, algorithmMapPath);
 
-    cnn->sort_operators_sequential(&ms);
-    //TODO this function is not tested
-    //cnn ->sort_operators_tp(ms);
-
-    // create ops
-    cnn->initialize_ops(&ms);
-
-    Vec<TensorDesc> dims = extractInputDims(&ms);
-
-    cnn->loadAlgorithmMapFromText(algorithmMapPath);
-
-    // assign space for output, tmp, bias, and trans_weight
-    cnn->ready(dims); 
-
-    cnn->saveAlgorithmMapToText(algorithmMapPath);
-
-    CHECK_STATUS(cnn->mark_input_output(&ms));
-#ifdef _USE_MALI
-    if(arch == MALI) cnn->mali_prepare();
-#endif
     CHECK_STATUS(mt_destroy_model(&ms));
-    return std::shared_ptr<CNN>(cnn);
+    return pipeline;
 }
 
 inline std::shared_ptr<CNN> createPipeline(const char *cpuAffinityPolicyName, const char* modelPath, DeviceTypeIn device)
@@ -107,6 +116,7 @@ inline std::shared_ptr<CNN> createPipeline(const char *cpuAffinityPolicyName, co
     return createPipelineWithConfigure(cpuAffinityPolicyName, modelPath, device, "");
 }
 
+#ifdef _BUILD_TEST
 inline Sequential createSequentialPipeline(const char *cpuAffinityPolicyName, DataType dt, const char *modelName)
 {
     // set cpu affinity
@@ -114,4 +124,5 @@ inline Sequential createSequentialPipeline(const char *cpuAffinityPolicyName, Da
     auto sequential = Sequential(arch, dt, modelName);
     return sequential;
 }
+#endif
 #endif

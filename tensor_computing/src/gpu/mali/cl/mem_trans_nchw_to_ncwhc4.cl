@@ -21,6 +21,7 @@ __kernel void mem_trans_nchw_to_ncwhc4(const int iw, const int ih, const int ic,
     const int idx = get_global_id(0);
     const int idy = get_global_id(1);
     const int idz = get_global_id(2);
+    if(idx >= (iw + 3) >> 2 || idy >= ih) return;
 
     short ew = ((idx << 2) + 4 <= iw) ? 4 : (iw & 3);
     short ec = ((idz << 2) + 4 <= ic) ? 4 : (ic & 3);

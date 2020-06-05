@@ -15,8 +15,8 @@
 /**
  * Project deploy
  */
-#ifndef _multiply_H
-#define _multiply_H
+#ifndef _MULTIPLY_H
+#define _MULTIPLY_H
 #include "operator.hpp"
 #include "tensor_computing.h"
 
@@ -33,29 +33,6 @@ public:
     {
         return OT_Multiply;
     }
-
-    void run() override
-    {
-        UTIL_TIME_TIC(__CLASS_FUNCTION__)
-        Tensor inputTensor =  this->inputTensors[0];
-        TensorDesc inputDesc = inputTensor.get_desc();
-        Tensor outputTensor = this->outputTensors[0];
-        TensorDesc output_desc = outputTensor.get_desc();
-
-        CHECK_STATUS(multiply(&(this->alpha), &(this->beta),
-                              inputDesc, inputTensor.get_val(),
-                              output_desc, outputTensor.get_val(), this->schedule));
-
-        UTIL_TIME_TOC(__CLASS_FUNCTION__)
-    }
-
-
-    EE infer_output_tensors_size(Vec<TensorDesc> inDims, Vec<TensorDesc>* outDims) override
-    {
-        CHECK_STATUS(multiply_infer_output_size(inDims[0], &((*outDims)[0])));
-        return SUCCESS;
-    }
-
 
 public:
     F32 alpha;

@@ -23,12 +23,13 @@ public:
         :ptr(p){}
     inline operator U8*()    {return (U8*)ptr;}
     inline operator void*()  {return ptr;}
-#ifdef _USE_FP16
+#ifdef __aarch64__
     inline operator F16*()   {return (F16*)ptr;}
 #endif
     inline operator F32*()   {return (F32*)ptr;}
     inline operator U32*()   {return (U32*)ptr;}
     inline operator I32*()   {return (I32*)ptr;}
+    inline operator INT8*()   {return (INT8*)ptr;}
 #ifdef _USE_MALI
     inline operator GCLMem_t(){return (GCLMem_t)ptr;}
 #endif

@@ -76,7 +76,7 @@ EE convolution_fp16(TensorDesc inputDesc, F16* input,
     TensorDesc biasDesc, const F16* bias,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F16* output,
-    ActivationMode activationMode,
+    ActivationDesc activationDesc,
     Arch arch)
 {
     if (nullptr == input || nullptr == filter || nullptr == output || nullptr == bias || nullptr == tmp) {
@@ -97,26 +97,33 @@ EE convolution_fp16(TensorDesc inputDesc, F16* input,
     if (!(odf == DF_NCHWC8)) {
         CHECK_STATUS(NOT_MATCH);
     }
-    if (!(ic == fc && oc == fn))
+    if (!(ic == fc && oc == fn)) {
         CHECK_STATUS(NOT_MATCH);
+    }
+
+    // In some cases when we adjust the model input, the input tensor of conv can change from NCHW to NCHWc8
+    // In this case we can simply change the algo, because they both require the same filter transform
+    if (CONVOLUTION_ALGORITHM_GEMM_ICNCHW == algorithm && DF_NCHWC8 == idf) {
+        algorithm = CONVOLUTION_ALGORITHM_GEMM;
+    }
 
     EE ret = SUCCESS;
     switch (algorithm) {
         case CONVOLUTION_ALGORITHM_DIRECT:
             ret = convolution_direct(inputDesc, input, filterDesc, filter, convDesc,
-                                     biasDesc, bias, tmpBytes, tmp, outputDesc, output, activationMode, arch);
+                                     biasDesc, bias, tmpBytes, tmp, outputDesc, output, activationDesc, arch);
             break;
         case CONVOLUTION_ALGORITHM_GEMM:
             ret = convolution_gemm(inputDesc, input, filterDesc, filter, convDesc,
-                                   biasDesc, bias, tmpBytes, tmp, outputDesc, output, activationMode, arch);
+                                   biasDesc, bias, tmpBytes, tmp, outputDesc, output, activationDesc, arch);
             break;
         case CONVOLUTION_ALGORITHM_WINOGRAD:
             ret = convolution_winograd(inputDesc, input, filterDesc, filter, convDesc,
-                                       biasDesc, bias, tmpBytes, tmp, outputDesc, output, activationMode, arch);
+                                       biasDesc, bias, tmpBytes, tmp, outputDesc, output, activationDesc, arch);
             break;
         case CONVOLUTION_ALGORITHM_GEMM_ICNCHW:
             ret = convolution_gemm_icnchw(inputDesc, input, filterDesc, filter, convDesc,
-                                          biasDesc, bias, tmpBytes, tmp, outputDesc, output, activationMode, arch);
+                                          biasDesc, bias, tmpBytes, tmp, outputDesc, output, activationDesc, arch);
             break;
         default:
             ret = NOT_SUPPORTED;

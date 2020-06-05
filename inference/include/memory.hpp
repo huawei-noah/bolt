@@ -25,13 +25,13 @@ typedef enum{
 } MemoryType;
 
 class Memory_ {
-    public:
+public:
     Memory_(){}
     virtual ~Memory_(){}
     virtual void  alloc(TensorDesc desc) = 0;
-    virtual void  set_val(PtrCaster val) = 0;
+    virtual void  alloc(U32 size) = 0;
+    virtual void  set_val_by_copy(TensorDesc desc, U8* ptr) = 0;
     virtual void* get_val() = 0;
-    inline  void  set_val_caster(void* val){set_val(PtrCaster(val));}
     inline PtrCaster get_val_caster(){return PtrCaster(this->get_val());}
     virtual MemoryType get_mem_type() = 0;
 

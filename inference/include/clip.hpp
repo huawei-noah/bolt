@@ -36,33 +36,11 @@ public:
         return OT_Clip;
     }
 
-    void run() override
-    {
-        UTIL_TIME_TIC(__CLASS_FUNCTION__)
-
-        Tensor inputTensor = this->inputTensors[0];
-        TensorDesc inputDesc = inputTensor.get_desc();
-        Tensor outputTensor = this->outputTensors[0];
-        TensorDesc outputDesc = outputTensor.get_desc();
-
-        CHECK_STATUS(clip(&(this->clipMinScalar), &(clipMaxScalar),
-                          inputDesc, inputTensor.get_val(),
-                          outputDesc, outputTensor.get_val(), this->schedule));
-        UTIL_TIME_TOC(__CLASS_FUNCTION__)
-    }
-
-    EE infer_output_tensors_size(Vec<TensorDesc>inDims, Vec<TensorDesc>* outDims) override
-    {
-        CHECK_STATUS(clip_infer_output_size(inDims[0], &((*outDims)[0])));
-        return SUCCESS;
-    }
-
     bool can_input_output_the_same() override
     {
         return true;
     }
-
-private:
+protected:
     F32 clipMinScalar;
     F32 clipMaxScalar;
 };

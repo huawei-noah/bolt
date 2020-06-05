@@ -40,12 +40,13 @@ int deconvolutionTest(int argc, char** argv, DataType dt) {
     CHECK_REQUIREMENT(in == 1 && on == 1);
     CHECK_REQUIREMENT(ic % 8 == 0 && oc % 8 == 0);
 
-    ActivationMode am = ACTIVATION_NULL;
+    ActivationDesc activationDesc;
+    activationDesc.mode = ACTIVATION_NULL;
 
     TensorDesc inputDesc, filterDesc, outputDesc, biasDesc;
     ConvolutionDesc convDesc;
     inputDesc = tensor4df(dt, DF_NCHWC8, in, ic, ih, iw);
-    filterDesc = tensor4df(dt, DF_NCHW, oc, ic, fh, fw);
+    filterDesc = tensor4df(dt, DF_NCHW, fn, fc, fh, fw);
     biasDesc = tensor1d(dt, oc);
     convDesc.stride_h = stride;
     convDesc.stride_w = stride;
@@ -99,7 +100,7 @@ int deconvolutionTest(int argc, char** argv, DataType dt) {
                                  biasDesc, bias,
                                  tmpBytes, tmp,
                                  outputDesc, output,
-                                 am, UT_ARCH));
+                                 activationDesc, UT_ARCH));
 
         // naive implement
         CHECK_STATUS(deconvolution(inputDesc, input_ref,
@@ -109,7 +110,7 @@ int deconvolutionTest(int argc, char** argv, DataType dt) {
                                  biasDesc, bias,
                                  tmpBytes, nullptr,
                                  outputDesc, output_ref,
-                                 am, CPU_GENERAL));
+                                 activationDesc, CPU_GENERAL));
 
         // check
         ut_check_v(output, output_ref, output_size, dt, 1, __FILE__, __LINE__);
@@ -125,7 +126,7 @@ int deconvolutionTest(int argc, char** argv, DataType dt) {
                                  biasDesc, bias,
                                  tmpBytes, tmp,
                                  outputDesc, output,
-                                 am, UT_ARCH));
+                                 activationDesc, UT_ARCH));
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;
@@ -159,8 +160,8 @@ int main(int argc, char** argv) {
 #ifdef _USE_FP16
     deconvolutionTest(argc, argv, DT_F16);
 #endif
-/*#ifdef _USE_FP32
+#ifdef _USE_FP32
     deconvolutionTest(argc, argv, DT_F32);
-#endif*/
+#endif
     return 0;
 }

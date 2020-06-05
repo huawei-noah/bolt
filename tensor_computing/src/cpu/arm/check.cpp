@@ -11,8 +11,8 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, 
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <arm_neon.h>
 #include "cpu/arm/tensor_computing_arm.h"
+#include "arm_neon_expand.h"
 #ifdef _USE_FP32
 #include "cpu/arm/fp32/tensor_computing_fp32.h"
 #endif
@@ -90,6 +90,13 @@ EE check_arm(TensorDesc inputDescA, const void* inputA,
         }
 #endif
         case DT_U32: {
+            ret = check_u32(inputDescA, (const U32*)inputA,
+                            inputDescB, (const U32*)inputB,
+                            checkMode,
+                            outputDesc, (I32*)output);
+            break;
+        }
+        case DT_I32: {
             ret = check_u32(inputDescA, (const U32*)inputA,
                             inputDescB, (const U32*)inputB,
                             checkMode,

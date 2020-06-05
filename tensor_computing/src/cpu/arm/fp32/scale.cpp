@@ -15,33 +15,97 @@
 #include <arm_neon.h>
 #include "cpu/arm/fp32/tensor_computing_fp32.h"
 
-EE scale_nchwc8_fp32(F32* alpha, F32* beta, F32* data, U32 in, U32 ic, U32 elements_per_channel)
+EE scale_nchwc8_fp32(F32* input, F32* alpha, F32* beta, I32 in, I32 ic, I32 elements_per_channel, F32* output)
 {
-    if (nullptr == data || nullptr == alpha) {
-        CHECK_STATUS(NULL_POINTER);
-    }
-    const U32 align_size = 8;
     float32x4_t in_vec, out_vec;
-    float32x4_t zero  = vdupq_n_f32(float32_t(0.));
-    ic = ic / align_size;
-    for (U32 n = 0; n < in; n++) {
-        for (U32 c = 0; c < ic; c++) {
-            float32x4_t alpha_vec0 = vld1q_f32(alpha + c * align_size);
-            float32x4_t alpha_vec1 = vld1q_f32(alpha + c * align_size + 4);
-            float32x4_t beta_vec0 = (beta == nullptr) ? zero : vld1q_f32(beta + c * align_size);
-            float32x4_t beta_vec1 = (beta == nullptr) ? zero : vld1q_f32(beta + c * align_size + 4);
-            for (U32 i = 0; i < elements_per_channel; i++) {
-                U32 index = ((n * ic + c) * elements_per_channel + i) * align_size;
-                in_vec = vld1q_f32(data + index);
+    float32x4_t one = vdupq_n_f32(float32_t(1.));
+    float32x4_t zero = vdupq_n_f32(float32_t(0.));
+    U32 index = 0;
+    for (I32 n = 0; n < in; n++) {
+        for (I32 c = 0; c < ic; c += 8) {
+            float32x4_t alpha_vec0 = (alpha == nullptr) ? one : vld1q_f32(alpha + c);
+            float32x4_t alpha_vec1 = (alpha == nullptr) ? one : vld1q_f32(alpha + c + 4);
+            float32x4_t beta_vec0 = (beta == nullptr) ? zero : vld1q_f32(beta + c);
+            float32x4_t beta_vec1 = (beta == nullptr) ? zero : vld1q_f32(beta + c + 4);
+            for (I32 i = 0; i < elements_per_channel; i++) {
+                in_vec = vld1q_f32(input + index);
                 out_vec = vfmaq_f32(beta_vec0, alpha_vec0, in_vec);
-                vst1q_f32(data+index, out_vec);
+                vst1q_f32(output+index, out_vec);
 
-                in_vec = vld1q_f32(data + index + 4);
+                in_vec = vld1q_f32(input + index + 4);
                 out_vec = vfmaq_f32(beta_vec1, alpha_vec1, in_vec);
-                vst1q_f32(data+index+4, out_vec);
+                vst1q_f32(output+index+4, out_vec);
+                index += 8;
             }
         }
     }
-
     return SUCCESS;
+}
+
+EE scale_nchw_fp32(F32* input, F32* alpha, F32* beta, I32 in, I32 ic, I32 elements_per_channel, F32* output)
+{
+    float32x4_t one = vdupq_n_f32(1.);
+    float32x4_t zero = vdupq_n_f32(0.);
+    U32 index = 0;
+    for (I32 n = 0; n < in; n++) {
+        for (I32 c = 0; c < ic; c++) {
+            float32x4_t alpha_vec = (alpha == nullptr) ? one : vdupq_n_f32(alpha[c]);
+            float32x4_t beta_vec  = (beta == nullptr) ? zero : vdupq_n_f32(beta[c]);
+            I32 i = 0;
+            for (; i < elements_per_channel-3; i += 4) {
+                float32x4_t in_vec = vld1q_f32(input + index);
+                float32x4_t out_vec = vfmaq_f32(beta_vec, alpha_vec, in_vec);
+                vst1q_f32(output+index, out_vec);
+                index += 4;
+            }
+            for (; i < elements_per_channel; i++) {
+                output[index] = alpha[c] * input[index] + beta[c];
+                index++;
+            }
+        }
+    }
+    return SUCCESS;
+}
+
+EE scale_nhwc_fp32(F32* input, F32* alpha, F32* beta, I32 in, I32 ic, I32 elements_per_channel, F32* output)
+{
+    float32x4_t one = vdupq_n_f32(1.);
+    float32x4_t zero = vdupq_n_f32(0.);
+    U32 index = 0;
+    for (I32 n = 0; n < in; n++) {
+        for (I32 i = 0; i < elements_per_channel; i++) {
+            I32 c = 0;
+            for (; c < ic-3; c += 4) {
+                float32x4_t alpha_vec = (alpha == nullptr) ? one : vld1q_f32(alpha+c);
+                float32x4_t beta_vec  = (beta == nullptr) ? zero : vld1q_f32(beta+c);
+                float32x4_t in_vec = vld1q_f32(input + index);
+                float32x4_t out_vec = vfmaq_f32(beta_vec, alpha_vec, in_vec);
+                vst1q_f32(output+index, out_vec);
+                index += 4;
+            }
+            for (; c < ic; c++) {
+                F32 beta_s = (beta == nullptr) ? 0 : beta[c];
+                output[index] = alpha[c] * input[index] + beta_s;
+                index++;
+            }
+        }
+    }
+    return SUCCESS;
+}
+
+EE scale_fp32(F32* input, I32 axis, I32 nDims, F32* alpha, F32* beta, I32 in, I32 ic, I32 elements_per_channel, F32* output)
+{
+    if (nullptr == input || nullptr == output)
+        CHECK_STATUS(NULL_POINTER);
+    EE ret = SUCCESS;
+    if (axis == 1 || axis == 0) {
+        ret = scale_nchw_fp32(input, alpha, beta, in, ic, elements_per_channel, output);
+    } else if (axis == nDims - 1) {
+        ret = scale_nhwc_fp32(input, alpha, beta, in, ic, elements_per_channel, output);
+    } else if (axis == nDims) {
+        ret = scale_nchwc8_fp32(input, alpha, beta, in, ic, elements_per_channel, output);
+    } else {
+        CHECK_STATUS(NOT_SUPPORTED);
+    }
+    return ret;
 }

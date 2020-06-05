@@ -18,5 +18,6 @@ int main(){
     GCLHandle_t handle;
     CHECK_STATUS(gcl_create_handle(&handle));
     CHECK_STATUS(list_device_info(handle->devices[handle->deviceId]));
+    CHECK_STATUS(gcl_destroy_handle(handle));
     return 0;
 }

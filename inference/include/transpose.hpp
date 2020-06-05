@@ -15,6 +15,7 @@
 #ifndef _TRANSPOSE_H
 #define _TRANSPOSE_H
 
+#include <algorithm>
 #include "operator.hpp"
 #include "tensor_computing.h"
 
@@ -30,31 +31,7 @@ public:
     {
         return OT_Transpose;
     }
-
-    void run() override
-    {
-        UTIL_TIME_TIC(__CLASS_FUNCTION__)
-
-        Tensor inputTensor = this->inputTensors[0];
-        TensorDesc inputDesc = inputTensor.get_desc();
-
-        Tensor outputTensor = this->outputTensors[0];
-        TensorDesc outputDesc = outputTensor.get_desc();
-
-        CHECK_STATUS(transpose(inputDesc, inputTensor.get_val(), outputDesc, outputTensor.get_val(), this->transDims.data(), this->schedule));
-        UTIL_TIME_TOC(__CLASS_FUNCTION__)
-    }
-
-    EE infer_output_tensors_size(Vec<TensorDesc> imDims, Vec<TensorDesc>* outDims) override
-    {
-        TensorDesc inputDesc = imDims[0];
-        CHECK_STATUS(transpose_infer_output_size(inputDesc, &((*outDims)[0]), this->transDims.data()));
-        return SUCCESS;
-
-    }
-
-
-private:
+protected:
     Vec<U32> transDims;
 };
 

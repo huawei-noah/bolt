@@ -30,7 +30,7 @@ EE convolution_bnn(TensorDesc inputDesc, const F16* input,
     TensorDesc biasDesc, const F16* bias,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F16* output,
-    ActivationMode activationMode,
+    ActivationDesc activationDesc,
     Arch arch);
 #endif
 #endif

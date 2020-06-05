@@ -21,8 +21,8 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
     TensorDesc biasDesc, const I32* biasArray,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, I32* outArray,
-    ActivationMode depthwiseActivationMode,
-    ActivationMode pointwiseActivationMode,
+    ActivationDesc depthwiseActivationDesc,
+    ActivationDesc pointwiseActivationDesc,
     Arch arch)
 {
     UNUSED(biasDesc);
@@ -247,7 +247,7 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                 }
 
                 // activation
-                switch (depthwiseActivationMode){
+                switch (depthwiseActivationDesc.mode){
                     case ACTIVATION_NULL: {
                         break;
                     }
@@ -429,7 +429,7 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                         return NOT_SUPPORTED;
                 }
 
-                if (depthwiseActivationMode != ACTIVATION_RELU6) {
+                if (depthwiseActivationDesc.mode != ACTIVATION_RELU6) {
                     __asm__ __volatile__(
                         "str q5, [%[pw0]]\n"
                         "str q7, [%[pw0], #16]\n"
@@ -583,7 +583,7 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                 }
 
                 // activation
-                switch (depthwiseActivationMode){
+                switch (depthwiseActivationDesc.mode){
                     case ACTIVATION_NULL: {
                         break;
                     }
@@ -718,7 +718,7 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                         return NOT_SUPPORTED;
                 }
 
-                if (depthwiseActivationMode != ACTIVATION_RELU6) {
+                if (depthwiseActivationDesc.mode != ACTIVATION_RELU6) {
                     __asm__ __volatile__(
                         "str q5, [%[pw0]]\n"
                         "str q7, [%[pw0], #16]\n"
@@ -821,7 +821,7 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                 }
 
                 // activation
-                switch (depthwiseActivationMode){
+                switch (depthwiseActivationDesc.mode){
                     case ACTIVATION_NULL: {
                         break;
                     }
@@ -907,7 +907,7 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                         return NOT_SUPPORTED;
                 }
 
-                if (depthwiseActivationMode != ACTIVATION_RELU6) {
+                if (depthwiseActivationDesc.mode != ACTIVATION_RELU6) {
                     __asm__ __volatile__(
                         "str q5, [%[pw0]]\n"
                         "str q7, [%[pw0], #16]\n"
@@ -968,7 +968,7 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                 }
 
                 // activation
-                switch (depthwiseActivationMode){
+                switch (depthwiseActivationDesc.mode){
                     case ACTIVATION_NULL: {
                         break;
                     }
@@ -1015,7 +1015,7 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                         return NOT_SUPPORTED;
                 }
 
-                if (depthwiseActivationMode != ACTIVATION_RELU6) {
+                if (depthwiseActivationDesc.mode != ACTIVATION_RELU6) {
                     __asm__ __volatile__(
                         "str q5, [%[pw0]]\n"
                         "str q6, [%[pw1]]\n"
@@ -1029,10 +1029,10 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
         }
         
         I32 scale = 1;
-        if (depthwiseActivationMode != ACTIVATION_RELU6) {
+        if (depthwiseActivationDesc.mode != ACTIVATION_RELU6) {
             // quantization
             I32 factor = 16777216; // 24 bits
-            switch (depthwiseActivationMode) {
+            switch (depthwiseActivationDesc.mode) {
                 case ACTIVATION_NULL: {
                     I32 max_s = dw_out[0];
                     I32 min_s = dw_out[0];
@@ -1431,7 +1431,7 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                     :[ic]"r"((I64)ic*8),
                      [b_0]"r"(b_0),
                      [b_1]"r"(b_1),
-                     [pointwiseActivationMode]"r"((I64)pointwiseActivationMode),
+                     [pointwiseActivationMode]"r"((I64)pointwiseActivationDesc.mode),
                      [am_relu]"r"((I64)ACTIVATION_RELU),
                      [am_relu6]"r"((I64)ACTIVATION_RELU6),
                      [scale]"r"(scale_v)
@@ -1667,7 +1667,7 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                     :[ic]"r"((I64)ic*8),
                      [b_0]"r"(b_0),
                      [b_1]"r"(b_1),
-                     [pointwiseActivationMode]"r"((I64)pointwiseActivationMode),
+                     [pointwiseActivationMode]"r"((I64)pointwiseActivationDesc.mode),
                      [am_relu]"r"((I64)ACTIVATION_RELU),
                      [am_relu6]"r"((I64)ACTIVATION_RELU6),
                      [scale]"r"(scale_v)
@@ -1824,7 +1824,7 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                     :[ic]"r"((I64)ic*8),
                      [b_0]"r"(b_0),
                      [b_1]"r"(b_1),
-                     [pointwiseActivationMode]"r"((I64)pointwiseActivationMode),
+                     [pointwiseActivationMode]"r"((I64)pointwiseActivationDesc.mode),
                      [am_relu]"r"((I64)ACTIVATION_RELU),
                      [am_relu6]"r"((I64)ACTIVATION_RELU6),
                      [scale]"r"(scale_v)
@@ -1865,7 +1865,7 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                     res[1] = vdotq_lane_s32(res[1], f_8o[3], in_2, 1);
                 }
 
-                if (pointwiseActivationMode!=ACTIVATION_RELU6 && scale!=1) { // Scale
+                if (pointwiseActivationDesc.mode != ACTIVATION_RELU6 && scale!=1) { // Scale
                     int32x4_t sc = vld1q_s32(scale_v);
                     res[0] = vmulq_s32(res[0], sc);
                     res[1] = vmulq_s32(res[1], sc);
@@ -1878,7 +1878,7 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
                 res[0] = vaddq_s32(res[0], bias[0]);
                 res[1] = vaddq_s32(res[1], bias[1]);
 
-                switch (pointwiseActivationMode) {
+                switch (pointwiseActivationDesc.mode) {
                     case ACTIVATION_NULL:
                         break;
                     case ACTIVATION_RELU: {

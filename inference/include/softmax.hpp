@@ -20,28 +20,18 @@
 
 class Softmax : public Operator {
 public:
-    explicit Softmax(DataType dt)
+    explicit Softmax(DataType dt, int axis)
     {
         this->dt = dt;
+        this->axis = axis;
+        this->lenOfTemp = 0;
     }
 
     OperatorType get_op_type() override
     {
         return OT_Softmax;
     }
-
-    TensorDesc reshape(TensorDesc inputDesc) {
-        TensorDesc reshapeDesc = inputDesc;
-        int i = 0, j = 0;
-        for (; i < (int)inputDesc.nDims; i++) {
-            if (inputDesc.dims[i] != 1)
-                break;
-        }
-        for (; i < (int)inputDesc.nDims; i++) {
-            reshapeDesc.dims[j++] = inputDesc.dims[i];
-        }
-        reshapeDesc.nDims = j;
-        return reshapeDesc;
-    }
+protected:
+    int axis;
 };
 #endif //_SOFTMAX_H

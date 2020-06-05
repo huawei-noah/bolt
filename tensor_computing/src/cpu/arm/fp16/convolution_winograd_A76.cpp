@@ -21,7 +21,7 @@ EE convolution_winograd_A76(TensorDesc inputDesc, F16* inArray,
     TensorDesc biasDesc, const F16* biasArray,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F16* outArray,
-    ActivationMode activationMode)
+    ActivationDesc activationDesc)
 {
     UNUSED(biasDesc);
     UNUSED(tmpBytes);
@@ -271,8 +271,8 @@ EE convolution_winograd_A76(TensorDesc inputDesc, F16* inArray,
                             O_1[i*4 + j] = out_1 + i*ow*8 + j*8;
                         }
                     }
-                    CHECK_STATUS(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationMode));
-                    CHECK_STATUS(trans_O_4x4_3x3(Ow_1, O_1, b_1, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationMode));
+                    CHECK_STATUS(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationDesc));
+                    CHECK_STATUS(trans_O_4x4_3x3(Ow_1, O_1, b_1, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationDesc));
                 }
             }
             if (oc & 1) {
@@ -347,7 +347,7 @@ EE convolution_winograd_A76(TensorDesc inputDesc, F16* inArray,
                             O_0[i*4 + j] = out_0 + i*ow*8 + j*8;
                         }
                     }
-                    CHECK_STATUS(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationMode));
+                    CHECK_STATUS(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationDesc));
                 }
             }
         }
@@ -509,8 +509,8 @@ EE convolution_winograd_A76(TensorDesc inputDesc, F16* inArray,
                             O_1[i*4 + j] = out_1 + i*ow*8 + j*8;
                         }
                     }
-                    CHECK_STATUS(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationMode));
-                    CHECK_STATUS(trans_O_4x4_3x3(Ow_1, O_1, b_1, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationMode));
+                    CHECK_STATUS(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationDesc));
+                    CHECK_STATUS(trans_O_4x4_3x3(Ow_1, O_1, b_1, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationDesc));
                 }
             }
             if (oc & 1) {
@@ -573,7 +573,7 @@ EE convolution_winograd_A76(TensorDesc inputDesc, F16* inArray,
                             O_0[i*4 + j] = out_0 + i*ow*8 + j*8;
                         }
                     }
-                    CHECK_STATUS(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationMode));
+                    CHECK_STATUS(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationDesc));
                 }
             }
         }
@@ -672,8 +672,8 @@ EE convolution_winograd_A76(TensorDesc inputDesc, F16* inArray,
                         O_1[i*4 + j] = out_1 + i*ow*8 + j*8;
                     }
                 }
-                CHECK_STATUS(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationMode));
-                CHECK_STATUS(trans_O_4x4_3x3(Ow_1, O_1, b_1, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationMode));
+                CHECK_STATUS(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationDesc));
+                CHECK_STATUS(trans_O_4x4_3x3(Ow_1, O_1, b_1, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationDesc));
             }
             if (oc & 1) {
                 F16 *itm_0 = itmArray;
@@ -725,7 +725,7 @@ EE convolution_winograd_A76(TensorDesc inputDesc, F16* inArray,
                         O_0[i*4 + j] = out_0 + i*ow*8 + j*8;
                     }
                 }
-                CHECK_STATUS(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationMode));
+                CHECK_STATUS(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationDesc));
             }
         }
     }

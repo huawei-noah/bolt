@@ -39,6 +39,7 @@ EE convolution_infer_forward_algorithm_arm(TensorDesc inputDesc, TensorDesc filt
     if (*algorithm != CONVOLUTION_ALGORITHM_NULL)
         return SUCCESS;
     if (policy == CONVOLUTION_LIBRARY_SEARCH) {
+#ifdef _USE_LIBRARY_TUNING
         if (libraryAlgorithmMap.size() == 0) {
             loadLibraryAlgorithmMapFromTxt();
         }
@@ -47,7 +48,9 @@ EE convolution_infer_forward_algorithm_arm(TensorDesc inputDesc, TensorDesc filt
         if (libraryAlgorithmMap.find(name) != libraryAlgorithmMap.end()) {
             *algorithm = (ConvolutionForwardAlgorithm)libraryAlgorithmMap[name];
             return SUCCESS;
-        } else {
+        } else
+#endif
+        {
             policy = CONVOLUTION_FASTEST;
         }
     }
@@ -73,7 +76,7 @@ EE convolution_infer_forward_algorithm_arm(TensorDesc inputDesc, TensorDesc filt
             return SUCCESS;
         }
 
-        if (ic % 8 != 0) {
+        if (ic % 8 != 0 || idf != DF_NCHWC8) {
             *algorithm = CONVOLUTION_ALGORITHM_GEMM_ICNCHW;
         } else if (fh == 3 && fw == 3 && strideH == 1 && strideW == 1 && paddingT == 1 && paddingB == 1 && paddingL == 1 && paddingR == 1) {
             *algorithm = CONVOLUTION_ALGORITHM_WINOGRAD;
@@ -90,9 +93,22 @@ EE convolution_infer_forward_algorithm_arm(TensorDesc inputDesc, TensorDesc filt
                 *algorithm = CONVOLUTION_ALGORITHM_BNN;
                 break;
             }
+            case DT_I8: {
+                if (*algorithm == CONVOLUTION_ALGORITHM_WINOGRAD) {
+                    *algorithm = CONVOLUTION_ALGORITHM_GEMM;
+                }
+                break;
+            }
             default:
                 break;
         }
+
+#ifndef __aarch64__
+        if (CONVOLUTION_ALGORITHM_GEMM_ICNCHW != *algorithm) {
+            *algorithm = CONVOLUTION_ALGORITHM_GEMM;
+        }
+        return SUCCESS;
+#endif
     } else if (policy == CONVOLUTION_TUNNING) {
         std::vector<ConvolutionForwardAlgorithm> convolutionAlgorithms;
         U32 filterBytes = 0;
@@ -115,6 +131,9 @@ EE convolution_infer_forward_algorithm_arm(TensorDesc inputDesc, TensorDesc filt
         U8 *tmp    = ut_input_v(tmpBytes/bytesOf(inputDesc.dt), inputDesc.dt, UT_INIT_ZERO);
         U8 *output = ut_input_v(tensorNumElements(outputDesc), outputDesc.dt, UT_INIT_ZERO);
         U32 algorithmIndex = 0;
+        ActivationDesc activationDesc;
+        activationDesc.mode = ACTIVATION_RELU;
+        activationDesc.value[0] = 0;
         for (U32 i = 0; i < convolutionAlgorithms.size(); i++) {
             TensorDesc ftmDesc;
             CHECK_STATUS(convolution_transform_filter_arm(filterDesc, filter,
@@ -131,7 +150,7 @@ EE convolution_infer_forward_algorithm_arm(TensorDesc inputDesc, TensorDesc filt
                 biasDesc, bias,
                 tmpBytes, tmp,
                 outputDesc, output,
-                ACTIVATION_RELU,
+                activationDesc,
                 ARM_A76));
             double timeEnd = ut_time_ms();
             double timeMin = FLT_MAX;
@@ -281,7 +300,7 @@ EE convolution_infer_forward_tmp_bytes_arm(TensorDesc inputDesc, TensorDesc filt
         }
 #endif
         default:
-            ret = NOT_SUPPORTED;
+            CHECK_STATUS(NOT_SUPPORTED);
             break;
     }
     return ret;
@@ -296,7 +315,7 @@ EE convolution_arm(TensorDesc inputDesc, void* input,
     TensorDesc biasDesc, const void* bias,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, void* output,
-    ActivationMode activationMode,
+    ActivationDesc activationDesc,
     Arch arch)
 {
     EE ret = SUCCESS;
@@ -312,7 +331,7 @@ EE convolution_arm(TensorDesc inputDesc, void* input,
                                    biasDesc, (F32*)bias,
                                    tmpBytes, tmp,
                                    outputDesc, (F32*)output,
-                                   activationMode,
+                                   activationDesc,
                                    arch);
             break;
         }
@@ -326,7 +345,7 @@ EE convolution_arm(TensorDesc inputDesc, void* input,
                                    biasDesc, (F16*)bias,
                                    tmpBytes, tmp,
                                    outputDesc, (F16*)output,
-                                   activationMode,
+                                   activationDesc,
                                    arch);
             break;
         }
@@ -341,7 +360,7 @@ EE convolution_arm(TensorDesc inputDesc, void* input,
                                    biasDesc, (F16*)bias,
                                    tmpBytes, tmp,
                                    outputDesc, output,
-                                   activationMode,
+                                   activationDesc,
                                    arch);
             break;
         }
@@ -355,7 +374,7 @@ EE convolution_arm(TensorDesc inputDesc, void* input,
                                          biasDesc, (F16*)bias,
                                          tmpBytes, tmp,
                                          outputDesc, (F16*)output,
-                                         activationMode,
+                                         activationDesc,
                                          arch);
             break;
         }
@@ -367,7 +386,7 @@ EE convolution_arm(TensorDesc inputDesc, void* input,
                                        biasDesc, (F16*)bias,
                                        tmpBytes, tmp,
                                        outputDesc, (F16*)output,
-                                       activationMode,
+                                       activationDesc,
                                        arch);
             break;
         }

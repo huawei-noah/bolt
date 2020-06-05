@@ -49,15 +49,16 @@ protected:
 
     virtual EE adapt_operator(OperatorType type, ParameterSpec* ps) {
         if (type == OT_Input
-         || type == OT_Softmax
-         || type == OT_Relu
+         || type == OT_TanH
+         || type == OT_Gelu
+         || type == OT_Jump
            )
         {
         } else if (type == OT_Conv) {
             *ps = adapt_Conv();
         } else if (type == OT_Deconvolution) {
-	        *ps = adapt_Deconvolution();
-	    } else if (type == OT_FC) {
+           *ps = adapt_Deconvolution();
+        } else if (type == OT_FC) {
             *ps = adapt_Fc();
         } else if (type == OT_Pooling) {
             *ps = adapt_Pooling();
@@ -76,7 +77,7 @@ protected:
         } else if (type == OT_Pad) {
             *ps = adapt_Pad();
         } else if (type == OT_LayerNorm) {
-	        *ps = adapt_LayerNorm();
+            *ps = adapt_LayerNorm();
         } else if (type == OT_Multiply) {
             *ps = adapt_Multiply();
         } else if (type == OT_Reshape) {
@@ -115,9 +116,38 @@ protected:
             *ps = adapt_Interp();
         } else if (type == OT_Flatten) {
             *ps = adapt_Flatten();
+        } else if (type == OT_AttentionMask) {
+            *ps = adapt_AttentionMask();
+        } else if (type == OT_RelativePositionEmbedding) {
+            *ps = adapt_RelativePositionEmbedding();
+        } else if (type == OT_RelativeShift) {
+            *ps = adapt_RelativeShift();
+        } else if (type == OT_Concat) {
+            *ps = adapt_Concat();
+        } else if (type == OT_Softmax) {
+            *ps = adapt_Softmax();
+        } else if (type == OT_Relu) {
+            *ps = adapt_Relu();
+        } else if (type == OT_Reduction) {
+            *ps = adapt_Reduction();
+        } else if (type == OT_Permute) {
+            *ps = adapt_Permute();
+        } else if (type == OT_Relu) {
+            *ps = adapt_Relu();
+        } else if (type == OT_PriorBox) {
+            *ps = adapt_PriorBox();
+        } else if (type == OT_DetectionOutput) {
+            *ps = adapt_DetectionOutput();
         }
         // Only these OPs have parameters
         return SUCCESS;
+    }
+
+    virtual ParameterSpec adapt_Permute()
+    {
+        UNIMPLEMENT();
+        ParameterSpec curPs;
+        return curPs;
     }
 
     virtual ParameterSpec adapt_Interp()
@@ -264,7 +294,7 @@ protected:
 	return curPs;
     }
 
-    virtual ParameterSpec adapt_AxisMean() {
+    virtual ParameterSpec adapt_Reduction() {
 	UNIMPLEMENT();
         ParameterSpec curPs;
         return curPs;
@@ -317,6 +347,63 @@ protected:
         ParameterSpec curPs;
         return curPs;
     }
+
+    virtual ParameterSpec adapt_AttentionMask() {
+	UNIMPLEMENT();
+        ParameterSpec curPs;
+        return curPs;
+    }
+
+    virtual ParameterSpec adapt_RelativePositionEmbedding() {
+	UNIMPLEMENT();
+        ParameterSpec curPs;
+        return curPs;
+    }
+
+    virtual ParameterSpec adapt_RelativeShift() {
+	UNIMPLEMENT();
+        ParameterSpec curPs;
+        return curPs;
+    }
+
+    virtual ParameterSpec adapt_Concat() {
+        UNIMPLEMENT();
+        ParameterSpec curPs;
+        ConcatParamSpec concatPs;
+        concatPs.axis = 1;
+        curPs.concat_spec = concatPs;
+        return curPs;
+    }
+
+    virtual ParameterSpec adapt_Softmax() {
+        UNIMPLEMENT();
+        ParameterSpec curPs;
+        SoftmaxParamSpec softmaxPs;
+        softmaxPs.axis = -1;
+        curPs.softmax_spec = softmaxPs;
+        return curPs;
+    }
+
+    virtual ParameterSpec adapt_Relu() {
+        ParameterSpec curPs;
+        ReLUParamSpec reluPs;
+        reluPs.neg_slope = 0;
+        curPs.relu_spec = reluPs;
+        return curPs;
+    }
+
+    virtual ParameterSpec adapt_PriorBox() {
+	UNIMPLEMENT();
+        ParameterSpec curPs;
+        return curPs;
+    }
+
+    virtual ParameterSpec adapt_DetectionOutput() {
+	UNIMPLEMENT();
+        ParameterSpec curPs;
+        return curPs;
+    }
+
 };
 
 #undef UNIMPLEMENT

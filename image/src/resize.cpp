@@ -12,15 +12,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#include <cstring>
-#include "sys.h"
-#include "type.h"
-#include "tensor_desc.h"
-#include "error.h"
 #include "image.h"
+#ifdef _USE_GENERAL
 #include "cpu/general/image_general.h"
+#endif
+#ifdef _USE_NEON
 #include "cpu/arm/image_arm.h"
-
+#endif
+#include <string.h>
 
 // params is a pointer to either the target size or the resize ratios
 // When resizeDesc specifies DT_U32, params should point to target sizes (height and width)
@@ -51,7 +50,6 @@ EE resize_infer_output_size(TensorDesc inputDesc, ResizeDesc resizeDesc, void* p
             break;
         }
         default: {
-            CHECK_STATUS(NOT_SUPPORTED);
             return NOT_SUPPORTED;
         }
     }
@@ -74,31 +72,22 @@ EE resize(TensorDesc inputDesc, void* input,
 
     CHECK_REQUIREMENT(in == on && ic == oc);
     
-    EE ret = SUCCESS;
     if (ih == oh && iw == ow) {
         memcpy(output, input, tensorNumBytes(inputDesc));
-        return ret;
+        return SUCCESS;
     }
 
-    switch (arch) {
-        case CPU_GENERAL:
-            ret = resize_bilinear_general(inputDesc, input,
-                                      outputDesc, output);
-            break;
-        case ARM_A55:
-            ret = resize_bilinear_arm(inputDesc, input,
-                                      outputDesc, output);
-            break;
-        case ARM_A76:
-            ret = resize_bilinear_arm(inputDesc, input,
-                                      outputDesc, output);
-            break;
-        case ARM_V8:
-            ret = resize_bilinear_arm(inputDesc, input,
-                                      outputDesc, output);
-            break;
-        default:
-            ret = NOT_SUPPORTED;
+    EE ret = NOT_SUPPORTED;
+    if (arch == CPU_GENERAL) {
+#ifdef _USE_GENERAL
+        ret = resize_bilinear_general(inputDesc, input,
+            outputDesc, output);
+#endif
+#ifdef _USE_NEON
+    } else {
+        ret = resize_bilinear_arm(inputDesc, input,
+            outputDesc, output);
+#endif
     }
     return ret;
 }

@@ -21,11 +21,11 @@
 class Deconvolution: public WeightOperator {
 public:
     Deconvolution(DataType dt, U32 nf, U32 ksizeH, U32 ksizeW, U32 kstrideH, U32 kstrideW, U32 kpaddingT, U32 kpaddingB, U32 kpaddingL, U32 kpaddingR,
-        ActivationMode dwActiveMode, ActivationMode pwActiveMode,
+        ActivationDesc dwActivationDesc, ActivationDesc pwActivationDesc,
         ConvolutionMode convolutionType, U32 group, U32 dilateH, U32 dilateW)
     {
         this->dt = dt;
-        this->numFilters = nf;
+        this->numOutputs = nf;
         this->kernelSizeH = ksizeH;
         this->kernelSizeW = ksizeW;
         this->strideH = kstrideH;
@@ -34,13 +34,14 @@ public:
         this->paddingB = kpaddingB;
         this->paddingL = kpaddingL;
         this->paddingR = kpaddingR;
-        this->dwActiveMode = dwActiveMode;
-        this->pwActiveMode = pwActiveMode;
+        this->dwActivationDesc = dwActivationDesc;
+        this->pwActivationDesc = pwActivationDesc;
         this->convolutionType = convolutionType;
         this->group = group;
         this->dilateH = dilateH;
         this->dilateW = dilateW;
         this->hasBias = false;
+        this->pwAlg = CONVOLUTION_ALGORITHM_NULL;
     }
 
     OperatorType get_op_type() override
@@ -67,7 +68,7 @@ public:
         auto curOpWs = this->get_weightspec_ptr();
         DataType filterDt = curOpWs.mdt;  // weight data type may not be the same as input and output
         if (modelPtr != nullptr) {
-            filterDt = DT_F16;
+            filterDt = this->dt;
         }
         DataType dtNoQ = (this->dt == DT_F16_8Q) ? DT_F16 : this->dt;
         U32 isBNN = 0;
@@ -79,7 +80,7 @@ public:
         switch (this->convolutionType) {
             case Convolution_Deconvolution: {
                 filterDf = DF_NCHW;
-                vectorLen = this->numFilters;  // bias length
+                vectorLen = this->numInputs;  // bias length
                 if (isBNN == 1) {
                     this->dt = dtNoQ;  // BNN convolution should not be quantized further
                     vectorLen *= 2;  // Scale has the same vector length as bias, so double the length
@@ -92,7 +93,7 @@ public:
             }
         }
         TensorDesc filterTensorDesc = tensor4df(filterDt, filterDf,
-                                                 this->numFilters, this->numChannels,
+                                                 this->numInputs, this->numOutputs,
                                                  this->kernelSizeH, this->kernelSizeW);
         TensorDesc vectorTensorDesc = tensor1d(dtNoQ, vectorLen);  // bias data type should be the same as input and output
 
@@ -106,7 +107,7 @@ public:
             memcpy((U8*)modelWeightTensor->get_val(), *modelPtr, tensorNumBytes(filterTensorDesc));
             *modelPtr += tensorNumBytes(filterTensorDesc);
         } else {
-            modelWeightTensor->set_val(curOpWs.weight);
+            modelWeightTensor->set_shared_ptr(std::shared_ptr<U8>(curOpWs.weight));
         }
        
         U8* biasVal = NULL;
@@ -120,13 +121,13 @@ public:
         }
 
         if (biasVal) {
-            modelVectorTensor->set_val(biasVal);
+            modelVectorTensor->set_shared_ptr(std::shared_ptr<U8>(biasVal));
         } else {
             modelVectorTensor->alloc();
             if (isBNN == 1) {
 #ifdef _USE_FP16
                 F16 *vec = (F16*)modelVectorTensor->get_val();
-                for (U32 i = 0; i < this->numFilters; i++) { // first half is scale
+                for (U32 i = 0; i < this->numInputs; i++) { // first half is scale
                     *vec = 1.0;
                     vec++;
                 }
@@ -175,9 +176,9 @@ public:
                                          convDesc, this->pwAlg,
                                          scaleDesc, scalePtr,
                                          biasDesc, biasPtr,
-                                         this->lenOfTemp, this->temp.get(),
+                                         this->lenOfTemp, this->temp->get_val(),
                                          outputDesc, (void*)outputTensor.get_val(),
-                                         this->pwActiveMode, this->schedule));
+                                         this->pwActivationDesc, this->schedule));
                 break;
             }
             default: {
@@ -220,34 +221,29 @@ public:
         DataFormat idf;
         U32 in, ic, ih, iw;
         CHECK_STATUS(tensor4dGet(inDim, &idt, &idf, &in, &ic, &ih, &iw));
-        this->numChannels = ic;
+        this->numInputs = ic;
 
-        TensorDesc filterDim = tensor4df(this->dt, DF_NCHW, this->numFilters, this->numChannels, this->kernelSizeH,
+        TensorDesc filterDim = tensor4df(this->dt, DF_NCHW, this->numInputs, this->numOutputs, this->kernelSizeH,
                                     this->kernelSizeW);
 
         ConvolutionDesc convDesc = create_convDesc(this->strideH, this->strideW,
                                 this->paddingT, this->paddingB, this->paddingL, this->paddingR, this->dilateH, this->dilateW);
 
-        DataType targetType = DT_F16; // Default DT_F16
+        DataType targetType = this->dt;
+        if (DT_F16_8Q == this->dt) {
+            targetType = DT_I8;
+        }
 
         U32 outBytes = 0;
-        switch (this->convolutionType) {
-            case Convolution_Deconvolution: {
-                CHECK_STATUS(deconvolution_infer_output_size(inDim, filterDim, convDesc, &((*outDims)[0]), targetType, &outBytes));
-                break;
-            }
-            default: {
-                CHECK_STATUS(NOT_SUPPORTED);
-            }
-        }
+        CHECK_STATUS(deconvolution_infer_output_size(inDim, filterDim, convDesc, &((*outDims)[0]), targetType, &outBytes));
         return SUCCESS;
     }
 
     U32 infer_tmp_memory_size() override
     {
-        TensorDesc inputDesc = (this->inputTensors[0]).desc;
-        TensorDesc filterDesc = (this->weightTensors[0]).desc;
-        TensorDesc outputDesc = (this->outputTensors[0]).desc;
+        TensorDesc inputDesc = (this->inputTensors[0]).get_desc();
+        TensorDesc filterDesc = (this->weightTensors[0]).get_desc();
+        TensorDesc outputDesc = (this->outputTensors[0]).get_desc();
         ConvolutionDesc convDesc = create_convDesc(this->strideH, this->strideW,
                                 this->paddingT, this->paddingB, this->paddingL, this->paddingR, this->dilateH, this->dilateW);
 
@@ -266,7 +262,7 @@ public:
 
     U32 infer_wtm_memory_size() override
     {
-        TensorDesc filterDesc = (this->weightTensors[0]).desc;
+        TensorDesc filterDesc = (this->weightTensors[0]).get_desc();
         U32 bytes = 0;
         switch (this->convolutionType) {
             case Convolution_Deconvolution: {
@@ -313,8 +309,8 @@ public:
     }
 
 public:
-    U32 numFilters;
-    U32 numChannels;
+    U32 numOutputs;
+    U32 numInputs;
     U32 kernelSizeH;
     U32 kernelSizeW;
     U32 strideH;
@@ -328,8 +324,8 @@ public:
     U32 dilateH;
     U32 dilateW;
 
-    ActivationMode dwActiveMode;
-    ActivationMode pwActiveMode;
+    ActivationDesc dwActivationDesc;
+    ActivationDesc pwActivationDesc;
 
     ConvolutionForwardAlgorithm pwAlg;
     DepthwiseConvolutionForwardAlgorithm dwAlg;

@@ -29,12 +29,12 @@
 #include "model_serialize_deserialize.hpp"
 #include "model_tools.h"
 #include "model_adaptee.h"
+#include "ut_util.h"
 
 class OnnxAdaptee: public ModelAdaptee {
 public:
-    OnnxAdaptee(int removePreprocessOpNum_outside, TensorDesc inputDesc_outside) {
+    OnnxAdaptee(int removePreprocessOpNum_outside) {
         this->removePreprocessOpNum = removePreprocessOpNum_outside;
-        this->inputDesc = inputDesc_outside;
     }
     ~OnnxAdaptee() {}
 
@@ -61,13 +61,14 @@ protected:
             return OT_Conv;
         } else if (inputType == "BatchNormalization") {
             return OT_BatchNorm;
-        } else if (inputType == "Sum" || inputType == "Add" || inputType == "Mul") {
+        } else if (inputType == "Sum" || inputType == "Add" || inputType == "Mul" || inputType == "Div") {
             return OT_Eltwise;
         } else if (inputType == "Gemm") {
             return OT_FC;
-        } else if (inputType == "AveragePool" || inputType == "MaxPool" || inputType == "ReduceMean" || inputType == "GlobalAveragePool") {
+        } else if (inputType == "AveragePool" || inputType == "MaxPool"
+            || inputType == "ReduceMean" || inputType == "GlobalAveragePool") {
             return OT_Pooling;
-        } else if (inputType == "Relu") {
+        } else if (inputType == "Relu" || inputType == "LeakyRelu") {
             return OT_Relu;
         } else if (inputType == "Softmax") {
             return OT_Softmax;
@@ -97,6 +98,12 @@ protected:
             return OT_MatMul;
         } else if (inputType == "Flatten") {
             return OT_Flatten;
+        } else if (inputType == "ConvTranspose") {
+            return OT_Deconvolution;
+        } else if (inputType == "Tanh") {
+            return OT_TanH;
+        } else if (inputType == "LogSoftmax") {
+            return OT_LogSoftmax;
         } else {
             return OT_None;
         }
@@ -133,7 +140,7 @@ protected:
                 } else if (tp.data_type() == 1) {
                     value = (F32*)(tp.float_data().data());
                 } else {
-                    std::cout << "[Warning] Constant not extracted\n";
+                    std::cout << "[WARNING] Constant not extracted\n";
                     return result;
                 }
 
@@ -203,23 +210,40 @@ protected:
 
     std::vector<int> get_reshapeInfo_from_tensorProto(const onnx::TensorProto& tp)
     {
-        const int64_t* shapeData = 0;
         int size = 0;
+        std::vector<int> shape;
 
         // int64
-        if (tp.has_raw_data()) {
-            shapeData = (const int64_t*)tp.raw_data().data();
-            size = tp.raw_data().size() / 8;
-        } else if (tp.data_type() == 7) {
-            shapeData = tp.int64_data().data();
-            size = tp.int64_data_size();
-        }
+        if (tp.data_type() == 7) {
+            const int64_t* shapeData = 0;
+            if (tp.has_raw_data()) {
+                shapeData = (const int64_t*)tp.raw_data().data();
+                size = tp.raw_data().size() / 8;
+            } else {
+                shapeData = tp.int64_data().data();
+                size = tp.int64_data_size();
+            }
 
-        std::vector<int> shape;
-        for (int j=0; j < size; j++) {
-            shape.push_back(shapeData[j]);
-        }
+            for (int j=0; j < size; j++) {
+                shape.push_back(shapeData[j]);
+            }
+        } else if (tp.data_type() == 6) { // int32
+            const int32_t* shapeData = 0;
+            if (tp.has_raw_data()) {
+                shapeData = (const int32_t*)tp.raw_data().data();
+                size = tp.raw_data().size() / 4;
+            } else {
+                shapeData = tp.int32_data().data();
+                size = tp.int32_data_size();
+            }
 
+            for (int j=0; j<size; j++) {
+                shape.push_back(shapeData[j]);
+            }
+        } else {
+            std::cerr << "[ERROR]: UnSupport data type " << std::endl;
+            exit(1);
+        }       
         return shape;
     }
 
@@ -254,21 +278,93 @@ protected:
         
         int onnxNodeCount = onnxGraph.node_size();
 
-        ms->num_inputs = 1;
-        ms->input_names = (I8**)mt_new_storage(ms->num_inputs * sizeof(I8*));
-        const onnx::NodeProto& theFirstNode = onnxGraph.node(removePreprocessOpNum);    // need to be flexible
-        std::string modelInputName = theFirstNode.input(0);
-        ms->input_names[0] = (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
-        str_copy(ms->input_names[0], modelInputName.c_str(), modelInputName.length());
-        ms->input_dims  = (TensorDesc*)mt_new_storage(sizeof(TensorDesc) * ms->num_inputs);
-        ms->input_dims[0] = inputDesc;
+        int input_node_num = onnxGraph.input().size();
+        int output_node_num = onnxGraph.output().size();
+        if (input_node_num != 1) {
+            std::cerr << "[WARNING]: num of input node is not 1 " << std::endl;
+            // return NOT_SUPPORTED;
+        }
 
-        ms->num_outputs = 1;
+        std::vector<std::string> exactly_input_names;
+        std::vector<std::vector<int>> input_dimens;
+        for (int i=0; i<input_node_num; i++) {
+            auto input_node = onnxGraph.input(i);
+             std::string cur_input_name = input_node.name();
+             if (weights.find(cur_input_name) != weights.end()) {
+                 continue;
+             }
+             exactly_input_names.push_back(cur_input_name);
+
+            std::vector<int> dims_list;
+            int node_dimension_size = input_node.type().tensor_type().shape().dim().size();
+            
+            if (node_dimension_size == 4) {
+                // extraction for 4 dimension tensor
+                int dim_0 = input_node.type().tensor_type().shape().dim(0).dim_value();
+                if (dim_0 == 0) {
+                    dims_list.push_back(1);
+                    dims_list.push_back(input_node.type().tensor_type().shape().dim(3).dim_value());
+                    dims_list.push_back(input_node.type().tensor_type().shape().dim(1).dim_value());
+                    dims_list.push_back(input_node.type().tensor_type().shape().dim(2).dim_value());
+                }else {
+                    dims_list.push_back(input_node.type().tensor_type().shape().dim(0).dim_value());
+                    dims_list.push_back(input_node.type().tensor_type().shape().dim(1).dim_value());
+                    dims_list.push_back(input_node.type().tensor_type().shape().dim(2).dim_value());
+                    dims_list.push_back(input_node.type().tensor_type().shape().dim(3).dim_value());
+                }
+            } else if (node_dimension_size == 3 || node_dimension_size == 2) {
+                for (int j=0; j<node_dimension_size; j++) {
+                    dims_list.push_back(input_node.type().tensor_type().shape().dim(j).dim_value());
+                }
+                dims_list.push_back(1);
+            } else {
+                std::cerr << "[ERROR]: not support input dimension!" << std::endl;
+            }
+            input_dimens.push_back(dims_list);
+        }
+
+        input_node_num = exactly_input_names.size();
+        ms->num_inputs = input_node_num;
+        ms->input_names = (I8**)mt_new_storage(ms->num_inputs * sizeof(I8*));
+        if (exactly_input_names.size() == 1) {
+            const onnx::NodeProto& theFirstNode = onnxGraph.node(removePreprocessOpNum);
+            std::string modelInputName = theFirstNode.input(0);
+            exactly_input_names[0] = modelInputName;
+        }
+//         const onnx::NodeProto& theFirstNode = onnxGraph.node(removePreprocessOpNum);    // need to be flexible
+//        std::string modelInputName = theFirstNode.input(0);
+//        ms->input_names[0] = (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
+//        str_copy(ms->input_names[0], modelInputName.c_str(), modelInputName.length());
+        for (int k=0; k<input_node_num; k++) {
+            ms->input_names[k] = (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
+            str_copy(ms->input_names[0], exactly_input_names[k].c_str(), exactly_input_names[k].length());
+        }
+        ms->input_dims  = (TensorDesc*)mt_new_storage(sizeof(TensorDesc) * ms->num_inputs);
+        for (int i=0; i < ms->num_inputs; i++) {
+            int curInputDimSize = input_dimens[i].size();
+            TensorDesc input_desc;
+            if (curInputDimSize == 4) {
+                input_desc = tensor4d(DT_F32, input_dimens[i][0], input_dimens[i][1], input_dimens[i][2], input_dimens[i][3]);
+            } else if (curInputDimSize == 3) {
+                input_desc = ms->input_dims[i] = tensor3df(DT_F32, DF_MTK, input_dimens[i][0], input_dimens[i][1], input_dimens[i][2]);
+            } else if (curInputDimSize == 2) {
+                input_desc = ms->input_dims[i] = tensor2df(DT_F32, DF_NORMAL, input_dimens[i][0], input_dimens[i][1]);
+            } else {
+                std::cerr << "[ERROR]: not support input dimension!" << std::endl;
+            }
+            ms->input_dims[i] = input_desc;
+        }
+
+        ms->num_outputs = output_node_num;
         ms->output_names = (I8**)mt_new_storage(ms->num_outputs * sizeof(I8*));
-        const onnx::NodeProto& the_last_node = onnxGraph.node(onnxNodeCount - 1);
-        std::string modelOutputName = the_last_node.output(0);
-        ms->output_names[0] = (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
-        str_copy(ms->output_names[0], modelOutputName.c_str(), modelOutputName.length());
+       // const onnx::NodeProto& the_last_node = onnxGraph.node(onnxNodeCount - 1);
+       //  std::string modelOutputName = the_last_node.output(0);
+        // ms->output_names[0] = (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
+        // str_copy(ms->output_names[0], modelOutputName.c_str(), modelOutputName.length());
+        for (int k=0; k< output_node_num; k++) {
+            ms->output_names[k] = (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
+            str_copy(ms->output_names[k], onnxGraph.output(k).name().c_str(), onnxGraph.output(k).name().length());
+        }
 
         int bnOpNum = 0;
         int constantOpNum = 0;
@@ -288,6 +384,8 @@ protected:
         ms->ops = opsPtr;
         for (I32 i = 0; i < ms->num_operator_specs; i++) {
             ms->ops[i].tensor_positions = nullptr;
+            ms->ops[i].num_quant_feature = 0;
+            ms->ops[i].feature_scale = nullptr;
         }
 
         // Some models transformed from TF store weight and bias as Constant OP
@@ -360,7 +458,7 @@ protected:
                 str_copy(opsPtr[opIndex].output_tensors_name[j], outputNames[j].c_str(), outputNames[j].length());
             }
 
-            if ((op == "Add" && opFinalInputNum == 1) || (op == "Mul" && opFinalInputNum == 1)) {
+            if ((op == "Add" || op == "Mul" || op == "Div") && opFinalInputNum == 1) {
                 weightOpIndexLists.push_back(nodeIndex);
                 opsPtr[opIndex].type = OT_Scale;
             } else if (op == "Transpose" && opFinalInputNum == 0) {
@@ -399,6 +497,10 @@ protected:
     {
 	    EE ret = SUCCESS;
         WeightSpec* wsPtr = (WeightSpec*)mt_new_storage(sizeof(WeightSpec) * ms->num_weight_specs);
+        for (int j = 0; j < ms->num_weight_specs; j++) {
+            wsPtr[j].num_quant_scale = 0;
+            wsPtr[j].weight_scale = nullptr;
+        }
         ms->ws = wsPtr;
         int weightOpIndexIndeed = 0;
         for (U32 i = 0; i < (U32)ms->num_weight_specs; i++) {
@@ -410,7 +512,7 @@ protected:
             }
             const std::string& weightOpType = weightNode.op_type();
 
-            if (weightOpType == "Conv") {
+            if (weightOpType == "Conv" || weightOpType == "ConvTranspose") {
                 // to check that if any op has bias
                 int convInputNum = weightNode.input_size();    // if convInputNum == 3, means has bias , otherwise , do not have bias
 
@@ -563,6 +665,21 @@ protected:
                 wsPtr[i].weight = (U8*)mt_new_storage(wsPtr[i].bytes_of_weight);
                 memcpy(wsPtr[i].weight, weight_ptr, wsPtr[i].bytes_of_weight);
                 wsPtr[i].vec = nullptr;
+            } else if(weightOpType == "Div") {
+                const onnx::TensorProto& weight = weights[weightNode.input(1)];
+                float* weight_ptr = get_ptr_from_weight_obj(weight);
+                int weight_num = get_data_size_from_tensor_proto(weight);
+
+                str_copy(wsPtr[i].op_name, weightOpName.c_str(), weightOpName.length());
+                wsPtr[i].mdt = DT_F32;
+                wsPtr[i].bytes_of_weight = weight_num * sizeof(float);
+                wsPtr[i].bytes_of_vec = 0;
+                wsPtr[i].weight = (U8*)mt_new_storage(wsPtr[i].bytes_of_weight);
+                F32 *scale = (F32*)wsPtr[i].weight;
+                for (int j = 0; j < weight_num; j++) {
+                    scale[j] = 1 / weight_ptr[j];
+                }
+                wsPtr[i].vec = nullptr;
             } else if (weightOpType == "Transpose") {
                 const onnx::TensorProto& weight = weights[weightNode.input(0)];
                 float* weight_ptr = get_ptr_from_weight_obj(weight);
@@ -585,7 +702,9 @@ protected:
     ParameterSpec adapt_Reshape() override
     {
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         ReshapeParamSpec reshapePs;
+        initialization_zero(&reshapePs, sizeof(reshapePs));
         std::vector<int> reshapeInfo;
         if (node.input_size() == 1) {
             reshapeInfo = get_node_vector_ints_attribute_by_name(node, "shape");
@@ -601,6 +720,7 @@ protected:
     ParameterSpec adapt_Upsample() override
     {
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         UpsampleParamSpec upsamplePs;
         std::string unsampleMode = get_node_str_attribute_by_name(node, "mode", "linear");
         str_copy(upsamplePs.upsample_mode, unsampleMode.c_str(), unsampleMode.length());
@@ -626,6 +746,7 @@ protected:
     ParameterSpec adapt_Transpose() override
     {
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         TransposeParamSpec transposePs;
         std::vector<int> transpose_info = get_node_vector_ints_attribute_by_name(node, "perm");
         transposePs.trans_size = transpose_info.size();
@@ -637,6 +758,7 @@ protected:
     ParameterSpec adapt_Clip() override
     {
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         ClipParamSpec clipParam;
         if (op == "Max") {
             clipParam.min = 0;
@@ -654,26 +776,26 @@ protected:
 
     ParameterSpec adapt_Conv() override
     {
-	    weightOpIndexLists.push_back(nodeIndex);
+        weightOpIndexLists.push_back(nodeIndex);
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         std::vector<int> kernelShape = get_node_vector_ints_attribute_by_name(node, "kernel_shape");
         std::vector<int> dilations = get_node_vector_ints_attribute_by_name(node, "dilations");
         std::vector<int> strides = get_node_vector_ints_attribute_by_name(node, "strides");
         std::vector<int> pads = get_node_vector_ints_attribute_by_name(node, "pads");
         int group = get_node_single_int_attribute_by_name(node, "group", 1);
 
-        const onnx::TensorProto& bias = weights[node.input(1)];
+        const onnx::TensorProto& weight = weights[node.input(1)];
         ConvolutionParamSpec cps;
-        cps.num_kernels = bias.dims(0);
+        initialization_zero(&cps, sizeof(cps));
+        cps.num_outputs = weight.dims(0);
 
         if (kernelShape.size() == 2) {
-            DEBUG_info("Conv kernel shape is " << kernelShape[0] << " x " << kernelShape[1]);
             cps.kernel_size_h = kernelShape[0];
-            if (kernelShape[1] >= 1) {
-                cps.kernel_size_w = kernelShape[1];
-            } else {
-                cps.kernel_size_w = cps.kernel_size_h;
-            }
+            cps.kernel_size_w = kernelShape[1];
+        } else if (kernelShape.size() == 1) {
+            cps.kernel_size_h = kernelShape[0];
+            cps.kernel_size_w = 1;
         } else {
             std::cerr << "[ERROR] convolution: kernel_size unknown" << std::endl;
             exit(1);
@@ -682,34 +804,48 @@ protected:
         if (dilations.size() == 2) {
             cps.dilatedRate_h = dilations[0];
             cps.dilatedRate_w = dilations[1];
-        }
-        else {
-            std::cerr << "[ERROR] convolution: dilation unknown" << std::endl;
-            exit(1);
+        } else if (dilations.size() == 1) {
+            cps.dilatedRate_h = dilations[0];
+            cps.dilatedRate_w = 1;
+        } else {
+            std::cout << "[WARNING] convolution: dilation unknown. Default to 1" << std::endl;
+            cps.dilatedRate_h = 1;
+            cps.dilatedRate_w = 1;
         }
 
         if (strides.size() == 2) {
             cps.stride_h = strides[0];
             cps.stride_w = strides[1];
-        }
-        else {
+        } else if (strides.size() == 1) {
+            cps.stride_h = strides[0];
+            cps.stride_w = 1;
+        } else {
             std::cerr << "[ERROR] convolution: stride unknown" << std::endl;
             exit(1);
         }
-        if (cps.kernel_size_h == cps.kernel_size_w) {
-            // Ghostnet model transformed from TF is known to have padding errors
-            cps.padding_top = (cps.kernel_size_h - 1) / 2;
-            cps.padding_bottom = (cps.kernel_size_h - 1) / 2;
-            cps.padding_left = (cps.kernel_size_w - 1) / 2;
-            cps.padding_right = (cps.kernel_size_w - 1) / 2;
-        } else {
-            CHECK_REQUIREMENT(pads.size() == 4);
+
+        if(pads.size() == 4) {
+            if (cps.kernel_size_h == cps.kernel_size_w && (pads[0] != pads[2] || pads[1] != pads[3])) {
+                cps.padding_top = UNI_MAX(pads[0], pads[2]);
+                cps.padding_bottom = UNI_MAX(pads[0], pads[2]);
+                cps.padding_left = UNI_MAX(pads[1], pads[3]);
+                cps.padding_right = UNI_MAX(pads[1], pads[3]);
+            } else {
+                cps.padding_top = pads[0];
+                cps.padding_left = pads[1];
+                cps.padding_bottom = pads[2];
+                cps.padding_right = pads[3];
+            }
+        } else if (pads.size() == 2) {
             cps.padding_top = pads[0];
-            cps.padding_bottom = pads[2];
-            cps.padding_left = pads[1];
-            cps.padding_right = pads[3];
+            cps.padding_bottom = pads[1];
+            cps.padding_left = 0;
+            cps.padding_right = 0;
+        } else {
+            std::cerr << "[ERROR] deconvolution: pad unknown" << std::endl;
+            exit(1);
         }
-        
+
         cps.group = group;
         if (cps.group == 1) {
             if (cps.dilatedRate_h > 1 || cps.dilatedRate_w > 1) {
@@ -724,13 +860,89 @@ protected:
         cps.dw_activation_type = ACTIVATION_NULL;
         cps.pw_activation_type = ACTIVATION_NULL;
         curPs.conv_spec = cps;
-        return curPs;    
+        return curPs;
+    }
+
+    ParameterSpec adapt_Deconvolution() override
+    {
+        weightOpIndexLists.push_back(nodeIndex);
+        ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
+        std::vector<int> kernelShape = get_node_vector_ints_attribute_by_name(node, "kernel_shape");
+        std::vector<int> dilations = get_node_vector_ints_attribute_by_name(node, "dilations");
+        std::vector<int> strides = get_node_vector_ints_attribute_by_name(node, "strides");
+        std::vector<int> pads = get_node_vector_ints_attribute_by_name(node, "pads");
+        int group = get_node_single_int_attribute_by_name(node, "group", 1);
+
+        const onnx::TensorProto& weight = weights[node.input(1)];
+        ConvolutionParamSpec cps;
+        initialization_zero(&cps, sizeof(cps));
+        cps.num_outputs = weight.dims(1);
+
+        if (kernelShape.size() == 2) {
+            cps.kernel_size_h = kernelShape[0];
+            cps.kernel_size_w = kernelShape[1];
+        } else if (kernelShape.size() == 1) {
+            cps.kernel_size_h = kernelShape[0];
+            cps.kernel_size_w = 1;
+        } else {
+            std::cerr << "[ERROR] deconvolution: kernel_size unknown" << std::endl;
+            exit(1);
+        }
+
+        if (dilations.size() == 2) {
+            cps.dilatedRate_h = dilations[0];
+            cps.dilatedRate_w = dilations[1];
+        } else if (dilations.size() == 1) {
+            cps.dilatedRate_h = dilations[0];
+            cps.dilatedRate_w = 1;
+        } 
+        else {
+            std::cerr << "[ERROR] deconvolution: dilation unknown" << std::endl;
+            exit(1);
+        }
+
+        if (strides.size() == 2) {
+            cps.stride_h = strides[0];
+            cps.stride_w = strides[1];
+        } else if (strides.size() == 1) {
+            cps.stride_h = strides[0];
+            cps.stride_w = 1;
+        } 
+        else {
+            std::cerr << "[ERROR] deconvolution: stride unknown" << std::endl;
+            exit(1);
+        }
+
+        if(pads.size() == 4) {
+            cps.padding_top = pads[0];
+            cps.padding_left = pads[1];
+            cps.padding_bottom = pads[2];
+            cps.padding_right = pads[3];
+        } else if (pads.size() == 2) {
+            cps.padding_top = pads[0];
+            cps.padding_bottom = pads[1];
+            cps.padding_left = 0;
+            cps.padding_right = 0;
+        } else {
+            std::cerr << "[ERROR] deconvolution: pad unknown" << std::endl;
+            exit(1);
+        }
+
+        cps.group = group;
+        cps.convolution_type = Convolution_Deconvolution;
+        cps.dw_activation_type = ACTIVATION_NULL;
+        cps.pw_activation_type = ACTIVATION_NULL;
+        curPs.conv_spec = cps;
+        return curPs;
     }
 
     ParameterSpec adapt_Pooling() override
     {
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         PoolingParamSpec pps;   
+        initialization_zero(&pps, sizeof(pps));
         std::string autoPad = get_node_str_attribute_by_name(node, "auto_pad"); // deprecated
         std::vector<int> kernelShape = get_node_vector_ints_attribute_by_name(node, "kernel_shape");
         std::vector<int> strides = get_node_vector_ints_attribute_by_name(node, "strides");
@@ -754,7 +966,7 @@ protected:
         } else {
             pps.kernel_size_h = 0;
             pps.kernel_size_w = 0;
-            std::cout << "[Info] pooling: kernel_size unknown. This could be global pooling." << std::endl;
+            std::cout << "[INFO] pooling: kernel_size unknown. This could be global pooling." << std::endl;
         }
 
         if (strides.size() == 2) {
@@ -763,7 +975,7 @@ protected:
         } else {
             pps.stride_h = 0;
             pps.stride_w = 0;
-            std::cout << "[Info] pooling: stride unknown. This could be global pooling." << std::endl;
+            std::cout << "[INFO] pooling: stride unknown. This could be global pooling." << std::endl;
         }
 
         if (pads.size() == 4) {
@@ -783,6 +995,7 @@ protected:
 
     ParameterSpec adapt_Flatten() override {
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         FlattenParamSpec flattenPs;
         flattenPs.axis = get_node_single_int_attribute_by_name(node, "axis", 1);
         curPs.flatten_spec = flattenPs;
@@ -792,6 +1005,7 @@ protected:
     ParameterSpec adapt_MatMul() override
     {
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         MatMulParamSpec matmulPs;
         matmulPs.transpose_a = false;
         matmulPs.transpose_b = false;
@@ -801,8 +1015,9 @@ protected:
 
     ParameterSpec adapt_Fc() override
     {
-	    weightOpIndexLists.push_back(nodeIndex);
+	weightOpIndexLists.push_back(nodeIndex);
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         FullyConnectedParamSpec fcParamSpec;
         fcParamSpec.num_outputs = -1;
         float alpha = get_node_float_attribute_by_name(node, "alpha", 1.f);
@@ -820,17 +1035,23 @@ protected:
             std::cerr << "[ERROR] fc: num_output unknown" << std::endl;
             exit(1);
         }
+        fcParamSpec.num_slices = 1;
+        fcParamSpec.slice_point[0] = fcParamSpec.num_outputs;
         curPs.fc_spec = fcParamSpec;
         return curPs;
     }
 
     ParameterSpec adapt_BatchNorm() override
     {
-	    weightOpIndexLists.push_back(nodeIndex);
+        weightOpIndexLists.push_back(nodeIndex);
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         float epsilon = get_node_float_attribute_by_name(node, "epsilon", 1e-5f);
         BatchNormParamSpec bnPs;
         bnPs.eps = epsilon; 
+        bnPs.axis = 1;
+        bnPs.gama = 1;
+        bnPs.momentum = get_node_float_attribute_by_name(node, "momentum", 0.9);
         curPs.bn_spec = bnPs;
         return curPs;     
     }
@@ -838,10 +1059,13 @@ protected:
     ParameterSpec adapt_Eltwise() override
     {
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         EltwiseParamSpec eps;
+        initialization_zero(&eps, sizeof(eps));
         if (op == "Add") {
             eps.elt_mode = ELTWISE_SUM;
             EltwiseSumSpec elt_sum_spec;
+            initialization_zero(&elt_sum_spec, sizeof(elt_sum_spec));
             elt_sum_spec.coeff_size = 2;
             F32* f_ptr = (F32*)mt_new_storage(elt_sum_spec.coeff_size * sizeof(float));
             for (I32 j = 0; j < elt_sum_spec.coeff_size; j++) {
@@ -851,6 +1075,8 @@ protected:
             eps.elt_sum_spec = elt_sum_spec;
         } else if (op == "Mul") {
             eps.elt_mode = ELTWISE_PROD;   
+        } else {
+            CHECK_STATUS(NOT_IMPLEMENTED);
         }
         curPs.eltwise_spec = eps;
         return curPs;
@@ -872,8 +1098,8 @@ protected:
     ParameterSpec adapt_Pad() override
     {
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         PadParamSpec padPs;
-        U32 top, bottom, left, right;
         PadMode padMode;
         std::string padModeStr = get_node_str_attribute_by_name(node, "mode");
         std::vector<int> padVec = get_node_vector_ints_attribute_by_name(node, "pads");
@@ -883,31 +1109,33 @@ protected:
             padMode = Pad_Constant;
         } else if (padModeStr == "edge") {
             padMode = Pad_Edge;
-        } else {    // padModeStr == "reflect"
+        } else if (padModeStr == "reflect") {
             padMode = Pad_Reflect;
+        } else {
+            std::cerr << "[ERROR] unknown pad mode: " << padModeStr << std::endl;
+            exit(1);
         }
 
         U32 padSize = padVec.size();
         if (padSize == 8) {    // NCHW
-            top = padVec[2];
-            bottom = padVec[6];
-            left = padVec[3];
-            right = padVec[7];
-        } else if (padSize == 6) {      // CHW
-            top = padVec[1];
-            bottom = padVec[4];
-            left = padVec[2];
-            right = padVec[5];
+            padPs.top = padVec[2];
+            padPs.left = padVec[3];
+            padPs.bottom = padVec[6];
+            padPs.right = padVec[7];
+        } else if (padSize == 6) { // NCH
+            padPs.top = padVec[2];
+            padPs.left = 0;
+            padPs.bottom = padVec[5];
+            padPs.right = 0;
+        } else if (padSize == 4) { // HW
+            padPs.top = padVec[0];
+            padPs.left = padVec[1];
+            padPs.bottom = padVec[2];
+            padPs.right = padVec[3];
         } else {
-            top = padVec[0];
-            bottom = padVec[2];
-            left = padVec[1];
-            right = padVec[3];
+            std::cerr << "[ERROR] unsupported pad length" << std::endl;
+            exit(1);
         }
-        padPs.top = top;
-        padPs.bottom = bottom;
-        padPs.left = left;
-        padPs.right = right;
         padPs.constant_value = padValue;
         padPs.pad_mode = padMode;
         curPs.pad_spec = padPs;
@@ -917,6 +1145,7 @@ protected:
     ParameterSpec adapt_Gather() override
     {
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         GatherParamSpec gps;
         int gatherAxis = get_node_single_int_attribute_by_name(node, "axis", 0);
         gps.gather_axis = gatherAxis;
@@ -926,6 +1155,7 @@ protected:
 
     ParameterSpec adapt_Squeeze() override {
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         SqueezeParamSpec squeezePs;
         std::vector<int> squeezeAxes = get_node_vector_ints_attribute_by_name(node, "axes");
         squeezePs.axes_num = squeezeAxes.size();
@@ -939,6 +1169,7 @@ protected:
 
     ParameterSpec adapt_Unsqueeze() override {
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         UnsqueezeParamSpec unsqueezePs;
         std::vector<int> unsqueezeAxes = get_node_vector_ints_attribute_by_name(node, "axes");
         unsqueezePs.axes_num = unsqueezeAxes.size();
@@ -953,11 +1184,39 @@ protected:
     ParameterSpec adapt_Cast() override
     {
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         CastParamSpec castPs;
         int castTo = get_node_single_int_attribute_by_name(node, "to", 0);
         castPs.cast_to = castTo;
         curPs.cast_spec = castPs;
         return curPs;        
+    }
+
+    ParameterSpec adapt_Concat() override {
+        ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
+        ConcatParamSpec concatPs;
+        concatPs.axis = get_node_single_int_attribute_by_name(node, "axis", 1);
+        curPs.concat_spec = concatPs;
+        return curPs;
+    }
+
+    ParameterSpec adapt_Softmax() override {
+        ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
+        SoftmaxParamSpec softmaxPs;
+        softmaxPs.axis = get_node_single_int_attribute_by_name(node, "axis", 1);
+        curPs.softmax_spec = softmaxPs;
+        return curPs;
+    }
+
+    ParameterSpec adapt_Relu() override {
+        ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
+        ReLUParamSpec reluPs;
+        reluPs.neg_slope = get_node_float_attribute_by_name(node, "alpha", 0.0);
+        curPs.relu_spec = reluPs;
+        return curPs;
     }
 
 private:

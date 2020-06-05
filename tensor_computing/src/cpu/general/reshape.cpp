@@ -22,6 +22,8 @@ EE reshape_general(TensorDesc inputDesc, void* input,
     if (nullptr == input || nullptr == output)
         CHECK_STATUS(NULL_POINTER);
 
+    CHECK_REQUIREMENT(DF_NCHWC8 != inputDesc.df);
+
     CHECK_REQUIREMENT(tensorNumElements(inputDesc) == tensorNumElements(outputDesc));
     memcpy(output, input, tensorNumBytes(inputDesc));
     return SUCCESS;

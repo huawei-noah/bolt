@@ -13,28 +13,32 @@
 
 
 #include "cpu/general/tensor_computing_general.h"
-#include "cpu/general/common_general.h"
+#include "cpu/general/general_functions.h"
 
-EE activation_general(TensorDesc inputDesc, void* data, ActivationMode activationMode)
+EE activation_general(TensorDesc inputDesc, void* input, ActivationDesc activationDesc, TensorDesc outputDesc, void* output)
 {
-    if (nullptr == data)
+    if (nullptr == input || nullptr == output) {
         CHECK_STATUS(NULL_POINTER);
+    }
     DataType idt = inputDesc.dt;
     EE ret = SUCCESS;
     U32 len = tensorNumElements(inputDesc);
+    CHECK_REQUIREMENT(len == tensorNumElements(outputDesc));
     for (U32 i = 0; i < len; i++) {
         switch (idt) {
 #ifdef _USE_FP16
             case DT_F16: {
-                F16* dataPtr = (F16 *)data;
-                CHECK_STATUS(activation<F16>(activationMode, dataPtr[i], &dataPtr[i]));
+                F16* inPtr = (F16 *)input;
+                F16* outPtr = (F16 *)output;
+                CHECK_STATUS(activation<F16>(activationDesc, inPtr[i], &outPtr[i]));
                 break;
             }
 #endif
 #ifdef _USE_FP32
             case DT_F32: {
-                F32* dataPtr = (F32 *)data;
-                CHECK_STATUS(activation<F32>(activationMode, dataPtr[i], &dataPtr[i]));
+                F32* inPtr = (F32 *)input;
+                F32* outPtr = (F32 *)output;
+                CHECK_STATUS(activation<F32>(activationDesc, inPtr[i], &outPtr[i]));
                 break;
             }
 #endif

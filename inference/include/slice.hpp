@@ -20,12 +20,12 @@
 
 class Slice: public Operator {
 public:
-    Slice(DataType dt, U32 axis, U32* slicePointsPtr, U32 sliceSize)
+    Slice(DataType dt, I32 axis, I32* slicePointsPtr, I32 sliceSize)
     {
         this->dt = dt;
         this->axis = axis;
-        this->slicePoints = Vec<U32>(sliceSize);
-        memcpy(this->slicePoints.data(), slicePointsPtr, sizeof(U32) * sliceSize);
+        this->slicePoints = Vec<I32>(sliceSize);
+        memcpy(this->slicePoints.data(), slicePointsPtr, sizeof(I32) * sliceSize);
     }
 
     OperatorType get_op_type() override
@@ -33,34 +33,9 @@ public:
         return OT_Slice;
     }
 
-    void run() override
-    {
-        UTIL_TIME_TIC(__CLASS_FUNCTION__)
-        Tensor inputTensor = this->inputTensors[0];
-        TensorDesc inputDesc = inputTensor.get_desc();
-        
-        Vec<Tensor> outputTensors = this->get_output_tensors();
-        Vec<TensorDesc> outputTensorDescs;
-        Vec<void*> outputPtrs;
-        for (U32 i = 0; i < outputTensors.size(); i++) {
-            outputTensorDescs.push_back(outputTensors[i].get_desc());
-            outputPtrs.push_back(outputTensors[i].get_val());
-        }
-
-        CHECK_STATUS(slice(inputDesc, inputTensor.get_val(), outputTensorDescs, &outputPtrs, this->schedule));
-        UTIL_TIME_TOC(__CLASS_FUNCTION__)
-    }
-
-    EE infer_output_tensors_size(Vec<TensorDesc> inDims, Vec<TensorDesc>* outDims) override
-    {
-        TensorDesc in_dim = inDims[0];
-        CHECK_STATUS(slice_infer_output_size(in_dim, outDims, this->axis, this->slicePoints.data()));
-        return SUCCESS;
-    }
-
-private:
-    Vec<U32> slicePoints;
-    U32 axis;
+protected:
+    Vec<I32> slicePoints;
+    I32 axis;
 };
 
 #endif //_SLICE_H

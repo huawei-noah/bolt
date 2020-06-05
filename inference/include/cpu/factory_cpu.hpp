@@ -15,59 +15,67 @@
 #ifndef _FACTORY_CPU_H
 #define _FACTORY_CPU_H
 
-#include <optional>
 #include "operator.hpp"
 #include "deconvolution.hpp"
-#include "embedding.hpp"
 #include "lstm.hpp"
 #include "lstmcell.hpp"
-#include "matmul.hpp"
-#include "multiply.hpp"
-#include "layer_norm.hpp"
-#include "reshape.hpp"
 #include "resize.hpp"
-#include "slice.hpp"
-#include "transpose.hpp"
 #include "attention.hpp"
-#include "clip.hpp"
-#include "squeeze.hpp"
 #include "unsqueeze.hpp"
-#include "axis_mean.hpp"
+#include "reduction.hpp"
 #include "argmax.hpp"
 #include "check.hpp"
 #include "repeat.hpp"
 #include "preallocated_memory.hpp"
 #include "shared_weight.hpp"
 #include "copy.hpp"
+#include "jump.hpp"
 #include "cpu/pooling_cpu.hpp"
 #include "cpu/convolution_cpu.hpp"
 #include "cpu/eltwise_cpu.hpp"
 #include "cpu/softmax_cpu.hpp"
 #include "cpu/activation_cpu.hpp"
-#include "cpu/fully_connected_eltwise_cpu.hpp"
+#include "cpu/fully_connected_cpu.hpp"
 #include "cpu/scale_cpu.hpp"
 #include "cpu/concat_cpu.hpp"
+#include "cpu/clip_cpu.hpp"
+#include "cpu/squeeze_cpu.hpp"
+#include "cpu/reshape_cpu.hpp"
+#include "cpu/embedding_cpu.hpp"
+#include "cpu/layer_norm_cpu.hpp"
+#include "cpu/matmul_cpu.hpp"
+#include "cpu/multiply_cpu.hpp"
+#include "cpu/transpose_cpu.hpp"
+#include "cpu/slice_cpu.hpp"
+#include "attention_mask.hpp"
+#include "relative_position_embedding.hpp"
+#include "relative_shift.hpp"
+#include "padding.hpp"
+#include "detection_output.hpp"
+#include "prior_box.hpp"
 
 class FactoryCPU: public Factory {
 public:
-    virtual std::shared_ptr<Operator> createConvolution(DataType dt, U32 nf, U32 ksizeH, U32 ksizeW, U32 kstrideH, U32 kstrideW,
+    virtual std::shared_ptr<Operator> createConvolution(DataType dt, U32 nf,
+        U32 ksizeH, U32 ksizeW, U32 kstrideH, U32 kstrideW,
         U32 kpaddingT, U32 kpaddingB, U32 kpaddingL, U32 kpaddingR,
-        ActivationMode dwActiveMode, ActivationMode pwActiveMode,
+        ActivationDesc dwActivationDesc, ActivationDesc pwActivationDesc,
         ConvolutionMode convolutionType, U32 group, U32 dilateH, U32 dilateW) override {
         auto cep = (Convolution*)(new ConvolutionCPU(dt, nf, ksizeH, ksizeW, kstrideH, kstrideW,
                                                     kpaddingT, kpaddingB, kpaddingL, kpaddingR,
-                                                    dwActiveMode, pwActiveMode,
+                                                    dwActivationDesc, pwActivationDesc,
                                                     convolutionType, group, dilateH, dilateW));
         return std::shared_ptr<Operator>(cep);
     }
 
-    virtual std::shared_ptr<Operator> createDeconvolution(DataType dt, U32 nf, U32 ksizeH, U32 ksizeW, U32 kstrideH, U32 kstrideW,
+    virtual std::shared_ptr<Operator> createDeconvolution(DataType dt, U32 nf,
+        U32 ksizeH, U32 ksizeW, U32 kstrideH, U32 kstrideW,
         U32 kpaddingT, U32 kpaddingB, U32 kpaddingL, U32 kpaddingR,
-        ActivationMode dwActiveMode, ActivationMode pwActiveMode,
+        ActivationDesc dwActivationDesc, ActivationDesc pwActivationDesc,
         ConvolutionMode convolutionType, U32 group, U32 dilateH, U32 dilateW) override {
         auto cep = new Deconvolution(dt, nf, ksizeH, ksizeW, kstrideH, kstrideW,
                                                     kpaddingT, kpaddingB, kpaddingL, kpaddingR,
-                                                    dwActiveMode, pwActiveMode,
+                                                    dwActivationDesc, pwActivationDesc,
                                                     convolutionType, group, dilateH, dilateW);
         return std::shared_ptr<Operator>(cep);
     }
@@ -78,28 +86,24 @@ public:
         return std::shared_ptr<Operator>(cep);
     }
 
-    virtual std::shared_ptr<Operator> createFullyConnectedEltwise(DataType dt, U32 numInput, U32 numOutput, std::optional<EltwiseType> eltwiseType) override {
-        auto cep = (FullyConnectedEltwise*)(new FullyConnectedEltwiseCPU(dt, numInput, numOutput, eltwiseType));
+    virtual std::shared_ptr<Operator> createFullyConnected(DataType dt, U32 numInput, U32 numOutput,
+        U32 numSlice, I32* slicePoint) override {
+        auto cep = (FullyConnected*)(new FullyConnectedCPU(dt, numInput, numOutput, numSlice, slicePoint));
         return std::shared_ptr<Operator>(cep);
     }
 
-    virtual std::shared_ptr<Operator> createFullyConnectedEltwise(DataType dt, U32 numInput, U32 numOutput) override {
-        std::optional<EltwiseType> etNull;
-        return FactoryCPU::createFullyConnectedEltwise(dt, numInput, numOutput, etNull);
-    }
-
-    virtual std::shared_ptr<Operator> createSoftmax(DataType dt) override {
-        auto cep = new SoftmaxCPU(dt);
+    virtual std::shared_ptr<Operator> createSoftmax(DataType dt, int axis) override {
+        auto cep = new SoftmaxCPU(dt, axis);
         return std::shared_ptr<Operator>(cep);
     }
 
-    virtual std::shared_ptr<Operator> createConcat(U32 concatDim) override {
-        auto cep = (Concat*)(new ConcatCPU(concatDim));
+    virtual std::shared_ptr<Operator> createConcat(int axis) override {
+        auto cep = (Concat*)(new ConcatCPU(axis));
         return std::shared_ptr<Operator>(cep);
     }
 
-    virtual std::shared_ptr<Operator> createActivation(ActivationMode activeMode) override {
-        auto cep = (Activation*) new ActivationCPU(activeMode);
+    virtual std::shared_ptr<Operator> createActivation(ActivationDesc activeDesc) override {
+        auto cep = (Activation*) new ActivationCPU(activeDesc);
         return std::shared_ptr<Operator>(cep);
     }
 
@@ -108,61 +112,59 @@ public:
         return std::shared_ptr<Operator>(cep);
     }
 
-    virtual std::shared_ptr<Operator> createScale(DataType dt, int numChannels, int numSource) override {
-        auto cep = (Scale*)(new ScaleCPU(dt, numChannels, numSource));
+    virtual std::shared_ptr<Operator> createScale(DataType dt, int axis, int numChannels, int numSource) override {
+        auto cep = (Scale*)(new ScaleCPU(dt, axis, numChannels, numSource));
         return std::shared_ptr<Operator>(cep);
     }
 
-    virtual std::shared_ptr<Operator> createLSTM(DataType dt, U32 numOutput, std::optional<EltwiseType> eltwiseType) override {
-        auto cep = new LSTM(dt, numOutput, eltwiseType);
+    virtual std::shared_ptr<Operator> createLSTM(DataType dt, U32 numOutput, U32 numProjection,
+        F32 zoneoutCell, F32 zoneoutOutput, bool biDirection) override
+    {
+        auto cep = new LSTM(dt, numOutput, numProjection, zoneoutCell, zoneoutOutput, biDirection);
         return std::shared_ptr<Operator>(cep);
     }
 
-    virtual std::shared_ptr<Operator> createLSTM(DataType dt, U32 numOutput) override {
-        std::optional<EltwiseType> etNull;
-        return FactoryCPU::createLSTM(dt, numOutput, etNull);
-    }
-
-    virtual std::shared_ptr<Operator> createLSTMCell(DataType dt, U32 numOutput, std::optional<EltwiseType> eltwiseType) override {
-        auto cep = new LSTMCell(dt, numOutput, eltwiseType);
+    virtual std::shared_ptr<Operator> createLSTMCell(DataType dt, U32 numOutput, U32 numProjection,
+        F32 zoneoutCell, F32 zoneoutOutput, bool biDirection) override
+    {
+        auto cep = new LSTMCell(dt, numOutput, numProjection, zoneoutCell, zoneoutOutput, biDirection);
         return std::shared_ptr<Operator>(cep);
     }
 
-    virtual std::shared_ptr<Operator> createLSTMCell(DataType dt, U32 numOutput) override {
-        std::optional<EltwiseType> etNull;
-        return FactoryCPU::createLSTMCell(dt, numOutput, etNull);
-    }
-
-    virtual std::shared_ptr<Operator> createLSTM(DataType dt, U32 numOutput, I32 steps) override {
-        std::optional<EltwiseType> etNull;
+    virtual std::shared_ptr<Operator> createLSTM(DataType dt, U32 numOutput, U32 numProjection,
+        F32 zoneoutCell, F32 zoneoutOutput, I32 steps) override
+    {
+        if (steps == -2)
+            return FactoryCPU::createLSTM(dt, numOutput, numProjection, zoneoutCell, zoneoutOutput, true);
         if (steps >= 0)
-            return FactoryCPU::createLSTM(dt, numOutput, etNull);
+            return FactoryCPU::createLSTM(dt, numOutput, numProjection, zoneoutCell, zoneoutOutput, false);
         else
-            return FactoryCPU::createLSTMCell(dt, numOutput, etNull);
+            return FactoryCPU::createLSTMCell(dt, numOutput, numProjection, zoneoutCell, zoneoutOutput, false);
     }
 
     virtual std::shared_ptr<Operator> createEmbedding(DataType dt, U32 inputDim, U32 numOutput, bool transpose) override {   
-        auto cep = new Embedding(dt, inputDim, numOutput, transpose);
+        auto cep = (Embedding*)(new EmbeddingCPU(dt, inputDim, numOutput, transpose));
         return std::shared_ptr<Operator>(cep);
     }
 
     virtual std::shared_ptr<Operator> createMultiply(DataType dt, F32 scale, F32 bias) override {
-        auto cep = new Multiply(dt, scale, bias);
+        auto cep = (Multiply*)(new MultiplyCPU(dt, scale, bias));
         return std::shared_ptr<Operator>(cep);
     }
 
     virtual std::shared_ptr<Operator> createMatMul(DataType dt, bool transposeA, bool transposeB) override {
-        auto cep = new MatMul(dt, transposeA, transposeB);
+        auto cep = (MatMul*)(new MatMulCPU(dt, transposeA, transposeB));
         return std::shared_ptr<Operator>(cep);
     }
 
     virtual std::shared_ptr<Operator> createLayerNorm(DataType dt, U32 weightNum) override {
-        auto cep = new LayerNorm(dt, weightNum);
+        auto cep = (LayerNorm*) (new LayerNormCPU(dt, weightNum));
         return std::shared_ptr<Operator>(cep);
     }
 
-    virtual std::shared_ptr<Operator> createReshape(DataType dt, I32* shapeDims, I32 shapeSize, I32 axis, I32 numAxes) override {
-        auto cep = new Reshape(dt, shapeDims, shapeSize, axis, numAxes);
+    virtual std::shared_ptr<Operator> createReshape(DataType dt, I32* shapeDims,
+        I32 shapeSize, I32 axis, I32 numAxes) override {
+        auto cep = (Reshape*)(new ReshapeCPU(dt, shapeDims, shapeSize, axis, numAxes));
         return std::shared_ptr<Operator>(cep);
     }
 
@@ -171,28 +173,29 @@ public:
         return std::shared_ptr<Operator>(cep);
     }
 
-    virtual std::shared_ptr<Operator> createSlice(DataType dt, U32 axis, U32* slicePoints, U32 sliceSize) override {
-        auto cep = new Slice(dt, axis, slicePoints, sliceSize);
+    virtual std::shared_ptr<Operator> createSlice(DataType dt, I32 axis, I32* slicePoints, U32 sliceSize) override {
+        auto cep = (Slice*)(new SliceCPU(dt, axis, slicePoints, sliceSize));
         return std::shared_ptr<Operator>(cep);
     }
 
     virtual std::shared_ptr<Operator> createTranspose(DataType dt, U32* transDims, U32 transSize) override {
-        auto cep = new Transpose(dt, transDims, transSize);
+        auto cep = (Transpose*)new TransposeCPU(dt, transDims, transSize);
         return std::shared_ptr<Operator>(cep);
     }
 
-    virtual std::shared_ptr<Operator> createAttention(DataType dt, U32 numHeads, U32 fromSequenceLength, U32 toSequenceLength) override {
+    virtual std::shared_ptr<Operator> createAttention(DataType dt,
+        U32 numHeads, U32 fromSequenceLength, U32 toSequenceLength) override {
         auto cep = new Attention(dt, numHeads, fromSequenceLength, toSequenceLength);
         return std::shared_ptr<Operator>(cep);
     }
 
     virtual std::shared_ptr<Operator> createClip(DataType dt, F32 clipMinScalar, F32 clipMaxScalar) override {
-        auto cep = new Clip(dt, clipMinScalar, clipMaxScalar);
+        auto cep = (Clip*)(new ClipCPU(dt, clipMinScalar, clipMaxScalar));
         return std::shared_ptr<Operator>(cep);
     }
 
     virtual std::shared_ptr<Operator> createSqueeze(DataType dt, I32 axis, I32 *dims, I32 dimSize) override {
-        auto cep = new Squeeze(dt, axis, dims, dimSize);
+        auto cep = (Squeeze*)(new SqueezeCPU(dt, axis, dims, dimSize));
         return std::shared_ptr<Operator>(cep);
     }
 
@@ -201,8 +204,8 @@ public:
         return std::shared_ptr<Operator>(cep);
     }
 
-    virtual std::shared_ptr<Operator> createAxisMean(DataType dt, I32 axis) override {
-        auto cep = new AxisMean(dt, axis);
+    virtual std::shared_ptr<Operator> createReduction(DataType dt, I32 axis, bool keepDim, ReductionMode reductionMode, float coeff) override {
+        auto cep = new Reduction(dt, axis, keepDim, reductionMode, coeff);
         return std::shared_ptr<Operator>(cep);
     }
 
@@ -211,7 +214,7 @@ public:
         return std::shared_ptr<Operator>(cep);
     }
 
-    virtual std::shared_ptr<Operator> createCopy(DataType dt, U32 *srcDims, U32 *dstDims, U32 length) override {
+    virtual std::shared_ptr<Operator> createCopy(DataType dt, I32 *srcDims, I32 *dstDims, I32 length) override {
         auto cep = new Copy(dt, srcDims, dstDims, length);
         return std::shared_ptr<Operator>(cep);
     }
@@ -221,13 +224,14 @@ public:
         return std::shared_ptr<Operator>(cep);
     }
 
-    virtual std::shared_ptr<Operator> createRepeat(DataType dt, I32 loops, I32 jumpOperatorIndex, I32 currentOperatorIndex) override {
-        auto cep = new Repeat(dt, loops, jumpOperatorIndex, currentOperatorIndex);
+    virtual std::shared_ptr<Operator> createRepeat(DataType dt, I32 loops, I32 axis,
+        I32 jumpOperatorIndex, I32 currentOperatorIndex) override {
+        auto cep = new Repeat(dt, loops, axis, jumpOperatorIndex, currentOperatorIndex);
         return std::shared_ptr<Operator>(cep);
     }
 
-    virtual std::shared_ptr<Operator> createBilateralSliceApply(U32 coefficiency_len, bool has_offset, BilateralSliceApplyMode mode) override {
-        //cep = (BilateralSliceApply*)(new BilateralSliceApplyCPU(coefficiency_len, has_offset, activationMode));
+    virtual std::shared_ptr<Operator> createBilateralSliceApply(U32 coefficiency_len, bool has_offset,
+        BilateralSliceApplyMode mode) override {
         OP_UNSUP(3, coefficiency_len, has_offset, mode);
         return std::shared_ptr<Operator>(cep);
     }
@@ -241,7 +245,52 @@ public:
         auto cep = new SharedWeight(dt, desc);
         return std::shared_ptr<Operator>(cep);
     }
+    
+    virtual std::shared_ptr<Operator> createJump(DataType dt,
+        I32 jumpOperatorIndex, I32 currentOperatorIndex) override {
+        auto cep = new Jump(dt, jumpOperatorIndex, currentOperatorIndex);
+        return std::shared_ptr<Operator>(cep);
+    }
+    
+    virtual std::shared_ptr<Operator> createSpace2Depth(DataType dt) override {
+        OP_UNSUP(1, dt);
+        return std::shared_ptr<Operator>(cep);
+    }
 
+    virtual std::shared_ptr<Operator> createDepth2Space(DataType dt) override {
+        OP_UNSUP(1, dt);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    virtual std::shared_ptr<Operator> createAttentionMask(DataType dt, I32 attentionLength,
+        bool sameLength, float mask) override {
+        auto cep = new AttentionMask(dt, attentionLength, sameLength, mask);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    virtual std::shared_ptr<Operator> createRelativePositionEmbedding(DataType dt, U32 inputDim,
+        U32 numOutput, bool transpose, I32 axis) override {
+        auto cep = new RelativePositionEmbedding(dt, inputDim, numOutput, transpose, axis);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    virtual std::shared_ptr<Operator> createRelativeShift(DataType dt, I32 axis,
+        I32 shiftLength) override {
+        auto cep = new RelativeShift(dt, axis, shiftLength);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    virtual std::shared_ptr<Operator> createPadding(DataType dt, PadDesc padDesc) override {
+        auto cep = new Padding(dt, padDesc);
+        return std::shared_ptr<Operator>(cep);
+    }
+    virtual std::shared_ptr<Operator> createPriorBox(DataType dt, PriorBoxDesc priorboxDesc) override {
+        auto cep = new PriorBox(dt, priorboxDesc);
+        return std::shared_ptr<Operator>(cep);
+    }
+    virtual std::shared_ptr<Operator> createDetectionOutput(DataType dt, DetectionOutputDesc detectionoutputDesc) override {
+        auto cep = new DetectionOutput(dt, detectionoutputDesc);
+        return std::shared_ptr<Operator>(cep);
+    }
 };
-
 #endif //_FACTORY_CPU_H

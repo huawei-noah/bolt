@@ -16,11 +16,12 @@
 
 
 __kernel void mem_trans_ncwhc4_to_nchw(const int iw, const int ih, const int pw, const int ph, 
-                                       const int ow, const int oh, const int oc, const int owh_str, const __global const T* in, __global T* out){
+                                       const int ow, const int oh, const int oc, const int owh_str, const int offset, __global T* in, __global T* out){
 
     const int idx = get_global_id(0);
     const int idy = get_global_id(1);
     const int idz = get_global_id(2);
+    if(idx >= oh || idy >= (ow + 3) >> 2) return;
 
     short ew = ((idy << 2) + 4 <= ow) ? 4 : (ow & 3);
     short ec = ((idz << 2) + 4 <= oc) ? 4 : (oc & 3);
@@ -37,7 +38,7 @@ __kernel void mem_trans_ncwhc4_to_nchw(const int iw, const int ih, const int pw,
     if(ew > 2) val[2] = vload4(in_off +(ih << 1), in);
     if(ew > 3) val[3] = vload4(in_off + ih * 3,   in);
 
-    int out_off = ((idz << 2) * oh + idx) * ow + (idy << 2);
+    int out_off = ((idz << 2) * oh + idx) * ow + (idy << 2) + offset;
  
     if(ew == 4){
                    vstore4((T4)(val[0].x, val[1].x, val[2].x, val[3].x), 0, out + out_off);

@@ -19,15 +19,6 @@
 #include "error.h"
 #include "tensor_computing_type.h"
 
-EE depthwise_convolution_direct_infer_forward_algorithm_mali_fp16(GCLHandle_t          handle,
-                                                                  TensorDesc           inputDesc, 
-                                                                  TensorDesc           filterDesc, 
-                                                                  ConvolutionDesc      convDesc,
-                                                                  TensorDesc           outputDesc,
-                                                                  ConvolutionPolicy    policy, 
-                                                                  ActivationMode       depthwiseActivationMode,
-                                                                  ForwardRunInfoMali_t forwardRunInfo);
-
 EE depthwise_convolution_direct_transform_filter_bytes_mali_fp16(TensorDesc            filterDesc, 
                                                                  ForwardRunInfoMali_t  forwardRunInfo,
                                                                  GCLMemDesc_t          gclmemFilterDesc,

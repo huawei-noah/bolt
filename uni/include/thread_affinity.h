@@ -28,14 +28,22 @@ typedef enum {
     CPU_AFFINITY_HIGH_PERFORMANCE = 1
 } CpuAffinityPolicy;
 
-inline const char * const *CpuAffinityPolicyNames() {
+typedef struct CpuStat {
+    unsigned long idle;
+    unsigned long total;
+} CpuStat;
+
+inline const char * const *CpuAffinityPolicyNames()
+{
     static const char * const names[] = {
         "CPU_AFFINITY_LOW_POWER",
         "CPU_AFFINITY_HIGH_PERFORMANCE"
     };
     return names;
 }
-inline const CpuAffinityPolicy* CpuAffinityPolicies() {
+
+inline const CpuAffinityPolicy* CpuAffinityPolicies()
+{
     static const CpuAffinityPolicy policies[] = {
         CPU_AFFINITY_LOW_POWER,
         CPU_AFFINITY_HIGH_PERFORMANCE
@@ -43,7 +51,8 @@ inline const CpuAffinityPolicy* CpuAffinityPolicies() {
     return policies;
 }
 
-inline int get_cpus_num() {
+inline int get_cpus_num()
+{
     const int bufferSize = 1024;
     char buffer[bufferSize];
     FILE* fp = fopen("/proc/cpuinfo", "rb");
@@ -65,13 +74,13 @@ inline int get_cpus_num() {
     return cpuNum;
 }
 
-inline void get_cpus_arch(Arch *archs)
+inline void get_cpus_arch(int cpuNum, Arch *archs)
 {
     const int bufferSize = 1024;
     char buffer[bufferSize];
     FILE* fp = fopen("/proc/cpuinfo", "rb");
+    *archs = CPU_GENERAL;
     if (!fp) {
-        *archs = CPU_GENERAL;
         return;
     }
 
@@ -86,11 +95,56 @@ inline void get_cpus_arch(Arch *archs)
             int id = 0;
             sscanf(buffer, "CPU part\t: %x", &id);
             switch (id) {
+                case 0xc07:
+                    arch = ARM_V7;
+                    break;
+                case 0xd03:
+                    arch = ARM_V8;
+                    break;
                 case 0xd05:
                     arch = ARM_A55;
                     break;
+                case 0xd07:
+                    arch = ARM_V8;
+                    break;
+                case 0xd08:
+                    arch = ARM_V8;
+                    break;
+                case 0xd09:
+                    arch = ARM_V8;
+                    break;
+                case 0xd0a:
+                    arch = ARM_A76;
+                    break;
                 case 0xd40:
                     arch = ARM_A76;
+                    break;
+                case 0xd41:
+                    arch = ARM_A76;
+                    break;
+                case 0xd44:
+                    arch = ARM_A76;
+                    break;
+                case 0x804:
+                    arch = ARM_A76;
+                    break;
+                case 0x805:
+                    arch = ARM_A55;
+                    break;
+                case 0x802:
+                    arch = ARM_A76;
+                    break;
+                case 0x803:
+                    arch = ARM_A55;
+                    break;
+                case 0x801:
+                    arch = ARM_V8;
+                    break;
+                case 0x800:
+                    arch = ARM_V8;
+                    break;
+                case 0x205:
+                    arch = ARM_V8;
                     break;
                 default:
                     printf("[WARNING] unknown CPU %d arch %x\n Default to ARM_V8\n", cpuid, id);
@@ -99,10 +153,14 @@ inline void get_cpus_arch(Arch *archs)
             archs[cpuid++] = arch;
         }
     }
+    for (; cpuid < cpuNum; cpuid++) {
+        archs[cpuid] = archs[0];
+    }
     fclose(fp);
 }
 
-inline long get_cpu_freq(int cpuid) {
+inline long get_cpu_freq(int cpuid)
+{
     char path[256];
     FILE *fp = NULL;
     if (fp == NULL) {
@@ -137,13 +195,70 @@ inline long get_cpu_freq(int cpuid) {
     return maxFrequency;
 }
 
-inline void get_cpus_freq(long *freqs, int cpuNum) {
+inline void get_cpus_freq(long *freqs, int cpuNum)
+{
     for (int i = 0; i < cpuNum; i++) {
         freqs[i] = get_cpu_freq(i);
     }
 }
 
-inline void sort_cpus_by_arch_freq(Arch *archs, long *freqs, int *cpuids, int cpuNum) {
+inline int get_cpus_stat(CpuStat *cpuStat, int cpuNum)
+{
+    const int bufferSize = 1024;
+    char buffer[bufferSize];
+    char name[32];
+    unsigned long user, nice, system, idle, iowait, irq, softirq;
+    FILE* fp = fopen("/proc/stat", "rb");
+    if (!fp) {
+        return 0;
+    }
+
+    // skip total statistics
+    fgets(buffer, bufferSize, fp);
+
+    for (int i = 0; i < cpuNum; i++) {
+        fgets(buffer, bufferSize, fp);
+        sscanf(buffer, "%s %lu %lu %lu %lu %lu %lu %lu", name, &user, &nice,
+            &system, &idle, &iowait, &irq, &softirq);
+        cpuStat[i].idle = idle;
+        cpuStat[i].total = user + nice + system + idle + iowait + irq + softirq;
+    }
+    fclose(fp);
+    return cpuNum;
+}
+
+inline void get_cpus_occupy(CpuStat *firstCpuStat, CpuStat *secondCpuStat, int cpuNum, float* cpuOccupy)
+{
+    for (int i = 0; i < cpuNum; i++) {
+        float idle  = secondCpuStat[i].idle - firstCpuStat[i].idle;
+        float total = secondCpuStat[i].total - firstCpuStat[i].total;
+        if (total != 0) {
+            cpuOccupy[i] = 1.0 - idle / total;
+        } else {
+            cpuOccupy[i] = 0;
+        }
+    }
+}
+
+inline void swap_variable(void* a, void *b, const int size)
+{
+    char buffer[size];
+    memcpy(buffer, a, size);
+    memcpy(a, b, size);
+    memcpy(b, buffer, size);
+}
+
+inline void disable_cpus(float *occupys, int *cpuids, int cpuNum, float cpuOccupyMax)
+{
+    for (int i = 0; i < cpuNum; i++) {
+        if (occupys[i] > cpuOccupyMax)
+            cpuids[i] = -1;
+    }
+}
+
+inline void sort_cpus_by_arch_freq_occupy(Arch *archs, long *freqs, float *occupys,
+    int *cpuids, int cpuNum, float cpuOccupyMax)
+{
     for (int i = 0; i < cpuNum; i++) {
         cpuids[i] = i;
     }
@@ -151,28 +266,18 @@ inline void sort_cpus_by_arch_freq(Arch *archs, long *freqs, int *cpuids, int cp
     for (int i = 1; i < cpuNum; i++) {
         for (int j = i - 1; j >= 0; j--) {
             if (archs[j+1] < archs[j]) {
-                Arch tmpArch = archs[j];
-                archs[j] = archs[j+1];
-                archs[j+1] = tmpArch;
-                long tmpFreq = freqs[j];
-                freqs[j] = freqs[j+1];
-                freqs[j+1] = tmpFreq;
-                int tmpCpuid = cpuids[j];
-                cpuids[j] = cpuids[j+1];
-                cpuids[j+1] = tmpCpuid;
+                swap_variable(&archs[j], &archs[j+1], sizeof(Arch));
+                swap_variable(&freqs[j], &freqs[j+1], sizeof(long));
+                swap_variable(&cpuids[j], &cpuids[j+1], sizeof(int));
+                swap_variable(&occupys[j], &occupys[j+1], sizeof(float));
                 continue;
             }
             if (archs[j+1] == archs[j]) {
                 if (freqs[j+1] < freqs[j]) {
-                    Arch tmpArch = archs[j];
-                    archs[j] = archs[j+1];
-                    archs[j+1] = tmpArch;
-                    long tmpFreq = freqs[j];
-                    freqs[j] = freqs[j+1];
-                    freqs[j+1] = tmpFreq;
-                    int tmpCpuid = cpuids[j];
-                    cpuids[j] = cpuids[j+1];
-                    cpuids[j+1] = tmpCpuid;
+                    swap_variable(&archs[j], &archs[j+1], sizeof(Arch));
+                    swap_variable(&freqs[j], &freqs[j+1], sizeof(long));
+                    swap_variable(&cpuids[j], &cpuids[j+1], sizeof(int));
+                    swap_variable(&occupys[j], &occupys[j+1], sizeof(float));
                     continue;
                 }
                 if (freqs[j+1] >= freqs[j]) {
@@ -184,9 +289,15 @@ inline void sort_cpus_by_arch_freq(Arch *archs, long *freqs, int *cpuids, int cp
             }
         }
     }
+    disable_cpus(occupys, cpuids, cpuNum, cpuOccupyMax);
 }
 
-inline int set_thread_affinity(int cpuid) {
+inline int set_thread_affinity(int threadid, int cpuid) {
+#ifdef _DEBUG
+    printf("[INFO] bind thread %d to core %d\n", threadid, cpuid);
+#else
+    UNUSED(threadid);
+#endif
 #ifdef __GLIBC__
     pid_t tid = syscall(SYS_gettid);
 #else
@@ -227,13 +338,23 @@ inline CpuAffinityPolicy  thread_affinity_get_policy_by_name(const char *name)
 }
 
 inline void thread_affinity_init(int *cpuNum, Arch **archs, int **cpuids) {
+    float cpuOccupyMax = 0.5;
     *cpuNum = get_cpus_num();
+    CpuStat* firstCpuStats = (CpuStat *)malloc(sizeof(CpuStat) * (*cpuNum));
+    get_cpus_stat(firstCpuStats, *cpuNum);
+    CpuStat* secondCpuStats = (CpuStat *)malloc(sizeof(CpuStat) * (*cpuNum));
+    float* occupys = (float *)malloc(sizeof(float) * (*cpuNum));
     *archs  = (Arch *)malloc(sizeof(Arch) * (*cpuNum));
     *cpuids = (int *)malloc(sizeof(int) * (*cpuNum));
     long *freqs  = (long *)malloc(sizeof(long) * (*cpuNum));
-    get_cpus_arch(*archs);
+    get_cpus_arch(*cpuNum, *archs);
     get_cpus_freq(freqs, *cpuNum);
-    sort_cpus_by_arch_freq(*archs, freqs, *cpuids, *cpuNum);
+    get_cpus_stat(secondCpuStats, *cpuNum);
+    get_cpus_occupy(firstCpuStats, secondCpuStats, *cpuNum, occupys);
+    sort_cpus_by_arch_freq_occupy(*archs, freqs, occupys, *cpuids, *cpuNum, cpuOccupyMax);
+    free(firstCpuStats);
+    free(secondCpuStats);
+    free(occupys);
     free(freqs);
 }
 
@@ -245,24 +366,29 @@ inline Arch thread_affinity_set_by_policy(int cpuNum, Arch *archs, int *cpuids, 
 
     int cpuid;
     Arch arch;
+    int i = cpuNum - 1 - threadId;
     switch (policy) {
         case CPU_AFFINITY_LOW_POWER: {
-            cpuid = cpuids[threadId];
-            arch = archs[threadId];
+            i = threadId;
+            while(cpuids[i] == -1 && i < cpuNum - 1) {
+                i++;
+            }
             break;
         }
         case CPU_AFFINITY_HIGH_PERFORMANCE: {
-            cpuid = cpuids[cpuNum-1-threadId];
-            arch = archs[cpuNum-1-threadId];
+            i = cpuNum - 1 - threadId;
+            while(cpuids[i] == -1 && i > 0) {
+                i--;
+            }
             break;
         }
         default: {
-            cpuid = cpuids[cpuNum-1-threadId];
-            arch = archs[cpuNum-1-threadId];
             break;
         }
     }
-    set_thread_affinity(cpuid);
+    cpuid = cpuids[i];
+    arch = archs[i];
+    set_thread_affinity(threadId, cpuid);
     return arch;
 }
 
@@ -275,7 +401,7 @@ inline void thread_affinity_set_by_arch(int cpuNum, Arch *archs, int *cpuids, Ar
     int count = 0;
     int cpuid = -1;
     for (int i=0; i < cpuNum; i++) {
-        if (archs[i] == arch) {
+        if (archs[i] == arch && cpuids[i] != -1) {
             if (count == threadId) {
                 cpuid = cpuids[i];
                 break;
@@ -285,7 +411,7 @@ inline void thread_affinity_set_by_arch(int cpuNum, Arch *archs, int *cpuids, Ar
         }
     }
     if (cpuid != -1) {
-        set_thread_affinity(cpuid);
+        set_thread_affinity(threadId, cpuid);
     } else {
         printf("[WARNING] there is not enough %d arch cores for thread %d", arch, threadId);
     }

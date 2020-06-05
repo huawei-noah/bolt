@@ -81,11 +81,11 @@ inline EE pooling_core_mali_fp16(GCLHandle_t    handle,
                                                                  sh, sw, ph, pw, kh, kw, inbuf, outbuf));
 
              U32 gs[3] = {oh, ow, (oc + 3) / 4 * on};
-             U32 ls[3] = {16, 16, 1};
+             U32 ls[3] = {0, 0, 0};
              U32 dim   = 3;
-             gcl_set_kernelVec(handle, kernel, dim, gs, ls);
+             gcl_set_kernelVec(handle, kernel, dim, gs, ls, "pooling_max");
 #ifdef _DEBUG
-             CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, "bolt_pooling_max"));
+             CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, "pooling_max"));
              CHECK_STATUS(gcl_print_memory<F16>(handle, input,  "pooling_max_input"));
              CHECK_STATUS(gcl_print_memory<F16>(handle, output, "pooling_max_output"));
 #endif
@@ -98,11 +98,11 @@ inline EE pooling_core_mali_fp16(GCLHandle_t    handle,
                                                                  sh, sw, ph, pw, kh, kw, inbuf, outbuf));
 
              U32 gs[3] = {oh, ow, (oc + 3) / 4 * on};
-             U32 ls[3] = {16, 16, 1};
+             U32 ls[3] = {0, 0, 0};
              U32 dim   = 3;
-             gcl_set_kernelVec(handle, kernel, dim, gs, ls);
+             gcl_set_kernelVec(handle, kernel, dim, gs, ls, "pooling_mean");
 #ifdef _DEBUG
-             CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, "bolt_pooling_mean"));
+             CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, "pooling_mean"));
              CHECK_STATUS(gcl_print_memory<F16>(handle, input,  "pooling_mean_input"));
              CHECK_STATUS(gcl_print_memory<F16>(handle, output, "pooling_mean_output"));
 #endif

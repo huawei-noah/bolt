@@ -23,8 +23,8 @@ int scaleTest(int argc, char** argv, DataType dt){
     U32 ih = atoi(argv[3]);
     U32 iw = atoi(argv[4]);
 
+    I32 axis = 1;
     DataFormat df = DF_NCHWC8;
-
     TensorDesc data_desc = tensor4df(dt, df, in, ic, ih, iw); 
     U32 len = tensorNumElements(data_desc);
 
@@ -35,10 +35,10 @@ int scaleTest(int argc, char** argv, DataType dt){
     memcpy(data_ref, data, len*bytesOf(dt));
 
     if (UT_CHECK) {
-        CHECK_STATUS(scale(alpha, beta, data_desc, data, data_desc, NULL, UT_ARCH));
+        CHECK_STATUS(scale(data_desc, data, axis, alpha, beta, data_desc, data, UT_ARCH));
 
         // naive implement
-        CHECK_STATUS(scale(alpha, beta, data_desc, data_ref, data_desc, NULL, CPU_GENERAL));
+        CHECK_STATUS(scale(data_desc, data_ref, axis, alpha, beta, data_desc, data_ref, CPU_GENERAL));
 
         // check
         ut_check_v(data, data_ref, len, dt, 1.0, __FILE__, __LINE__);
@@ -47,7 +47,7 @@ int scaleTest(int argc, char** argv, DataType dt){
     // benchmark
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        CHECK_STATUS(scale(alpha, beta, data_desc, data_ref, data_desc, NULL, UT_ARCH));
+        CHECK_STATUS(scale(data_desc, data, axis, alpha, beta, data_desc, data, UT_ARCH));
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;

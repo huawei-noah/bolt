@@ -39,91 +39,91 @@ inline EE deconvolution_transform_filter_kernel_fp16(TensorDesc filterDesc, cons
     switch (ftmDataFormat) {
         case DF_NHWCN16: {
             /*
-             *  NCHW => NHWCN16
+             *  CNHW => NHWCN16
              *  if there is remainder, it should be NHWCN8
              */
-            U32 oc = fn / 16;
+            U32 oc = fc / 16;
             U32 hwMax = fh * fw - 1;
             for (U32 o = 0; o < oc; o++) {
                 for (U32 hw = 0; hw < fh*fw; hw++) {
-                    for (U32 c = 0; c < fc; c++) {
+                    for (U32 c = 0; c < fn; c++) {
                         for (U32 o16 = 0; o16 < 16; o16++) {
-                            ftmArray[o*fh*fw*fc*16 + hw*fc*16 + c*16 + o16] = filterArray[(o*16+o16)*fc*fh*fw + c*fh*fw + hwMax - hw];
+                            ftmArray[o*fh*fw*fn*16 + hw*fn*16 + c*16 + o16] = filterArray[c*fc*fh*fw + (o*16+o16)*fh*fw + hwMax - hw];
                         }
                     }
                 }
             }
-            if (fn != oc*16) {
+            if (fc != oc * 16) {
                 for (U32 hw = 0; hw < fh*fw; hw++) {
-                    for (U32 c = 0; c < fc; c++) {
+                    for (U32 c = 0; c < fn; c++) {
                         for (U32 o8 = 0; o8 < 8; o8++) {
-                            ftmArray[(oc*16)*fh*fw*fc + hw*fc*8 + c*8 + o8] = filterArray[(oc*16+o8)*fc*fh*fw + c*fh*fw + hwMax - hw];
+                            ftmArray[(oc*16)*fh*fw*fn + hw*fn*8 + c*8 + o8] = filterArray[c*fc*fh*fw + (oc*16+o8)*fh*fw + hwMax - hw];
                         }
                     }
                 }
             }
-            *ftmDesc = tensor4df(fdt, ftmDataFormat, fn, fc, fh, fw);
+            *ftmDesc = tensor4df(fdt, ftmDataFormat, fc, fn, fh, fw);
             break;
         }
         case DF_HWNCN16: {
             /*
-             *  NCHW => NHWCN16 + NHWCN8 if there is remainder divided by 16
+             *  CNHW => NHWCN16 + NHWCN8 if there is remainder divided by 16
              */
             const U32 hwMax = 8;
             
-            for (U32 o = 0; o < fn/16; o++) {
-                for (U32 c = 0; c < fc; c++) {
-                    U32 f_off_0 = (o*16)*fc*fh*fw + c*fh*fw;
-                    U32 f_off_1 = (o*16+8)*fc*fh*fw + c*fh*fw;
-                    U32 ftm_off_0 = o*36*fc*16 + c*16;
-                    U32 ftm_off_1 = o*36*fc*16 + c*16 + 8;
+            for (U32 o = 0; o < fc/16; o++) {
+                for (U32 c = 0; c < fn; c++) {
+                    U32 f_off_0 = c*fc*fh*fw + (o*16)*fh*fw;
+                    U32 f_off_1 = c*fc*fh*fw + (o*16+8)*fh*fw;
+                    U32 ftm_off_0 = o*36*fn*16 + c*16;
+                    U32 ftm_off_1 = o*36*fn*16 + c*16 + 8;
                     F16 F[9][8];
                     F16 *F_ptr[9];
                     F16 *Fw[36];
 
                     for (U32 hw = 0; hw < 9; hw++) {
                         for (U32 oo = 0; oo < 8; oo++) {
-                            F[hw][oo] = filterArray[f_off_0 + hwMax - hw + oo*fc*fh*fw];
+                            F[hw][oo] = filterArray[f_off_0 + hwMax - hw + oo*fh*fw];
                         }
                         F_ptr[hw] = F[hw];
                     }
                     for (U32 hw = 0; hw < 36; hw++) {
-                        Fw[hw] = ftmArray + ftm_off_0 + hw*fc*16;
+                        Fw[hw] = ftmArray + ftm_off_0 + hw*fn*16;
                     }
                     trans_W_4x4_3x3(Fw, F_ptr);
                     for (U32 hw = 0; hw < 9; hw++) {
                         for (U32 oo = 0; oo < 8; oo++) {
-                            F[hw][oo] = filterArray[f_off_1 + hwMax - hw + oo*fc*fh*fw];
+                            F[hw][oo] = filterArray[f_off_1 + hwMax - hw + oo*fh*fw];
                         }
                         F_ptr[hw] = F[hw];
                     }
                     for (U32 hw = 0; hw < 36; hw++) {
-                        Fw[hw] = ftmArray + ftm_off_1 + hw*fc*16;
+                        Fw[hw] = ftmArray + ftm_off_1 + hw*fn*16;
                     }
                     trans_W_4x4_3x3(Fw, F_ptr);
                 }
             }
-            U32 oc = (fn / 16) * 16;
-            if (oc != fn) {
-                for (U32 c = 0; c < fc; c++) {
-                    U32 f_off_0 = oc*fc*fh*fw + c*fh*fw;
-                    U32 ftm_off_0 = oc*36*fc + c*8;
+            U32 oc = (fc / 16) * 16;
+            if (oc != fc) {
+                for (U32 c = 0; c < fn; c++) {
+                    U32 f_off_0 = c*fc*fh*fw + oc*fh*fw;
+                    U32 ftm_off_0 = oc*36*fn + c*8;
                     F16 F[9][8];
                     F16 *F_ptr[9];
                     F16 *Fw[36];
                     for (U32 hw = 0; hw < 9; hw++) {
                         for (U32 oo = 0; oo < 8; oo++) {
-                            F[hw][oo] = filterArray[f_off_0 + hwMax - hw + oo*fc*fh*fw];
+                            F[hw][oo] = filterArray[f_off_0 + hwMax - hw + oo*fh*fw];
                         }
                         F_ptr[hw] = F[hw];
                     }
                     for (U32 hw = 0; hw < 36; hw++) {
-                        Fw[hw] = ftmArray + ftm_off_0 + hw*fc*8;
+                        Fw[hw] = ftmArray + ftm_off_0 + hw*fn*8;
                     }
                     trans_W_4x4_3x3(Fw, F_ptr);
                 }
             }
-            *ftmDesc = tensor4df(fdt, ftmDataFormat, fn, fc, 6, 6);
+            *ftmDesc = tensor4df(fdt, ftmDataFormat, fc, fn, 6, 6);
             break;
         }
         default:
@@ -141,6 +141,9 @@ EE deconvolution_transform_filter_fp16(TensorDesc filterDesc, const F16* filter,
     switch (algorithm) {
         case CONVOLUTION_ALGORITHM_WINOGRAD:
             ftmDataFormat = DF_HWNCN16;
+            break;
+        case CONVOLUTION_ALGORITHM_GEMM_ICNCHW:
+            ftmDataFormat = DF_NHWCN16;
             break;
         case CONVOLUTION_ALGORITHM_GEMM:
             ftmDataFormat = DF_NHWCN16;

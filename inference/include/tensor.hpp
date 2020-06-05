@@ -31,159 +31,166 @@
 
 #define HashMap std::map
 #define Vec std::vector
-#define Set std::set
 
 class Tensor {
-    public:
-        Tensor()
-        {
-            this->val = std::shared_ptr<Memory_>(new CpuMemory());
+public:
+    Tensor()
+    {
+        this->val = std::shared_ptr<Memory_>(new CpuMemory());
+        this->scalePtr = std::shared_ptr<F32>((F32*)operator new(bytesOf(DT_F32)));
+    }
+
+#ifdef _USE_MALI
+    Tensor(std::shared_ptr<GCLHandle> handle)
+    {
+        this->val = std::shared_ptr<Memory_>(new OclMemory(handle));
+        this->scalePtr = std::shared_ptr<F32>((F32*)operator new(bytesOf(DT_F32)));
+    }
+#endif
+
+    void alloc()
+    {
+        this->val->alloc(desc);
+    }
+
+    void set_desc(TensorDesc d)
+    {
+        this->desc = d;
+    }
+
+    TensorDesc get_desc()
+    {
+        return this->desc;
+    };
+
+    void set_scale(F32 s)
+    {
+        if (nullptr == this->scalePtr.get()) {
             this->scalePtr = std::shared_ptr<F32>((F32*)operator new(bytesOf(DT_F32)));
         }
+        *(this->scalePtr.get()) = s;
+    }
 
-#ifdef _USE_MALI
-        Tensor(std::shared_ptr<GCLHandle> handle)
-        {
-            this->val = std::shared_ptr<Memory_>(new OclMemory(handle));
-            this->scalePtr = std::shared_ptr<F32>((F32*)operator new(bytesOf(DT_F32)));
+    F32 get_scale()
+    {
+        if (nullptr != this->scalePtr.get()) {
+            return *(this->scalePtr.get());
+        } else {
+            return 1.0;
         }
-#endif
+    }
 
-        void alloc()
-        {
-            this->val->alloc(desc);
-        }
+    void set_val_by_copy(TensorDesc desc, U8* ptr) {
+        this->val->set_val_by_copy(desc, ptr);
+    }
 
-        void set_desc(TensorDesc d)
-        {
-            this->desc = d;
-        }
+    void set_shared_ptr(std::shared_ptr<void> val)
+    {
+        this->val->set_shared_ptr_caster(val);
+    }
 
-        TensorDesc get_desc()
-        {
-            return this->desc;
-        };
+    PtrCaster get_val() 
+    {
+        return this->val->get_val_caster();
+    }
 
-        void set_scale(F32 s)
-        {
-            if (nullptr == this->scalePtr.get()) {
-                this->scalePtr = std::shared_ptr<F32>((F32*)operator new(bytesOf(DT_F32)));
+    PtrCasterShared get_shared_ptr()
+    {
+        return this->val->get_shared_ptr_caster();
+    }
+
+    void set_memory(std::shared_ptr<Memory_> mem)
+    {
+        this->val = mem;
+    }
+
+    Memory_* get_memory()
+    {
+        return this->val.get();
+    }
+
+    bool isInvalid()
+    {
+        U32 num = tensorNumElements(this->desc);
+        for (U32 i = 0; i < num; i++) {
+            if (UNI_ISNAN(getElement(i)) || UNI_ISINF(getElement(i))) {
+                return true;
             }
-            *(this->scalePtr.get()) = s;
         }
+        return false;
+    }
 
-        F32 get_scale()
-        {
-            if (nullptr != this->scalePtr.get()) {
-                return *(this->scalePtr.get());
-            } else {
-                return 1.0;
+    void print()
+    {
+        U32 num = tensorNumElements(this->desc);
+        std::cout << num << std::endl;
+        num = (num > 64) ? 64 : num;
+        for(U32 i = 0; i < num; i++) {
+            std::cout << getElement(i) << " ";
+        }
+        std::cout << std::endl;
+    }
+
+    F32 getElement(U32 index)
+    {
+        F32 value = 0;
+        U8* res = NULL;
+#ifdef _USE_MALI
+        if(val->get_mem_type() == OCLMem) {
+            std::shared_ptr<GCLMem> oclMem = this->val->get_shared_ptr_caster();
+            if(!oclMem->desc.use_map) {
+                std::cerr << "[ERROR] Not support check unmapped gcl memory value" << std::endl;
+                exit(1);
             }
-        }
-
-        void set_val(void* v)
-        {
-            this->val->set_val_caster(v);
-        }
-
-        PtrCaster get_val() 
-        {
-            return this->val->get_val_caster();
-        }
-
-        void set_shared_ptr(std::shared_ptr<void> val)
-        {
-            this->val->set_shared_ptr_caster(val);
-        }
-
-        PtrCasterShared get_shared_ptr()
-        {
-            return this->val->get_shared_ptr_caster();
-        }
-
-        void set_memory(std::shared_ptr<Memory_> mem)
-        {
-            this->val = mem;
-        }
-
-        
-        Memory_* get_memory()
-        {
-            return this->val.get();
-        }
-
-        bool isInvalid()
-        {
-#ifdef _USE_MALI
-            if (val->get_mem_type() == OCLMem) {
-                return false;
-            } else {
+            res = oclMem->desc.map_ptr;
+        } else {
 #endif
-                U32 num = tensorNumElements(this->desc);
-                for (U32 i = 0; i < num; i++) {
-                    if (UNI_ISNAN(getElement(i)) || UNI_ISINF(getElement(i))) {
-                        return true;
-                    }
-                }
-                return false;
+            res = (U8*)this->val->get_val();
 #ifdef _USE_MALI
+        }
+#endif
+        switch (this->desc.dt) {
+            case DT_F32: {
+                 F32* data = (F32*)res;
+                 value = data[index];
+                 break;
             }
-#endif
-        }
-
-        void print()
-        {
-#ifdef _USE_MALI
-            if (val->get_mem_type() == OCLMem) {
-            } else {
-#endif
-                U32 num = tensorNumElements(this->desc);
-                std::cout << num << std::endl;
-                if(num > 64) num = 64;
-                for(U32 i = 0; i < num; i++) {
-                    std::cout << getElement(i) << " ";
-                }
-                std::cout << std::endl;
-#ifdef _USE_MALI
+#ifdef __aarch64__
+            case DT_F16: {
+                 F16* data = (F16*)res;
+                 value = data[index];
+                 break;
             }
 #endif
+            case DT_U32: {
+                 U32* data = (U32*)res;
+                 value = data[index];
+                 break;
+            }
+            case DT_I32: {
+                 I32* data = (I32*)res;
+                 value = data[index];
+                 break;
+            }
+            case DT_I8: {
+                 INT8* data = (INT8*)res;
+                 value = data[index] / this->get_scale();
+                 break;
+            }
+            case DT_U8: {
+                 U8* data = (U8*)res;
+                 value = data[index];
+                 break;
+            }
+            default:
+                 CHECK_STATUS(NOT_SUPPORTED);
         }
+        return value;
+    }
 
-       F32 getElement(U32 index)
-       {
-           F32 value = 0;
-           switch (this->desc.dt) {
-               case DT_F32: {
-                    F32* data = (F32*) this->val->get_val();
-                    value = data[index];
-                    break;
-               }
-#ifdef _USE_FP16
-               case DT_F16: {
-                    F16* data = (F16*) this->val->get_val();
-                    value = data[index];
-                    break;
-               }
-#endif
-               case DT_U32: {
-                    U32* data = (U32*) this->val->get_val();
-                    value = data[index];
-                    break;
-               }
-               case DT_I32: {
-                    I32* data = (I32*) this->val->get_val();
-                    value = data[index];
-                    break;
-               }
-               default:
-                    CHECK_STATUS(NOT_SUPPORTED);
-           }
-           return value;
-       }
-
-    public:
-        TensorDesc desc;
-        std::shared_ptr<Memory_> val;
-        std::shared_ptr<F32> scalePtr;
+private:
+    TensorDesc desc;
+    std::shared_ptr<Memory_> val;
+    std::shared_ptr<F32> scalePtr;
 };
 #endif //_TENSOR_H

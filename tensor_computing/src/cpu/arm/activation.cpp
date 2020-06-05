@@ -19,24 +19,35 @@
 #ifdef _USE_FP16
 #include "cpu/arm/fp16/tensor_computing_fp16.h"
 #endif
+#ifdef _USE_INT8
+#include "cpu/arm/int8/tensor_computing_int8.h"
+#endif
 
-EE activation_arm(TensorDesc inputDesc, void* data, ActivationMode activationMode)
+EE activation_arm(TensorDesc inputDesc, void* input, ActivationDesc activationDesc, TensorDesc outputDesc, void* output)
 {
-    if (nullptr == data)
+    if (nullptr == input || nullptr == output) {
         CHECK_STATUS(NULL_POINTER);
+    }
     DataType idt = inputDesc.dt;
     EE ret = SUCCESS;
     U32 len = tensorNumElements(inputDesc);
+    CHECK_REQUIREMENT(len == tensorNumElements(outputDesc));
     switch (idt) {
 #ifdef _USE_FP32
         case DT_F32: {
-            ret = activation_fp32((F32*)data, len, activationMode);
+            ret = activation_fp32((F32*)input, len, activationDesc, (F32*)output);
             break;
         }
 #endif
 #ifdef _USE_FP16
         case DT_F16: {
-            ret = activation_fp16((F16*)data, len, activationMode);
+            ret = activation_fp16((F16*)input, len, activationDesc, (F16*)output);
+            break;
+        }
+#endif
+#ifdef _USE_INT8
+        case DT_I8: {
+            ret = activation_int8((INT8*)input, len, activationDesc, (INT8*)output);
             break;
         }
 #endif

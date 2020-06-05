@@ -26,7 +26,7 @@ public:
     /**
     @param mode
     */
-    ActivationCPU(ActivationMode activeMode): Activation(activeMode) {}
+    ActivationCPU(ActivationDesc activationDesc): Activation(activationDesc) {}
 
     virtual void run() override
     {
@@ -35,13 +35,12 @@ public:
         Tensor inputTensor = this->inputTensors[0];
         TensorDesc inputDesc = inputTensor.get_desc();
         Tensor outputTensor = this->outputTensors[0];
+        TensorDesc outputDesc = outputTensor.get_desc();
         U8* inPtr = inputTensor.get_val();
         U8* outPtr = outputTensor.get_val();
-        if(inPtr != outPtr) {
-            memcpy(outPtr, inPtr, tensorNumBytes(inputDesc));
-        }
-        CHECK_STATUS(activation(inputDesc, outPtr, this->activeMode, this->schedule));
 
+        CHECK_STATUS(activation(inputDesc, inPtr, this->activationDesc, outputDesc, outPtr, this->schedule));
+        outputTensor.set_scale(inputTensor.get_scale());
         UTIL_TIME_TOC(__CLASS_FUNCTION__)
     }
 

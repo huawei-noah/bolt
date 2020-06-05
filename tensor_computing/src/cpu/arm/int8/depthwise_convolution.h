@@ -29,8 +29,8 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc, INT8* inArray,
     TensorDesc biasDesc, const I32* biasArray,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, I32* outArray,
-    ActivationMode depthwiseActivationMode,
-    ActivationMode pointwiseActivationMode,
+    ActivationDesc depthwiseActivationDesc,
+    ActivationDesc pointwiseActivationDesc,
     Arch arch);
 #endif
 #endif

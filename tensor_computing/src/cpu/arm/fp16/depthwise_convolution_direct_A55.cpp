@@ -20,7 +20,7 @@ EE depthwise_convolution_direct_A55(TensorDesc inputDesc, F16* inArray,
     TensorDesc biasDesc, const F16* biasArray,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F16* outArray,
-    ActivationMode depthwiseActivationMode)
+    ActivationDesc depthwiseActivationDesc)
 {
     UNUSED(biasDesc);
     UNUSED(tmpBytes);
@@ -160,7 +160,7 @@ EE depthwise_convolution_direct_A55(TensorDesc inputDesc, F16* inArray,
                 }
 
                 // activation
-                switch (depthwiseActivationMode){
+                switch (depthwiseActivationDesc.mode){
                     case ACTIVATION_NULL:
                          break;
                     case ACTIVATION_RELU:{
@@ -332,7 +332,7 @@ EE depthwise_convolution_direct_A55(TensorDesc inputDesc, F16* inArray,
                 }
 
                 // activation
-                switch (depthwiseActivationMode){
+                switch (depthwiseActivationDesc.mode){
                     case ACTIVATION_NULL:
                          break;
                     case ACTIVATION_RELU:{
@@ -442,7 +442,7 @@ EE depthwise_convolution_direct_A55(TensorDesc inputDesc, F16* inArray,
                 }
 
                 // activation
-                switch (depthwiseActivationMode){
+                switch (depthwiseActivationDesc.mode){
                     case ACTIVATION_NULL:
                          break;
                     case ACTIVATION_RELU:{

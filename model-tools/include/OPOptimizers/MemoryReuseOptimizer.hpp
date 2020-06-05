@@ -23,12 +23,22 @@
 #include "OPOptimizer.hpp"
 
 class MemoryReuseOptimizer: public OPOptimizer {
-    virtual bool optimize(ModelSpec* spec) override {
+    virtual bool optimize(ModelSpec* spec) override
+    {
         bool hasOptimized = false;
         std::map<std::string, int> endOfLife;
         int i;
         for (i = 0; i < spec->num_operator_specs; i++) {
             if (OT_None != spec->ops[i].type) {
+                if (OT_Repeat == spec->ops[i].type) {
+                    int loopEnd = i;
+                    std::string startName = spec->ops[i].input_tensors_name[0];
+                    int loopStart = searchOperatorIndexByOutput(spec, startName);
+                    CHECK_REQUIREMENT(-1 != loopStart);
+                    loops.push_back(std::make_pair(loopStart, loopEnd));
+                    continue;
+                }
+
                 for (U32 j = 0; j < spec->ops[i].num_inputs; j++) {
                     std::string inputName = spec->ops[i].input_tensors_name[j];
                     auto it = endOfLife.find(inputName);
@@ -52,6 +62,12 @@ class MemoryReuseOptimizer: public OPOptimizer {
             }
         }
 
+        // model inputs should not overwrite each other
+        for (int j = 0; j < spec->num_inputs; j++) {
+            std::string inputName = spec->input_names[j];
+            allocate(inputName, endOfLife[inputName], 0);
+        }
+
         for (int i = 0; i < spec->num_operator_specs; i++) {
             if (OT_None != spec->ops[i].type) {
                 U32 numInputs = spec->ops[i].num_inputs;
@@ -69,6 +85,13 @@ class MemoryReuseOptimizer: public OPOptimizer {
                         continue;
                     }
 
+                    if (isOPtoBypass(spec->ops[i].type)) {
+                        // Use -1 to label this tensor as standalone
+                        aliveTensors.insert(std::make_pair(inputName, -1));
+                        spec->ops[i].tensor_positions[j] = -1;
+                        continue;
+                    }
+
                     int lastId = endOfLife[inputName];
                     layerTensors.push_back(std::make_tuple(inputName, lastId, j));
                 }
@@ -82,19 +105,29 @@ class MemoryReuseOptimizer: public OPOptimizer {
                         continue;
                     }
 
-                    if (isOPtoBypass(spec->ops[i].type)) {
+                    int lastId = endOfLife[outputName];
+
+                    bool loopExternal = false;
+                    for (auto loop : loops) {
+                        int loopStart = std::get<0>(loop);
+                        int loopEnd = std::get<1>(loop);
+                        if (lastId >= loopStart && lastId <= loopEnd && (i < loopStart || i > loopEnd)) {
+                            loopExternal = true;
+                        }
+                    }
+
+                    if (loopExternal || isOPtoBypass(spec->ops[i].type)) {
                         // Use -1 to label this tensor as standalone
                         aliveTensors.insert(std::make_pair(outputName, -1));
                         spec->ops[i].tensor_positions[numInputs + j] = -1;
                         continue;
                     }
 
-                    int lastId = endOfLife[outputName];
                     layerTensors.push_back(std::make_tuple(outputName, lastId, numInputs + j));
                 }
 
                 // Sort the unallocated tensors according to their death time
-                sort(layerTensors.begin(), layerTensors.end(), [=](auto a, auto b)
+                sort(layerTensors.begin(), layerTensors.end(), [=](std::tuple<std::string, int, U32> a, std::tuple<std::string, int, U32> b)
                 {
                     return std::get<1>(a) > std::get<1>(b);
                 });
@@ -130,6 +163,8 @@ private:
 
     std::map<std::string, int> aliveTensors;
 
+    std::vector<std::pair<int, int>> loops;  // If a tensor used in a loop is produced outside, it should not be overwritten
+
     I32 allocate(std::string tensorName, int deathTime, int curID)
     {
         I32 pos;
@@ -148,6 +183,10 @@ private:
     }
 
     bool isOPtoBypass(OperatorType ot) {
+        char *environmentSetting = getenv("BOLT_MEMORY_REUSE_OPTIMIZATION");
+        bool memoryReuse = (environmentSetting != NULL && std::string(environmentSetting) == std::string("OFF")) ? false : true;
+        if (! memoryReuse)
+            return true;
         switch (ot) {
             case OT_None: {
                 return true;
@@ -162,6 +201,12 @@ private:
                 return true;
             }
             case OT_Repeat: {
+                return true;
+            }
+            case OT_Jump: {
+                return true;
+            }
+            case OT_LayerNorm: {
                 return true;
             }
             default: {

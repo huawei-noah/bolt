@@ -82,7 +82,7 @@ EE convolution_int8(TensorDesc inputDesc, const INT8* input,
     TensorDesc biasDesc, const F16* bias,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, void* output,
-    ActivationMode activationMode,
+    ActivationDesc activationDesc,
     Arch arch)
 {
     if (nullptr == input || nullptr == filter || nullptr == output || nullptr == bias || nullptr == tmp) {
@@ -112,11 +112,11 @@ EE convolution_int8(TensorDesc inputDesc, const INT8* input,
     switch (algorithm) {
         case CONVOLUTION_ALGORITHM_WINOGRAD:
             ret = convolution_winograd(inputDesc, input, scales, filterDesc, filter, scales+2, convDesc,
-                                       biasDesc, bias, tmpBytes, tmp, outputDesc, output, scales+1, activationMode, arch);
+                                       biasDesc, bias, tmpBytes, tmp, outputDesc, output, scales+1, activationDesc, arch);
             break;
         case CONVOLUTION_ALGORITHM_GEMM:
             ret = convolution_gemm(inputDesc, input, scales, filterDesc, filter, scales+2, convDesc,
-                                   biasDesc, bias, tmpBytes, tmp, outputDesc, output, scales+1, activationMode, arch);
+                                   biasDesc, bias, tmpBytes, tmp, outputDesc, output, scales+1, activationDesc, arch);
             break;
         default:
             ret = NOT_SUPPORTED;

@@ -11,7 +11,7 @@ Build third party library.
 
 Mandatory arguments to long options are mandatory for short options too.
   -h, --help                 display this help and exit.
-  -c, --compiler <llvm|gnu>  use to set compiler(default: gnu).
+  -c, --compiler <llvm|gnu|himix100>  use to set compiler(default: gnu).
   -t, --threads              use parallel build(default: 8).
 EOF
     exit 1;
@@ -74,31 +74,40 @@ if [ $? == 0 ] ; then
 fi
 
 if [ "${compiler_arch}" == "llvm" ] ; then
-    exeIsValid aarch64-linux-android21-clang
-    if [ $? == 0 ] ; then
-        echo "[ERROR] please install android ndk aarch64-linux-android21-clang compiler and set shell environment PATH to find it"
-        exit 1
-    fi
-    exeIsValid aarch64-linux-android21-clang++
+    exeIsValid aarch64-linux-android21-clang && exeIsValid aarch64-linux-android21-clang++
     if [ $? == 0 ] ; then
         echo "[ERROR] please install android ndk aarch64-linux-android21-clang++ compiler and set shell environment PATH to find it"
         exit 1
     fi
     export CC=aarch64-linux-android21-clang
     export CXX=aarch64-linux-android21-clang++
-else
-    exeIsValid aarch64-linux-gnu-gcc
-    if [ $? == 0 ] ; then
-        echo "[ERROR] please install GNU gcc ARM compiler and set shell environment PATH to find it"
-        exit 1
-    fi
-    exeIsValid aarch64-linux-gnu-g++
+fi
+if [ "${compiler_arch}" == "gnu" ] ; then
+    exeIsValid aarch64-linux-gnu-gcc && exeIsValid aarch64-linux-gnu-g++
     if [ $? == 0 ] ; then
         echo "[ERROR] please install GNU gcc ARM compiler and set shell environment PATH to find it"
         exit 1
     fi
     export CC=aarch64-linux-gnu-gcc
     export CXX=aarch64-linux-gnu-g++
+fi
+if [ "${compiler_arch}" == "himix100" ] ; then
+    exeIsValid arm-himix100-linux-gcc && exeIsValid arm-himix100-linux-g++
+    if [ $? == 0 ] ; then
+        echo "[ERROR] please install Himix100 GNU gcc ARM compiler and set shell environment PATH to find it"
+        exit 1
+    fi
+    export CC=arm-himix100-linux-gcc
+    export CXX=arm-himix100-linux-g++
+fi
+if [ "${compiler_arch}" == "ndkv7" ] ; then
+    exeIsValid armv7a-linux-androideabi16-clang && exeIsValid armv7a-linux-androideabi16-clang++
+    if [ $? == 0 ] ; then
+        echo "[ERROR] please install Himix100 GNU gcc ARM compiler and set shell environment PATH to find it"
+        exit 1
+    fi
+    export CC=armv7a-linux-androideabi16-clang
+    export CXX=armv7a-linux-androideabi16-clang++
 fi
 
 script_abs=$(readlink -f "$0")
@@ -150,7 +159,7 @@ fi
 tar xzf v3.1.0.tar.gz
 cd protobuf-3.1.0
 if [ ! -f "./configure" ]; then
-    ./autogen.sh
+    ./autogen.sh || (echo "./autogen.sh failed for protobuf"; exit 1) ;
 fi
 ./configure --host=arm-linux --with-protoc=${PROTOC_ROOT}/bin/protoc\
             --prefix=${Protobuf_ROOT}
@@ -190,7 +199,7 @@ if [ ! -d "${script_dir}/sources/tflite" ]; then
     git init
     git remote add -f origin https://github.com/tensorflow/tensorflow || exit 1
     git config core.sparsecheckout true
-    echo "lite/schema/schema_generated.h" >> .git/info/sparse-checkout
+    echo "tensorflow/lite/schema/schema_generated.h" >> .git/info/sparse-checkout
     git pull origin master || exit 1
     rm -rf .git*
     cp -r ../../tflite ${script_dir}/sources/
@@ -239,7 +248,7 @@ fi
 tar xzf jpegsrc.v9c.tar.gz
 cd jpeg-9c
 if [ ! -f "./configure" ]; then
-    ./autogen.sh
+    ./autogen.sh || (echo "./autogen.sh failed for libjpeg; exit 1") ;
 fi
 ./configure --host=arm-linux --prefix=${JPEG_ROOT}
 make -j${build_threads} || exit 1

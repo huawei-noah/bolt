@@ -101,10 +101,22 @@ extern "C" EE mt_destroy_model(ModelSpec* ms)
                 delete [] ms->ops[i].tensor_positions;
             }
 
+            if (0 != ms->ops[i].num_quant_feature && nullptr != ms->ops[i].feature_scale) {
+                for (U32 j = 0; j < ms->ops[i].num_quant_feature; j++) {
+                    if (0 != ms->ops[i].feature_scale[j].num_scale) {
+                        if (nullptr != ms->ops[i].feature_scale[j].scale) {
+                            delete [] ms->ops[i].feature_scale[j].scale;
+                        }
+                    }
+                }
+                delete [] ms->ops[i].feature_scale;
+            }
+
             // process op memory
             switch (ms->ops[i].type) {
                 case OT_Eltwise: {
-                    if (nullptr != ms->ops[i].ps.eltwise_spec.elt_sum_spec.coeff_values) {
+                    if (ms->ops[i].ps.eltwise_spec.elt_mode == ELTWISE_SUM &&
+                        nullptr != ms->ops[i].ps.eltwise_spec.elt_sum_spec.coeff_values) {
                         delete [] ms->ops[i].ps.eltwise_spec.elt_sum_spec.coeff_values;
                     }
                     ms->ops[i].ps.eltwise_spec.elt_sum_spec.coeff_values = nullptr;
@@ -164,7 +176,6 @@ extern "C" EE mt_destroy_model(ModelSpec* ms)
     return SUCCESS;
 }
 
-
 std::string concat_dir_file(std::string dir, std::string file) {
     std::string ret;
     if (!dir.empty()) {
@@ -183,16 +194,16 @@ std::string concat_dir_file(std::string dir, std::string file) {
     return ret;
 }
 
-
 EE mt_load(CI8* dir, CI8* mfn, ModelSpec* md) {
     std::string completePath = concat_dir_file(dir, mfn);
     deserialize_model_from_file(completePath.c_str(), md);
     return SUCCESS;
 }
 
-
+#if defined(_USE_CAFFE) || defined(_USE_ONNX) || defined(_USE_TFLITE)
 EE mt_store(CI8* dir, CI8* mfn, const ModelSpec* md) {
     std::string completePath = concat_dir_file(dir, mfn);
     serialize_model_to_file(md, completePath.c_str());
     return SUCCESS;
 }
+#endif

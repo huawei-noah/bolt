@@ -21,77 +21,113 @@
 #include "cpu/arm/fp16/tensor_computing_fp16.h"
 #endif
 
+std::vector<int> calculateLocalIndex_arm(U32 index, TensorDesc desc) {
+    std::vector<int> indexes(desc.nDims);
+    for (U32 i = 0; i < desc.nDims; i++) {
+        indexes[i] = index % desc.dims[i];
+        index /= desc.dims[i];
+    }
+    return indexes;
+}
+
+U32 calculateGlobalIndex_arm(std::vector<int> indexes, TensorDesc desc) {
+    U32 index = 0;
+    for (int i = ((int)desc.nDims) - 1; i >= 0; i--) {
+        index = index * desc.dims[i] + indexes[i];
+    }
+    return index;
+    
+}
+
+std::vector<int> calculateRelativeLocalIndex_arm(std::vector<int> indexes, TensorDesc desc) {
+    std::vector<int> relativeIndexes(desc.nDims);
+    for (U32 i = 0; i < desc.nDims; i++) {
+        relativeIndexes[i] = indexes[i] % desc.dims[i];
+    }
+    return relativeIndexes;
+}
+
+// [1, 10, 10] + [1, 10, 10] = [1, 10, 10]
+// [1, 10, 1] + [1, 1, 10] = [1, 10, 10]
+// [1, 20, 10] + [10] = [1. 20, 10] + [1, 1, 10] = [1, 20, 10]
 EE eltwise_arm(std::vector<TensorDesc> inputDesc, std::vector<void*> input,
                TensorDesc outputDesc, void* output, EltwiseMode eltwiseMode) {
     U32 num = inputDesc.size();
-    if(num <= 1) return NOT_MATCH;
-    U32 batch = outputDesc.dims[outputDesc.nDims - 1];
-    std::vector<U32> batchs(num, 1);
-    for (U32 i = 0; i < num; i++) {
-        if (inputDesc[i].dims[inputDesc[i].nDims - 1] != batch)
-            batchs[i] = 0;
-    }
-
-    U32 arrayDimMin = 0;
-    for (U32 i = 1; i < num; i++) {
-        if (inputDesc[i].nDims < inputDesc[arrayDimMin].nDims)
-            arrayDimMin = i;
-    }
-    U32 sameDim = 0;
-    for (U32 i = 0; i < inputDesc[arrayDimMin].nDims; i++) {
-        bool various = false;
-        for (U32 j = 1; j < num; j++) {
-            if (inputDesc[j].dims[i] != inputDesc[0].dims[i])
-                various = true;
-        }
-        if (various)
+    if(num <= 1 || outputDesc.nDims < 1) return NOT_MATCH;
+    I32 oneCount = 0;
+    for (int i = 0; i < ((int)outputDesc.nDims)-1; i++) {
+        if(outputDesc.dims[i] == 1)
+            oneCount ++;
+        else
             break;
-        else
-            sameDim++;
     }
-    U32 loopInner = 1;
-    for (U32 i = 0; i < sameDim; i++) {
-        loopInner *= inputDesc[0].dims[i];
-    }
-    U32 len = tensorNumElements(outputDesc);
-    U32 loopOuter = len / batch / loopInner;
-    std::vector<U32> loopOuters(num);
+    TensorDesc newOutputDesc = outputDesc;
+    for (int i = 0; i < (int)outputDesc.nDims - oneCount; i++)
+        newOutputDesc.dims[i] =  outputDesc.dims[oneCount+i];
+    newOutputDesc.nDims = outputDesc.nDims - oneCount;
+
+    std::vector<TensorDesc> newInputDesc(num);
     for (U32 i = 0; i < num; i++) {
-        if (batchs[i] != 0)
-            loopOuters[i] = tensorNumElements(inputDesc[i]) / batch / loopInner;
-        else
-            loopOuters[i] = tensorNumElements(inputDesc[i]) / loopInner;
+        newInputDesc[i] = inputDesc[i];
+        for (int j = 0; j < (int)inputDesc[i].nDims - oneCount; j++)
+            newInputDesc[i].dims[j] =  inputDesc[i].dims[oneCount+j];
+        newInputDesc[i].nDims = inputDesc[i].nDims - oneCount;
+        for (U32 j = newInputDesc[i].nDims; j < newOutputDesc.nDims; j++) {
+            newInputDesc[i].dims[j] = 1;
+        }
+        newInputDesc[i].nDims = newOutputDesc.nDims;
+    }
+    U32 size = tensorNumElements(newOutputDesc);
+    U32 lastDimSize = newOutputDesc.dims[0];
+    std::vector<int> lastDimSizes(num);
+    for (U32 i = 0; i < num; i++)
+        lastDimSizes[i] = newInputDesc[i].dims[0];
+    for (U32 i = 1; i < newOutputDesc.nDims; i++) {
+        bool sameDim = true;
+        for (U32 j = 0; j < num; j++) {
+            if (newInputDesc[j].dims[i] != newOutputDesc.dims[i]) {
+                sameDim = false;
+                break;
+            }
+        }
+        if (sameDim) {
+            lastDimSize *= newOutputDesc.dims[i];
+            for (U32 j = 0; j < num; j++) {
+                lastDimSizes[j] *= newInputDesc[j].dims[i];
+            }
+        } else {
+            break;
+        }
     }
 
+    std::vector<void*> newInput(num);
     EE ret = SUCCESS;
-    for (U32 i = 0; i < batch; i++) {
-        for (U32 j = 0; j < loopOuter; j++) {
-            std::vector<void*> currentInput(num, nullptr);
-            void *currentOutput = (U8*)output + ((i * loopOuter + j) * loopInner) * bytesOf(outputDesc.dt);
-            for (U32 k = 0; k < num; k++) {
-                U32 curJ = 0;
-                if (j < loopOuters[k])
-                    curJ = j;
-                currentInput[k] = (U8*)input[k] + ((i * batchs[k] * loopOuters[k] + curJ) * loopInner) * bytesOf(inputDesc[k].dt);
-            }
-            switch (outputDesc.dt) {
+    for (U32 i = 0; i < size; i+=lastDimSize) {
+        std::vector<int> index = calculateLocalIndex_arm(i, newOutputDesc);
+        for (U32 j = 0; j < num; j++) {
+            std::vector<int> relativeIndex = calculateRelativeLocalIndex_arm(index, newInputDesc[j]);
+            U32 globalIndex = calculateGlobalIndex_arm(relativeIndex, newInputDesc[j]);
+            newInput[j] = (U8*)(input[j]) + globalIndex * bytesOf(newInputDesc[j].dt);
+        }
+        U8* newOutput = (U8*)output + i * bytesOf(newOutputDesc.dt);
+        switch (newOutputDesc.dt) {
 #ifdef _USE_FP32
-                case DT_F32: {
-                    ret = eltwise_fp32(currentInput, num, loopInner, currentOutput, eltwiseMode);
-                    break;
-                }
+            case DT_F32: {
+                ret = eltwise_fp32(newInput, lastDimSizes, num, lastDimSize, newOutput, eltwiseMode);
+                break;
+            }
 #endif
 #ifdef _USE_FP16
-                case DT_F16: {
-                    ret = eltwise_fp16(currentInput, num, loopInner, currentOutput, eltwiseMode);
-                    break;
-                }
-#endif
-                default:
-                    ret = NOT_SUPPORTED;
-                    break;
+            case DT_F16: {
+                ret = eltwise_fp16(newInput, lastDimSizes, num, lastDimSize, newOutput, eltwiseMode);
+                break;
             }
+#endif
+            default:
+                ret = NOT_SUPPORTED;
+                break;
         }
+
     }
     return ret;
 }

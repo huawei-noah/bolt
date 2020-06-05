@@ -35,41 +35,12 @@ public:
         return OT_MatMul;
     }
 
-    void run() override
-    {
-        UTIL_TIME_TIC(__CLASS_FUNCTION__)
-        Tensor inputTensorA =  this->inputTensors[0];
-        TensorDesc inputDescA = inputTensorA.get_desc();
-        Tensor inputTensorB =  this->inputTensors[1];
-        TensorDesc inputDescB = inputTensorB.get_desc();
-        Tensor outputTensor = this->outputTensors[0];
-        TensorDesc outputDesc = outputTensor.get_desc();
-
-        CHECK_STATUS(matmul(inputDescA, this->transposeA, inputTensorA.get_val(),
-                            inputDescB, this->transposeB, inputTensorB.get_val(),
-                            this->temp.get(), this->lenOfTemp,
-                            outputDesc, outputTensor.get_val(), this->schedule));
-        UTIL_TIME_TOC(__CLASS_FUNCTION__)
-    }
-
-    EE infer_output_tensors_size(Vec<TensorDesc> inDims, Vec<TensorDesc>* outDims) override
-    {
-        TensorDesc inDimA = inDims[0];
-        TensorDesc inDimB = inDims[1];
-        CHECK_STATUS(matmul_infer_output_size(inDimA, this->transposeA, inDimB, this->transposeB, &((*outDims)[0])));
+    virtual EE infer_forward_algorithm(HashMap<std::string, std::string> &algorithmMap) {
+        UNUSED(algorithmMap);
         return SUCCESS;
     }
 
-    U32 infer_tmp_memory_size() override
-    {
-        TensorDesc inputDescA = (this->inputTensors[0]).desc;
-        TensorDesc inputDescB = (this->inputTensors[1]).desc;
-        U32 bytes = 0;
-        CHECK_STATUS(matmul_infer_forward_tmp_bytes(inputDescA, this->transposeA, inputDescB, this->transposeB, &bytes, this->schedule));
-        return bytes;
-    }
-
-private:
+protected:
     bool transposeA;
     bool transposeB;
 };

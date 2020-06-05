@@ -23,8 +23,8 @@ EE depthwise_convolution_int8(TensorDesc inputDesc, INT8* input,
     TensorDesc biasDesc, const I32* bias,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, I32* output,
-    ActivationMode depthwiseActivationMode,
-    ActivationMode pointwiseActivationMode,
+    ActivationDesc depthwiseActivationDesc,
+    ActivationDesc pointwiseActivationDesc,
     Arch arch)
 {
     if(nullptr == input || nullptr == filter || nullptr == output || nullptr == bias || nullptr == tmp)
@@ -56,8 +56,8 @@ EE depthwise_convolution_int8(TensorDesc inputDesc, INT8* input,
                                                          biasDesc, bias,
                                                          tmpBytes, tmp,
                                                          outputDesc, output,
-                                                         depthwiseActivationMode,
-                                                         pointwiseActivationMode,
+                                                         depthwiseActivationDesc,
+                                                         pointwiseActivationDesc,
                                                          arch);
             break;
         default:

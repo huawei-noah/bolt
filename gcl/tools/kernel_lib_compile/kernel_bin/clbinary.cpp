@@ -167,6 +167,7 @@ int main(I32 argc , I8* argv[]){
     free(binary);
     delete[] source;
     CHECK_STATUS(release_program(program));
+    CHECK_STATUS(release_kernel(kernel));
     gcl_destroy_handle(handle);
 }
 

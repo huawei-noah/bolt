@@ -60,17 +60,17 @@ inline EE depthwise_core_mali_fp16(GCLHandle_t          handle,
     iw_off = input->desc.offset[1] - pw;
     ihw_str = ih_str * iw_str;
 
-    U32 ow_str, oh_str, ow_off, oh_off;
+    U32 ow_str, oh_str, ow_off, oh_off, ohw_str;
     oh_str = output->desc.stride[0];
     ow_str = output->desc.stride[1];
     oh_off = output->desc.offset[0];
     ow_off = output->desc.offset[1];
+    ohw_str = oh_str * ow_str;
 
-    U32 item_w;
-    if(sw == 1) item_w = (fw == 5) ? 4 : 8;
-    if(sw == 2) item_w = 4;
-    if(ow < item_w) item_w = ow;
-
+    U32 item_w = forwardRunInfo->best_w[0];
+    U32 gs[3] = {oh, (ow + item_w - 1) / item_w, (oc + 3) / 4 * on};
+    U32 ls[3] = {0, 0, 0};
+    U32 dim   = 3;
     char kernelname[128];
     Kernel kernel;
     if(depthwiseActivationMode == ACTIVATION_NULL){
@@ -82,11 +82,8 @@ inline EE depthwise_core_mali_fp16(GCLHandle_t          handle,
         return NOT_SUPPORTED;
     }
     CHECK_STATUS(gcl_create_kernel_binary(handle, kernelname, &kernel));
-    CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, ihw_str, ic_str, ih_off, iw_off, oh_str, ow_str, oh_off, ow_off, ow, inbuf, fltbuf, biasimg, outbuf));
-    U32 gs[3] = {oh, (ow + item_w - 1) / item_w, (oc + 3) / 4 * on};
-    U32 ls[3] = {16, 16, 1};
-    U32 dim   = 3;
-    gcl_set_kernelVec(handle, kernel, dim, gs, ls);
+    CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, ihw_str, ic_str, ih_off, iw_off, oh_str, ow_str, ohw_str, oh_off, ow_off, ow, gs[0], gs[1], inbuf, fltbuf, biasimg, outbuf));
+    gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelname);
     
 #ifdef _DEBUG
     CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelname));
@@ -94,28 +91,8 @@ inline EE depthwise_core_mali_fp16(GCLHandle_t          handle,
     CHECK_STATUS(gcl_print_memory<F16>(handle, filter, "conv_depthwise_filter"));
     CHECK_STATUS(gcl_print_memory<F16>(handle, bias,   "conv_depthwise_bias"));
     CHECK_STATUS(gcl_print_memory<F16>(handle, output, "conv_depthwise_output"));
+    handle->t_total += handle->t_execute;
 #endif
-    return SUCCESS;
-}
-
-
-EE depthwise_convolution_direct_infer_forward_algorithm_mali_fp16(GCLHandle_t          handle,
-                                                                  TensorDesc           inputDesc, 
-                                                                  TensorDesc           filterDesc, 
-                                                                  ConvolutionDesc      convDesc,
-                                                                  TensorDesc           outputDesc,
-                                                                  ConvolutionPolicy    policy, 
-                                                                  ActivationMode       depthwiseActivationMode,
-                                                                  ForwardRunInfoMali_t forwardRunInfo) 
-{
-    UNUSED(handle);
-    UNUSED(inputDesc);
-    UNUSED(filterDesc); 
-    UNUSED(convDesc);
-    UNUSED(outputDesc);
-    UNUSED(policy); 
-    UNUSED(depthwiseActivationMode);
-    UNUSED(forwardRunInfo); 
     return SUCCESS;
 }
 
@@ -127,7 +104,7 @@ EE depthwise_convolution_direct_transform_filter_bytes_mali_fp16(TensorDesc     
     UNUSED(forwardRunInfo);
     U32 fw, fh, fn;
     tensorSelectGet(filterDesc, NULL, NULL, &fn, NULL, &fh, &fw);
-    U32 item_k = 4;
+    U32 item_k = forwardRunInfo->best_k[0];
     U32 s0, s1, s2;
     U32 num, byteSize;
     s0 = fw * fh;
@@ -165,14 +142,14 @@ EE depthwise_convolution_direct_transform_filter_mali_fp16(GCLHandle_t          
     U32 fw, fh, fn;
     tensorSelectGet(filterDesc, &fdt, &fdf, &fn, NULL, &fh, &fw);
     U32 fwh = fw * fh;
-    U32 item_k = 4;
+    U32 item_k = forwardRunInfo->best_k[0];
     char kernelname[128];
     Kernel kernel;
     sprintf(kernelname, "conv_depthwise_trans_fltbuf_%d", item_k);
     CHECK_STATUS(gcl_get_kernel_from_map(handle, kernelname, &kernel));
     CHECK_STATUS(gcl_set_kernelArgs(kernel, fwh, fn, filter->mem, fltmem->mem));
     U32 gs[3] = {fwh, (fn + item_k - 1) / item_k};
-    U32 ls[3] = {16, 16, 1};
+    U32 ls[3] = {0, 0, 0};
     U32 dim   = 2;
     CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelname));
     *fltmemDesc = tensor4df(fdt, fdf, fn, 1, fh, fw);

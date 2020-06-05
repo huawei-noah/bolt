@@ -56,6 +56,11 @@ void print_help() {
     std::cout << "supported op: OT_FC" <<std::endl;
     std::cout << "supported op: OT_Scale" <<std::endl;
     std::cout << "supported op: OT_Concat" <<std::endl;
+    std::cout << "supported op: OT_Clip" <<std::endl;
+    std::cout << "supported op: OT_Squeeze" <<std::endl;
+    std::cout << "supported op: OT_Reshape" <<std::endl;
+    std::cout << "supported op: OT_Space2Depth" <<std::endl;
+    std::cout << "supported op: OT_Depth2Space" <<std::endl;
 }
 
 template <typename T>
@@ -68,6 +73,7 @@ void buildInputTensor(DataType dt, DataFormat df, U32 n, U32 c, U32 h, U32 w, Ve
     T* data = (T*) inputVal;
     if(dt == DT_F16){
         for(U32 i = 0; i < inputNum; i++) data[i] = (T)(rand() & 255) / 256.0 - 0.5;
+        //for(U32 i = 0; i < inputNum; i++) data[i] = (T)(i & 255) / 255.0;
     }
     if(dt == DT_U8){
         for(U32 i = 0; i < inputNum; i++) {
@@ -76,7 +82,7 @@ void buildInputTensor(DataType dt, DataFormat df, U32 n, U32 c, U32 h, U32 w, Ve
     }
     std::shared_ptr<Tensor> inputTensor = std::shared_ptr<Tensor>(new Tensor());
     inputTensor->set_desc(inputDesc);
-    inputTensor->set_val(inputVal);
+    inputTensor->set_shared_ptr(std::shared_ptr<U8>(inputVal));
 
     dims->push_back(inputDesc);
     inputTensors->push_back(*inputTensor.get());
@@ -143,12 +149,17 @@ int main(int argc, char* argv[]) {
     if(opName == "OT_FC")                  OType = OT_FC;
     if(opName == "OT_Scale")               OType = OT_Scale;
     if(opName == "OT_Concat")              OType = OT_Concat;
+    if(opName == "OT_Clip")                OType = OT_Clip;
+    if(opName == "OT_Squeeze")             OType = OT_Squeeze;
+    if(opName == "OT_Reshape")             OType = OT_Reshape;
+    if(opName == "OT_Space2Depth")         OType = OT_Space2Depth;
+    if(opName == "OT_Depth2Space")         OType = OT_Depth2Space;
     Factory* factory_ocl = (Factory*)(new FactoryOCL());
     std::shared_ptr<Factory> factory;
     factory = std::shared_ptr<Factory>(factory_ocl);
     ConvolutionMode convMode;
-    convMode = Convolution_Depthwise_Pointwise;
-//    convMode = Convolution_Pointwise;
+//    convMode = Convolution_Depthwise_Pointwise;
+    convMode = Convolution_Pointwise;
 
     switch(OType) {
         case OT_Pooling: {
@@ -162,67 +173,86 @@ int main(int argc, char* argv[]) {
             break;
         }
         case OT_Softmax: {
-            auto op = factory->createSoftmax(dt);
+            auto op = factory->createSoftmax(dt, -1);
             model_ptr->add(op);
             break;
         }
         case OT_Conv: {
             if(pm == "NULL") {
-                //auto op = factory->createConvolution(dt, fn, fh, fw, sh, sw, pt, pb, pl, pr, ACTIVATION_NULL, ACTIVATION_NULL, Convolution_Pointwise, 1, 1, 1);
-                //auto op = factory->createConvolution(dt, fn, fh, fw, sh, sw, pt, pb, pl, pr, ACTIVATION_NULL, ACTIVATION_NULL, Convolution_Depthwise, 1, 1, 1);
-                auto op = factory->createConvolution(dt, fn, fh, fw, sh, sw, pt, pb, pl, pr, ACTIVATION_NULL, ACTIVATION_NULL, convMode, 1, 1, 1);
+                ActivationDesc dwActivationDesc, pwActivationDesc;
+                dwActivationDesc.mode = ACTIVATION_NULL;
+                pwActivationDesc.mode = ACTIVATION_NULL;
+                auto op = factory->createConvolution(dt, fn, fh, fw, sh, sw, pt, pb, pl, pr, dwActivationDesc, pwActivationDesc, convMode, 1, 1, 1);
                 model_ptr->add(op);
             }
 
             if(pm == "RELU") {
-                //auto op = factory->createConvolution(dt, fn, fh, fw, sh, sw, pt, pb, pl, pr, ACTIVATION_NULL, ACTIVATION_RELU, Convolution_Pointwise, 1, 1, 1);
-                auto op = factory->createConvolution(dt, fn, fh, fw, sh, sw, pt, pb, pl, pr, ACTIVATION_RELU, ACTIVATION_NULL, convMode, 1, 1, 1);
+                ActivationDesc dwActivationDesc, pwActivationDesc;
+                dwActivationDesc.mode = ACTIVATION_RELU;
+                dwActivationDesc.value[0] = 0;
+                pwActivationDesc.mode = ACTIVATION_NULL;
+                auto op = factory->createConvolution(dt, fn, fh, fw, sh, sw, pt, pb, pl, pr, dwActivationDesc, pwActivationDesc, convMode, 1, 1, 1);
                 model_ptr->add(op);
             }
             break;
         }
         case OT_Relu: {
-            auto op = factory->createActivation(ACTIVATION_RELU);
+            ActivationDesc activationDesc;
+            activationDesc.mode = ACTIVATION_RELU;
+            activationDesc.value[0] = 0;
+            auto op = factory->createActivation(activationDesc);
             model_ptr->add(op);
             break;
         }
         case OT_Relu6: {
-            auto op = factory->createActivation(ACTIVATION_RELU6);
+            ActivationDesc activationDesc;
+            activationDesc.mode = ACTIVATION_RELU6;
+            auto op = factory->createActivation(activationDesc);
             model_ptr->add(op);
             break;
         }
         case OT_HSwish: {
-            auto op = factory->createActivation(ACTIVATION_H_SWISH);
+            ActivationDesc activationDesc;
+            activationDesc.mode = ACTIVATION_H_SWISH;
+            auto op = factory->createActivation(activationDesc);
             model_ptr->add(op);
             break;
         }
         case OT_HSigmoid: {
-            auto op = factory->createActivation(ACTIVATION_H_SIGMOID);
+            ActivationDesc activationDesc;
+            activationDesc.mode = ACTIVATION_H_SIGMOID;
+            auto op = factory->createActivation(activationDesc);
             model_ptr->add(op);
             break;
         }
         case OT_Gelu: {
-            auto op = factory->createActivation(ACTIVATION_GELU);
+            ActivationDesc activationDesc;
+            activationDesc.mode = ACTIVATION_GELU;
+            auto op = factory->createActivation(activationDesc);
             model_ptr->add(op);
             break;
         }
         case OT_TanH: {
-            auto op = factory->createActivation(ACTIVATION_TANH);
+            ActivationDesc activationDesc;
+            activationDesc.mode = ACTIVATION_TANH;
+            auto op = factory->createActivation(activationDesc);
             model_ptr->add(op);
             break;
         }
         case OT_Sigmoid: {
-            auto op = factory->createActivation(ACTIVATION_SIGMOID);
+            ActivationDesc activationDesc;
+            activationDesc.mode = ACTIVATION_SIGMOID;
+            auto op = factory->createActivation(activationDesc);
             model_ptr->add(op);
             break;
         }
         case OT_FC: {
-            auto op = factory->createFullyConnectedEltwise(dt, ih * iw * ic, fn);
+            auto op = factory->createFullyConnected(dt, ih * iw * ic, fn, 1, nullptr);
             model_ptr->add(op);
             break;
         }
         case OT_Scale: {
-            auto op = factory->createScale(dt, fc, inputNum);
+            auto op = factory->createScale(dt, 1, fc, inputNum);
             model_ptr->add(op);
             break;
         }
@@ -231,13 +261,46 @@ int main(int argc, char* argv[]) {
             model_ptr->add(op);
             break;
         }
+        case OT_Clip: {
+            auto op = factory->createClip(dt, 0, 0.5);
+            model_ptr->add(op);
+            break;
+        }
+        case OT_Squeeze: {
+            int dim[4] = {1, 1, 1, 1};
+            auto op = factory->createSqueeze(dt, 0, dim, 4);
+            model_ptr->add(op);
+            break;
+        }
+        case OT_Reshape: {
+            int dim[2] = {-1, 8};
+            auto op = factory->createReshape(dt, dim, 2, 0, 0);
+            model_ptr->add(op);
+            break;
+        }
+        case OT_Space2Depth: {
+            auto op = factory->createSpace2Depth(dt);
+            model_ptr->add(op);
+            break;
+        }
+        case OT_Depth2Space: {
+            auto op = factory->createDepth2Space(dt);
+            model_ptr->add(op);
+            break;
+        }
         default: std::cout << "not support op" << std::endl;
     }
 
     Vec<TensorDesc> dims;
     Vec<Tensor> inputTensors;
-    for(U32 i = 0; i < inputNum; i++){
-        buildInputTensor<F16>(dt, DF_NCHW, in, ic, ih, iw, &dims, &inputTensors);
+    if(OType == OT_Space2Depth){
+        for(U32 i = 0; i < inputNum; i++){
+            buildInputTensor<U8>(DT_U8, DF_NCHW, in, ic, ih, iw, &dims, &inputTensors);
+        }
+    } else {
+        for(U32 i = 0; i < inputNum; i++){
+            buildInputTensor<F16>(DT_F16, DF_NCHW, in, ic, ih, iw, &dims, &inputTensors);
+        }
     }
 
     U8* weightVal = NULL;
@@ -288,13 +351,10 @@ int main(int argc, char* argv[]) {
     model_ptr->run();
     
     auto output = model_ptr->get_output_tensors();
-    output[0]->print();
-/*    
-    auto output = model_ptr->get_output_tensors_map();
-    F16* val = (F16*) output[0];
+    std::shared_ptr<GCLMem> oclMem = output[0]->get_shared_ptr();
+    F16* val = (F16*) (oclMem->desc.map_ptr);
     for(int i = 0; i < 64; i++) std::cout << val[i] << " ";
     std::cout << std::endl;
-*/    
     return 0;
 }
 #endif

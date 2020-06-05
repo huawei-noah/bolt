@@ -15,26 +15,94 @@
 #include <arm_neon.h>
 #include "cpu/arm/fp16/tensor_computing_fp16.h"
 
-EE scale_nchwc8_fp16(F16* alpha, F16* beta, F16* data, U32 in, U32 ic, U32 elements_per_channel)
+EE scale_nchwc8_fp16(F16* input, F16* alpha, F16* beta, I32 in, I32 ic, I32 elements_per_channel, F16* output)
 {
-    if (nullptr == data || nullptr == alpha)
-        CHECK_STATUS(NULL_POINTER);
-    const U32 align_size = 8;
-    float16x8_t in_vec, out_vec;
-    float16x8_t zero  = vdupq_n_f16(float16_t(0.));
-    ic = ic / align_size;
-    for (U32 n = 0; n < in; n++) {
-        for (U32 c = 0; c < ic; c++) {
-            float16x8_t alpha_vec = vld1q_f16(alpha + c * align_size);
-            float16x8_t beta_vec  = (beta == nullptr) ? zero : vld1q_f16(beta + c * align_size);
-            for (U32 i = 0; i < elements_per_channel; i++) {
-                U32 index = ((n * ic + c) * elements_per_channel + i) * align_size;
-                in_vec = vld1q_f16(data + index);
-                out_vec = vfmaq_f16(beta_vec, alpha_vec, in_vec);
-                vst1q_f16(data+index, out_vec);
+    float16x8_t one = vdupq_n_f16(1.);
+    float16x8_t zero = vdupq_n_f16(0.);
+    U32 index = 0;
+    for (I32 n = 0; n < in; n++) {
+        for (I32 c = 0; c < ic; c += 8) {
+            float16x8_t alpha_vec = (alpha == nullptr) ? one : vld1q_f16(alpha + c);
+            float16x8_t beta_vec  = (beta == nullptr) ? zero : vld1q_f16(beta + c);
+            for (I32 i = 0; i < elements_per_channel; i++) {
+                float16x8_t in_vec = vld1q_f16(input + index);
+                float16x8_t out_vec = vfmaq_f16(beta_vec, alpha_vec, in_vec);
+                vst1q_f16(output+index, out_vec);
+                index += 8;
             }
         }
     }
-
     return SUCCESS;
+}
+
+EE scale_nchw_fp16(F16* input, F16* alpha, F16* beta, I32 in, I32 ic, I32 elements_per_channel, F16* output)
+{
+    float16x8_t one = vdupq_n_f16(1.);
+    float16x8_t zero = vdupq_n_f16(0.);
+    U32 index = 0;
+    for (I32 n = 0; n < in; n++) {
+        for (I32 c = 0; c < ic; c++) {
+            float16x8_t alpha_vec = (alpha == nullptr) ? one : vdupq_n_f16(alpha[c]);
+            float16x8_t beta_vec  = (beta == nullptr) ? zero : vdupq_n_f16(beta[c]);
+            I32 i = 0;
+            for (; i < elements_per_channel-7; i += 8) {
+                float16x8_t in_vec = vld1q_f16(input + index);
+                float16x8_t out_vec = vfmaq_f16(beta_vec, alpha_vec, in_vec);
+                vst1q_f16(output+index, out_vec);
+                index += 8;
+            }
+            for (; i < elements_per_channel; i++) {
+                output[index] = alpha[c] * input[index] + beta[c];
+                index++;
+            }
+        }
+    }
+    return SUCCESS;
+}
+
+EE scale_nhwc_fp16(F16* input, F16* alpha, F16* beta, I32 in, I32 ic, I32 elements_per_channel, F16* output)
+{
+    float16x8_t one = vdupq_n_f16(1.);
+    float16x8_t zero = vdupq_n_f16(0.);
+    U32 index = 0;
+    for (I32 n = 0; n < in; n++) {
+        for (I32 i = 0; i < elements_per_channel; i++) {
+            I32 c = 0;
+            for (; c < ic-7; c += 8) {
+                float16x8_t alpha_vec = (alpha == nullptr) ? one : vld1q_f16(alpha+c);
+                float16x8_t beta_vec  = (beta == nullptr) ? zero : vld1q_f16(beta+c);
+                float16x8_t in_vec = vld1q_f16(input + index);
+                float16x8_t out_vec = vfmaq_f16(beta_vec, alpha_vec, in_vec);
+                vst1q_f16(output+index, out_vec);
+                index += 8;
+            }
+            for (; c < ic; c++) {
+                F32 beta_s = (beta == nullptr) ? 0 : beta[c];
+                output[index] = alpha[c] * input[index] + beta_s;
+                index++;
+            }
+        }
+    }
+    return SUCCESS;
+}
+
+EE scale_fp16(F16* input, I32 axis, I32 nDims, F16* alpha, F16* beta, I32 in, I32 ic, I32 elements_per_channel, F16* output)
+{
+    if (nullptr == input || nullptr == output)
+        CHECK_STATUS(NULL_POINTER);
+    EE ret = SUCCESS;
+    if (axis == 1 || axis == 0) {
+        ret = scale_nchw_fp16(input, alpha, beta, in, ic, elements_per_channel, output);
+        CHECK_STATUS(ret);
+    } else if (axis == nDims - 1) {
+        ret = scale_nhwc_fp16(input, alpha, beta, in, ic, elements_per_channel, output);
+        CHECK_STATUS(ret);
+    } else if (axis == nDims) {
+        ret = scale_nchwc8_fp16(input, alpha, beta, in, ic, elements_per_channel, output);
+        CHECK_STATUS(ret);
+    } else {
+        ret = NOT_SUPPORTED;
+        CHECK_STATUS(ret);
+    }
+    return ret;
 }

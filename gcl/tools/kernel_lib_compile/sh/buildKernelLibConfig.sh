@@ -68,4 +68,5 @@ rm -rf ${deviceNamePath}/build
 for cPath in "${CLPath[@]}"; do
     cp ${cPath}/*.cl ${clPath}
 done
+cp ${tensorCLPath}/*.h ${clPath}
 

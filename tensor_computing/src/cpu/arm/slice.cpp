@@ -16,21 +16,45 @@
 #include <vector>
 #include "cpu/arm/tensor_computing_arm.h"
 
+
 EE slice_arm(TensorDesc inputDesc, void* input,
+    int axis,
     std::vector<TensorDesc> outputDesc, std::vector<void*>* output)
 {
-    UNUSED(inputDesc);
-    if (nullptr == input)
+    if (nullptr == input || nullptr == output)
         CHECK_STATUS(NULL_POINTER);
     U32 num = outputDesc.size();
     if (num < 1) return NOT_MATCH;
 
+    int dim = inputDesc.nDims;
+    axis = (axis + dim) % dim;
+    axis = dim - 1 - axis;
+    U32 tileSize = bytesOf(inputDesc.dt);
+    for (I32 i = 0; i < axis; i++) {
+        tileSize *= inputDesc.dims[i];
+    }
+    U32 loops = 1;
+    for (I32 i = axis + 1; i < dim; i++) {
+        loops *= inputDesc.dims[i];
+    }
+
+    if (inputDesc.df == DF_NCHWC8) {
+        if (axis < 2) {
+            tileSize *= 8;
+            loops /= 8;
+        }
+    }
+
     U8 *ptr = (U8 *)input;
-    for (U32 i = 0; i < num; i++) {
-        if (nullptr == (*output)[i])
-            CHECK_STATUS(NULL_POINTER);
-        memcpy((*output)[i], ptr, tensorNumBytes(outputDesc[i]));
-        ptr += tensorNumBytes(outputDesc[i]);
+    for (U32 i = 0; i < loops; i++) {
+        for (U32 j = 0; j < num; j++) {
+            U32 blockSize = outputDesc[j].dims[axis] * tileSize;
+            if (blockSize > 0 && nullptr == (*output)[j])
+                CHECK_STATUS(NULL_POINTER);
+            U8* dstPtr = (U8*)((*output)[j]) + i * blockSize;
+            memcpy(dstPtr, ptr, blockSize);
+            ptr += blockSize;
+        }
     }
     return SUCCESS;
 }

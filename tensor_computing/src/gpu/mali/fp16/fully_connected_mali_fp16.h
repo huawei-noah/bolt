@@ -21,27 +21,31 @@
 
 EE fully_connected_transform_filter_bytes_mali_fp16(TensorDesc            filterDesc, 
                                                     GCLMemDesc_t          gclmemFilterDesc,
-                                                    U32*                  bytes);
+                                                    U32*                  bytes,
+                                                    ForwardRunInfoMali_t forwardRunInfo);
 
-EE fully_connected_transform_filter_mali_fp16(GCLHandle_t          handle,
-                                              TensorDesc           filterDesc,
-                                              GCLMem_t             filter,
-                                              TensorDesc*          fltmemDesc,
-                                              GCLMem_t             fltmem);
+EE fully_connected_transform_filter_mali_fp16(GCLHandle_t           handle,
+                                              TensorDesc            filterDesc,
+                                              GCLMem_t              filter,
+                                              TensorDesc*           fltmemDesc,
+                                              std::vector<GCLMem_t> fltmem,
+                                              ForwardRunInfoMali_t  forwardRunInfo);
 
 EE fully_connected_infer_forward_tmp_bytes_mali_fp16(TensorDesc            inputDesc, 
                                                      TensorDesc            filterDesc, 
-                                                     U32*                  bytes);
+                                                     U32*                  bytes,
+                                                     ForwardRunInfoMali_t  forwardRunInfo);
 
-EE fully_connected_mali_fp16(GCLHandle_t          handle,
-                             TensorDesc           inputDesc, 
-                             const GCLMem_t       input,
-                             TensorDesc           filterDesc, 
-                             const GCLMem_t       filter,
-                             TensorDesc           biasDesc, 
-                             const GCLMem_t       bias,
-                             U32                  tmpBytes, 
-                             GCLMem_t             tmpBuf,
-                             TensorDesc           outputDesc, 
-                             GCLMem_t             output);
+EE fully_connected_mali_fp16(GCLHandle_t           handle,
+                             TensorDesc            inputDesc, 
+                             const GCLMem_t        input,
+                             TensorDesc            filterDesc, 
+                             std::vector<GCLMem_t> filter,
+                             TensorDesc            biasDesc, 
+                             std::vector<GCLMem_t> bias,
+                             U32                   tmpBytes, 
+                             GCLMem_t              tmpBuf,
+                             TensorDesc            outputDesc, 
+                             std::vector<GCLMem_t> output,
+                             ForwardRunInfoMali_t  forwardRunInfo);
 #endif                             

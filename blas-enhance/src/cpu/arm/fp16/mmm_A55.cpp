@@ -693,7 +693,6 @@ void mmm_A55(int M, int N, int K, F16* matrix1, F16* matrix2, F16* tmp, F16* res
     int blockK = K;
     int blockM = 192;
     F16* matrix1Trans = tmp;
-    F16* matrix2Trans = tmp + blockK * N;
     F16* resultCurrent = result;
     int KInner, MInner, m, n;
     for(int k = 0; k < K; k += blockK) {
@@ -707,39 +706,23 @@ void mmm_A55(int M, int N, int K, F16* matrix1, F16* matrix2, F16* tmp, F16* res
                     matrix1_trans(8, KInner, K, matrix1 + n * K + k, matrix1Trans + n * KInner);
                 }
                 for(m = 0; m <= (MInner-24); m+=24) {
-
-                    if (n == 0) {
-                        matrix2_trans(24, KInner, M, matrix2 + k * M + i + m, matrix2Trans + m * KInner);
-                    }
-
                     resultCurrent = result + n * M + m + i;
-                    mmm_8x24_A55(M*2, KInner, matrix1Trans + n * KInner, matrix2Trans + m * KInner, resultCurrent);
+                    mmm_8x24_A55(M*2, KInner, matrix1Trans + n * KInner, matrix2 + (i + m) * KInner, resultCurrent);
                 }
                 for(; m <=(MInner - 8); m+=8) {
-
-                    if (n == 0) {
-                        matrix2_trans(8, KInner, M, matrix2 + k * M + i + m, matrix2Trans + m * KInner);
-                    }
-
                     resultCurrent = result + n * M + m + i;
-                    mmm_8x8_A55(M*2, KInner, matrix1Trans + n * KInner, matrix2Trans + m * KInner, resultCurrent);
+                    mmm_8x8_A55(M*2, KInner, matrix1Trans + n * KInner, matrix2 + (i + m) * KInner, resultCurrent);
                 }
 
                 if ((MInner - m) >= 4) {
-                    if (n == 0) {
-                        matrix2_trans(4, KInner, M, matrix2 + k * M + i + m, matrix2Trans + m * KInner);
-                    }
                     resultCurrent = result + n * M + m + i;
-                    mmm_8x4_A55(M*2, KInner, matrix1Trans + n * KInner, matrix2Trans + m * KInner, resultCurrent);
+                    mmm_8x4_A55(M*2, KInner, matrix1Trans + n * KInner, matrix2 + (i + m) * KInner, resultCurrent);
                     m += 4;
                 }
 
                 if (MInner - m) {
-                    if (n == 0) {
-                        matrix2_trans(MInner - m, KInner, M, matrix2 + k * M + i + m, matrix2Trans + m * KInner);
-                    }
                     resultCurrent = result + n * M + m + i;
-                    mmm_N8_MTail(MInner - m, M, KInner, matrix1Trans + n * KInner, matrix2Trans + m * KInner, resultCurrent);
+                    mmm_N8_MTail(MInner - m, M, KInner, matrix1Trans + n * KInner, matrix2 + (i + m) * KInner, resultCurrent);
                 }
             }
 
@@ -750,37 +733,24 @@ void mmm_A55(int M, int N, int K, F16* matrix1, F16* matrix2, F16* tmp, F16* res
                 }
 
                 for(m = 0; m <= (MInner - 24); m+=24) {
-                    if (n == 0) {
-                        matrix2_trans(24, KInner, M, matrix2 + k * M + i + m, matrix2Trans + m * KInner);
-                    }
-
                     resultCurrent = result + n * M + m + i;
-                    mmm_4x24_A55(M*2, KInner, matrix1Trans + n * KInner, matrix2Trans + m * KInner, resultCurrent);
+                    mmm_4x24_A55(M*2, KInner, matrix1Trans + n * KInner, matrix2 + (i + m) * KInner, resultCurrent);
                 }
  
                 for(; m <= (MInner - 8); m+=8) {
-                    if (n == 0) {
-                        matrix2_trans(8, KInner, M, matrix2 + k * M + i + m, matrix2Trans + m * KInner);
-                    }
                     resultCurrent = result + n * M + m + i;
-                    mmm_4x8_A55(M*2, KInner, matrix1Trans + n * KInner, matrix2Trans + m * KInner, resultCurrent);
+                    mmm_4x8_A55(M*2, KInner, matrix1Trans + n * KInner, matrix2 + (i + m) * KInner, resultCurrent);
                 }
 
                 if ((MInner - m) >= 4) {
-                    if (n == 0) {
-                        matrix2_trans(4, KInner, M, matrix2 + k * M + i + m, matrix2Trans + m * KInner);
-                    }
                     resultCurrent = result + n * M + m + i;
-                    mmm_4x4_A55(M*2, KInner, matrix1Trans + n * KInner, matrix2Trans + m * KInner, resultCurrent);
+                    mmm_4x4_A55(M*2, KInner, matrix1Trans + n * KInner, matrix2 + (i + m) * KInner, resultCurrent);
                     m += 4;
                 }
                 
                 if (MInner - m) {
-                    if (n == 0) {
-                        matrix2_trans(MInner - m, KInner, M, matrix2 + k * M + i + m, matrix2Trans + m * KInner);
-                    }
                     resultCurrent = result + n * M + m + i;
-                    mmm_N4_MTail(MInner - m, M, KInner, matrix1Trans + n * KInner, matrix2Trans + m * KInner, resultCurrent);
+                    mmm_N4_MTail(MInner - m, M, KInner, matrix1Trans + n * KInner, matrix2 + (i + m) * KInner, resultCurrent);
                 }
 
                 n += 4;
@@ -793,37 +763,24 @@ void mmm_A55(int M, int N, int K, F16* matrix1, F16* matrix2, F16* tmp, F16* res
                 }
 
                 for(m = 0; m <= (MInner - 24); m+=24) {
-                    if (n == 0) {
-                        matrix2_trans(24, KInner, M, matrix2 + k * M + i + m, matrix2Trans + m * KInner);
-                    }
-
                     resultCurrent = result + n * M + m + i;
-                    mmm_NTail_M24(M, N - n, KInner, matrix1Trans + n * KInner, matrix2Trans + m * KInner, resultCurrent);
+                    mmm_NTail_M24(M, N - n, KInner, matrix1Trans + n * KInner, matrix2 + (i + m) * KInner, resultCurrent);
                 }
  
                 for(; m <= (MInner - 8); m+=8) {
-                    if (n == 0) {
-                        matrix2_trans(8, KInner, M, matrix2 + k * M + i + m, matrix2Trans + m * KInner);
-                    }
                     resultCurrent = result + n * M + m + i;
-                    mmm_NTail_M8(M, N - n, KInner, matrix1Trans + n * KInner, matrix2Trans + m * KInner, resultCurrent);
+                    mmm_NTail_M8(M, N - n, KInner, matrix1Trans + n * KInner, matrix2 + (i + m) * KInner, resultCurrent);
                 }
 
                 if ((MInner - m) >= 4) {
-                    if (n == 0) {
-                        matrix2_trans(4, KInner, M, matrix2 + k * M + i + m, matrix2Trans + m * KInner);
-                    }
                     resultCurrent = result + n * M + m + i;
-                    mmm_NTail_M4(M, N - n, KInner, matrix1Trans + n * KInner, matrix2Trans + m * KInner, resultCurrent);
+                    mmm_NTail_M4(M, N - n, KInner, matrix1Trans + n * KInner, matrix2 + (i + m) * KInner, resultCurrent);
                     m += 4;
                 }
 
                 if (MInner - m) {
-                    if (n == 0) {
-                        matrix2_trans(MInner - m, KInner, M, matrix2 + k * M + i + m, matrix2Trans + m * KInner);
-                    }
                     resultCurrent = result + n * M + m + i;
-                    mmm_NTail_M(MInner - m, M, N - n, KInner, matrix1Trans + n * KInner, matrix2Trans + m * KInner, resultCurrent);
+                    mmm_NTail_M(MInner - m, M, N - n, KInner, matrix1Trans + n * KInner, matrix2 + (i + m) * KInner, resultCurrent);
                 }
 
             }

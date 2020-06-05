@@ -25,8 +25,8 @@
 class ScaleOCL: public Scale
 {
 public:
-    ScaleOCL(DataType dt, int numChannels, int numSource) :
-    Scale(dt, numChannels, numSource) {} 
+    ScaleOCL(DataType dt, int axis, int numChannels, int numSource):
+    Scale(dt, axis, numChannels, numSource) {} 
     virtual EE init_weight_bias_from_model(U8** modelPtr) override
     {
         auto curOpWs = this->get_weightspec_ptr();
@@ -110,13 +110,15 @@ public:
         this->biasTensors.push_back(*modelBiasTensor.get());
         if(weightTmp) delete weightTmp;
         if(biasTmp)   delete biasTmp;
-        if(biasVal)   delete biasVal;
+        if(curOpWs.weight) delete curOpWs.weight;
+        if(curOpWs.vec)    delete curOpWs.vec;
         return SUCCESS;
     }
 
     virtual void run() override
     {
         UTIL_TIME_TIC(__CLASS_FUNCTION__)
+        this->handle->curOpName = this->get_op_name();
         int inputNum = this->inputTensors.size();
         Tensor inputTensor = this->inputTensors[this->dataID];
         Tensor outputTensor = this->outputTensors[0];
@@ -136,31 +138,42 @@ public:
             }
         }
         if (inputNum == 1) {
-            CHECK_STATUS(scale(this->weightTensors[0].get_val(), this->biasTensors[0].get_val(),
-                               inputDesc, inPtr, outputDesc, outPtr, this->schedule, &this->oclExtInfo));
+            CHECK_STATUS(scale(inputDesc, inPtr,
+                this->axis, this->weightTensors[0].get_val(), this->biasTensors[0].get_val(),
+                outputDesc, outPtr, this->schedule, &this->oclExtInfo));
         } else {
-            CHECK_STATUS(scale(this->inputTensors[1 - this->dataID].get_val(), NULL,
-                               inputDesc, inPtr, outputDesc, outPtr, this->schedule, &this->oclExtInfo));
+            CHECK_STATUS(scale(inputDesc, inPtr,
+                this->axis, this->inputTensors[1 - this->dataID].get_val(), NULL,
+                outputDesc, outPtr, this->schedule, &this->oclExtInfo));
         }
         UTIL_TIME_TOC(__CLASS_FUNCTION__)
     }
 
     virtual EE infer_output_tensors_size(Vec<TensorDesc>inDims, Vec<TensorDesc>* outDims) override 
     {
-        UNUSED(inDims);
-        UNUSED(outDims);
-        return NOT_SUPPORTED;
-    }
-
-    virtual EE infer_output_tensors_size(Vec<TensorDesc> inDims, Vec<TensorDesc>* outDims, Vec<GCLMemDesc>* gclmemInputDesc, Vec<GCLMemDesc>* gclmemOutputDesc) override
-    {
         if(inDims.size() > 1 && tensorNumElements(inDims[1]) > tensorNumElements(inDims[0])) this->dataID = 1;
         TensorDesc inputDesc  = inDims[dataID];
-        this->oclExtInfo.maliInfo.gclmemInputDesc  = &((*gclmemInputDesc)[0]);
-        this->oclExtInfo.maliInfo.gclmemOutputDesc = &((*gclmemOutputDesc)[0]);
+        this->oclExtInfo.maliInfo.gclmemInputDesc  = NULL;
+        this->oclExtInfo.maliInfo.gclmemOutputDesc = NULL;
         CHECK_STATUS(scale_infer_output_size(inputDesc, &((*outDims)[0]), this->schedule, &this->oclExtInfo));
+        return SUCCESS;
+    }
+
+    virtual EE infer_gclmem_desc(Vec<GCLMemDesc>* gclmemInputDesc, Vec<GCLMemDesc>* gclmemOutputDesc) override
+    {
+        TensorDesc inputDesc  = this->inputTensors[0].get_desc();
+        if(this->inputTensors.size() > 1) {
+            TensorDesc tmpDesc = this->inputTensors[1].get_desc();
+            if(tensorNumElements(tmpDesc) > tensorNumElements(inputDesc)) {
+                this->dataID = 1;
+                inputDesc = tmpDesc;
+            }
+        }
+        this->oclExtInfo.maliInfo.gclmemInputDesc  = &((*gclmemInputDesc)[dataID]);
+        this->oclExtInfo.maliInfo.gclmemOutputDesc = &((*gclmemOutputDesc)[0]);
+        CHECK_STATUS(scale_infer_output_size(inputDesc, NULL, this->schedule, &this->oclExtInfo));
         return SUCCESS;
     }
 };
 
-#endif //_SCALE_CPU_H
+#endif //_SCALE_GPU_H

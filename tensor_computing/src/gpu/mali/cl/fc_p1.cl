@@ -26,6 +26,7 @@ __kernel void fc_p1(const int item_y, const int ih_str, const int iw_str, const 
     const int idx = get_global_id(0);
     const int idy = get_global_id(1);
     const int idz = get_global_id(2);
+    if(idx >= fh || idy >= item_y) return;
 
     T4  in_val;
     T16 flt_val;

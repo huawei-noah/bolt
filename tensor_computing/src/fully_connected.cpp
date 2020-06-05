@@ -35,15 +35,16 @@ inline EE fully_connected_infer_output_size_cpu(TensorDesc inputDesc, TensorDesc
     U32 fh, fw;
     if (tensorIs2d(inputDesc)) {
         CHECK_STATUS(tensor2dfGet(inputDesc, &idt, &idf, &in, &iw));
-        ic = ih = 1;
-    }
-    else if (tensorIs4d(inputDesc)) {
+        ic = 1;
+        ih = 1;
+    } else if (tensorIs4d(inputDesc)) {
         CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-        if (idf != DF_NCHW && idf != DF_NCHWC8)
+        if (idf != DF_NCHW && idf != DF_NCHWC8) {
             CHECK_STATUS(NOT_MATCH);
-    }
-    else
+        }
+    } else {
         CHECK_STATUS(NOT_MATCH);
+    }
 
     CHECK_REQUIREMENT(tensorIs2d(filterDesc));
     CHECK_STATUS(tensor2dfGet(filterDesc, &fdt, &fdf, &fh, &fw));
@@ -59,32 +60,39 @@ inline EE fully_connected_infer_output_size_cpu(TensorDesc inputDesc, TensorDesc
 
 EE fully_connected_infer_output_size(TensorDesc inputDesc, TensorDesc filterDesc, TensorDesc *outputDesc, Arch arch, ExtInfo_t extInfo)
 {
-#ifdef _USE_MALI
+    EE ret = NOT_SUPPORTED;
     if(arch == MALI){
-        CHECK_STATUS(fully_connected_infer_output_size_mali(inputDesc, filterDesc, outputDesc, extInfo->maliInfo.gclmemInputDesc, extInfo->maliInfo.gclmemOutputDesc));
-    } else {
+#ifdef _USE_MALI
+        ret = fully_connected_infer_output_size_mali(inputDesc, filterDesc, outputDesc, extInfo->maliInfo.gclmemInputDesc, extInfo->maliInfo.gclmemOutputDesc, extInfo->maliInfo.forwardRunInfo);
 #endif
-        UNUSED(arch);
-        UNUSED(extInfo);
-        CHECK_STATUS(fully_connected_infer_output_size_cpu(inputDesc, filterDesc, outputDesc));
-#ifdef _USE_MALI    
+    } else {
+        ret = fully_connected_infer_output_size_cpu(inputDesc, filterDesc, outputDesc);
     }    
-#endif    
-    return SUCCESS;
+    return ret;
 }
 
-
-EE fully_connected_infer_forward_tmp_bytes(TensorDesc inputDesc, TensorDesc filterDesc, U32 *bytes, Arch arch)
-{
-#ifndef _USE_MALI
-    UNUSED(arch);
-#endif    
-    EE ret = SUCCESS;
-#ifdef _USE_MALI
+EE fully_connected_infer_forward_algorithm(TensorDesc inputDesc, TensorDesc filterDesc, std::vector<TensorDesc> outputDescs, Arch arch, ExtInfo_t extInfo) {
+    EE ret = NOT_SUPPORTED;
     if(arch == MALI){
-        CHECK_STATUS(fully_connected_infer_forward_tmp_bytes_mali(inputDesc, filterDesc, bytes));
-    } else {
+#ifdef _USE_MALI
+        ret = fully_connected_infer_forward_algorithm_mali(extInfo->maliInfo.handle, inputDesc, filterDesc, outputDescs, extInfo->maliInfo.forwardRunInfo);
 #endif
+    } else {
+        UNUSED(inputDesc);
+        UNUSED(filterDesc);
+        UNUSED(outputDescs);
+        UNUSED(extInfo);
+    }
+    return ret;
+}
+EE fully_connected_infer_forward_tmp_bytes(TensorDesc inputDesc, TensorDesc filterDesc, U32 *bytes, Arch arch, ExtInfo_t extInfo)
+{
+    EE ret = NOT_SUPPORTED;
+    if(arch == MALI){
+#ifdef _USE_MALI
+        ret = fully_connected_infer_forward_tmp_bytes_mali(inputDesc, filterDesc, bytes, extInfo->maliInfo.forwardRunInfo);
+#endif
+    } else {
         if(bytes == nullptr) CHECK_STATUS(NULL_POINTER);
         DataType idt;
         DataFormat idf;
@@ -101,38 +109,30 @@ EE fully_connected_infer_forward_tmp_bytes(TensorDesc inputDesc, TensorDesc filt
         }
 
         if(in != 1){
-                // call gemm
+            // call gemm
             TensorDesc in_desc = tensor2df(idt, DF_NORMAL, in, ic*ih*iw);
             ret = matrix_matrix_multiply_tmp_bytes(in_desc, filterDesc, bytes, arch);
         }
         else{
-                // call gemv
+            // call gemv
             TensorDesc in_desc = tensor1d(idt, ic*ih*iw);
             ret = matrix_vector_multiply_tmp_bytes(filterDesc, in_desc, bytes, arch);
         }
-#ifdef _USE_MALI    
     }    
-#endif    
     return ret;
 }
 
 
 EE fully_connected_transform_filter_bytes(TensorDesc filterDesc, U32* bytes, Arch arch, ExtInfo_t extInfo)
 {
-#ifndef _USE_MALI
-    UNUSED(arch);
-    UNUSED(extInfo);
-#endif    
-#ifdef _USE_MALI
     if(arch == MALI){
-        CHECK_STATUS(fully_connected_transform_filter_bytes_mali(filterDesc, extInfo->maliInfo.gclmemFilterDesc, bytes));
-    } else {
+#ifdef _USE_MALI
+        CHECK_STATUS(fully_connected_transform_filter_bytes_mali(filterDesc, extInfo->maliInfo.gclmemFilterDesc, bytes, extInfo->maliInfo.forwardRunInfo));
 #endif
+    } else {
         if (bytes == nullptr) CHECK_STATUS(NULL_POINTER);
-        *bytes = tensorNumBytes(filterDesc);
-#ifdef _USE_MALI    
-    }    
-#endif    
+        *bytes = tensorNumBytes(filterDesc) + 32;
+    }
     return SUCCESS;
 }
 
@@ -152,12 +152,11 @@ EE fully_connected_transform_filter_kernel(TensorDesc inputDesc, TensorDesc filt
     if (tensorIs2d(inputDesc)) {
         CHECK_STATUS(tensor2dfGet(inputDesc, &idt, &idf, &in, &iw));
         ic = ih = 1;
-    }
-    else if (tensorIs4d(inputDesc)){
+    } else if (tensorIs4d(inputDesc)) {
         CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    }
-    else
+    } else {
         CHECK_STATUS(NOT_MATCH);
+    }
     CHECK_STATUS(tensor2dfGet(filterDesc, &fdt, &fdf, &fh, &fw));
 
     if (fw != ic*ih*iw)
@@ -167,18 +166,17 @@ EE fully_connected_transform_filter_kernel(TensorDesc inputDesc, TensorDesc filt
         need_transpose = true;
 
     if (idf == DF_NCHW || idf == DF_NORMAL) {
-        if(need_transpose){
+        if (need_transpose) {
             T *f_ptr   = (T *)filter;
             T *ftm_ptr = (T *)filterTransformed;
-            for(U32 h = 0; h < fh; h++){
+            for (U32 h = 0; h < fh; h++) {
                 for(U32 w = 0; w < fw; w++){
                     U32 f_index   = h * fw + w;
                     U32 ftm_index = w * fh + h;
                     ftm_ptr[ftm_index] = f_ptr[f_index];
                 }
             }
-        }
-        else{
+        } else {
             memcpy(filterTransformed, filter, tensorNumBytes(filterDesc));
         }
     }
@@ -227,36 +225,30 @@ EE fully_connected_transform_filter_kernel(TensorDesc inputDesc, TensorDesc filt
 EE fully_connected_transform_filter(TensorDesc inputDesc, TensorDesc filterDesc, const void* filter,
     TensorDesc *ftmDesc, void* filterTransformed, Arch arch, ExtInfo_t extInfo)
 {
-#ifndef _USE_MALI
-    UNUSED(arch);
-    UNUSED(extInfo);
-#endif    
-    EE ret = SUCCESS;
-#ifdef _USE_MALI
+    EE ret = NOT_SUPPORTED;
     if(arch == MALI){
-        CHECK_STATUS(fully_connected_transform_filter_mali(extInfo->maliInfo.handle, filterDesc, (GCLMem_t)filter, ftmDesc, (GCLMem_t)filterTransformed));
-    } else {
+#ifdef _USE_MALI
+        ret = fully_connected_transform_filter_mali(extInfo->maliInfo.handle, filterDesc, (GCLMem_t)filter, ftmDesc, (std::vector<GCLMem_t>*)(filterTransformed), extInfo->maliInfo.forwardRunInfo);
 #endif
+    } else {
         switch(filterDesc.dt) {
 #ifdef _USE_FP16
             case DT_F16: {
-                 ret = fully_connected_transform_filter_kernel<F16>(inputDesc, filterDesc, filter, ftmDesc, filterTransformed);
+                ret = fully_connected_transform_filter_kernel<F16>(inputDesc, filterDesc, filter, ftmDesc, filterTransformed);
                  break;
             }
 #endif
 #ifdef _USE_FP32
             case DT_F32: {
-                 ret = fully_connected_transform_filter_kernel<F32>(inputDesc, filterDesc, filter, ftmDesc, filterTransformed);
-                 break;
+                ret = fully_connected_transform_filter_kernel<F32>(inputDesc, filterDesc, filter, ftmDesc, filterTransformed);
+                break;
             }
 #endif
             default:
-                 ret = NOT_SUPPORTED;
-                 break;
-            }
-#ifdef _USE_MALI
+                ret = NOT_SUPPORTED;
+                break;
+        }
     }
-#endif
     return ret;
 }
 
@@ -267,22 +259,20 @@ EE fully_connected(TensorDesc inputDesc, const void* input,
     TensorDesc biasDesc, const void* bias,
     Arch arch, ExtInfo_t extInfo)
 {
-    EE ret = SUCCESS;
-#ifndef _USE_MALI
-    UNUSED(arch);
-    UNUSED(extInfo);
-#endif    
+    EE ret = NOT_SUPPORTED;    
+    if(arch == MALI) {
 #ifdef _USE_MALI
-    if(arch == MALI){
-        CHECK_STATUS(fully_connected_mali(extInfo->maliInfo.handle, inputDesc, (GCLMem_t)input,
-                                          filterDesc, (GCLMem_t) filter,
-                                          biasDesc,   (GCLMem_t) bias,
-                                          bytes,      (GCLMem_t) tmp,
-                                          outputDesc, (GCLMem_t) output));
+        ret = fully_connected_mali(extInfo->maliInfo.handle, inputDesc, (GCLMem_t)input,
+                                   filterDesc, (std::vector<GCLMem_t>*) filter,
+                                   biasDesc,   (std::vector<GCLMem_t>*) bias,
+                                   bytes,      (GCLMem_t) tmp,
+                                   outputDesc, (std::vector<GCLMem_t>*) output, extInfo->maliInfo.forwardRunInfo);
+#endif                                   
     } else {
-#endif
-        if(input == nullptr || filter == nullptr || output == nullptr) CHECK_STATUS(NULL_POINTER);
-
+        if(input == nullptr || filter == nullptr || output == nullptr) {
+            CHECK_STATUS(NULL_POINTER);
+        }
+    
         U32 in, ic, ih, iw;
         U32 oh, ow;
         U32 fh, fw, bw;
@@ -291,21 +281,20 @@ EE fully_connected(TensorDesc inputDesc, const void* input,
         if (tensorIs2d(inputDesc)) {
             CHECK_STATUS(tensor2dfGet(inputDesc, &idt, &idf, &in, &iw));
             ic = ih = 1;
-        }
-        else if (tensorIs4d(inputDesc)){
+        } else if (tensorIs4d(inputDesc)){
             CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-        }
-        else
+        } else {
             CHECK_STATUS(NOT_MATCH);
-
+        }
+    
         CHECK_REQUIREMENT(tensorIs2d(filterDesc));
         CHECK_STATUS(tensor2dfGet(filterDesc, &fdt, &fdf, &fh, &fw));
         CHECK_STATUS(tensor2dfGet(outputDesc, &odt, &odf, &oh, &ow));
-
+    
         if (bias != nullptr) {
             CHECK_STATUS(tensor1dGet(biasDesc, &bdt, &bw));
-
-            if(bw != ow){
+    
+            if (bw != ow) {
                 CHECK_STATUS(NOT_MATCH);
             } else {
                 U8 *outArray = (U8*)output;
@@ -315,8 +304,7 @@ EE fully_connected(TensorDesc inputDesc, const void* input,
                 }
             }
         }
-
-        if (in == 1) {
+        if (in == 1 && (fdf == DF_NORMAL || fdf == DF_TRANSPOSE)) {
             TensorDesc vectorDesc = tensor1d(idt, ic*ih*iw);
             TensorDesc resultDesc = tensor1d(odt, ow);
             ret = matrix_vector_multiply(filterDesc, filter, vectorDesc, input, bytes, tmp, resultDesc, output, arch);
@@ -325,8 +313,6 @@ EE fully_connected(TensorDesc inputDesc, const void* input,
             TensorDesc in_desc  = tensor2df(idt, DF_NORMAL, in, ic*ih*iw);
             ret = matrix_matrix_multiply(in_desc, input, filterDesc, filter, bytes, tmp, outputDesc, output, arch);
         }
-#ifdef _USE_MALI
-    }
-#endif
+    }    
     return ret;
 }

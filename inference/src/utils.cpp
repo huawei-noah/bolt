@@ -73,6 +73,7 @@ void ut_time_toc(std::string key) {
        std::cout << "[WARNING] mismatched UTIL_TIME_TIC/UTIL_TIME_TOC " << key << std::endl;
    else {
        iter = time_statistics.find(key);
+       DEBUG_info(key << ": " << time_toc[key] - time_tic[key]);
        if(iter == time_statistics.end())
            time_statistics[key] = time_toc[key] - time_tic[key];
        else

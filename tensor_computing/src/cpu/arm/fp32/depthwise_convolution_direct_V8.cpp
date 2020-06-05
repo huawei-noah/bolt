@@ -12,6 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
+#ifdef __aarch64__
 #include "cpu/arm/fp32/depthwise_convolution.h"
 
 EE depthwise_convolution_direct_V8(TensorDesc inputDesc, F32* inArray,
@@ -20,7 +21,7 @@ EE depthwise_convolution_direct_V8(TensorDesc inputDesc, F32* inArray,
     TensorDesc biasDesc, const F32* biasArray,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F32* outArray,
-    ActivationMode depthwiseActivationMode)
+    ActivationDesc depthwiseActivationDesc)
 {
     UNUSED(biasDesc);
     UNUSED(tmpBytes);
@@ -179,7 +180,7 @@ EE depthwise_convolution_direct_V8(TensorDesc inputDesc, F32* inArray,
                 }
 
                 // activation
-                switch (depthwiseActivationMode){
+                switch (depthwiseActivationDesc.mode){
                     case ACTIVATION_NULL:
                          break;
                     case ACTIVATION_RELU:{
@@ -439,7 +440,7 @@ EE depthwise_convolution_direct_V8(TensorDesc inputDesc, F32* inArray,
                 }
 
                 // activation
-                switch (depthwiseActivationMode){
+                switch (depthwiseActivationDesc.mode){
                     case ACTIVATION_NULL:
                          break;
                     case ACTIVATION_RELU:{
@@ -593,7 +594,7 @@ EE depthwise_convolution_direct_V8(TensorDesc inputDesc, F32* inArray,
                 }
 
                 // activation
-                switch (depthwiseActivationMode){
+                switch (depthwiseActivationDesc.mode){
                     case ACTIVATION_NULL:
                          break;
                     case ACTIVATION_RELU:{
@@ -662,3 +663,4 @@ EE depthwise_convolution_direct_V8(TensorDesc inputDesc, F32* inArray,
     }
     return SUCCESS;
 }
+#endif

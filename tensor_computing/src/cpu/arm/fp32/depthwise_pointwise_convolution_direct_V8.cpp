@@ -12,6 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
+#ifdef __aarch64__
 #include "cpu/arm/fp32/depthwise_convolution.h"
 
 EE depthwise_pointwise_convolution_direct_V8(TensorDesc inputDesc, F32* inArray,
@@ -20,8 +21,8 @@ EE depthwise_pointwise_convolution_direct_V8(TensorDesc inputDesc, F32* inArray,
     TensorDesc biasDesc, const F32* biasArray,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F32* outArray,
-    ActivationMode depthwiseActivationMode,
-    ActivationMode pointwiseActivationMode)
+    ActivationDesc depthwiseActivationDesc,
+    ActivationDesc pointwiseActivationDesc)
 {
     UNUSED(biasDesc);
     UNUSED(tmpBytes);
@@ -187,7 +188,7 @@ EE depthwise_pointwise_convolution_direct_V8(TensorDesc inputDesc, F32* inArray,
                 }
 
                 // activation
-                switch (depthwiseActivationMode){
+                switch (depthwiseActivationDesc.mode){
                     case ACTIVATION_NULL:
                          break;
                     case ACTIVATION_RELU:{
@@ -487,7 +488,7 @@ EE depthwise_pointwise_convolution_direct_V8(TensorDesc inputDesc, F32* inArray,
                 }
 
                 // activation
-                switch (depthwiseActivationMode){
+                switch (depthwiseActivationDesc.mode){
                     case ACTIVATION_NULL:
                          break;
                     case ACTIVATION_RELU:{
@@ -662,7 +663,7 @@ EE depthwise_pointwise_convolution_direct_V8(TensorDesc inputDesc, F32* inArray,
                 }
 
                 // activation
-                switch (depthwiseActivationMode){
+                switch (depthwiseActivationDesc.mode){
                     case ACTIVATION_NULL:
                          break;
                     case ACTIVATION_RELU:{
@@ -990,7 +991,7 @@ EE depthwise_pointwise_convolution_direct_V8(TensorDesc inputDesc, F32* inArray,
                     : [ic] "r"((I64)ic * 8),
                       [b_0] "r"(b_o0),
                       [b_1] "r"(b_o1),
-                      [pointwiseActivationMode] "r"((I64)pointwiseActivationMode),
+                      [pointwiseActivationMode] "r"((I64)pointwiseActivationDesc.mode),
                       [am_relu] "r"((I64)ACTIVATION_RELU),
                       [am_relu6] "r"((I64)ACTIVATION_RELU6),
                       [am_h_swish] "r"((I64)ACTIVATION_H_SWISH)
@@ -1160,7 +1161,7 @@ EE depthwise_pointwise_convolution_direct_V8(TensorDesc inputDesc, F32* inArray,
                     : [ic] "r"((I64)ic * 8),
                       [b_0] "r"(b_o0),
                       [b_1] "r"(b_o1),
-                      [pointwiseActivationMode] "r"((I64)pointwiseActivationMode),
+                      [pointwiseActivationMode] "r"((I64)pointwiseActivationDesc.mode),
                       [am_relu] "r"((I64)ACTIVATION_RELU),
                       [am_relu6] "r"((I64)ACTIVATION_RELU6),
                       [am_h_swish] "r"((I64)ACTIVATION_H_SWISH)
@@ -1251,7 +1252,7 @@ EE depthwise_pointwise_convolution_direct_V8(TensorDesc inputDesc, F32* inArray,
                     : [ic] "r"((I64)ic * 8),
                       [b_0] "r"(b_o0),
                       [b_1] "r"(b_o1),
-                      [pointwiseActivationMode] "r"((I64)pointwiseActivationMode),
+                      [pointwiseActivationMode] "r"((I64)pointwiseActivationDesc.mode),
                       [am_relu] "r"((I64)ACTIVATION_RELU),
                       [am_relu6] "r"((I64)ACTIVATION_RELU6),
                       [am_h_swish] "r"((I64)ACTIVATION_H_SWISH)
@@ -1264,3 +1265,4 @@ EE depthwise_pointwise_convolution_direct_V8(TensorDesc inputDesc, F32* inArray,
     }
     return SUCCESS;
 }
+#endif

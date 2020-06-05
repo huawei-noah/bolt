@@ -18,22 +18,33 @@
 #include "sys.h"
 #include "type.h"
 #include "error.h"
+#include "tensor_desc.h"
+#include "arm_neon_expand.h"
 
 void mvm_col_V8(U32 row, U32 col, F32* matrix, F32* vector, F32* result);
 
 void mvm_row_V8(U32 row, U32 col, F32* matrix, F32* vector, F32* result);
 
-inline void mvm_fp32(U32 row, U32 col, bool transpose, F32* matrix, F32* vector, F32* result)
+inline EE mvm_fp32(U32 row, U32 col, bool transpose, F32* matrix, F32* vector, F32* result)
 {
     if (transpose) {
         mvm_col_V8(row, col, matrix, vector, result);
     } else {
         mvm_row_V8(row, col, matrix, vector, result);
     }
+    return SUCCESS;
 }
 
 void matrix_matrix_multiply_tmp_bytes_fp32(U32 row1, U32 col1, U32 row2, U32 col2, DataType dt, U32 *bytes);
 
-void mmm_fp32_V8(int M, int N, int K, F32* matrix1, F32* matrix2, F32* tmp, F32* result);
+EE matrix_matrix_multiply_transform_rhsN_fp32(TensorDesc desc, F32* src, F32* dst);
+
+EE matrix_matrix_multiply_transform_rhsT_fp32(TensorDesc desc, F32* src, F32* dst);
+
+#ifdef __aarch64__
+EE mmm_fp32_V8(int M, int N, int K, F32* matrix1, F32* matrix2, F32* tmp, F32* result);
+#else
+EE mmm_fp32_V7(int M, int N, int K, F32* matrix1, F32* matrix2, F32* tmp, F32* result);
+#endif
 
 #endif

@@ -17,7 +17,7 @@
 
 #include <arm_neon.h>
 #include "type.h"
-#include "cpu/arm/arm_neon_expand.h"
+#include "arm_neon_expand.h"
 
 inline void mvm_row_tail(U32 N, U32 K, F16* matrix, F16* vector, F16* result) {
     float16x8_t vec, res, mat;
@@ -108,6 +108,79 @@ inline void mvm_col_kernel(U32 N, U32 K, F16* matrix, F16* vector, F16* result) 
      }
 }
 
+inline void mvm_col_kernel_4x8(U32 N, U32 K, F16* matrix, F16* vector, F16* result) {
+    F16* result_end8 = result + N / 8 * 8;
+    F16* result_end  = result + N;
+    asm volatile(
+        "mov x20, %0\n"
+        "add x21, x20, %5\n"
+        "add x22, x21, %5\n"
+        "add x23, x22, %5\n"
+        "mov x24, %1\n"
+        "add x25, x24, %6\n"
+        "add x26, x25, %6\n"
+        "add x27, x26, %6\n"
+        "mov x29, x21\n"
+
+        "00:\n"
+        "cmp x20, x29\n"
+        "bge 01f\n"
+        "ldr h0, [x20], 2\n"
+        "dup v0.8h, v0.h[0]\n"
+        "ldr h1, [x21], 2\n"
+        "dup v1.8h, v1.h[0]\n"
+        "ldr h2, [x22], 2\n"
+        "dup v2.8h, v2.h[0]\n"
+        "ldr h3, [x23], 2\n"
+        "dup v3.8h, v3.h[0]\n"
+
+        "mov x28, %2\n"
+
+        "10:\n"
+        "cmp x28, %3\n"
+        "bge 11f\n"
+        "ldr  q4, [x28]\n"
+        "ldr  q8, [x24], 16\n"
+        "ldr  q9, [x25], 16\n"
+        "ldr q10, [x26], 16\n"
+        "fmla v4.8h,  v8.8h, v0.8h\n"
+        "ldr q11, [x27], 16\n"
+        "fmla v4.8h,  v9.8h, v1.8h\n"
+        "fmla v4.8h, v10.8h, v2.8h\n"
+        "fmla v4.8h, v11.8h, v3.8h\n"
+        "str  q4, [x28], 16\n"
+        "b 10b\n"
+
+        "11:\n"
+        "cmp x28, %4\n"
+        "bge 12f\n"
+        "ldr  h4, [x28]\n"
+        "ldr  h8, [x24], 2\n"
+        "ldr  h9, [x25], 2\n"
+        "ldr h10, [x26], 2\n"
+        "fmla h4,  h8, v0.h[0]\n"
+        "ldr h11, [x27], 2\n"
+        "fmla h4,  h9, v1.h[0]\n"
+        "fmla h4, h10, v2.h[0]\n"
+        "fmla h4, h11, v3.h[0]\n"
+        "str  h4, [x28], 2\n"
+        "b 11b\n"
+
+        "12:\n"
+        "b 00b\n"
+        "01:\n"
+        :"+r" (vector),
+         "+r" (matrix),
+         "+r" (result),
+         "+r" (result_end8),
+         "+r" (result_end)
+        :"r" ((I64)K*2),
+         "r" ((I64)K*N*2)
+        :"memory", "cc", "x20", "x21", "x22", "x23", "x24", "x25", "x26", "x27", "x28", "x29",
+            "v0", "v1", "v2", "v3", "v4", "v8", "v9", "v10", "v11"
+    );
+}
+
 inline void mvm_row_kernel(U32 N, U32 K, F16* matrix, F16* vector, F16* result) {
     float16x8_t res[4] = {0}, mat[4] = {0} , vec;
     float16x8_t tmp[6] = {0};
@@ -169,7 +242,7 @@ inline void mvm_col(U32 numRows, U32 numColumns, F16* matrix, F16* vector, F16* 
     U32 K = numColumns;
     U32 KInner = K / 4;
     U32 KTail = K % 4;
-    mvm_col_kernel(N, KInner, matrix, vector, result);
+    mvm_col_kernel_4x8(N, KInner, matrix, vector, result);
     if (KTail != 0) {
         mvm_col_tail(N, KTail, matrix + (K - KTail) * N, vector + (K - KTail), result);
     }

@@ -30,7 +30,7 @@ public:
     virtual void run() override
     {
         UTIL_TIME_TIC(__CLASS_FUNCTION__)
-
+        this->handle->curOpName = this->get_op_name();
         Vec<TensorDesc> inputDesc;
         Vec<void*> inputPtr;
         for (Tensor tensorIn: this->inputTensors) {
@@ -54,22 +54,23 @@ public:
 
     virtual EE infer_output_tensors_size(Vec<TensorDesc> inDims, Vec<TensorDesc>* outDims) override
     {
-        UNUSED(inDims);
-        UNUSED(outDims);
-        CHECK_STATUS(NOT_SUPPORTED);
-        return NOT_SUPPORTED;
+        this->oclExtInfo.maliInfo.gclmemInputDesc = NULL;
+        this->oclExtInfo.maliInfo.gclmemOutputDesc = NULL;
+        CHECK_STATUS(eltwise_infer_output_size(inDims, &((*outDims)[0]), this->schedule, &this->oclExtInfo));
+        return SUCCESS;
     }
 
-    virtual EE infer_output_tensors_size(Vec<TensorDesc> inDims, Vec<TensorDesc>* outDims, Vec<GCLMemDesc>* gclmemInputDesc, Vec<GCLMemDesc>* gclmemOutputDesc) override
+    virtual EE infer_gclmem_desc(Vec<GCLMemDesc>* gclmemInputDesc, Vec<GCLMemDesc>* gclmemOutputDesc) override
     {
-        U32 stride[3] = {0, 0, 0};
-        U32 offset[3] = {0, 0, 0};
-        GCLMemDesc tmpDesc = gcl_mem_desc(stride, offset, DT_U8, DF_NCWHC4);
+        Vec<TensorDesc> inputDesc;
+        for (Tensor tensorIn: this->inputTensors) inputDesc.push_back(tensorIn.get_desc());
         GCLMemDesc memInDesc[8];
-        for(U32 i = 0; i < 8; i++) memInDesc[i] = tmpDesc; 
+        U32 inputNum = gclmemInputDesc->size();
+        if(inputNum > 8) CHECK_STATUS(NOT_SUPPORTED);
+        for(U32 i = 0; i < inputNum; i++) memInDesc[i] = (*gclmemInputDesc)[i];
         this->oclExtInfo.maliInfo.gclmemInputDesc = memInDesc;
         this->oclExtInfo.maliInfo.gclmemOutputDesc = &((*gclmemOutputDesc)[0]);
-        CHECK_STATUS(eltwise_infer_output_size(inDims, &((*outDims)[0]), this->schedule, &this->oclExtInfo));
+        CHECK_STATUS(eltwise_infer_output_size(inputDesc, NULL, this->schedule, &this->oclExtInfo));
         U32 num = (*gclmemInputDesc).size();
         for(U32 i = 0; i < num; i++) (*gclmemInputDesc)[i] = memInDesc[i];
         return SUCCESS;

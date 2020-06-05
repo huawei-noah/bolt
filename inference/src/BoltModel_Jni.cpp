@@ -23,7 +23,7 @@
 #include "BoltModel.h"
 #include "../exports/c/bolt.h"
 
-struct IHandleInfo {
+struct ModelHandleInfo {
     void* cnn;
     void* ms;
     DEVICE_TYPE deviceType;
@@ -41,14 +41,14 @@ typedef struct {
     U32 num_outputs;
     DataDesc* outputArr;
     DEVICE_TYPE deviceType;
-} IResultInner;
+} ResultHandleInner;
 
 AFFINITY_TYPE str2AFFINITY_TYPE(std::string affinity_str) {
     AFFINITY_TYPE ret = HIGH_PERFORMANCE;
     if (affinity_str == "HIGH_PERFORMANCE") {
-	ret = HIGH_PERFORMANCE;
+        ret = HIGH_PERFORMANCE;
     } else if (affinity_str == "LOW_POWER") {
-	ret = LOW_POWER;
+        ret = LOW_POWER;
     } else {
         std::cerr << "[ERROR] unsupported JNI CPU affinity setting " << affinity_str << std::endl;
         exit(1);
@@ -59,9 +59,9 @@ AFFINITY_TYPE str2AFFINITY_TYPE(std::string affinity_str) {
 DEVICE_TYPE str2DEVICE_TYPE(std::string device_str) {
     DEVICE_TYPE ret = CPU;
     if (device_str == "CPU") {
-	ret = CPU;
+        ret = CPU;
     } else if (device_str == "GPU") {
-	ret = GPU;
+        ret = GPU;
     } else {
         std::cerr << "[ERROR] unsupported JNI device setting " << device_str << std::endl;
         exit(1);
@@ -72,15 +72,15 @@ DEVICE_TYPE str2DEVICE_TYPE(std::string device_str) {
 DATA_TYPE str2DATA_TYPE (std::string data_type) {
     DATA_TYPE ret = FP_32;
     if (data_type == "FP32") {
-	ret = FP_32;
-#ifdef _USE_FP16
+        ret = FP_32;
+#ifdef __aarch64__
     } else if (data_type == "FP16"){
-	ret = FP_16;
+        ret = FP_16;
 #endif
     } else if (data_type == "INT32") {
         ret = INT_32;
     } else if (data_type == "UINT32") {
-	ret = UINT_32;
+        ret = UINT_32;
     } else {
         std::cerr << "[ERROR] unsupported JNI data type setting " << data_type << std::endl;
         exit(1);
@@ -91,11 +91,13 @@ DATA_TYPE str2DATA_TYPE (std::string data_type) {
 DATA_FORMAT str2DATA_FORMAT (std::string data_format) {
     DATA_FORMAT ret = NCHW;
     if (data_format == "NCHW") {
-	ret = NCHW;
+        ret = NCHW;
     } else if (data_format == "NHWC") {
-	ret = NHWC;
+        ret = NHWC;
+    } else if (data_format == "MTK") {
+        ret = MTK;
     } else if (data_format == "NORMAL") {
-	ret = NORMAL;
+        ret = NORMAL;
     } else {
         std::cerr << "[ERROR] unsupported JNI data format setting " << data_format << std::endl;
         exit(1);
@@ -115,11 +117,14 @@ std::string DataFormat2str (DataFormat data_format) {
         case DF_NHWC:
             ret = "NHWC";
             break;
-	case DF_NORMAL:
-	    ret = "NORMAL";
-	    break;
+        case DF_MTK:
+            ret = "MTK";
+            break;
+        case DF_NORMAL:
+            ret = "NORMAL";
+            break;
         default:
-            std::cerr << "[ERROR] unsupported JNI data format setting"<< std::endl;
+            std::cerr << "[ERROR] unsupported JNI data format setting " << data_format << std::endl;
             exit(1);
     }
     return ret;
@@ -127,7 +132,7 @@ std::string DataFormat2str (DataFormat data_format) {
 
 void dataTypeConverterToFloat(void *src, DataType srcDataType, float *dst, int num) {
     switch (srcDataType) {
-#ifdef _USE_FP16
+#ifdef __aarch64__
         case DT_F16: {
             F16 *srcPtr = (F16 *)src;
             for (int i = 0; i < num; i++) {
@@ -162,7 +167,7 @@ void dataTypeConverterToFloat(void *src, DataType srcDataType, float *dst, int n
 
 void dataTypeConverterFromFloat(float *src, void *dst, DataType dstDataType, int num) {
     switch (dstDataType) {
-#ifdef _USE_FP16
+#ifdef __aarch64__
         case DT_F16: {
             F16 *dstPtr = (F16 *)dst;
             for (int i = 0; i < num; i++) {
@@ -205,13 +210,13 @@ extern "C" JNIEXPORT jlong JNICALL Java_BoltModel_model_1create
     std::string device_str = devicePtr;
     DEVICE_TYPE device_cur = str2DEVICE_TYPE(device_str);
 
-    long modelAddr = (long)model_create(modelPathPtr, affinity_cur, device_cur);     
+    long modelAddr = (long)CreateModel(modelPathPtr, affinity_cur, device_cur, NULL);     
     return modelAddr;
 }
 
 extern "C" JNIEXPORT void JNICALL Java_BoltModel_model_1ready
   (JNIEnv *env, jobject, jlong modelAddr, jint num_input, jobjectArray input_names, jintArray n, jintArray c, jintArray h, jintArray w, jobjectArray dt_input, jobjectArray df_input) {
-    IHandle ih = (IHandle)modelAddr;    
+    ModelHandle ih = (ModelHandle)modelAddr;    
 
     jint *curArray_n = env->GetIntArrayElements(n, 0);
     int* datas_n = (int*)malloc(num_input * sizeof(int));
@@ -222,27 +227,27 @@ extern "C" JNIEXPORT void JNICALL Java_BoltModel_model_1ready
     jint *curArray_w = env->GetIntArrayElements(w, 0);
     int* datas_w = (int*)malloc(num_input * sizeof(int));
     for (int i = 0; i < num_input; i++) {
-	datas_n[i] = curArray_n[i];
-	datas_c[i] = curArray_c[i];
-	datas_h[i] = curArray_h[i];
-	datas_w[i] = curArray_w[i];
+        datas_n[i] = curArray_n[i];
+        datas_c[i] = curArray_c[i];
+        datas_h[i] = curArray_h[i];
+        datas_w[i] = curArray_w[i];
     }
 
     char** input_names_ptr = (char**)malloc(sizeof(char*) * num_input);
     std::vector<std::string> name_strs;   
     for (int i=0; i < num_input; i++) {
-	jstring cur_str = (jstring)(env->GetObjectArrayElement(input_names, i));
-	const char* cur_str_ptr = env->GetStringUTFChars(cur_str, 0);
-	std::string tmp_str = cur_str_ptr;
-	name_strs.push_back(tmp_str);
-	input_names_ptr[i] = (char*)name_strs[i].c_str();
-	
-	env->ReleaseStringUTFChars(cur_str, cur_str_ptr);
-	env->DeleteLocalRef(cur_str); 	
-    }    
+        jstring cur_str = (jstring)(env->GetObjectArrayElement(input_names, i));
+        const char* cur_str_ptr = env->GetStringUTFChars(cur_str, 0);
+        std::string tmp_str = cur_str_ptr;
+        name_strs.push_back(tmp_str);
+        input_names_ptr[i] = (char*)name_strs[i].c_str();
+        
+        env->ReleaseStringUTFChars(cur_str, cur_str_ptr);
+        env->DeleteLocalRef(cur_str);
+    }
 
     for (int i=0; i<num_input; i++) {
-	input_names_ptr[i] = (char*)(name_strs[i].c_str());
+        input_names_ptr[i] = (char*)(name_strs[i].c_str());
     }
 
     DATA_TYPE* dt_inputs_ptr = (DATA_TYPE*)malloc(sizeof(DATA_TYPE) * num_input);
@@ -251,23 +256,22 @@ extern "C" JNIEXPORT void JNICALL Java_BoltModel_model_1ready
     int df_input_num = env->GetArrayLength(df_input);
 
     if (dt_input_num != df_input_num) {
-	    std::cerr << "[ERROR]: num of input_datatype not equal to num of input_dataformat!" << std::endl;
+        std::cerr << "[ERROR]: num of input_datatype not equal to num of input_dataformat!" << std::endl;
         exit(1);
     }
 
     for (int i=0; i<dt_input_num; i++) {
-	jstring tmp_str_dt = (jstring)(env->GetObjectArrayElement(dt_input, i));
-	const char* tmp_str_dt_ptr = env->GetStringUTFChars(tmp_str_dt, 0);
-	std::string cur_tmp_str_dt = tmp_str_dt_ptr;
-	dt_inputs_ptr[i] = str2DATA_TYPE(cur_tmp_str_dt);
-
+        jstring tmp_str_dt = (jstring)(env->GetObjectArrayElement(dt_input, i));
+        const char* tmp_str_dt_ptr = env->GetStringUTFChars(tmp_str_dt, 0);
+        std::string cur_tmp_str_dt = tmp_str_dt_ptr;
+        dt_inputs_ptr[i] = str2DATA_TYPE(cur_tmp_str_dt);
+        
         jstring tmp_str_df = (jstring)(env->GetObjectArrayElement(df_input, i));
-	const char* tmp_str_df_ptr = env->GetStringUTFChars(tmp_str_df, 0);
-	std::string cur_tmp_str_df = tmp_str_df_ptr;
-	df_inputs_ptr[i] = str2DATA_FORMAT(cur_tmp_str_df);	
+        const char* tmp_str_df_ptr = env->GetStringUTFChars(tmp_str_df, 0);
+        std::string cur_tmp_str_df = tmp_str_df_ptr;
+        df_inputs_ptr[i] = str2DATA_FORMAT(cur_tmp_str_df);
     }
-
-    model_ready(ih, num_input, datas_n, datas_c, datas_h, datas_w, input_names_ptr, dt_inputs_ptr, df_inputs_ptr);
+    PrepareModel(ih, num_input, datas_n, datas_c, datas_h, datas_w, input_names_ptr, dt_inputs_ptr, df_inputs_ptr);
 
     env->ReleaseIntArrayElements(n, curArray_n, 0);
     free(datas_n);
@@ -282,7 +286,7 @@ extern "C" JNIEXPORT void JNICALL Java_BoltModel_model_1ready
 
 extern "C" JNIEXPORT void JNICALL Java_BoltModel_model_1resize_1input
   (JNIEnv *env, jobject, jlong modelAddr, jint num_input, jobjectArray input_names, jintArray n, jintArray c, jintArray h, jintArray w, jobjectArray dt_input, jobjectArray df_input) {
-    IHandle ih = (IHandle)modelAddr;
+    ModelHandle ih = (ModelHandle)modelAddr;
 
     jint *curArray_n = env->GetIntArrayElements(n, 0);
     int* datas_n = (int*)malloc(num_input * sizeof(int));
@@ -338,7 +342,7 @@ extern "C" JNIEXPORT void JNICALL Java_BoltModel_model_1resize_1input
         df_inputs_ptr[i] = str2DATA_FORMAT(cur_tmp_str_df);
     }
 
-    model_resize_input(ih, num_input, datas_n, datas_c, datas_h, datas_w, input_names_ptr, dt_inputs_ptr, df_inputs_ptr);
+    ResizeModelInput(ih, num_input, datas_n, datas_c, datas_h, datas_w, input_names_ptr, dt_inputs_ptr, df_inputs_ptr);
 
     env->ReleaseIntArrayElements(n, curArray_n, 0);
     free(datas_n);
@@ -353,14 +357,14 @@ extern "C" JNIEXPORT void JNICALL Java_BoltModel_model_1resize_1input
 
 extern "C" JNIEXPORT jlong JNICALL Java_BoltModel_IResult_1malloc_1all
   (JNIEnv *, jobject, jlong modelAddr) {
-    IHandle ih = (IHandle)modelAddr;
-    IResult ir = IResult_malloc_all(ih);
+    ModelHandle ih = (ModelHandle)modelAddr;
+    ResultHandle ir = AllocAllResultHandle(ih);
     return (long)ir;
 }
 
 extern "C" JNIEXPORT jlong JNICALL Java_BoltModel_IResult_1malloc_1part
   (JNIEnv *env, jobject, jlong modelAddr, jint num_outputs, jobjectArray outputNames) {
-    IHandle ih = (IHandle)modelAddr;
+    ModelHandle ih = (ModelHandle)modelAddr;
     char** output_names_ptr = (char**)malloc(sizeof(char*) * num_outputs);
     std::vector<std::string> name_strs;
     for (int i=0; i < num_outputs; i++) {
@@ -377,18 +381,18 @@ extern "C" JNIEXPORT jlong JNICALL Java_BoltModel_IResult_1malloc_1part
     for (int i=0; i<num_outputs; i++) {
         output_names_ptr[i] = (char*)(name_strs[i].c_str());
     }
-    IResult ir = IResult_malloc_part(ih, num_outputs, output_names_ptr);
+    ResultHandle ir = AllocSpecificResultHandle(ih, num_outputs, output_names_ptr);
 
     free(output_names_ptr);
     return (long)ir;
 }
 
 extern "C" JNIEXPORT void JNICALL Java_BoltModel_model_1run
-  (JNIEnv *env, jobject, jlong modelAddr, jlong IResultAddr, jint num_input, jobjectArray input_names, jobjectArray inputData) {
-    IHandle ih = (IHandle)modelAddr;
-    IResult ir = (IResult)IResultAddr;
+  (JNIEnv *env, jobject, jlong modelAddr, jlong ResultHandleAddr, jint num_input, jobjectArray input_names, jobjectArray inputData) {
+    ModelHandle ih = (ModelHandle)modelAddr;
+    ResultHandle ir = (ResultHandle)ResultHandleAddr;
     
-    IHandleInfo* ihInfo = (IHandleInfo*)ih;
+    ModelHandleInfo* ihInfo = (ModelHandleInfo*)ih;
     CNN* cnn = (CNN*)ihInfo->cnn;
 
     char** input_names_ptr = (char**)malloc(sizeof(char*) * num_input);
@@ -404,25 +408,24 @@ extern "C" JNIEXPORT void JNICALL Java_BoltModel_model_1run
     }
 
     for (int i=0; i<num_input; i++) {
-	input_names_ptr[i] = (char*)(name_strs[i].c_str());
+        input_names_ptr[i] = (char*)(name_strs[i].c_str());
     }
 
     void** mem_ptr = (void**)malloc(sizeof(void*) * num_input);
     jint rows = env->GetArrayLength(inputData);
     HashMap<std::string, std::shared_ptr<Tensor>> inMap = cnn->get_inputs();
     for (int i=0; i<rows; i++) {
-	jfloatArray curArray = static_cast<jfloatArray>(env->GetObjectArrayElement(inputData, i));
-	jfloat* datas = env->GetFloatArrayElements(curArray, JNI_FALSE);
-	std::string curTensorName = name_strs[i];
-	std::shared_ptr<Tensor> cur_input_tensor = inMap[curTensorName];
-	jint clos = env->GetArrayLength(curArray);
-	
+        jfloatArray curArray = static_cast<jfloatArray>(env->GetObjectArrayElement(inputData, i));
+        jfloat* datas = env->GetFloatArrayElements(curArray, JNI_FALSE);
+        std::string curTensorName = name_strs[i];
+        std::shared_ptr<Tensor> cur_input_tensor = inMap[curTensorName];
+        jint clos = env->GetArrayLength(curArray);
         TensorDesc tensorDesc = cur_input_tensor->get_desc();
         mem_ptr[i] = cur_input_tensor->get_val();
         dataTypeConverterFromFloat(datas, mem_ptr[i], tensorDesc.dt, clos);
     }
 
-    model_run(ih, ir, num_input, input_names_ptr, mem_ptr);
+    RunModel(ih, ir, num_input, input_names_ptr, mem_ptr);
     free(input_names_ptr);
     free(mem_ptr);
 }
@@ -443,12 +446,12 @@ int calculateLength(int *array, int num) {
 }
 
 extern "C" JNIEXPORT jobject JNICALL Java_BoltModel_getOutput
-  (JNIEnv *env, jobject, jlong IResultAddr) {
+  (JNIEnv *env, jobject, jlong ResultHandleAddr) {
     jclass stucls = env->FindClass("BoltResult");
    
     jmethodID constrocMID = env->GetMethodID(stucls, "<init>", "([[F[[I[Ljava/lang/String;[Ljava/lang/String;)V");
     
-    IResultInner* ir_inner = (IResultInner*)IResultAddr;
+    ResultHandleInner* ir_inner = (ResultHandleInner*)ResultHandleAddr;
     DataDesc* outputArrPtr = (*ir_inner).outputArr;
     int num_outputs = (*ir_inner).num_outputs;
 
@@ -466,35 +469,33 @@ extern "C" JNIEXPORT jobject JNICALL Java_BoltModel_getOutput
     df_arr = (jobjectArray)env->NewObjectArray(num_outputs, env->FindClass("java/lang/String"), env->NewStringUTF(""));
 
     for (int i=0; i<num_outputs; i++) {
-	std::string cur_output_name = outputArrPtr[i].name;
-	env->SetObjectArrayElement(output_names_arr, i, env->NewStringUTF(cur_output_name.c_str()));
-	
-	DataType cur_data_type = outputArrPtr[i].dt;
-
-	DataFormat cur_data_format = outputArrPtr[i].df;
-	std::string cur_data_format_str = DataFormat2str(cur_data_format);
-	env->SetObjectArrayElement(df_arr, i, env->NewStringUTF(cur_data_format_str.c_str()));
-
-	void* cur_dataPtr = outputArrPtr[i].dataPtr;
-	int tensorNumber = calculateLength((int*)outputArrPtr[i].dims, 4);
-	jfloat tmp_output_values[tensorNumber];
-	jfloatArray floatArr = env->NewFloatArray(tensorNumber);
-
+        std::string cur_output_name = outputArrPtr[i].name;
+        env->SetObjectArrayElement(output_names_arr, i, env->NewStringUTF(cur_output_name.c_str()));
+        DataType cur_data_type = outputArrPtr[i].dt;
+        DataFormat cur_data_format = outputArrPtr[i].df;
+        std::string cur_data_format_str = DataFormat2str(cur_data_format);
+        env->SetObjectArrayElement(df_arr, i, env->NewStringUTF(cur_data_format_str.c_str()));
+    
+        void* cur_dataPtr = outputArrPtr[i].dataPtr;
+        int tensorNumber = calculateLength((int*)outputArrPtr[i].dims, 4);
+        jfloat tmp_output_values[tensorNumber];
+        jfloatArray floatArr = env->NewFloatArray(tensorNumber);
+    
         jint tmp_output_dimensions[4];
-	jintArray intArr = env->NewIntArray(4);
-
-	for (int j = 0; j < 4; j++) {
-	    tmp_output_dimensions[j] = (int)(outputArrPtr[i].dims[j]);
-	}
-
+        jintArray intArr = env->NewIntArray(4);
+    
+        for (int j = 0; j < 4; j++) {
+            tmp_output_dimensions[j] = (int)(outputArrPtr[i].dims[j]);
+        }
+    
         dataTypeConverterToFloat(cur_dataPtr, cur_data_type, tmp_output_values, tensorNumber);
-	env->SetFloatArrayRegion(floatArr, 0, tensorNumber, tmp_output_values);
-	env->SetObjectArrayElement(output_values, i, floatArr);
-	env->DeleteLocalRef(floatArr);
-
+        env->SetFloatArrayRegion(floatArr, 0, tensorNumber, tmp_output_values);
+        env->SetObjectArrayElement(output_values, i, floatArr);
+        env->DeleteLocalRef(floatArr);
+    
         env->SetIntArrayRegion(intArr, 0, 4, tmp_output_dimensions);
         env->SetObjectArrayElement(output_dimension, i, intArr);
-        env->DeleteLocalRef(intArr);	
+        env->DeleteLocalRef(intArr);
     }   
 
     jobject bolt_result_obj = env->NewObject(stucls, constrocMID, output_values, output_dimension, output_names_arr, df_arr);
@@ -502,14 +503,14 @@ extern "C" JNIEXPORT jobject JNICALL Java_BoltModel_getOutput
 }
 
 extern "C" JNIEXPORT void JNICALL Java_BoltModel_IResult_1free
-  (JNIEnv *, jobject, jlong IResultAddr) {
-    IResult ir = (IResult)IResultAddr;
-    IResult_free(ir);
+  (JNIEnv *, jobject, jlong ResultHandleAddr) {
+    ResultHandle ir = (ResultHandle)ResultHandleAddr;
+    FreeResultHandle(ir);
 }
 
 extern "C" JNIEXPORT void JNICALL Java_BoltModel_destroyModel
   (JNIEnv *, jobject, jlong modelAddr) {
-    IHandle ih = (IHandle)modelAddr;
-    model_destroy(ih);
+    ModelHandle ih = (ModelHandle)modelAddr;
+    DestroyModel(ih);
 }
 #endif

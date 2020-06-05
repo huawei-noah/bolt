@@ -52,43 +52,41 @@ class DepthwisePointwiseOptimizer: public OPOptimizer {
                        spec->ws[convWeightIndex].weight,
                        spec->ws[convWeightIndex].bytes_of_weight);
 
-                U32 vecSize = sizeof(F32) * (spec->ops[dwConvOpIndex].ps.conv_spec.num_kernels \
-                                           + spec->ops[convOpIndex].ps.conv_spec.num_kernels);
+                U32 vecSize = sizeof(F32) * (spec->ops[dwConvOpIndex].ps.conv_spec.num_outputs \
+                                           + spec->ops[convOpIndex].ps.conv_spec.num_outputs);
                 U8* vec = (U8 *)mt_new_storage(vecSize);
                 U8* ptr = vec;
                 if (spec->ws[dwConvWeightIndex].bytes_of_vec == 0) {
-                    memset(ptr, 0, sizeof(F32)*(spec->ops[dwConvOpIndex].ps.conv_spec.num_kernels));
-                }
-                else{
-                    CHECK_REQUIREMENT(sizeof(F32)*(spec->ops[dwConvOpIndex].ps.conv_spec.num_kernels) == spec->ws[dwConvWeightIndex].bytes_of_vec);
+                    memset(ptr, 0, sizeof(F32)*(spec->ops[dwConvOpIndex].ps.conv_spec.num_outputs));
+                } else {
+                    CHECK_REQUIREMENT(sizeof(F32)*(spec->ops[dwConvOpIndex].ps.conv_spec.num_outputs) == spec->ws[dwConvWeightIndex].bytes_of_vec);
                     memcpy(ptr, spec->ws[dwConvWeightIndex].vec, spec->ws[dwConvWeightIndex].bytes_of_vec);
                 }
-                ptr = vec + sizeof(F32)*(spec->ops[dwConvOpIndex].ps.conv_spec.num_kernels);
+                ptr = vec + sizeof(F32)*(spec->ops[dwConvOpIndex].ps.conv_spec.num_outputs);
                 if (spec->ws[convWeightIndex].bytes_of_vec == 0) {
-                    memset(ptr, 0, sizeof(F32)*(spec->ops[convOpIndex].ps.conv_spec.num_kernels));
-                }
-                else{
-                    CHECK_REQUIREMENT(sizeof(F32)*(spec->ops[convOpIndex].ps.conv_spec.num_kernels) == spec->ws[convWeightIndex].bytes_of_vec);
+                    memset(ptr, 0, sizeof(F32)*(spec->ops[convOpIndex].ps.conv_spec.num_outputs));
+                } else {
+                    CHECK_REQUIREMENT(sizeof(F32)*(spec->ops[convOpIndex].ps.conv_spec.num_outputs) == spec->ws[convWeightIndex].bytes_of_vec);
                     memcpy(ptr, spec->ws[convWeightIndex].vec, spec->ws[convWeightIndex].bytes_of_vec);
                 }
 
                 // free and reallocate
-                if(spec->ws[dwConvWeightIndex].weight != nullptr) {
+                if (spec->ws[dwConvWeightIndex].weight != nullptr) {
                     spec->ws[dwConvWeightIndex].bytes_of_weight = 0;
                     delete [] spec->ws[dwConvWeightIndex].weight;
                     spec->ws[dwConvWeightIndex].weight = nullptr;
                 }
-                if(spec->ws[dwConvWeightIndex].vec != nullptr) {
+                if (spec->ws[dwConvWeightIndex].vec != nullptr) {
                     spec->ws[dwConvWeightIndex].bytes_of_vec = 0;
                     delete [] spec->ws[dwConvWeightIndex].vec;
                     spec->ws[dwConvWeightIndex].vec = nullptr;
                 }
-                if(spec->ws[convWeightIndex].weight != nullptr) {
+                if (spec->ws[convWeightIndex].weight != nullptr) {
                     spec->ws[convWeightIndex].bytes_of_weight = 0;
                     delete [] spec->ws[convWeightIndex].weight;
                     spec->ws[convWeightIndex].weight = nullptr;
                 }
-                if(spec->ws[convWeightIndex].vec != nullptr) {
+                if (spec->ws[convWeightIndex].vec != nullptr) {
                     spec->ws[convWeightIndex].bytes_of_vec = 0;
                     delete [] spec->ws[convWeightIndex].vec;
                     spec->ws[convWeightIndex].vec = nullptr;
@@ -96,7 +94,7 @@ class DepthwisePointwiseOptimizer: public OPOptimizer {
 
                 // retain depthwise convolution operator
                 str_copy(spec->ops[dwConvOpIndex].output_tensors_name[0], spec->ops[convOpIndex].output_tensors_name[0], NAME_LEN);
-                spec->ops[dwConvOpIndex].ps.conv_spec.num_kernels = spec->ops[convOpIndex].ps.conv_spec.num_kernels;
+                spec->ops[dwConvOpIndex].ps.conv_spec.num_outputs = spec->ops[convOpIndex].ps.conv_spec.num_outputs;
                 spec->ops[dwConvOpIndex].ps.conv_spec.convolution_type = Convolution_Depthwise_Pointwise;
                 spec->ops[dwConvOpIndex].ps.conv_spec.pw_activation_type = spec->ops[convOpIndex].ps.conv_spec.pw_activation_type;
                 spec->ws[dwConvWeightIndex].bytes_of_weight = weightSize;

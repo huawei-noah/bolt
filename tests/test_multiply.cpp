@@ -23,7 +23,7 @@ int multiplyTest(int argc, char** argv, DataType dt) {
 
     TensorDesc input_desc = tensor1d(dt, len); 
     TensorDesc output_desc;
-    CHECK_STATUS(multiply_infer_output_size(input_desc, &output_desc));
+    CHECK_STATUS(multiply_infer_output_size(input_desc, &output_desc, UT_ARCH));
 
     U8* input = ut_input_v(len, dt, UT_INIT_RANDOM);
     U8* output = ut_input_v(len, dt, UT_INIT_ZERO);

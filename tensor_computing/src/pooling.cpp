@@ -12,19 +12,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#include <cmath>
-#include "sys.h"
-#include "type.h"
-#include "tensor_desc.h"
-#include "error.h"
 #include "tensor_computing.h"
+#ifdef _USE_GENERAL
 #include "cpu/general/tensor_computing_general.h"
+#endif
+#ifdef _USE_NEON
 #include "cpu/arm/tensor_computing_arm.h"
-#ifdef _USE_MALI 
+#endif
+#ifdef _USE_MALI
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
 
-inline EE pooling_infer_output_size_cpu(TensorDesc inputDesc, PoolingDesc poolingDesc, TensorDesc* outputDesc){
+inline EE pooling_infer_output_size_cpu(TensorDesc inputDesc, PoolingDesc poolingDesc, TensorDesc* outputDesc)
+{
     if (nullptr == outputDesc) {
         CHECK_STATUS(NULL_POINTER);
     }
@@ -62,54 +62,46 @@ inline EE pooling_infer_output_size_cpu(TensorDesc inputDesc, PoolingDesc poolin
 }
 EE pooling_infer_output_size(TensorDesc inputDesc, PoolingDesc poolingDesc, TensorDesc* outputDesc, Arch arch, ExtInfo_t extInfo)
 {
-#ifdef _USE_MALI
-    if(arch == MALI){
-        CHECK_STATUS(pooling_infer_output_size_mali(inputDesc, poolingDesc, outputDesc, extInfo->maliInfo.gclmemInputDesc, extInfo->maliInfo.gclmemOutputDesc));
-    } else {
-#endif
-        UNUSED(arch);
-        UNUSED(extInfo);
-        CHECK_STATUS(pooling_infer_output_size_cpu(inputDesc, poolingDesc, outputDesc));
-#ifdef _USE_MALI
+    EE ret = NOT_SUPPORTED;
+    if (0 == poolingDesc.kernelSize_h && 0 == poolingDesc.kernelSize_w) {  // Global pooling
+        CHECK_REQUIREMENT(4 == inputDesc.nDims);
+        poolingDesc.kernelSize_h = inputDesc.dims[1];
+        poolingDesc.kernelSize_w = inputDesc.dims[0];
     }
+    if(arch == MALI){
+#ifdef _USE_MALI
+        ret = pooling_infer_output_size_mali(inputDesc, poolingDesc, outputDesc, extInfo->maliInfo.gclmemInputDesc, extInfo->maliInfo.gclmemOutputDesc);
 #endif
-    return SUCCESS;
+    } else {
+        ret = pooling_infer_output_size_cpu(inputDesc, poolingDesc, outputDesc);
+    }
+    return ret;
 }
 
 EE pooling(TensorDesc inputDesc, const void* input, PoolingDesc poolingDesc, const void* scale, TensorDesc outputDesc, void* output, Arch arch, ExtInfo_t extInfo)
 {
-#ifndef _USE_MALI
-    UNUSED(extInfo);
-#endif    
-    EE ret = SUCCESS;
-    switch (arch) {
-        case CPU_GENERAL:
-            ret = pooling_general(inputDesc, input,
-                                  poolingDesc,
-                                  outputDesc, output);
-            break;
-        case ARM_A55:
-            ret = pooling_arm(inputDesc, input,
-                              poolingDesc, scale,
+    EE ret = NOT_SUPPORTED;
+    if (0 == poolingDesc.kernelSize_h && 0 == poolingDesc.kernelSize_w) {  // Global pooling
+        CHECK_REQUIREMENT(4 == inputDesc.nDims);
+        poolingDesc.kernelSize_h = inputDesc.dims[1];
+        poolingDesc.kernelSize_w = inputDesc.dims[0];
+    }
+    if (arch == CPU_GENERAL) {
+#ifdef _USE_GENERAL
+        ret = pooling_general(inputDesc, input,
+                              poolingDesc,
                               outputDesc, output);
-            break;
-        case ARM_A76:
-            ret = pooling_arm(inputDesc, input,
-                              poolingDesc, scale,
-                              outputDesc, output);
-            break;
-        case ARM_V8:
-            ret = pooling_arm(inputDesc, input,
-                              poolingDesc, scale,
-                              outputDesc, output);
-            break;
-#ifdef _USE_MALI
-        case MALI:
-            ret = pooling_mali(extInfo->maliInfo.handle, inputDesc, (const GCLMem_t)input, poolingDesc, scale, outputDesc, (GCLMem_t)output);
-            break;
 #endif
-        default:
-            ret = NOT_SUPPORTED;
+#ifdef _USE_NEON
+    } else if (arch == ARM_A55 || arch == ARM_A76 || arch == ARM_V8 || arch == ARM_V7) {
+        ret = pooling_arm(inputDesc, input,
+                          poolingDesc, scale,
+                          outputDesc, output);
+#endif
+#ifdef _USE_MALI
+    } else if (arch == MALI) {
+        ret = pooling_mali(extInfo->maliInfo.handle, inputDesc, (const GCLMem_t)input, poolingDesc, scale, outputDesc, (GCLMem_t)output);
+#endif
     }
     return ret;
 }

@@ -18,6 +18,7 @@
 #include "error.h"
 #include "tensor_computing_type.h"
 #include "gpu/mali/fp16/eltwise_mali_fp16.h"
+#include "gpu/mali/infer_gclmem_desc_mali.h"
 
 inline EE eltwise_checkpara_mali_fp16(std::vector<TensorDesc> inputDesc,
                                       std::vector<void*>      input,
@@ -39,7 +40,14 @@ inline EE eltwise_core_mali_fp16(GCLHandle_t             handle,
                                  EltwiseMode             eltwiseMode) {
     UNUSED(outputDesc);
     U32 iw, ih, ic, in;
-    tensorSelectGet(inputDesc[0],  NULL, NULL, &in, &ic, &ih, &iw);
+    if(inputDesc[0].df == DF_NCHW) {
+        tensorSelectGet(inputDesc[0],  NULL, NULL, &in, &ic, &ih, &iw);
+    } else if(inputDesc[0].df == DF_MKT) {
+        get_nlp_mkt_val(inputDesc[0], NULL, &in, &ic, &ih);
+        iw = 1;
+    } else {
+        CHECK_STATUS(NOT_SUPPORTED);
+    }
     U32 iw_str, ih_str, iw_off, ih_off;
     U32 num = input.size();
     GCLMem_t inputMem[8];
@@ -102,9 +110,9 @@ inline EE eltwise_core_mali_fp16(GCLHandle_t             handle,
     
 
     U32 gs[3] = {(ih + 1) / 2, iw, (ic + 3) / 4 * in};
-    U32 ls[3] = {16, 16, 1};
+    U32 ls[3] = {0, 0, 0};
     U32 dim   = 3;
-    gcl_set_kernelVec(handle, kernel, dim, gs, ls);
+    gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
 #ifdef _DEBUG
     CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
     for(U32 i = 0; i < num; ++i){

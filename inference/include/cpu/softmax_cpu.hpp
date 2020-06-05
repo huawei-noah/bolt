@@ -22,7 +22,8 @@
 class SoftmaxCPU : public Softmax {
 public:
 
-    SoftmaxCPU(DataType dt) : Softmax(dt){}
+    SoftmaxCPU(DataType dt, int axis):
+        Softmax(dt, axis) { }
     
     virtual void run() override
     {
@@ -34,28 +35,17 @@ public:
 
         U8 *inputPtr = (U8*)inputTensor.get_val();
         
-        TensorDesc reshapeDesc = Softmax::reshape(outputDesc);
-        outputDesc = reshapeDesc;
-
         if (DT_I8 == inputDesc.dt) {
 #ifdef _USE_INT8
-            F16 inputScale = inputTensor.get_scale();
+            F32 inputScale = inputTensor.get_scale();
             INT8 *inQ = (INT8*)inputPtr;
-
             U32 numData = tensorNumElements(inputDesc);
-            std::shared_ptr<F16> inBuf((F16*) operator new(numData*bytesOf(DT_F16)));
-            
-            F16* ptr = inBuf.get();
-            for (U32 i = 0; i < numData; i++) {
-                ptr[i] = inQ[i] / inputScale;
-            }
-            inputPtr = (U8*)ptr;
-            inputDesc = reshapeDesc;
-            CHECK_STATUS(softmax(inputDesc, inputPtr, outputDesc, outputTensor.get_val(), this->schedule));
+            F16* inD = (F16*)this->temp->get_val();
+            dequantize_int8_to_fp16(numData, inQ, inputScale, inD);
+            CHECK_STATUS(softmax(outputDesc, inD, this->axis, outputDesc, outputTensor.get_val(), this->schedule));
 #endif
         } else {
-            inputDesc = reshapeDesc;
-            CHECK_STATUS(softmax(inputDesc, inputPtr, outputDesc, outputTensor.get_val(), this->schedule));
+            CHECK_STATUS(softmax(inputDesc, inputPtr, this->axis, outputDesc, outputTensor.get_val(), this->schedule));
         }
         
         UTIL_TIME_TOC(__CLASS_FUNCTION__)
@@ -66,8 +56,14 @@ public:
         CHECK_STATUS(softmax_infer_output_size(inDims[0], &((*outDims)[0]), this->schedule));
         if (DT_I8 == (*outDims)[0].dt) {
             (*outDims)[0].dt = DT_F16;
+            this->lenOfTemp = tensorNumBytes((*outDims)[0]);
         }
         return SUCCESS;
+    }
+
+    U32 infer_tmp_memory_size() override
+    {
+        return this->lenOfTemp;
     }
 };
 

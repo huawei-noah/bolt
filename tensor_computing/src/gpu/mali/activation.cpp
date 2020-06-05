@@ -26,15 +26,21 @@ EE activation_infer_output_size_mali(TensorDesc   inputDesc,
                                      GCLMemDesc_t gclmemOutputDesc){
     /*tensorDesc record cpu org data format info*/
     /*gclmemDesc record gpu trans data format info*/
-    *outputDesc = inputDesc;
+    if(outputDesc) *outputDesc = inputDesc;
 
-    DataType   idt;
-    DataFormat idf;
-    U32 iw, ih, ic, in;
-    tensorSelectGet(inputDesc,  &idt, &idf, &in, &ic, &ih, &iw);
-    if(idf == DF_NCHW) {
+    if(inputDesc.df == DF_NCHW || inputDesc.df == DF_MKT) {
+        DataType   idt;
+        DataFormat idf;
+        U32 iw, ih, ic, in;
+        if(inputDesc.df == DF_NCHW) tensorSelectGet(inputDesc,  &idt, &idf, &in, &ic, &ih, &iw);
+        if(inputDesc.df == DF_MKT) {
+            U32 m, k, t;
+            get_nlp_mkt_val(inputDesc, &idt, &m, &k, &t);
+            map_nlp_mkt_to_ncwhc4(m, k, t, &iw, &ih, &ic);
+            ic = 4 * ic;
+        }
         CHECK_STATUS(infer_gclmem_desc_ncwhc4(iw, ih, ic, 0, 0, iw, ih, ic, idt, idt, gclmemInputDesc, gclmemOutputDesc));
-        *gclmemOutputDesc = *gclmemInputDesc;
+        if(gclmemInputDesc && gclmemOutputDesc) *gclmemOutputDesc = *gclmemInputDesc;
         return SUCCESS;
     }
     return NOT_SUPPORTED;
@@ -43,11 +49,15 @@ EE activation_infer_output_size_mali(TensorDesc   inputDesc,
 inline EE activation_checkpara_mali(GCLHandle_t    handle, 
                                     TensorDesc     inputDesc,
                                     GCLMem_t       input,
+                                    TensorDesc     outputDesc,
+                                    GCLMem_t       output,
                                     ActivationMode activationMode) {
 
-    if(handle == nullptr || nullptr == input) return NULL_POINTER;
-    if(inputDesc.df != DF_NCHW)            return NOT_SUPPORTED;
-    if(input->desc.memFormat != DF_NCWHC4) return NOT_SUPPORTED;
+    if(handle == nullptr || nullptr == input || nullptr == output) return NULL_POINTER;
+    if(inputDesc.df  != outputDesc.df)                   return NOT_SUPPORTED;
+    if(outputDesc.df != DF_NCHW && outputDesc.df != DF_MKT) return NOT_SUPPORTED;
+    if(input->desc.memFormat != DF_NCWHC4)   return NOT_SUPPORTED;
+    if(output->desc.memFormat != DF_NCWHC4)  return NOT_SUPPORTED;
     if(activationMode != ACTIVATION_NULL      && 
        activationMode != ACTIVATION_RELU      && 
        activationMode != ACTIVATION_RELU6     && 
@@ -56,19 +66,20 @@ inline EE activation_checkpara_mali(GCLHandle_t    handle,
        activationMode != ACTIVATION_GELU      && 
        activationMode != ACTIVATION_TANH      && 
        activationMode != ACTIVATION_SIGMOID)  return NOT_SUPPORTED;     
-
     return SUCCESS; 
 }
 
 EE activation_mali(GCLHandle_t    handle, 
                    TensorDesc     inputDesc,
                    GCLMem_t       input,
+                   TensorDesc     outputDesc,
+                   GCLMem_t       output,
                    ActivationMode activationMode) {
     EE ret = SUCCESS;
-    CHECK_STATUS(activation_checkpara_mali(handle, inputDesc, input, activationMode));
+    CHECK_STATUS(activation_checkpara_mali(handle, inputDesc, input, outputDesc, output, activationMode));
     switch(inputDesc.dt){
         case DT_F16:{
-            ret = activation_mali_fp16(handle, inputDesc, input, activationMode);
+            ret = activation_mali_fp16(handle, inputDesc, input, outputDesc, output, activationMode);
             break;
         }
         case DT_I8:{

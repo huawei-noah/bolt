@@ -31,7 +31,7 @@ EE convolution_xnor_A55(TensorDesc inputDesc, const F16* input,
     TensorDesc biasDesc, const F16* biasArray,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F16* outArray,
-    ActivationMode activationMode);
+    ActivationDesc activationDesc);
 
 EE convolution_xnor_A76(TensorDesc inputDesc, const F16* input,
     TensorDesc filterDesc, const BIN8* filterArray,
@@ -40,7 +40,7 @@ EE convolution_xnor_A76(TensorDesc inputDesc, const F16* input,
     TensorDesc biasDesc, const F16* biasArray,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F16* outArray,
-    ActivationMode activationMode);
+    ActivationDesc activationDesc);
 
 inline EE convolution_xnor(TensorDesc inputDesc, const F16* input,
     TensorDesc filterDesc, const BIN8* filter,
@@ -49,7 +49,7 @@ inline EE convolution_xnor(TensorDesc inputDesc, const F16* input,
     TensorDesc biasDesc, const F16* bias,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F16* output,
-    ActivationMode activationMode,
+    ActivationDesc activationDesc,
     Arch arch)
 {
     EE ret = SUCCESS;
@@ -62,7 +62,7 @@ inline EE convolution_xnor(TensorDesc inputDesc, const F16* input,
                                          biasDesc, bias,
                                          tmpBytes, tmp,
                                          outputDesc, output,
-                                         activationMode);
+                                         activationDesc);
             break;
         case ARM_A76:
             ret = convolution_xnor_A76(inputDesc, input,
@@ -72,7 +72,7 @@ inline EE convolution_xnor(TensorDesc inputDesc, const F16* input,
                                          biasDesc, bias,
                                          tmpBytes, tmp,
                                          outputDesc, output,
-                                         activationMode);
+                                         activationDesc);
             break;
         default:
             return NOT_SUPPORTED;

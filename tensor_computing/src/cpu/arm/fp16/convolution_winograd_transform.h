@@ -18,7 +18,7 @@
 #ifdef _USE_FP16
 #include <math.h>
 #include <string.h>
-#include "cpu/arm/fp16/arm_neon_expand_fp16.h"
+#include "cpu/arm/fp16/arm_functions_fp16.h"
 
 inline void trans_W_4x4_3x3(F16 *Fw[36], F16* const F[9]) {
     F16 T[6][3][8];
@@ -77,7 +77,7 @@ inline void trans_W_4x4_3x3(F16 *Fw[36], F16* const F[9]) {
 }
 
 inline EE trans_O_4x4_3x3(F16* const Ow[36], F16 *O[16], const F16* bias,
-    U32 h, U32 w, U32 _pad_h_mod_4, U32 _pad_w_mod_4, U32 oh, U32 ow, ActivationMode activationMode)
+    U32 h, U32 w, U32 _pad_h_mod_4, U32 _pad_w_mod_4, U32 oh, U32 ow, ActivationDesc activationDesc)
 {
     F16 T[4][6][8];
     // bias
@@ -140,7 +140,7 @@ inline EE trans_O_4x4_3x3(F16* const Ow[36], F16 *O[16], const F16* bias,
         float16x8_t v_O2 = vfmaq_f16(v_t0, v_t1, v_4);
         float16x8_t v_O3 = vaddq_f16(vfmaq_f16(v_t2, v_t3, v_8), v_T5);
 
-        switch (activationMode) {
+        switch (activationDesc.mode) {
             case ACTIVATION_NULL: {
                 if (pad_w_mod_4 == 0) {
                     vst1q_f16(O[i*4+0], vaddq_f16(v_O0, v_b));

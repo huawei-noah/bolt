@@ -36,10 +36,6 @@ EE deconvolution_infer_forward_tmp_bytes_fp32(TensorDesc inputDesc, TensorDesc f
     U32 paddingL = convDesc.padding_left;
     U32 paddingR = convDesc.padding_right;
 
-    if (fh < paddingT + 2 || fh < paddingB + 2 || fw < paddingL + 2 || fw < paddingR + 2) {
-        CHECK_STATUS(NOT_SUPPORTED);
-    }
-
     U32 tPadding = fh - 1 - paddingT;
     U32 bPadding = fh - 1 - paddingB;
     U32 lPadding = fw - 1 - paddingL;
@@ -69,9 +65,12 @@ EE deconvolution_infer_forward_tmp_bytes_fp32(TensorDesc inputDesc, TensorDesc f
 
     ih = ih + (ih - 1) * (strideH - 1) + tPadding + bPadding;
     iw = iw + (iw - 1) * (strideW - 1) + lPadding + rPadding;
-
     TensorDesc inPaddedDesc = tensor4df(idt, idf, in, ic, ih, iw);
-
+    if (DF_NCHW == filterDesc.df) {
+        // Swap fn and fc
+        filterDesc.dims[2] = filterDesc.dims[3];
+        filterDesc.dims[3] = ic;
+    }
     EE ret = convolution_infer_forward_tmp_bytes_fp32(inPaddedDesc, filterDesc, outputDesc, transposedCD, algorithm, bytes);
     *bytes += tensorNumBytes(inPaddedDesc);  // for pre-convolution padding
     return ret;
@@ -83,7 +82,7 @@ EE deconvolution_fp32(TensorDesc inputDesc, F32* input,
     TensorDesc biasDesc, const F32* bias,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F32* output,
-    ActivationMode activationMode,
+    ActivationDesc activationDesc,
     Arch arch)
 {
     UNUSED(arch);
@@ -113,15 +112,6 @@ EE deconvolution_fp32(TensorDesc inputDesc, F32* input,
     U32 paddingL = convDesc.padding_left;
     U32 paddingR = convDesc.padding_right;
 
-    if (fh < paddingT + 2 || fh < paddingB + 2 || fw < paddingL + 2 || fw < paddingR + 2) {
-        CHECK_STATUS(NOT_SUPPORTED);
-    }
-
-    U32 tPadding = fh - 1 - paddingT;
-    U32 bPadding = fh - 1 - paddingB;
-    U32 lPadding = fw - 1 - paddingL;
-    U32 rPadding = fw - 1 - paddingR;
-
     ConvolutionDesc transposedCD;
     transposedCD.stride_h = 1;
     transposedCD.stride_w = 1;
@@ -131,6 +121,11 @@ EE deconvolution_fp32(TensorDesc inputDesc, F32* input,
     transposedCD.padding_right = 0;
     transposedCD.dilatedRate_h = 1;
     transposedCD.dilatedRate_w = 1;
+
+    U32 tPadding = fh - 1 - paddingT;
+    U32 bPadding = fh - 1 - paddingB;
+    U32 lPadding = fw - 1 - paddingL;
+    U32 rPadding = fw - 1 - paddingR;
 
     if (CONVOLUTION_ALGORITHM_WINOGRAD == algorithm) {
         // If algorithm is not Winograd, leave out padding of length 1
@@ -205,9 +200,20 @@ EE deconvolution_fp32(TensorDesc inputDesc, F32* input,
     EE ret = SUCCESS;
     switch (algorithm) {
         case CONVOLUTION_ALGORITHM_GEMM:
+#ifdef __aarch64__
             ret = convolution_gemm_V8(inPaddedDesc, inPad, filterDesc, filter, transposedCD,
                                    biasDesc, bias, tmpBytes - tensorNumBytes(inPaddedDesc),
-                                   inPad + tensorNumElements(inPaddedDesc), outputDesc, output, activationMode);
+                                   inPad + tensorNumElements(inPaddedDesc), outputDesc, output, activationDesc);
+#else
+            ret = convolution_gemm_V7(inPaddedDesc, inPad, filterDesc, filter, transposedCD,
+                                   biasDesc, bias, tmpBytes - tensorNumBytes(inPaddedDesc),
+                                   inPad + tensorNumElements(inPaddedDesc), outputDesc, output, activationDesc);
+#endif
+            break;
+        case CONVOLUTION_ALGORITHM_WINOGRAD:
+            ret = convolution_winograd_V8(inPaddedDesc, inPad, filterDesc, filter, transposedCD,
+                                   biasDesc, bias, tmpBytes - tensorNumBytes(inPaddedDesc),
+                                   inPad + tensorNumElements(inPaddedDesc), outputDesc, output, activationDesc);
             break;
         default:
             ret = NOT_SUPPORTED;

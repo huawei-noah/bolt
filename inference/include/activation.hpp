@@ -25,10 +25,10 @@ public:
     /**
     @param mode
     */
-    Activation(ActivationMode activeMode)
+    Activation(ActivationDesc activationDesc)
     {
-        this->activeMode = activeMode;
-        switch(activeMode) {
+        this->activationDesc = activationDesc;
+        switch(activationDesc.mode) {
             case ACTIVATION_RELU: {
                 this->opt = OT_Relu;
                 break;
@@ -61,6 +61,7 @@ public:
                 CHECK_STATUS(NOT_SUPPORTED);
             }
         }
+        this->lenOfTemp = 0;
     }
 
     OperatorType get_op_type() override
@@ -75,7 +76,7 @@ public:
     }
 
 protected:
-    ActivationMode activeMode;
+    ActivationDesc activationDesc;
     OperatorType opt;
 };
 

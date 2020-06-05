@@ -12,22 +12,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#ifndef _DEPTHWISE_POINTWISE_CONVOLUTION_MALI_FP16
-#define _DEPTHWISE_POINTWISE_CONVOLUTION_MALI_FP16
+#ifndef _DEPTHWISE_POINTWISE_CONVOLUTION_DIRECT_MALI_FP16
+#define _DEPTHWISE_POINTWISE_CONVOLUTION_DIRECT_MALI_FP16
 #include "sys.h"
 #include "tensor_desc.h"
 #include "type.h"
 #include "error.h"
 #include "tensor_computing_type.h"
-
-EE depthwise_pointwise_convolution_direct_infer_forward_algorithm_mali_fp16(GCLHandle_t          handle,
-                                                                            TensorDesc           inputDesc, 
-                                                                            TensorDesc           filterDesc, 
-                                                                            ConvolutionDesc      convDesc,
-                                                                            TensorDesc           outputDesc,
-                                                                            ConvolutionPolicy    policy, 
-                                                                            ActivationMode       depthwiseActivationMode,
-                                                                            ForwardRunInfoMali_t forwardRunInfo); 
 
 EE depthwise_pointwise_convolution_direct_transform_filter_bytes_mali_fp16(TensorDesc            filterDesc, 
                                                                            ForwardRunInfoMali_t  forwardRunInfo,

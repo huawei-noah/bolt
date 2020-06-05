@@ -45,13 +45,14 @@ class ConvBNOptimizer: public OPOptimizer {
                 CHECK_REQUIREMENT(bnWeightIndex >= 0);
                 CHECK_REQUIREMENT(spec->ws[bnWeightIndex].mdt == DT_F32);
                 F32 epsCur = spec->ops[bnOpIndex].ps.bn_spec.eps;
+                F32 gamaCur = spec->ops[bnOpIndex].ps.bn_spec.gama;
                 U32 channelCur = spec->ws[bnWeightIndex].bytes_of_weight / bytesOf(spec->ws[bnWeightIndex].mdt);
                 F32* meanPtr = (F32 *)spec->ws[bnWeightIndex].weight;
                 F32* varPtr = (F32 *)spec->ws[bnWeightIndex].vec;
 
                 std::vector<float> stdValue(channelCur);
                 for (U32 j=0; j < channelCur; j++) {
-                    stdValue[j] = sqrt(varPtr[j] + epsCur);
+                    stdValue[j] = sqrt(gamaCur * varPtr[j] + epsCur);
                 }
 
                 // conv
@@ -88,7 +89,7 @@ class ConvBNOptimizer: public OPOptimizer {
                         for (int n = 0; n < weightPerChannel; n++) {
                             convWeightPerChannel[n] /= stdValue[m];
                         }
-                        vecTemp[m] = (vecTemp[m] - meanPtr[m]) / stdValue[m];
+                        vecTemp[m] = (vecTemp[m] - gamaCur * meanPtr[m]) / stdValue[m];
                     }
                 }
                 // free BN memory

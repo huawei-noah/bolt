@@ -30,7 +30,8 @@ class OPOptimizer {
          */
         virtual ~OPOptimizer() {}
         virtual bool optimize(ModelSpec* spec) = 0;
-        int searchWeightIndex(ModelSpec* spec, char* op_name) {
+        int searchWeightIndex(ModelSpec* spec, char* op_name)
+        {
             if (spec->num_weight_specs <= 0) {
                 return -1;
             }
@@ -47,6 +48,22 @@ class OPOptimizer {
                 return -1;
             else
                 return weightsIndex[opNameStr];
+        }
+
+        int searchOperatorIndex(ModelSpec* spec, char* op_name)
+        {
+            if (spec->num_operator_specs <= 0) {
+                return -1;
+            }
+
+            std::string opNameStr = op_name;
+            for (int i = 0; i < spec->num_operator_specs; i++) {
+                std::string key = spec->ops[i].name;
+                if (key == opNameStr) {
+                    return i;
+                }
+            }
+            return -1;
         }
 
         bool isValidOperator(ModelSpec* spec, int index){
@@ -68,7 +85,8 @@ class OPOptimizer {
             spec->ops[index].type = OT_None;
         }
 
-        int searchOperatorIndexBackward(ModelSpec* spec, int end, OperatorType *queryOps, int queryNum, bool unskip=true) {
+        int searchOperatorIndexBackward(ModelSpec* spec, int end, OperatorType *queryOps, int queryNum, bool unskip=true)
+        {
             for (int i = end; i >= 0; i--) {
                 if (isValidOperator(spec, i)) {
                     for (int j=0; j<queryNum; j++) {
@@ -79,6 +97,21 @@ class OPOptimizer {
                     }
                     if (unskip) {
                         return -1;
+                    }
+                }
+            }
+            return -1;
+        }
+
+        int searchOperatorIndexByOutput(ModelSpec* spec, std::string tensorName)
+        {
+            for (int i = 0; i < spec->num_operator_specs; i++) {
+                if (isValidOperator(spec, i)) {
+                    for (U32 j = 0; j < spec->ops[i].num_outputs; j++) {
+                        std::string outName = spec->ops[i].output_tensors_name[j];
+                        if (outName == tensorName) {
+                            return i;
+                        }
                     }
                 }
             }

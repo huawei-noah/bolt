@@ -15,6 +15,7 @@
 #ifndef _H_BLAS_ARM
 #define _H_BLAS_ARM
 
+#include "error.h"
 #include "sys.h"
 #include "type.h"
 
@@ -36,5 +37,14 @@ EE mmm_arm(U32 matrixC_N, U32 matrixC_M, U32 matrixA_K,
      void* tmp,
      void* matrixCData,
      Arch arch);
+
+inline U32 pad_to_4_multiple(U32 k)
+{
+    if (k % 4 == 0) {
+        return k;
+    } else {
+        return (k / 4) * 4 + 4;
+    }
+}
 
 #endif

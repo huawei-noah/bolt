@@ -11,7 +11,7 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, 
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-
+#ifdef __aarch64__
 #include <string.h>
 
 #include "type.h"
@@ -26,7 +26,7 @@ EE convolution_gemm_V8(TensorDesc inputDesc, F32* inArray,
     TensorDesc biasDesc, const F32* biasArray,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F32* outArray,
-    ActivationMode activationMode)
+    ActivationDesc activationDesc)
 {
     UNUSED(biasDesc);
     UNUSED(tmpBytes);
@@ -52,17 +52,6 @@ EE convolution_gemm_V8(TensorDesc inputDesc, F32* inArray,
         CHECK_STATUS(NOT_MATCH);
     }
 
-    I64 activation = 0;
-    switch (activationMode) {
-        case ACTIVATION_NULL:
-            activation = 0;
-            break;
-        case ACTIVATION_RELU:
-            activation = 1;
-            break;
-        default:
-            return NOT_SUPPORTED;
-    }
     oc /= 8;
     ic /= 8;
     U32 ih_pad = ih + paddingT + paddingB;
@@ -329,34 +318,121 @@ EE convolution_gemm_V8(TensorDesc inputDesc, F32* inArray,
                     "fmla v26.4s, v29.4s, v2.s[2]\n"
                     "fmla v28.4s, v29.4s, v2.s[3]\n"
                     "bne 0b\n"
+                    :[in_0]"+r"(in_hw0),
+                     [f_0]"+r"(f_o0c0)
+                    :[ic]"r"((I64)ic*8*fh*fw),
+                     [b_0]"r"(b_o0),
+                     [b_1]"r"(b_o1)
+                    :"memory", "cc", "v0", "v1", "v2", "v3", "v5", "v6", "v7", "v8", "v9", "v10",
+                        "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20",
+                        "v21", "v22", "v23", "v24", "v25", "v26", "v27", "v28", "v29", "v30", "x0", "x1", "x2", "x3"
+                );
 
-                    "cbz %[activation], 1f\n"
-                    "eor v1.16b, v1.16b, v1.16b\n"     //zero
-                    "fmax  v5.4s,  v5.4s, v1.4s\n"
-                    "fmax  v6.4s,  v6.4s, v1.4s\n"
-                    "fmax  v7.4s,  v7.4s, v1.4s\n"
-                    "fmax  v8.4s,  v8.4s, v1.4s\n"
-                    "fmax  v9.4s,  v9.4s, v1.4s\n"
-                    "fmax v10.4s, v10.4s, v1.4s\n"
-                    "fmax v11.4s, v11.4s, v1.4s\n"
-                    "fmax v12.4s, v12.4s, v1.4s\n"
-                    "fmax v13.4s, v13.4s, v1.4s\n"
-                    "fmax v14.4s, v14.4s, v1.4s\n"
-                    "fmax v15.4s, v15.4s, v1.4s\n"
-                    "fmax v16.4s, v16.4s, v1.4s\n"
-                    "fmax v17.4s, v17.4s, v1.4s\n"
-                    "fmax v18.4s, v18.4s, v1.4s\n"
-                    "fmax v19.4s, v19.4s, v1.4s\n"
-                    "fmax v20.4s, v20.4s, v1.4s\n"
-                    "fmax v21.4s, v21.4s, v1.4s\n"
-                    "fmax v22.4s, v22.4s, v1.4s\n"
-                    "fmax v23.4s, v23.4s, v1.4s\n"
-                    "fmax v24.4s, v24.4s, v1.4s\n"
-                    "fmax v25.4s, v25.4s, v1.4s\n"
-                    "fmax v26.4s, v26.4s, v1.4s\n"
-                    "fmax v27.4s, v27.4s, v1.4s\n"
-                    "fmax v28.4s, v28.4s, v1.4s\n"
-                    "1:\n"
+                switch (activationDesc.mode){
+                    case ACTIVATION_NULL:
+                         break;
+                    case ACTIVATION_RELU:{
+                        __asm__ __volatile__(
+                            "eor v1.16b, v1.16b, v1.16b\n"     //zero
+                            "fmax  v5.4s,  v5.4s, v1.4s\n"
+                            "fmax  v6.4s,  v6.4s, v1.4s\n"
+                            "fmax  v7.4s,  v7.4s, v1.4s\n"
+                            "fmax  v8.4s,  v8.4s, v1.4s\n"
+                            "fmax  v9.4s,  v9.4s, v1.4s\n"
+                            "fmax v10.4s, v10.4s, v1.4s\n"
+                            "fmax v11.4s, v11.4s, v1.4s\n"
+                            "fmax v12.4s, v12.4s, v1.4s\n"
+                            "fmax v13.4s, v13.4s, v1.4s\n"
+                            "fmax v14.4s, v14.4s, v1.4s\n"
+                            "fmax v15.4s, v15.4s, v1.4s\n"
+                            "fmax v16.4s, v16.4s, v1.4s\n"
+                            "fmax v17.4s, v17.4s, v1.4s\n"
+                            "fmax v18.4s, v18.4s, v1.4s\n"
+                            "fmax v19.4s, v19.4s, v1.4s\n"
+                            "fmax v20.4s, v20.4s, v1.4s\n"
+                            "fmax v21.4s, v21.4s, v1.4s\n"
+                            "fmax v22.4s, v22.4s, v1.4s\n"
+                            "fmax v23.4s, v23.4s, v1.4s\n"
+                            "fmax v24.4s, v24.4s, v1.4s\n"
+                            "fmax v25.4s, v25.4s, v1.4s\n"
+                            "fmax v26.4s, v26.4s, v1.4s\n"
+                            "fmax v27.4s, v27.4s, v1.4s\n"
+                            "fmax v28.4s, v28.4s, v1.4s\n"
+                            :
+                            :
+                            :"memory", "cc", "v1", "v5", "v6", "v7", "v8", "v9", "v10",
+                            "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20",
+                            "v21", "v22", "v23", "v24", "v25", "v26", "v27", "v28"
+                        );
+                        break;
+                    }
+                    case ACTIVATION_RELU6:{
+                        __asm__ __volatile__(
+                            "eor v1.16b, v1.16b, v1.16b\n" // zero
+                            "fmov v30.4s, 6.0\n"              // six
+                            "fmax  v5.4s,  v5.4s, v1.4s\n"
+                            "fmax  v6.4s,  v6.4s, v1.4s\n"
+                            "fmax  v7.4s,  v7.4s, v1.4s\n"
+                            "fmax  v8.4s,  v8.4s, v1.4s\n"
+                            "fmax  v9.4s,  v9.4s, v1.4s\n"
+                            "fmax v10.4s, v10.4s, v1.4s\n"
+                            "fmax v11.4s, v11.4s, v1.4s\n"
+                            "fmax v12.4s, v12.4s, v1.4s\n"
+                            "fmax v13.4s, v13.4s, v1.4s\n"
+                            "fmax v14.4s, v14.4s, v1.4s\n"
+                            "fmax v15.4s, v15.4s, v1.4s\n"
+                            "fmax v16.4s, v16.4s, v1.4s\n"
+                            "fmax v17.4s, v17.4s, v1.4s\n"
+                            "fmax v18.4s, v18.4s, v1.4s\n"
+                            "fmax v19.4s, v19.4s, v1.4s\n"
+                            "fmax v20.4s, v20.4s, v1.4s\n"
+                            "fmax v21.4s, v21.4s, v1.4s\n"
+                            "fmax v22.4s, v22.4s, v1.4s\n"
+                            "fmax v23.4s, v23.4s, v1.4s\n"
+                            "fmax v24.4s, v24.4s, v1.4s\n"
+                            "fmax v25.4s, v25.4s, v1.4s\n"
+                            "fmax v26.4s, v26.4s, v1.4s\n"
+                            "fmax v27.4s, v27.4s, v1.4s\n"
+                            "fmax v28.4s, v28.4s, v1.4s\n"
+
+                            "fmin v5.4s, v5.4s, v30.4s\n"
+                            "fmin v6.4s, v6.4s, v30.4s\n"
+                            "fmin v7.4s, v7.4s, v30.4s\n"
+                            "fmin v8.4s, v8.4s, v30.4s\n"
+                            "fmin v9.4s, v9.4s, v30.4s\n"
+                            "fmin v10.4s, v10.4s, v30.4s\n"
+                            "fmin v11.4s, v11.4s, v30.4s\n"
+                            "fmin v12.4s, v12.4s, v30.4s\n"
+                            "fmin v13.4s, v13.4s, v30.4s\n"
+                            "fmin v14.4s, v14.4s, v30.4s\n"
+                            "fmin v15.4s, v15.4s, v30.4s\n"
+                            "fmin v16.4s, v16.4s, v30.4s\n"
+                            "fmin v17.4s, v17.4s, v30.4s\n"
+                            "fmin v18.4s, v18.4s, v30.4s\n"
+                            "fmin v19.4s, v19.4s, v30.4s\n"
+                            "fmin v20.4s, v20.4s, v30.4s\n"
+                            "fmin v21.4s, v21.4s, v30.4s\n"
+                            "fmin v22.4s, v22.4s, v30.4s\n"
+                            "fmin v23.4s, v23.4s, v30.4s\n"
+                            "fmin v24.4s, v24.4s, v30.4s\n"
+                            "fmin v25.4s, v25.4s, v30.4s\n"
+                            "fmin v26.4s, v26.4s, v30.4s\n"
+                            "fmin v27.4s, v27.4s, v30.4s\n"
+                            "fmin v28.4s, v28.4s, v30.4s\n"
+                            :
+                            :
+                            :"memory", "cc", "v1", "v5", "v6", "v7", "v8", "v9", "v10",
+                            "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20",
+                            "v21", "v22", "v23", "v24", "v25", "v26", "v27", "v28", "v30"
+                        );
+                        break;
+                    }
+                    default: {
+                        CHECK_STATUS(NOT_SUPPORTED);
+                    }
+                }
+
+                __asm__ __volatile__(
                     "str   q5, [%[out_0]]\n"
                     "str   q6, [%[out_0], #16]\n"
                     "str   q7, [%[out_0], #32]\n"
@@ -381,16 +457,11 @@ EE convolution_gemm_V8(TensorDesc inputDesc, F32* inArray,
                     "str   q26, [%[out_0], #336]\n"
                     "str   q27, [%[out_0], #352]\n"
                     "str   q28, [%[out_0], #368]\n"
-                    :[out_0]"+r"(out_o0hw0),
-                     [in_0]"+r"(in_hw0),
-                     [f_0]"+r"(f_o0c0)
-                    :[ic]"r"((I64)ic*8*fh*fw),
-                     [b_0]"r"(b_o0),
-                     [b_1]"r"(b_o1),
-                     [activation]"r"(activation)
-                    :"memory", "cc", "v0", "v1", "v2", "v3", "v5", "v6", "v7", "v8", "v9", "v10",
-                        "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20",
-                        "v21", "v22", "v23", "v24", "v25", "v26", "v27", "v28", "v29", "v30", "x0", "x1", "x2", "x3"
+                    :[out_0]"+r"(out_o0hw0)
+                    :
+                    :"memory", "cc", "v5", "v6", "v7", "v8", "v9", "v10",
+                    "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20",
+                    "v21", "v22", "v23", "v24", "v25", "v26", "v27", "v28"
                 );
                 b0 += 8;
                 b1 += 8;
@@ -569,26 +640,95 @@ EE convolution_gemm_V8(TensorDesc inputDesc, F32* inArray,
                     "fmla v18.4s, v29.4s, v3.s[2]\n"
                     "fmla v20.4s, v29.4s, v3.s[3]\n"
                     "bne 0b\n"
+                    :[in_0]"+r"(in_hw0),
+                     [f_0]"+r"(f_o0c0)
+                    :[ic]"r"((I64)ic*8*fh*fw),
+                     [b_0]"r"(b_o0),
+                     [b_1]"r"(b_o1)
+                    :"memory", "cc", "v0", "v1", "v3", "v5", "v6", "v7", "v8", "v9", "v10", "v11",
+                     "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20",
+                     "v27", "v28", "v29", "x0", "x1", "x2", "x3"
+                );
 
-                    "cbz %[activation], 1f\n"
-                    "eor v1.16b, v1.16b, v1.16b\n"     //zero
-                    "fmax  v5.4s,  v5.4s, v1.4s\n"
-                    "fmax  v6.4s,  v6.4s, v1.4s\n"
-                    "fmax  v7.4s,  v7.4s, v1.4s\n"
-                    "fmax  v8.4s,  v8.4s, v1.4s\n"
-                    "fmax  v9.4s,  v9.4s, v1.4s\n"
-                    "fmax v10.4s, v10.4s, v1.4s\n"
-                    "fmax v11.4s, v11.4s, v1.4s\n"
-                    "fmax v12.4s, v12.4s, v1.4s\n"
-                    "fmax v13.4s, v13.4s, v1.4s\n"
-                    "fmax v14.4s, v14.4s, v1.4s\n"
-                    "fmax v15.4s, v15.4s, v1.4s\n"
-                    "fmax v16.4s, v16.4s, v1.4s\n"
-                    "fmax v17.4s, v17.4s, v1.4s\n"
-                    "fmax v18.4s, v18.4s, v1.4s\n"
-                    "fmax v19.4s, v19.4s, v1.4s\n"
-                    "fmax v20.4s, v20.4s, v1.4s\n"
-                    "1:\n"
+                switch (activationDesc.mode){
+                    case ACTIVATION_NULL:
+                         break;
+                    case ACTIVATION_RELU:{
+                        __asm__ __volatile__(
+                            "eor v1.16b, v1.16b, v1.16b\n"     //zero
+                            "fmax  v5.4s,  v5.4s, v1.4s\n"
+                            "fmax  v6.4s,  v6.4s, v1.4s\n"
+                            "fmax  v7.4s,  v7.4s, v1.4s\n"
+                            "fmax  v8.4s,  v8.4s, v1.4s\n"
+                            "fmax  v9.4s,  v9.4s, v1.4s\n"
+                            "fmax v10.4s, v10.4s, v1.4s\n"
+                            "fmax v11.4s, v11.4s, v1.4s\n"
+                            "fmax v12.4s, v12.4s, v1.4s\n"
+                            "fmax v13.4s, v13.4s, v1.4s\n"
+                            "fmax v14.4s, v14.4s, v1.4s\n"
+                            "fmax v15.4s, v15.4s, v1.4s\n"
+                            "fmax v16.4s, v16.4s, v1.4s\n"
+                            "fmax v17.4s, v17.4s, v1.4s\n"
+                            "fmax v18.4s, v18.4s, v1.4s\n"
+                            "fmax v19.4s, v19.4s, v1.4s\n"
+                            "fmax v20.4s, v20.4s, v1.4s\n"
+                            :
+                            :
+                            :"memory", "cc", "v1", "v5", "v6", "v7", "v8", "v9", "v10",
+                            "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20"
+                        );
+                        break;
+                    }
+                    case ACTIVATION_RELU6:{
+                        __asm__ __volatile__(
+                            "eor v1.16b, v1.16b, v1.16b\n" // zero
+                            "fmov v30.4s, 6.0\n"              // six
+                            "fmax  v5.4s,  v5.4s, v1.4s\n"
+                            "fmax  v6.4s,  v6.4s, v1.4s\n"
+                            "fmax  v7.4s,  v7.4s, v1.4s\n"
+                            "fmax  v8.4s,  v8.4s, v1.4s\n"
+                            "fmax  v9.4s,  v9.4s, v1.4s\n"
+                            "fmax v10.4s, v10.4s, v1.4s\n"
+                            "fmax v11.4s, v11.4s, v1.4s\n"
+                            "fmax v12.4s, v12.4s, v1.4s\n"
+                            "fmax v13.4s, v13.4s, v1.4s\n"
+                            "fmax v14.4s, v14.4s, v1.4s\n"
+                            "fmax v15.4s, v15.4s, v1.4s\n"
+                            "fmax v16.4s, v16.4s, v1.4s\n"
+                            "fmax v17.4s, v17.4s, v1.4s\n"
+                            "fmax v18.4s, v18.4s, v1.4s\n"
+                            "fmax v19.4s, v19.4s, v1.4s\n"
+                            "fmax v20.4s, v20.4s, v1.4s\n"
+
+                            "fmin v5.4s, v5.4s, v30.4s\n"
+                            "fmin v6.4s, v6.4s, v30.4s\n"
+                            "fmin v7.4s, v7.4s, v30.4s\n"
+                            "fmin v8.4s, v8.4s, v30.4s\n"
+                            "fmin v9.4s, v9.4s, v30.4s\n"
+                            "fmin v10.4s, v10.4s, v30.4s\n"
+                            "fmin v11.4s, v11.4s, v30.4s\n"
+                            "fmin v12.4s, v12.4s, v30.4s\n"
+                            "fmin v13.4s, v13.4s, v30.4s\n"
+                            "fmin v14.4s, v14.4s, v30.4s\n"
+                            "fmin v15.4s, v15.4s, v30.4s\n"
+                            "fmin v16.4s, v16.4s, v30.4s\n"
+                            "fmin v17.4s, v17.4s, v30.4s\n"
+                            "fmin v18.4s, v18.4s, v30.4s\n"
+                            "fmin v19.4s, v19.4s, v30.4s\n"
+                            "fmin v20.4s, v20.4s, v30.4s\n"
+                            :
+                            :
+                            :"memory", "cc", "v1", "v5", "v6", "v7", "v8", "v9", "v10",
+                            "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20", "v30"
+                        );
+                        break;
+                    }
+                    default: {
+                        CHECK_STATUS(NOT_SUPPORTED);
+                    }
+                }
+
+                __asm__ __volatile__(
                     "str   q5, [%[out_0]]\n"
                     "str   q6, [%[out_0], #16]\n"
                     "str   q7, [%[out_0], #32]\n"
@@ -605,16 +745,10 @@ EE convolution_gemm_V8(TensorDesc inputDesc, F32* inArray,
                     "str   q18, [%[out_0], #208]\n"
                     "str   q19, [%[out_0], #224]\n"
                     "str   q20, [%[out_0], #240]\n"
-                    :[out_0]"+r"(out_o0hw0),
-                     [in_0]"+r"(in_hw0),
-                     [f_0]"+r"(f_o0c0)
-                    :[ic]"r"((I64)ic*8*fh*fw),
-                     [b_0]"r"(b_o0),
-                     [b_1]"r"(b_o1),
-                     [activation]"r"(activation)
-                    :"memory", "cc", "v0", "v1", "v3", "v5", "v6", "v7", "v8", "v9", "v10", "v11",
-                     "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20",
-                     "v27", "v28", "v29", "x0", "x1", "x2", "x3"
+                    :[out_0]"+r"(out_o0hw0)
+                    :
+                    :"memory", "cc", "v5", "v6", "v7", "v8", "v9", "v10",
+                    "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20"
                 );
                 b0 += 8;
                 b1 += 8;
@@ -713,18 +847,70 @@ EE convolution_gemm_V8(TensorDesc inputDesc, F32* inArray,
 
                     "mov	v1.16b, v3.16b\n"
                     "bne 0b\n"
+                    :[in_0]"+r"(in_hw0),
+                     [f_0]"+r"(f_o0c0)
+                    :[ic]"r"((I64)ic*8*fh*fw),
+                     [b_0]"r"(b_o0),
+                     [b_1]"r"(b_o1)
+                    :"memory", "cc", "v0", "v1", "v3", "v5", "v6", "v7", "v8", "v9", "v10", "v11",
+                     "v12", "v27", "v28", "v29", "x0", "x1", "x2", "x3"
+                );
 
-                    "cbz %[activation], 1f\n"
-                    "eor v1.16b, v1.16b, v1.16b\n"     //zero
-                    "fmax  v5.4s,  v5.4s, v1.4s\n"
-                    "fmax  v6.4s,  v6.4s, v1.4s\n"
-                    "fmax  v7.4s,  v7.4s, v1.4s\n"
-                    "fmax  v8.4s,  v8.4s, v1.4s\n"
-                    "fmax  v9.4s,  v9.4s, v1.4s\n"
-                    "fmax v10.4s, v10.4s, v1.4s\n"
-                    "fmax v11.4s, v11.4s, v1.4s\n"
-                    "fmax v12.4s, v12.4s, v1.4s\n"
-                    "1:\n"
+                switch (activationDesc.mode){
+                    case ACTIVATION_NULL:
+                         break;
+                    case ACTIVATION_RELU:{
+                        __asm__ __volatile__(
+                            "eor v1.16b, v1.16b, v1.16b\n"     //zero
+                            "fmax  v5.4s,  v5.4s, v1.4s\n"
+                            "fmax  v6.4s,  v6.4s, v1.4s\n"
+                            "fmax  v7.4s,  v7.4s, v1.4s\n"
+                            "fmax  v8.4s,  v8.4s, v1.4s\n"
+                            "fmax  v9.4s,  v9.4s, v1.4s\n"
+                            "fmax v10.4s, v10.4s, v1.4s\n"
+                            "fmax v11.4s, v11.4s, v1.4s\n"
+                            "fmax v12.4s, v12.4s, v1.4s\n"
+                            :
+                            :
+                            :"memory", "cc", "v1", "v5", "v6", "v7", "v8", "v9", "v10",
+                            "v11", "v12"
+                        );
+                        break;
+                    }
+                    case ACTIVATION_RELU6:{
+                        __asm__ __volatile__(
+                            "eor v1.16b, v1.16b, v1.16b\n" // zero
+                            "fmov v30.4s, 6.0\n"              // six
+                            "fmax  v5.4s,  v5.4s, v1.4s\n"
+                            "fmax  v6.4s,  v6.4s, v1.4s\n"
+                            "fmax  v7.4s,  v7.4s, v1.4s\n"
+                            "fmax  v8.4s,  v8.4s, v1.4s\n"
+                            "fmax  v9.4s,  v9.4s, v1.4s\n"
+                            "fmax v10.4s, v10.4s, v1.4s\n"
+                            "fmax v11.4s, v11.4s, v1.4s\n"
+                            "fmax v12.4s, v12.4s, v1.4s\n"
+
+                            "fmin v5.4s, v5.4s, v30.4s\n"
+                            "fmin v6.4s, v6.4s, v30.4s\n"
+                            "fmin v7.4s, v7.4s, v30.4s\n"
+                            "fmin v8.4s, v8.4s, v30.4s\n"
+                            "fmin v9.4s, v9.4s, v30.4s\n"
+                            "fmin v10.4s, v10.4s, v30.4s\n"
+                            "fmin v11.4s, v11.4s, v30.4s\n"
+                            "fmin v12.4s, v12.4s, v30.4s\n"
+                            :
+                            :
+                            :"memory", "cc", "v1", "v5", "v6", "v7", "v8", "v9", "v10",
+                            "v11", "v12", "v30"
+                        );
+                        break;
+                    }
+                    default: {
+                        CHECK_STATUS(NOT_SUPPORTED);
+                    }
+                }
+
+                __asm__ __volatile__(
                     "str   q5, [%[out_0]]\n"
                     "str   q6, [%[out_0], #16]\n"
                     "str   q7, [%[out_0], #32]\n"
@@ -733,15 +919,10 @@ EE convolution_gemm_V8(TensorDesc inputDesc, F32* inArray,
                     "str   q10, [%[out_0], #80]\n"
                     "str   q11, [%[out_0], #96]\n"
                     "str   q12, [%[out_0], #112]\n"
-                    :[out_0]"+r"(out_o0hw0),
-                     [in_0]"+r"(in_hw0),
-                     [f_0]"+r"(f_o0c0)
-                    :[ic]"r"((I64)ic*8*fh*fw),
-                     [b_0]"r"(b_o0),
-                     [b_1]"r"(b_o1),
-                     [activation]"r"(activation)
-                    :"memory", "cc", "v0", "v1", "v3", "v5", "v6", "v7", "v8", "v9", "v10", "v11",
-                     "v12", "v27", "v28", "v29", "x0", "x1", "x2", "x3"
+                    :[out_0]"+r"(out_o0hw0)
+                    :
+                    :"memory", "cc", "v5", "v6", "v7", "v8", "v9", "v10",
+                    "v11", "v12"
                 );
                 b0 += 8;
                 b1 += 8;
@@ -807,22 +988,54 @@ EE convolution_gemm_V8(TensorDesc inputDesc, F32* inArray,
                     "fmla  v6.4s, v28.4s, v3.s[0]\n"
 
                     "bne 0b\n"
-
-                    "cbz %[activation], 1f\n"
-                    "eor v1.16b, v1.16b, v1.16b\n"     //zero
-                    "fmax  v5.4s,  v5.4s, v1.4s\n"
-                    "fmax  v6.4s,  v6.4s, v1.4s\n"
-                    "1:\n"
-                    "str   q5, [%[out_0]]\n"
-                    "str   q6, [%[out_0], #16]\n"
-                    :[out_0]"+r"(out_o0hw0),
-                     [in_0]"+r"(in_hw0),
+                    :[in_0]"+r"(in_hw0),
                      [f_0]"+r"(f_o0c0)
                     :[ic]"r"((I64)ic*8*fh*fw),
                      [b_0]"r"(b_o0),
-                     [b_1]"r"(b_o1),
-                     [activation]"r"(activation)
+                     [b_1]"r"(b_o1)
                     :"memory", "cc", "v0", "v1", "v3", "v5", "v6", "v28", "v29", "v30", "x0", "x1", "x2", "x3"
+                );
+
+                switch (activationDesc.mode){
+                    case ACTIVATION_NULL:
+                         break;
+                    case ACTIVATION_RELU:{
+                        __asm__ __volatile__(
+                            "eor v1.16b, v1.16b, v1.16b\n"     //zero
+                            "fmax  v5.4s,  v5.4s, v1.4s\n"
+                            "fmax  v6.4s,  v6.4s, v1.4s\n"
+                            :
+                            :
+                            :"memory", "cc", "v1", "v5", "v6"
+                        );
+                        break;
+                    }
+                    case ACTIVATION_RELU6:{
+                        __asm__ __volatile__(
+                            "eor v1.16b, v1.16b, v1.16b\n" // zero
+                            "fmov v30.4s, 6.0\n"              // six
+                            "fmax  v5.4s,  v5.4s, v1.4s\n"
+                            "fmax  v6.4s,  v6.4s, v1.4s\n"
+
+                            "fmin v5.4s, v5.4s, v30.4s\n"
+                            "fmin v6.4s, v6.4s, v30.4s\n"
+                            :
+                            :
+                            :"memory", "cc", "v1", "v5", "v6", "v30"
+                        );
+                        break;
+                    }
+                    default: {
+                        CHECK_STATUS(NOT_SUPPORTED);
+                    }
+                }
+
+                __asm__ __volatile__(
+                    "str   q5, [%[out_0]]\n"
+                    "str   q6, [%[out_0], #16]\n"
+                    :[out_0]"+r"(out_o0hw0)
+                    :
+                    :"memory", "cc", "v5", "v6"
                 );
                 b0 += 8;
                 b1 += 8;
@@ -831,3 +1044,4 @@ EE convolution_gemm_V8(TensorDesc inputDesc, F32* inArray,
     }
     return ret;
 }
+#endif

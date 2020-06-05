@@ -40,7 +40,8 @@ int bnnConvolutionTest(int argc, char* argv[], DataType dt) {
     CHECK_REQUIREMENT(in == 1 && on == 1);
 
     DataType fdt = DT_BIN11;  // Use dt to distinguish DoReFa and XNOR
-    ActivationMode am = ACTIVATION_NULL;
+    ActivationDesc activationDesc;
+    activationDesc.mode = ACTIVATION_NULL;
 
     TensorDesc inputDesc = tensor4df(dt, DF_NCHWC8, in, ic, ih, iw);
     TensorDesc filterDesc = tensor4df(fdt, DF_NCHW, oc, ic, fh, fw);
@@ -97,7 +98,7 @@ int bnnConvolutionTest(int argc, char* argv[], DataType dt) {
     // setup alg
     ConvolutionPolicy policy = CONVOLUTION_FASTEST;
     ConvolutionForwardAlgorithm alg = CONVOLUTION_ALGORITHM_NULL;
-    CHECK_STATUS(convolution_infer_forward_algorithm(inputDesc, filterDesc, outputDesc, convDesc, policy, &alg, fdt, am, UT_ARCH));
+    CHECK_STATUS(convolution_infer_forward_algorithm(inputDesc, filterDesc, outputDesc, convDesc, policy, &alg, fdt, activationDesc, UT_ARCH));
 
     // setup tmp
     U32 tmpBytes;
@@ -111,7 +112,7 @@ int bnnConvolutionTest(int argc, char* argv[], DataType dt) {
     BIN8 *ftm     = (BIN8*)ut_input_v(ftmBytes/sizeof(BIN8), fdt, UT_INIT_ZERO);
     // trans filter
     TensorDesc ftmDesc;
-    CHECK_STATUS(convolution_transform_filter(filterDesc, filter, alg, &ftmDesc, ftm, UT_ARCH));
+    CHECK_STATUS(convolution_transform_filter(filterDesc, filter, alg, &ftmDesc, ftm, tmp, UT_ARCH));
 
     if (UT_CHECK) {
         CHECK_STATUS(convolution(inputDesc, input,
@@ -121,7 +122,7 @@ int bnnConvolutionTest(int argc, char* argv[], DataType dt) {
                                  biasDesc, bias,
                                  tmpBytes, tmp,
                                  outputDesc, output,
-                                 am, UT_ARCH));
+                                 activationDesc, UT_ARCH));
 
         // naive implement
         CHECK_STATUS(convolution(inputDesc, input_ref,
@@ -131,7 +132,7 @@ int bnnConvolutionTest(int argc, char* argv[], DataType dt) {
                                  biasDesc, bias,
                                  tmpBytes, tmp,
                                  outputDesc, output_ref,
-                                 am, CPU_GENERAL));
+                                 activationDesc, CPU_GENERAL));
 
         // check
         ut_check_v(output, output_ref, output_size, dt, 1, __FILE__, __LINE__);
@@ -147,7 +148,7 @@ int bnnConvolutionTest(int argc, char* argv[], DataType dt) {
                                  biasDesc, bias,
                                  tmpBytes, tmp,
                                  outputDesc, output,
-                                 am, UT_ARCH));
+                                 activationDesc, UT_ARCH));
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;

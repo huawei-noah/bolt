@@ -28,7 +28,7 @@ class ConvActivationOptimizer: public OPOptimizer {
         bool hasOptimized = false;
         for (int i = 1; i< spec->num_operator_specs; i++) {
             OperatorType curOT = spec->ops[i].type;
-            if (curOT == OT_Relu) {
+            if (curOT == OT_Relu && spec->ops[i].ps.relu_spec.neg_slope == 0) {
                 if (spec->ops[i].num_inputs > 0 && spec->ops[i].num_outputs > 0) {
                     std::string inputName = spec->ops[i].input_tensors_name[0];
                     std::string outputName = spec->ops[i].output_tensors_name[0];
@@ -48,7 +48,6 @@ class ConvActivationOptimizer: public OPOptimizer {
                 // tensor relationship rewrite
                 str_copy(spec->ops[convOpIndex].output_tensors_name[0], spec->ops[atOpIndex].output_tensors_name[0], NAME_LEN);
                 hasOptimized = true;
-
                 switch (spec->ops[convOpIndex].ps.conv_spec.convolution_type) {
                     case Convolution_Pointwise: {
                         spec->ops[convOpIndex].ps.conv_spec.pw_activation_type = ACTIVATION_RELU;
@@ -59,6 +58,10 @@ class ConvActivationOptimizer: public OPOptimizer {
                         break;
                     }
                     case Convolution_Depthwise: {
+                        spec->ops[convOpIndex].ps.conv_spec.dw_activation_type = ACTIVATION_RELU;
+                        break;
+                    }
+                    case Convolution_Dilation: {
                         spec->ops[convOpIndex].ps.conv_spec.dw_activation_type = ACTIVATION_RELU;
                         break;
                     }

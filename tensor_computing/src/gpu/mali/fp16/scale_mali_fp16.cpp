@@ -59,13 +59,13 @@ inline EE scale_core_mali_fp16(GCLHandle_t handle,
     }
     char kernelName[128];
     sprintf(kernelName, "scale_%s", modeName);    
+    U32 gs[3] = {(ih + 1) / 2, iw, (ic + 3) / 4};
+    U32 ls[3] = {0, 0, 0};
+    U32 dim   = 3;
     Kernel kernel;
     CHECK_STATUS(gcl_create_kernel_binary(handle, kernelName, &kernel));
-    CHECK_STATUS(gcl_set_kernelArgs(kernel, ih, ih_str, iw_str, ih_off, iw_off, oh_str, ow_str, oh_off, ow_off, albuf, bebuf, inbuf, outbuf));
-    U32 gs[3] = {(ih + 1) / 2, iw, (ic + 3) / 4};
-    U32 ls[3] = {16, 16, 1};
-    U32 dim   = 3;
-    gcl_set_kernelVec(handle, kernel, dim, gs, ls);
+    CHECK_STATUS(gcl_set_kernelArgs(kernel, ih, ih_str, iw_str, ih_off, iw_off, oh_str, ow_str, oh_off, ow_off, gs[0], gs[1], albuf, bebuf, inbuf, outbuf));
+    gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
 #ifdef _DEBUG
     CHECK_STATUS(gcl_print_memory<F16>(handle, input,  "scale_input"));
     CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));

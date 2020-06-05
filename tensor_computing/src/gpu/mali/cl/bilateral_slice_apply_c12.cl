@@ -54,7 +54,7 @@ __kernel void bilateral_slice_apply_c12_uchar
 __kernel void bilateral_slice_apply_c12
 #endif
 #endif
-    (const int w, const int wh, const int gc, const int gw, const int gh, const int gcw, const int gd, const int coe,
+    (const int w, const int wh, const int gc, const int gw, const int gh, const int gcw, const int gd, const int coe, const int bx, const int by,
     const float scale_x, const float scale_y, global const T* guide, global const T* grid, 
 #if defined (UCHAR)    
     global const uchar* input, 
@@ -66,6 +66,7 @@ __kernel void bilateral_slice_apply_c12
     
     const int x = get_global_id(0);
     const int y = get_global_id(1);
+    if(x >= bx || y >= by) return;
     int in_off = y * w + x;
     T3 in_val;
 #if defined (UCHAR)

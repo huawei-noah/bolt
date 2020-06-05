@@ -22,7 +22,7 @@ EE convolution_direct(TensorDesc inputDesc, F16* inArray,
     TensorDesc biasDesc, const F16* biasArray,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F16* outArray,
-    ActivationMode activationMode,
+    ActivationDesc activationDesc,
     Arch arch)
 {
     UNUSED(biasDesc);
@@ -485,7 +485,7 @@ EE convolution_direct(TensorDesc inputDesc, F16* inArray,
             float16x8_t v_b = vld1q_f16(biasArray + o*8);
             for (U32 hw = 0; hw < oh*ow; hw++) {
                 float16x8_t v = vld1q_f16(out);
-                switch (activationMode) {
+                switch (activationDesc.mode) {
                     case ACTIVATION_NULL:
                         vst1q_f16(out, vaddq_f16(v, v_b));
                         break;

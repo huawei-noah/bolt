@@ -29,20 +29,52 @@ EE eltwise_infer_output_size_mali(std::vector<TensorDesc> inputDesc,
     U32 size = inputDesc.size();
     U32 arrayDimMax = 0;
     for (U32 i = 1; i < size; i++) {
-        if (inputDesc[i].nDims > inputDesc[arrayDimMax].nDims)
-            arrayDimMax = i;
+        if (inputDesc[i].nDims > inputDesc[arrayDimMax].nDims) arrayDimMax = i;
+        if (inputDesc[i].df != inputDesc[0].df) CHECK_STATUS(NOT_SUPPORTED);
     }
-    *outputDesc = inputDesc[arrayDimMax];
+    if(outputDesc) *outputDesc = inputDesc[arrayDimMax];
 
-    DataType   idt;
-    DataFormat idf;
-    U32 iw, ih, ic, in;
-    tensorSelectGet(inputDesc[0],  &idt, &idf, &in, &ic, &ih, &iw);
-
-    if(idf == DF_NCHW) {
+    if(inputDesc[0].df == DF_NCHW || inputDesc[0].df == DF_MKT) {
+        DataType   idt;
+        DataFormat idf;
+        U32 iw, ih, ic, in;
+        if(inputDesc[0].df == DF_NCHW) tensorSelectGet(inputDesc[0],  &idt, &idf, &in, &ic, &ih, &iw);
+        if(inputDesc[0].df == DF_MKT) {
+            U32 m, k, t;
+            get_nlp_mkt_val(inputDesc[0], &idt, &m, &k, &t);
+            map_nlp_mkt_to_ncwhc4(m, k, t, &iw, &ih, &ic);
+            ic = 4 * ic;
+        }
         U32 ih_align = (ih + 1) / 2 * 2;
         CHECK_STATUS(infer_gclmem_desc_ncwhc4(iw, ih_align, ic, 0, 0, iw, ih, ic, idt, idt, gclmemInputDesc, gclmemOutputDesc));
-        for(U32 i = 1; i < size; i++) gclmemInputDesc[i] = gclmemInputDesc[0];
+        if(gclmemInputDesc) {
+            U32 s0 = gclmemInputDesc[0].stride[0];
+            U32 s1 = gclmemInputDesc[0].stride[1];
+            U32 s2 = gclmemInputDesc[0].stride[2];
+            U32 off0 = gclmemInputDesc[0].offset[0];
+            U32 off1 = gclmemInputDesc[0].offset[1];
+            U32 off2 = gclmemInputDesc[0].offset[2];
+            for(U32 i = 1; i < size; i++) {
+                s0 = (s0 >= gclmemInputDesc[i].stride[0]) ? s0 : gclmemInputDesc[i].stride[0];
+                s1 = (s1 >= gclmemInputDesc[i].stride[1]) ? s1 : gclmemInputDesc[i].stride[1];
+                s2 = (s2 >= gclmemInputDesc[i].stride[2]) ? s2 : gclmemInputDesc[i].stride[2];
+                off0 = (off0 >= gclmemInputDesc[i].offset[0]) ? off0 : gclmemInputDesc[i].offset[0];
+                off1 = (off1 >= gclmemInputDesc[i].offset[1]) ? off1 : gclmemInputDesc[i].offset[1];
+                off2 = (off2 >= gclmemInputDesc[i].offset[2]) ? off2 : gclmemInputDesc[i].offset[2];
+            }
+            U32 num = s0 * s1 * s2 * 4;
+            U32 byteSize = num * bytesOf(idt);
+            for(U32 i = 0; i < size; i++) {
+                gclmemInputDesc[i].stride[0] = s0;
+                gclmemInputDesc[i].stride[1] = s1;
+                gclmemInputDesc[i].stride[2] = s2;
+                gclmemInputDesc[i].offset[0] = off0;
+                gclmemInputDesc[i].offset[1] = off1;
+                gclmemInputDesc[i].offset[2] = off2;
+                gclmemInputDesc[i].num       = num;
+                gclmemInputDesc[i].byteSize  = byteSize;
+            }
+        }
         return SUCCESS;
     } 
     return NOT_SUPPORTED;
@@ -68,7 +100,7 @@ inline EE eltwise_checkpara_mali(GCLHandle_t             handle,
         if(it.dims[2] != outputDesc.dims[2]) return NOT_SUPPORTED;
         if(it.dims[3] != outputDesc.dims[3]) return NOT_SUPPORTED;
     }
-    if(outputDesc.df != DF_NCHW)            return NOT_SUPPORTED;
+    if(outputDesc.df != DF_NCHW && outputDesc.df != DF_MKT) return NOT_SUPPORTED;
     if(output->desc.memFormat != DF_NCWHC4) return NOT_SUPPORTED;
     if(eltwiseMode != ELTWISE_SUM && eltwiseMode != ELTWISE_MAX && eltwiseMode != ELTWISE_PROD) return NOT_SUPPORTED;
     return SUCCESS; 

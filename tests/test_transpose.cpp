@@ -36,8 +36,8 @@ int transposeTest(int argc, char** argv, DataType dt) {
     TensorDesc out_1_desc;
     TensorDesc out_2_desc;
 
-    CHECK_STATUS(transpose_infer_output_size(in_desc, &out_1_desc, dim.data()));
-    CHECK_STATUS(transpose_infer_output_size(out_1_desc, &out_2_desc, inv_dim.data()));
+    CHECK_STATUS(transpose_infer_output_size(in_desc, &out_1_desc, dim.data(), UT_ARCH));
+    CHECK_STATUS(transpose_infer_output_size(out_1_desc, &out_2_desc, inv_dim.data(), UT_ARCH));
 
     U32 len = tensorNumElements(in_desc);
     U8* input = ut_input_v(len, dt, UT_INIT_RANDOM);

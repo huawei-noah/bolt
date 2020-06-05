@@ -25,8 +25,8 @@ int sliceTest(int argc, char** argv, DataType dt) {
     U32 ic  = atoi(argv[3]);
     U32 ih  = atoi(argv[4]);
     U32 iw  = atoi(argv[5]);
-    U32 axis= atoi(argv[6]);
-    std::vector<U32> slice_point(num);
+    I32 axis= atoi(argv[6]);
+    std::vector<I32> slice_point(num);
     for (I32 i = 0; i < num-1; i++) {
         slice_point[i] = atoi(argv[7+i]);
     }
@@ -35,7 +35,7 @@ int sliceTest(int argc, char** argv, DataType dt) {
     TensorDesc in_desc = tensor4df(dt, df, in, ic, ih, iw);
     std::vector<TensorDesc> out_desc(num);
 
-    CHECK_STATUS(slice_infer_output_size(in_desc, &out_desc, axis, slice_point.data()));
+    CHECK_STATUS(slice_infer_output_size(in_desc, &out_desc, axis, slice_point.data(), UT_ARCH));
     std::vector<void*> output(num);
     for (I32 i = 0; i < num; i++) {
         output[i] = (void*)ut_input_v(tensorNumElements(out_desc[i]), dt, UT_INIT_ZERO);
@@ -45,7 +45,7 @@ int sliceTest(int argc, char** argv, DataType dt) {
     U8* input = ut_input_v(len, dt, UT_INIT_RANDOM);
 
     if (UT_CHECK) {
-        CHECK_STATUS(slice(in_desc, input, out_desc, &output, UT_ARCH));
+        CHECK_STATUS(slice(in_desc, input, axis, out_desc, &output, UT_ARCH));
 
         U32 tmp = 0;
         for (I32 i = 0; i < num; i++) {
@@ -56,7 +56,7 @@ int sliceTest(int argc, char** argv, DataType dt) {
 
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        CHECK_STATUS(slice(in_desc, input, out_desc, &output, UT_ARCH));
+        CHECK_STATUS(slice(in_desc, input, axis, out_desc, &output, UT_ARCH));
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;
@@ -75,7 +75,6 @@ int sliceTest(int argc, char** argv, DataType dt) {
 
     return 0;
 }
-
 
 int main(int argc, char** argv) {
 #ifdef _USE_FP16

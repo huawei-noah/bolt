@@ -31,10 +31,11 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
     res.w += iv.x * fv.sc + iv.y * fv.sd + iv.z * fv.se + iv.w * fv.sf;\
 }
 __kernel void fc_p2(const int loop, const int len, const int oh_str, const int ow_str, const int oh_off, const int ow_off, 
-    __global const T* in, __read_only image1d_t bias, __global T* out) { 
+    __global const T* in, __global const T* bias, __global T* out) { 
     const int idx = get_global_id(0);
+    if(idx >= len) return;
 
-    T4 sum = READ_IMAGE(bias, sampler, idx);
+    T4 sum = vload4(idx, bias);
     T4 val;
     for(int i = 0; i < loop; i++) {
         val = vload4(idx + i * len, in);

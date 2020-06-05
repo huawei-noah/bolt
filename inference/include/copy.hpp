@@ -23,13 +23,13 @@ public:
     /**
     @param mode
     */
-    Copy(DataType dt, U32 *srcDimsPtr, U32 *dstDimsPtr, U32 len)
+    Copy(DataType dt, I32 *srcDimsPtr, I32 *dstDimsPtr, I32 len)
     {
         this->dt = dt;
-        this->srcDims = Vec<U32>(3);
-        memcpy(this->srcDims.data(), srcDimsPtr, 3 * sizeof(U32));
-        this->dstDims = Vec<U32>(3);
-        memcpy(this->dstDims.data(), dstDimsPtr, 3 * sizeof(U32));
+        this->srcDims = Vec<I32>(3);
+        memcpy(this->srcDims.data(), srcDimsPtr, 3 * sizeof(I32));
+        this->dstDims = Vec<I32>(3);
+        memcpy(this->dstDims.data(), dstDimsPtr, 3 * sizeof(I32));
         this->length = len;
     }
 
@@ -44,8 +44,14 @@ public:
         Tensor srcTensor = this->inputTensors[0];
         TensorDesc srcDesc = srcTensor.get_desc();
         Tensor dstTensor = this->inputTensors[1];
+        TensorDesc dstDesc = dstTensor.get_desc();
 
         U32 batch = srcDesc.dims[srcDesc.nDims - 1];
+        U32 copyLength = (this->length >= 0) ? this->length : tensorNumElements(srcDesc) / batch;
+        U32 srcBatchStride = (this->srcDims[0] >= 0) ? this->srcDims[0] : tensorNumElements(srcDesc) / batch;
+        U32 srcStride = (this->srcDims[0] >= 0) ? this->srcDims[1] : tensorNumElements(srcDesc) / batch;
+        U32 dstBatchStride = (this->dstDims[0] >= 0) ? this->dstDims[0] : tensorNumElements(dstDesc) / batch;
+        U32 dstStride = (this->dstDims[0] >= 0) ? this->dstDims[1] : tensorNumElements(dstDesc) / batch;
         for (U32 i = 0; i < batch; i++) {
             U32 srcBlockIndex = 0;
             if (this->inputTensors.size() > 2)
@@ -53,11 +59,11 @@ public:
             U32 dstBlockIndex = 0;
             if (this->inputTensors.size() > 3)
                 dstBlockIndex = ((U32 *)(this->inputTensors[3].get_val()))[i];
-            U32 srcIndex = i * this->srcDims[0] + srcBlockIndex * this->srcDims[1] + this->srcDims[2];
-            U32 dstIndex = i * this->dstDims[0] + dstBlockIndex * this->dstDims[1] + this->dstDims[2];
+            U32 srcIndex = i * srcBatchStride + srcBlockIndex * srcStride + this->srcDims[2];
+            U32 dstIndex = i * dstBatchStride + dstBlockIndex * dstStride + this->dstDims[2];
             memcpy((U8*)(dstTensor.get_val()) + bytesOf(srcDesc.dt) * dstIndex,
                    (U8*)(srcTensor.get_val()) + bytesOf(srcDesc.dt) * srcIndex,
-                   this->length * bytesOf(srcDesc.dt));
+                    copyLength * bytesOf(srcDesc.dt));
         }
 
         UTIL_TIME_TOC(__CLASS_FUNCTION__)
@@ -74,9 +80,9 @@ public:
     }
 
 private:
-    Vec<U32> srcDims;
-    Vec<U32> dstDims;
-    U32 length;
+    Vec<I32> srcDims;
+    Vec<I32> dstDims;
+    I32 length;
 };
 
 #endif //_COPY_H

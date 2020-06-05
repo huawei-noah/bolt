@@ -178,7 +178,7 @@ std::shared_ptr<U8> load_resize_image(TensorDesc rgbDesc, void* rgb, TensorDesc 
     CHECK_STATUS(tensor4dGet(imageDesc, &imageDt, &imageDf, &imageNum, &imageChannel, &imageHeight, &imageWidth));
 
     switch (imageDt) {
-#ifdef _USE_FP16
+#ifdef __aarch64__
         case DT_F16: {
             return get_resize_image<F16>(rgbDesc, rgb, imageDesc, targetImageFormat, scaleValue);
         }
@@ -233,7 +233,7 @@ std::shared_ptr<U8> load_fake_image(TensorDesc inputDesc)
     CHECK_STATUS(tensor4dGet(inputDesc, &dt, &df, &in, &ic, &ih, &iw));
 
     switch (dt) {
-#ifdef _USE_FP16
+#ifdef __aarch64__
         case DT_F16: {
             return gen_fake_image<F16>(inputDesc);
         }

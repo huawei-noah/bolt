@@ -23,7 +23,7 @@
 class ChannelPaddingOptimizer: public OPOptimizer {
     virtual bool optimize(ModelSpec* spec) override {
         bool hasOptimized = false;  // If padding optimization has never been done, we do not need to check the number of input channels
-        for (int i = 0; i< spec->num_operator_specs; i++) {
+        for (int i = 0; i < spec->num_operator_specs; i++) {
             bool padding = false;  // Whether to check input channels and actually pad
             bool optimizeOC = false;
             U32 numKernels = 0;
@@ -35,7 +35,7 @@ class ChannelPaddingOptimizer: public OPOptimizer {
                     continue;
                 }
 
-                numKernels = spec->ops[i].ps.conv_spec.num_kernels;
+                numKernels = spec->ops[i].ps.conv_spec.num_outputs;
                 kernelSizeH = spec->ops[i].ps.conv_spec.kernel_size_h;
                 kernelSizeW = spec->ops[i].ps.conv_spec.kernel_size_w;
                 if (numKernels % 8 != 0) {  // Check output channels
@@ -75,7 +75,7 @@ class ChannelPaddingOptimizer: public OPOptimizer {
                 memset(spec->ws[weightIndex].weight, 0, spec->ws[weightIndex].bytes_of_weight);
                 memset(spec->ws[weightIndex].vec, 0, spec->ws[weightIndex].bytes_of_vec);
                 if (spec->ops[i].type == OT_Conv)
-                    spec->ops[i].ps.conv_spec.num_kernels = numKernelsNew;
+                    spec->ops[i].ps.conv_spec.num_outputs = numKernelsNew;
                 if (spec->ops[i].type == OT_FC)
                     spec->ops[i].ps.fc_spec.num_outputs = numKernelsNew;
                 // process weight

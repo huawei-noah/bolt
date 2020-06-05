@@ -28,7 +28,7 @@ EE convolution_general(TensorDesc inputDesc, void* input,
         TensorDesc scaleDesc, const void* scale,
         TensorDesc biasDesc, const void* bias,
         TensorDesc outputDesc, void* output,
-        ActivationMode activationMode);
+        ActivationDesc activationDesc);
 
 EE deconvolution_general(TensorDesc inputDesc, void* input,
         TensorDesc filterDesc, const void* filter,
@@ -36,19 +36,23 @@ EE deconvolution_general(TensorDesc inputDesc, void* input,
         TensorDesc scaleDesc, const void* scale,
         TensorDesc biasDesc, const void* bias,
         TensorDesc outputDesc, void* output,
-        ActivationMode activationMode);
+        ActivationDesc activationDesc);
 
 EE depthwise_convolution_general(TensorDesc inputDesc, void* input,
         TensorDesc filterDesc, const void* filter,
         ConvolutionDesc convDesc,
         TensorDesc biasDesc, const void* bias,
         TensorDesc outputDesc, void* output,
-        ActivationMode depthwiseActivationMode,
-        ActivationMode pointwiseActivationMode);
+        ActivationDesc depthwiseActivationDesc,
+        ActivationDesc pointwiseActivationDesc);
+
+EE detectionoutput_general(std::vector<TensorDesc> inputDesc, std::vector<void*> input, DetectionOutputDesc detectionoutputDesc, TensorDesc outputDesc, void* output);
 
 EE pooling_general(TensorDesc inputDesc, const void* input, PoolingDesc poolingDesc, TensorDesc outputDesc, void* output);
 
-EE activation_general(TensorDesc inputDesc, void* data, ActivationMode activationMode);
+EE priorbox_general(std::vector<TensorDesc> inputDesc, PriorBoxDesc priorboxDesc, TensorDesc outputDesc, void* output);
+
+EE activation_general(TensorDesc inputDesc, void* input, ActivationDesc activationDesc, TensorDesc outputDesc, void* output);
 
 EE attention_general(TensorDesc inputDesc, const void *input,
        TensorDesc outputDesc, void *output);
@@ -75,7 +79,7 @@ EE lstm_general(TensorDesc inputDesc, const void* input,
 
 EE transpose_general(TensorDesc inputDesc, void *input, TensorDesc outputDesc, void *output, U32 *dim);
 
-EE slice_general(TensorDesc inputDesc, void* input,
+EE slice_general(TensorDesc inputDesc, void* input, int axis,
     std::vector<TensorDesc> outputDesc, std::vector<void*>* output);
 
 EE split_general(TensorDesc inputDesc, void* input,
@@ -83,9 +87,12 @@ EE split_general(TensorDesc inputDesc, void* input,
 
 EE multiply_general(void *alpha, void *beta, TensorDesc inputDesc, void* input, TensorDesc outputDesc, void *output);
 
-EE scale_general(void *alpha, void *beta, TensorDesc inputDesc, void* data);
+EE scale_general(TensorDesc inputDesc, void* input,
+    I32 axis, void *alpha, void *beta,
+    TensorDesc outputDesc, void* output);
 
 EE softmax_general(TensorDesc inputDesc, const void* input,
+    int axis,
     TensorDesc outputDesc, void* output);
 
 EE reshape_general(TensorDesc inputDesc, void* input,
@@ -95,8 +102,11 @@ EE argmax_general(TensorDesc inputDesc, const void* input,
     I32 axis,
     TensorDesc outputDesc, void* output);
 
-EE axis_mean_general(TensorDesc inputDesc, const void* input,
+EE reduction_general(TensorDesc inputDesc, const void* input,
+    TensorDesc maskDesc, const void* mask,
     I32 axis,
+    ReductionMode reductionMode,
+    float coeff,
     TensorDesc outputDesc, void* output);
 
 EE check_general(TensorDesc inputDescA, const void* inputA,
@@ -107,4 +117,12 @@ EE check_general(TensorDesc inputDescA, const void* inputA,
 EE layer_normalization_general(void *alpha, void *beta,
     TensorDesc inputDesc, void* input,
     TensorDesc outputDesc, void* output);
+
+EE attention_mask_general(TensorDesc inputDesc, const void* input,
+    I32 attentionLength, bool sameLength, float mask,
+    TensorDesc outputDesc, void* output);
+
+EE concat_general(std::vector<TensorDesc> inputDesc, std::vector<void*> input, TensorDesc outputDesc, void* output, int axis);
+
+EE padding_general(TensorDesc inputDesc, const void* input, PadDesc padDesc, TensorDesc outputDesc, void* output);
 #endif

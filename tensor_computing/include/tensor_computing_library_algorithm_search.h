@@ -15,6 +15,8 @@
 #ifndef _H_TENSOR_COMPUTING_LIBRARY_ALGORITHM_SEARCH
 #define _H_TENSOR_COMPUTING_LIBRARY_ALGORITHM_SEARCH
 
+#ifdef _USE_LIBRARY_TUNING
+
 #include <map>
 #include <string>
 #include "type.h"
@@ -31,4 +33,5 @@ std::string getConvolutionAlgorithmMapNameFromInput(TensorDesc inputDesc,
     TensorDesc filterDesc,
     ConvolutionDesc convDesc,
     DataType targetDataType);
+#endif
 #endif

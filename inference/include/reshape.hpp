@@ -25,7 +25,7 @@ public:
  * @param axis
  * @param numAxes
  */
-    Reshape(DataType dt, I32* shapeDimsPtr, I32 shapeSize, I32 axis, I32 numAxes){
+    Reshape(DataType dt, I32* shapeDimsPtr, I32 shapeSize, I32 axis, I32 numAxes) {
         this->dt = dt;
         shapeDims = Vec<I32>(shapeSize);
         memcpy(this->shapeDims.data(), shapeDimsPtr, shapeSize * sizeof(I32));
@@ -38,30 +38,7 @@ public:
         return OT_Reshape;
     }
 
-    void run() override
-    {
-        UTIL_TIME_TIC(__CLASS_FUNCTION__)
-
-        Tensor inputTensor = this->inputTensors[0];
-        TensorDesc inputDesc = inputTensor.get_desc();
-
-        Tensor outputTensor = this->outputTensors[0];
-        TensorDesc outputDesc = outputTensor.get_desc();
-
-        CHECK_STATUS(reshape(inputDesc, inputTensor.get_val(), outputDesc, outputTensor.get_val(), this->schedule));
-
-        UTIL_TIME_TOC(__CLASS_FUNCTION__)
-    }
-
-    EE infer_output_tensors_size(Vec<TensorDesc> inDims, Vec<TensorDesc>* outDims) override
-    {
-        TensorDesc inputDesc = inDims[0];
-        CHECK_STATUS(reshape_infer_output_size(inputDesc, &((*outDims)[0]), this->shapeDims.data(), this->shapeDims.size()));
-        return SUCCESS;
-    }
-
-
-private:
+protected:
     Vec<I32> shapeDims;
     I32 axis;
     I32 numAxes;

@@ -99,7 +99,7 @@ run_command ${host_bin_dir}/test_mvm ${script_dir}/params/mvm.csv
 # tensor_computing
 run_command ${host_bin_dir}/test_activation ${script_dir}/params/activation.csv
 run_command ${host_bin_dir}/test_attention ${script_dir}/params/attention.csv
-run_command ${host_bin_dir}/test_axis_mean ${script_dir}/params/axis_mean.csv
+run_command ${host_bin_dir}/test_reduction ${script_dir}/params/reduction.csv
 run_command ${host_bin_dir}/test_clip ${script_dir}/params/clip.csv
 run_command ${host_bin_dir}/test_concat ${script_dir}/params/concat.csv
 run_command ${host_bin_dir}/test_convolution ${script_dir}/params/convolution.csv

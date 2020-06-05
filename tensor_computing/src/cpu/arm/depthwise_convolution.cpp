@@ -214,8 +214,8 @@ EE depthwise_convolution_arm(TensorDesc inputDesc, void* input,
     TensorDesc biasDesc, const void* bias,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, void* output,
-    ActivationMode depthwiseActivationMode,
-    ActivationMode pointwiseActivationMode,
+    ActivationDesc depthwiseActivationDesc,
+    ActivationDesc pointwiseActivationDesc,
     Arch arch)
 {
     EE ret = SUCCESS;
@@ -229,8 +229,8 @@ EE depthwise_convolution_arm(TensorDesc inputDesc, void* input,
                                    biasDesc, (const F16*)bias,
                                    tmpBytes, tmp,
                                    outputDesc, (F16*)output,
-                                   depthwiseActivationMode,
-                                   pointwiseActivationMode,
+                                   depthwiseActivationDesc,
+                                   pointwiseActivationDesc,
                                    arch);
             break;
         }
@@ -244,8 +244,8 @@ EE depthwise_convolution_arm(TensorDesc inputDesc, void* input,
                                    biasDesc, (const F32*)bias,
                                    tmpBytes, tmp,
                                    outputDesc, (F32*)output,
-                                   depthwiseActivationMode,
-                                   pointwiseActivationMode,
+                                   depthwiseActivationDesc,
+                                   pointwiseActivationDesc,
                                    arch);
             break;
         }
@@ -259,8 +259,8 @@ EE depthwise_convolution_arm(TensorDesc inputDesc, void* input,
                                    biasDesc, (I32*)bias,
                                    tmpBytes, tmp,
                                    outputDesc, (I32*)output,
-                                   depthwiseActivationMode,
-                                   pointwiseActivationMode,
+                                   depthwiseActivationDesc,
+                                   pointwiseActivationDesc,
                                    arch);
             break;
         }

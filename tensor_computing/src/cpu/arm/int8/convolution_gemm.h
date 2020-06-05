@@ -27,16 +27,16 @@
 template<typename OT>
 EE convolution_gemm_A55(TensorDesc inputDesc, const void* input, F16* inputScale, TensorDesc filterDesc, const void* filter, F16* filterScale,
     ConvolutionDesc convDesc, TensorDesc biasDesc, const void* bias, U32 tmpBytes, void* tmp, TensorDesc outputDesc,
-    void* output, F16* outputScale, ActivationMode am);
+    void* output, F16* outputScale, ActivationDesc am);
 
 template<typename OT>
 EE convolution_gemm_A76(TensorDesc inputDesc, const void* input, F16* inputScale, TensorDesc filterDesc, const void* filter, F16* filterScale,
     ConvolutionDesc convDesc, TensorDesc biasDesc, const void* bias, U32 tmpBytes, void* tmp, TensorDesc outputDesc,
-    void* output, F16* outputScale, ActivationMode am);
+    void* output, F16* outputScale, ActivationDesc am);
 
 inline EE convolution_gemm(TensorDesc inputDesc, const void* input, F16* inputScale, TensorDesc filterDesc, const void* filter, F16* filterScale,
     ConvolutionDesc convDesc, TensorDesc biasDesc, const void* bias, U32 tmpBytes, void* tmp, TensorDesc outputDesc,
-    void* output, F16* outputScale, ActivationMode am, Arch arch)
+    void* output, F16* outputScale, ActivationDesc am, Arch arch)
 {
     EE ret = SUCCESS;
     switch (arch) {
@@ -64,8 +64,9 @@ inline EE convolution_gemm(TensorDesc inputDesc, const void* input, F16* inputSc
     return ret;
 }
 
-inline EE quantize_I32(U32 num_v, I32* out_d, I32 factor, F16 scale, INT8* out_q)
-{ // num_v is the number of q-form vectors (I32)
+inline EE quantize_I32(U32 num_v, I32* out_d, I32 factor, F32 scale, INT8* out_q)
+{
+    // num_v is the number of q-form vectors (I32)
     I32 *arr_d = out_d;
     I32 fact = factor;
     INT8 *arr_q = out_q;

@@ -26,21 +26,23 @@ int lstmTest(int argc, char **argv, DataType dt) {
 
     LSTMDesc lstmDesc;
     lstmDesc.numOutput = hDim;
+    lstmDesc.numProjection = 1024;
     lstmDesc.forgetBias = 1.0;
     lstmDesc.activationMode = ACTIVATION_TANH;
 
+    U32 column = (lstmDesc.numProjection > 0) ? lstmDesc.numProjection : lstmDesc.numOutput;
     TensorDesc inputDesc  = tensor3df(dt, DF_MTK, batch, step, xDim);
-    TensorDesc filterDesc = tensor2df(dt, DF_NK, 4*hDim, xDim+hDim);
-    TensorDesc biasDesc   = tensor1d(dt, hDim*4);
+    TensorDesc filterDesc = tensor2df(dt, DF_NK, 4*column, xDim+hDim);
+    TensorDesc biasDesc   = tensor1d(dt, column*4);
     U32 outputBytes, tmpBytes, ftmBytes;
     TensorDesc outputDesc;
     CHECK_STATUS(lstm_infer_output_size(inputDesc, filterDesc, lstmDesc, &outputDesc, &outputBytes));
     CHECK_STATUS(lstm_infer_forward_tmp_bytes(inputDesc, filterDesc, outputDesc, lstmDesc, &tmpBytes, UT_ARCH));
-    CHECK_STATUS(lstm_transform_filter_bytes(filterDesc, &ftmBytes, UT_ARCH));
+    CHECK_STATUS(lstm_transform_filter_bytes(filterDesc, lstmDesc, &ftmBytes, UT_ARCH));
 
     U32 inputLength  = batch * step * xDim;
-    U32 filterLength = (xDim + hDim) * hDim * 4;
-    U32 biasLength   = hDim * 4;
+    U32 filterLength = (xDim + hDim) * column * 4 + lstmDesc.numProjection * lstmDesc.numOutput;
+    U32 biasLength   = column * 4;
     U32 outputLength = outputBytes / bytesOf(dt);
     U8* input  = ut_input_v(inputLength, dt, UT_INIT_RANDOM);
     U8* filter = ut_input_v(filterLength, dt, UT_INIT_RANDOM);
@@ -51,7 +53,7 @@ int lstmTest(int argc, char **argv, DataType dt) {
     U8* ftm       = ut_input_v(ftmBytes/bytesOf(dt), dt, UT_INIT_ZERO);
 
     TensorDesc ftmDesc;
-    CHECK_STATUS(lstm_transform_filter(filterDesc, filter, &ftmDesc, ftm, xDim, hDim, UT_ARCH));
+    CHECK_STATUS(lstm_transform_filter(filterDesc, filter, lstmDesc, &ftmDesc, ftm, UT_ARCH));
 
     if (UT_CHECK) {
         CHECK_STATUS(lstm(inputDesc, input, ftmDesc, ftm, biasDesc, bias, tmpBytes, tmp, lstmDesc, outputDesc, output, UT_ARCH));
@@ -77,9 +79,9 @@ int lstmTest(int argc, char **argv, DataType dt) {
     sprintf(params, "%u (%u %u %u)=(%u %u)",
                     batch, step, xDim, hDim,
                     batch, hDim);
-    sprintf(buffer, "%20s, %80s", "Lstm", params);
+    sprintf(buffer, "%20s, %80s", "LSTM", params);
     double hxDim = hDim + xDim;
-    double ops = 1.0 * batch * step * ((2.0 * hxDim * hDim + hDim + hDim) * 4 + 5.0 * hDim);
+    double ops = 1.0 * batch * step * (2.0 * hxDim * column * 4 + column * 4 + lstmDesc.numProjection * lstmDesc.numOutput);
     ut_log(dt, buffer, ops, time);
 
     free(input);

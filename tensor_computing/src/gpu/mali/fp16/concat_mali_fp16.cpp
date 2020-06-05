@@ -75,44 +75,44 @@ inline EE concat_core_mali_fp16(GCLHandle_t             handle,
         sprintf(kernelName, "concat_%d%d", concatDim, en);
         Kernel kernel;
         CHECK_STATUS(gcl_create_kernel_binary(handle, kernelName, &kernel));
+        U32 gs[3] = {oh, ow, cmax + inputMem[nmax]->desc.stride[2]};
+        U32 ls[3] = {0, 0, 0};
+        U32 dim   = 3;
         switch(en) {
             case 1:
                 CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, iw_str, ih_off, iw_off,
-                             oh_str, ow_str, oh_off, ow_off, cmax, nmax, out_size, inbuf[0], outbuf));break;
+                             oh_str, ow_str, oh_off, ow_off, cmax, nmax, out_size, gs[0], gs[1], inbuf[0], outbuf));break;
             case 2:
                 CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, iw_str, ih_off, iw_off,
-                             oh_str, ow_str, oh_off, ow_off, cmax, nmax, out_size, inbuf[0], c[0], inbuf[1], outbuf));break;
+                             oh_str, ow_str, oh_off, ow_off, cmax, nmax, out_size, gs[0], gs[1], inbuf[0], c[0], inbuf[1], outbuf));break;
             case 3: 
                 CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, iw_str, ih_off, iw_off,
-                             oh_str, ow_str, oh_off, ow_off, cmax, nmax, out_size, inbuf[0], c[0], inbuf[1], c[1], inbuf[2], 
+                             oh_str, ow_str, oh_off, ow_off, cmax, nmax, out_size, gs[0], gs[1], inbuf[0], c[0], inbuf[1], c[1], inbuf[2], 
                              outbuf));break;
             case 4: 
                 CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, iw_str, ih_off, iw_off,
-                             oh_str, ow_str, oh_off, ow_off, cmax, nmax, out_size, inbuf[0], c[0], inbuf[1], c[1], inbuf[2], 
+                             oh_str, ow_str, oh_off, ow_off, cmax, nmax, out_size, gs[0], gs[1], inbuf[0], c[0], inbuf[1], c[1], inbuf[2], 
                              c[2], inbuf[3], outbuf));break;
             case 5: 
                 CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, iw_str, ih_off, iw_off,
-                             oh_str, ow_str, oh_off, ow_off, cmax, nmax, out_size, inbuf[0], c[0], inbuf[1], c[1], inbuf[2], 
+                             oh_str, ow_str, oh_off, ow_off, cmax, nmax, out_size, gs[0], gs[1], inbuf[0], c[0], inbuf[1], c[1], inbuf[2], 
                              c[2], inbuf[3], c[3], inbuf[4], outbuf));break;
             case 6: 
                 CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, iw_str, ih_off, iw_off,
-                             oh_str, ow_str, oh_off, ow_off, cmax, nmax, out_size, inbuf[0], c[0], inbuf[1], c[1], inbuf[2], 
+                             oh_str, ow_str, oh_off, ow_off, cmax, nmax, out_size, gs[0], gs[1], inbuf[0], c[0], inbuf[1], c[1], inbuf[2], 
                              c[2], inbuf[3], c[3], inbuf[4], c[4], inbuf[5], outbuf));break;
             case 7: 
                 CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, iw_str, ih_off, iw_off,
-                             oh_str, ow_str, oh_off, ow_off, cmax, nmax, out_size, inbuf[0], c[0], inbuf[1], c[1], inbuf[2], 
+                             oh_str, ow_str, oh_off, ow_off, cmax, nmax, out_size, gs[0], gs[1], inbuf[0], c[0], inbuf[1], c[1], inbuf[2], 
                              c[2], inbuf[3], c[3], inbuf[4], c[4], inbuf[5], c[5], inbuf[6], outbuf));break;
             case 8: 
                 CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, iw_str, ih_off, iw_off,
-                             oh_str, ow_str, oh_off, ow_off, cmax, nmax, out_size, inbuf[0], c[0], inbuf[1], c[1], inbuf[2], 
+                             oh_str, ow_str, oh_off, ow_off, cmax, nmax, out_size, gs[0], gs[1], inbuf[0], c[0], inbuf[1], c[1], inbuf[2], 
                              c[2], inbuf[3], c[3], inbuf[4], c[4], inbuf[5], c[5], inbuf[6], c[6], inbuf[7], outbuf));break;
             default:
                 return NOT_SUPPORTED;
         }
-        U32 gs[3] = {oh, ow, cmax + inputMem[nmax]->desc.stride[2]};
-        U32 ls[3] = {16, 16, 1};
-        U32 dim   = 3;
-        gcl_set_kernelVec(handle, kernel, dim, gs, ls);
+        gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
         out_size += ow_str * oh_str * gs[2] * 4;
 #ifdef _DEBUG
         CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));

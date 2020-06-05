@@ -27,26 +27,51 @@ EE concat_infer_output_size_mali(std::vector<TensorDesc> inputDesc,
                                  GCLMemDesc_t            gclmemOutputDesc){
     /*tensorDesc record cpu org data format info*/
     /*gclmemDesc record gpu trans data format info*/
-    *outputDesc = inputDesc[0];
+    if(outputDesc) *outputDesc = inputDesc[0];
     U32 sumDimSize = 0;
-    for(U32 i = 0; i < inputDesc.size(); i++) sumDimSize += inputDesc[0].dims[3 - concatDim];
+    for(U32 i = 0; i < inputDesc.size(); i++) sumDimSize += inputDesc[i].dims[3 - concatDim];
     if(concatDim == 1) {
-         (*outputDesc).dims[2] = sumDimSize;
-         DataType   idt;
-         DataFormat idf;
-         U32 iw, ih, ic, in;
-         sumDimSize = 0;
-         for(U32 i = 0; i < inputDesc.size(); i++){
-             tensorSelectGet(inputDesc[i],  &idt, &idf, &in, &ic, &ih, &iw);
-             CHECK_STATUS(infer_gclmem_desc_ncwhc4(iw, ih, ic, 0, 0, iw, ih, ic, idt, idt, &gclmemInputDesc[i], gclmemOutputDesc));
-             sumDimSize += (ic + 3) / 4;
+        if(outputDesc) (*outputDesc).dims[2] = sumDimSize;
+        DataType   idt;
+        DataFormat idf;
+        U32 iw, ih, ic, in;
+        sumDimSize = 0;
+        if(gclmemInputDesc && gclmemOutputDesc) {
+            for(U32 i = 0; i < inputDesc.size(); i++){
+                tensorSelectGet(inputDesc[i],  &idt, &idf, &in, &ic, &ih, &iw);
+                CHECK_STATUS(infer_gclmem_desc_ncwhc4(iw, ih, ic, 0, 0, iw, ih, ic, idt, idt, &gclmemInputDesc[i], gclmemOutputDesc));
+                sumDimSize += (ic + 3) / 4;
+            }
+            U32 s0 =  gclmemOutputDesc->stride[0];
+            U32 s1 =  gclmemOutputDesc->stride[1];
+            U32 s2 =  sumDimSize;
+            gclmemOutputDesc->stride[2] = s2;
+            gclmemOutputDesc->num = s0 * s1 * s2 * 4;
+            gclmemOutputDesc->byteSize = s0 * s1 * s2 * 4 * bytesOf(idt);
+
+            U32 off0, off1, num, byteSize;
+            s0 = gclmemInputDesc[0].stride[0];
+            s1 = gclmemInputDesc[0].stride[1];
+            off0 = gclmemInputDesc[0].offset[0];
+            off1 = gclmemInputDesc[0].offset[1];
+            for(U32 i = 1; i < inputDesc.size(); i++) {
+                s0 = (s0 >= gclmemInputDesc[i].stride[0]) ? s0 : gclmemInputDesc[i].stride[0];
+                s1 = (s1 >= gclmemInputDesc[i].stride[1]) ? s1 : gclmemInputDesc[i].stride[1];
+                off0 = (off0 >= gclmemInputDesc[i].offset[0]) ? off0 : gclmemInputDesc[i].offset[0];
+                off1 = (off1 >= gclmemInputDesc[i].offset[1]) ? off1 : gclmemInputDesc[i].offset[1];
+            }
+            for(U32 i = 0; i < inputDesc.size(); i++) {
+                s2 = gclmemInputDesc[i].stride[2];
+                num = s0 * s1 * s2 * 4;
+                byteSize = num * bytesOf(idt);
+                gclmemInputDesc[i].stride[0] = s0;
+                gclmemInputDesc[i].stride[1] = s1;
+                gclmemInputDesc[i].offset[0] = off0;
+                gclmemInputDesc[i].offset[1] = off1;
+                gclmemInputDesc[i].num       = num;
+                gclmemInputDesc[i].byteSize  = byteSize;
+            }
          }
-         U32 s0 =  gclmemOutputDesc->stride[0];
-         U32 s1 =  gclmemOutputDesc->stride[1];
-         U32 s2 =  sumDimSize;
-         gclmemOutputDesc->stride[2] = s2;
-         gclmemOutputDesc->num = s0 * s1 * s2 * 4;
-         gclmemOutputDesc->byteSize = s0 * s1 * s2 * 4 * sizeof(idt);
          return SUCCESS;
     }
     return NOT_SUPPORTED; 

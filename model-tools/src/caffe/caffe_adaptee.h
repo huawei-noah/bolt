@@ -19,6 +19,7 @@
 #include <fstream>
 #include <iostream>
 #include <map>
+#include <vector>
 #include <google/protobuf/io/coded_stream.h>
 #include <google/protobuf/io/zero_copy_stream_impl.h>
 #include <google/protobuf/text_format.h>
@@ -30,6 +31,7 @@
 #include "model_serialize_deserialize.hpp"
 #include "model_tools.h"
 #include "model_adaptee.h"
+#include "ut_util.h"
 
 class CaffeAdaptee: public ModelAdaptee {
 public:
@@ -129,8 +131,8 @@ protected:
             return OT_Squeeze;
         } else if (inputType == "Unsqueeze") {
             return OT_Unsqueeze;
-        } else if (inputType == "AxisMean") {
-            return OT_AxisMean;
+        } else if (inputType == "Reduction") {
+            return OT_Reduction;
         } else if (inputType == "ArgMax") {
             return OT_ArgMax;
         } else if (inputType == "PreAllocatedMemory") {
@@ -145,9 +147,29 @@ protected:
             return OT_Repeat;
         } else if (inputType == "Interp") {
             return OT_Interp;
-        } else {
-            std::cout << "[INFO] encounter unsupported operator " << inputType << std::endl;
+        } else if (inputType == "Jump") {
+            return OT_Jump;
+        } else if (inputType == "AttentionMask") {
+            return OT_AttentionMask;
+        } else if (inputType == "RelativePositionEmbed") {
+            return OT_RelativePositionEmbedding;
+        } else if (inputType == "RelativeShift") {
+            return OT_RelativeShift;
+        } else if (inputType == "Dropout") {
             return OT_None;
+        } else if (inputType == "Flatten") {
+            return OT_Flatten;
+        } else if (inputType == "Permute") {
+            return OT_Permute;
+        } else if (inputType == "Clip") {
+            return OT_Clip;
+        } else if (inputType == "PriorBox") {
+            return OT_PriorBox;
+        } else if (inputType == "DetectionOutput") {
+            return OT_DetectionOutput;  
+        } else {
+            std::cerr << "[ERROR] encounter unsupported operator " << inputType << std::endl;
+            exit(1);
         }
     }
 
@@ -188,30 +210,62 @@ protected:
         }
     }
 
-    void net_copy_blob(WeightSpec* wsPtr, int weightIndex, caffe::NetParameter& netParams, int netLayerId, int blobNum)
+    void net_copy_blob(WeightSpec* wsPtr, int weightIndex, caffe::NetParameter& netParams,
+        int netLayerId, int blobNum, OperatorType operatorType)
     {
         wsPtr[weightIndex].mdt = DT_F32;
         wsPtr[weightIndex].bytes_of_weight = 0;
         wsPtr[weightIndex].weight = nullptr;
         wsPtr[weightIndex].bytes_of_vec = 0;
         wsPtr[weightIndex].vec = nullptr;
-    
+
+        std::vector<std::pair<caffe::BlobProto, U32>> weights;
+        std::vector<std::pair<caffe::BlobProto, U32>> biases;
+        // Batchnorm may have 3 blobs, but the third blob can be ignored
+        if (operatorType == OT_BatchNorm) {
+            if (blobNum >= 3)
+                blobNum = 2;
+        }
         if (blobNum >= 1) {
             caffe::BlobProto blob0 = net_get_blob(netParams, netLayerId, 0);
             U32 elemSize = sizeof(*(blob0.data().data()));
             CHECK_REQUIREMENT(elemSize == bytesOf(wsPtr[weightIndex].mdt));
-            wsPtr[weightIndex].bytes_of_weight = elemSize * blob0.data_size();
-            wsPtr[weightIndex].weight = (U8*)mt_new_storage(wsPtr[weightIndex].bytes_of_weight);
-            memcpy(wsPtr[weightIndex].weight, (U8*)blob0.data().data(), wsPtr[weightIndex].bytes_of_weight);
+            U32 blobSize = elemSize * blob0.data_size();
+            wsPtr[weightIndex].bytes_of_weight += blobSize;
+            weights.push_back(std::make_pair(blob0, blobSize));
         }
         if (blobNum >= 2) {
             caffe::BlobProto blob1 = net_get_blob(netParams, netLayerId, 1);
+            U32 elemSize = sizeof(*(blob1.data().data()));
             CHECK_REQUIREMENT(sizeof(*(blob1.data().data())) == bytesOf(wsPtr[weightIndex].mdt));
-            wsPtr[weightIndex].bytes_of_vec = sizeof(*(blob1.data().data())) * blob1.data_size();
-            wsPtr[weightIndex].vec = (U8*)mt_new_storage(wsPtr[weightIndex].bytes_of_vec);
-            memcpy(wsPtr[weightIndex].vec, (U8*)blob1.data().data(), wsPtr[weightIndex].bytes_of_vec);
+            U32 blobSize = elemSize * blob1.data_size();
+            wsPtr[weightIndex].bytes_of_vec += blobSize;
+            biases.push_back(std::make_pair(blob1, blobSize));
         }
-        // Batchnorm may have 3 blobs, but the third blob can be ignored
+        if (blobNum >= 3) {
+            caffe::BlobProto blob2 = net_get_blob(netParams, netLayerId, 2);
+            U32 elemSize = sizeof(*(blob2.data().data()));
+            CHECK_REQUIREMENT(elemSize == bytesOf(wsPtr[weightIndex].mdt));
+            U32 blobSize = elemSize * blob2.data_size();
+            wsPtr[weightIndex].bytes_of_weight += blobSize;
+            weights.push_back(std::make_pair(blob2, blobSize));
+        }
+        if (weights.size() > 0) {
+            wsPtr[weightIndex].weight = (U8*)mt_new_storage(wsPtr[weightIndex].bytes_of_weight);
+            U8 *ptr = wsPtr[weightIndex].weight;
+            for (U32 i = 0; i < weights.size(); i++) {
+                memcpy(ptr, weights[i].first.data().data(), weights[i].second);
+                ptr += weights[i].second;
+            }
+        }
+        if (biases.size() > 0) {
+            wsPtr[weightIndex].vec = (U8*)mt_new_storage(wsPtr[weightIndex].bytes_of_vec);
+            U8 *ptr = wsPtr[weightIndex].vec;
+            for (U32 i = 0; i < biases.size(); i++) {
+                memcpy(ptr, biases[i].first.data().data(), biases[i].second);
+                ptr += biases[i].second;
+            }
+        }
     }
 
     EE parse_file(std::string dir, std::string mfn) override {
@@ -236,7 +290,7 @@ protected:
     // the first loop can specify the input info and output info
     EE adapt_operators(ModelSpec* ms) override
     {
-	    EE ret = SUCCESS;
+        EE ret = SUCCESS;
         // model_name
         str_copy(ms->model_name, proto.name().c_str(), proto.name().length());
         ms->dt = DT_F32; // set default value
@@ -246,6 +300,8 @@ protected:
         ms->ops = opsPtr;
         for (I32 i = 0; i < ms->num_operator_specs; i++) {
             ms->ops[i].tensor_positions = nullptr;
+            ms->ops[i].num_quant_feature = 0;
+            ms->ops[i].feature_scale = nullptr;
         }
 
         int inputsNumber = 0;
@@ -271,8 +327,10 @@ protected:
                 opsPtr[i].input_tensors_name[j] = (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
                 str_copy(opsPtr[i].input_tensors_name[j], layer.bottom(j).c_str(), layer.bottom(j).length());
                 if (outputCounts.find(layer.bottom(j)) == outputCounts.end()) {
-                    std::cerr << "[ERROR] encounter no output as this operator's input" << std::endl;
-                    exit(1);
+                    if (opsPtr[i].type != OT_Jump) {
+                        std::cerr << "[ERROR] encounter no output as this operator's input " << layer.bottom(j) << std::endl;
+                        exit(1);
+                    }
                 } else {
                     outputCounts[layer.bottom(j)]--;
                 }
@@ -293,7 +351,13 @@ protected:
             ParameterSpec curPs;
             OperatorType curType = convert_caffe_type(layer.type());     
             ret = adapt_operator(curType, &curPs);
-	        ms->ops[i].ps = curPs;
+            ms->ops[i].ps = curPs;
+
+            if (layer.type() == "Flatten") {
+                opsPtr[i].type = OT_Reshape;
+            } else if (layer.type() == "Permute") {
+                opsPtr[i].type = OT_Transpose;
+            }
         }
 
         inputsNumber = (inputsNumber > proto.input_size()) ? inputsNumber : proto.input_size();
@@ -302,7 +366,7 @@ protected:
         ms->input_dims  = (TensorDesc*)mt_new_storage(sizeof(TensorDesc) * inputsNumber);
         for (int i = 0; i < inputsNumber; i++) {
             ms->input_names[i] = (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
-     
+
             if (proto.input_size() > 0) {
                 str_copy(ms->input_names[i], proto.input(i).c_str(), proto.input(i).length());
                 switch (proto.input_dim_size()) {
@@ -312,7 +376,7 @@ protected:
                                                       proto.input_dim(1));
                         break;
                     case 3:
-                        ms->input_dims[i] = tensor4df(DT_F32, DF_NCHW, 1, 
+                        ms->input_dims[i] = tensor3df(DT_F32, DF_MTK,
                                                       proto.input_dim(0), 
                                                       proto.input_dim(1), 
                                                       proto.input_dim(2));
@@ -339,7 +403,7 @@ protected:
                                                       proto.input_shape(i).dim(1));
                         break;
                     case 3:
-                        ms->input_dims[i] = tensor4df(DT_F32, DF_NCHW, 1,
+                        ms->input_dims[i] = tensor3df(DT_F32, DF_NCHW,
                                                       proto.input_shape(i).dim(0),
                                                       proto.input_shape(i).dim(1),
                                                       proto.input_shape(i).dim(2));
@@ -379,12 +443,18 @@ protected:
         return ret;
     }
 
-    EE adapt_weights(ModelSpec* ms) override {
-	EE ret = SUCCESS;
+    EE adapt_weights(ModelSpec* ms) override
+    {
+        EE ret = SUCCESS;
         WeightSpec* wsPtr = (WeightSpec*)mt_new_storage(sizeof(WeightSpec) * ms->num_weight_specs);
+        for (int j = 0; j < ms->num_weight_specs; j++) {
+            wsPtr[j].num_quant_scale = 0;
+            wsPtr[j].weight_scale = nullptr;
+        }
         ms->ws = wsPtr;
         int inNamesIndex = 0;
         int weightIndex = 0;
+
         for (int i = 0; i < proto.layer_size(); i++) {
             const caffe::LayerParameter layer = proto.layer(i);
             std::string layerName = layer.name();
@@ -399,7 +469,7 @@ protected:
                                                                    layer.input_param().shape(0).dim(1));
                         break;
                     case 3:
-                        ms->input_dims[inNamesIndex] = tensor4df(DT_F32, DF_NCHW, 1,
+                        ms->input_dims[inNamesIndex] = tensor3df(DT_F32, DF_MTK,
                                                                    layer.input_param().shape(0).dim(0),
                                                                    layer.input_param().shape(0).dim(1),
                                                                    layer.input_param().shape(0).dim(2));
@@ -422,12 +492,20 @@ protected:
                    || layerType == "Embed"
                    || layerType == "LSTM"
                    || layerType == "SharedWeight"
+                   || layerType == "RelativePositionEmbed"
                    || layerType == "Deconvolution") {
                 int netLayerId = net_search_layerId(net, layerName);
                 CHECK_REQUIREMENT(netLayerId >= 0);
                 str_copy(wsPtr[weightIndex].op_name, layerName.c_str(), layerName.length());
                 U32 blobNum = net_get_blobs_size(net, netLayerId);
-                net_copy_blob(wsPtr, weightIndex, net, netLayerId, blobNum);
+                net_copy_blob(wsPtr, weightIndex, net, netLayerId, blobNum, convert_caffe_type(layerType));
+
+                if (layerType == "BatchNorm" && blobNum > 2) {
+                    caffe::BlobProto blob2 = net_get_blob(net, netLayerId, 2);
+                    float cur_gama = blob2.data().data()[0] == 0 ? 1.0 : 1.0 / blob2.data().data()[0];
+                    ms->ops[i].ps.bn_spec.gama = cur_gama;
+                }
+
                 weightIndex++;
             }else if (layerType == "Scale" || layerType == "LayerNorm") {
                 int netLayerId = net_search_layerId(net, layerName);
@@ -435,12 +513,12 @@ protected:
                 str_copy(wsPtr[weightIndex].op_name, layerName.c_str(), layerName.length());
                 U32 blobNum = net_get_blobs_size(net, netLayerId);
                 if (layer.bottom_size() == 1) {
-                    CHECK_REQUIREMENT(blobNum == 2);
+                    CHECK_REQUIREMENT(blobNum >= 1);
                 }
                 else {
                     CHECK_REQUIREMENT(blobNum == 0);
                 }
-                net_copy_blob(wsPtr, weightIndex, net, netLayerId, blobNum);
+                net_copy_blob(wsPtr, weightIndex, net, netLayerId, blobNum, convert_caffe_type(layerType));
                 weightIndex++;
             }
         }
@@ -455,6 +533,7 @@ protected:
     ParameterSpec adapt_Interp() override
     {
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         InterpParamSpec interpPs;
         auto caffeInterpParam = layer.interp_param();
         interpPs.height = caffeInterpParam.height();
@@ -465,15 +544,19 @@ protected:
 
     ParameterSpec adapt_Conv() override {
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         weightNumber = weightNumber + 1;
         ConvolutionParamSpec cps;
-        cps.num_kernels = layer.convolution_param().num_output();
+        initialization_zero(&cps, sizeof(cps));
+        cps.num_outputs = layer.convolution_param().num_output();
         if (layer.convolution_param().has_kernel_w() && layer.convolution_param().has_kernel_h()) {
             cps.kernel_size_w = layer.convolution_param().kernel_w();
             cps.kernel_size_h = layer.convolution_param().kernel_h();
         } else {
-            cps.kernel_size_h = layer.convolution_param().kernel_size(0);
-            cps.kernel_size_w = cps.kernel_size_h;
+            cps.kernel_size_h = (layer.convolution_param().kernel_size_size() > 0) ? \
+                layer.convolution_param().kernel_size(0) : 1;
+            cps.kernel_size_w = (layer.convolution_param().kernel_size_size() > 1) ? \
+                layer.convolution_param().kernel_size(1) : cps.kernel_size_h;
         }
         
         cps.group = (layer.convolution_param().has_group()) ? layer.convolution_param().group() : 1;  // group[default=1]
@@ -481,8 +564,8 @@ protected:
         cps.dilatedRate_h = (layer.convolution_param().dilation_size() != 0) ? layer.convolution_param().dilation(0) : 1;
         cps.dilatedRate_w = cps.dilatedRate_h;
 
-        if (cps.group != cps.num_kernels) {
-            std::cout << "[INFO] Convolution group != num_kernels" << std::endl;
+        if (cps.group != cps.num_outputs) {
+            std::cout << "[INFO] Convolution group != num_outputs" << std::endl;
             cps.group = 1;
         } else {
             std::cout << "[INFO] Depthwise Convolution" << std::endl;
@@ -502,8 +585,10 @@ protected:
             cps.stride_w = layer.convolution_param().stride_w();
             cps.stride_h = layer.convolution_param().stride_h();
         } else {
-            cps.stride_h = (layer.convolution_param().stride_size() != 0) ? layer.convolution_param().stride(0) : 1;  // stride[default=1]
-            cps.stride_w = cps.stride_h;
+            cps.stride_h = (layer.convolution_param().stride_size() != 0) ? \
+                layer.convolution_param().stride(0) : 1;  // stride[default=1]
+            cps.stride_w = (layer.convolution_param().stride_size() > 1) ? \
+                layer.convolution_param().stride(1) : cps.stride_h;
         }
         if (layer.convolution_param().has_pad_w() && layer.convolution_param().has_pad_h()) {
             cps.padding_left = layer.convolution_param().pad_w();
@@ -511,10 +596,10 @@ protected:
             cps.padding_top = layer.convolution_param().pad_h();
             cps.padding_bottom = cps.padding_top;
         } else {
-            cps.padding_top = (layer.convolution_param().pad_size() != 0) ? layer.convolution_param().pad(0) : 0;  // pad[default=0]
-            cps.padding_bottom = cps.padding_top;
-            cps.padding_left = cps.padding_top;
-            cps.padding_right = cps.padding_top;
+            cps.padding_top    = (layer.convolution_param().pad_size() > 0) ? layer.convolution_param().pad(0) : 0;
+            cps.padding_bottom = (layer.convolution_param().pad_size() > 1) ? layer.convolution_param().pad(1) : cps.padding_top;
+            cps.padding_left   = (layer.convolution_param().pad_size() > 2) ? layer.convolution_param().pad(2) : cps.padding_top;
+            cps.padding_right  = (layer.convolution_param().pad_size() > 3) ? layer.convolution_param().pad(3) : cps.padding_top;
         }
         curPs.conv_spec = cps;
         return curPs;
@@ -523,9 +608,10 @@ protected:
     ParameterSpec adapt_Deconvolution() override
     {
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         weightNumber = weightNumber + 1;
         ConvolutionParamSpec cps;
-        cps.num_kernels = layer.convolution_param().num_output();
+        cps.num_outputs = layer.convolution_param().num_output();
         if (layer.convolution_param().has_kernel_w() && layer.convolution_param().has_kernel_h()) {
             cps.kernel_size_w = layer.convolution_param().kernel_w();
             cps.kernel_size_h = layer.convolution_param().kernel_h();
@@ -569,7 +655,9 @@ protected:
 
     ParameterSpec adapt_Pooling() override {
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         PoolingParamSpec pps;
+        initialization_zero(&pps, sizeof(pps));
         if (layer.pooling_param().has_kernel_w() && layer.pooling_param().has_kernel_h()) {
             pps.kernel_size_w = layer.pooling_param().kernel_w();
             pps.kernel_size_h = layer.pooling_param().kernel_h();
@@ -630,32 +718,43 @@ protected:
 
     ParameterSpec adapt_Fc() override {
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         weightNumber = weightNumber + 1; 
         FullyConnectedParamSpec ips;
         ips.num_outputs = layer.inner_product_param().num_output();
+        ips.num_slices = 1;
+        ips.slice_point[0] = ips.num_outputs;
         curPs.fc_spec = ips;
         return curPs;   
     }
 
     ParameterSpec adapt_BatchNorm() override {   
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         weightNumber = weightNumber + 1;
         BatchNormParamSpec bnps;
+        bnps.axis = layer.batch_norm_param().axis();
         bnps.eps = layer.batch_norm_param().eps();
+        bnps.gama = 1;
+        bnps.momentum = layer.batch_norm_param().moving_average_fraction();
         curPs.bn_spec = bnps;
         return curPs; 
     }
 
     ParameterSpec adapt_LayerNorm() override {
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         weightNumber = weightNumber + 1;
         return curPs;
     }
 
     ParameterSpec adapt_Eltwise() override{
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         EltwiseParamSpec eps;
+        initialization_zero(&eps, sizeof(eps));
         EltwiseSumSpec ess;
+        initialization_zero(&ess, sizeof(ess));
 
         auto caffeEltwiseParam = layer.eltwise_param();
         auto op = caffeEltwiseParam.operation();
@@ -689,6 +788,7 @@ protected:
 
     ParameterSpec adapt_Embedding() override {
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         weightNumber = weightNumber + 1;
         EmbedParamSpec embedPs;
         auto caffeEmbedParam = layer.embed_param();
@@ -702,6 +802,7 @@ protected:
 
     ParameterSpec adapt_Multiply() override {
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         MultiplyParamSpec multiplyPs;
         auto caffeMultiplyParam = layer.multiply_param();
         multiplyPs.scale = caffeMultiplyParam.scale();
@@ -710,8 +811,10 @@ protected:
         return curPs;
     }
 
-    ParameterSpec adapt_Reshape() override { 
+    ParameterSpec adapt_Reshape() override
+    { 
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         ReshapeParamSpec reshapePs;
         auto caffeReshapeParam = layer.reshape_param();
         reshapePs.shape_size = caffeReshapeParam.shape().dim_size();
@@ -724,8 +827,27 @@ protected:
         return curPs;
     }
 
+    ParameterSpec adapt_Flatten() override
+    { 
+        ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
+        ReshapeParamSpec reshapePs;
+        auto caffeFlattenParam = layer.flatten_param();
+        CHECK_REQUIREMENT(-1 == caffeFlattenParam.end_axis());  // Currently compute as reshape layer
+        reshapePs.shape_size = caffeFlattenParam.axis() + 1;
+        for (I32 iter = 0; iter < reshapePs.shape_size - 1; iter++) {
+            reshapePs.shape_dims[iter] = 0;
+        }
+        reshapePs.shape_dims[reshapePs.shape_size - 1] = -1;
+        reshapePs.axis = 0;
+        reshapePs.num_axes = -1;
+        curPs.reshape_spec = reshapePs;
+        return curPs;
+    }
+
     ParameterSpec adapt_Slice() override {
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         SliceParamSpec slicePs;
         auto caffeSliceParam = layer.slice_param();
         for (I32 iter = 0; iter < caffeSliceParam.slice_point().size(); iter++) {
@@ -737,8 +859,10 @@ protected:
         return curPs;
     }
 
-    ParameterSpec adapt_Transpose() override {
+    ParameterSpec adapt_Transpose() override
+    {
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         TransposeParamSpec transPs;
         auto caffeTransposeParam = layer.transpose_param();
         for (I32 iter=0; iter < caffeTransposeParam.dim().dim_size(); iter++) {
@@ -749,8 +873,22 @@ protected:
         return curPs;
     }
 
+    ParameterSpec adapt_Permute() override {
+        ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
+        TransposeParamSpec transPs;
+        auto caffePermuteParam = layer.permute_param();
+        for (I32 iter=0; iter < caffePermuteParam.order().size(); iter++) {
+            transPs.trans_dims[iter] = caffePermuteParam.order(iter);
+        }
+        transPs.trans_size = caffePermuteParam.order().size();
+        curPs.transpose_spec = transPs;
+        return curPs;
+    }
+
     ParameterSpec adapt_Attention() override {    
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         AttentionParamSpec attentionPs;
         auto caffe_attention_param = layer.attention_param();
         attentionPs.num_heads  = caffe_attention_param.num_heads();
@@ -762,32 +900,59 @@ protected:
     
     ParameterSpec adapt_LSTM() override {
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         weightNumber = weightNumber + 1;
         LSTMParamSpec lstmPs;
         auto caffeLSTMParam = layer.lstm_param();
         lstmPs.num_output = caffeLSTMParam.num_output();
         lstmPs.steps = caffeLSTMParam.steps();
+        lstmPs.num_projection = caffeLSTMParam.num_proj();
+        lstmPs.zoneout_cell = caffeLSTMParam.zoneout_cell();
+        lstmPs.zoneout_output = caffeLSTMParam.zoneout_output();
         curPs.lstm_spec = lstmPs;
         return curPs;
     }
 
     ParameterSpec adapt_Scale() override {
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         weightNumber = weightNumber + 1;
+        ScaleParamSpec scalePs;
+        auto caffeScaleParam = layer.scale_param();
+        scalePs.axis = caffeScaleParam.axis();
+        curPs.scale_spec = scalePs;
         return curPs;
     }
 
-    ParameterSpec adapt_AxisMean() override {
+    ParameterSpec adapt_Reduction() override {
         ParameterSpec curPs;
-        AxisMeanParamSpec axisMeanPs;
-        auto caffeAxisMeanParam = layer.axis_mean_param();
-        axisMeanPs.axis = caffeAxisMeanParam.axis();
-        curPs.axis_mean_spec = axisMeanPs;
+        initialization_zero(&curPs, sizeof(curPs));
+        ReductionParamSpec reductionPs;
+        auto caffeReductionParam = layer.reduction_param();
+        reductionPs.axis = caffeReductionParam.axis();
+        auto op = caffeReductionParam.operation();
+        switch (op)
+        {
+            case caffe::ReductionParameter_ReductionOp_SUM:
+                reductionPs.reduction_mode = REDUCTION_SUM;
+                break;
+            case caffe::ReductionParameter_ReductionOp_MEAN:
+                reductionPs.reduction_mode = REDUCTION_MEAN;
+                break;
+            default: {
+                std::cerr << "[ERROR] unknown reduction mode" << std::endl;
+                exit(-1);
+            }
+        }
+        reductionPs.coeff = caffeReductionParam.coeff();
+        reductionPs.keep_dim = caffeReductionParam.keep_dim();
+        curPs.reduction_spec = reductionPs;
         return curPs;
     }
 
     ParameterSpec adapt_Squeeze() override {
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         SqueezeParamSpec squeezePs;
         auto caffeSqueezeParam = layer.squeeze_param();
         squeezePs.axis = caffeSqueezeParam.axis();
@@ -798,6 +963,7 @@ protected:
 
     ParameterSpec adapt_Unsqueeze() override {
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         UnsqueezeParamSpec unsqueezePs;
         auto caffeUnsqueezeParam = layer.unsqueeze_param();
         unsqueezePs.axis = caffeUnsqueezeParam.axis();
@@ -808,6 +974,7 @@ protected:
 
     ParameterSpec adapt_ArgMax() override {
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         ArgMaxParamSpec argmaxPs;
         auto caffeArgMaxParam = layer.argmax_param();
         argmaxPs.axis = caffeArgMaxParam.axis();
@@ -817,15 +984,18 @@ protected:
 
     ParameterSpec adapt_Repeat() override {
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         RepeatParamSpec repeatPs;
         auto caffeRepeatParam = layer.repeat_param();
         repeatPs.loops = caffeRepeatParam.loops();
+        repeatPs.axis = caffeRepeatParam.axis();
         curPs.repeat_spec = repeatPs;
         return curPs;
     }
 
     ParameterSpec adapt_Check() override {
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         CheckParamSpec checkPs;
         auto caffeCheckParam = layer.check_param();
         auto op = caffeCheckParam.operation();
@@ -833,6 +1003,12 @@ protected:
         {
             case caffe::CheckParameter_CheckOp_EQUAL:
                 checkPs.check_mode = CHECK_EQUAL;
+                break;
+            case caffe::CheckParameter_CheckOp_GREAT:
+                checkPs.check_mode = CHECK_GREAT;
+                break;
+            case caffe::CheckParameter_CheckOp_GREATEQUAL:
+                checkPs.check_mode = CHECK_GREATEQUAL;
                 break;
             default: {
                 std::cerr << "[ERROR] unknown check mode" << std::endl;
@@ -845,6 +1021,7 @@ protected:
 
     ParameterSpec adapt_PreAllocatedMemory() override {
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         PreAllocatedMemoryParamSpec preAllocatedMemoryPs;
         auto caffePreAllocatedMemoryParam = layer.preallocated_memory_param();
         preAllocatedMemoryPs.desc.nDims = caffePreAllocatedMemoryParam.shape().dim_size();
@@ -875,6 +1052,7 @@ protected:
 
     ParameterSpec adapt_SharedWeight() override {
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         weightNumber = weightNumber + 1;
         SharedWeightParamSpec sharedWeightPs;
         auto caffeSharedWeightParam = layer.shared_weight_param();
@@ -906,6 +1084,7 @@ protected:
 
     ParameterSpec adapt_Copy() override {
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         CopyParamSpec copyPs;
         auto caffeCopyParam = layer.copy_param();
         copyPs.src_dims[0] = caffeCopyParam.src_batch_stride();
@@ -921,11 +1100,179 @@ protected:
 
     ParameterSpec adapt_MatMul() override {
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         MatMulParamSpec matmulPs;
         auto caffeMatMulParam = layer.matmul_param();
         matmulPs.transpose_a = caffeMatMulParam.transpose_a();
         matmulPs.transpose_b = caffeMatMulParam.transpose_b();
         curPs.matmul_spec = matmulPs;
+        return curPs;
+    }
+
+    ParameterSpec adapt_AttentionMask() override {
+        ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
+        AttentionMaskParamSpec attentionMaskPs;
+        auto caffeAttentionMaskParam = layer.attention_mask_param();
+        attentionMaskPs.attention_length = caffeAttentionMaskParam.attention_length();
+        attentionMaskPs.same_length = caffeAttentionMaskParam.same_length();
+        attentionMaskPs.mask = caffeAttentionMaskParam.mask();
+        curPs.attention_mask_spec = attentionMaskPs;
+        return curPs;
+    }
+
+    ParameterSpec adapt_RelativePositionEmbedding() override {
+        ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
+        weightNumber = weightNumber + 1;
+        RelativePositionEmbedParamSpec relativePositionEmbedPs;
+        auto caffeRelativePositionEmbedParam = layer.relative_position_embed_param();
+        relativePositionEmbedPs.input_dim  = caffeRelativePositionEmbedParam.input_dim();
+        relativePositionEmbedPs.num_output = caffeRelativePositionEmbedParam.num_output();
+        relativePositionEmbedPs.bias_term  = caffeRelativePositionEmbedParam.bias_term() == 0 ? false: true;
+        relativePositionEmbedPs.transpose  = caffeRelativePositionEmbedParam.transpose() == 0 ? false : true;
+        relativePositionEmbedPs.axis       = caffeRelativePositionEmbedParam.axis();
+        curPs.relative_position_embed_spec = relativePositionEmbedPs;
+        return curPs;
+    }
+
+    ParameterSpec adapt_RelativeShift() override {
+        ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
+        RelativeShiftParamSpec relativeShiftPs;
+        auto caffeRelativeShiftParam = layer.relative_shift_param();
+        relativeShiftPs.axis = caffeRelativeShiftParam.axis();
+        relativeShiftPs.shift_length = caffeRelativeShiftParam.shift_length();
+        curPs.relative_shift_spec = relativeShiftPs;
+        return curPs;
+    }
+
+    ParameterSpec adapt_Concat() override {
+        ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
+        ConcatParamSpec concatPs;
+        auto caffeConcatParam = layer.concat_param();
+        concatPs.axis = caffeConcatParam.axis();
+        curPs.concat_spec = concatPs;
+        return curPs;
+    }
+
+    ParameterSpec adapt_Softmax() override {
+        ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));  
+        SoftmaxParamSpec softmaxPs;
+        auto caffeSoftmaxParam = layer.softmax_param();
+        softmaxPs.axis = caffeSoftmaxParam.axis();
+        curPs.softmax_spec = softmaxPs;
+        return curPs;
+    }
+    
+    ParameterSpec adapt_PriorBox() override {
+        ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
+        PriorBoxParamSpec priorboxPs;
+        auto caffePriorBoxParam = layer.prior_box_param();
+        CHECK_REQUIREMENT(caffePriorBoxParam.min_size_size() <= 2 && caffePriorBoxParam.max_size_size() <= 2);
+        for (int i = 0; i < 2; i++){
+            priorboxPs.min_sizes[i] = 0;
+            if(i < caffePriorBoxParam.min_size_size())
+                priorboxPs.min_sizes[i] = caffePriorBoxParam.min_size(i);
+        }
+        for (int i = 0; i < 2; i++){
+            priorboxPs.max_sizes[i] = 0;
+            if(i < caffePriorBoxParam.max_size_size())
+                priorboxPs.max_sizes[i] = caffePriorBoxParam.max_size(i);
+        }
+        CHECK_REQUIREMENT(caffePriorBoxParam.aspect_ratio_size() <= 2);
+        for (int i = 0; i < 2; i++){
+            priorboxPs.aspect_ratios[i] = 0;
+            if(i < caffePriorBoxParam.aspect_ratio_size())
+                priorboxPs.aspect_ratios[i] = caffePriorBoxParam.aspect_ratio(i);
+        }
+        if(caffePriorBoxParam.has_flip()){
+            if(caffePriorBoxParam.flip())
+                priorboxPs.flip = 1;
+            else
+                priorboxPs.flip = 0;
+        } else 
+            priorboxPs.flip = 1;
+        if(caffePriorBoxParam.has_clip()){
+            if(caffePriorBoxParam.clip())
+                priorboxPs.clip = 1;
+            else
+                priorboxPs.clip = 0;
+        } else 
+            priorboxPs.clip = 0;
+        if (caffePriorBoxParam.variance_size() == 4){
+            priorboxPs.variances[0] = caffePriorBoxParam.variance(0); 
+            priorboxPs.variances[1] = caffePriorBoxParam.variance(1); 
+            priorboxPs.variances[2] = caffePriorBoxParam.variance(2); 
+            priorboxPs.variances[3] = caffePriorBoxParam.variance(3); 
+        }
+        else if (caffePriorBoxParam.variance_size() == 1){
+            priorboxPs.variances[0] = caffePriorBoxParam.variance(0); 
+            priorboxPs.variances[1] = caffePriorBoxParam.variance(0);
+            priorboxPs.variances[2] = caffePriorBoxParam.variance(0);
+            priorboxPs.variances[3] = caffePriorBoxParam.variance(0);
+        }
+        priorboxPs.image_w = 0;
+        priorboxPs.image_h = 0;
+        if (caffePriorBoxParam.has_img_size()){
+            priorboxPs.image_w = caffePriorBoxParam.img_size();
+            priorboxPs.image_h = caffePriorBoxParam.img_size();
+        }
+        if (caffePriorBoxParam.has_img_w() && caffePriorBoxParam.has_img_h()){
+            priorboxPs.image_w = caffePriorBoxParam.img_w();
+            priorboxPs.image_h = caffePriorBoxParam.img_h();    
+        }
+        priorboxPs.step_w = 0;
+        priorboxPs.step_h = 0;
+        if(caffePriorBoxParam.has_step()){
+            priorboxPs.step_w = caffePriorBoxParam.step();
+            priorboxPs.step_h = caffePriorBoxParam.step();
+        }
+        if (caffePriorBoxParam.has_step_w() && caffePriorBoxParam.has_step_h()){
+            priorboxPs.step_w = caffePriorBoxParam.step_w();
+            priorboxPs.step_h = caffePriorBoxParam.step_h();
+        }
+        priorboxPs.offset = caffePriorBoxParam.offset();        
+        curPs.prior_box_spec = priorboxPs;
+        return curPs;
+    }
+
+    ParameterSpec adapt_DetectionOutput() override {
+        ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
+        DetectionOutputParamSpec detectionoutputPs;
+        auto caffeDetectionOutputParam = layer.detection_output_param();
+        detectionoutputPs.num_class = caffeDetectionOutputParam.num_classes();
+        CHECK_REQUIREMENT((caffeDetectionOutputParam.background_label_id() == 0)&&(caffeDetectionOutputParam.share_location() == true));
+        detectionoutputPs.nms_threshold = caffeDetectionOutputParam.nms_param().nms_threshold();
+        detectionoutputPs.nms_top_k = caffeDetectionOutputParam.nms_param().top_k();
+        detectionoutputPs.keep_top_k = caffeDetectionOutputParam.keep_top_k();
+        detectionoutputPs.confidence_threshold = caffeDetectionOutputParam.confidence_threshold();
+        curPs.detection_output_spec = detectionoutputPs;
+        return curPs;
+    }
+
+    ParameterSpec adapt_Clip() override
+    {
+        ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
+        ClipParamSpec clipParam;
+        auto caffeClipParam = layer.clip_param();
+        clipParam.min = caffeClipParam.min();
+        clipParam.max = caffeClipParam.max();
+        curPs.clip_spec = clipParam;
+        return curPs;
+    }
+
+    ParameterSpec adapt_Relu() override {
+        ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
+        ReLUParamSpec reluSpec;
+        reluSpec.neg_slope = 0.0;
+        curPs.relu_spec = reluSpec;
         return curPs;
     }
 

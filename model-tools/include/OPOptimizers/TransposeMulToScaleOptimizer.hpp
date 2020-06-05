@@ -46,6 +46,7 @@ class TransposeMulToScaleOptimizer: public OPOptimizer {
 
                     hasOptimized = true;
                     spec->ops[mulOpIndex].type = OT_Scale;
+                    spec->ops[mulOpIndex].ps.scale_spec.axis = 1;
 
                     setOperatorInvalid(spec, transposeOpIndex00);
                     setOperatorInvalid(spec, transposeOpIndex01);

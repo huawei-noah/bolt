@@ -23,10 +23,11 @@
 #include "tensor_desc.h"
 #include "../exports/c/bolt.h"
 
-struct IHandleInfo {
+struct ModelHandleInfo {
     void*       cnn;
     void*       ms;
     DEVICE_TYPE deviceType;
+    void*       algoPath;
 };
 
 typedef struct {
@@ -41,7 +42,7 @@ typedef struct {
     U32 num_outputs;
     DataDesc* outputArr;
     DEVICE_TYPE deviceType;
-} IResultInner;
+} ResultHandleInner;
 
 DataType dt_mapping_user2bolt(DATA_TYPE dt_user) {
     DataType ret = DT_F32;
@@ -49,7 +50,7 @@ DataType dt_mapping_user2bolt(DATA_TYPE dt_user) {
         case FP_32:
             ret = DT_F32;
             break;
-#ifdef _USE_FP16
+#ifdef __aarch64__
         case FP_16:
             ret = DT_F16;
             break;
@@ -73,7 +74,7 @@ DATA_TYPE dt_mapping_bolt2user(DataType dt_bolt) {
         case DT_F32:
             ret = FP_32;
             break;
-#ifdef _USE_FP16
+#ifdef __aarch64__
         case DT_F16:
             ret = FP_16;
             break;
@@ -103,6 +104,9 @@ DataFormat df_mapping_user2bolt(DATA_FORMAT df_user) {
 	case NCHWC8:
 	    ret = DF_NCHWC8;
 	    break;
+	case MTK:
+	    ret = DF_MTK;
+	    break;
 	case NORMAL:
 	    ret = DF_NORMAL;
 	    break;
@@ -125,6 +129,9 @@ DATA_FORMAT df_mapping_bolt2user(DataFormat df_bolt) {
             break;
 	case DF_NCHWC8:
 	    ret = NCHWC8;
+	    break;
+	case DF_MTK:
+	    ret = MTK;
 	    break;
 	case DF_NORMAL:
 	    ret = NORMAL;
@@ -175,7 +182,7 @@ inline Arch arch_acquire(AFFINITY_TYPE affinity, DEVICE_TYPE device)
     return ret;
 }
 
-IHandle model_create(const char* modelPath, AFFINITY_TYPE affinity, DEVICE_TYPE device) {
+ModelHandle CreateModel(const char* modelPath, AFFINITY_TYPE affinity, DEVICE_TYPE device, const char* algoPath) {
     ModelSpec* ms = new ModelSpec();
     Arch       arch;
 
@@ -185,21 +192,22 @@ IHandle model_create(const char* modelPath, AFFINITY_TYPE affinity, DEVICE_TYPE 
     cnn->sort_operators_sequential(ms);
     cnn->initialize_ops(ms);
     
-    IHandleInfo* handle = new IHandleInfo();
+    ModelHandleInfo* handle = new ModelHandleInfo();
     handle->cnn         = (void*)cnn;
     handle->ms          = (void*)ms;
     handle->deviceType  = device;
-    return (IHandle)handle;
+    handle->algoPath    = (void*)algoPath;
+    return (ModelHandle)handle;
 }
 
-Vec<TensorDesc> getInputDataFormatFromUser(IHandle ih,
+HashMap<std::string, TensorDesc> getInputDataFormatFromUser(ModelHandle ih,
     const int num_input,
     const int* n, const int* c, const int* h, const int* w,
     char** name,
     const DATA_TYPE* dt_input,
     const DATA_FORMAT* df_input)
 {
-    IHandleInfo* ihInfo = (IHandleInfo*)ih;
+    ModelHandleInfo* ihInfo = (ModelHandleInfo*)ih;
     ModelSpec*ms        = (ModelSpec*)ihInfo->ms;
     U32 num             = ms->num_inputs;
     if(num != (U32)num_input) {
@@ -207,7 +215,7 @@ Vec<TensorDesc> getInputDataFormatFromUser(IHandle ih,
         exit(1);
     }
 
-    Vec<TensorDesc> modelInputDims(num);
+    HashMap<std::string, TensorDesc> modelInputDims;
     for(U32 i = 0; i < num; ++i) {
         std::string inputName = name[i];
         bool findTensorName = false;
@@ -218,10 +226,13 @@ Vec<TensorDesc> getInputDataFormatFromUser(IHandle ih,
                 DataFormat df = (df_input == NULL) ? DF_NCHW : df_mapping_user2bolt(df_input[i]);
                 switch (df) {
                     case DF_NORMAL:
-                        modelInputDims[j] = tensor2df(dt, df, n[i], c[i]);
+                        modelInputDims[inputName] = tensor2df(dt, df, n[i], c[i]);
+                        break;
+                    case DF_MTK:
+                        modelInputDims[inputName] = tensor3df(dt, df, n[i], c[i], h[i]);
                         break;
                     case DF_NCHW:
-                        modelInputDims[j] = tensor4df(dt, df, n[i], c[i], h[i], w[i]);
+                        modelInputDims[inputName] = tensor4df(dt, df, n[i], c[i], h[i], w[i]);
                         break;
                     default:
                         std::cerr << "[ERROR] unsupported data format in " << __func__ << std::endl;
@@ -246,59 +257,61 @@ Vec<TensorDesc> getInputDataFormatFromUser(IHandle ih,
     return modelInputDims;
 }
 
-void model_ready(IHandle ih,
+void PrepareModel(ModelHandle ih,
     const int num_input,
     const int* n, const int* c, const int* h, const int* w,
     char** name,
     const DATA_TYPE* dt_input = NULL,
     const DATA_FORMAT* df_input = NULL)
 {
-    IHandleInfo* ihInfo = (IHandleInfo*)ih;
+    ModelHandleInfo* ihInfo = (ModelHandleInfo*)ih;
     CNN* cnn            = (CNN*)ihInfo->cnn;
     ModelSpec*ms        = (ModelSpec*)ihInfo->ms;
+    const char* algoPath = (ihInfo->algoPath) ? (const char*)ihInfo->algoPath : "";
 
-    Vec<TensorDesc> modelInputDims = getInputDataFormatFromUser(ih,
+    HashMap<std::string, TensorDesc> modelInputDims = getInputDataFormatFromUser(ih,
         num_input, n, c, h, w, name, dt_input, df_input);
+    cnn->loadAlgorithmMapFromText(algoPath);
     cnn->ready(modelInputDims);
     cnn->mark_input_output(ms);
 #ifdef _USE_MALI    
-    if (ihInfo->deviceType == GPU)
-        cnn->mali_prepare();
+    if (ihInfo->deviceType == GPU) cnn->mali_prepare();
 #endif    
+    cnn->saveAlgorithmMapToText(algoPath);
     return;
 }
 
-void model_resize_input(IHandle ih,
+void ResizeModelInput(ModelHandle ih,
     const int num_input,
     const int* n, const int* c, const int* h, const int* w,
     char** name,
     const DATA_TYPE* dt_input = NULL,
     const DATA_FORMAT* df_input = NULL)
 {
-    IHandleInfo* ihInfo = (IHandleInfo*)ih;
+    ModelHandleInfo* ihInfo = (ModelHandleInfo*)ih;
     CNN* cnn            = (CNN*)ihInfo->cnn;
 
-    Vec<TensorDesc> modelInputDims = getInputDataFormatFromUser(ih,
+    HashMap<std::string, TensorDesc> modelInputDims = getInputDataFormatFromUser(ih,
         num_input, n, c, h, w, name, dt_input, df_input);
-    cnn->infer_output_tensors_size(modelInputDims);
+    cnn->reready(modelInputDims);
 }
 
-IResult IResult_malloc_all(IHandle ih) {
-    IHandleInfo* ihInfo = (IHandleInfo*)ih;
+ResultHandle AllocAllResultHandle(ModelHandle ih) {
+    ModelHandleInfo* ihInfo = (ModelHandleInfo*)ih;
     CNN* cnn            = (CNN*)ihInfo->cnn;
     DEVICE_TYPE device  = ihInfo->deviceType;
 
-    IResultInner* model_result_ptr = (IResultInner*)malloc(sizeof(IResultInner));
-    HashMap<std::string, std::shared_ptr<Tensor>> outMap = cnn->get_outputs();
-    int model_num_outputs = outMap.size();
+    ResultHandleInner* model_result_ptr = (ResultHandleInner*)malloc(sizeof(ResultHandleInner));
+    Vec<std::string> modelOutputTensorNames = cnn->get_model_output_tensor_names();
+    int model_num_outputs = modelOutputTensorNames.size();
     DataDesc* outputArrPtr = (DataDesc*)malloc(sizeof(DataDesc) * model_num_outputs);
-    int curIndex = 0;
-    for (auto iter: outMap) {
-        U32 length = iter.first.size();
-        memcpy(outputArrPtr[curIndex].name, iter.first.c_str(), length);
+    for (int i = 0; i < model_num_outputs; ++i) {
+        std::string name = modelOutputTensorNames[i];
+        U32 length = name.size();
+        length = (length > NAME_LEN) ? NAME_LEN : length;
+        memcpy(outputArrPtr[i].name, name.c_str(), length);
         if (length < NAME_LEN)
-            outputArrPtr[curIndex].name[length] = '\0';
-        curIndex++;
+            outputArrPtr[i].name[length] = '\0';
     }
     model_result_ptr->num_outputs = model_num_outputs;
     model_result_ptr->outputArr = outputArrPtr;
@@ -306,13 +319,13 @@ IResult IResult_malloc_all(IHandle ih) {
     return (void*)model_result_ptr;
 }
 
-IResult IResult_malloc_part(IHandle ih, const int num_outputs,
+ResultHandle AllocSpecificResultHandle(ModelHandle ih, const int num_outputs,
     char** outputNames)
 {
-    IHandleInfo* ihInfo = (IHandleInfo*)ih;
+    ModelHandleInfo* ihInfo = (ModelHandleInfo*)ih;
     DEVICE_TYPE device  = ihInfo->deviceType;
 
-    IResultInner* model_result_ptr = (IResultInner*)malloc(sizeof(IResultInner));
+    ResultHandleInner* model_result_ptr = (ResultHandleInner*)malloc(sizeof(ResultHandleInner));
     int model_num_outputs = num_outputs;
     DataDesc* outputArrPtr = (DataDesc*)malloc(sizeof(DataDesc) * model_num_outputs);
     for (int i = 0; i < num_outputs; i++) {
@@ -340,28 +353,15 @@ void copyTensorDescToDataDesc(TensorDesc srcDesc, DataDesc *dstDesc) {
         dstDesc->dims[i] = 1;
 }
 
-void model_run(IHandle ih, IResult ir, const int num_input, char** inputNames, void** mem) {
-    IHandleInfo* ihInfo = (IHandleInfo*)ih;
+void RunModel(ModelHandle ih, ResultHandle ir, const int num_input, char** inputNames, void** mem) {
+    ModelHandleInfo* ihInfo = (ModelHandleInfo*)ih;
     CNN* cnn            = (CNN*)ihInfo->cnn;
     DEVICE_TYPE device  = ihInfo->deviceType;
-    IResultInner* ir_inner = (IResultInner*)ir;
+    ResultHandleInner* ir_inner = (ResultHandleInner*)ir;
    
-    if(device == CPU){
-        for (int index = 0; index < num_input; index++) {
-            std::string input_name(inputNames[index]);
-            cnn->copy_to_named_input(input_name, (U8*)(mem[index]));
-        }
-    } else if(device == GPU){
-        HashMap<std::string, std::shared_ptr<U8>> modelInputTensors;
-        for (int index = 0; index < num_input; ++index) {
-            U8* tmp = (U8*)(mem[index]);
-            std::shared_ptr<U8> tensorPointer(tmp);
-            modelInputTensors.insert(std::pair(inputNames[index], tensorPointer));
-        }
-        cnn->set_input_tensors_value(modelInputTensors);//GPU will copy data to GPU memory
-    } else {
-        std::cerr << "[ERROR] unsupported device type in " << __func__ << std::endl;
-        exit(1);
+    for (int index = 0; index < num_input; index++) {
+        std::string input_name(inputNames[index]);
+        cnn->copy_to_named_input(input_name, (U8*)(mem[index]));
     }
     cnn->run();
     
@@ -376,38 +376,36 @@ void model_run(IHandle ih, IResult ir, const int num_input, char** inputNames, v
 #ifdef _USE_MALI
     else if(device == GPU) {
         HashMap<std::string, std::shared_ptr<Tensor>> outMap = cnn->get_outputs();
-//        HashMap<std::string, std::tuple<TensorDesc, U8*>> outMap = cnn->get_outputs_mali_map();
         if (ir_inner->num_outputs != outMap.size()) {
-            std::cerr << "[ERROR] GPU currently not support IResult_malloc_part" << std::endl;
+            std::cerr << "[ERROR] GPU currently not support AllocSpecificResultHandle" << std::endl;
             exit(1);
         }
-        
         int curIndex = 0;
         for(const auto &p : outMap) {
-            std::string   output_name = p.first;
+            std::string output_name = p.first;
+            auto mem = p.second->get_memory();
+            std::shared_ptr<GCLMem> oclMem = mem->get_shared_ptr_caster();
             copyTensorDescToDataDesc(p.second->get_desc(), &(outputArrPtr[curIndex]));
-            outputArrPtr[curIndex].dataPtr = p.second ->get_val();
-//            copyTensorDescToDataDesc(std::get<0>(p.second), &(outputArrPtr[curIndex]));
-//            outputArrPtr[curIndex].dataPtr = std::get<1>(p.second);
+            outputArrPtr[curIndex].dataPtr = oclMem->desc.map_ptr;
             curIndex++;
         }
     }
 #endif
 }
 
-int IResult_num_outputs(IResult ir) {
-    IResultInner* ir_inner = (IResultInner*)ir;
+int GetNumOutputsFromResultHandle(ResultHandle ir) {
+    ResultHandleInner* ir_inner = (ResultHandleInner*)ir;
     return (*ir_inner).num_outputs;
 }
 
-void IResult_get(IResult ir,
+void GetPtrFromResultHandle(ResultHandle ir,
     int num_outputs,
     char** outputNames,
     void** data,
     int* n, int* c, int* h, int* w,
     DATA_TYPE* dt_output, DATA_FORMAT* df_output)
 {
-    IResultInner* ir_inner = (IResultInner*)ir;
+    ResultHandleInner* ir_inner = (ResultHandleInner*)ir;
     DataDesc* outputArrPtr = (*ir_inner).outputArr;
     for (int i = 0; i < num_outputs; i++) {
         n[i] = outputArrPtr[i].dims[0];
@@ -422,14 +420,14 @@ void IResult_get(IResult ir,
     }
 }
 
-void IResult_get_nocopy(IResult ir,
+void CopyOutputsFromResultHandle(ResultHandle ir,
     int num_outputs,
     char** outputNames,
     void** data,
     int* n, int* c, int* h, int* w,
     DATA_TYPE* dt_output, DATA_FORMAT* df_output)
 {
-    IResultInner* ir_inner = (IResultInner*)ir;
+    ResultHandleInner* ir_inner = (ResultHandleInner*)ir;
     DataDesc* outputArrPtr = (*ir_inner).outputArr;
     for (int i = 0; i < num_outputs; i++) {
         n[i] = outputArrPtr[i].dims[0];
@@ -440,23 +438,25 @@ void IResult_get_nocopy(IResult ir,
         DataType dt = outputArrPtr[i].dt;
         dt_output[i] = dt_mapping_bolt2user(dt);
         df_output[i] = df_mapping_bolt2user(outputArrPtr[i].df);
-        data[i] = outputArrPtr[i].dataPtr;
+        U32 size = n[i] * c[i] * h[i] * w[i] * bytesOf(dt);
+        memcpy((void*)data[i], (void*)outputArrPtr[i].dataPtr, size);
     }
 }
 
-void IResult_free(IResult ir) {
-    IResultInner* ir_inner = (IResultInner*)ir;
+void FreeResultHandle(ResultHandle ir) {
+    ResultHandleInner* ir_inner = (ResultHandleInner*)ir;
     DataDesc* outputArrPtr = (*ir_inner).outputArr;
     free(outputArrPtr);
     free(ir_inner);
 }
 
-void model_destroy(IHandle ih) {
-    IHandleInfo* ihInfo = (IHandleInfo*)ih;
+void DestroyModel(ModelHandle ih) {
+    ModelHandleInfo* ihInfo = (ModelHandleInfo*)ih;
     CNN* cnn            = (CNN*)ihInfo->cnn;
     ModelSpec* ms       = (ModelSpec*)ihInfo->ms;
     CHECK_STATUS(mt_destroy_model(ms));
     delete ms;
     delete cnn;
+    delete ihInfo;
 }
 

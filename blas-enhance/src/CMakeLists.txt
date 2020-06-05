@@ -1,4 +1,7 @@
-file(GLOB general_srcs ${CMAKE_CURRENT_SOURCE_DIR}/cpu/general/*.cpp)
+if (USE_GENERAL)
+    file(GLOB general_srcs ${CMAKE_CURRENT_SOURCE_DIR}/cpu/general/*.cpp)
+endif (USE_GENERAL)
+
 if (USE_NEON)
     if (USE_FP16)
         file(GLOB arm_fp16_srcs ${CMAKE_CURRENT_SOURCE_DIR}/cpu/arm/fp16/*.cpp)

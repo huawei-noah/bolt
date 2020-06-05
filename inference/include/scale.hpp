@@ -24,9 +24,10 @@
 class Scale: public WeightOperator
 {
 public:
-    Scale(DataType dt, int numChannels, int numSource)
+    Scale(DataType dt, int axis, int numChannels, int numSource)
     {
         this->dt = dt;
+        this->axis = axis;
         this->numSource = numSource;
         this->numChannels = numChannels;
         this->dataID = 0;
@@ -45,9 +46,9 @@ public:
     virtual EE init_weight_bias_from_model(U8** modelPtr) = 0;
 
 protected:
-
-    int numSource;  // How many source tensors compose this input
+    int axis;
     U32 numChannels;
+    int numSource;  // How many source tensors compose this input
     int dataID;
 };
 

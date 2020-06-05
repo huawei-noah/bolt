@@ -21,11 +21,12 @@
 
 class ConcatOCL: public Concat {
 public:
-    ConcatOCL(U32 concatDim) : Concat(concatDim) {}
+    ConcatOCL(int axis) : Concat(axis) {}
 
     virtual void run() override
     {
         UTIL_TIME_TIC(__CLASS_FUNCTION__)
+        this->handle->curOpName = this->get_op_name();
         Vec<TensorDesc> inputDesc;
         Vec<void*> inputPtr;
         Vec<F32> inputScales;
@@ -39,7 +40,7 @@ public:
         auto outputPtr = this->outputTensors[0].get_val();
 //        F32 outputScale = 1.0;
 
-        CHECK_STATUS(concat(inputDesc, inputPtr, NULL, outputDesc, outputPtr, NULL, this->concatDim, this->schedule, &this->oclExtInfo));
+        CHECK_STATUS(concat(inputDesc, inputPtr, NULL, outputDesc, outputPtr, NULL, this->axis, this->schedule, &this->oclExtInfo));
 
 //        if (DT_I8 == outputDesc.dt) {
 //            this->outputTensors[0].set_scale(outputScale);
@@ -49,23 +50,22 @@ public:
 
     virtual EE infer_output_tensors_size(Vec<TensorDesc> inDims, Vec<TensorDesc>* outDims) override
     {
-        UNUSED(inDims);
-        UNUSED(outDims);
-        CHECK_STATUS(NOT_SUPPORTED);
-        return NOT_SUPPORTED;
+        this->oclExtInfo.maliInfo.gclmemInputDesc  = NULL;
+        this->oclExtInfo.maliInfo.gclmemOutputDesc = NULL;
+        CHECK_STATUS(concat_infer_output_size(inDims, &((*outDims)[0]), this->axis, this->schedule, &this->oclExtInfo));
+        return SUCCESS;
     }
 
-    virtual EE infer_output_tensors_size(Vec<TensorDesc> inDims, Vec<TensorDesc>* outDims, Vec<GCLMemDesc>* gclmemInputDesc, Vec<GCLMemDesc>* gclmemOutputDesc) override
+    virtual EE infer_gclmem_desc(Vec<GCLMemDesc>* gclmemInputDesc, Vec<GCLMemDesc>* gclmemOutputDesc) override
     {
-        U32 stride[3] = {0, 0, 0};
-        U32 offset[3] = {0, 0, 0};
-        U32 num = inDims.size();
-        GCLMemDesc tmpDesc = gcl_mem_desc(stride, offset, DT_U8, DF_NCWHC4);
-        GCLMemDesc_t memInDesc = (GCLMemDesc_t) operator new(sizeof(struct GCLMemDesc) * inDims.size()) ;
-        for(U32 i = 0; i < num; i++) memInDesc[i] = tmpDesc; 
+        Vec<TensorDesc> inputDesc;
+        for (Tensor tensorIn: this->inputTensors) inputDesc.push_back(tensorIn.get_desc());
+        U32 num = inputDesc.size();
+        GCLMemDesc_t memInDesc = (GCLMemDesc_t) operator new(sizeof(struct GCLMemDesc) * num) ;
+        for(U32 i = 0; i < num; i++) memInDesc[i] = (*gclmemInputDesc)[i]; 
         this->oclExtInfo.maliInfo.gclmemInputDesc = memInDesc;
         this->oclExtInfo.maliInfo.gclmemOutputDesc = &((*gclmemOutputDesc)[0]);
-        CHECK_STATUS(concat_infer_output_size(inDims, &((*outDims)[0]), this->concatDim, this->schedule, &this->oclExtInfo));
+        CHECK_STATUS(concat_infer_output_size(inputDesc, NULL, this->axis, this->schedule, &this->oclExtInfo));
         for(U32 i = 0; i < num; i++) (*gclmemInputDesc)[i] = memInDesc[i];
         delete memInDesc;
         return SUCCESS;

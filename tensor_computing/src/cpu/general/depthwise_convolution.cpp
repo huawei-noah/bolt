@@ -17,7 +17,7 @@
 #include "error.h"
 #include "tensor_computing_type.h"
 #include "cpu/general/tensor_computing_general.h"
-#include "cpu/general/common_general.h"
+#include "cpu/general/general_functions.h"
 
 template<typename T1, typename T2, typename T3>
 inline EE depthwise_convolution(TensorDesc inputDesc, T1* inArray,
@@ -25,8 +25,8 @@ inline EE depthwise_convolution(TensorDesc inputDesc, T1* inArray,
     ConvolutionDesc convDesc,
     const T3* biasArray,
     TensorDesc outputDesc, T3* outArray,
-    ActivationMode depthwiseActivationMode,
-    ActivationMode pointwiseActivationMode)
+    ActivationDesc depthwiseActivationDesc,
+    ActivationDesc pointwiseActivationDesc)
 {
     DataType idt, fdt, odt;
     DataFormat idf, fdf, odf;
@@ -83,7 +83,7 @@ inline EE depthwise_convolution(TensorDesc inputDesc, T1* inArray,
                 U32 pw_off = c*oh*ow + hw;
                 U32 b_off = c;
                 pwArray[pw_off] += biasArray[b_off];
-                CHECK_STATUS(activation<T3>(depthwiseActivationMode, pwArray[pw_off], &pwArray[pw_off]));
+                CHECK_STATUS(activation<T3>(depthwiseActivationDesc, pwArray[pw_off], &pwArray[pw_off]));
             }
         }
         if (fuseDepthwisePointwise) {
@@ -103,7 +103,7 @@ inline EE depthwise_convolution(TensorDesc inputDesc, T1* inArray,
                         U32 o_off = n*oc*oh*ow + o*oh*ow + h*ow + w;
                         U32 b_off = ic + o;
                         outArray[o_off] += biasArray[b_off];
-                        CHECK_STATUS(activation<T3>(pointwiseActivationMode, outArray[o_off], &outArray[o_off]));
+                        CHECK_STATUS(activation<T3>(pointwiseActivationDesc, outArray[o_off], &outArray[o_off]));
                     }
                 }
             }
@@ -125,8 +125,8 @@ EE depthwise_convolution_general(TensorDesc inputDesc, void* input,
         ConvolutionDesc convDesc,
         TensorDesc biasDesc, const void* bias,
         TensorDesc outputDesc, void* output,
-        ActivationMode depthwiseActivationMode,
-        ActivationMode pointwiseActivationMode)
+        ActivationDesc depthwiseActivationDesc,
+        ActivationDesc pointwiseActivationDesc)
 {
     UNUSED(biasDesc);
 
@@ -139,8 +139,8 @@ EE depthwise_convolution_general(TensorDesc inputDesc, void* input,
                                                        convDesc,
                                                        (F16*)bias,
                                                        outputDesc, (F16*)output,
-                                                       depthwiseActivationMode,
-                                                       pointwiseActivationMode);
+                                                       depthwiseActivationDesc,
+                                                       pointwiseActivationDesc);
             break;
 #endif
 #ifdef _USE_INT8
@@ -150,8 +150,8 @@ EE depthwise_convolution_general(TensorDesc inputDesc, void* input,
                                                         convDesc,
                                                         (I32*)bias,
                                                         outputDesc, (I32*)output,
-                                                        depthwiseActivationMode,
-                                                        pointwiseActivationMode);
+                                                        depthwiseActivationDesc,
+                                                        pointwiseActivationDesc);
             break;
 #endif
 #ifdef _USE_FP32
@@ -161,8 +161,8 @@ EE depthwise_convolution_general(TensorDesc inputDesc, void* input,
                                                         convDesc,
                                                         (F32*)bias,
                                                         outputDesc, (F32*)output,
-                                                        depthwiseActivationMode,
-                                                        pointwiseActivationMode);
+                                                        depthwiseActivationDesc,
+                                                        pointwiseActivationDesc);
             break;
 #endif
         default:

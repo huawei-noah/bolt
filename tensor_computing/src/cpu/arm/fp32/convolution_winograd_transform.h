@@ -18,7 +18,7 @@
 #ifdef _USE_FP32
 #include <math.h>
 #include <string.h>
-#include "cpu/arm/fp32/arm_neon_expand_fp32.h"
+#include "cpu/arm/fp32/arm_functions_fp32.h"
 
 inline void trans_W_4x4_3x3(float* WTM[36], float* W[9])
 {
@@ -78,7 +78,7 @@ inline void trans_W_4x4_3x3(float* WTM[36], float* W[9])
 }
 
 inline EE trans_O_4x4_3x3(float* OTM[36], float* O[16], const float* bias,
-    U32 h, U32 w, U32 _pad_h_mod_4, U32 _pad_w_mod_4, U32 oh, U32 ow, ActivationMode activationMode)
+    U32 h, U32 w, U32 _pad_h_mod_4, U32 _pad_w_mod_4, U32 oh, U32 ow, ActivationDesc activationDesc)
 {
     float T[4][6][4];
     // bias
@@ -141,7 +141,7 @@ inline EE trans_O_4x4_3x3(float* OTM[36], float* O[16], const float* bias,
         float32x4_t v_O2 = vfmaq_f32(v_t0, v_t1, v_4);
         float32x4_t v_O3 = vaddq_f32(vfmaq_f32(v_t2, v_t3, v_8), v_T5);
 
-        switch (activationMode) {
+        switch (activationDesc.mode) {
             case ACTIVATION_NULL: {
                 if (pad_w_mod_4 == 0) {
                     vst1q_f32(O[i*4+0], vaddq_f32(v_O0, v_b));

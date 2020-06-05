@@ -19,7 +19,7 @@
 #include "error.h"
 #include "tensor_computing_type.h"
 #include "cpu/general/tensor_computing_general.h"
-#include "cpu/general/common_general.h"
+#include "cpu/general/general_functions.h"
 
 template<typename T1, typename T2, typename T3, typename T4>
 inline EE convolution(TensorDesc inputDesc, T1* inArray,
@@ -28,7 +28,7 @@ inline EE convolution(TensorDesc inputDesc, T1* inArray,
     const T3* biasArray,
     const T4* scaleArray,
     TensorDesc outputDesc, T4* outArray,
-    ActivationMode activationMode,
+    ActivationDesc activationDesc,
     T1 paddingValue=0)
 {
     DataType idt, fdt, odt;
@@ -92,13 +92,14 @@ inline EE convolution(TensorDesc inputDesc, T1* inArray,
                     if (scaleArray != nullptr)
                         scale = scaleArray[b_off];
                     outArray[o_off] = scale * outBuf[o_off] + biasArray[b_off];
-                    switch (activationMode) {
+                    switch (activationDesc.mode) {
                         case ACTIVATION_NULL: {
                             break;
                         }
                         case ACTIVATION_RELU: {
-                            if(outArray[o_off] < 0) {
-                                outArray[o_off] = 0;
+                            F32 tmp = activationDesc.value[0] * outArray[o_off];
+                            if(outArray[o_off] < tmp) {
+                                outArray[o_off] = tmp;
                             }
                             break;
                         }
@@ -165,7 +166,7 @@ EE convolution_general(TensorDesc inputDesc, void* input,
         TensorDesc scaleDesc, const void* scale,
         TensorDesc biasDesc, const void* bias,
         TensorDesc outputDesc, void* output,
-        ActivationMode activationMode)
+        ActivationDesc activationDesc)
 {
     UNUSED(scaleDesc);
     UNUSED(biasDesc);
@@ -180,7 +181,7 @@ EE convolution_general(TensorDesc inputDesc, void* input,
                                                   (F32*)bias,
                                                   (F32*)scale,
                                                   outputDesc, (F32*)output,
-                                                  activationMode);
+                                                  activationDesc);
             break;
 #endif
 #ifdef _USE_FP16
@@ -191,7 +192,7 @@ EE convolution_general(TensorDesc inputDesc, void* input,
                                                   (F16*)bias,
                                                   (F16*)scale,
                                                   outputDesc, (F16*)output,
-                                                  activationMode);
+                                                  activationDesc);
             break;
 #endif
 #ifdef _USE_INT8
@@ -202,7 +203,7 @@ EE convolution_general(TensorDesc inputDesc, void* input,
                                                    (F16*)bias,
                                                    (F16*)scale,
                                                    outputDesc, (F16*)output,
-                                                   activationMode);
+                                                   activationDesc);
             break;
 #endif
 #ifdef _USE_FP16
@@ -217,7 +218,7 @@ EE convolution_general(TensorDesc inputDesc, void* input,
                                                       (F16*)bias,
                                                       (F16*)scale,
                                                       outputDesc, (F16*)output,
-                                                      activationMode, 0);
+                                                      activationDesc, 0);
             break;
         }
         case DT_BIN11: {
@@ -231,7 +232,7 @@ EE convolution_general(TensorDesc inputDesc, void* input,
                                                       (F16*)bias,
                                                       (F16*)scale,
                                                       outputDesc, (F16*)output,
-                                                      activationMode, -1);
+                                                      activationDesc, -1);
             break;
         }
 #endif

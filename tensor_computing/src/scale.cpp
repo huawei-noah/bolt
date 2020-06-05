@@ -13,8 +13,12 @@
 
 
 #include "tensor_computing.h"
+#ifdef _USE_GENERAL
 #include "cpu/general/tensor_computing_general.h"
+#endif
+#ifdef _USE_NEON
 #include "cpu/arm/tensor_computing_arm.h"
+#endif
 #ifdef _USE_MALI 
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
@@ -30,50 +34,36 @@ inline EE scale_infer_output_size_cpu(TensorDesc inputDesc, TensorDesc *outputDe
 
 EE scale_infer_output_size(TensorDesc inputDesc, TensorDesc *outputDesc, Arch arch, ExtInfo_t extInfo)
 {
-#ifdef _USE_MALI
+    EE ret = NOT_SUPPORTED;
     if(arch == MALI){
-        CHECK_STATUS(scale_infer_output_size_mali(inputDesc, outputDesc, extInfo->maliInfo.gclmemInputDesc, extInfo->maliInfo.gclmemOutputDesc));
+#ifdef _USE_MALI
+        ret = scale_infer_output_size_mali(inputDesc, outputDesc, extInfo->maliInfo.gclmemInputDesc, extInfo->maliInfo.gclmemOutputDesc);
+#endif
     } else {
-#endif
-        UNUSED(arch);
-        UNUSED(extInfo);
-        CHECK_STATUS(scale_infer_output_size_cpu(inputDesc, outputDesc));
-#ifdef _USE_MALI
-    }
-#endif
-    return SUCCESS;
-}
-
-EE scale(void *alpha, void *beta, TensorDesc inputDesc, void* input, TensorDesc outputDesc, void* output, Arch arch, ExtInfo_t extInfo)
-{
-    EE ret = SUCCESS;
-
-#ifndef _USE_MALI
-    UNUSED(outputDesc);
-    UNUSED(output);
-    UNUSED(extInfo);
-#endif    
-    switch (arch) {
-        case CPU_GENERAL:
-            ret = scale_general(alpha, beta, inputDesc, input);
-            break;
-        case ARM_A55:
-            ret = scale_arm(alpha, beta, inputDesc, input);
-            break;
-        case ARM_A76:
-            ret = scale_arm(alpha, beta, inputDesc, input);
-            break;
-        case ARM_V8:
-            ret = scale_arm(alpha, beta, inputDesc, input);
-            break;
-#ifdef _USE_MALI
-        case MALI:
-            ret = scale_mali(extInfo->maliInfo.handle, (GCLMem_t)alpha, (GCLMem_t)beta, inputDesc, (GCLMem_t)input, outputDesc, (GCLMem_t)output);
-            break;
-#endif
-        default:
-            ret = NOT_SUPPORTED;
+        ret = scale_infer_output_size_cpu(inputDesc, outputDesc);
     }
     return ret;
 }
 
+EE scale(TensorDesc inputDesc, void* input,
+    I32 axis, void *alpha, void *beta, 
+    TensorDesc outputDesc, void* output,
+    Arch arch, ExtInfo_t extInfo)
+{
+    EE ret = NOT_SUPPORTED;
+    if (arch == CPU_GENERAL) {
+#ifdef _USE_GENERAL
+        ret = scale_general(inputDesc, input, axis, alpha, beta, outputDesc, output);
+#endif    
+#ifdef _USE_NEON
+    } else if (arch == ARM_A55 || arch == ARM_A76 || arch == ARM_V8 || arch == ARM_V7) {
+        ret = scale_arm(inputDesc, input, axis, alpha, beta, outputDesc, output);
+#endif    
+#ifdef _USE_MALI
+    } else if (arch == MALI) {
+        ret = scale_mali(extInfo->maliInfo.handle, (GCLMem_t)alpha, (GCLMem_t)beta,
+            inputDesc, (GCLMem_t)input, outputDesc, (GCLMem_t)output);
+#endif
+    }
+    return ret;
+}

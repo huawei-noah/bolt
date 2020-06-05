@@ -19,7 +19,7 @@
 template<typename OT>
 EE convolution_gemm_A76(TensorDesc inputDesc, const void* input, F16* inputScale, TensorDesc filterDesc, const void* filter, F16* filterScale,
     ConvolutionDesc convDesc, TensorDesc biasDesc, const void* bias, U32 tmpBytes, void* tmp, TensorDesc outputDesc,
-    void* output, F16* outputScale, ActivationMode am)
+    void* output, F16* outputScale, ActivationDesc activationDesc)
 {
     UNUSED(biasDesc);
     UNUSED(tmpBytes);
@@ -45,8 +45,12 @@ EE convolution_gemm_A76(TensorDesc inputDesc, const void* input, F16* inputScale
         return NOT_MATCH;
     }
 
-    I64 conv_relu_bool = (am == ACTIVATION_RELU) ? 1 : 0;
+    I64 conv_relu_bool = (activationDesc.mode == ACTIVATION_RELU) ? 1 : 0;
     I64 out_f16_bool = (odt == DT_F16) ? 1 : 0;
+    I64 scale_known_bool = 0;
+    if (*outputScale > 0 || ACTIVATION_RELU6 == activationDesc.mode) {
+        scale_known_bool = 1;
+    }
 
     INT8* inArray = (INT8*)input; // It will be updated if there is quantization
     INT8* filterArray = (INT8*)filter;
@@ -79,45 +83,74 @@ EE convolution_gemm_A76(TensorDesc inputDesc, const void* input, F16* inputScale
             inArray = in_pad + ic*ihiw*8 + 12*fh*fw*ic*8; // After the space for padding and packing
 
             U32 numData = ic*ih*iw*8;
-            float16x8_t temp_v = vld1q_f16(in);
-            float16x8_t max_v = temp_v;
-            float16x8_t min_v = temp_v;
+            if (*inputScale > 0) {
+                scale_i = *inputScale;
+            } else {
+                float16x8_t temp_v = vld1q_f16(in);
+                float16x8_t max_v = temp_v;
+                float16x8_t min_v = temp_v;
 
-            for (U32 i=8; i<numData; i+=8) {
-                temp_v = vld1q_f16(in+i);
-                max_v = vmaxq_f16(max_v, temp_v);
-                min_v = vminq_f16(min_v, temp_v);
-            }
+                for (U32 i=8; i<numData; i+=8) {
+                    temp_v = vld1q_f16(in+i);
+                    max_v = vmaxq_f16(max_v, temp_v);
+                    min_v = vminq_f16(min_v, temp_v);
+                }
 
-            F16 max = vmaxvq_f16(max_v);
-            F16 min = vminvq_f16(min_v);
+                F16 max = vmaxvq_f16(max_v);
+                F16 min = vminvq_f16(min_v);
 
-            if (max == 0 && min == 0) {
-                return NOT_SUPPORTED;
+                if (max == 0 && min == 0) {
+                    return NOT_SUPPORTED;
+                }
+                if (max > 0 && min < 0) {
+                    F16 scale_max = 127.0 / max;
+                    F16 scale_min = -127.0 / min;
+                    scale_i = (scale_max < scale_min) ? scale_max : scale_min;
+                } else if (max < 0) {
+                    scale_i = -127.0 / min;
+                } else { // min > 0
+                    scale_i = 127.0 / max;
+                }
             }
-            if (max>0 && min<0) {
-                F16 scale_max = 127.0 / max;
-                F16 scale_min = -128.0 / min;
-                scale_i = (scale_max < scale_min) ? scale_max : scale_min;
-            } else if (max < 0) {
-                scale_i = -128.0 / min;
-            } else { // min > 0
-                scale_i = 127.0 / max;
-            }
-            for (U32 i=0; i<numData; i++) {
+            for (U32 i = 0; i < numData; i++) {
                 F32 temp = in[i] * scale_i;
-                inArray[i] = round(temp);
+                if (temp > 127) {
+                    inArray[i] = 127;
+                } else if (temp < -127) {
+                    inArray[i] = -127;
+                } else {
+                    inArray[i] = temp;
+                }
             }
             *inputScale = scale_i;
+        } else {
+            scale_i = *inputScale;
+        }
+
+        if (1 == scale_known_bool) {
+            if (ACTIVATION_RELU6 == activationDesc.mode) {
+                *outputScale = 127.0 / 6.0;
+            }
+            F32 scaleInt = (*outputScale / *inputScale) / *filterScale;
+            I32 thresholdP = 127.0 / scaleInt;
+            I32 thresholdN = 0;
+            if (ACTIVATION_RELU6 != activationDesc.mode) {
+                thresholdN = thresholdP * -1;
+            }
+
+            for (U32 i = 0; i < 4; i++) {
+                max_i32[i] = thresholdP;
+                min_i32[i] = thresholdN;
+            }
         }
         
         if (odt == DT_I8) { // Scale the bias
             if (idt == DT_F16) {
-                biasScaled += ic*ih*iw*8; // After the quantized input
+                biasScaled += ic * ih * iw * 8 / bytesOf(DT_I32);  // After the quantized input
             }
             F32 scale = (*inputScale) * (*filterScale);
             for (U32 i=0; i<oc*8; i++) {
-                biasScaled[i] = (I32)(biasArray[i] * scale);
+                biasScaled[i] = round(scale * biasArray[i]);
             }
         }
 
@@ -530,6 +563,83 @@ EE convolution_gemm_A76(TensorDesc inputDesc, const void* input, F16* inputScale
                     "smax v28.4s, v28.4s, v1.4s\n"
 
                     "2:\n"
+                    "cbz %[scale_known], 7f\n"
+                    "smax v5.4s, v5.4s, v0.4s\n"
+                    "smin v5.4s, v5.4s, v30.4s\n"
+                    "smax v6.4s, v6.4s, v0.4s\n"
+                    "smin v6.4s, v6.4s, v30.4s\n"
+                    "smax v7.4s, v7.4s, v0.4s\n"
+                    "smin v7.4s, v7.4s, v30.4s\n"
+                    "smax v8.4s, v8.4s, v0.4s\n"
+                    "smin v8.4s, v8.4s, v30.4s\n"
+                    "smax v9.4s, v9.4s, v0.4s\n"
+                    "smin v9.4s, v9.4s, v30.4s\n"
+                    "smax v10.4s, v10.4s, v0.4s\n"
+                    "smin v10.4s, v10.4s, v30.4s\n"
+                    "smax v11.4s, v11.4s, v0.4s\n"
+                    "smin v11.4s, v11.4s, v30.4s\n"
+                    "smax v12.4s, v12.4s, v0.4s\n"
+                    "smin v12.4s, v12.4s, v30.4s\n"
+                    "smax v13.4s, v13.4s, v0.4s\n"
+                    "smin v13.4s, v13.4s, v30.4s\n"
+                    "smax v14.4s, v14.4s, v0.4s\n"
+                    "smin v14.4s, v14.4s, v30.4s\n"
+                    "smax v15.4s, v15.4s, v0.4s\n"
+                    "smin v15.4s, v15.4s, v30.4s\n"
+                    "smax v16.4s, v16.4s, v0.4s\n"
+                    "smin v16.4s, v16.4s, v30.4s\n"
+                    "smax v17.4s, v17.4s, v0.4s\n"
+                    "smin v17.4s, v17.4s, v30.4s\n"
+                    "smax v18.4s, v18.4s, v0.4s\n"
+                    "smin v18.4s, v18.4s, v30.4s\n"
+                    "smax v19.4s, v19.4s, v0.4s\n"
+                    "smin v19.4s, v19.4s, v30.4s\n"
+                    "smax v20.4s, v20.4s, v0.4s\n"
+                    "smin v20.4s, v20.4s, v30.4s\n"
+                    "smax v21.4s, v21.4s, v0.4s\n"
+                    "smin v21.4s, v21.4s, v30.4s\n"
+                    "smax v22.4s, v22.4s, v0.4s\n"
+                    "smin v22.4s, v22.4s, v30.4s\n"
+                    "smax v23.4s, v23.4s, v0.4s\n"
+                    "smin v23.4s, v23.4s, v30.4s\n"
+                    "smax v24.4s, v24.4s, v0.4s\n"
+                    "smin v24.4s, v24.4s, v30.4s\n"
+                    "smax v25.4s, v25.4s, v0.4s\n"
+                    "smin v25.4s, v25.4s, v30.4s\n"
+                    "smax v26.4s, v26.4s, v0.4s\n"
+                    "smin v26.4s, v26.4s, v30.4s\n"
+                    "smax v27.4s, v27.4s, v0.4s\n"
+                    "smin v27.4s, v27.4s, v30.4s\n"
+                    "smax v28.4s, v28.4s, v0.4s\n"
+                    "smin v28.4s, v28.4s, v30.4s\n"
+
+                    "str   q5, [%[out_buf]]\n"
+                    "str   q6, [%[out_buf], 16]\n"
+                    "str   q7, [%[out_buf], 32]\n"
+                    "str   q8, [%[out_buf], 48]\n"
+                    "str   q9, [%[out_buf], 64]\n"
+                    "str   q10, [%[out_buf], 80]\n"
+                    "str   q11, [%[out_buf], 96]\n"
+                    "str   q12, [%[out_buf], 112]\n"
+                    "str   q13, [%[out_buf], 128]\n"
+                    "str   q14, [%[out_buf], 144]\n"
+                    "str   q15, [%[out_buf], 160]\n"
+                    "str   q16, [%[out_buf], 176]\n"
+                    "str   q17, [%[out_buf], 192]\n"
+                    "str   q18, [%[out_buf], 208]\n"
+                    "str   q19, [%[out_buf], 224]\n"
+                    "str   q20, [%[out_buf], 240]\n"
+                    "str   q21, [%[out_buf], 256]\n"
+                    "str   q22, [%[out_buf], 272]\n"
+                    "str   q23, [%[out_buf], 288]\n"
+                    "str   q24, [%[out_buf], 304]\n"
+                    "str   q25, [%[out_buf], 320]\n"
+                    "str   q26, [%[out_buf], 336]\n"
+                    "str   q27, [%[out_buf], 352]\n"
+                    "str   q28, [%[out_buf], 368]\n"
+                    "b 5f\n"
+
+                    "7:\n"
                     "smax v30.4s, v5.4s, v30.4s\n"
                     "smin v0.4s, v5.4s, v0.4s\n"
                     "str   q5, [%[out_buf]]\n"
@@ -620,7 +730,8 @@ EE convolution_gemm_A76(TensorDesc inputDesc, const void* input, F16* inputScale
                      [max]"r"(max_i32),
                      [min]"r"(min_i32),
                      [conv_relu]"r"(conv_relu_bool),
-                     [out_f16]"r"(out_f16_bool)
+                     [out_f16]"r"(out_f16_bool),
+                     [scale_known]"r"(scale_known_bool)
                     :"memory", "cc", "v0", "v1", "v2", "v3", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23", "v24", "v25", "v26", "v27", "v28", "v29", "v30", "x0", "x1", "x2", "x3","x17","x16"
                 );
                 b0 += 8;
@@ -900,6 +1011,59 @@ EE convolution_gemm_A76(TensorDesc inputDesc, const void* input, F16* inputScale
                     "smax v20.4s, v20.4s, v1.4s\n"
 
                     "2:\n"
+                    "cbz %[scale_known], 7f\n"
+                    "smax v5.4s, v5.4s, v0.4s\n"
+                    "smin v5.4s, v5.4s, v30.4s\n"
+                    "smax v6.4s, v6.4s, v0.4s\n"
+                    "smin v6.4s, v6.4s, v30.4s\n"
+                    "smax v7.4s, v7.4s, v0.4s\n"
+                    "smin v7.4s, v7.4s, v30.4s\n"
+                    "smax v8.4s, v8.4s, v0.4s\n"
+                    "smin v8.4s, v8.4s, v30.4s\n"
+                    "smax v9.4s, v9.4s, v0.4s\n"
+                    "smin v9.4s, v9.4s, v30.4s\n"
+                    "smax v10.4s, v10.4s, v0.4s\n"
+                    "smin v10.4s, v10.4s, v30.4s\n"
+                    "smax v11.4s, v11.4s, v0.4s\n"
+                    "smin v11.4s, v11.4s, v30.4s\n"
+                    "smax v12.4s, v12.4s, v0.4s\n"
+                    "smin v12.4s, v12.4s, v30.4s\n"
+                    "smax v13.4s, v13.4s, v0.4s\n"
+                    "smin v13.4s, v13.4s, v30.4s\n"
+                    "smax v14.4s, v14.4s, v0.4s\n"
+                    "smin v14.4s, v14.4s, v30.4s\n"
+                    "smax v15.4s, v15.4s, v0.4s\n"
+                    "smin v15.4s, v15.4s, v30.4s\n"
+                    "smax v16.4s, v16.4s, v0.4s\n"
+                    "smin v16.4s, v16.4s, v30.4s\n"
+                    "smax v17.4s, v17.4s, v0.4s\n"
+                    "smin v17.4s, v17.4s, v30.4s\n"
+                    "smax v18.4s, v18.4s, v0.4s\n"
+                    "smin v18.4s, v18.4s, v30.4s\n"
+                    "smax v19.4s, v19.4s, v0.4s\n"
+                    "smin v19.4s, v19.4s, v30.4s\n"
+                    "smax v20.4s, v20.4s, v0.4s\n"
+                    "smin v20.4s, v20.4s, v30.4s\n"
+
+                    "str   q5, [%[out_buf]]\n"
+                    "str   q6, [%[out_buf], 16]\n"
+                    "str   q7, [%[out_buf], 32]\n"
+                    "str   q8, [%[out_buf], 48]\n"
+                    "str   q9, [%[out_buf], 64]\n"
+                    "str   q10, [%[out_buf], 80]\n"
+                    "str   q11, [%[out_buf], 96]\n"
+                    "str   q12, [%[out_buf], 112]\n"
+                    "str   q13, [%[out_buf], 128]\n"
+                    "str   q14, [%[out_buf], 144]\n"
+                    "str   q15, [%[out_buf], 160]\n"
+                    "str   q16, [%[out_buf], 176]\n"
+                    "str   q17, [%[out_buf], 192]\n"
+                    "str   q18, [%[out_buf], 208]\n"
+                    "str   q19, [%[out_buf], 224]\n"
+                    "str   q20, [%[out_buf], 240]\n"
+                    "b 5f\n"
+
+                    "7:\n"
                     "smax v30.4s, v5.4s, v30.4s\n"
                     "smin v0.4s, v5.4s, v0.4s\n"
                     "str   q5, [%[out_buf]]\n"
@@ -965,7 +1129,8 @@ EE convolution_gemm_A76(TensorDesc inputDesc, const void* input, F16* inputScale
                      [max]"r"(max_i32),
                      [min]"r"(min_i32),
                      [conv_relu]"r"(conv_relu_bool),
-                     [out_f16]"r"(out_f16_bool)
+                     [out_f16]"r"(out_f16_bool),
+                     [scale_known]"r"(scale_known_bool)
                     :"memory", "cc", "v0", "v1", "v3", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18", "v19", "v20", "v29", "v30", "x0", "x1", "x2", "x3","x17","x16"
                 );
                 b0 += 8;
@@ -1155,6 +1320,35 @@ EE convolution_gemm_A76(TensorDesc inputDesc, const void* input, F16* inputScale
                     "smax v12.4s, v12.4s, v1.4s\n"
 
                     "2:\n"
+                    "cbz %[scale_known], 7f\n"
+                    "smax v5.4s, v5.4s, v0.4s\n"
+                    "smin v5.4s, v5.4s, v30.4s\n"
+                    "smax v6.4s, v6.4s, v0.4s\n"
+                    "smin v6.4s, v6.4s, v30.4s\n"
+                    "smax v7.4s, v7.4s, v0.4s\n"
+                    "smin v7.4s, v7.4s, v30.4s\n"
+                    "smax v8.4s, v8.4s, v0.4s\n"
+                    "smin v8.4s, v8.4s, v30.4s\n"
+                    "smax v9.4s, v9.4s, v0.4s\n"
+                    "smin v9.4s, v9.4s, v30.4s\n"
+                    "smax v10.4s, v10.4s, v0.4s\n"
+                    "smin v10.4s, v10.4s, v30.4s\n"
+                    "smax v11.4s, v11.4s, v0.4s\n"
+                    "smin v11.4s, v11.4s, v30.4s\n"
+                    "smax v12.4s, v12.4s, v0.4s\n"
+                    "smin v12.4s, v12.4s, v30.4s\n"
+
+                    "str   q5, [%[out_buf]]\n"
+                    "str   q6, [%[out_buf], 16]\n"
+                    "str   q7, [%[out_buf], 32]\n"
+                    "str   q8, [%[out_buf], 48]\n"
+                    "str   q9, [%[out_buf], 64]\n"
+                    "str   q10, [%[out_buf], 80]\n"
+                    "str   q11, [%[out_buf], 96]\n"
+                    "str   q12, [%[out_buf], 112]\n"
+                    "b 5f\n"
+
+                    "7:\n"
                     "smax v30.4s, v5.4s, v30.4s\n"
                     "smin v0.4s, v5.4s, v0.4s\n"
                     "str   q5, [%[out_buf]]\n"
@@ -1195,7 +1389,8 @@ EE convolution_gemm_A76(TensorDesc inputDesc, const void* input, F16* inputScale
                      [max]"r"(max_i32),
                      [min]"r"(min_i32),
                      [conv_relu]"r"(conv_relu_bool),
-                     [out_f16]"r"(out_f16_bool)
+                     [out_f16]"r"(out_f16_bool),
+                     [scale_known]"r"(scale_known_bool)
                     :"memory", "cc", "v0", "v1", "v2", "v3", "v5", "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v29", "x0", "x1", "x2", "x3","x17","x16"
                 );
                 b0 += 8;
@@ -1283,14 +1478,21 @@ EE convolution_gemm_A76(TensorDesc inputDesc, const void* input, F16* inputScale
                         res[0] = vmaxq_s32(res[0], z);
                         res[1] = vmaxq_s32(res[1], z);
                     }
-                    max = vmaxq_s32(max, res[0]);
-                    min = vminq_s32(min, res[0]);
+                    if (1 == scale_known_bool) {
+                        res[0] = vmaxq_s32(min, res[0]);
+                        res[1] = vmaxq_s32(min, res[1]);
+                        res[0] = vminq_s32(max, res[0]);
+                        res[1] = vminq_s32(max, res[1]);
+                    } else {
+                        max = vmaxq_s32(max, res[0]);
+                        min = vminq_s32(min, res[0]);
+                        max = vmaxq_s32(max, res[1]);
+                        min = vminq_s32(min, res[1]);
+                        vst1q_s32(max_i32, max);
+                        vst1q_s32(min_i32, min);
+                    }
                     vst1q_s32(out_buf, res[0]);
-                    max = vmaxq_s32(max, res[1]);
-                    min = vminq_s32(min, res[1]);
                     vst1q_s32(out_buf + 4, res[1]);
-                    vst1q_s32(max_i32, max);
-                    vst1q_s32(min_i32, min);
                 }
                 
                 b0 += 8;
@@ -1301,37 +1503,42 @@ EE convolution_gemm_A76(TensorDesc inputDesc, const void* input, F16* inputScale
 
     EE ret = SUCCESS;
     if (out_f16_bool == 0) {
-        //double start = get_current_time_int8();
-        I32 max = max_i32[0];
-        I32 min = min_i32[0];
-        for (U32 i=1; i<4; i++) {
-            if (max < max_i32[i]) {
-                max = max_i32[i];
-            }
-            if (min > min_i32[i]) {
-                min = min_i32[i];
-            }
-        }
-
-        if (max == 0 && min == 0) {
-            return NOT_SUPPORTED;
-        }
-
         I32 factor;
-        F16 scale_o;
-        if (max > 0 && min < 0) {
-            I32 factor_max = 127 * 16777216 / max;
-            I32 factor_min = -128 * 16777216 / min;
-            factor = (factor_max < factor_min) ? factor_max : factor_min;
-            scale_o = (factor_max < factor_min) ? (127.0/max) : (-128.0/min);
-        } else if (max > 0) {
-            factor = 127 * 16777216 / max;
-            scale_o = 127.0 / max;
+        F32 scale_o;
+
+        if (1 == scale_known_bool) {
+            scale_o = (*outputScale / *inputScale) / *filterScale;
+            factor = 127 * 16777216 / max_i32[0];
         } else {
-            factor = -128 * 16777216 / min;
-            scale_o = -128.0 / min;
+            I32 max = max_i32[0];
+            I32 min = min_i32[0];
+            for (U32 i=1; i<4; i++) {
+                if (max < max_i32[i]) {
+                    max = max_i32[i];
+                }
+                if (min > min_i32[i]) {
+                    min = min_i32[i];
+                }
+            }
+
+            if (max == 0 && min == 0) {
+                return NOT_SUPPORTED;
+            }
+
+            if (max > 0 && min < 0) {
+                I32 factor_max = 127 * 16777216 / max;
+                I32 factor_min = -127 * 16777216 / min;
+                factor = (factor_max < factor_min) ? factor_max : factor_min;
+                scale_o = (factor_max < factor_min) ? (127.0/max) : (-127.0/min);
+            } else if (max > 0) {
+                factor = 127 * 16777216 / max;
+                scale_o = 127.0 / max;
+            } else {
+                factor = -127 * 16777216 / min;
+                scale_o = -127.0 / min;
+            }
+            *outputScale = (*inputScale) * (*filterScale) * scale_o;
         }
-        *outputScale = (*inputScale) * (*filterScale) * scale_o;
         
         U32 num_v = oc * ohow * 2; // Number of q-form vectors
         I32 *out_buf = biasScaled + oc*8;
@@ -1344,9 +1551,9 @@ EE convolution_gemm_A76(TensorDesc inputDesc, const void* input, F16* inputScale
 
 template EE convolution_gemm_A76<INT8>(TensorDesc inputDesc, const void* input, F16* inputScale, TensorDesc filterDesc, const void* filter, F16* filterScale,
     ConvolutionDesc convDesc, TensorDesc biasDesc, const void* bias, U32 tmpBytes, void* tmp, TensorDesc outputDesc,
-    void* output, F16* outputScale, ActivationMode am);
+    void* output, F16* outputScale, ActivationDesc activationDesc);
 
 template EE convolution_gemm_A76<F16>(TensorDesc inputDesc, const void* input, F16* inputScale, TensorDesc filterDesc, const void* filter, F16* filterScale,
     ConvolutionDesc convDesc, TensorDesc biasDesc, const void* bias, U32 tmpBytes, void* tmp, TensorDesc outputDesc,
-    void* output, F16* outputScale, ActivationMode am);
+    void* output, F16* outputScale, ActivationDesc activationDesc);
 #endif

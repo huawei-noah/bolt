@@ -17,8 +17,8 @@
 #include "model_tools.h"
 #include "onnx_adaptee.h"
 
-EE onnx_converter(std::string dir, std::string mfn, int removePreprocessOpNum, TensorDesc inputDesc, ModelSpec* ms) {
-    ModelAdaptee* ade = new OnnxAdaptee(removePreprocessOpNum, inputDesc);
+EE onnx_converter(std::string dir, std::string mfn, int removePreprocessOpNum, ModelSpec* ms) {
+    ModelAdaptee* ade = new OnnxAdaptee(removePreprocessOpNum);
     EE ret = ade->adapt(dir, mfn, ms);
     delete ade;
     return ret;

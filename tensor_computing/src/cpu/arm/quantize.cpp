@@ -16,6 +16,9 @@
 #ifdef _USE_FP16
 #include "cpu/arm/fp16/tensor_computing_fp16.h"
 #endif
+#ifdef _USE_INT8
+#include "cpu/arm/int8/tensor_computing_int8.h"
+#endif
 
 
 EE quantize_tensor_arm(TensorDesc dDesc, const void* data, TensorDesc* qDesc, void* qData, void *scale)
@@ -25,6 +28,12 @@ EE quantize_tensor_arm(TensorDesc dDesc, const void* data, TensorDesc* qDesc, vo
 #ifdef _USE_FP16
         case DT_F16: {
             ret = quantize_tensor_fp16(dDesc, data, qDesc, qData, (F16*)scale);
+            break;
+        }
+#endif
+#ifdef _USE_INT8
+        case DT_I32: {
+            ret = quantize_tensor_int32(dDesc, data, qDesc, qData, (F32*)scale);
             break;
         }
 #endif

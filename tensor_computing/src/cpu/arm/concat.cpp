@@ -18,72 +18,66 @@
 #endif
 #include <cstring>
 
-EE concat(std::vector<TensorDesc> inputDesc, std::vector<void*> input, TensorDesc outputDesc, void* output, U32 concatDim)
+EE concat(std::vector<TensorDesc> inputDesc, std::vector<void*> input, TensorDesc outputDesc, void* output, int axis)
 {
-    if (nullptr == output)
+    if (nullptr == output) {
         CHECK_STATUS(NULL_POINTER);
-
-    if (inputDesc.size() < 1) {
-        CHECK_STATUS(NOT_MATCH);
     }
-    if(inputDesc.size() == 1) {
-        memcpy(output, input[0], tensorNumBytes(outputDesc));
-        return SUCCESS;
-    }
-    if (concatDim != 0 && concatDim != 1) {
-        CHECK_STATUS(NOT_SUPPORTED);
-    }
-
-    DataType odt, idt;
-    DataFormat odf, idf;
-    U32 on = 0, oc = 0, oh = 0, ow = 0,
-        in = 0, ic = 0, ih = 0, iw = 0;
-    U32 copySize;
-
-    if(tensorIs4d(outputDesc)) {
-        CHECK_STATUS(tensor4dGet(inputDesc[0], &idt, &idf, &in, &ic, &ih, &iw));
-        CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
-        if (odt != idt) {
-            CHECK_STATUS(NOT_MATCH);
-        }
-
-        char *out_ptr = (char *)output;
-        //batch
-        if(concatDim == 0) {
-            for(U32 i = 0; i < inputDesc.size(); i++) {
-                copySize = tensorNumElements(inputDesc[i]) * bytesOf(idt);
-
-                memcpy(out_ptr, input[i], copySize);
-                out_ptr = out_ptr + copySize;
-            }
-            return SUCCESS;
-        }
-        //channel
-        if(concatDim == 1) {
-            for(U32 j = 0; j < on; j++) {
-                for(U32 i = 0; i < inputDesc.size(); i++) {
-                    CHECK_STATUS(tensor4dGet(inputDesc[i], &idt, &idf, &in, &ic, &ih, &iw));
-                    if (odf != idf) {
-                        CHECK_STATUS(NOT_MATCH);
-                    }
-
-                    copySize = tensorNumElements(inputDesc[i]) / in * bytesOf(idt);
-
-                    memcpy(out_ptr, (char *)input[i] + j * copySize, copySize);
-                    out_ptr = out_ptr + copySize;
-                }
-            }
-            return SUCCESS;
-        }
-    }
-    else{
+    U32 num = inputDesc.size();
+    if (num < 1) {
         return NOT_MATCH;
     }
-    return NOT_SUPPORTED;
+
+    int dim = outputDesc.nDims;
+    axis = (axis + dim) % dim;
+    axis = dim - 1 - axis;
+    U32 tileSize = bytesOf(outputDesc.dt);
+    for (I32 i = 0; i < axis; i++) {
+        tileSize *= outputDesc.dims[i];
+    }
+    U32 loops = 1;
+    for (I32 i = axis + 1; i < dim; i++) {
+        loops *= outputDesc.dims[i];
+    }
+
+    if (outputDesc.df == DF_NCHWC8) {
+        if (axis < 2) {
+            tileSize *= 8;
+            loops /= 8;
+        }
+    }
+
+    // DF should either all be NCHWC8, or all be non-C8
+    bool isC8 = DF_NCHWC8 == outputDesc.df;
+
+    U8 *ptr = (U8 *)output;
+    for (U32 i = 0; i < loops; i++) {
+        for (U32 j = 0; j < num; j++) {
+            if (nullptr == input[j]) {
+                CHECK_STATUS(NULL_POINTER);
+            }
+            if (isC8) {
+                if (DF_NCHWC8 != inputDesc[j].df) {
+                    CHECK_REQUIREMENT(4 == inputDesc[j].nDims);
+                    CHECK_REQUIREMENT(1 == inputDesc[j].dims[1] && 1 == inputDesc[j].dims[0]);
+                }
+            } else {
+                if (DF_NCHWC8 == inputDesc[j].df) {
+                    CHECK_REQUIREMENT(4 == inputDesc[j].nDims);
+                    CHECK_REQUIREMENT(1 == inputDesc[j].dims[1] && 1 == inputDesc[j].dims[0]);
+                }
+            }
+            U32 blockSize = inputDesc[j].dims[axis] * tileSize;
+            U8* srcPtr = (U8*)((input)[j]) + i * blockSize;
+            memcpy(ptr, srcPtr, blockSize);
+            ptr += blockSize;
+        }
+    }
+    return SUCCESS;
 }
 
 EE concat_arm(std::vector<TensorDesc> inputDesc, std::vector<void*> input, void* inputScale,
-    TensorDesc outputDesc, void* output, void* outputScale, U32 concatDim)
+    TensorDesc outputDesc, void* output, void* outputScale, int axis)
 {
     EE ret = SUCCESS;
     switch (outputDesc.dt) {
@@ -93,7 +87,7 @@ EE concat_arm(std::vector<TensorDesc> inputDesc, std::vector<void*> input, void*
             UNUSED(outputScale);
             ret = concat(inputDesc, input,
                          outputDesc, output,
-                         concatDim);
+                         axis);
             break;
         }
 #endif
@@ -103,7 +97,7 @@ EE concat_arm(std::vector<TensorDesc> inputDesc, std::vector<void*> input, void*
             UNUSED(outputScale);
             ret = concat(inputDesc, input,
                          outputDesc, output,
-                         concatDim);
+                         axis);
             break;
         }
 #endif
@@ -111,7 +105,7 @@ EE concat_arm(std::vector<TensorDesc> inputDesc, std::vector<void*> input, void*
         case DT_I8: {
             ret = concat_int8(inputDesc, input, (F32*)inputScale,
                               outputDesc, output, (F32*)outputScale,
-                              concatDim);
+                              axis);
             break;
         }
 #endif

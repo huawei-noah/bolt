@@ -33,10 +33,10 @@
         DF_NCHWN16C8, //bnn im2col + GEMM, for filter
         DF_TRANSPOSE, //vectorize for COL_MAJOR
         DF_NORMAL,  //vectorize for ROW_MAJOR
-        DF_MTK, // LSTM input, T: step, M: batch, K: x_dim
+        DF_MTK, // LSTM input, M: batch, T: step, K: x_dim
+        DF_MKT, // LSTM input, M: batch, T: step, K: x_dim
         DF_NK, // MMM/MVM filter, N: col_num, K: row_num
         DF_NKN32, // MMM/MVM filter, vectorized for N=32
-        DF_8NK, // LSTM MMM/MVM filter, with 8 matrix
         DF_CHW_NC, // dw_conv, CHW means dw part, NC means pw part
         DF_CHWC8_NCN16, // dw_conv, vectorized for C8 and N16
         DF_CHWC8_NCN8C4, // int8 dw_conv, vectorized for C4 and N8
@@ -44,15 +44,28 @@
         DF_NCHWC3, //ocl mali support input rgb
         DF_NHWC, //ocl mali support input/output
         DF_NCHWN4C4, //ocl mali conv filter
+        DF_NCHWN4,   //ocl mali conv filter
+        DF_HWCN ,    //ocl mali filter
         DF_NCWHN4C4, //ocl mali fc   filter
-        DF_NHWCN4,  //ocl mali filter
+        DF_NHWCN4,   //ocl mali filter
+        DF_CHWNC4,   //ocl mali filter
+        DF_CHWNC8,   //ocl mali filter
+        DF_CHWNC16,  //ocl mali filter
         DF_CHWC8_NCN8, // fp32 dw_conv, vectorized for C8 and N8
         DF_RGB,
-        DF_HWNCN8  // fp32 filter for winograd
+        DF_HWNCN8,  // fp32 filter for winograd
+        DF_NKN24,  // Optimized MMM filter for FP16
+#ifdef __aarch64__
+        DF_NKN12,  // Optimized MMM filter for FP32
+#else
+        DF_NKN8,  // Optimized MMM filter for FP32
+#endif
+        DF_NKN12K4,  // Optimized MMM filter for INT8
+        DF_NCHW_ORG_MALI // mark first layer for mali
     } DataFormat;
 
     typedef struct {
-        DataType dt;
+        DataType dt = DT_U8;
         DataFormat df;
         U32 nDims = 0;
         U32 dims[6] = {0};

@@ -17,8 +17,8 @@
 
     #include <arm_neon.h>
     #define UNUSED(x) (void)x
-    #define UNI_MIN(a,b) (((a)<(b))?(a):(b))
-    #define UNI_MAX(a,b) (((a)>(b))?(a):(b))
+    #define UNI_MIN(a, b) (((a) < (b))?(a):(b))
+    #define UNI_MAX(a, b) (((a) > (b))?(a):(b))
     #define UNI_F16_MIN -65504.0f
     #define UNI_F16_MAX 65504.0f
     #define NAME_LEN 128
@@ -37,7 +37,7 @@ extern "C" {
 #endif
 
     typedef enum {
-        RGB_SC = 0, // scale and center crop
+        RGB_SC = 0,  // scale and center crop
         RGB = 1,
         BGR = 2,
         RGB_RAW = 3,
@@ -70,7 +70,7 @@ extern "C" {
     typedef float F32;
     typedef double F64;
     typedef long I64;
-#ifdef _USE_FP16
+#ifdef __aarch64__
     typedef __fp16 F16;
 #endif
     typedef unsigned char BIN8;
@@ -137,8 +137,15 @@ extern "C" {
     } InferencePrecision;
 
     typedef enum {
-        CHECK_EQUAL
+        CHECK_EQUAL,
+        CHECK_GREATEQUAL,
+        CHECK_GREAT
     } CheckMode;
+
+    typedef enum {
+        REDUCTION_SUM,
+        REDUCTION_MEAN
+    } ReductionMode;
 
 #ifdef __cplusplus
 }

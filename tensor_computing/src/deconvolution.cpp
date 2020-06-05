@@ -12,15 +12,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#include <cmath>
-#include "sys.h"
-#include "type.h"
-#include "tensor_desc.h"
-#include "error.h"
 #include "tensor_computing.h"
-#include "tensor_computing_type.h"
+#ifdef _USE_GENERAL
 #include "cpu/general/tensor_computing_general.h"
+#endif
+#ifdef _USE_NEON
 #include "cpu/arm/tensor_computing_arm.h"
+#endif
 
 EE deconvolution_infer_output_size(TensorDesc inputDesc, TensorDesc filterDesc, ConvolutionDesc convDesc,
     TensorDesc* outputDesc, DataType targetDataType, U32* outputBytes)
@@ -36,7 +34,7 @@ EE deconvolution_infer_output_size(TensorDesc inputDesc, TensorDesc filterDesc, 
     CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
     CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
 
-    if (fn % 8 != 0) {
+    if (fc % 8 != 0) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
 
@@ -54,7 +52,7 @@ EE deconvolution_infer_output_size(TensorDesc inputDesc, TensorDesc filterDesc, 
     oh = fh + strideH * (ih - 1) - paddingT - paddingB;
     ow = fw + strideW * (iw - 1) - paddingL - paddingR;
 
-    *outputDesc = tensor4df(targetDataType, DF_NCHWC8, in, fn, oh, ow);
+    *outputDesc = tensor4df(targetDataType, DF_NCHWC8, in, fc, oh, ow);
     *outputBytes = tensorNumBytes(*outputDesc);
     return SUCCESS;
 }
@@ -62,41 +60,63 @@ EE deconvolution_infer_output_size(TensorDesc inputDesc, TensorDesc filterDesc, 
 EE deconvolution_infer_forward_algorithm(TensorDesc inputDesc, TensorDesc filterDesc, TensorDesc outputDesc,
     ConvolutionDesc convDesc, ConvolutionPolicy policy, ConvolutionForwardAlgorithm *algorithm, DataType targetDataType, Arch arch)
 {
-    EE ret = SUCCESS;
-    if (arch == ARM_A55 || arch == ARM_A76 || arch == ARM_V8)
+    EE ret = NOT_SUPPORTED;
+    if (arch == CPU_GENERAL) {
+#ifdef _USE_GENERAL
+        ret = SUCCESS;
+#endif
+#ifdef _USE_NEON
+    } else if (arch == ARM_A55 || arch == ARM_A76 || arch == ARM_V8 || arch == ARM_V7) {
         ret = deconvolution_infer_forward_algorithm_arm(inputDesc, filterDesc, outputDesc, convDesc, policy, algorithm, targetDataType);
-    else
-        ret = NOT_SUPPORTED;
+#endif
+    }
     return ret;
 }
 
-EE deconvolution_transform_filter_bytes(TensorDesc filterDesc, ConvolutionForwardAlgorithm algorithm, U32* bytes, Arch arch){
-    EE ret = SUCCESS;
-    if (arch == ARM_A55 || arch == ARM_A76 || arch == ARM_V8)
+EE deconvolution_transform_filter_bytes(TensorDesc filterDesc, ConvolutionForwardAlgorithm algorithm, U32* bytes, Arch arch)
+{
+    EE ret = NOT_SUPPORTED;
+    if (arch == CPU_GENERAL) {
+#ifdef _USE_GENERAL
+        ret = SUCCESS;
+#endif
+#ifdef _USE_NEON
+    } else if (arch == ARM_A55 || arch == ARM_A76 || arch == ARM_V8 || arch == ARM_V7) {
         ret = deconvolution_transform_filter_bytes_arm(filterDesc, algorithm, bytes);
-    else
-        ret = NOT_SUPPORTED;
+#endif
+    }
     return ret;
 }
 
 EE deconvolution_transform_filter(TensorDesc filterDesc, const void* filter, ConvolutionForwardAlgorithm algorithm,
     TensorDesc *ftmDesc, void* filterTransformed, Arch arch)
 {
-    EE ret = SUCCESS;
-    if (arch == ARM_A55 || arch == ARM_A76 || arch == ARM_V8)
+    EE ret = NOT_SUPPORTED;
+    if (arch == CPU_GENERAL) {
+#ifdef _USE_GENERAL
+        ret = SUCCESS;
+#endif
+#ifdef _USE_NEON
+    } else if (arch == ARM_A55 || arch == ARM_A76 || arch == ARM_V8 || arch == ARM_V7) {
         ret = deconvolution_transform_filter_arm(filterDesc, filter, algorithm, ftmDesc, filterTransformed);
-    else
-        ret = NOT_SUPPORTED;
+#endif
+    }
     return ret;
 }
 
 EE deconvolution_infer_forward_tmp_bytes(TensorDesc inputDesc, TensorDesc filterDesc, TensorDesc outputDesc,
-    ConvolutionDesc convDesc, ConvolutionForwardAlgorithm algorithm, U32 *bytes, Arch arch) {
-    EE ret = SUCCESS;
-    if (arch == ARM_A55 || arch == ARM_A76 || arch == ARM_V8)
+    ConvolutionDesc convDesc, ConvolutionForwardAlgorithm algorithm, U32 *bytes, Arch arch)
+{
+    EE ret = NOT_SUPPORTED;
+    if (arch == CPU_GENERAL) {
+#ifdef _USE_GENERAL
+        ret = SUCCESS;
+#endif
+#ifdef _USE_NEON
+    } else if (arch == ARM_A55 || arch == ARM_A76 || arch == ARM_V8 || arch == ARM_V7) {
         ret = deconvolution_infer_forward_tmp_bytes_arm(inputDesc, filterDesc, outputDesc, convDesc, algorithm, bytes);
-    else
-        ret = NOT_SUPPORTED;
+#endif
+    }
     return ret;
 }
 
@@ -108,58 +128,33 @@ EE deconvolution(TensorDesc inputDesc, void* input,
         TensorDesc biasDesc, const void* bias,
         U32 tmpBytes, void* tmp,
         TensorDesc outputDesc, void* output,
-        ActivationMode activationMode,
+        ActivationDesc activationDesc,
         Arch arch)
 {
-    EE ret = SUCCESS;
-    switch (arch) {
-        case CPU_GENERAL:
-            ret = deconvolution_general(inputDesc, input,
-                                      filterDesc, filter,
-                                      convDesc,
-                                      scaleDesc, scale,
-                                      biasDesc, bias,
-                                      outputDesc, output,
-                                      activationMode);
-            break;
-        case ARM_A55:
-            ret = deconvolution_arm(inputDesc, input,
+    EE ret = NOT_SUPPORTED;
+    if (arch == CPU_GENERAL) {
+#ifdef _USE_GENERAL
+        ret = deconvolution_general(inputDesc, input,
                                   filterDesc, filter,
                                   convDesc,
-                                  algorithm,
                                   scaleDesc, scale,
                                   biasDesc, bias,
-                                  tmpBytes, tmp,
                                   outputDesc, output,
-                                  activationMode,
-                                  arch);
-            break;
-        case ARM_A76:
-            ret = deconvolution_arm(inputDesc, input,
-                                  filterDesc, filter,
-                                  convDesc,
-                                  algorithm,
-                                  scaleDesc, scale,
-                                  biasDesc, bias,
-                                  tmpBytes, tmp,
-                                  outputDesc, output,
-                                  activationMode,
-                                  arch);
-            break;
-        case ARM_V8:
-            ret = deconvolution_arm(inputDesc, input,
-                                  filterDesc, filter,
-                                  convDesc,
-                                  algorithm,
-                                  scaleDesc, scale,
-                                  biasDesc, bias,
-                                  tmpBytes, tmp,
-                                  outputDesc, output,
-                                  activationMode,
-                                  arch);
-            break;
-        default:
-            ret = NOT_SUPPORTED;
+                                  activationDesc);
+#endif
+#ifdef _USE_NEON
+    } else if (arch == ARM_A55 || arch == ARM_A76 || arch == ARM_V8 || arch == ARM_V7) {
+        ret = deconvolution_arm(inputDesc, input,
+                              filterDesc, filter,
+                              convDesc,
+                              algorithm,
+                              scaleDesc, scale,
+                              biasDesc, bias,
+                              tmpBytes, tmp,
+                              outputDesc, output,
+                              activationDesc,
+                              arch);
+#endif
     }
     return ret;
 }

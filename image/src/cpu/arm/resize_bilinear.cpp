@@ -12,7 +12,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#include <arm_neon.h>
 #include <cmath>
 #include <cstring>
 #include "type.h"

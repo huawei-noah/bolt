@@ -12,7 +12,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#include <arm_neon.h>
 #include "blas_fp32.h"
 
 
@@ -43,6 +42,7 @@ void mvm_row_tail(U32 N, U32 K, F32* matrix, F32* vector, F32* result)
 
 void mvm_row_kernel(U32 N, U32 K, F32* matrix, F32* vector, F32* result)
 {
+#ifdef __aarch64__
     I32 KTail = K % 4;
     I32 KInner = K - KTail;
     F32* w0 = matrix;
@@ -129,6 +129,11 @@ void mvm_row_kernel(U32 N, U32 K, F32* matrix, F32* vector, F32* result)
         :"memory", "cc", "x19", "x20", "x21", "x22", "x23", "x24", "x15", "x16",
             "v0", "v1", "v2", "v3", "v4", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v16", "v17", "v18"
     );
+#else
+    // TODO
+    std::cerr << "[ERROR] currently not support ARMv7 row MVM" <<std::endl;
+    exit(1);
+#endif
 }
 
 void mvm_row_V8(U32 numRows, U32 numColumns, F32* matrix, F32* vector, F32* result)

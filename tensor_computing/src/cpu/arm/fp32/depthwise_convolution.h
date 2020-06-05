@@ -22,20 +22,42 @@
 #include "tensor_desc.h"
 #include "tensor_computing_type.h"
 
+#ifdef __aarch64__
 EE depthwise_convolution_direct_V8(TensorDesc inputDesc, F32* inArray,
     TensorDesc filterDesc, const F32* filterArray,
     ConvolutionDesc convDesc,
     TensorDesc biasDesc, const F32* biasArray,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F32* outArray,
-    ActivationMode depthwiseActivationMode);
+    ActivationDesc depthwiseActivationDesc);
+#else
+EE depthwise_convolution_direct_V7(TensorDesc inputDesc, F32* inArray,
+    TensorDesc filterDesc, const F32* filterArray,
+    ConvolutionDesc convDesc,
+    TensorDesc biasDesc, const F32* biasArray,
+    U32 tmpBytes, void* tmp,
+    TensorDesc outputDesc, F32* outArray,
+    ActivationDesc depthwiseActivationDesc);
+#endif
 
+#ifdef __aarch64__
 EE depthwise_pointwise_convolution_direct_V8(TensorDesc inputDesc, F32 *inArray,
                                    TensorDesc filterDesc, const F32 *filterArray,
                                    ConvolutionDesc convDesc,
                                    TensorDesc biasDesc, const F32 *biasArray,
                                    U32 tmpBytes, void *tmp,
                                    TensorDesc outputDesc, F32 *outArray,
-                                   ActivationMode depthwiseActivationMode,
-                                   ActivationMode pointwiseActivationMode);
+                                   ActivationDesc depthwiseActivationDesc,
+                                   ActivationDesc pointwiseActivationDesc);
+#else
+EE depthwise_pointwise_convolution_direct_V7(TensorDesc inputDesc, F32 *inArray,
+                                   TensorDesc filterDesc, const F32 *filterArray,
+                                   ConvolutionDesc convDesc,
+                                   TensorDesc biasDesc, const F32 *biasArray,
+                                   U32 tmpBytes, void *tmp,
+                                   TensorDesc outputDesc, F32 *outArray,
+                                   ActivationDesc depthwiseActivationDesc,
+                                   ActivationDesc pointwiseActivationDesc);
+#endif
+
 #endif

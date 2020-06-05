@@ -18,11 +18,16 @@
 #include "sys.h"
 #include "type.h"
 #include "error.h"
+#include "tensor_desc.h"
 
 
 EE mvm_fp16(U32 row, U32 col, bool transpose, F16* matrix, F16* vector, F16* result, Arch arch);
 
 void matrix_matrix_multiply_tmp_bytes_fp16(U32 row1, U32 col1, U32 row2, U32 col2, DataType dt, U32 *bytes);
+
+EE matrix_matrix_multiply_transform_rhsN_fp16(TensorDesc desc, F16* src, F16* dst);
+
+EE matrix_matrix_multiply_transform_rhsT_fp16(TensorDesc desc, F16* src, F16* dst);
 
 EE mmm_fp16(int M, int N, int K, F16* matrix1, F16* matrix2, F16* tmp, F16* result, Arch arch);
 

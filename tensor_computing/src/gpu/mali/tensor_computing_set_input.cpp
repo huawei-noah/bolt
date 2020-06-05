@@ -19,52 +19,65 @@
 #include "gpu/mali/tensor_computing_mali.h"
 EE tensor_computing_set_input_infer_tmpBuf_size_mali(GCLMem_t    input, 
                                                      TensorDesc  hostDesc, 
-                                                     U32*        tmpBufSize){
-    *tmpBufSize = 0;
-    if(input->desc.memType == GCL_MEM_BUF){*tmpBufSize = tensorNumBytes(hostDesc);}//TODO
+                                                     U32*        tmpBufSize) {
+    UNUSED(input);                                                     
+    *tmpBufSize = tensorNumBytes(hostDesc);
+//    if(input->desc.memFormat == DF_NCWHC4) {*tmpBufSize = tensorNumBytes(hostDesc);}
     return SUCCESS;
 }
 
 EE tensor_computing_set_input_mali(GCLHandle_t handle, 
-                                   GCLMem_t       input, 
-                                   TensorDesc     hostDesc, 
-                                   const U8*      hostPtr, 
-                                   GCLMem_t       tmpBuf, 
-                                   bool           blocking){
+                                   GCLMem_t    input, 
+                                   TensorDesc  hostDesc, 
+                                   const U8*   hostPtr, 
+                                   GCLMem_t    tmpBuf, 
+                                   bool        blocking) {
     GCLMemDesc desc = input->desc;
-    if(desc.memType == GCL_MEM_BUF){
+    if(desc.memType == GCL_MEM_BUF) {
         U32 size = tensorNumBytes(hostDesc);
         Kernel kernel;
         U32 iw, ih, ic, in;
         DataType hdt;
         DataFormat hdf;
-        tensorSelectGet(hostDesc, &hdt, &hdf, &in, &ic, &ih, &iw);
-        if(hdf == DF_NCHW){
-            if(hdt != DT_F16) return NOT_SUPPORTED;
+        if(hostDesc.df == DF_NCHW || hostDesc.df == DF_NHWC || hostDesc.df == DF_NCHW_ORG_MALI) { 
+            tensorSelectGet(hostDesc, &hdt, &hdf, &in, &ic, &ih, &iw);
+        } else if(hostDesc.df == DF_NORMAL){
+            tensor2dfGet(hostDesc, &hdt, &hdf, &ih, &iw);
+            ic = 1;
+            in = 1;
+            hdf = DF_NORMAL;
+        } else {
+            return NOT_SUPPORTED;
+        }
+        if(hdf == DF_NCHW_ORG_MALI || hdf == DF_NCHW) {
             U32 ow, oh, pw, ph;
-            if(desc.memFormat == DF_NCHW){
-                ow = input->desc.stride[0];
-                oh = input->desc.stride[1];
-                pw = input->desc.offset[0]; 
-                ph = input->desc.offset[1]; 
-                if(iw == ow && ih == oh){
-                    gcl_trans_memory(handle, (void*)hostPtr, (void*)input, &size, HOST_TO_DEVICE_BUF, blocking);
-                } else {
-                    gcl_trans_memory(handle, (void*)hostPtr, (void*)tmpBuf, &size, HOST_TO_DEVICE_BUF, blocking);
+            ow = input->desc.stride[0];
+            oh = input->desc.stride[1];
+            pw = input->desc.offset[0]; 
+            ph = input->desc.offset[1]; 
+            if(desc.memFormat == DF_NCHW || (ow == 1 && oh == 1 && pw == 0 && ph == 0)) {
+                GCLMem_t dst = (iw == ow && ih == oh) ? input : tmpBuf;
+                CHECK_STATUS(gcl_trans_memory(handle, (void*)hostPtr, (void*)dst, &size, HOST_TO_DEVICE_BUF, CL_TRUE));
+                if(iw != ow || ih != oh) {
                     CHECK_STATUS(gcl_get_kernel_from_map(handle, "padding_input_gclmem", &kernel));
                     CHECK_STATUS(gcl_set_kernelArgs(kernel, iw, ih, pw, ph, ow, oh, tmpBuf->mem, input->mem));
-                    U32 gs[3] = {(iw + 3) / 4, ih, ic * in};
-                    U32 ls[3] = {16, 16, 1};
+                    U32 gs[3] = {((ow + 3) / 4 + 3) / 4 * 4, (oh + 3) / 4 * 4, ic};
+                    U32 ls[3] = {0, 0, 0};
                     U32 dim   = 3;
                     CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, "padding_input_gclmem"));
                 }
 #ifdef _DEBUG
-                CHECK_STATUS(gcl_print_memory<F16>(handle, input, "padding output"));
+                if(hdt == DT_F16) {
+                    CHECK_STATUS(gcl_print_memory<F16>(handle, input, "padding output"));
+                } else if(hdt == DT_U8) {
+                    CHECK_STATUS(gcl_print_memory<U8>(handle, input, "padding output"));
+                }
 #endif
                 return SUCCESS;           
             }
 
-            if(desc.memFormat == DF_NCWHC4){
+            if(desc.memFormat == DF_NCWHC4) {
+                if(hdt != DT_F16) return NOT_SUPPORTED;
                 oh = input->desc.stride[0];
                 ow = input->desc.stride[1];
                 ph = input->desc.offset[0]; 
@@ -74,7 +87,7 @@ EE tensor_computing_set_input_mali(GCLHandle_t handle,
                 CHECK_STATUS(gcl_get_kernel_from_map(handle, "mem_trans_nchw_to_ncwhc4", &kernel));
                 CHECK_STATUS(gcl_set_kernelArgs(kernel, iw, ih, ic, iwh_str, pw, ph, ow, oh, tmpBuf->mem, input->mem));
                 U32 gs[3] = {(iw + 3) / 4, ih, (ic + 3) / 4 * in };
-                U32 ls[3] = {16, 16, 1};
+                U32 ls[3] = {0, 0, 0};
                 U32 dim   = 3;
                 CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, "mem_trans_nchw_to_ncwhc4"));
 #ifdef _DEBUG
@@ -84,14 +97,30 @@ EE tensor_computing_set_input_mali(GCLHandle_t handle,
             }
             return NOT_SUPPORTED;
         }
-        if(hdf == DF_NHWC){
+
+        if(hdf == DF_NHWC) {
             U32 oc, ow, pc, pw;
             oc = input->desc.stride[0];
             ow = input->desc.stride[1];
             pc = input->desc.offset[0]; 
             pw = input->desc.offset[1]; 
-            if(desc.memFormat == DF_NHWC){
-                if(ic == oc && iw == ow){
+            if(desc.memFormat == DF_NHWC) {
+                if(ic == oc && iw == ow && pc == 0 && pw == 0) {
+                    gcl_trans_memory(handle, (void*)hostPtr, (void*)input, &size, HOST_TO_DEVICE_BUF, blocking);
+                    return SUCCESS;           
+                }
+            }
+            return NOT_SUPPORTED;
+        }
+
+        if(hdf == DF_NORMAL) {
+            U32 oh, ow, ph, pw;
+            ow = input->desc.stride[0];
+            oh = input->desc.stride[1];
+            pw = input->desc.offset[0]; 
+            ph = input->desc.offset[1]; 
+            if(desc.memFormat == DF_NCHW) {
+                if(iw == ow && ih == oh && pw == 0 && ph == 0) {
                     gcl_trans_memory(handle, (void*)hostPtr, (void*)input, &size, HOST_TO_DEVICE_BUF, blocking);
                     return SUCCESS;           
                 }
@@ -99,12 +128,6 @@ EE tensor_computing_set_input_mali(GCLHandle_t handle,
             return NOT_SUPPORTED;
         }
     }
- /* 
-    if(desc.memType == GCL_MEM_IMG_1D || 
-       desc.memType == GCL_MEM_IMG_2D || 
-       desc.memType == GCL_MEM_IMG_3D ){
-    }
-*/   
     return NOT_SUPPORTED;
 }
 

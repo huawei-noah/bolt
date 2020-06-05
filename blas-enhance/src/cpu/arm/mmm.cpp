@@ -14,6 +14,7 @@
 
 #include "error.h"
 #include "type.h"
+#include "blas-enhance.h"
 #include "cpu/arm/blas_arm.h"
 #ifdef _USE_FP16
 #include "cpu/arm/fp16/blas_fp16.h"
@@ -57,6 +58,90 @@ EE matrix_matrix_multiply_tmp_bytes_arm(U32 matrixA_M, U32 matrixA_K, U32 matrix
     return ret;
 }
 
+EE matrix_matrix_multiply_transform_rhsN(TensorDesc desc, const  void* src, TensorDesc* descTran, void* dst)
+{
+    EE ret = SUCCESS;
+    switch (desc.dt) {
+#ifdef _USE_FP16
+        case DT_F16: {
+            ret = matrix_matrix_multiply_transform_rhsN_fp16(desc, (F16*)src, (F16*)dst);
+            break;
+        }
+#endif
+#ifdef _USE_FP32
+        case DT_F32: {
+            ret = matrix_matrix_multiply_transform_rhsN_fp32(desc, (F32*)src, (F32*)dst);
+            break;
+        }
+#endif
+#ifdef _USE_INT8
+        case DT_I8: {
+            ret = matrix_matrix_multiply_transform_rhsN_int8(desc, (INT8*)src, (INT8*)dst);
+            break;
+        }
+#endif
+        default:
+            ret = NOT_SUPPORTED;
+            break;
+    }
+    (*descTran) = desc;
+    (*descTran).df = targetFormat4MatrixB(desc.dt);
+    return ret;
+}
+
+EE matrix_matrix_multiply_transform_rhsT(TensorDesc desc, const  void* src, TensorDesc* descTran, void* dst)
+{
+    EE ret = SUCCESS;
+    switch (desc.dt) {
+#ifdef _USE_FP16
+        case DT_F16: {
+            ret = matrix_matrix_multiply_transform_rhsT_fp16(desc, (F16*)src, (F16*)dst);
+            break;
+        }
+#endif
+#ifdef _USE_FP32
+        case DT_F32: {
+            ret = matrix_matrix_multiply_transform_rhsT_fp32(desc, (F32*)src, (F32*)dst);
+            break;
+        }
+#endif
+#ifdef _USE_INT8
+        case DT_I8: {
+            ret = matrix_matrix_multiply_transform_rhsT_int8(desc, (INT8*)src, (INT8*)dst);
+            break;
+        }
+#endif
+        default:
+            ret = NOT_SUPPORTED;
+            break;
+    }
+    (*descTran) = desc;
+    (*descTran).df = targetFormat4MatrixB(desc.dt);
+    return ret;
+}
+
+EE matrix_matrix_multiply_transform_rhs(TensorDesc desc, const  void* src, TensorDesc* descTran, void* dst)
+{
+    if (desc.df == targetFormat4MatrixB(desc.dt)) {
+        return SUCCESS;
+    }
+    EE ret = SUCCESS;
+    switch (desc.df) {
+        case DF_NORMAL: {
+            ret = matrix_matrix_multiply_transform_rhsN(desc, src, descTran, dst);
+            break;
+        }
+        case DF_TRANSPOSE: {
+            ret = matrix_matrix_multiply_transform_rhsT(desc, src, descTran, dst);
+            break;
+        }
+        default:
+            ret = NOT_SUPPORTED;
+            break;
+    }
+    return ret;
+}
+
 EE mmm_arm(U32 matrixC_N, U32 matrixC_M, U32 matrixA_K,
      DataType dt,
      const void* matrixAData, const void* matrixBData,
@@ -68,23 +153,23 @@ EE mmm_arm(U32 matrixC_N, U32 matrixC_M, U32 matrixA_K,
     switch (dt) {
 #ifdef _USE_FP16
         case DT_F16: {
-            mmm_fp16(matrixC_N, matrixC_M, matrixA_K, (F16*)matrixAData, (F16*)matrixBData, (F16*)tmp, (F16*)matrixCData, arch);
+            ret = mmm_fp16(matrixC_N, matrixC_M, matrixA_K, (F16*)matrixAData, (F16*)matrixBData, (F16*)tmp, (F16*)matrixCData, arch);
             break;
         }
 #endif
 #ifdef _USE_FP32
         case DT_F32: {
-            UNUSED(arch);
-            mmm_fp32_V8(matrixC_N, matrixC_M, matrixA_K, (F32*)matrixAData, (F32*)matrixBData, (F32*)tmp, (F32*)matrixCData);
+#ifdef __aarch64__
+            ret = mmm_fp32_V8(matrixC_N, matrixC_M, matrixA_K, (F32*)matrixAData, (F32*)matrixBData, (F32*)tmp, (F32*)matrixCData);
+#else
+            ret = mmm_fp32_V7(matrixC_N, matrixC_M, matrixA_K, (F32*)matrixAData, (F32*)matrixBData, (F32*)tmp, (F32*)matrixCData);
+#endif
             break;
         }
 #endif
 #ifdef _USE_INT8
         case DT_I8: {
-            if (matrixA_K % 4 != 0) {
-                CHECK_STATUS(NOT_SUPPORTED);
-            }
-            mmm_int8(matrixC_N, matrixC_M, matrixA_K, (INT8*)matrixAData, (INT8*)matrixBData, (INT8*)tmp, (I32*)matrixCData, arch);
+            ret = mmm_int8(matrixC_N, matrixC_M, matrixA_K, (INT8*)matrixAData, (INT8*)matrixBData, (INT8*)tmp, (I32*)matrixCData, arch);
             break;
         }
 #endif

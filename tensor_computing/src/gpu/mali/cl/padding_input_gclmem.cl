@@ -16,25 +16,36 @@
 
 
 __kernel void padding_input_gclmem(const int iw, const int ih, const int pw, const int ph, 
-                                   const int ow, const int oh, const __global const T* in, __global T* out){
+    const int ow, const int oh, const __global const T* in, __global T* out) {
 
-    const int idx = get_global_id(0);
-    const int idy = get_global_id(1);
-    const int idz = get_global_id(2);
+    int idx = get_global_id(0) << 2;
+    int idy = get_global_id(1);
+    int idz = get_global_id(2);
+    if(idx >= ow || idy >= oh) return;
 
-    int bx = iw >> 2;
-    int rx = iw & 3;
+    int in_y = idy - ph;
+    int be_x = idx - pw;
+    int en_x = be_x + 4;
     T4 val = 0;
-
-    int in_off  = (idz * ih + idy) * iw + (idx << 2);
-    int out_off = (idz * oh + idy + ph) * ow + (idx << 2) + pw;
-    if(rx == 0 || idx < bx){
-        val = vload4(0, in + in_off);
-    } else {
-        if(rx == 1)  val.x = in[in_off];
-        if(rx == 2) {val.x = in[in_off]; val.y = in[in_off + 1];}    
-        if(rx == 3) {val.x = in[in_off]; val.y = in[in_off + 1]; val.z = in[in_off + 2];}    
+    if(in_y >= 0 && in_y < ih) {
+        int in_off = (idz  * ih + in_y) * iw;
+        if(be_x >= 0 && en_x < iw) {
+            val = vload4(0, in + in_off + be_x);
+        } else {
+            if(be_x >= 0 && be_x < iw)         val.x = in[in_off + be_x];
+            if(be_x + 1 >= 0 && be_x + 1 < iw) val.y = in[in_off + be_x + 1];
+            if(be_x + 2 >= 0 && be_x + 2 < iw) val.z = in[in_off + be_x + 2];
+            if(be_x + 3 >= 0 && be_x + 3 < iw) val.w = in[in_off + be_x + 3];
+        }
     }
-    vstore4(val, 0, out + out_off);
+
+    int out_off = (idz * oh + idy) * ow + idx;
+    if(idx + 3 >= ow) {
+        out[out_off] = val.x;
+        if(idx + 1 < ow) out[out_off + 1] = val.y;
+        if(idx + 2 < ow) out[out_off + 2] = val.z;
+    } else {
+        vstore4(val, 0, out + out_off);
+    }
 }
 

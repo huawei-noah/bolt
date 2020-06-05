@@ -13,30 +13,27 @@
 
 
 #include "tensor_computing.h"
+#ifdef _USE_GENERAL
 #include "cpu/general/tensor_computing_general.h"
+#endif
+#ifdef _USE_NEON
 #include "cpu/arm/tensor_computing_arm.h"
+#endif
 
 EE check(TensorDesc inputDescA, const void* inputA,
     TensorDesc inputDescB, const void* inputB,
     CheckMode checkMode,
     TensorDesc outputDesc, void* output, Arch arch)
 {
-    EE ret = SUCCESS;
-    switch (arch) {
-        case CPU_GENERAL:
-            ret = check_general(inputDescA, inputA, inputDescB, inputB, checkMode, outputDesc, output);
-            break;
-        case ARM_A55:
-            ret = check_arm(inputDescA, inputA, inputDescB, inputB, checkMode, outputDesc, output);
-            break;
-        case ARM_A76:
-            ret = check_arm(inputDescA, inputA, inputDescB, inputB, checkMode, outputDesc, output);
-            break;
-        case ARM_V8:
-            ret = check_arm(inputDescA, inputA, inputDescB, inputB, checkMode, outputDesc, output);
-            break;
-        default:
-            ret = NOT_SUPPORTED;
+    EE ret = NOT_SUPPORTED;
+    if (arch == CPU_GENERAL) {
+#ifdef _USE_GENERAL
+        ret = check_general(inputDescA, inputA, inputDescB, inputB, checkMode, outputDesc, output);
+#endif
+#ifdef _USE_NEON
+    } else if (arch == ARM_A55 || arch == ARM_A76 || arch == ARM_V8 || arch == ARM_V7) {
+        ret = check_arm(inputDescA, inputA, inputDescB, inputB, checkMode, outputDesc, output);
+#endif
     }
     return ret;
 }

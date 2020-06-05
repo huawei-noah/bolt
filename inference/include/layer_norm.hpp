@@ -33,75 +33,8 @@ public:
         return OT_LayerNorm;
     }
 
-    EE init_weight_bias_from_model(U8** modelPtr)
-    {
-        auto curOpWs = this->get_weightspec_ptr();
-        if(modelPtr == nullptr){
-            this->weightNum = curOpWs.bytes_of_weight / bytesOf(curOpWs.mdt);
-        }
-
-        TensorDesc weightDesc = tensor1d(this->dt, this->weightNum);
-        TensorDesc biasDesc = tensor1d(this->dt, this->weightNum);
-        std::shared_ptr<Tensor> modelWeightTensor(new Tensor());
-        std::shared_ptr<Tensor> modelBiasTensor(new Tensor());
-        modelWeightTensor->set_desc(weightDesc);
-        modelBiasTensor->set_desc(biasDesc);
-        U32 weightBytes = tensorNumBytes(weightDesc);
-        if(modelPtr != nullptr){
-            modelWeightTensor->alloc();
-            memcpy((U8*)modelWeightTensor->get_val(), *modelPtr, weightBytes);
-            *modelPtr += weightBytes;
-        } else {
-            modelWeightTensor->set_val(curOpWs.weight);
-        }
-
-        U8* biasVal = nullptr;
-        if(modelPtr != nullptr){
-            if(this->hasBias){
-                biasVal = *modelPtr;
-                *modelPtr += tensorNumBytes(biasDesc);
-            }
-        } else {
-            if(this->hasBias) biasVal = curOpWs.vec; 
-        }
-
-        if(biasVal){
-            modelBiasTensor->set_val(biasVal);
-        } else {
-            modelBiasTensor->alloc();
-            memset((U8*)modelBiasTensor->get_val(), 0, tensorNumBytes(biasDesc));
-        }
-
-        this->weightTensors.push_back(*modelWeightTensor.get());
-        this->biasTensors.push_back(*modelBiasTensor.get());
-        return SUCCESS;
-    }
-
-    void run() override 
-    {
-        UTIL_TIME_TIC(__CLASS_FUNCTION__)
-        Tensor inputTensor =  this->inputTensors[0];
-        TensorDesc inputDesc = inputTensor.get_desc();
-
-        Tensor weightTensor = this->weightTensors[0];
-        Tensor biasTensor = this->biasTensors[0];
-
-        Tensor outputTensor = this->outputTensors[0];
-        TensorDesc outputDesc = outputTensor.get_desc();
-
-        CHECK_STATUS(layer_normalization(weightTensor.get_val(),
-                                         biasTensor.get_val(),
-                                         inputDesc, inputTensor.get_val(),
-                                         outputDesc, outputTensor.get_val(), this->schedule));
-        UTIL_TIME_TOC(__CLASS_FUNCTION__)
-    }
-
-    EE infer_output_tensors_size(Vec<TensorDesc> inDims, Vec<TensorDesc>* outDims) override {
-        TensorDesc in_dim = inDims[0];
-        CHECK_STATUS(normalization_infer_output_size(in_dim, &((*outDims)[0])));
-        return SUCCESS;
-    }
-private:
+    virtual EE init_weight_bias_from_model(U8** modelPtr) = 0;
+protected:
     U32 weightNum;
 };
 

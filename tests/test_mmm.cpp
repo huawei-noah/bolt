@@ -25,17 +25,21 @@ int mmmTest(int argc, char** argv, DataType dt)
 
     TensorDesc A_desc = tensor2df(dt, DF_NORMAL, m, k);
     TensorDesc B_desc = tensor2df(dt, DF_NORMAL, k, n);
+    TensorDesc tranDescB;
     TensorDesc C_desc = tensor2df(dt, DF_NORMAL, m, n);
 
     U32 bytes = 0;
     U8* A = ut_input_v(m * k, dt, UT_INIT_RANDOM);
     U8* B = ut_input_v(k * n, dt, UT_INIT_RANDOM);
+    U8* B_tran = ut_input_v(k * n + 32, dt, UT_INIT_ZERO);
     U8* C = ut_input_v(m * n, dt, UT_INIT_ZERO);
     U8* C_ref = ut_input_v(m * n, dt, UT_INIT_ZERO);
     CHECK_STATUS(matrix_matrix_multiply_tmp_bytes(A_desc, B_desc, &bytes, UT_ARCH));
     U8* tmp = ut_input_v(bytes/bytesOf(dt), dt, UT_INIT_ZERO);
+
+    matrix_matrix_multiply_transform_rhs(B_desc, B, &tranDescB, B_tran);
     if (UT_CHECK) {
-        CHECK_STATUS(matrix_matrix_multiply(A_desc, A, B_desc, B, bytes, tmp, C_desc, C, UT_ARCH));
+        CHECK_STATUS(matrix_matrix_multiply(A_desc, A, tranDescB, B_tran, bytes, tmp, C_desc, C, UT_ARCH));
 
         // naive implement
         CHECK_STATUS(matrix_matrix_multiply(A_desc, A, B_desc, B, bytes, tmp, C_desc, C_ref, CPU_GENERAL));
@@ -47,7 +51,7 @@ int mmmTest(int argc, char** argv, DataType dt)
     // benchmark 
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        matrix_matrix_multiply(A_desc, A, B_desc, B, bytes, tmp, C_desc, C, UT_ARCH);
+        matrix_matrix_multiply(A_desc, A, tranDescB, B_tran, bytes, tmp, C_desc, C, UT_ARCH);
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;
@@ -63,6 +67,7 @@ int mmmTest(int argc, char** argv, DataType dt)
 
     free(A);
     free(B);
+    free(B_tran);
     free(C);
     free(C_ref);
     free(tmp);

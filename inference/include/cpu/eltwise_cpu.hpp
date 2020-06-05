@@ -33,18 +33,34 @@ public:
 
         Vec<TensorDesc> inputDesc;
         Vec<void*> inputPtr;
+#ifdef _USE_INT8
+        F16 *inD = (F16*)this->temp->get_val();
+#endif
         for (Tensor tensorIn: this->inputTensors) {
-            inputDesc.push_back(tensorIn.get_desc());
-            inputPtr.push_back((void*)tensorIn.get_val());
+            TensorDesc desc = tensorIn.get_desc();
+            U8 *ptr = tensorIn.get_val();
+#ifdef _USE_INT8
+            if (DT_I8 == desc.dt) {
+                INT8 *inQ = (INT8*)ptr;
+                F32 inputScale = tensorIn.get_scale();
+                dequantize_int8_to_fp16(tensorNumElements(desc), inQ, inputScale, inD);
+                desc.dt = DT_F16;
+                ptr = (U8*)inD;
+                inD += tensorNumElements(desc);
+            }
+#endif
+            inputDesc.push_back(desc);
+            inputPtr.push_back((void*)ptr);
         }
         auto outputDesc = this->outputTensors[0].get_desc();
         auto outputPtr = this->outputTensors[0].get_val();
 
-        if (inputDesc.size() == 2
-            && inputDesc[1].nDims == 2
-            && inputDesc[0].dims[inputDesc[0].nDims-1] == inputDesc[1].dims[0]) {
-            CHECK_STATUS(scale(this->inputTensors[1].get_val(), nullptr, outputDesc, this->inputTensors[0].get_val(), outputDesc, NULL, this->schedule));
-            memcpy(outputPtr, this->inputTensors[0].get_val(), tensorNumBytes(outputDesc));
+        if (this->eltMode == ELTWISE_PROD && inputDesc.size() == 2 &&
+            (inputDesc[1].nDims == 2 || (inputDesc[1].nDims == 4 && inputDesc[1].dims[0] == 1 && inputDesc[1].dims[1] == 1)) &&
+            tensorNumElements(inputDesc[0]) != tensorNumElements(inputDesc[1]) ) { 
+                CHECK_STATUS(scale(this->inputTensors[0].get_desc(), this->inputTensors[0].get_val(),
+                    1, this->inputTensors[1].get_val(), nullptr,
+                    outputDesc, outputPtr, this->schedule));
         } else {
             CHECK_STATUS(eltwise(inputDesc, inputPtr, outputDesc, outputPtr, this->eltMode, this->schedule));
         }
@@ -55,7 +71,21 @@ public:
     virtual EE infer_output_tensors_size(Vec<TensorDesc>inDims, Vec<TensorDesc>* outDims) override
     {
         CHECK_STATUS(eltwise_infer_output_size(inDims, &((*outDims)[0]), this->schedule));
+        if (DT_I8 == (*outDims)[0].dt) {
+            (*outDims)[0].dt = DT_F16;
+            this->lenOfTemp = 0;
+            for (auto desc : inDims) {
+                if (DT_I8 == desc.dt) {
+                    this->lenOfTemp += tensorNumElements(desc) * bytesOf(DT_F16);
+                }
+            }
+        }
         return SUCCESS;
+    }
+
+    U32 infer_tmp_memory_size() override
+    {
+        return this->lenOfTemp;
     }
 };
 

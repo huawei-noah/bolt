@@ -66,7 +66,7 @@ int int8ConcatTest(int argc, char** argv, DataType dt){
     for (int i = 0; i < num; i++){
         input_ref[i] = (void *)(tmp + count * bytesOf(dt));
         input[i] = (void *)(quant + count);
-        F16 scale = 1;
+        F16 scale = -1;
         quantize_tensor(in_desc_ref[i], input_ref[i], &(in_desc[i]), input[i], &scale);
         scale_i[i] = scale;
         count += tensorNumElements(in_desc[i]);

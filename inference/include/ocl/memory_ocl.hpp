@@ -20,63 +20,45 @@
 
 class OclMemory : public Memory_
 {
-    public:
-    OclMemory(std::shared_ptr<GCLHandle> handle){
+public:
+    OclMemory(std::shared_ptr<GCLHandle> handle) {
         this->handle = handle;
-        GCLMem_t mem = gcl_create_gclmem();
-        std::shared_ptr<GCLMem> tmp(mem);
-        val = tmp;
+        val = std::shared_ptr<GCLMem> (gcl_create_gclmem());
         type = OCLMem;
     };    
 
     virtual ~OclMemory() override {
-        if(val->desc.use_map) CHECK_STATUS(gcl_unmap_memory(handle.get(), val.get()));
-        CHECK_STATUS(gcl_release_memory(val.get()));
+        release_gclmem();
     };
 
     virtual void alloc(TensorDesc desc) override {
         UNUSED(desc);
-        if(val->desc.byteSize) {
+        if(val->desc.byteSize && !val->desc.has_alloc) {
             CHECK_STATUS(gcl_create_memory(handle.get(), val.get()));
             if(val->desc.host_ptr == NULL) CHECK_STATUS(gcl_fill_memory_zero(handle.get(), val.get()));
+//            CHECK_STATUS(gcl_finish(handle.get()));
         }
     }
 
-    virtual void set_val(PtrCaster val) override {
-        std::shared_ptr<GCLMem> tmp((GCLMem_t)val);
-        this->val = tmp;
-    };
+    virtual void alloc(U32 size) override {
+        if(val->desc.byteSize < size) {
+            if(val->desc.byteSize > 0) release_gclmem();
+            val->desc.byteSize = size;
+            CHECK_STATUS(gcl_create_memory(handle.get(), val.get()));
+            if(val->desc.host_ptr == NULL) CHECK_STATUS(gcl_fill_memory_zero(handle.get(), val.get()));
+//            CHECK_STATUS(gcl_finish(handle.get()));
+        }
+    }
 
-    virtual void* get_val() override {
-        return this->val.get();
-    };
-
-    void set_val_from_hostptr(TensorDesc hostDesc, U8* hostPtr, bool blocking){
+    void set_val_by_copy(TensorDesc desc, U8* ptr) override {
         ExtInfo extInfo;
         extInfo.maliInfo.handle = handle.get();
-        CHECK_STATUS(tensor_computing_set_input((void*)val.get(), hostDesc, (const void*)hostPtr, (void*)tmpBuf, blocking, MALI, &extInfo));
+        CHECK_STATUS(tensor_computing_set_input((void*)val.get(), desc, (const void*)ptr, (void*)tmpBuf.get(), CL_TRUE, MALI, &extInfo));
         
     }
 
-    void get_val_to_hostptr(TensorDesc hostDesc, U8** hostPtr, bool blocking){
-        ExtInfo extInfo;
-        extInfo.maliInfo.handle = handle.get();
-        CHECK_STATUS(tensor_computing_get_output((const void*)val.get(), hostDesc, (void**)hostPtr, (void*)tmpBuf, blocking, MALI, &extInfo));
-    }
-
-    void set_tmpBuf(GCLMem_t tmpBuf){
-        this->tmpBuf = tmpBuf;
-    }
-
-    void set_mem_desc(GCLMemDesc desc){val.get()->desc = desc;}
-
-    GCLMemDesc get_mem_desc(){return val.get()->desc;}
-
-    MemoryType get_mem_type() override {
-        return type;
-    }
-   
     virtual void set_shared_ptr(PtrCasterShared val) override {
+        release_gclmem();
         this->val = val;
     }
 
@@ -84,10 +66,39 @@ class OclMemory : public Memory_
         return val;
     }
 
+    virtual void* get_val() override {
+        return this->val.get();
+    };
+
+    void get_val_to_hostptr(TensorDesc hostDesc, U8** hostPtr, bool blocking) {
+        UNUSED(hostPtr);
+        ExtInfo extInfo;
+        extInfo.maliInfo.handle = handle.get();
+        CHECK_STATUS(tensor_computing_get_output((const void*)val.get(), hostDesc, NULL, NULL, blocking, MALI, &extInfo));
+    }
+
+    void set_tmpBuf(std::shared_ptr<GCLMem> tmpBuf) {
+        this->tmpBuf = tmpBuf;
+    }
+
+    void set_mem_desc(GCLMemDesc desc) {val.get()->desc = desc;}
+
+    GCLMemDesc get_mem_desc() {return val.get()->desc;}
+
+    MemoryType get_mem_type() override {
+        return type;
+    }
+   
+
     private:
+    void release_gclmem() {
+        if(val->desc.use_map) CHECK_STATUS(gcl_unmap_memory(handle.get(), val.get()));
+        CHECK_STATUS(gcl_release_memory(val.get()));
+    }
+
     std::shared_ptr<GCLHandle> handle;
     std::shared_ptr<GCLMem> val;
-    GCLMem_t    tmpBuf;
+    std::shared_ptr<GCLMem> tmpBuf;
     MemoryType  type;
 };
 #endif

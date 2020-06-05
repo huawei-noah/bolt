@@ -12,15 +12,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#include "sys.h"
-#include "error.h"
-#include "type.h"
 #include "blas-enhance.h"
+#ifdef _USE_GENERAL
 #include "cpu/general/blas_general.h"
+#endif
 #ifdef _USE_NEON
 #include "cpu/arm/blas_arm.h"
 #endif
-
 
 EE matrix_matrix_multiply_tmp_bytes(TensorDesc matrixADesc, TensorDesc matrixBDesc, U32* bytes, Arch arch)
 {
@@ -29,16 +27,16 @@ EE matrix_matrix_multiply_tmp_bytes(TensorDesc matrixADesc, TensorDesc matrixBDe
     CHECK_STATUS(tensor2dGet(matrixADesc, &matrixADataType, &matrixA_M, &matrixA_K));
     CHECK_STATUS(tensor2dGet(matrixBDesc, &matrixBDataType, &matrixB_K, &matrixB_N));
 
-    EE ret = SUCCESS;
-    if (arch == ARM_A55 || arch == ARM_A76 || arch == ARM_V8)
-#ifdef _USE_NEON
-        ret = matrix_matrix_multiply_tmp_bytes_arm(matrixA_M, matrixA_K, matrixB_K, matrixB_N, matrixADataType, bytes);
-#else
-        ret = NOT_SUPPORTED;
+    EE ret = NOT_SUPPORTED;
+    if (arch == CPU_GENERAL) {
+#ifdef _USE_GENERAL
+        ret = SUCCESS;
 #endif
-    else
-        ret = NOT_SUPPORTED;
-
+#ifdef _USE_NEON
+    } else {
+        ret = matrix_matrix_multiply_tmp_bytes_arm(matrixA_M, matrixA_K, matrixB_K, matrixB_N, matrixADataType, bytes);
+#endif
+    }
     return ret;
 }
 
@@ -56,9 +54,10 @@ EE matrix_matrix_multiply(TensorDesc matrixADesc, const void* matrixAData,
     }
     
     DataType matrixADataType, matrixBDataType, matrixCDataType;
+    DataFormat matrixADataFormat, matrixBDataFormat;
     U32 matrixA_M, matrixA_K, matrixB_K, matrixB_N, matrixC_M, matrixC_N;
-    CHECK_STATUS(tensor2dGet(matrixADesc, &matrixADataType, &matrixA_M, &matrixA_K));
-    CHECK_STATUS(tensor2dGet(matrixBDesc, &matrixBDataType, &matrixB_K, &matrixB_N));
+    CHECK_STATUS(tensor2dfGet(matrixADesc, &matrixADataType, &matrixADataFormat, &matrixA_M, &matrixA_K));
+    CHECK_STATUS(tensor2dfGet(matrixBDesc, &matrixBDataType, &matrixBDataFormat, &matrixB_K, &matrixB_N));
     CHECK_STATUS(tensor2dGet(matrixCDesc, &matrixCDataType, &matrixC_M, &matrixC_N));
 
     if (matrixADataType != matrixBDataType)
@@ -67,17 +66,37 @@ EE matrix_matrix_multiply(TensorDesc matrixADesc, const void* matrixAData,
         if (matrixADataType != DT_I8 || matrixCDataType != DT_I32)
             CHECK_STATUS(NOT_MATCH);
 
+    bool transposeA = false, transposeB = false;
+    if (matrixADataFormat == DF_TRANSPOSE) {
+        std::swap(matrixA_M, matrixA_K);
+        transposeA = true;
+    }
+    if (matrixBDataFormat == DF_TRANSPOSE) {
+        std::swap(matrixB_K, matrixB_N);
+        transposeB = true;
+    }
     if (matrixA_M != matrixC_M || matrixB_N != matrixC_N || matrixA_K != matrixB_K)
         CHECK_STATUS(NOT_MATCH);
-    
-    EE ret = SUCCESS;
-    if (arch == CPU_GENERAL)
-        ret = mmm_general(matrixC_N, matrixC_M, matrixA_K, matrixADataType, matrixAData, matrixBData, matrixCData);
-    else
-#ifdef _USE_NEON
-        ret = mmm_arm(matrixC_N, matrixC_M, matrixA_K, matrixADataType, matrixAData, matrixBData, tmp, matrixCData, arch);
-#else
-        ret = NOT_SUPPORTED;
+
+    EE ret = NOT_SUPPORTED;
+    if (arch == CPU_GENERAL) {
+#ifdef _USE_GENERAL
+        ret = mmm_general(matrixC_N, matrixC_M, matrixA_K, transposeA, transposeB, matrixADataType, matrixAData, matrixBData, matrixCData);
 #endif
+#ifdef _USE_NEON
+    } else {
+        TensorDesc tranDescB;
+        U8 *dataB = (U8*)matrixBData;
+        if (matrixBDataFormat != targetFormat4MatrixB(matrixBDataType)) {
+            U32 K = matrixA_K;
+            if (DT_I8 == matrixADataType) {
+                K = pad_to_4_multiple(K);
+            }
+            dataB = ((U8*)tmp) + matrixA_M * K * bytesOf(matrixADataType);
+            ret = matrix_matrix_multiply_transform_rhs(matrixBDesc, matrixBData, &tranDescB, dataB);
+        }
+        ret = mmm_arm(matrixC_N, matrixC_M, matrixA_K, matrixADataType, matrixAData, dataB, tmp, matrixCData, arch);
+#endif
+    }
     return ret;
 }

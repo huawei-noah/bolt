@@ -124,10 +124,13 @@ public:
             case OT_Gelu: {
                 return true;
             }
-            case OT_TanH: {
+            case OT_Logistic: {
                 return true;
             }
-            case OT_Logistic: {
+            case OT_Multiply: {
+                return true;
+            }
+            case OT_Squeeze: {
                 return true;
             }
             default: {

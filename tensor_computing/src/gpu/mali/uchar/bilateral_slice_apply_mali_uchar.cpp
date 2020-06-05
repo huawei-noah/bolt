@@ -67,18 +67,21 @@ inline EE bilateral_slice_apply_core_mali_uchar(GCLHandle_t             handle,
         guidebuf = inbuf;
     }
 
+    U32 gs0[3] = {gc / 4, gw, ih};
+    U32 ls0[3] = {0, 0, 0};
+    U32 dim0   = 3;
     Kernel kernel;
     CHECK_STATUS(gcl_create_kernel_binary(handle, "bilateral_slice_apply_pre", &kernel));
-    CHECK_STATUS(gcl_set_kernelArgs(kernel, gh, gc, gcw, scale_y, gridbuf, gridTran));
-    U32 gs0[3] = {gc / 4, gw, ih};
-    U32 ls0[3] = {16, 16, 1};
-    U32 dim0   = 3;
-    gcl_set_kernelVec(handle, kernel, dim0, gs0, ls0);
+    CHECK_STATUS(gcl_set_kernelArgs(kernel, gh, gc, gcw, gs0[0], gs0[1], scale_y, gridbuf, gridTran));
+    gcl_set_kernelVec(handle, kernel, dim0, gs0, ls0, "bilateral_slice_apply_pre");
     
 #ifdef _DEBUG
     CHECK_STATUS(gcl_run_kernel_profiling(handle, kernel, dim0, gs0, ls0, "bilateral_slice_apply_pre"));
     CHECK_STATUS(gcl_print_memory<F16>(handle, grid,  "bilateral_slice_apply_grid"));
 #endif
+    U32 gs[2] = {ow, oh};
+    U32 ls[2] = {0, 0};
+    U32 dim   = 2;
     char kernelname[128];
     if(mode == BSliceApply_CONV) {
         sprintf(kernelname, "bilateral_slice_apply_c12_conv_uchar");
@@ -86,11 +89,8 @@ inline EE bilateral_slice_apply_core_mali_uchar(GCLHandle_t             handle,
         sprintf(kernelname, "bilateral_slice_apply_c12_uchar");
     }
     CHECK_STATUS(gcl_create_kernel_binary(handle, kernelname, &kernel));
-    CHECK_STATUS(gcl_set_kernelArgs(kernel, iw, wh, gc, gw, gh, gcw, dep, coe, scale_x, scale_y, guidebuf, gridTran, inbuf, outbuf));
-    U32 gs[2] = {ow, oh};
-    U32 ls[2] = {16, 16};
-    U32 dim   = 2;
-    gcl_set_kernelVec(handle, kernel, dim, gs, ls);
+    CHECK_STATUS(gcl_set_kernelArgs(kernel, iw, wh, gc, gw, gh, gcw, dep, coe, gs[0], gs[1], scale_x, scale_y, guidebuf, gridTran, inbuf, outbuf));
+    gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelname);
 
 #ifdef _DEBUG
     CHECK_STATUS(gcl_run_kernel_profiling(handle, kernel, dim, gs, ls, kernelname));

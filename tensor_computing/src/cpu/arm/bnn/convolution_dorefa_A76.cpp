@@ -27,12 +27,12 @@ EE convolution_dorefa_A76(TensorDesc inputDesc, const F16* input,
     TensorDesc biasDesc, const F16* biasArray,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F16* outArray,
-    ActivationMode activationMode)
+    ActivationDesc activationDesc)
 {
     UNUSED(scaleDesc);
     UNUSED(biasDesc);
     UNUSED(tmpBytes);
-    UNUSED(activationMode);
+    UNUSED(activationDesc);
 
     DataType idt, fdt, odt;
     DataFormat idf, fdf, odf;

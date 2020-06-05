@@ -19,15 +19,6 @@
 #include "error.h"
 #include "tensor_computing_type.h"
 
-EE convolution_infer_forward_algorithm_mali_fp16(GCLHandle_t          handle,
-                                                 TensorDesc           inputDesc, 
-                                                 TensorDesc           filterDesc, 
-                                                 ConvolutionDesc      convDesc,
-                                                 TensorDesc           outputDesc,
-                                                 ConvolutionPolicy    policy, 
-                                                 ActivationMode       activationMode,
-                                                 ForwardRunInfoMali_t forwardRunInfo);
-
 EE convolution_transform_filter_bytes_mali_fp16(TensorDesc            filterDesc, 
                                                 ForwardRunInfoMali_t  forwardRunInfo,
                                                 GCLMemDesc_t          gclmemFilterDesc,
@@ -38,7 +29,8 @@ EE convolution_transform_filter_mali_fp16(GCLHandle_t          handle,
                                           GCLMem_t             filter,
                                           ForwardRunInfoMali_t forwardRunInfo,
                                           TensorDesc*          fltmemDesc,
-                                          GCLMem_t             fltmem);
+                                          GCLMem_t             fltmem,
+                                          GCLMem_t             tmp);
 
 EE convolution_infer_forward_tmp_bytes_mali_fp16(TensorDesc            inputDesc, 
                                                  TensorDesc            filterDesc, 

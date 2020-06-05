@@ -13,28 +13,35 @@
 
 
 #include "tensor_computing.h"
-#include "cpu/arm/tensor_computing_arm.h"
+#ifdef _USE_GENERAL
 #include "cpu/general/tensor_computing_general.h"
+#endif
+#ifdef _USE_NEON
+#include "cpu/arm/tensor_computing_arm.h"
+#endif
 
 EE lstm_transform_filter(TensorDesc filterDesc, const void* filter,
+    LSTMDesc lstmDesc,
     TensorDesc *ftmDesc, void* filterTransformed,
-    U32 xDim, U32 hDim, Arch arch)
+    Arch arch)
 {
-    EE ret = SUCCESS;
-    if (arch == ARM_A55 || arch == ARM_A76 || arch == ARM_V8)
-        ret = lstm_transform_filter_arm(filterDesc, filter, ftmDesc, filterTransformed, xDim, hDim);
-    else
-        ret = NOT_SUPPORTED;
+    EE ret = NOT_SUPPORTED;
+    if (arch == CPU_GENERAL || arch == ARM_A55 || arch == ARM_A76 || arch == ARM_V8 || arch == ARM_V7) {
+#if defined(_USE_GENERAL) || defined(_USE_NEON)
+        ret = lstm_transform_filter_arm(filterDesc, filter, lstmDesc, ftmDesc, filterTransformed);
+#endif
+    }
     return ret;
 }
 
-EE lstm_transform_filter_bytes(TensorDesc filterDesc, U32* bytes, Arch arch)
+EE lstm_transform_filter_bytes(TensorDesc filterDesc, LSTMDesc lstmDesc, U32* bytes, Arch arch)
 {
-    EE ret = SUCCESS;
-    if (arch == ARM_A55 || arch == ARM_A76 || arch == ARM_V8)
-        ret = lstm_transform_filter_bytes_arm(filterDesc, bytes);
-    else
-        ret = NOT_SUPPORTED;
+    EE ret = NOT_SUPPORTED;
+    if (arch == CPU_GENERAL || arch == ARM_A55 || arch == ARM_A76 || arch == ARM_V8 || arch == ARM_V7) {
+#if defined(_USE_GENERAL) || defined(_USE_NEON)
+        ret = lstm_transform_filter_bytes_arm(filterDesc, lstmDesc, bytes);
+#endif
+    }
     return ret;
 }
 
@@ -50,7 +57,8 @@ EE lstm_infer_output_size(TensorDesc inputDesc, TensorDesc filterDesc,
     DataFormat idf;
     U32 batch, step, xDim;
     CHECK_STATUS(tensor3dGet(inputDesc, &idt, &idf, &batch, &step, &xDim));
-    U32 hDim = lstmDesc.numOutput;
+    U32 num = (lstmDesc.biDirection) ? 2 : 1;
+    U32 hDim = num * lstmDesc.numOutput;
     *outputDesc = tensor3df(idt, idf, batch, step, hDim);
     *outputBytes = batch * step * hDim * bytesOf(idt);
     return SUCCESS;
@@ -60,11 +68,12 @@ EE lstm_infer_forward_tmp_bytes(TensorDesc inputDesc, TensorDesc filterDesc, Ten
     LSTMDesc lstmDesc,
     U32 *bytes, Arch arch)
 {
-    EE ret = SUCCESS;
-    if (arch == ARM_A55 || arch == ARM_A76 || arch == ARM_V8)
-        ret = lstm_infer_forward_tmp_bytes_arm(inputDesc, filterDesc, outputDesc, lstmDesc, bytes);
-    else
-        ret = NOT_SUPPORTED;
+    EE ret = NOT_SUPPORTED;
+    if (arch == CPU_GENERAL || arch == ARM_A55 || arch == ARM_A76 || arch == ARM_V8 || arch == ARM_V7) {
+#if defined(_USE_GENERAL) || defined(_USE_NEON)
+        ret = lstm_infer_forward_tmp_bytes_arm(inputDesc, filterDesc, outputDesc, lstmDesc, bytes, arch);
+#endif
+    }
     return ret;
 }
 
@@ -76,46 +85,26 @@ EE lstm(TensorDesc inputDesc, const void* input,
     TensorDesc outputDesc, void* output,
     Arch arch)
 {
-    EE ret = SUCCESS;
-    switch (arch) {
-        case CPU_GENERAL: {
-            ret = lstm_general(inputDesc, input,
-                               filterDesc, filter,
-                               biasDesc, bias,
-                               tmpBytes, tmp,
-                               lstmDesc,
-                               outputDesc, output);
-            break;
-        }
-        case ARM_A55: {
-            ret = lstm_arm(inputDesc, input,
+    EE ret = NOT_SUPPORTED;
+    if (arch == CPU_GENERAL) {
+#ifdef _USE_GENERAL
+        ret = lstm_general(inputDesc, input,
                            filterDesc, filter,
                            biasDesc, bias,
                            tmpBytes, tmp,
                            lstmDesc,
                            outputDesc, output);
-            break;
-        }
-        case ARM_A76: {
-            ret = lstm_arm(inputDesc, input,
-                           filterDesc, filter,
-                           biasDesc, bias,
-                           tmpBytes, tmp,
-                           lstmDesc,
-                           outputDesc, output);
-            break;
-        }
-        case ARM_V8: {
-            ret = lstm_arm(inputDesc, input,
-                           filterDesc, filter,
-                           biasDesc, bias,
-                           tmpBytes, tmp,
-                           lstmDesc,
-                           outputDesc, output);
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
+#endif
+#ifdef _USE_NEON
+    } else if (arch == ARM_A55 || arch == ARM_A76 || arch == ARM_V8 || arch == ARM_V7) {
+        ret = lstm_arm(inputDesc, input,
+                       filterDesc, filter,
+                       biasDesc, bias,
+                       tmpBytes, tmp,
+                       lstmDesc,
+                       outputDesc, output,
+                       arch);
+#endif
     }
     return ret;
 }
@@ -142,11 +131,12 @@ EE lstmcell_infer_forward_tmp_bytes(TensorDesc inputDesc, TensorDesc filterDesc,
     LSTMDesc lstmDesc,
     U32 *bytes, Arch arch)
 {
-    EE ret = SUCCESS;
-    if (arch == ARM_A55 || arch == ARM_A76 || arch == ARM_V8)
-        ret = lstmcell_infer_forward_tmp_bytes_arm(inputDesc, filterDesc, outputDesc, lstmDesc, bytes);
-    else
-        ret = NOT_SUPPORTED;
+    EE ret = NOT_SUPPORTED;
+    if (arch == CPU_GENERAL || arch == ARM_A55 || arch == ARM_A76 || arch == ARM_V8 || arch == ARM_V7) {
+#if defined(_USE_GENERAL) || defined(_USE_NEON)
+        ret = lstmcell_infer_forward_tmp_bytes_arm(inputDesc, filterDesc, outputDesc, lstmDesc, bytes, arch);
+#endif
+    }
     return ret;
 }
 
@@ -159,51 +149,28 @@ EE lstmcell(TensorDesc xDesc, const void* currentX,
     TensorDesc hDesc, void* currentH,
     Arch arch)
 {
-    EE ret = SUCCESS;
-    switch (arch) {
-        case CPU_GENERAL: {
-            ret = lstmcell_general(xDesc, currentX,
-                                   filterDesc, filter,
-                                   biasDesc, bias,
-                                   state,
-                                   tmpBytes, tmp,
-                                   lstmDesc, batchStrideX, batchStrideH,
-                                   hDesc, currentH);
-            break;
-        }
-        case ARM_A55: {
-            ret = lstmcell_arm(xDesc, currentX,
+    EE ret = NOT_SUPPORTED;
+    if (arch == CPU_GENERAL) {
+#ifdef _USE_GENERAL
+        ret = lstmcell_general(xDesc, currentX,
                                filterDesc, filter,
                                biasDesc, bias,
                                state,
                                tmpBytes, tmp,
                                lstmDesc, batchStrideX, batchStrideH,
                                hDesc, currentH);
-            break;
-        }
-        case ARM_A76: {
-            ret = lstmcell_arm(xDesc, currentX,
-                               filterDesc, filter,
-                               biasDesc, bias,
-                               state,
-                               tmpBytes, tmp,
-                               lstmDesc, batchStrideX, batchStrideH,
-                               hDesc, currentH);
-            break;
-        }
-        case ARM_V8: {
-            ret = lstmcell_arm(xDesc, currentX,
-                               filterDesc, filter,
-                               biasDesc, bias,
-                               state,
-                               tmpBytes, tmp,
-                               lstmDesc, batchStrideX, batchStrideH,
-                               hDesc, currentH);
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
+#endif
+#ifdef _USE_NEON
+    } else if (arch == ARM_A55 || arch == ARM_A76 || arch == ARM_V8 || arch == ARM_V7) {
+        ret = lstmcell_arm(xDesc, currentX,
+                           filterDesc, filter,
+                           biasDesc, bias,
+                           state,
+                           tmpBytes, tmp,
+                           lstmDesc, batchStrideX, batchStrideH,
+                           hDesc, currentH,
+                           arch);
+#endif
     }
     return ret;
 }

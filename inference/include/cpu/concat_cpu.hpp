@@ -21,7 +21,7 @@
 
 class ConcatCPU: public Concat {
 public:
-    ConcatCPU(U32 concatDim) : Concat(concatDim) {}
+    ConcatCPU(int axis) : Concat(axis) {}
 
     virtual void run() override
     {
@@ -40,7 +40,7 @@ public:
         auto outputPtr = this->outputTensors[0].get_val();
         F32 outputScale = 1.0;
 
-        CHECK_STATUS(concat(inputDesc, inputPtr, inputScales.data(), outputDesc, outputPtr, &outputScale, this->concatDim, this->schedule));
+        CHECK_STATUS(concat(inputDesc, inputPtr, inputScales.data(), outputDesc, outputPtr, &outputScale, this->axis, this->schedule));
 
         if (DT_I8 == outputDesc.dt) {
             this->outputTensors[0].set_scale(outputScale);
@@ -51,7 +51,7 @@ public:
 
     virtual EE infer_output_tensors_size(Vec<TensorDesc>inDims, Vec<TensorDesc>* outDims) override
     {
-        CHECK_STATUS(concat_infer_output_size(inDims, &((*outDims)[0]), this->concatDim, this->schedule));
+        CHECK_STATUS(concat_infer_output_size(inDims, &((*outDims)[0]), this->axis, this->schedule));
         return SUCCESS;
     }
 };

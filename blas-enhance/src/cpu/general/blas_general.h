@@ -22,6 +22,7 @@
 EE mvm_general(U32 row, U32 col, DataType dt, bool transpose, const void *matrix, const void *vector, void *result);
 
 EE mmm_general(U32 matrixC_N, U32 matrixC_M, U32 matrixA_K,
+     bool transposeA, bool transposeB,
      DataType matrixADataType,
      const void* matrixAData, const void* matrixBData,
      void* matrixCData);

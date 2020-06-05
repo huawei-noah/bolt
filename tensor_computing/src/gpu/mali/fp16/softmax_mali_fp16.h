@@ -23,6 +23,7 @@
 EE softmax_mali_fp16(GCLHandle_t handle,
                      TensorDesc  inputdesc,
                      GCLMem_t    input,
+                     int         axis,
                      TensorDesc  outputDesc,
                      GCLMem_t    output);
 #endif                     

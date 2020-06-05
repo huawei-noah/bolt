@@ -57,7 +57,7 @@ EE convolution_bnn(TensorDesc inputDesc, const F16* input,
     TensorDesc biasDesc, const F16* bias,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F16* output,
-    ActivationMode activationMode,
+    ActivationDesc activationDesc,
     Arch arch)
 {
     if(nullptr == input || nullptr == filter || nullptr == output || nullptr == scale || nullptr == bias || nullptr == tmp)
@@ -88,7 +88,7 @@ EE convolution_bnn(TensorDesc inputDesc, const F16* input,
                                          biasDesc, (F16*)bias,
                                          tmpBytes, tmp,
                                          outputDesc, (F16*)output,
-                                         activationMode, arch);
+                                         activationDesc, arch);
             break;
         case DT_BIN11:
             ret = convolution_xnor(inputDesc, (F16*)input,
@@ -98,7 +98,7 @@ EE convolution_bnn(TensorDesc inputDesc, const F16* input,
                                          biasDesc, (F16*)bias,
                                          tmpBytes, tmp,
                                          outputDesc, (F16*)output,
-                                         activationMode, arch);
+                                         activationDesc, arch);
             break;
         default:
             ret = NOT_SUPPORTED;

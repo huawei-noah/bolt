@@ -20,7 +20,7 @@
 int concatTest(int argc, char** argv, DataType dt) {
     CHECK_REQUIREMENT(argc > 2);
     int num = atoi(argv[1]);
-    U32 axis = atoi(argv[2]);
+    int axis = atoi(argv[2]);
     CHECK_REQUIREMENT(axis == 0 || axis == 1);
     CHECK_REQUIREMENT(argc == 1 + 2 + (num+1)*4);
 

@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.15)
+cmake_minimum_required(VERSION 3.2)
 
 file(GLOB BOLT_CONFIGURE_FILE $ENV{BOLT_ROOT}/bolt.cmake ${BOLT_ROOT}/bolt.cmake)
 if (BOLT_CONFIGURE_FILE)
@@ -20,9 +20,11 @@ add_subdirectory(model-tools)
 add_subdirectory(tensor_computing)
 add_subdirectory(image)
 add_subdirectory(inference)
+add_subdirectory(tools)
+add_subdirectory(kits)
 add_subdirectory(tests)
 add_custom_target(bolt_library ALL
-    COMMAND ./scripts/build_light_bolt.sh ${CMAKE_BINARY_DIR} ${USE_MALI}
+    COMMAND ./CI_SCRIPTS/build_light_bolt.sh ${CMAKE_BINARY_DIR} ${USE_MALI} ${USE_DEBUG} ${USE_LLVM_CLANG} ${CMAKE_CXX_COMPILER} ${CMAKE_AR} ${CMAKE_STRIP}
     WORKING_DIRECTORY $ENV{BOLT_ROOT})
 
 if (USE_MALI)
@@ -38,6 +40,7 @@ add_dependencies(tensor_computing blas-enhance)
 add_dependencies(tensor_computing_static blas-enhance_static)
 add_dependencies(inference tensor_computing model-tools image)
 add_dependencies(inference_static tensor_computing_static model-tools_static image_static)
+add_dependencies(bolt_library inference)
 add_dependencies(bolt_library inference_static)
 
 install(TARGETS blas-enhance blas-enhance_static
@@ -82,15 +85,25 @@ install(DIRECTORY model-tools/tools/tensorflow2caffe
                   model-tools/tools/pytorch2caffe
         DESTINATION tools)
 
-install(TARGETS tensor_computing_library_search
-        RUNTIME DESTINATION tools)
+if (USE_LIBRARY_TUNING)
+    install(TARGETS tensor_computing_library_search
+            RUNTIME DESTINATION tools)
+endif (USE_LIBRARY_TUNING)
 
 if (BUILD_TEST)
+    if (USE_INT8)
+        install(TARGETS ptq_calibration
+                RUNTIME DESTINATION tools)
+    endif(USE_INT8)
     install(TARGETS classification
                     bert
                     tinybert
                     nmt
-            RUNTIME DESTINATION bin)
+                    asr_rnnt
+                    asr_convolution_transformer
+                    tts
+                    vad
+            RUNTIME DESTINATION kits)
 endif(BUILD_TEST)
 
 install(DIRECTORY inference/exports/java
@@ -98,6 +111,8 @@ install(DIRECTORY inference/exports/java
         DESTINATION include)
 
 install(FILES ${CMAKE_BINARY_DIR}/libBoltModel.so
+              ${CMAKE_BINARY_DIR}/libbolt.a
+              ${CMAKE_BINARY_DIR}/libbolt.so
         DESTINATION lib)
 
 execute_process(COMMAND doxygen .Doxyfile WORKING_DIRECTORY $ENV{BOLT_ROOT})
@@ -107,7 +122,7 @@ enable_testing()
 find_program (BASH_PROGRAM bash)
 
 if (BASH_PROGRAM)
-    set(parameters -b $ENV{BOLT_ROOT}/tests/bin -p /data/local/tmp/uldra)
+    set(parameters -t $ENV{BOLT_ROOT}/tests/bin -k $ENV{BOLT_ROOT}/kits/bin -p /data/local/tmp/uldra)
     if (USE_MALI)
         set(parameters ${parameters} -g)
     endif(USE_MALI)

@@ -12,7 +12,7 @@ Build Bolt.
 
 Mandatory arguments to long options are mandatory for short options too.
   -h, --help                 display this help and exit.
-  -c, --compiler <llvm|gnu>  use to set compiler(default: gnu).
+  -c, --compiler <llvm|gnu|himix100>  use to set compiler(default: gnu).
   -s, --skip <true|false>    skip dependency library install and option set(default: false).
   -t, --threads              use parallel build(default: 8).
 EOF
@@ -82,6 +82,20 @@ if [ ${skip} != true ] ; then
 
     options="-DUSE_CROSS_COMPILE=ON \
             -DBUILD_TEST=ON "
+    if [ "${compiler_arch}" == "gnu" ] ; then
+        exeIsValid aarch64-linux-gnu-g++
+        if [ $? == 0 ] ; then
+            echo "[ERROR] please install GNU gcc ARM compiler and set shell environment PATH to find it"
+            exit 1
+        fi
+        options="${options} \
+            -DUSE_GNU_GCC=ON \
+            -DUSE_LLVM_CLANG=OFF \
+            -DUSE_MALI=OFF \
+            -DCMAKE_C_COMPILER=`which aarch64-linux-gnu-gcc` \
+            -DCMAKE_CXX_COMPILER=`which aarch64-linux-gnu-g++` \
+            -DCMAKE_STRIP=`which aarch64-linux-gnu-strip` "
+    fi
     if [ "${compiler_arch}" == "llvm" ] ; then
         exeIsValid aarch64-linux-android21-clang++
         if [ $? == 0 ] ; then
@@ -92,17 +106,49 @@ if [ ${skip} != true ] ; then
             -DUSE_GNU_GCC=OFF \
             -DUSE_LLVM_CLANG=ON \
             -DUSE_MALI=ON \
-	    -DUSE_DYNAMIC_LIBRARY=ON"
-    else
-        exeIsValid aarch64-linux-gnu-g++
+            -DUSE_DYNAMIC_LIBRARY=ON \
+            -DCMAKE_C_COMPILER=`which aarch64-linux-android21-clang` \
+            -DCMAKE_CXX_COMPILER=`which aarch64-linux-android21-clang++` \
+            -DCMAKE_STRIP=`which aarch64-linux-android-strip` "
+    fi
+    if [ "${compiler_arch}" == "himix100" ] ; then
+        exeIsValid arm-himix100-linux-g++
         if [ $? == 0 ] ; then
-            echo "[ERROR] please install GNU gcc ARM compiler and set shell environment PATH to find it"
+            echo "[ERROR] please install Himix100 GNU gcc ARM compiler and set shell environment PATH to find it"
             exit 1
         fi
         options="${options} \
             -DUSE_GNU_GCC=ON \
             -DUSE_LLVM_CLANG=OFF \
-            -DUSE_MALI=OFF"
+            -DUSE_MALI=OFF \
+            -DUSE_ARMV8=OFF \
+            -DUSE_ARMV7=ON \
+            -DUSE_FP32=ON \
+            -DUSE_FP16=OFF \
+            -DUSE_INT8=OFF \
+            -DCMAKE_C_COMPILER=`which arm-himix100-linux-gcc` \
+            -DCMAKE_CXX_COMPILER=`which arm-himix100-linux-g++` \
+            -DCMAKE_STRIP=`which arm-himix100-linux-strip` "
+    fi
+    if [ "${compiler_arch}" == "ndkv7" ] ; then
+        exeIsValid armv7a-linux-androideabi19-clang++
+        if [ $? == 0 ] ; then
+            echo "[ERROR] please install Himix100 ndk armv7a-linux-androideabi19-clang++ compiler and set shell environment PATH to find it"
+            exit 1
+        fi
+        options="${options} \
+            -DUSE_GNU_GCC=OFF \
+            -DUSE_LLVM_CLANG=ON \
+            -DUSE_MALI=OFF \
+            -DUSE_DYNAMIC_LIBRARY=ON \
+            -DUSE_ARMV8=OFF \
+            -DUSE_ARMV7=ON \
+            -DUSE_FP32=ON \
+            -DUSE_FP16=OFF \
+            -DUSE_INT8=OFF \
+            -DCMAKE_C_COMPILER=`which armv7a-linux-androideabi19-clang` \
+            -DCMAKE_CXX_COMPILER=`which armv7a-linux-androideabi19-clang++` \
+            -DCMAKE_STRIP=`which arm-linux-androideabi-strip` "
     fi
 fi
 

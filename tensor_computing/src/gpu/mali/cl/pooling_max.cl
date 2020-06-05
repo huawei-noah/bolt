@@ -29,6 +29,7 @@ __kernel void pooling_max(const int ih, const int iw, const int ih_off, const in
     const int idx = get_global_id(0);
     const int idy = get_global_id(1);
     const int idz = get_global_id(2);
+    if(idx >= oh || idy >= ow) return;
     
     int bh = idx * sh - ph;
     int bw = idy * sw - pw;

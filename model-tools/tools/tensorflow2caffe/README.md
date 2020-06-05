@@ -29,18 +29,27 @@ Modify the following variables:
 
 ### Google Bert
 
-you can directly use [transform_bert.py](transform_bert.py) and modify some parameters according to downloaded model.
+you can directly use [transform_bert.py](./bert/transform_bert.py) and modify some parameters according to downloaded model.
 
 ### Google ALBert
 
-you can directly use [transform_albert.py](transform_albert.py) and modify some parameters according to downloaded model.
+you can directly use [transform_albert.py](./bert/albert/transform_albert.py) and modify some parameters according to downloaded model.
 
 ### Noah TinyBert
 
-you can directly use [transform_tinybert_mrpc.py](transform_tinybert_mrpc.py) for MRPC task, and modify some parameters according to downloaded model.
+you can directly use [transform_tinybert_mrpc.py](./bert/tinybert/transform_tinybert_mrpc.py) for MRPC task, and modify some parameters according to downloaded model.
 
-you can directly use [transform_tinybert_intent_slot.py](transform_tinybert_intent_slot.py) for intention identification, and modify some parameters according to downloaded model.
+you can directly use [transform_tinybert_intent_slot.py](./bert/tinybert/transform_tinybert_intent_slot.py) for intention identification, and modify some parameters according to downloaded model.
 
+### Noah Machine Translation
+
+you can use [transform_transformer_lstm.py](./nmt/transform_transformer_lstm.py) for transforming neural machine traslation model, and modify some parameters according to downloaded model.
+
+### Noah Speech Recognition
+
+you can use [transform_asr.py](./asr/transform_asr.py) for recognizing speech model RNT, and modify some parameters according to downloaded model.
+
+you can use [transform_convolution_transformer.py](./asr/transform_convolution_transformer.py) for recognizing speech model Convolution+Transformer, and modify some parameters according to downloaded model.
 
 ## How to add new layers?
 
@@ -54,4 +63,4 @@ you can directly use [transform_tinybert_intent_slot.py](transform_tinybert_inte
 
 ### Noarh TinyBert
 
-we give an example to use bert tools do inference on mobile device in [tinybert](./tinybert). You need to download the Google research bert [modeling.py](https://github.com/google-research/bert/blob/master/modeling.py) from github, and run the [tinybert-infer.py](./tinybert/tinybert-infer.py).
+we give an example to use bert tools do inference on mobile device in [tinybert](./bert/tinybert). You need to download the Google research bert [modeling.py](https://github.com/google-research/bert/blob/master/modeling.py) from github, and run the [tinybert-infer.py](./bert/tinybert/tinybert-infer.py).

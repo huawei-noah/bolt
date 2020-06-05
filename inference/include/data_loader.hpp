@@ -18,6 +18,8 @@
 #include "tensor.hpp"
 
 #ifdef _BUILD_TEST
+Vec<Tensor> load_txt(std::string dataPath, Vec<TensorDesc> dataDesc);
+
 Vec<std::string> load_data(std::string directoryPath,
     Vec<TensorDesc> dataDesc,
     Vec<Vec<Tensor>>* datas);

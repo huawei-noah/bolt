@@ -118,7 +118,7 @@ inline void trans_I_int8(short *Iw[36], INT8* const I[36])
 }
 
 inline void trans_O(F16* const Ow[36], F16 *O[16], const F16* bias,
-                     U32 h, U32 w, U32 _pad_h_mod_4, U32 _pad_w_mod_4, U32 oh, U32 ow, F16* max, F16* min, ActivationMode am)
+                     U32 h, U32 w, U32 _pad_h_mod_4, U32 _pad_w_mod_4, U32 oh, U32 ow, F16* max, F16* min, ActivationDesc activationDesc)
 {
     F16 T[4][6][8];
     // bias
@@ -190,7 +190,7 @@ inline void trans_O(F16* const Ow[36], F16 *O[16], const F16* bias,
 
         float16x8_t temp;
 
-        if (am == ACTIVATION_RELU) {
+        if (activationDesc.mode == ACTIVATION_RELU) {
             if (pad_w_mod_4 == 0) {
                 temp = vmaxq_f16(vaddq_f16(v_O0, v_b), v_0);
                 max_v = vmaxq_f16(max_v, temp);

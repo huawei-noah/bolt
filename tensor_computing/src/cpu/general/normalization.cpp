@@ -14,7 +14,7 @@
 
 #include <math.h>
 
-#include "cpu/general/common_general.h"
+#include "cpu/general/general_functions.h"
 #include "cpu/general/tensor_computing_general.h"
 
 template<typename T>

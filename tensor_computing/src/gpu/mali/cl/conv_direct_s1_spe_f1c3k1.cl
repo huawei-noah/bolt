@@ -18,11 +18,12 @@
 #define MANGLE_NAME_IMPL(base, EW) base ## EW
 #define MANGLE_NAME(base, EW) MANGLE_NAME_IMPL(base, EW)
 
-__kernel void MANGLE_NAME(conv_direct_s1_spe_f1c3k1_, EW)(const int iw_str, const int ow_str, const int ow_off, const int oh_off, const int ow_d2,
+__kernel void MANGLE_NAME(conv_direct_s1_spe_f1c3k1_, EW)(const int iw_str, const int ow_str, const int ow_off, const int oh_off, const int ow_d2, const int bx, const int by,
                                 __global const T* in, __global const T* flt, __global T* out){
                                 
     const int idx = get_global_id(0);
     const int idy = get_global_id(1);
+    if(idx >= bx || idy >= by) return;
     T4 flt_val;
     T8 in_val;
     T2 out_val;

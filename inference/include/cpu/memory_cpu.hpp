@@ -16,24 +16,38 @@
 #define _MEMORY_CPU_H
 #include <math.h>
 #include <memory>
+#include <cstring>
 #include "memory.hpp"
 
 class CpuMemory : public Memory_
 {
-    public:
-    CpuMemory(){type = CPUMem;}   
+public:
+    CpuMemory(){
+        len  = 0;
+        type = CPUMem;
+    }   
     virtual ~CpuMemory() = default;
 
-    virtual void alloc(TensorDesc desc) override{
-	    U32 size = tensorNumElements(desc);
-	    this->val = std::shared_ptr<U8>((U8*)operator new(size*bytesOf(desc.dt)));
+    virtual void alloc(TensorDesc desc) override
+    {
+        U32 size = tensorNumBytes(desc);
+        if (len < size) {
+            this->val = std::shared_ptr<U8>((U8*)operator new(size));
+            len = size;
+        }
     }
 
-    virtual void  set_val(PtrCaster val) override{
-//        std::shared_ptr<U8> tmp((U8*)val);
-        U8* tmp = (U8*)val;
-        this->val.reset(tmp);
-    };
+    virtual void alloc(U32 size) override
+    {
+        if (len < size) {  
+            this->val = std::shared_ptr<U8>((U8*)operator new(size));
+            len = size;
+        }
+    }
+
+    virtual void set_val_by_copy(TensorDesc desc, U8* ptr) override {
+        memcpy(val.get(), ptr, tensorNumBytes(desc));
+    }
 
     virtual void* get_val() override{
         return this->val.get();
@@ -51,8 +65,9 @@ class CpuMemory : public Memory_
         return val;
     }
 
-    private:
+private:
     std::shared_ptr<U8> val;
+    U32 len;
     MemoryType type;
 };
 #endif

@@ -13,39 +13,52 @@
 
 
 #include "tensor_computing.h"
+#ifdef _USE_GENERAL
 #include "cpu/general/tensor_computing_general.h"
+#endif
+#ifdef _USE_NEON
 #include "cpu/arm/tensor_computing_arm.h"
+#endif
+#ifdef _USE_MALI 
+#include "gpu/mali/tensor_computing_mali.h"
+#endif
 
 EE layer_normalization(void *alpha, void *beta,
     TensorDesc inputDesc, void* input,
     TensorDesc outputDesc, void* output,
-    Arch arch)
+    Arch arch, ExtInfo_t extInfo)
 {
+#ifndef _USE_MALI
+    UNUSED(extInfo);
+#endif
     EE ret = SUCCESS;
-    switch (arch) {
-        case CPU_GENERAL:
-            ret = layer_normalization_general(alpha, beta, inputDesc, input, outputDesc, output);
-            break;
-        case ARM_A55:
-            ret = layer_normalization_arm(alpha, beta, inputDesc, input, outputDesc, output);
-            break;
-        case ARM_A76:
-            ret = layer_normalization_arm(alpha, beta, inputDesc, input, outputDesc, output);
-            break;
-        case ARM_V8:
-            ret = layer_normalization_arm(alpha, beta, inputDesc, input, outputDesc, output);
-            break;
-        default:
-            ret = NOT_SUPPORTED;
+    if (arch == CPU_GENERAL) {
+#ifdef _USE_GENERAL
+        ret = layer_normalization_general(alpha, beta, inputDesc, input, outputDesc, output);
+#endif
+#ifdef _USE_NEON
+    } else if (arch == ARM_A55 || arch == ARM_A76 || arch == ARM_V8 || arch == ARM_V7) {
+        ret = layer_normalization_arm(alpha, beta, inputDesc, input, outputDesc, output);
+#endif
+#ifdef _USE_MALI            
+    } else if (arch == MALI){
+        ret = layer_normalization_mali(extInfo->maliInfo.handle, (GCLMem_t)alpha, (GCLMem_t)beta, inputDesc, (GCLMem_t)input, outputDesc, (GCLMem_t)output);
+#endif            
     }
     return ret;
 }
 
-EE normalization_infer_output_size(TensorDesc inputDesc, TensorDesc *outputDesc)
+EE normalization_infer_output_size(TensorDesc inputDesc, TensorDesc *outputDesc, Arch arch, ExtInfo_t extInfo)
 {
-    if (nullptr == outputDesc)
-        CHECK_STATUS(NULL_POINTER);
-
-    *outputDesc = inputDesc;
+#ifdef _USE_MALI
+    if(arch == MALI) {
+        CHECK_STATUS(normalization_infer_output_size_mali(inputDesc, outputDesc, extInfo->maliInfo.gclmemInputDesc, extInfo->maliInfo.gclmemOutputDesc));
+    } else {
+#endif
+        if (nullptr == outputDesc) CHECK_STATUS(NULL_POINTER);
+        *outputDesc = inputDesc;
+#ifdef _USE_MALI
+    }
+#endif
     return SUCCESS;
 }

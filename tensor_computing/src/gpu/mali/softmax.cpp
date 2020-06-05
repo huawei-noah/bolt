@@ -26,15 +26,30 @@ EE softmax_infer_output_size_mali(TensorDesc   inputDesc,
                                   GCLMemDesc_t gclmemOutputDesc){
     /*tensorDesc record cpu org data format info*/
     /*gclmemDesc record gpu trans data format info*/
-    *outputDesc = inputDesc;
+    if(outputDesc) *outputDesc = inputDesc;
 
     DataType   idt;
     DataFormat idf;
     U32 iw, ih, ic, in;
-    tensorSelectGet(inputDesc,  &idt, &idf, &in, &ic, &ih, &iw);
-
-    if(idf == DF_NCHW) {
-        CHECK_STATUS(infer_gclmem_desc_ncwhc4(iw, ih, ic, 0, 0, iw, ih, ic, idt, idt, gclmemInputDesc, gclmemOutputDesc));
+    if(inputDesc.df == DF_NCHW) tensorSelectGet(inputDesc,  &idt, &idf, &in, &ic, &ih, &iw);
+    if(inputDesc.df == DF_MKT) {
+        U32 m, k, t;
+        get_nlp_mkt_val(inputDesc, &idt, &m, &k, &t);
+        map_nlp_mkt_to_ncwhc4(m, k, t, &iw, &ih, &ic);
+        ic = 4 * ic;
+        idf = DF_MKT;
+    }
+    if(idf == DF_NCHW || idf == DF_MKT) {
+        if(gclmemInputDesc) {
+            if(gclmemInputDesc->memFormat == DF_NCHW) {
+                U32 iw_align = (iw + 3) / 4 * 4;
+                CHECK_STATUS(infer_gclmem_desc_nchw(iw_align, ih, ic, 0, 0, iw_align, ih, ic, idt, idt, gclmemInputDesc, gclmemOutputDesc));
+            } else if(gclmemInputDesc->memFormat == DF_NCWHC4) {
+                CHECK_STATUS(infer_gclmem_desc_ncwhc4(iw, ih, ic, 0, 0, iw, ih, ic, idt, idt, gclmemInputDesc, gclmemOutputDesc));
+            } else {
+                CHECK_STATUS(NOT_SUPPORTED);
+            }
+        }
         return SUCCESS;
     } 
     return NOT_SUPPORTED;
@@ -43,6 +58,7 @@ EE softmax_infer_output_size_mali(TensorDesc   inputDesc,
 inline EE softmax_checkpara_mali(GCLHandle_t handle, 
                                  TensorDesc  inputDesc,
                                  GCLMem_t    input,
+                                 int         axis,
                                  TensorDesc  outputDesc,
                                  GCLMem_t    output) {
 
@@ -53,21 +69,23 @@ inline EE softmax_checkpara_mali(GCLHandle_t handle,
     if(inputDesc.dims[1] != outputDesc.dims[1]) return NOT_SUPPORTED;
     if(inputDesc.dims[2] != outputDesc.dims[2]) return NOT_SUPPORTED;
     if(inputDesc.dims[3] != outputDesc.dims[3]) return NOT_SUPPORTED;
-    if(outputDesc.df != DF_NCHW)            return NOT_SUPPORTED;
-    if(output->desc.memFormat != DF_NCWHC4) return NOT_SUPPORTED;
+    if(outputDesc.df != DF_NCHW && outputDesc.df != DF_MKT) return NOT_SUPPORTED;
+    if(output->desc.memFormat != DF_NCWHC4 && output->desc.memFormat != DF_NCHW) return NOT_SUPPORTED;
+    if(axis != 1 && axis != 3 && axis != -1) return NOT_SUPPORTED;
     return SUCCESS; 
 }
 
 EE softmax_mali(GCLHandle_t handle, 
                 TensorDesc  inputDesc,
                 GCLMem_t    input,
+                int         axis,
                 TensorDesc  outputDesc,
                 GCLMem_t    output) {
     EE ret = SUCCESS;
-    CHECK_STATUS(softmax_checkpara_mali(handle, inputDesc, input, outputDesc, output));
+    CHECK_STATUS(softmax_checkpara_mali(handle, inputDesc, input, axis, outputDesc, output));
     switch(inputDesc.dt){
         case DT_F16:{
-            ret = softmax_mali_fp16(handle, inputDesc, input, outputDesc, output);
+            ret = softmax_mali_fp16(handle, inputDesc, input, axis, outputDesc, output);
             break;
         }
         case DT_I8:{

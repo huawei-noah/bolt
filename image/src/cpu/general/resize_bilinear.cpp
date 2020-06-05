@@ -107,7 +107,7 @@ EE resize_bilinear_general(TensorDesc inputDesc, void* input,
 {
     EE ret = SUCCESS;
     switch (inputDesc.dt) {
-#ifdef _USE_FP16
+#ifdef __aarch64__
         case DT_F16: {
             ret = resize_bilinear<F16, F16>(inputDesc, (F16*)input,
                                     outputDesc, (F16*)output);
@@ -122,7 +122,7 @@ EE resize_bilinear_general(TensorDesc inputDesc, void* input,
         }
 #endif
         case DT_U8: {
-#ifdef _USE_FP16
+#ifdef __aarch64__
             if (DT_F16 == outputDesc.dt) {
                 ret = resize_bilinear<U8, F16>(inputDesc, (U8*)input,
                                         outputDesc, (F16*)output);

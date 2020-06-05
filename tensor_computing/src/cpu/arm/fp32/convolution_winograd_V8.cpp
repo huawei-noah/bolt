@@ -21,8 +21,9 @@ EE convolution_winograd_V8(TensorDesc inputDesc, F32* inArray,
     TensorDesc biasDesc, const F32* biasArray,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F32* outArray,
-    ActivationMode activationMode)
+    ActivationDesc activationDesc)
 {
+#ifdef __aarch64__
     UNUSED(biasDesc);
     UNUSED(tmpBytes);
 
@@ -374,8 +375,8 @@ EE convolution_winograd_V8(TensorDesc inputDesc, F32* inArray,
                             O_1[i*4 + j] = O_0[i*4 + j] + 4;
                         }
                     }
-                    CHECK_STATUS(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationMode));
-                    CHECK_STATUS(trans_O_4x4_3x3(Ow_1, O_1, b_1, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationMode));
+                    CHECK_STATUS(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationDesc));
+                    CHECK_STATUS(trans_O_4x4_3x3(Ow_1, O_1, b_1, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationDesc));
                 }
             }
         }
@@ -605,8 +606,8 @@ EE convolution_winograd_V8(TensorDesc inputDesc, F32* inArray,
                             O_1[i*4 + j] = O_0[i*4 + j] + 4;
                         }
                     }
-                    CHECK_STATUS(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationMode));
-                    CHECK_STATUS(trans_O_4x4_3x3(Ow_1, O_1, b_1, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationMode));
+                    CHECK_STATUS(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationDesc));
+                    CHECK_STATUS(trans_O_4x4_3x3(Ow_1, O_1, b_1, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationDesc));
                 }
             }
             tiles_s += 8;
@@ -750,8 +751,8 @@ EE convolution_winograd_V8(TensorDesc inputDesc, F32* inArray,
                             O_1[i*4 + j] = O_0[i*4 + j] + 4;
                         }
                     }
-                    CHECK_STATUS(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationMode));
-                    CHECK_STATUS(trans_O_4x4_3x3(Ow_1, O_1, b_1, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationMode));
+                    CHECK_STATUS(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationDesc));
+                    CHECK_STATUS(trans_O_4x4_3x3(Ow_1, O_1, b_1, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationDesc));
                 }
             }
             tiles_s += 4;
@@ -853,10 +854,15 @@ EE convolution_winograd_V8(TensorDesc inputDesc, F32* inArray,
                         O_1[i*4 + j] = O_0[i*4 + j] + 4;
                     }
                 }
-                CHECK_STATUS(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationMode));
-                CHECK_STATUS(trans_O_4x4_3x3(Ow_1, O_1, b_1, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationMode));
+                CHECK_STATUS(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationDesc));
+                CHECK_STATUS(trans_O_4x4_3x3(Ow_1, O_1, b_1, h, w, pad_h_mod_4, pad_w_mod_4, tile_h-1, tile_w-1, activationDesc));
             }
         }
     }
     return ret;
+#else
+    // TODO
+    std::cerr << "[ERROR] currently not support ARMv7 convolution winograd" <<std::endl;
+    exit(1);
+#endif
 }

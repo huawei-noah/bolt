@@ -18,10 +18,15 @@
 #include "sys.h"
 #include "type.h"
 #include "error.h"
+#include "tensor_desc.h"
 
-void mvm_int8(U32 row, U32 col, bool transpose, INT8* matrix, INT8* vector, I32* tmp, I32* result);
+EE mvm_int8(U32 row, U32 col, bool transpose, INT8* matrix, INT8* vector, I32* tmp, I32* result);
 
 void matrix_matrix_multiply_tmp_bytes_int8(U32 row1, U32 col1, U32 row2, U32 col2, DataType dt, U32 *bytes);
+
+EE matrix_matrix_multiply_transform_rhsN_int8(TensorDesc desc, INT8* src, INT8* dst);
+
+EE matrix_matrix_multiply_transform_rhsT_int8(TensorDesc desc, INT8* src, INT8* dst);
 
 EE mmm_int8(int M, int N, int K, INT8* matrix1, INT8* matrix2, INT8* tmp, I32* result, Arch arch);
 

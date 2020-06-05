@@ -47,7 +47,11 @@ EE convolution_infer_forward_tmp_bytes_fp32(TensorDesc inputDesc, TensorDesc fil
             *bytes = ic*ih_pad*iw_pad;
             break;
         case CONVOLUTION_ALGORITHM_GEMM:
+#ifdef __aarch64__
             *bytes = ic*ih_pad*iw_pad + 12*fh*fw*ic;
+#else
+            *bytes = ic*ih_pad*iw_pad + 6*fh*fw*ic;
+#endif
             break;
         case CONVOLUTION_ALGORITHM_WINOGRAD: {
             U32 tile_h = (oh + 3) / 4;
@@ -62,7 +66,11 @@ EE convolution_infer_forward_tmp_bytes_fp32(TensorDesc inputDesc, TensorDesc fil
             break;
         }
         case CONVOLUTION_ALGORITHM_GEMM_ICNCHW:
+#ifdef __aarch64__
             *bytes = ic*ih_pad*iw_pad + 12*fh*fw*ic;
+#else
+            *bytes = ic*ih_pad*iw_pad + 6*fh*fw*ic;
+#endif
             break;
         default:
             ret = NOT_MATCH;
@@ -79,7 +87,7 @@ EE convolution_fp32(TensorDesc inputDesc, F32* input,
     TensorDesc biasDesc, const F32* bias,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F32* output,
-    ActivationMode activationMode,
+    ActivationDesc activationDesc,
     Arch arch)
 {
     UNUSED(arch);
@@ -101,22 +109,39 @@ EE convolution_fp32(TensorDesc inputDesc, F32* input,
     if (!(odf == DF_NCHWC8)) {
         CHECK_STATUS(NOT_MATCH);
     }
-    if (!(ic == fc && oc == fn))
+    if (!(ic == fc && oc == fn)) {
         CHECK_STATUS(NOT_MATCH);
+    }
+
+    // In some cases when we adjust the model input, the input tensor of conv can change from NCHW to NCHWc8
+    // In this case we can simply change the algo, because they both require the same filter transform
+    if (CONVOLUTION_ALGORITHM_GEMM_ICNCHW == algorithm && DF_NCHWC8 == idf) {
+        algorithm = CONVOLUTION_ALGORITHM_GEMM;
+    }
 
     EE ret = SUCCESS;
     switch (algorithm) {
         case CONVOLUTION_ALGORITHM_GEMM:
+#ifdef __aarch64__
             ret = convolution_gemm_V8(inputDesc, input, filterDesc, filter, convDesc,
-                                   biasDesc, bias, tmpBytes, tmp, outputDesc, output, activationMode);
+                                   biasDesc, bias, tmpBytes, tmp, outputDesc, output, activationDesc);
+#else
+            ret = convolution_gemm_V7(inputDesc, input, filterDesc, filter, convDesc,
+                                   biasDesc, bias, tmpBytes, tmp, outputDesc, output, activationDesc);
+#endif
             break;
         case CONVOLUTION_ALGORITHM_GEMM_ICNCHW:
+#ifdef __aarch64__
             ret = convolution_gemm_icnchw_V8(inputDesc, input, filterDesc, filter, convDesc,
-                                   biasDesc, bias, tmpBytes, tmp, outputDesc, output, activationMode);
+                                   biasDesc, bias, tmpBytes, tmp, outputDesc, output, activationDesc);
+#else
+            ret = convolution_gemm_icnchw_V7(inputDesc, input, filterDesc, filter, convDesc,
+                                   biasDesc, bias, tmpBytes, tmp, outputDesc, output, activationDesc);
+#endif
             break;
         case CONVOLUTION_ALGORITHM_WINOGRAD:
             ret = convolution_winograd_V8(inputDesc, input, filterDesc, filter, convDesc,
-                                   biasDesc, bias, tmpBytes, tmp, outputDesc, output, activationMode);
+                                   biasDesc, bias, tmpBytes, tmp, outputDesc, output, activationDesc);
             break;
         default:
             ret = NOT_SUPPORTED;

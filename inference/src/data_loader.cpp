@@ -131,7 +131,7 @@ Vec<Tensor> load_fake_data(Vec<TensorDesc> dataDesc) {
                 ptr = (U8 *)dataPtr;
                 break;
             }
-#ifdef _USE_FP16
+#ifdef __aarch64__
             case DT_F16: {
                 F16* dataPtr = (F16 *)operator new(tensorNumBytes(dataDesc[index]));
                 init_one<F16>(dataPtr, tensorNumElements(dataDesc[index]));
@@ -157,7 +157,7 @@ Vec<Tensor> load_fake_data(Vec<TensorDesc> dataDesc) {
         }
         std::shared_ptr<Tensor> data(new Tensor());
         data->set_desc(dataDesc[index]);
-        data->set_val(ptr);
+        data->set_shared_ptr(std::shared_ptr<U8>(ptr));
         result.push_back(*data.get());
     }
     return result;
@@ -178,7 +178,7 @@ Vec<Tensor> load_txt(std::string dataPath, Vec<TensorDesc> dataDesc) {
                 ptr = (U8 *)dataPtr;
                 break;
             }
-#ifdef _USE_FP16
+#ifdef __aarch64__
             case DT_F16: {
                 F16* dataPtr = (F16 *)operator new(tensorNumBytes(dataDesc[index]));
                 F32 value;
@@ -212,7 +212,7 @@ Vec<Tensor> load_txt(std::string dataPath, Vec<TensorDesc> dataDesc) {
         }
         std::shared_ptr<Tensor> data(new Tensor());
         data->set_desc(dataDesc[index]);
-        data->set_val(ptr);
+        data->set_shared_ptr(std::shared_ptr<U8>(ptr));
         result.push_back(*data.get());
     }
     fclose(f);
@@ -228,6 +228,8 @@ Vec<Tensor> load_seq(std::string dataPath, Vec<TensorDesc> dataDesc) {
         fscanf(f, "%u", &sequenceLen);
         TensorDesc sequenceDesc = dataDesc[index];
         sequenceDesc.dims[0] = sequenceLen;
+        for (U32 j = 1; j < sequenceDesc.nDims; j++)
+            sequenceDesc.dims[j] = 1;
 
         U8 *ptr = nullptr;
         switch (dataDesc[index].dt) {
@@ -239,7 +241,7 @@ Vec<Tensor> load_seq(std::string dataPath, Vec<TensorDesc> dataDesc) {
                 ptr = (U8 *)dataPtr;
                 break;
             }
-#ifdef _USE_FP16
+#ifdef __aarch64__
             case DT_F16: {
                 F16* dataPtr = (F16 *)operator new(tensorNumBytes(sequenceDesc));
                 F32 value;
@@ -274,7 +276,7 @@ Vec<Tensor> load_seq(std::string dataPath, Vec<TensorDesc> dataDesc) {
 
         std::shared_ptr<Tensor> data(new Tensor());
         data->set_desc(sequenceDesc);
-        data->set_val(ptr);
+        data->set_shared_ptr(std::shared_ptr<U8>(ptr));
         result.push_back(*data.get());
     }
     fclose(f);
@@ -283,7 +285,7 @@ Vec<Tensor> load_seq(std::string dataPath, Vec<TensorDesc> dataDesc) {
 
 Vec<Tensor> load_bin(std::string dataPath, Vec<DataType> sourceDataType, Vec<TensorDesc> dataDesc) {
     Vec<Tensor> result;
-#ifdef _USE_FP16
+#ifdef __aarch64__
     FILE *f = fopen(dataPath.c_str(), "r");
     CHECK_REQUIREMENT(f != nullptr);
     for (U32 index = 0; index < dataDesc.size(); index++) {
@@ -310,7 +312,7 @@ Vec<Tensor> load_bin(std::string dataPath, Vec<DataType> sourceDataType, Vec<Ten
         }
         std::shared_ptr<Tensor> data(new Tensor());
         data->set_desc(dataDesc[index]);
-        data->set_val(ptrNew);
+        data->set_shared_ptr(std::shared_ptr<U8>(ptrNew));
         result.push_back(*data.get());
     }
     fclose(f);

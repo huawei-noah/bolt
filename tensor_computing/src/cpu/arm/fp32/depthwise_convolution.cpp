@@ -23,8 +23,8 @@ EE depthwise_convolution_fp32(TensorDesc inputDesc, F32* input,
     TensorDesc biasDesc, const F32* bias,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F32* output,
-    ActivationMode depthwiseActivationMode,
-    ActivationMode pointwiseActivationMode,
+    ActivationDesc depthwiseActivationDesc,
+    ActivationDesc pointwiseActivationDesc,
     Arch arch)
 {
     UNUSED(arch);
@@ -50,23 +50,44 @@ EE depthwise_convolution_fp32(TensorDesc inputDesc, F32* input,
     EE ret = SUCCESS;
     switch (algorithm) {
         case DEPTHWISE_CONVOLUTION_ALGORITHM_DIRECT:
+#ifdef __aarch64__
             ret = depthwise_convolution_direct_V8(inputDesc, input,
                                                filterDesc, filter,
                                                convDesc,
                                                biasDesc, bias,
                                                tmpBytes, tmp,
                                                outputDesc, output,
-                                               depthwiseActivationMode);
+                                               depthwiseActivationDesc);
+#else
+            ret = depthwise_convolution_direct_V7(inputDesc, input,
+                                               filterDesc, filter,
+                                               convDesc,
+                                               biasDesc, bias,
+                                               tmpBytes, tmp,
+                                               outputDesc, output,
+                                               depthwiseActivationDesc);
+#endif
             break;
         case DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_DIRECT:
+#ifdef __aarch64__
             ret = depthwise_pointwise_convolution_direct_V8(inputDesc, input,
                                                          filterDesc, filter,
                                                          convDesc,
                                                          biasDesc, bias,
                                                          tmpBytes, tmp,
                                                          outputDesc, output,
-                                                         depthwiseActivationMode,
-                                                         pointwiseActivationMode);
+                                                         depthwiseActivationDesc,
+                                                         pointwiseActivationDesc);
+#else
+            ret = depthwise_pointwise_convolution_direct_V7(inputDesc, input,
+                                                         filterDesc, filter,
+                                                         convDesc,
+                                                         biasDesc, bias,
+                                                         tmpBytes, tmp,
+                                                         outputDesc, output,
+                                                         depthwiseActivationDesc,
+                                                         pointwiseActivationDesc);
+#endif
             break;
         default:
             ret = NOT_SUPPORTED;

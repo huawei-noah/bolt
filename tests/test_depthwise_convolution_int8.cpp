@@ -42,8 +42,10 @@ int main(int argc, char *argv[]){
 
     DataType dt = DT_I8;
     DataType odt = DT_I32;
-    ActivationMode dw_am = ACTIVATION_RELU6;
-    ActivationMode pw_am = ACTIVATION_RELU6;
+    ActivationDesc dwActivationDesc;
+    ActivationDesc pwActivationDesc;
+    dwActivationDesc.mode = ACTIVATION_RELU6;
+    pwActivationDesc.mode = ACTIVATION_RELU6;
 
     TensorDesc inputDesc, filterDesc, outputDesc, biasDesc;
     ConvolutionDesc convDesc;
@@ -82,7 +84,7 @@ int main(int argc, char *argv[]){
     // setup alg
     ConvolutionPolicy policy = CONVOLUTION_FASTEST;
     DepthwiseConvolutionForwardAlgorithm alg = DEPTHWISE_CONVOLUTION_ALGORITHM_NULL;
-    CHECK_STATUS(depthwise_convolution_infer_forward_algorithm(inputDesc, filterDesc, outputDesc, convDesc, policy, &alg, dt, dw_am, pw_am, UT_ARCH));
+    CHECK_STATUS(depthwise_convolution_infer_forward_algorithm(inputDesc, filterDesc, outputDesc, convDesc, policy, &alg, dt, dwActivationDesc, pwActivationDesc, UT_ARCH));
 
     // setup tmp
     U32 tmpBytes;
@@ -104,7 +106,7 @@ int main(int argc, char *argv[]){
                                            biasDesc, bias,
                                            tmpBytes, tmp,
                                            outputDesc, output,
-                                           dw_am, pw_am,
+                                           dwActivationDesc, pwActivationDesc,
                                            UT_ARCH));
 
         // naive implement
@@ -114,7 +116,7 @@ int main(int argc, char *argv[]){
                                            biasDesc, bias_ref,
                                            tmpBytes, tmp,
                                            outputDesc, output_ref,
-                                           dw_am, pw_am,
+                                           dwActivationDesc, pwActivationDesc,
                                            CPU_GENERAL));
 
         // check
@@ -130,7 +132,7 @@ int main(int argc, char *argv[]){
                                            biasDesc, bias,
                                            tmpBytes, tmp,
                                            outputDesc, output,
-                                           dw_am, pw_am,
+                                           dwActivationDesc, pwActivationDesc,
                                            UT_ARCH));
     }
     double time_end = ut_time_ms();

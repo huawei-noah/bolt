@@ -64,7 +64,7 @@ int int8PoolingTest(int argc, char **argv, DataType dt) {
 
     U8* input_ref  = ut_input_v(input_len, dt, UT_INIT_RANDOM);
     INT8* input = (INT8*)ut_input_v(input_len, DT_I8, UT_INIT_ZERO);
-    F16 scales[2];
+    F16 scales[2] = {-1};
     quantize_tensor(in_desc_ref, input_ref, &input_desc, input, scales);
 
     INT8* output = (INT8*)ut_input_v(output_len, DT_I8, UT_INIT_ZERO);

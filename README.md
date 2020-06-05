@@ -8,30 +8,39 @@ Bolt is a light-weight library for mobile devices. Bolt, as a universal deployme
 
 - ### Overview
 
-  Bolt is highly optimized for ARMv8.2 CPUs, supporting fast inference of FP16, INT8 and BNN networks. Recently, FP32 functionality has been integrated, which also works on ARMv8 devices.
+  Bolt has almost supported all the ARM-A devices incude ARMv7/ARMv8/ARMv8.2/Mali-GPU. FP16/BNN for CPU and FP16 for GPU are highly optimized. Bolt also support FP32 on ARMv7/ARMv8/ARMv8.2 devices. 
   
-  Bolt has its own format of model storage, which helps reduce the memory footprint by storing in FP16 and 1-bit representations when possible. We provide model converters for the following formats:
+  Bolt has its own format of model storage, which helps reduce the memory footprint by storing in FP16, INT8 and 1-bit representations when possible. We provide model converters for the following formats:
   
   - caffe
   - onnx
   - tflite
   
-  For PyTorch and TensorFlow models, please try to convert them to the onnx format first. We also had some success in converting these models into customized caffe models.
+  For PyTorch and TensorFlow models, please try to convert them to the onnx or tflite format first. We also had some success in converting these models into customized caffe models.
   
 - ### Verified Networks
 
   Bolt has shown its high performance in the inference of common CV and NLP neural networks. Some of the representative networks that we have verified are listed below. You can find detailed benchmark information in [docs/BENCHMARK.md](docs/BENCHMARK.md).
   
-  - Squeezenet (full-network int8 quantization)
-  - Mobilenet v1 - v3
+  - Squeezenet
+  - Mobilenet v1, v2, v3
   - Resnet50, [Ghostnet](https://github.com/huawei-noah/ghostnet) (plus FPN detection)
   - Birealnet18 (BNN)
+  - SSD(Resnet)
   - Bert, TinyBert, Albert
   - Neural Machine Translation
+  - Automatic Speech Recognition
+  - Text To Speech
+
+  For MALI GPU FP16 Support 
+  - Squeezenet v1.1
+  - Mobilenet v1, v2, v3
+  - Ghostnet
+
 
 - ### Inference Graph Optimizers
 
-  Apart from the refined acceleration of convolutions and GeMM for the supported data precisions, Bolt has a sophisticated inference graph optimizer. As shown in [model-tools/include](model-tools/include), classic operator fusion is supported. Bolt is also equipped with a Memory Reuse Optmizer, which reassigns the space occupied by a feature map as soon as it is no longer needed as input or output. Most networks that we tested benefit from a two-third reduction in feature map storage.
+  Apart from the refined acceleration of convolutions and GeMM for the supported data precisions, Bolt has a easy use and powerful inference graph optimizer. As shown in [model-tools/include](model-tools/include), classic operator fusion is supported. Bolt is also equipped with a Memory Reuse Optmizer, which reassigns the space occupied by a feature map as soon as it is no longer needed as input or output. Most networks that we tested benefit from a two-third reduction in feature map storage.
 
 - ### Thread Affinity Setting
 
@@ -93,11 +102,12 @@ We provide a detailed benchmark report for your reference. For more testing info
 
 # Road Map
 
-#### v0.3.0
+#### v0.4.0
 
-Future Release 2020-04-01
+Future Release 2020-09-01
 
-- GPU
+- Yolo support
+- TensorFlow model converter
 
 # Who are using Bolt
 
@@ -106,27 +116,31 @@ Future Release 2020-04-01
 
 # FAQ
 
-1. More details about dependency libraries for cross-compilation?
+1. Why configuring bolt.cmake does not take effect?
+
+   The [install.sh](install.sh) serves as an example of compilation setup, and it overwrites some settings in [bolt.cmake](bolt.cmake). Please check install.sh first.
+
+2. More details about dependency libraries for cross-compilation?
 
    The major dependency is Protobuf. Protoc should be the x86 version but protbuf should be the ARM version.
 
-2. Requirements on tensor dimensions?
+3. Requirements on tensor dimensions?
 
-   For optimal performance, Bolt requires the number of output channels to be divisible by 8. For compatibility, Bolt will try to pad the output channels of convolution layers to the nearest multiple of 8. You can turn on DEBUG in [bolt.cmake](bolt.cmake) to check the actual dimensions.
+   For optimal performance, Bolt requires the number of output channels to be divisible by 8. For compatibility, Bolt will try to pad the output channels of convolution layers to the nearest multiple of 8. You can turn on USE_DEBUG in [bolt.cmake](bolt.cmake) to check the actual dimensions.
 
-3. Restrictions for BNN?
+4. Restrictions for BNN?
 
    For BNN convolution layers, the number of output channels must be divisible by 32.
 
-4. Restrictions on quantization (int8)?
+5. Restrictions on quantization (int8)?
 
-   For the time being, Bolt only supports post-training int8 quantization. If quantization is activated, the second convolution layer will quantize the tensors to 8-bit integers. For now, int8 operators include Convolution, Pooling and Concatenation (end-to-end support for Squeezenet). If your network includes other operators, you may need to add type casting in the front of those operators. The quantization method is symmetrical for both activation and weight.
+   For the time being, Bolt only supports post-training int8 quantization. The quantization method is symmetrical for both activation and weight. We have added a calibration tool for image CNN pipelines. Please feel free to report cases of usage failures.
 
-5. Requirements for fp16 and int8?
+6. Requirements for fp16 and int8?
 
    Only arm-v8.2 supports fp16 and int8 dotprod instructions. 
 
-6. Restrictions for MALI?
+7. Restrictions for MALI?
 
    Only llvm compilation supports MALI computing.
 

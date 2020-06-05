@@ -12,94 +12,58 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#include <cmath>
-#include "sys.h"
-#include "type.h"
-#include "tensor_desc.h"
-#include "error.h"
 #include "tensor_computing.h"
-#include "cpu/general/tensor_computing_general.h"
-#include "cpu/arm/tensor_computing_arm.h"
 #ifdef _USE_MALI 
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
 
-inline EE bilateral_slice_apply_infer_output_size_cpu(){
+inline EE bilateral_slice_apply_infer_output_size_cpu()
+{
     return NOT_SUPPORTED;
 }
 
 EE bilateral_slice_apply_infer_output_size(TensorDesc inputDesc, TensorDesc guideDesc, TensorDesc gridDesc, BilateralSliceApplyDesc bilateralSliceApplyDesc,
-    TensorDesc* outputDesc, Arch arch, ExtInfo_t extInfo){
+    TensorDesc* outputDesc, Arch arch, ExtInfo_t extInfo)
+{
+    EE ret = NOT_SUPPORTED;
+    if(arch == MALI) {
 #ifdef _USE_MALI
-    if(arch == MALI){
-        CHECK_STATUS(bilateral_slice_apply_infer_output_size_mali(inputDesc, guideDesc, gridDesc, bilateralSliceApplyDesc, outputDesc, 
-            &extInfo->maliInfo.gclmemInputDesc[0], &extInfo->maliInfo.gclmemInputDesc[2], &extInfo->maliInfo.gclmemInputDesc[1], extInfo->maliInfo.gclmemOutputDesc));
-    } else {
+        if(extInfo->maliInfo.gclmemInputDesc) {
+            ret = bilateral_slice_apply_infer_output_size_mali(inputDesc, guideDesc, gridDesc, bilateralSliceApplyDesc, outputDesc,
+                &extInfo->maliInfo.gclmemInputDesc[0], &extInfo->maliInfo.gclmemInputDesc[2], &extInfo->maliInfo.gclmemInputDesc[1], extInfo->maliInfo.gclmemOutputDesc);
+        } else {
+            ret = bilateral_slice_apply_infer_output_size_mali(inputDesc, guideDesc, gridDesc, bilateralSliceApplyDesc, outputDesc, 
+                NULL, NULL, NULL, extInfo->maliInfo.gclmemOutputDesc);
+        }
 #endif
-        UNUSED(inputDesc);
-        UNUSED(guideDesc);
-        UNUSED(gridDesc);
-        UNUSED(bilateralSliceApplyDesc);
-        UNUSED(outputDesc);
-        UNUSED(arch);
-        UNUSED(extInfo);
-        CHECK_STATUS(bilateral_slice_apply_infer_output_size_cpu());
-#ifdef _USE_MALI
     }
-#endif
-    return SUCCESS;
+    return ret;
 }
 
 EE bilateral_slice_apply_infer_forward_tmp_bytes(TensorDesc inputDesc, TensorDesc guideDesc, TensorDesc gridDesc, BilateralSliceApplyDesc bilateralSliceApplyDesc,
-    U32* bytes, Arch arch, ExtInfo_t extInfo){
-    EE ret = SUCCESS;
+    U32* bytes, Arch arch, ExtInfo_t extInfo)
+{
+    EE ret = NOT_SUPPORTED;
+    if(arch == MALI) {
 #ifdef _USE_MALI
-    if(arch == MALI){
-        CHECK_STATUS(bilateral_slice_apply_infer_forward_tmp_bytes_mali(inputDesc, guideDesc, gridDesc, bilateralSliceApplyDesc, 
-            extInfo->maliInfo.forwardRunInfo, bytes)); 
-    } else {
+        ret = bilateral_slice_apply_infer_forward_tmp_bytes_mali(inputDesc, guideDesc, gridDesc, bilateralSliceApplyDesc, 
+            extInfo->maliInfo.forwardRunInfo, bytes);
 #endif
-        UNUSED(inputDesc);
-        UNUSED(guideDesc);
-        UNUSED(gridDesc);
-        UNUSED(bilateralSliceApplyDesc);
-        UNUSED(bytes);
-        UNUSED(arch);
-        UNUSED(extInfo);
-        return NOT_SUPPORTED;
-#ifdef _USE_MALI
     }
-#endif
     return ret;
 }
 
 EE bilateral_slice_apply(TensorDesc inputDesc, const void* input, TensorDesc guideDesc, const void* guide, 
                          TensorDesc gridDesc, const void* grid, BilateralSliceApplyDesc bilateralSliceApplyDesc,
                          U32 tmpBytes, const void* tmpBuf, TensorDesc outputDesc, 
-                         const void* output, Arch arch, ExtInfo_t extInfo){
-    EE ret = SUCCESS;
-#ifdef _USE_MALI
+                         const void* output, Arch arch, ExtInfo_t extInfo)
+{
+    EE ret = NOT_SUPPORTED;
     if(arch == MALI){
-        CHECK_STATUS(bilateral_slice_apply_mali(extInfo->maliInfo.handle, inputDesc, (GCLMem_t)input, guideDesc, (GCLMem_t)guide, gridDesc, (GCLMem_t)grid, 
-            bilateralSliceApplyDesc, extInfo->maliInfo.forwardRunInfo, tmpBytes, (GCLMem_t)tmpBuf, outputDesc, (GCLMem_t)output)); 
-    } else {
-#endif
-        UNUSED(inputDesc);
-        UNUSED(input);
-        UNUSED(guideDesc);
-        UNUSED(guide);
-        UNUSED(gridDesc);
-        UNUSED(grid);
-        UNUSED(bilateralSliceApplyDesc);
-        UNUSED(tmpBytes);
-        UNUSED(tmpBuf);
-        UNUSED(outputDesc);
-        UNUSED(output);
-        UNUSED(arch);
-        UNUSED(extInfo);
-        return NOT_SUPPORTED;
 #ifdef _USE_MALI
-    }
+        ret = bilateral_slice_apply_mali(extInfo->maliInfo.handle, inputDesc, (GCLMem_t)input, guideDesc, (GCLMem_t)guide, gridDesc, (GCLMem_t)grid, 
+            bilateralSliceApplyDesc, extInfo->maliInfo.forwardRunInfo, tmpBytes, (GCLMem_t)tmpBuf, outputDesc, (GCLMem_t)output);
 #endif
+    }
     return ret;
 }

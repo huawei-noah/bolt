@@ -35,7 +35,7 @@ int reshapeTest(int argc, char** argv, DataType dt) {
     TensorDesc in_desc = tensor4df(dt, df, in, ic, ih, iw);
     TensorDesc out_desc;
 
-    CHECK_STATUS(reshape_infer_output_size(in_desc, &out_desc, shape.data(), shape_size));
+    CHECK_STATUS(reshape_infer_output_size(in_desc, &out_desc, shape.data(), shape_size, UT_ARCH));
 
     U32 len = tensorNumElements(in_desc);
     U8* input  = ut_input_v(len, dt, UT_INIT_RANDOM);

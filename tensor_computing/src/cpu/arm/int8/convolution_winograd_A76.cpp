@@ -19,7 +19,7 @@
 template<typename OT>
 EE convolution_winograd_A76(TensorDesc inputDesc, const void* input, F16* input_scale, TensorDesc filterDesc, const void* filter, F16* filterScale,
     ConvolutionDesc convDesc, TensorDesc biasDesc, const void* bias, U32 tmpBytes, void* tmp, TensorDesc outputDesc,
-    void* output, F16* outputScale, ActivationMode am)
+    void* output, F16* outputScale, ActivationDesc am)
 {
     UNUSED(biasDesc);
     UNUSED(tmpBytes);
@@ -1419,9 +1419,9 @@ EE convolution_winograd_A76(TensorDesc inputDesc, const void* input, F16* input_
 
 template EE convolution_winograd_A76<INT8>(TensorDesc inputDesc, const void* input, F16* input_scale, TensorDesc filterDesc, const void* filter, F16* filterScale,
     ConvolutionDesc convDesc, TensorDesc biasDesc, const void* bias, U32 tmpBytes, void* tmp, TensorDesc outputDesc,
-    void* output, F16* outputScale, ActivationMode am);
+    void* output, F16* outputScale, ActivationDesc am);
 
 template EE convolution_winograd_A76<F16>(TensorDesc inputDesc, const void* input, F16* input_scale, TensorDesc filterDesc, const void* filter, F16* filterScale,
     ConvolutionDesc convDesc, TensorDesc biasDesc, const void* bias, U32 tmpBytes, void* tmp, TensorDesc outputDesc,
-    void* output, F16* outputScale, ActivationMode am);
+    void* output, F16* outputScale, ActivationDesc am);
 #endif

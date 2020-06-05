@@ -13,7 +13,7 @@
 
 
 #include "cpu/arm/fp16/depthwise_pointwise_convolution_direct_no_padding.h"
-#include "cpu/arm/fp16/arm_neon_expand_fp16.h"
+#include "cpu/arm/fp16/arm_functions_fp16.h"
 
 EE depthwise_pointwise_convolution_direct_no_padding_A76(TensorDesc inputDesc, F16* inArray,
     TensorDesc filterDesc, const F16* filterArray,
@@ -21,8 +21,8 @@ EE depthwise_pointwise_convolution_direct_no_padding_A76(TensorDesc inputDesc, F
     TensorDesc biasDesc, const F16* biasArray,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F16* outArray,
-    ActivationMode depthwiseActivationMode,
-    ActivationMode pointwiseActivationMode)
+    ActivationDesc depthwiseActivationDesc,
+    ActivationDesc pointwiseActivationDesc)
 {
     UNUSED(biasDesc);
     UNUSED(tmpBytes);
@@ -72,7 +72,7 @@ EE depthwise_pointwise_convolution_direct_no_padding_A76(TensorDesc inputDesc, F
                         f,
                         vv0,
                         buffer);
-                    CHECK_STATUS(activation_fp16(buffer, 8, depthwiseActivationMode));
+                    CHECK_STATUS(activation_fp16(buffer, 8, depthwiseActivationDesc, buffer));
                     U32 out_index = out_base + j;
                     for (I32 i = 0; i < 8; i++, out_index+=8) {
                         pwArray[out_index] = buffer[i];
@@ -93,7 +93,7 @@ EE depthwise_pointwise_convolution_direct_no_padding_A76(TensorDesc inputDesc, F
                         f,
                         vv0,
                         buffer);
-                    CHECK_STATUS(activation_fp16(buffer, 8, depthwiseActivationMode));
+                    CHECK_STATUS(activation_fp16(buffer, 8, depthwiseActivationDesc, buffer));
                     U32 out_index = out_base + j;
                     for (I32 i = 0; i < 8; i++, out_index+=4) {
                         pwArray[out_index] = buffer[i];
@@ -114,7 +114,7 @@ EE depthwise_pointwise_convolution_direct_no_padding_A76(TensorDesc inputDesc, F
                         f,
                         vv0,
                         buffer);
-                    CHECK_STATUS(activation_fp16(buffer, 8, depthwiseActivationMode));
+                    CHECK_STATUS(activation_fp16(buffer, 8, depthwiseActivationDesc, buffer));
                     U32 out_index = out_base + j;
                     for (I32 i = 0; i < 8; i++, out_index++) {
                         pwArray[out_index] = buffer[i];
@@ -363,7 +363,7 @@ EE depthwise_pointwise_convolution_direct_no_padding_A76(TensorDesc inputDesc, F
                     :[ic]"r"((I64)ic*8),
                      [b_0]"r"(b_o0),
                      [b_1]"r"(b_o1),
-                     [pointwiseActivationMode]"r"((I64)pointwiseActivationMode),
+                     [pointwiseActivationMode]"r"((I64)pointwiseActivationDesc.mode),
                      [am_relu]"r"((I64)ACTIVATION_RELU),
                      [am_relu6]"r"((I64)ACTIVATION_RELU6),
                      [am_h_swish]"r"((I64)ACTIVATION_H_SWISH)
@@ -516,7 +516,7 @@ EE depthwise_pointwise_convolution_direct_no_padding_A76(TensorDesc inputDesc, F
                      [f_0]"+r"(f_r)
                     :[ic]"r"((I64)ic*8),
                      [b_0]"r"(b_o0),
-                     [pointwiseActivationMode]"r"((I64)pointwiseActivationMode),
+                     [pointwiseActivationMode]"r"((I64)pointwiseActivationDesc.mode),
                      [am_relu]"r"((I64)ACTIVATION_RELU),
                      [am_relu6]"r"((I64)ACTIVATION_RELU6),
                      [am_h_swish]"r"((I64)ACTIVATION_H_SWISH)
@@ -681,7 +681,7 @@ EE depthwise_pointwise_convolution_direct_no_padding_A76(TensorDesc inputDesc, F
                     :[ic]"r"((I64)ic*8),
                      [b_0]"r"(b_o0),
                      [b_1]"r"(b_o1),
-                     [pointwiseActivationMode]"r"((I64)pointwiseActivationMode),
+                     [pointwiseActivationMode]"r"((I64)pointwiseActivationDesc.mode),
                      [am_relu]"r"((I64)ACTIVATION_RELU),
                      [am_relu6]"r"((I64)ACTIVATION_RELU6),
                      [am_h_swish]"r"((I64)ACTIVATION_H_SWISH)
@@ -785,7 +785,7 @@ EE depthwise_pointwise_convolution_direct_no_padding_A76(TensorDesc inputDesc, F
                      [f_0]"+r"(f_r)
                     :[ic]"r"((I64)ic*8),
                      [b_0]"r"(b_o0),
-                     [pointwiseActivationMode]"r"((I64)pointwiseActivationMode),
+                     [pointwiseActivationMode]"r"((I64)pointwiseActivationDesc.mode),
                      [am_relu]"r"((I64)ACTIVATION_RELU),
                      [am_relu6]"r"((I64)ACTIVATION_RELU6),
                      [am_h_swish]"r"((I64)ACTIVATION_H_SWISH)
@@ -878,7 +878,7 @@ EE depthwise_pointwise_convolution_direct_no_padding_A76(TensorDesc inputDesc, F
                     :[ic]"r"((I64)ic*8),
                      [b_0]"r"(b_o0),
                      [b_1]"r"(b_o1),
-                     [pointwiseActivationMode]"r"((I64)pointwiseActivationMode),
+                     [pointwiseActivationMode]"r"((I64)pointwiseActivationDesc.mode),
                      [am_relu]"r"((I64)ACTIVATION_RELU),
                      [am_relu6]"r"((I64)ACTIVATION_RELU6),
                      [am_h_swish]"r"((I64)ACTIVATION_H_SWISH)
@@ -945,7 +945,7 @@ EE depthwise_pointwise_convolution_direct_no_padding_A76(TensorDesc inputDesc, F
                      [f_0]"+r"(f_r)
                     :[ic]"r"((I64)ic*8),
                      [b_0]"r"(b_o0),
-                     [pointwiseActivationMode]"r"((I64)pointwiseActivationMode),
+                     [pointwiseActivationMode]"r"((I64)pointwiseActivationDesc.mode),
                      [am_relu]"r"((I64)ACTIVATION_RELU),
                      [am_relu6]"r"((I64)ACTIVATION_RELU6),
                      [am_h_swish]"r"((I64)ACTIVATION_H_SWISH)

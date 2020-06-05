@@ -13,7 +13,7 @@
 
 
 #include "cpu/general/tensor_computing_general.h"
-#include "cpu/general/common_general.h"
+#include "cpu/general/general_functions.h"
 
 template<typename T>
 EE attention(U32 batch, U32 numHeads, U32 fromSequenceLength, U32 toSequenceLength, const T *input, T *output)

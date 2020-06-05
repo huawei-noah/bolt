@@ -58,7 +58,7 @@ public:
             *modelPtr += weightBytes;
         } else {
             auto curOpWs = this->get_weightspec_ptr();
-            modelWeightTensor->set_val(curOpWs.weight);
+            modelWeightTensor->set_shared_ptr(std::shared_ptr<U8>(curOpWs.weight));
         }
         this->weightTensors.push_back(*modelWeightTensor.get());
         return SUCCESS;

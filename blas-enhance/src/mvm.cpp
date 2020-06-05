@@ -12,12 +12,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#include "sys.h"
-#include "error.h"
-#include "type.h"
 #include "blas-enhance.h"
+#ifdef _USE_GENERAL
 #include "cpu/general/blas_general.h"
+#endif
+#ifdef _USE_NEON
 #include "cpu/arm/blas_arm.h"
+#endif
 
 
 EE matrix_vector_multiply_tmp_bytes(TensorDesc matrixDesc, TensorDesc vectorDesc, U32* bytes, Arch arch)
@@ -25,17 +26,16 @@ EE matrix_vector_multiply_tmp_bytes(TensorDesc matrixDesc, TensorDesc vectorDesc
     UNUSED(vectorDesc);
 
     bool transpose = (matrixDesc.df == DF_TRANSPOSE);
-
-    EE ret = SUCCESS;
-    if (arch == ARM_A55 || arch == ARM_A76 || arch == ARM_V8)
-#ifdef _USE_NEON
-        ret = matrix_vector_multiply_tmp_bytes_arm(transpose, matrixDesc.dt, bytes);
-#else
-        ret = NOT_SUPPORTED;
+    EE ret = NOT_SUPPORTED;
+    if (arch == CPU_GENERAL) {
+#ifdef _USE_GENERAL
+        ret = SUCCESS;
 #endif
-    else
-        ret = NOT_SUPPORTED;
-
+#ifdef _USE_NEON
+    } else if (arch == ARM_A55 || arch == ARM_A76 || arch == ARM_V8 || arch == ARM_V7) {
+        ret = matrix_vector_multiply_tmp_bytes_arm(transpose, matrixDesc.dt, bytes);
+#endif
+    }
     return ret;
 }
 
@@ -68,11 +68,15 @@ EE matrix_vector_multiply(TensorDesc matrixDesc, const void* matrix,
         CHECK_STATUS(NOT_MATCH);
 
     bool transpose = (matrixDataFormat == DF_TRANSPOSE);
-    EE ret = SUCCESS;
-    if (arch == CPU_GENERAL)
+    EE ret = NOT_SUPPORTED;
+    if (arch == CPU_GENERAL) {
+#ifdef _USE_GENERAL
         ret = mvm_general(matrixRow, matrixColumn, matrixDataType, transpose, matrix, vector, result);
-    else
+#endif
+#ifdef _USE_NEON
+    } else {
         ret = mvm_arm(matrixRow, matrixColumn, matrixDataType, transpose, matrix, vector, tmp, result, arch);
-        
+#endif
+    }
     return ret;
 }

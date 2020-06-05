@@ -34,7 +34,7 @@ F32 convert_F32(void* ptr, int index, DataType dt){
             value = ((U32*)ptr)[index];
             break;
         }
-#ifdef _USE_FP16
+#ifdef __aarch64__
         case DT_F16: {
             value = ((F16*)ptr)[index];
             break;
@@ -116,6 +116,13 @@ void print_operator_tensor_relationship(const ModelSpec ms, bool deleteDeprecate
             printf("        Tensor Positions: ");
             for (U32 j = 0; j < ms.ops[i].num_inputs + ms.ops[i].num_outputs; j++) {
                 printf("%d ", ms.ops[i].tensor_positions[j]);
+            }
+            printf("\n");
+        }
+        if (nullptr != ms.ops[i].feature_scale) {
+            printf("        Quant Scale: ");
+            for (U32 j = 0; j < ms.ops[i].num_quant_feature; j++) {
+                printf("%f ", ms.ops[i].feature_scale[j].scale[0]);
             }
             printf("\n");
         }

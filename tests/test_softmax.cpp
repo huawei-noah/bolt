@@ -18,6 +18,7 @@
 int softmaxTest(int argc, char** argv, DataType dt){
     CHECK_REQUIREMENT(argc == 2);
     U32 len = atoi(argv[1]);
+    U32 axis = 1;
     
     TensorDesc in_desc, out_desc;
     in_desc = tensor2df(dt, DF_NORMAL, 1, len);
@@ -28,10 +29,10 @@ int softmaxTest(int argc, char** argv, DataType dt){
     U8* out_ref = ut_input_v(len, dt, UT_INIT_ZERO);
 
     if(UT_CHECK){
-        CHECK_STATUS(softmax(in_desc, in, out_desc, out, UT_ARCH));
+        CHECK_STATUS(softmax(in_desc, in, axis, out_desc, out, UT_ARCH));
 
         // naive implement
-        CHECK_STATUS(softmax(in_desc, in, out_desc, out_ref, CPU_GENERAL));
+        CHECK_STATUS(softmax(in_desc, in, axis, out_desc, out_ref, CPU_GENERAL));
 
         // check
         ut_check_v(out, out_ref, len, dt, 0.1, __FILE__, __LINE__);
@@ -40,7 +41,7 @@ int softmaxTest(int argc, char** argv, DataType dt){
     // benchmark
     double time_start = ut_time_ms();
     for(int iter=0; iter<UT_LOOPS; iter++){
-        CHECK_STATUS(softmax(in_desc, in, out_desc, out, UT_ARCH));
+        CHECK_STATUS(softmax(in_desc, in, axis, out_desc, out, UT_ARCH));
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;

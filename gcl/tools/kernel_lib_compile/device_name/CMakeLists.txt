@@ -23,4 +23,4 @@ find_package(Gcl)
 find_package(Uni)
 
 add_executable(gcl_device_name device_name.cpp)
-TARGET_LINK_LIBRARIES(gcl_device_name ${OPENCL_LIBRARIES})
+TARGET_LINK_LIBRARIES(gcl_device_name ${OPENCL_LIBRARIES} -Wl,-allow-shlib-undefined, -static-libstdc++)

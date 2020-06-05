@@ -21,7 +21,7 @@
 #include "tensor.hpp"
 #include "operator.hpp"
 #include "convolution.hpp"
-#include "fully_connected_eltwise.hpp"
+#include "fully_connected.hpp"
 #include "model.hpp"
 #include "op_type.h"
 #include "tensor_desc.h"
@@ -36,19 +36,19 @@ public:
         this->modelPtr = _modelPtr;
     }
 
-    EE infer_output_tensors_size(Vec<TensorDesc> dims) override
+    EE infer_output_tensors_size(HashMap<std::string, TensorDesc> inputDescMap) override
     {
-        if (dims.size() != 1) {
+        if (inputDescMap.size() != 1) {
             return NOT_SUPPORTED;
         }
-        Vec<TensorDesc> inDims = dims;
+        Vec<TensorDesc> inDims;
+        for (auto iter: inputDescMap)
+            inDims.push_back(iter.second);
         Vec<TensorDesc> outDims(1);
-
-        this->dimsOp = { dims };
-
-        auto num = [](Vec<TensorDesc> dims) -> U32 {
+        this->dimsOp = { inDims };
+        auto num = [](Vec<TensorDesc> inDims) -> U32 {
             U32 ret = 0;
-            for (auto d: dims) ret += tensorNumElements(d);
+            for (auto d: inDims) ret += tensorNumElements(d);
             return ret;
         };
 
@@ -112,12 +112,12 @@ public:
     }
 
 
-    void ready(Vec<TensorDesc> dims) override
+    void ready(HashMap<std::string, TensorDesc> inputDescMap) override
     {
         for (auto op : this->ops) {
             op->set_op_schedule(this->schedule);
         }
-        this->infer_output_tensors_size(dims);
+        this->infer_output_tensors_size(inputDescMap);
         this->assign_output_tensor();
 
         U8* curPtr = modelPtr.get();
@@ -129,7 +129,7 @@ public:
                     CHECK_STATUS(convOpPtr->infer_forward_algorithm(this->algorithmMap));
                     CHECK_STATUS(convOpPtr->transform_filter());
                 } else if (op->get_op_type() == OT_FC) {
-                    auto fcOpPtr = dynamic_cast<FullyConnectedEltwise*>(op.get());
+                    auto fcOpPtr = dynamic_cast<FullyConnected*>(op.get());
                     CHECK_STATUS(fcOpPtr->init_weight_bias_from_model(&curPtr));
                     CHECK_STATUS(fcOpPtr->transform_filter());
                 } else if (op->get_op_type() == OT_LSTM) {
@@ -158,9 +158,10 @@ public:
 
     void assign_tmp_tensor() override
     {
-        auto secondPtr = std::shared_ptr<U8>((U8*)operator new(maxTmpElements));
+        temp = std::shared_ptr<Memory_>(new CpuMemory());
+        temp->alloc(this->maxTmpElements);
         for (auto op: this->ops) {
-            op->set_tmp_memory(maxTmpElements, secondPtr);
+            op->set_tmp_memory(this->maxTmpElements, temp);
         }
     }
 
@@ -193,6 +194,7 @@ private:
     Vec<Vec<TensorDesc> > dimsOp;
     U32 maxTmpElements;
     Vec<U32> tmpElements;
+    std::shared_ptr<Memory_> temp;
 };
 #endif
 

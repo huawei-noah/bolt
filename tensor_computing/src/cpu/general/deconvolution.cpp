@@ -17,7 +17,7 @@
 #include "error.h"
 #include "tensor_computing_type.h"
 #include "cpu/general/tensor_computing_general.h"
-#include "cpu/general/common_general.h"
+#include "cpu/general/general_functions.h"
 
 template<typename T>
 inline EE deconvolution(TensorDesc inputDesc, T* inArray,
@@ -25,7 +25,7 @@ inline EE deconvolution(TensorDesc inputDesc, T* inArray,
     ConvolutionDesc convDesc,
     const T* biasArray,
     TensorDesc outputDesc, T* outArray,
-    ActivationMode activationMode)
+    ActivationDesc activationDesc)
 {
     DataType idt, fdt, odt;
     DataFormat idf, fdf, odf;
@@ -35,7 +35,7 @@ inline EE deconvolution(TensorDesc inputDesc, T* inArray,
     CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
     CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
 
-    if (ic != fc) {
+    if (ic != fn) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
 
@@ -68,7 +68,7 @@ inline EE deconvolution(TensorDesc inputDesc, T* inArray,
                                 I32 ow_idx = fw_idx + strideW * w - paddingL;
                                 if (oh_idx >= 0 && oh_idx < (I32)oh && ow_idx >= 0 && ow_idx < (I32)ow) {
                                     U32 o_off = n*oc*oh*ow + o*oh*ow + oh_idx*ow + ow_idx;
-                                    U32 f_off = o*ic*fh*fw + c*fh*fw + fh_idx*fw + fw_idx;
+                                    U32 f_off = c*fc*fh*fw + o*fh*fw + fh_idx*fw + fw_idx;
                                     outArray[o_off] += inArray[i_off] * filterArray[f_off];
                                 }
                             }
@@ -86,13 +86,14 @@ inline EE deconvolution(TensorDesc inputDesc, T* inArray,
                     U32 o_off = n*oc*oh*ow + o*oh*ow + h*ow + w;
                     U32 b_off = o;
                     outArray[o_off] += biasArray[b_off];
-                    switch (activationMode) {
+                    switch (activationDesc.mode) {
                         case ACTIVATION_NULL: {
                             break;
                         }
                         case ACTIVATION_RELU: {
-                            if(outArray[o_off] < 0) {
-                                outArray[o_off] = 0;
+                            F32 tmp = activationDesc.value[0] * outArray[o_off];
+                            if(outArray[o_off] < tmp) {
+                                outArray[o_off] = tmp;
                             }
                             break;
                         }
@@ -117,7 +118,7 @@ EE deconvolution_general(TensorDesc inputDesc, void* input,
         TensorDesc scaleDesc, const void* scale,
         TensorDesc biasDesc, const void* bias,
         TensorDesc outputDesc, void* output,
-        ActivationMode activationMode)
+        ActivationDesc activationDesc)
 {
     UNUSED(scaleDesc);
     UNUSED(scale);
@@ -132,7 +133,7 @@ EE deconvolution_general(TensorDesc inputDesc, void* input,
                                              convDesc,
                                              (F16*)bias,
                                              outputDesc, (F16*)output,
-                                             activationMode);
+                                             activationDesc);
             break;
 #endif
 #ifdef _USE_FP32
@@ -142,7 +143,7 @@ EE deconvolution_general(TensorDesc inputDesc, void* input,
                                              convDesc,
                                              (F32*)bias,
                                              outputDesc, (F32*)output,
-                                             activationMode);
+                                             activationDesc);
             break;
 #endif
         default:

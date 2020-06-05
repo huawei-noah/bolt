@@ -23,4 +23,4 @@ set_c_cxx_flags()
 set_test_c_cxx_flags()
 
 add_executable(gcl_binary clbinary.cpp)
-TARGET_LINK_LIBRARIES(gcl_binary ${OPENCL_LIBRARIES})
+TARGET_LINK_LIBRARIES(gcl_binary ${OPENCL_LIBRARIES} -Wl,-allow-shlib-undefined, -static-libstdc++)

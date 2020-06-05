@@ -13,8 +13,12 @@
 
 
 #include "tensor_computing.h"
+#ifdef _USE_GENERAL
 #include "cpu/general/tensor_computing_general.h"
+#endif
+#ifdef _USE_NEON
 #include "cpu/arm/tensor_computing_arm.h"
+#endif
 #ifdef _USE_MALI 
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
@@ -30,47 +34,32 @@ inline EE activation_infer_output_size_cpu(TensorDesc inputDesc, TensorDesc *out
 
 EE activation_infer_output_size(TensorDesc inputDesc, TensorDesc *outputDesc, Arch arch, ExtInfo_t extInfo)
 {
-#ifdef _USE_MALI
+    EE ret = NOT_SUPPORTED;
     if(arch == MALI){
-        CHECK_STATUS(activation_infer_output_size_mali(inputDesc, outputDesc, extInfo->maliInfo.gclmemInputDesc, extInfo->maliInfo.gclmemOutputDesc));
+#ifdef _USE_MALI
+        ret = activation_infer_output_size_mali(inputDesc, outputDesc, extInfo->maliInfo.gclmemInputDesc, extInfo->maliInfo.gclmemOutputDesc);
+#endif
     } else {
-#endif
-        UNUSED(arch);
-        UNUSED(extInfo);
-        CHECK_STATUS(activation_infer_output_size_cpu(inputDesc, outputDesc));
-#ifdef _USE_MALI
-    }
-#endif
-    return SUCCESS;
-}
-
-EE activation(TensorDesc inputDesc, void* data, ActivationMode activationMode, Arch arch, ExtInfo_t extInfo)
-{
-#ifndef _USE_MALI
-    UNUSED(extInfo);
-#endif 
-    EE ret = SUCCESS;
-    switch (arch) {
-        case CPU_GENERAL:
-            ret = activation_general(inputDesc, data, activationMode);
-            break;
-        case ARM_A55:
-            ret = activation_arm(inputDesc, data, activationMode);
-            break;
-        case ARM_A76:
-            ret = activation_arm(inputDesc, data, activationMode);
-            break;
-        case ARM_V8:
-            ret = activation_arm(inputDesc, data, activationMode);
-            break;
-#ifdef _USE_MALI
-        case MALI:
-            ret = activation_mali(extInfo->maliInfo.handle, inputDesc, (GCLMem_t)data, activationMode);
-            break;
-#endif
-        default:
-            ret = NOT_SUPPORTED;
+        ret = activation_infer_output_size_cpu(inputDesc, outputDesc);
     }
     return ret;
 }
 
+EE activation(TensorDesc inputDesc, void* input, ActivationDesc activationDesc, TensorDesc outputDesc, void* output, Arch arch, ExtInfo_t extInfo)
+{
+    EE ret = NOT_SUPPORTED;
+    if (arch == CPU_GENERAL) {
+#ifdef _USE_GENERAL
+        ret = activation_general(inputDesc, input, activationDesc, outputDesc, output);
+#endif
+#ifdef _USE_NEON
+    } else if (arch == ARM_A55 || arch == ARM_A76 || arch == ARM_V8 || arch == ARM_V7) {
+        ret = activation_arm(inputDesc, input, activationDesc, outputDesc, output);
+#endif
+#ifdef _USE_MALI
+    } else if (arch == MALI) {
+        ret = activation_mali(extInfo->maliInfo.handle, inputDesc, (GCLMem_t)input, outputDesc, (GCLMem_t)output, activationDesc.mode);
+#endif
+    }
+    return ret;
+}

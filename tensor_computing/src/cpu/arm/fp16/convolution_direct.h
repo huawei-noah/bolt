@@ -26,6 +26,6 @@ EE convolution_direct(TensorDesc inputDesc, F16* inArray,
     TensorDesc biasDesc, const F16* biasArray,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F16* outArray,
-    ActivationMode activationMode,
+    ActivationDesc activationDesc,
     Arch arch);
 #endif

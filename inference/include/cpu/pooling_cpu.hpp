@@ -78,7 +78,6 @@ public:
 
         TensorDesc inputDesc = tensor4df(dt, df, num, numChannels, height, width);
         if (this->kernelSizeH == 0 && this->kernelSizeW == 0) {
-            Pooling::set_kernelSize(height, width);
             Pooling::set_stride(1, 1);
         }
         PoolingDesc poolingDesc = Pooling::create_PoolingDesc(this->mode, this->kernelSizeH, this->kernelSizeW, this->strideH, this->strideW,

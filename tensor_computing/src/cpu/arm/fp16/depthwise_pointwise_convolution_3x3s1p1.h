@@ -27,8 +27,8 @@ EE depthwise_pointwise_convolution_3x3s1p1_A55(TensorDesc inputDesc, F16* inArra
     TensorDesc biasDesc, const F16* biasArray,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F16* outArray,
-    ActivationMode depthwiseActivationMode,
-    ActivationMode pointwiseActivationMode);
+    ActivationDesc depthwiseActivationDesc,
+    ActivationDesc pointwiseActivationDesc);
 
 EE depthwise_pointwise_convolution_3x3s1p1_A76(TensorDesc inputDesc, F16* inArray,
     TensorDesc filterDesc, const F16* filterArray,
@@ -36,8 +36,8 @@ EE depthwise_pointwise_convolution_3x3s1p1_A76(TensorDesc inputDesc, F16* inArra
     TensorDesc biasDesc, const F16* biasArray,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F16* outArray,
-    ActivationMode depthwiseActivationMode,
-    ActivationMode pointwiseActivationMode);
+    ActivationDesc depthwiseActivationDesc,
+    ActivationDesc pointwiseActivationDesc);
 
 
 inline EE depthwise_pointwise_convolution_3x3s1p1(TensorDesc inputDesc, F16* inArray,
@@ -46,8 +46,8 @@ inline EE depthwise_pointwise_convolution_3x3s1p1(TensorDesc inputDesc, F16* inA
     TensorDesc biasDesc, const F16* biasArray,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F16* outArray,
-    ActivationMode depthwiseActivationMode,
-    ActivationMode pointwiseActivationMode,
+    ActivationDesc depthwiseActivationDesc,
+    ActivationDesc pointwiseActivationDesc,
     Arch arch)
 {
     EE ret = SUCCESS;
@@ -59,8 +59,8 @@ inline EE depthwise_pointwise_convolution_3x3s1p1(TensorDesc inputDesc, F16* inA
                                                              biasDesc, biasArray,
                                                              tmpBytes, tmp,
                                                              outputDesc, outArray,
-                                                             depthwiseActivationMode,
-                                                             pointwiseActivationMode);
+                                                             depthwiseActivationDesc,
+                                                             pointwiseActivationDesc);
             break;
         case ARM_A76:
             ret = depthwise_pointwise_convolution_3x3s1p1_A76(inputDesc, inArray,
@@ -69,8 +69,8 @@ inline EE depthwise_pointwise_convolution_3x3s1p1(TensorDesc inputDesc, F16* inA
                                                              biasDesc, biasArray,
                                                              tmpBytes, tmp,
                                                              outputDesc, outArray,
-                                                             depthwiseActivationMode,
-                                                             pointwiseActivationMode);
+                                                             depthwiseActivationDesc,
+                                                             pointwiseActivationDesc);
             break;
         default:
             return NOT_SUPPORTED;

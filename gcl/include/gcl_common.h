@@ -180,6 +180,7 @@ struct GCLKernelInfo{
     U32  dim = 0;
     U32  gs[3] = {0};
     U32  ls[3] = {0};
+    std::string name;
 };
 
 struct GCLKernelBin{
@@ -199,6 +200,7 @@ struct GCLHandle{
 
     Context      context;
     CommandQueue queue;
+    CommandQueue queue_profiling;
 
     cl_command_queue_properties queueProperties;
     Event                       eventObj;
@@ -206,11 +208,13 @@ struct GCLHandle{
     U32                         numWaitEvents;
     Event*                      waitEvents;
     double t_execute;
+    double t_total;
 
     std::string deviceBinmapName;
     std::unordered_map<std::string, GCLKernelBin>* binMapPtr;
     std::map<std::string, Kernel> kernelMap;
-    std::vector<GCLKernelInfo> kernelVec; 
+    std::vector<GCLKernelInfo> kernelVec;
+    std::string curOpName;
 };
 
 typedef struct GCLHandle* GCLHandle_t;
@@ -222,23 +226,25 @@ struct GCLHandleConfig{
 typedef GCLHandleConfig* GCLHandleConfig_t;
 
 struct GCLMemDesc{
-    U32          stride[3];
-    U32          offset[3];
-    GCLMemType   memType;
-    DataFormat   memFormat;
-    U32          byteSize;
-    U32          num;
-    MemFlags     flags;
-    ImgFormat    imgFormat; 
-    void*        host_ptr;
-    bool         use_map;
-    void*        map_ptr;
-    bool         has_alloc;
+    U32              stride[3];
+    U32              offset[3];
+    GCLMemType       memType;
+    DataFormat       memFormat;
+    U32              byteSize;
+    U32              num;
+    MemFlags         flags;
+    ImgFormat        imgFormat; 
+    void*            host_ptr;
+    U8*              map_ptr;
+    bool             use_map;
+    bool             has_alloc;
 };
 typedef struct GCLMemDesc* GCLMemDesc_t;
 struct GCLMem{
     Mem          mem;
     GCLMemDesc   desc;
+    std::vector<Mem> subMem;
+    std::vector<U8*> mapPtrArray;
 };
 typedef struct GCLMem* GCLMem_t;
 

@@ -20,7 +20,7 @@
 #define MANGLE_NAME(base, A, N) MANGLE_NAME_IMPL(base, A, N)
 
 __kernel void MANGLE_NAME(concat_, A, N)(const int ih_str, const int iw_str, const int ih_off, const int iw_off, 
-    const int oh_str, const int ow_str, const int oh_off, const int ow_off, const int cmax, const int nmax, const int out_size, 
+    const int oh_str, const int ow_str, const int oh_off, const int ow_off, const int cmax, const int nmax, const int out_size, const int bx, const int by,
     __global const T* in0,
 #if (N > 1)
     const int c0,
@@ -54,6 +54,7 @@ __kernel void MANGLE_NAME(concat_, A, N)(const int ih_str, const int iw_str, con
     const int idx = get_global_id(0);
     const int idy = get_global_id(1);
     const int idz = get_global_id(2);
+    if(idx >= bx || idy >= by) return;
     int idc = idz - cmax;
     int idn = nmax;
     int out_c = cmax;

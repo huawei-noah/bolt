@@ -24,8 +24,8 @@ EE depthwise_convolution_fp16(TensorDesc inputDesc, F16* input,
     TensorDesc biasDesc, const F16* bias,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F16* output,
-    ActivationMode depthwiseActivationMode,
-    ActivationMode pointwiseActivationMode,
+    ActivationDesc depthwiseActivationDesc,
+    ActivationDesc pointwiseActivationDesc,
     Arch arch)
 {
     if(nullptr == input || nullptr == filter || nullptr == output || nullptr == bias || nullptr == tmp)
@@ -55,7 +55,7 @@ EE depthwise_convolution_fp16(TensorDesc inputDesc, F16* input,
                                                biasDesc, bias,
                                                tmpBytes, tmp,
                                                outputDesc, output,
-                                               depthwiseActivationMode,
+                                               depthwiseActivationDesc,
                                                arch);
             break;
         case DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_DIRECT:
@@ -65,8 +65,8 @@ EE depthwise_convolution_fp16(TensorDesc inputDesc, F16* input,
                                                          biasDesc, bias,
                                                          tmpBytes, tmp,
                                                          outputDesc, output,
-                                                         depthwiseActivationMode,
-                                                         pointwiseActivationMode,
+                                                         depthwiseActivationDesc,
+                                                         pointwiseActivationDesc,
                                                          arch);
             break;
         case DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_DIRECT_NO_PADDING:
@@ -76,8 +76,8 @@ EE depthwise_convolution_fp16(TensorDesc inputDesc, F16* input,
                                                                     biasDesc, bias,
                                                                     tmpBytes, tmp,
                                                                     outputDesc, output,
-                                                                    depthwiseActivationMode,
-                                                                    pointwiseActivationMode,
+                                                                    depthwiseActivationDesc,
+                                                                    pointwiseActivationDesc,
                                                                     arch);
             break;
         case DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_3X3S1P1:
@@ -87,8 +87,8 @@ EE depthwise_convolution_fp16(TensorDesc inputDesc, F16* input,
                                                          biasDesc, bias,
                                                          tmpBytes, tmp,
                                                          outputDesc, output,
-                                                         depthwiseActivationMode,
-                                                         pointwiseActivationMode,
+                                                         depthwiseActivationDesc,
+                                                         pointwiseActivationDesc,
                                                          arch);
             break;
         default:

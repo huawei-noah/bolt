@@ -21,6 +21,7 @@
 #include "tensor.hpp"
 #include "op_type.h"
 #include <map>
+#include "model_tools.h"
 #define HashMap std::map
 
 #ifdef _USE_MALI
@@ -77,10 +78,6 @@ public:
 
     virtual EE infer_output_tensors_size(Vec<TensorDesc>, Vec<TensorDesc>*) = 0;
 
-#ifdef _USE_MALI
-    virtual EE infer_output_tensors_size(Vec<TensorDesc>, Vec<TensorDesc>*, Vec<GCLMemDesc>*, Vec<GCLMemDesc>*){return NOT_SUPPORTED;}
-#endif
-
     std::string get_name()
     {
        return this->name;
@@ -103,30 +100,30 @@ public:
     virtual U32 infer_tmp_memory_size()
     {
         this->lenOfTemp = 0;
-        this->temp = std::shared_ptr<U8>();
+        this->temp = std::shared_ptr<Memory_>();
         return 0;
     }
 
-    virtual void set_tmp_memory(U32 len, std::shared_ptr<U8> temp)
+    virtual void set_tmp_memory(U32 len, std::shared_ptr<Memory_> temp)
     {
         this->lenOfTemp = len;
         this->temp = temp;
     }
 #ifdef _USE_MALI
-    virtual void set_tmp_gclmem(U32 len, GCLMem_t temp)
-    {
-        this->lenOfTemp  = len;
-        this->gclTempMem = temp;
-    }
     virtual EE set_mali_handle(std::shared_ptr<GCLHandle> handle){
         this->handle = handle;
         oclExtInfo.maliInfo.handle = handle.get();  
         runInfo.algorithm = 0;
-        runInfo.best_ls   = 0;
-        runInfo.best_whck = 0;
+        runInfo.best_w[0] = 1;
+        runInfo.best_w[1] = 1;
+        runInfo.best_c[0] = 1;
+        runInfo.best_c[1] = 1;
+        runInfo.best_k[0] = 1;
+        runInfo.best_k[1] = 1;
         oclExtInfo.maliInfo.forwardRunInfo = &runInfo;
         return SUCCESS;
     }
+    virtual EE infer_gclmem_desc(Vec<GCLMemDesc>*, Vec<GCLMemDesc>*){return NOT_SUPPORTED;}
 #endif
 
     virtual U32 get_len_of_temp()
@@ -134,7 +131,7 @@ public:
         return this->lenOfTemp;
     }
 
-    virtual std::shared_ptr<U8> get_tmp()
+    virtual std::shared_ptr<Memory_> get_tmp()
     {
         return this->temp;
     }
@@ -165,6 +162,95 @@ public:
     {
         return -1;
     }
+
+    virtual void setAlgorithmInfoToMap(HashMap<std::string, std::string> &algorithmMap, std::string name, I32* algorithmArray, U32 ArrayNum) 
+    {
+        std::string algoInfo = "/";
+        for(U32 i = 0; i < ArrayNum; i++) {
+            algoInfo += std::to_string(algorithmArray[i]);
+            algoInfo += "/";
+        }
+        algorithmMap[name] = algoInfo;
+    }
+
+    virtual void getAlgorithmInfoFromMap(HashMap<std::string, std::string> &algorithmMap, std::string name, I32* algorithmArray, U32 ArrayNum) 
+    {
+       std::string algoInfo = algorithmMap[name];
+       U32 be = algoInfo.find_first_of("/"); 
+       U32 end;
+       for(U32 i = 0; i < ArrayNum; i++) {
+           end = algoInfo.find("/", be + 1);
+           algorithmArray[i] = std::stoi(algoInfo.substr(be + 1, end - be - 1));
+           be  = end;
+       }
+    }
+
+    virtual void init_feature_scale(U32 num, QuantSpec* qs)
+    {
+        UNUSED(num);
+        UNUSED(qs);
+#ifdef _USE_INT8
+        if (1 == num && 0 == qs[0].scale[0]) {  // OP is labelled as no-quantization
+            if (DT_F16_8Q == this->dt) {
+                this->dt = DT_F16;
+            }
+            return;
+        }
+        featureScale.resize(num);
+        for (U32 i = 0; i < num; i++) {
+            featureScale[i].resize(qs[i].num_scale);
+            memcpy(featureScale[i].data(), qs[i].scale, qs[i].num_scale * bytesOf(DT_F32));
+        }
+#endif
+    }
+
+#ifdef _USE_INT8
+    virtual void set_feature_scale(Vec<Vec<F32>> fs) {
+        this->featureScale = fs;
+    }
+
+    virtual bool is_dynamic_scale()
+    {
+        OperatorType ot = this->get_op_type();
+        if (OT_Conv != ot) {
+            return false;
+        }
+
+        U32 numScale = featureScale.size();
+        U32 numQuant = (DT_F16_8Q == this->dt) ? inputTensors.size() : 0;
+
+        if (0 != numScale && 0 == featureScale[0][0]) {  // OP is labelled as no-quantization
+            return false;
+        }
+
+        if (0 != numScale && -2 == (featureScale.back())[0]) {  // OP is labelled as fp-output
+            numScale = 0;
+            numQuant += 1;
+        }
+
+        for (auto tensor : outputTensors) {
+            if (DT_I8 == tensor.get_desc().dt) {
+                numQuant++;
+            }
+        }
+        if (0 == numQuant) {
+            return false;
+        }
+
+        if (0 == numScale) {
+            return true;
+        }
+
+        CHECK_REQUIREMENT(numQuant == numScale);
+        return false;
+    }
+
+#endif
+    std::string get_op_name()
+    {
+        return this->name;
+    }
+
 public:
     Arch schedule;
     DataType dt;
@@ -174,16 +260,16 @@ public:
     Vec<I32> tensorPos;
 
     U32 lenOfTemp;
-    std::shared_ptr<U8> temp;
+    std::shared_ptr<Memory_> temp;
 
 #ifdef _USE_MALI
-    GCLMem_t gclTempMem;
     std::shared_ptr<GCLHandle> handle;
     ExtInfo oclExtInfo;
     ForwardRunInfoMali runInfo;
 #endif
 
     std::string name;
+    Vec<Vec<F32>> featureScale;
 };
 
 #endif //_OPERATOR_H

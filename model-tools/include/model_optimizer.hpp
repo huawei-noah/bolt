@@ -24,6 +24,7 @@
 #include "OPOptimizers/ConvBNOptimizer.hpp"
 #include "OPOptimizers/BNScaleOptimizer.hpp"
 #include "OPOptimizers/ConvScaleOptimizer.hpp"
+#include "OPOptimizers/PadConvOptimizer.hpp"
 #include "OPOptimizers/InPlaceOptimizer.hpp"
 #include "OPOptimizers/ConvActivationOptimizer.hpp"
 #include "OPOptimizers/ChannelPaddingOptimizer.hpp"
@@ -31,8 +32,12 @@
 #include "OPOptimizers/TransposeMulToScaleOptimizer.hpp"
 #include "OPOptimizers/TransposeMatMulToFCOptimizer.hpp"
 #include "OPOptimizers/FlattenGemmOptimizer.hpp"
+#include "OPOptimizers/FCFCOptimizer.hpp"
 #include "OPOptimizers/ClipClipOptimizer.hpp"
+#include "OPOptimizers/SqueezeReshapeOptimizer.hpp"
+#include "OPOptimizers/NoQuantLabelOptimizer.hpp"
 #include "OPOptimizers/MemoryReuseOptimizer.hpp"
+
 
 
 class ConvEltwisePoolingOptimizer: public OPOptimizer {
@@ -74,7 +79,8 @@ class ModelSpecOptimizer {
             return optimizeOrNot;
         }
 
-        void suggest() {
+        void suggest(float clipVal=0)
+        {
             // strict order
             this->opos.push_back(std::shared_ptr<OPOptimizer>(new DeprecatedOPOptimizer()));
 
@@ -82,6 +88,7 @@ class ModelSpecOptimizer {
             this->opos.push_back(std::shared_ptr<OPOptimizer>(new ConvBNOptimizer()));
             this->opos.push_back(std::shared_ptr<OPOptimizer>(new BNScaleOptimizer()));
             this->opos.push_back(std::shared_ptr<OPOptimizer>(new ConvScaleOptimizer()));
+            this->opos.push_back(std::shared_ptr<OPOptimizer>(new PadConvOptimizer()));
 
             this->opos.push_back(std::shared_ptr<OPOptimizer>(new InPlaceOptimizer()));
             
@@ -91,10 +98,24 @@ class ModelSpecOptimizer {
             this->opos.push_back(std::shared_ptr<OPOptimizer>(new TransposeMulToScaleOptimizer()));
             this->opos.push_back(std::shared_ptr<OPOptimizer>(new TransposeMatMulToFCOptimizer()));
             this->opos.push_back(std::shared_ptr<OPOptimizer>(new FlattenGemmOptimizer()));
+            this->opos.push_back(std::shared_ptr<OPOptimizer>(new FCFCOptimizer()));
             this->opos.push_back(std::shared_ptr<OPOptimizer>(new ClipClipOptimizer()));
+            this->opos.push_back(std::shared_ptr<OPOptimizer>(new SqueezeReshapeOptimizer()));
+
+            this->opos.push_back(std::shared_ptr<OPOptimizer>(new NoQuantLabelOptimizer(clipVal)));
 
             // Please leave MemoryReuseOptimizer at last
             this->opos.push_back(std::shared_ptr<OPOptimizer>(new MemoryReuseOptimizer()));
+        }
+
+        void suggest_for_training()
+        {
+            // strict order
+            this->opos.push_back(std::shared_ptr<OPOptimizer>(new DeprecatedOPOptimizer()));
+
+            this->opos.push_back(std::shared_ptr<OPOptimizer>(new PadConvOptimizer()));
+
+            this->opos.push_back(std::shared_ptr<OPOptimizer>(new NoQuantLabelOptimizer(0)));
         }
 
         void empty() {}

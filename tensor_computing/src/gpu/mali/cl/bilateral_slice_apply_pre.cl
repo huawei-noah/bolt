@@ -16,10 +16,11 @@
 
 
 
-__kernel void bilateral_slice_apply_pre(const int gh, const int gc, const int gcw, const float scale_y, global const T* grid, global T* gridTran){
+__kernel void bilateral_slice_apply_pre(const int gh, const int gc, const int gcw, const int bx, const int bw, const float scale_y, global const T* grid, global T* gridTran){
     const int idx = get_global_id(0);//dep * coe / 4
     const int idw = get_global_id(1);//gw
     const int idh = get_global_id(2);//H
+    if(idx >= bx || idw >= bw) return;
     char j = 1;
 
     T2 wy;

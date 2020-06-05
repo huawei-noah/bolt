@@ -40,9 +40,15 @@ EE deconvolution_infer_forward_algorithm_arm(TensorDesc inputDesc, TensorDesc fi
     U32 paddingL = convDesc.padding_left;
     U32 paddingR = convDesc.padding_right;
 
-    if (fh < paddingT + 2 || fh < paddingB + 2 || fw < paddingL + 2 || fw < paddingR + 2) {
-        CHECK_STATUS(NOT_SUPPORTED);
-    }
+    ConvolutionDesc transposedCD;
+    transposedCD.stride_h = 1;
+    transposedCD.stride_w = 1;
+    transposedCD.padding_top = 1;
+    transposedCD.padding_bottom = 1;
+    transposedCD.padding_left = 1;
+    transposedCD.padding_right = 1;
+    transposedCD.dilatedRate_h = 1;
+    transposedCD.dilatedRate_w = 1;
 
     U32 tPadding = (fh - 1 - paddingT) - 1;  // Leave out padding of length 1 to activate Winograd
     U32 bPadding = (fh - 1 - paddingB) - 1;
@@ -54,17 +60,11 @@ EE deconvolution_infer_forward_algorithm_arm(TensorDesc inputDesc, TensorDesc fi
     
     TensorDesc inPaddedDesc = tensor4df(idt, idf, in, ic, ih, iw);
 
-    ConvolutionDesc transposedCD;
-    transposedCD.stride_h = 1;
-    transposedCD.stride_w = 1;
-    transposedCD.padding_top = 1;
-    transposedCD.padding_bottom = 1;
-    transposedCD.padding_left = 1;
-    transposedCD.padding_right = 1;
-    transposedCD.dilatedRate_h = 1;
-    transposedCD.dilatedRate_w = 1;
-
-    return convolution_infer_forward_algorithm_arm(inPaddedDesc, filterDesc, outputDesc, transposedCD, policy, algorithm, targetDataType);
+    // Swap fn and fc
+    filterDesc.dims[2] = filterDesc.dims[3];
+    filterDesc.dims[3] = ic;
+    EE ret = convolution_infer_forward_algorithm_arm(inPaddedDesc, filterDesc, outputDesc, transposedCD, policy, algorithm, targetDataType);
+    return ret;
 }
 
 EE deconvolution_transform_filter_bytes_arm(TensorDesc filterDesc, ConvolutionForwardAlgorithm algorithm, U32* bytes) {
@@ -77,13 +77,12 @@ EE deconvolution_transform_filter_arm(TensorDesc filterDesc, const void* filter,
 {
     EE ret = SUCCESS;
     switch (filterDesc.dt) {
-        //TODO: confirm
-/*#ifdef _USE_FP32
+#ifdef _USE_FP32
         case DT_F32: {
             ret = deconvolution_transform_filter_fp32(filterDesc, (F32*)filter, algorithm, ftmDesc, (F32*)filterTransformed);
             break;
         }
-#endif*/
+#endif
 #ifdef _USE_FP16
         case DT_F16: {
             ret = deconvolution_transform_filter_fp16(filterDesc, (F16*)filter, algorithm, ftmDesc, (F16*)filterTransformed);
@@ -130,7 +129,7 @@ EE deconvolution_arm(TensorDesc inputDesc, void* input,
     TensorDesc biasDesc, const void* bias,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, void* output,
-    ActivationMode activationMode,
+    ActivationDesc activationDesc,
     Arch arch)
 {
     UNUSED(scaleDesc);
@@ -147,7 +146,7 @@ EE deconvolution_arm(TensorDesc inputDesc, void* input,
                                    biasDesc, (F32*)bias,
                                    tmpBytes, tmp,
                                    outputDesc, (F32*)output,
-                                   activationMode,
+                                   activationDesc,
                                    arch);
             break;
         }
@@ -161,7 +160,7 @@ EE deconvolution_arm(TensorDesc inputDesc, void* input,
                                    biasDesc, (F16*)bias,
                                    tmpBytes, tmp,
                                    outputDesc, (F16*)output,
-                                   activationMode,
+                                   activationDesc,
                                    arch);
             break;
         }

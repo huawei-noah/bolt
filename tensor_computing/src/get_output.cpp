@@ -12,11 +12,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#include <cmath>
-#include "sys.h"
-#include "type.h"
-#include "tensor_desc.h"
-#include "error.h"
 #include "tensor_computing.h"
 #ifdef _USE_MALI 
 #include "gpu/mali/tensor_computing_mali.h"
@@ -24,51 +19,22 @@
 
 EE tensor_computing_get_output_infer_tmpBuf_size(const void* input, TensorDesc hostDesc, U32* tmpBufSize, Arch arch)
 {
+    EE ret = NOT_SUPPORTED;
+    if(arch == MALI) {
 #ifdef _USE_MALI
-    if(arch == MALI){
-        CHECK_STATUS(tensor_computing_get_output_infer_tmpBuf_size_mali((const GCLMem_t)input, hostDesc, tmpBufSize));
-    } else {
+        ret = tensor_computing_get_output_infer_tmpBuf_size_mali((const GCLMem_t)input, hostDesc, tmpBufSize);
 #endif
-        UNUSED(input);
-        UNUSED(hostDesc);
-        UNUSED(tmpBufSize);
-        UNUSED(arch);
-        return NOT_SUPPORTED;
-#ifdef _USE_MALI
     }
-#endif
-    return SUCCESS;
+    return ret;
 }
 
 EE tensor_computing_get_output(const void* input, TensorDesc hostDesc, void** hostPtr, void* tmpBuf, bool blocking, Arch arch, ExtInfo_t extInfo)
 {
-#ifndef _USE_MALI
-    UNUSED(input);
-    UNUSED(hostDesc);
-    UNUSED(hostPtr);
-    UNUSED(tmpBuf);
-    UNUSED(blocking);
-    UNUSED(arch);
-    UNUSED(extInfo);
-#endif
-    EE ret = SUCCESS;
-    switch (arch) {
-        case CPU_GENERAL:
-            return NOT_SUPPORTED;
-            break;
-        case ARM_A55:
-            return NOT_SUPPORTED;
-            break;
-        case ARM_A76:
-            return NOT_SUPPORTED;
-            break;
+    EE ret = NOT_SUPPORTED;
+    if (arch == MALI) {
 #ifdef _USE_MALI
-        case MALI:
-            ret = tensor_computing_get_output_mali(extInfo->maliInfo.handle, (const GCLMem_t)input, hostDesc, (U8**)hostPtr, (GCLMem_t)tmpBuf, blocking);
-            break;
+        ret = tensor_computing_get_output_mali(extInfo->maliInfo.handle, (const GCLMem_t)input, hostDesc, (U8**)hostPtr, (GCLMem_t)tmpBuf, blocking);
 #endif
-        default:
-            ret = NOT_SUPPORTED;
     }
     return ret;
 }

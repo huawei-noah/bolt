@@ -16,10 +16,10 @@
 
 
 #define sumvec4(x, y){\
-    x.s0 += y.s0;\
-    x.s1 += y.s1;\
-    x.s2 += y.s2;\
-    x.s3 += y.s3;\
+    x.s0 += (float)y.s0;\
+    x.s1 += (float)y.s1;\
+    x.s2 += (float)y.s2;\
+    x.s3 += (float)y.s3;\
 }
 
 __kernel void pooling_mean(const int ih, const int iw, const int ih_off, const int iw_off, const int ih_str, const int iw_str,
@@ -29,6 +29,7 @@ __kernel void pooling_mean(const int ih, const int iw, const int ih_off, const i
     const int idx = get_global_id(0);
     const int idy = get_global_id(1);
     const int idz = get_global_id(2);
+    if(idx >= oh || idy >= ow) return;
     
     int bh = idx * sh - ph;
     int bw = idy * sw - pw;
@@ -38,7 +39,7 @@ __kernel void pooling_mean(const int ih, const int iw, const int ih_off, const i
     bw = (bw < 0)  ? 0 : bw;
     eh = (eh < ih) ? eh : ih;
     ew = (ew < iw) ? ew : iw;
-    T psize = (eh - bh) * (ew - bw);
+    float psize = (eh - bh) * (ew - bw);
      
     bh += ih_off;
     bw += iw_off;
@@ -47,7 +48,7 @@ __kernel void pooling_mean(const int ih, const int iw, const int ih_off, const i
     int in_off = (idz * iw_str + bw) * ih_str;
 
     T4 val;
-    T4 sum = 0;
+    float4 sum = 0;
     for(int i = bw; i< ew; ++i){
         for(int j = bh; j < eh; ++j){
             val = vload4(in_off + j, in);
@@ -57,5 +58,5 @@ __kernel void pooling_mean(const int ih, const int iw, const int ih_off, const i
     }
     sum = sum / psize; 
     int out_off = (idz * ow_str + ow_off + idy) * oh_str + oh_off + idx;
-    vstore4(sum, out_off, out);
+    vstore4((T4)(sum.x, sum.y, sum.z , sum.w), out_off, out);
 }

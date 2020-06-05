@@ -54,7 +54,7 @@ inline EE direct_spe_ck_core_mali_fp16(GCLHandle_t          handle,
     tensorSelectGet(outputDesc, NULL, NULL, &on,  &oc,  &oh,  &ow);
     Kernel kernel;
     U32 gs[3];
-    U32 ls[3] = {16, 16, 1};
+    U32 ls[3] = {0, 0, 0};
     U32 dim;
     char kernelname[128];
 
@@ -71,13 +71,13 @@ inline EE direct_spe_ck_core_mali_fp16(GCLHandle_t          handle,
         U32 item_w = 2;
         U32 item_h = 1;
         U32 ew = ow % item_w;
-        sprintf(kernelname, "conv_direct_s%d_spe_f1c3k1_%d", sw, ew);
-        CHECK_STATUS(gcl_create_kernel_binary(handle, kernelname, &kernel));
-        CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ow_str, ow_off, oh_off, ow >> 1, inbuf, fltbuf, outbuf));//c = 3 k = 1, bias val has been set in fltbuf
         gs[0] = (ow + item_w - 1) / item_w;
         gs[1] = (oh + item_h - 1) / item_h;
         dim   = 2;
-        gcl_set_kernelVec(handle, kernel, dim, gs, ls);
+        sprintf(kernelname, "conv_direct_s%d_spe_f1c3k1_%d", sw, ew);
+        CHECK_STATUS(gcl_create_kernel_binary(handle, kernelname, &kernel));
+        CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ow_str, ow_off, oh_off, ow >> 1, gs[0], gs[1], inbuf, fltbuf, outbuf));//c = 3 k = 1, bias val has been set in fltbuf
+        gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelname);
     } else {
         return NOT_SUPPORTED;
     }
@@ -88,27 +88,6 @@ inline EE direct_spe_ck_core_mali_fp16(GCLHandle_t          handle,
     CHECK_STATUS(gcl_print_memory<F16>(handle, filter, "conv_direct_spe_ck_filter"));
     CHECK_STATUS(gcl_print_memory<F16>(handle, output, "conv_direct_spe_ck_output"));
 #endif
-    return SUCCESS;
-}
-
-
-EE convolution_direct_spe_ck_infer_forward_algorithm_mali_fp16(GCLHandle_t          handle,
-                                                               TensorDesc           inputDesc, 
-                                                               TensorDesc           filterDesc, 
-                                                               ConvolutionDesc      convDesc,
-                                                               TensorDesc           outputDesc,
-                                                               ConvolutionPolicy    policy, 
-                                                               ActivationMode       activationMode,
-                                                               ForwardRunInfoMali_t forwardRunInfo) 
-{
-    UNUSED(handle);
-    UNUSED(inputDesc); 
-    UNUSED(filterDesc); 
-    UNUSED(convDesc);
-    UNUSED(outputDesc);
-    UNUSED(policy); 
-    UNUSED(activationMode);
-    UNUSED(forwardRunInfo);
     return SUCCESS;
 }
 

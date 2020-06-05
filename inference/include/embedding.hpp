@@ -32,89 +32,11 @@ public:
         return OT_Embedding;
     }
 
-    void run() override
-    {
-        UTIL_TIME_TIC(__CLASS_FUNCTION__)
-        Tensor inputTensor =  this->inputTensors[0];
-        Tensor weightTensor;
-        if (this->weightTensors.size() > 0)
-            weightTensor = this->weightTensors[0];
-        else
-            weightTensor = this->inputTensors[1];
-        Tensor outputTensor = this->outputTensors[0];
-
-        U32* inputPtr = (U32*)(inputTensor.get_val());
-        U8* weightPtr = weightTensor.get_val();
-        U8* outputPtr = outputTensor.get_val();
-
-        TensorDesc inputDesc = inputTensor.get_desc();
-        U32 len = tensorNumElements(inputDesc);
-        U32 elementBytes = bytesOf(this->dt);
-        U32 wordEmbeddingBytes = elementBytes * this->numOutput;
-        U32 transposeStride = elementBytes * this->inputDim;
-        for (U32 i = 0; i < len; i++) {
-            U32 wordIndex = inputPtr[i];
-            U8* dest = outputPtr;
-            if (transpose) {
-                U8* src = weightPtr + wordIndex * elementBytes;
-                for (U32 j = 0; j < this->numOutput; j++) {
-                    memcpy(dest, src, elementBytes);
-                    src += transposeStride;
-                    dest += elementBytes;
-                }
-            } else {
-                U8* src = weightPtr + wordIndex * wordEmbeddingBytes;
-                memcpy(dest, src, wordEmbeddingBytes);
-            }
-            outputPtr += wordEmbeddingBytes;
-        }
-
-        UTIL_TIME_TOC(__CLASS_FUNCTION__)
+    virtual EE init_weight_bias_from_model(U8** modelPtr) {
+        UNUSED(modelPtr);
+        return NOT_SUPPORTED;
     }
-
-    EE infer_output_tensors_size(Vec<TensorDesc> inDims, Vec<TensorDesc>* outDims) override
-    {
-        TensorDesc inDim = inDims[0];
-        DataType dt;
-        DataFormat df;
-        U32 batch, step;
-    	CHECK_REQUIREMENT(tensorIs2d(inDim));
-    	CHECK_STATUS(tensor2dfGet(inDim, &dt, &df, &batch, &step));
-
-        (*outDims)[0] = tensor3df(this->dt, DF_MTK, batch, step, this->numOutput);
-        return SUCCESS;
-    }
-
-    EE init_weight_bias_from_model(U8** modelPtr)
-    {
-        TensorDesc weightDesc;
-        if (transpose)
-            weightDesc = tensor2df(this->dt, DF_TRANSPOSE, this->numOutput, this->inputDim);
-        else
-            weightDesc = tensor2df(this->dt, DF_NORMAL, this->inputDim, this->numOutput);
-        U32 weightBytes = tensorNumBytes(weightDesc);
-
-        std::shared_ptr<Tensor> modelWeightTensor(new Tensor());
-        modelWeightTensor->set_desc(weightDesc);
-
-        bool set_ptr = false;
-        if(modelPtr != nullptr){
-            modelWeightTensor->alloc();
-            memcpy((U8*)modelWeightTensor->get_val(), *modelPtr, weightBytes);
-            *modelPtr += weightBytes;
-            set_ptr = true;
-        } else {
-            auto curOpWs = this->get_weightspec_ptr();
-            if (curOpWs.weight != nullptr) {
-                modelWeightTensor->set_val(curOpWs.weight);
-                set_ptr = true;
-            }
-        }
-        if(set_ptr) this->weightTensors.push_back(*modelWeightTensor.get());
-        return SUCCESS;
-    }
-
-private:
+protected:
     U32 inputDim;
     U32 numOutput;
     bool transpose;

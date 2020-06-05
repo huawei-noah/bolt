@@ -29,7 +29,7 @@ EE convolution_gemm_icnchw_A55(TensorDesc inputDesc, F16* inArray,
     TensorDesc biasDesc, const F16* biasArray,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F16* outArray,
-    ActivationMode activationMode);
+    ActivationDesc activationDesc);
 
 EE convolution_gemm_icnchw_A76(TensorDesc inputDesc, F16* inArray,
     TensorDesc filterDesc, const F16* filterArray,
@@ -37,7 +37,7 @@ EE convolution_gemm_icnchw_A76(TensorDesc inputDesc, F16* inArray,
     TensorDesc biasDesc, const F16* biasArray,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F16* outArray,
-    ActivationMode activationMode);
+    ActivationDesc activationDesc);
 
 inline EE convolution_gemm_icnchw(TensorDesc inputDesc, F16* inArray,
     TensorDesc filterDesc, const F16* filterArray,
@@ -45,7 +45,7 @@ inline EE convolution_gemm_icnchw(TensorDesc inputDesc, F16* inArray,
     TensorDesc biasDesc, const F16* biasArray,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F16* outArray,
-    ActivationMode activationMode,
+    ActivationDesc activationDesc,
     Arch arch)
 {
     EE ret = SUCCESS;
@@ -57,7 +57,7 @@ inline EE convolution_gemm_icnchw(TensorDesc inputDesc, F16* inArray,
                                               biasDesc, biasArray,
                                               tmpBytes, tmp,
                                               outputDesc, outArray,
-                                              activationMode);
+                                              activationDesc);
             break;
         case ARM_A76:
             ret = convolution_gemm_icnchw_A76(inputDesc, inArray,
@@ -66,7 +66,7 @@ inline EE convolution_gemm_icnchw(TensorDesc inputDesc, F16* inArray,
                                               biasDesc, biasArray,
                                               tmpBytes, tmp,
                                               outputDesc, outArray,
-                                              activationMode);
+                                              activationDesc);
             break;
         default:
             return NOT_SUPPORTED;

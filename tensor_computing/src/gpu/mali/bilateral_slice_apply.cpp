@@ -59,7 +59,7 @@ EE bilateral_slice_apply_infer_output_size_mali(TensorDesc              inputDes
                                                 GCLMemDesc_t            gclmemInputDesc,
                                                 GCLMemDesc_t            gclmemGuideDesc,
                                                 GCLMemDesc_t            gclmemGridDesc,
-                                                GCLMemDesc_t            gclmemOutputDesc){
+                                                GCLMemDesc_t            gclmemOutputDesc) {
     UNUSED(bilateralSliceApplyDesc);
     DataType   idt, gdt, guide_dt;
     DataFormat idf, gdf;
@@ -68,55 +68,57 @@ EE bilateral_slice_apply_infer_output_size_mali(TensorDesc              inputDes
     U32 ow, oh, oc, on;
     U32 gw, gh, gc, gn;
     
+    if(inputDesc.df != DF_NHWC || guideDesc.df != DF_NHWC) return NOT_MATCH;
     tensorSelectGet(inputDesc, &idt,      &idf, &in,      &ic,      &ih,      &iw);
     tensorSelectGet(guideDesc, &guide_dt, &gdf, &guide_n, &guide_c, &guide_h, &guide_w);
     tensorSelectGet(gridDesc,  &gdt,      &gdf, &gn,      &gc,      &gh,      &gw);
-    if(idf != DF_NHWC || gdf != DF_NHWC) return NOT_MATCH;
     ow = guide_w;
     oh = guide_h;
     oc = ic;
     on = guide_n;
-    *outputDesc = tensor4df(idt, idf, on, oc, oh, ow);
+    if(outputDesc) *outputDesc = tensor4df(idt, idf, on, oc, oh, ow);
     CHECK_STATUS(infer_gclmem_desc_nhwc(iw, ih, ic, 0, 0, ow, oh, oc, idt, idt, gclmemInputDesc, gclmemOutputDesc));
 
-    U32 s0, s1, s2;
-    U32 num, byteSize;
-    s0 = gc;
-    s1 = gw;
-    s2 = gh;
-    num = s0 * s1 * s2;
-    byteSize = s0 * s1 * s2 * bytesOf(gdt);
-    gclmemGridDesc->stride[0] = s0;
-    gclmemGridDesc->stride[1] = s1;
-    gclmemGridDesc->stride[2] = s2;
-    gclmemGridDesc->offset[0] = 0;
-    gclmemGridDesc->offset[1] = 0;
-    gclmemGridDesc->offset[2] = 0;
-    gclmemGridDesc->num       = num;
-    gclmemGridDesc->byteSize  = byteSize;
-    gclmemGridDesc->memType   = GCL_MEM_BUF;
-    gclmemGridDesc->memFormat = DF_NHWC;
-    gclmemGridDesc->flags     = CL_MEM_READ_WRITE;
-    gclmemGridDesc->host_ptr  = NULL;
-
-    if(bilateralSliceApplyDesc.mode == BSliceApply_NULL) {
-        s0 = guide_c;
-        s1 = guide_w;
-        s2 = guide_h;
+    if(gclmemGridDesc && gclmemGuideDesc) {
+        U32 s0, s1, s2;
+        U32 num, byteSize;
+        s0 = gc;
+        s1 = gw;
+        s2 = gh;
         num = s0 * s1 * s2;
-        byteSize = s0 * s1 * s2 * bytesOf(guide_dt);
-        gclmemGuideDesc->stride[0] = s0;
-        gclmemGuideDesc->stride[1] = s1;
-        gclmemGuideDesc->stride[2] = s2;
-        gclmemGuideDesc->offset[0] = 0;
-        gclmemGuideDesc->offset[1] = 0;
-        gclmemGuideDesc->offset[2] = 0;
-        gclmemGuideDesc->num       = num;
-        gclmemGuideDesc->byteSize  = byteSize;
-        gclmemGuideDesc->memType   = GCL_MEM_BUF;
-        gclmemGuideDesc->memFormat = DF_NHWC;
-        gclmemGuideDesc->flags     = CL_MEM_READ_WRITE;
-        gclmemGuideDesc->host_ptr  = NULL;
+        byteSize = s0 * s1 * s2 * bytesOf(gdt);
+        gclmemGridDesc->stride[0] = s0;
+        gclmemGridDesc->stride[1] = s1;
+        gclmemGridDesc->stride[2] = s2;
+        gclmemGridDesc->offset[0] = 0;
+        gclmemGridDesc->offset[1] = 0;
+        gclmemGridDesc->offset[2] = 0;
+        gclmemGridDesc->num       = num;
+        gclmemGridDesc->byteSize  = byteSize;
+        gclmemGridDesc->memType   = GCL_MEM_BUF;
+        gclmemGridDesc->memFormat = DF_NHWC;
+        gclmemGridDesc->flags     = CL_MEM_READ_WRITE;
+        gclmemGridDesc->host_ptr  = NULL;
+
+        if(bilateralSliceApplyDesc.mode == BSliceApply_NULL) {
+            s0 = guide_c;
+            s1 = guide_w;
+            s2 = guide_h;
+            num = s0 * s1 * s2;
+            byteSize = s0 * s1 * s2 * bytesOf(guide_dt);
+            gclmemGuideDesc->stride[0] = s0;
+            gclmemGuideDesc->stride[1] = s1;
+            gclmemGuideDesc->stride[2] = s2;
+            gclmemGuideDesc->offset[0] = 0;
+            gclmemGuideDesc->offset[1] = 0;
+            gclmemGuideDesc->offset[2] = 0;
+            gclmemGuideDesc->num       = num;
+            gclmemGuideDesc->byteSize  = byteSize;
+            gclmemGuideDesc->memType   = GCL_MEM_BUF;
+            gclmemGuideDesc->memFormat = DF_NHWC;
+            gclmemGuideDesc->flags     = CL_MEM_READ_WRITE;
+            gclmemGuideDesc->host_ptr  = NULL;
+        }
     }
     return SUCCESS;
 }

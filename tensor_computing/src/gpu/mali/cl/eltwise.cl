@@ -82,6 +82,7 @@ __kernel void MANGLE_NAME(eltwise_, TP, N)(const int h, const int w, const int c
     const int idx = get_global_id(0);
     const int idy = get_global_id(1);
     const int idz = get_global_id(2);
+    if(idx >= ((h + 1) >> 1) || idy >= w) return;
 
     T8 val;
     T8 res;

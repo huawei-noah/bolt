@@ -37,6 +37,7 @@ public:
     virtual void run() override
     {
         UTIL_TIME_TIC(__CLASS_FUNCTION__)
+        this->handle->curOpName = this->get_op_name();
         Tensor inputTensor = this->inputTensors[0];
         TensorDesc inputDesc = inputTensor.get_desc();
         PoolingDesc poolingDesc = Pooling::create_PoolingDesc(this->mode, this->kernelSizeH, this->kernelSizeW, this->strideH, this->strideW,
@@ -75,44 +76,30 @@ public:
         U32 num;
         CHECK_STATUS(tensor4dGet(inDim, &dt, &df, &num, &numChannels, &height, &width));
 
+        this->oclExtInfo.maliInfo.gclmemInputDesc = NULL;
+        this->oclExtInfo.maliInfo.gclmemOutputDesc = NULL;
         TensorDesc inputDesc = tensor4df(dt, df, num, numChannels, height, width);
         if (this->kernelSizeH == 0 && this->kernelSizeW == 0) {
-            Pooling::set_kernelSize(height, width);
             Pooling::set_stride(1, 1);
         }
-        PoolingDesc poolingDesc = Pooling::create_PoolingDesc(this->mode, this->kernelSizeH, this->kernelSizeW, this->strideH, this->strideW,
-            this->paddingT, this->paddingB, this->paddingL, this->paddingR, this->rm);
-        CHECK_STATUS(pooling_infer_output_size(inputDesc, poolingDesc, &((*outDims)[0]), this->schedule));
-        return SUCCESS;
-    }
-
-    virtual EE infer_output_tensors_size(Vec<TensorDesc> inDims, Vec<TensorDesc>* outDims, Vec<GCLMemDesc>* gclmemInputDesc, Vec<GCLMemDesc>* gclmemOutputDesc) override
-    {
-        auto inDim = inDims[0];
-        DataType dt;
-        DataFormat df;
-        U32 width ;
-        U32 height;
-        U32 numChannels;
-        U32 num;
-        CHECK_STATUS(tensor4dGet(inDim, &dt, &df, &num, &numChannels, &height, &width));
-
-        this->oclExtInfo.maliInfo.gclmemInputDesc = &((*gclmemInputDesc)[0]);
-        this->oclExtInfo.maliInfo.gclmemOutputDesc = &((*gclmemOutputDesc)[0]);
-        TensorDesc inputDesc = tensor4df(dt, df, num, numChannels, height, width);
-        if (this->kernelSizeH == 0 && this->kernelSizeW == 0) {
-            Pooling::set_kernelSize(height, width);
-            Pooling::set_stride(1, 1);
-        }
-        
-        PoolingDesc poolingDesc = Pooling::create_PoolingDesc(this->mode, this->kernelSizeH, this->kernelSizeW, this->strideH, this->strideW,
+        poolingDesc = Pooling::create_PoolingDesc(this->mode, this->kernelSizeH, this->kernelSizeW, this->strideH, this->strideW,
             this->paddingT, this->paddingB, this->paddingL, this->paddingR, this->rm);
         CHECK_STATUS(pooling_infer_output_size(inputDesc, poolingDesc, &((*outDims)[0]), this->schedule, &this->oclExtInfo));
         return SUCCESS;
     }
 
+    virtual EE infer_gclmem_desc(Vec<GCLMemDesc>* gclmemInputDesc, Vec<GCLMemDesc>* gclmemOutputDesc) override
+    {
+        TensorDesc inputDesc  = this->inputTensors[0].get_desc();
+        this->oclExtInfo.maliInfo.gclmemInputDesc = &((*gclmemInputDesc)[0]);
+        this->oclExtInfo.maliInfo.gclmemOutputDesc = &((*gclmemOutputDesc)[0]);
+        CHECK_STATUS(pooling_infer_output_size(inputDesc, poolingDesc, NULL, this->schedule, &this->oclExtInfo));
+        return SUCCESS;
+    }
+
 
 private:
+      PoolingDesc poolingDesc;
 };
 
 #endif //_POOLING_OCL_H

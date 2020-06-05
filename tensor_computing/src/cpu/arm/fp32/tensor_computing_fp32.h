@@ -20,7 +20,7 @@
 #include "tensor_desc.h"
 #include "error.h"
 #include "tensor_computing_type.h"
-#include "cpu/arm/fp32/arm_neon_expand_fp32.h"
+#include "cpu/arm/fp32/arm_functions_fp32.h"
 
 EE convolution_transform_filter_fp32(TensorDesc filterDesc, const F32* filter,
     ConvolutionForwardAlgorithm algorithm,
@@ -35,24 +35,44 @@ EE convolution_fp32(TensorDesc inputDesc, F32* input,
     TensorDesc biasDesc, const F32* bias,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F32* output,
-    ActivationMode activationMode,
+    ActivationDesc activationDesc,
     Arch arch);
 
+#ifdef __aarch64__
 EE convolution_gemm_V8(TensorDesc inputDesc, F32* inArray,
     TensorDesc filterDesc, const F32* filterArray,
     ConvolutionDesc convDesc,
     TensorDesc biasDesc, const F32* biasArray,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F32* outArray,
-    ActivationMode activationMode);
+    ActivationDesc activationDesc);
+#else
+EE convolution_gemm_V7(TensorDesc inputDesc, F32* inArray,
+    TensorDesc filterDesc, const F32* filterArray,
+    ConvolutionDesc convDesc,
+    TensorDesc biasDesc, const F32* biasArray,
+    U32 tmpBytes, void* tmp,
+    TensorDesc outputDesc, F32* outArray,
+    ActivationDesc activationDesc);
+#endif
 
+#ifdef __aarch64__
 EE convolution_gemm_icnchw_V8(TensorDesc inputDesc, F32* inArray,
     TensorDesc filterDesc, const F32* filterArray,
     ConvolutionDesc convDesc,
     TensorDesc biasDesc, const F32* biasArray,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F32* outArray,
-    ActivationMode activationMode);
+    ActivationDesc activationDesc);
+#else
+EE convolution_gemm_icnchw_V7(TensorDesc inputDesc, F32* inArray,
+    TensorDesc filterDesc, const F32* filterArray,
+    ConvolutionDesc convDesc,
+    TensorDesc biasDesc, const F32* biasArray,
+    U32 tmpBytes, void* tmp,
+    TensorDesc outputDesc, F32* outArray,
+    ActivationDesc activationDesc);
+#endif
 
 EE convolution_winograd_V8(TensorDesc inputDesc, F32* inArray,
     TensorDesc filterDesc, const F32* filterArray,
@@ -60,7 +80,7 @@ EE convolution_winograd_V8(TensorDesc inputDesc, F32* inArray,
     TensorDesc biasDesc, const F32* biasArray,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F32* outArray,
-    ActivationMode activationMode);
+    ActivationDesc activationDesc);
 
 EE deconvolution_infer_forward_algorithm_fp32(TensorDesc inputDesc, TensorDesc filterDesc, TensorDesc outputDesc,
     ConvolutionDesc convDesc, ConvolutionPolicy policy, ConvolutionForwardAlgorithm *algorithm);
@@ -80,12 +100,14 @@ EE deconvolution_fp32(TensorDesc inputDesc, F32* input,
     TensorDesc biasDesc, const F32* bias,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F32* output,
-    ActivationMode activationMode,
+    ActivationDesc activationDesc,
     Arch arch);
+
+EE detectionoutput_fp32(std::vector<TensorDesc> inputDesc, std::vector<void*> input, DetectionOutputDesc detectionoutputDesc, TensorDesc outputDesc, F32* output);
 
 EE pooling_fp32(TensorDesc inputDesc, const F32* input, PoolingDesc poolingDesc, TensorDesc outputDesc, F32* output);
 
-EE softmax_fp32(TensorDesc inputDesc, const F32* input, TensorDesc outputDesc, F32* output);
+EE softmax_fp32(TensorDesc inputDesc, const F32* input, int axis, TensorDesc outputDesc, F32* output);
 
 EE concat_fp32(std::vector<TensorDesc> inputDesc, std::vector<void*> input, TensorDesc outputDesc, void* output, U32 concatDim);
 
@@ -116,11 +138,11 @@ EE depthwise_convolution_fp32(TensorDesc inputDesc, F32* input,
     TensorDesc biasDesc, const F32* bias,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F32* output,
-    ActivationMode depthwiseActivationMode,
-    ActivationMode pointwiseActivationMode,
+    ActivationDesc depthwiseActivationDesc,
+    ActivationDesc pointwiseActivationDesc,
     Arch arch);
 
-EE eltwise_fp32(std::vector<void*>input, U32 num, U32 len, void *output, EltwiseMode eltwiseMode);
+EE eltwise_fp32(std::vector<void*>input, std::vector<int> inputSize, U32 num, U32 len, void *output, EltwiseMode eltwiseMode);
 
 EE lstmcell_fp32(TensorDesc xDesc, const void* currentX,
     TensorDesc filterDesc, const void* filter,
@@ -128,7 +150,8 @@ EE lstmcell_fp32(TensorDesc xDesc, const void* currentX,
     void *state,
     U32 tmpBytes, void *tmp,
     LSTMDesc lstmDesc, U32 batchStrideX, U32 batchStrideH,
-    TensorDesc hDesc, void* output);
+    TensorDesc hDesc, void* output,
+    Arch arch);
 
 EE multiply_fp32(F32 *alpha, F32 *beta, TensorDesc inputDesc, F32* input, TensorDesc outputDesc, F32 *output);
 
@@ -138,7 +161,9 @@ EE layer_normalization_fp32(F32 *alpha, F32 *beta,
 
 EE pooling_fp32(TensorDesc inputDesc, const F32* input, PoolingDesc poolingDesc, const F32* scale, TensorDesc outputDesc, F32* output);
 
-EE scale_nchwc8_fp32(F32* alpha, F32* beta, F32* data, U32 in, U32 ic, U32 elements_per_channel);
+EE priorbox_fp32(std::vector<TensorDesc> inputDesc, PriorBoxDesc priorboxDesc, TensorDesc outputDesc, F32* output);
+
+EE scale_fp32(F32* input, I32 axis, I32 nDims, F32* alpha, F32* beta, I32 in, I32 ic, I32 elements_per_channel, F32* output);
 
 EE softmax_fp32(TensorDesc inputDesc, const F32* input,
     TensorDesc outputDesc, F32* output);
@@ -147,4 +172,8 @@ EE check_fp32(TensorDesc inputDescA, const F32* inputA,
     TensorDesc inputDescB, const F32* inputB,
     CheckMode checkMode,
     TensorDesc outputDesc, I32* output);
+
+EE attention_mask_fp32(TensorDesc inputDesc, const F32* input,
+    I32 attentionLength, bool sameLength, float maskValue,
+    TensorDesc outputDesc, F32* output);
 #endif

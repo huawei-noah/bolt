@@ -24,10 +24,10 @@ extern "C" {
 
 
 /** inference pipeline handle */
-typedef void* IHandle;
+typedef void* ModelHandle;
 
 /** result data memory handle */
-typedef void* IResult;
+typedef void* ResultHandle;
 
 /** CPU affinity policy */
 typedef enum {
@@ -49,12 +49,13 @@ typedef enum {
     UINT_32 = 3  ///<  32 bit unsigned integer
 } DATA_TYPE;
 
-/** multi-dimensions data format */
+/** multi-dimension data format */
 typedef enum {
     NCHW = 0,   ///< batch->channel->high->width data order
     NHWC = 1,   ///< batch->high->width->channel data order
     NCHWC8 = 2,  ///< batch->channel/8->high->width->channel four element data order
-    NORMAL = 3
+    MTK = 3,     ///< batch->time->unit data order
+    NORMAL = 4   ///< batch->unit data order
 } DATA_FORMAT;
 
 /** 
@@ -62,17 +63,27 @@ typedef enum {
 * @param  modelPath     model file path
 * @param  affinity      CPU affinity setting
 * @param  device        heterogeneous device setting
+* @param  algoPath      the file path to save and load algos info
 *
 * @return inference pipeline handle
 *
 * @note destroy model when pipeline end
 * @code
-*     IHandle handle = model_create(...);
+*     ModelHandle handle = CreateModel(...);
 *     ...
-*     model_destroy(handle);
+*     DestroyModel(handle);
 * @endcode
+* valid algoPath can reduce PrepareModel significantly
+* if you set a valid algoPath, algorithm selected only need to run once, which is usually time consuming
+* the algorithm select result will be saved to the file path you set, and loaded when you run it next time,
+* which avoid to do the algorithm selected again
+* it is strongly suggest that set a valid algoPath, especiall for GPU running
+* @note
+* if your inputSize changed, please delete the old algorithm file be saved
+* if your model     changed, please delete the old algorithm file be saved
+* if any unexpected error happen, you can try to delete algorithm file and run it again
 */
-IHandle model_create(const char* modelPath, AFFINITY_TYPE affinity, DEVICE_TYPE device);
+ModelHandle CreateModel(const char* modelPath, AFFINITY_TYPE affinity, DEVICE_TYPE device, const char* algoPath);
 
 /**
 * @brief complete model inference engine prepare
@@ -88,7 +99,7 @@ IHandle model_create(const char* modelPath, AFFINITY_TYPE affinity, DEVICE_TYPE 
 *
 * @return
 */
-void model_ready(IHandle ih, const int num_input,
+void PrepareModel(ModelHandle ih, const int num_input,
     const int* n, const int* c, const int* h, const int* w,
     char** name,
     const DATA_TYPE* dt_input, const DATA_FORMAT* df_input);
@@ -108,13 +119,13 @@ void model_ready(IHandle ih, const int num_input,
 * @return
 *
 * @code
-*     // model_resize must behind model_ready;
-*     model_ready(...);
-*     model_resize_input(...);
-*     model_run(...);
+*     // model_resize must behind PrepareModel;
+*     PrepareModel(...);
+*     ResizeModelInput(...);
+*     RunModel(...);
 * @endcode
 */
-void model_resize_input(IHandle ih, const int num_input,
+void ResizeModelInput(ModelHandle ih, const int num_input,
     const int* n, const int* c, const int* h, const int* w,
     char** name,
     const DATA_TYPE* dt_input, const DATA_FORMAT* df_input);
@@ -125,7 +136,7 @@ void model_resize_input(IHandle ih, const int num_input,
 *
 * @return result data memory handle
 */
-IResult IResult_malloc_all(IHandle ih);
+ResultHandle AllocAllResultHandle(ModelHandle ih);
 
 /**
 * @brief malloc result data memory according to user specification
@@ -135,7 +146,7 @@ IResult IResult_malloc_all(IHandle ih);
 *
 * @return result data memory handle
 */
-IResult IResult_malloc_part(IHandle ih, const int num_outputs,
+ResultHandle AllocSpecificResultHandle(ModelHandle ih, const int num_outputs,
     char** outputNames);
 
 /**
@@ -148,18 +159,19 @@ IResult IResult_malloc_part(IHandle ih, const int num_outputs,
 *
 * @return
 */
-void model_run(IHandle ih, IResult ir, const int num_input, char** inputNames, void** mem);
+void RunModel(ModelHandle ih, ResultHandle ir, const int num_input, char** inputNames, void** mem);
 
 /**
-* @brief get the number of model output from IResult
+* @brief get the number of model output from ResultHandle
 * @param  ir            result data memory handle
 *
 * @return the number of output
 */
-int IResult_num_outputs(IResult ir);
+int GetNumOutputsFromResultHandle(ResultHandle ir);
 
 /**
-* @brief get data from IResult
+* @brief get data from ResultHandle, default to pass value of output ptr,
+* if need copy data to your own ptr, please use CopyOutputsFromResultHandle
 * @param  ir            result data memory handle
 * @param  num_outputs   the number of output data
 * @param  outputNames   the array of all output data's name in string format
@@ -173,12 +185,12 @@ int IResult_num_outputs(IResult ir);
 *
 * @return
 */
-void IResult_get(IResult ir, int num_outputs, char** outputNames, void** data,
+void GetPtrFromResultHandle(ResultHandle ir, int num_outputs, char** outputNames, void** data,
     int* n, int* c, int* h, int* w,
     DATA_TYPE* dt_output, DATA_FORMAT* df_output);
 
 /**
-* @brief get data ptr from IResult without memcpy
+* @brief get data ptr from ResultHandle with memcpy
 * @param  ir            result data memory handle
 * @param  num_outputs   the number of output data
 * @param  outputNames   the array of all output data's name in string format
@@ -192,7 +204,7 @@ void IResult_get(IResult ir, int num_outputs, char** outputNames, void** data,
 *
 * @return
 */
-void IResult_get_nocopy(IResult ir, int num_outputs, char** outputNames, void** data,
+void CopyOutputsFromResultHandle(ResultHandle ir, int num_outputs, char** outputNames, void** data,
     int* n, int* c, int* h, int* w,
     DATA_TYPE* dt_output, DATA_FORMAT* df_output);
 /**
@@ -201,7 +213,7 @@ void IResult_get_nocopy(IResult ir, int num_outputs, char** outputNames, void** 
 *
 * @return
 */
-void IResult_free(IResult ir);
+void FreeResultHandle(ResultHandle ir);
 
 /**
 * @brief destroy model
@@ -209,7 +221,7 @@ void IResult_free(IResult ir);
 *
 * @return
 */
-void model_destroy(IHandle ih);
+void DestroyModel(ModelHandle ih);
 #ifdef __cplusplus
 }
 #endif

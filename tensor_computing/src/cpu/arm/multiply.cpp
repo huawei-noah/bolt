@@ -13,19 +13,7 @@
 
 
 #include "cpu/arm/tensor_computing_arm.h"
-#ifdef _USE_FP32
-#include "cpu/arm/fp32/arm_neon_expand_fp32.h"
-#endif
-#ifdef _USE_FP16
-#include "cpu/arm/fp16/arm_neon_expand_fp16.h"
-#endif
-
-template<typename T>
-inline void array_scale(T *input, T *output, I32 len, F32 alpha, F32 beta) {
-    for (I32 i = 0; i < len; i++) {
-        output[i] = alpha * input[i] + beta;
-    }
-}
+#include "arm_functions.h"
 
 EE multiply_arm(void *alpha, void *beta, TensorDesc inputDesc, void* input, TensorDesc outputDesc, void *output)
 {
@@ -37,32 +25,6 @@ EE multiply_arm(void *alpha, void *beta, TensorDesc inputDesc, void* input, Tens
         || nullptr == output)
         CHECK_STATUS(NULL_POINTER);
 
-    EE ret = SUCCESS;
-    switch (inputDesc.dt) {
-#ifdef _USE_FP32
-        case DT_F32: {
-            array_scale_f32((F32 *)input, (F32 *)output, tensorNumElements(inputDesc), *((F32 *)alpha), *((F32 *)beta));
-            break;
-        }
-#endif
-#ifdef _USE_FP16
-        case DT_F16: {
-            array_scale_f16((F16 *)input, (F16 *)output, tensorNumElements(inputDesc), *((F32 *)alpha), *((F32 *)beta));
-            break;
-        }
-#endif
-        case DT_I32: {
-            array_scale<I32>((I32 *)input, (I32 *)output, tensorNumElements(inputDesc), *((F32 *)alpha), *((F32 *)beta));
-            break;
-        }
-        case DT_U32: {
-            array_scale<U32>((U32 *)input, (U32 *)output, tensorNumElements(inputDesc), *((F32 *)alpha), *((F32 *)beta));
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-
-    return ret;
+    array_scale(inputDesc.dt, input, output, tensorNumElements(inputDesc), *((F32 *)alpha), *((F32 *)beta));
+    return SUCCESS;
 }

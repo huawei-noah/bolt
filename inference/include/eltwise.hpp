@@ -29,6 +29,7 @@ public:
         this->eltMode = eltMode;
         this->coeffSize = coeffSize;
         this->coeffValues = coeffValues;
+        this->lenOfTemp = 0;
     }
 
     OperatorType get_op_type() override

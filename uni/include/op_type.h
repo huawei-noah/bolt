@@ -59,22 +59,34 @@ extern "C" {
         OT_Upsample,
         OT_Cast,
         OT_Logistic,
-
         OT_BilateralSliceApply,
         OT_Resize,
         OT_Deconvolution,
         OT_Constant,
         OT_ResizeBilinear,
+
         OT_PreAllocatedMemory,
         OT_SharedWeight,
         OT_Copy,
         OT_Check,
         OT_Repeat,
-        OT_AxisMean,
+        OT_Reduction,
         OT_ArgMax,
         OT_None,
         OT_Interp,
-        OT_Flatten
+        OT_Flatten,
+
+        OT_Jump,
+        OT_Space2Depth,
+        OT_Depth2Space,
+        OT_AttentionMask,
+        OT_RelativePositionEmbedding,
+        OT_RelativeShift,
+        OT_TfSlice,
+        OT_Permute,
+        OT_LogSoftmax,
+        OT_PriorBox,
+        OT_DetectionOutput
     } OperatorType;
 
     inline const char * const *OperatorTypeName() {
@@ -117,22 +129,34 @@ extern "C" {
             "OT_Upsample",
             "OT_Cast",
             "OT_Logistic",
-
             "OT_BilateralSliceApply",
             "OT_Resize",
             "OT_Deconvolution",
             "OT_Constant",
             "OT_ResizeBilinear",
+
             "OT_PreAllocatedMemory",
             "OT_SharedWeight",
             "OT_Copy",
             "OT_Check",
             "OT_Repeat",
-            "OT_AxisMean",
+            "OT_Reduction",
             "OT_ArgMax",
             "OT_None",
             "OT_Interp",
-            "OT_Flatten"
+            "OT_Flatten",
+
+            "OT_Jump",
+            "OT_Space2Depth",
+            "OT_Depth2Space",
+            "OT_AttentionMask",
+            "OT_RelativePositionEmbedding",
+            "OT_RelativeShift",
+            "OT_TfSlice",
+            "OT_Permute",
+            "OT_LogSoftmax",
+            "OT_PriorBox",
+            "OT_DetectionOutput"
         };
         return names;
     }

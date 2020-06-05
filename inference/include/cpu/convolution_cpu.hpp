@@ -14,8 +14,6 @@
 
 #ifndef _CONVELTWISEPOOLING_CPU_H
 #define _CONVELTWISEPOOLING_CPU_H
-#include <optional>
-#include <stdio.h>
 #include "weight_operator.hpp"
 #include "tensor_computing.h"
 #include "tensor_desc.h"
@@ -27,9 +25,9 @@
 class ConvolutionCPU: public Convolution {
 public:
     ConvolutionCPU(DataType dt, U32 nf, U32 ksizeH, U32 ksizeW, U32 kstrideH, U32 kstrideW, U32 kpaddingT, U32 kpaddingB, U32 kpaddingL, U32 kpaddingR,
-        ActivationMode dwActiveMode, ActivationMode pwActiveMode, ConvolutionMode convolutionType, U32 group, U32 dilateH, U32 dilateW) :
+        ActivationDesc dwActivationDesc, ActivationDesc pwActivationDesc, ConvolutionMode convolutionType, U32 group, U32 dilateH, U32 dilateW) :
         Convolution(dt, nf, ksizeH, ksizeW, kstrideH, kstrideW, kpaddingT, kpaddingB, kpaddingL, kpaddingR, 
-            dwActiveMode, pwActiveMode, convolutionType, group, dilateH, dilateW) {}
+            dwActivationDesc, pwActivationDesc, convolutionType, group, dilateH, dilateW) {}
 
     virtual EE init_weight_bias_from_model(U8** modelPtr)override
     {
@@ -88,7 +86,7 @@ public:
             memcpy((U8*)modelWeightTensor->get_val(), *modelPtr, tensorNumBytes(filterTensorDesc));
             *modelPtr += tensorNumBytes(filterTensorDesc);
         } else {
-            modelWeightTensor->set_val(curOpWs.weight);
+            modelWeightTensor->set_shared_ptr(std::shared_ptr<U8>(curOpWs.weight));
         }
        
         U8* biasVal = NULL;
@@ -102,7 +100,7 @@ public:
         }
 
         if (biasVal) {
-            modelVectorTensor->set_val(biasVal);
+            modelVectorTensor->set_shared_ptr(std::shared_ptr<U8>(biasVal));
         } else {
             modelVectorTensor->alloc();
             if (isBNN == 1) {
@@ -161,8 +159,20 @@ public:
                 } else if (DT_F16_8Q == this->dt) {
 #ifdef _USE_INT8
                     F16 *ptr = this->scales.get();
-                    ptr[0] = inputTensor.get_scale();
                     scalePtr = (U8*)ptr;
+
+                    ptr[0] = inputTensor.get_scale();                    
+                    if (featureScale.size() > 0 && featureScale[0][0] > 0) {
+                        ptr[0] = featureScale[0][0];
+                    } else if (DT_F16 == inputDesc.dt) {
+                        ptr[0] = -1;
+                    }
+
+                    if (featureScale.size() > 0 && (featureScale.back())[0] != -2) {
+                        ptr[1] = (featureScale.back())[0];
+                    } else {
+                        ptr[1] = -1;
+                    }
 #endif
                 }
                 CHECK_STATUS(convolution(inputDesc, inputTensor.get_val(),
@@ -170,9 +180,9 @@ public:
                                          convDesc, this->pwAlg,
                                          scaleDesc, scalePtr,
                                          biasDesc, biasPtr,
-                                         this->lenOfTemp, this->temp.get(),
+                                         this->lenOfTemp, this->temp->get_val(),
                                          outputDesc, (void*)outputTensor.get_val(),
-                                         this->pwActiveMode, this->schedule));
+                                         this->pwActivationDesc, this->schedule));
 #ifdef _USE_INT8
                 if (DT_I8 == outputDesc.dt) {
                     F16 *ptr = (F16*)scalePtr;
@@ -186,9 +196,9 @@ public:
                                                    filterDesc, filterTensor.get_val(),
                                                    convDesc, this->dwAlg,
                                                    biasDesc, biasPtr,
-                                                   this->lenOfTemp, this->temp.get(),
+                                                   this->lenOfTemp, this->temp->get_val(),
                                                    outputDesc, outputTensor.get_val(),
-                                                   this->dwActiveMode, ACTIVATION_NULL,
+                                                   this->dwActivationDesc, this->pwActivationDesc,
                                                    this->schedule));
                 break;
             }
@@ -197,9 +207,9 @@ public:
                                                    filterDesc, filterTensor.get_val(),
                                                    convDesc, this->dwAlg,
                                                    biasDesc, biasPtr,
-                                                   this->lenOfTemp, this->temp.get(),
+                                                   this->lenOfTemp, this->temp->get_val(),
                                                    outputDesc, outputTensor.get_val(),
-                                                   this->dwActiveMode, this->pwActiveMode,
+                                                   this->dwActivationDesc, this->pwActivationDesc,
                                                    this->schedule));
                 break;
             }
@@ -209,9 +219,9 @@ public:
                                          convDesc, this->pwAlg,
                                          scaleDesc, scalePtr,
                                          biasDesc, biasPtr,
-                                         this->lenOfTemp, this->temp.get(),
+                                         this->lenOfTemp, this->temp->get_val(),
                                          outputDesc, (void*)outputTensor.get_val(),
-                                         this->pwActiveMode, this->schedule));
+                                         this->pwActivationDesc, this->schedule));
                 break;
             }
             default:
@@ -222,7 +232,7 @@ public:
         UTIL_TIME_TOC(__CLASS_FUNCTION__)
     }
 
-    virtual EE infer_forward_algorithm(HashMap<std::string, int> &algorithmMap) override
+    virtual EE infer_forward_algorithm(HashMap<std::string, std::string> &algorithmMap) override
     {
         TensorDesc inputDesc = (this->inputTensors[0]).get_desc();
         TensorDesc filterDesc = (this->weightTensors[0]).get_desc();
@@ -238,47 +248,59 @@ public:
                     targetType = DT_I8;
                 }
                 if (algorithmMap.find(this->name) != algorithmMap.end()) {
-                    this->pwAlg = (ConvolutionForwardAlgorithm)algorithmMap[this->name];
+                    I32 algo;
+                    Operator::getAlgorithmInfoFromMap(algorithmMap, this->name, &algo, 1);
+                    this->pwAlg = (ConvolutionForwardAlgorithm)algo;
                 } else {
                     CHECK_STATUS(convolution_infer_forward_algorithm(inputDesc, filterDesc,
                                                  this->outputTensors[0].get_desc(),
-                                                 convDesc, policy, &(this->pwAlg), targetType, this->pwActiveMode, this->schedule));
-                    algorithmMap[this->name] = this->pwAlg;
+                                                 convDesc, policy, &(this->pwAlg), targetType, this->pwActivationDesc, this->schedule));
+                    I32 algo = this->pwAlg;
+                    Operator::setAlgorithmInfoToMap(algorithmMap, this->name, &algo, 1);
                 }
                 break;
             }
             case Convolution_Depthwise: {
                 if (algorithmMap.find(this->name) != algorithmMap.end()) {
-                    this->dwAlg = (DepthwiseConvolutionForwardAlgorithm)algorithmMap[this->name];
+                    I32 algo;
+                    Operator::getAlgorithmInfoFromMap(algorithmMap, this->name, &algo, 1);
+                    this->dwAlg = (DepthwiseConvolutionForwardAlgorithm)algo;
                 } else {
                     CHECK_STATUS(depthwise_convolution_infer_forward_algorithm(inputDesc, filterDesc,
                                                  this->outputTensors[0].get_desc(),
                                                  convDesc, policy, &(this->dwAlg),
-                                                 targetType, this->dwActiveMode, ACTIVATION_NULL, this->schedule));
-                    algorithmMap[this->name] = this->dwAlg;
+                                                 targetType, this->dwActivationDesc, this->pwActivationDesc, this->schedule));
+                    I32 algo = this->dwAlg;
+                    Operator::setAlgorithmInfoToMap(algorithmMap, this->name, &algo, 1);
                 }
                 break;
             }
             case Convolution_Depthwise_Pointwise: {
                 if (algorithmMap.find(this->name) != algorithmMap.end()) {
-                    this->dwAlg = (DepthwiseConvolutionForwardAlgorithm)algorithmMap[this->name];
+                    I32 algo;
+                    Operator::getAlgorithmInfoFromMap(algorithmMap, this->name, &algo, 1);
+                    this->dwAlg = (DepthwiseConvolutionForwardAlgorithm)algo;
                 } else {
                     CHECK_STATUS(depthwise_convolution_infer_forward_algorithm(inputDesc, filterDesc,
                                                  this->outputTensors[0].get_desc(),
                                                  convDesc, policy, &(this->dwAlg), 
-                                                 targetType, this->dwActiveMode, this->pwActiveMode, this->schedule));
-                    algorithmMap[this->name] = this->dwAlg;
+                                                 targetType, this->dwActivationDesc, this->pwActivationDesc, this->schedule));
+                    I32 algo = this->dwAlg;
+                    Operator::setAlgorithmInfoToMap(algorithmMap, this->name, &algo, 1);
                 }
                 break;
             }
             case Convolution_Dilation: {
                 if (algorithmMap.find(this->name) != algorithmMap.end()) {
-                    this->pwAlg = (ConvolutionForwardAlgorithm)algorithmMap[this->name];
+                    I32 algo;
+                    Operator::getAlgorithmInfoFromMap(algorithmMap, this->name, &algo, 1);
+                    this->pwAlg = (ConvolutionForwardAlgorithm)algo;
                 } else {
                     CHECK_STATUS(convolution_infer_forward_algorithm(inputDesc, filterDesc,
                                                  this->outputTensors[0].get_desc(),
-                                                 convDesc, policy, &(this->pwAlg), targetType, this->pwActiveMode, this->schedule));
-                    algorithmMap[this->name] = this->pwAlg;
+                                                 convDesc, policy, &(this->pwAlg), targetType, this->pwActivationDesc, this->schedule));
+                    I32 algo = this->pwAlg;
+                    Operator::setAlgorithmInfoToMap(algorithmMap, this->name, &algo, 1);
                 }
                 break;
             }
@@ -333,14 +355,20 @@ public:
             default:
                 CHECK_STATUS(NOT_SUPPORTED);
         }
+        if (DT_F16_8Q == this->dt && featureScale.size() > 0 && -2 == (featureScale.back())[0]) {
+            (*outDims)[0].dt = DT_F16;
+        }
         return SUCCESS;
     }
 
     virtual U32 infer_tmp_memory_size() override
     {
-        TensorDesc inputDesc = (this->inputTensors[0]).desc;
-        TensorDesc filterDesc = (this->weightTensors[0]).desc;
-        TensorDesc outputDesc = (this->outputTensors[0]).desc;
+        TensorDesc inputDesc = (this->inputTensors[0]).get_desc();
+        TensorDesc filterDesc = (this->weightTensors[0]).get_desc();
+        if (DT_F16_8Q == filterDesc.dt) {
+            filterDesc.dt = DT_I8;
+        }
+        TensorDesc outputDesc = (this->outputTensors[0]).get_desc();
         ConvolutionDesc convDesc = Convolution::create_convDesc(this->strideH, this->strideW, this->paddingT, this->paddingB,
             this->paddingL, this->paddingR, this->dilateH, this->dilateW);
 
@@ -370,7 +398,7 @@ public:
 
     virtual U32 infer_wtm_memory_size() override
     {
-        TensorDesc filterDesc = (this->weightTensors[0]).desc;
+        TensorDesc filterDesc = (this->weightTensors[0]).get_desc();
         U32 bytes = 0;
         switch (this->convolutionType) {
             case Convolution_Pointwise: {
@@ -416,7 +444,7 @@ public:
             }
 
             filterDesc.dt = DT_F16_8Q; // To label as int8
-            CHECK_STATUS(convolution_transform_filter(filterDesc, weightPtr, this->pwAlg, &tFilterDesc, tFilter, this->schedule));
+            CHECK_STATUS(convolution_transform_filter(filterDesc, weightPtr, this->pwAlg, &tFilterDesc, tFilter, this->temp.get(), this->schedule));
 
             U32 ftmBytes = ftBytes / bytesOf(DT_F16);
             std::shared_ptr<U8> sPtr((U8*) operator new(ftmBytes));
@@ -439,6 +467,7 @@ public:
             }
             std::shared_ptr<F16> fsp((F16*) operator new(3*bytesOf(DT_F16)));
             this->scales = fsp;
+            this->scales.get()[2] = -1;
             CHECK_STATUS(quantize_tensor(filterDesc, weightPtr, &qFilterDesc, qFilter, this->scales.get()+2));
 
             U32 ftmBytes;
@@ -453,7 +482,7 @@ public:
 
             // trans filter
             CHECK_STATUS(convolution_transform_filter(qFilterDesc, qFilter, this->pwAlg,
-                                                &wtmDesc, this->get_wtm()->get_val(), this->schedule));
+                                                &wtmDesc, this->get_wtm()->get_val(), this->temp.get(), this->schedule));
 
             free(qFilter);
 #endif
@@ -468,7 +497,7 @@ public:
 
             switch (this->convolutionType) {
                 case Convolution_Pointwise: {
-                    CHECK_STATUS(convolution_transform_filter(filterDesc, weightPtr, this->pwAlg, &wtmDesc, this->get_wtm()->get_val(), this->schedule));
+                    CHECK_STATUS(convolution_transform_filter(filterDesc, weightPtr, this->pwAlg, &wtmDesc, this->get_wtm()->get_val(), this->temp.get(), this->schedule));
                     break;
                 }
                 case Convolution_Depthwise: {
@@ -480,7 +509,7 @@ public:
                     break;
                 }
                 case Convolution_Dilation: {
-                    CHECK_STATUS(convolution_transform_filter(filterDesc, weightPtr, this->pwAlg, &wtmDesc, this->get_wtm()->get_val(), this->schedule));
+                    CHECK_STATUS(convolution_transform_filter(filterDesc, weightPtr, this->pwAlg, &wtmDesc, this->get_wtm()->get_val(), this->temp.get(), this->schedule));
                     break;
                 }
                 default:

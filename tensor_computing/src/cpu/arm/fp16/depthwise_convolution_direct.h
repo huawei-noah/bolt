@@ -29,7 +29,7 @@ EE depthwise_convolution_direct_A55(TensorDesc inputDesc, F16* inArray,
     TensorDesc biasDesc, const F16* biasArray,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F16* outArray,
-    ActivationMode depthwiseActivationMode);
+    ActivationDesc depthwiseActivationDesc);
 
 EE depthwise_convolution_direct_A76(TensorDesc inputDesc, F16* inArray,
     TensorDesc filterDesc, const F16* filterArray,
@@ -37,7 +37,7 @@ EE depthwise_convolution_direct_A76(TensorDesc inputDesc, F16* inArray,
     TensorDesc biasDesc, const F16* biasArray,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F16* outArray,
-    ActivationMode depthwiseActivationMode);
+    ActivationDesc depthwiseActivationDesc);
 
 inline EE depthwise_convolution_direct(TensorDesc inputDesc, F16* inArray,
     TensorDesc filterDesc, const F16* filterArray,
@@ -45,7 +45,7 @@ inline EE depthwise_convolution_direct(TensorDesc inputDesc, F16* inArray,
     TensorDesc biasDesc, const F16* biasArray,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, F16* outArray,
-    ActivationMode depthwiseActivationMode,
+    ActivationDesc depthwiseActivationDesc,
     Arch arch)
 {
     EE ret = SUCCESS;
@@ -57,7 +57,7 @@ inline EE depthwise_convolution_direct(TensorDesc inputDesc, F16* inArray,
                                                    biasDesc, biasArray,
                                                    tmpBytes, tmp,
                                                    outputDesc, outArray,
-                                                   depthwiseActivationMode);
+                                                   depthwiseActivationDesc);
             break;
         case ARM_A76:
             ret = depthwise_convolution_direct_A76(inputDesc, inArray,
@@ -66,7 +66,7 @@ inline EE depthwise_convolution_direct(TensorDesc inputDesc, F16* inArray,
                                                    biasDesc, biasArray,
                                                    tmpBytes, tmp,
                                                    outputDesc, outArray,
-                                                   depthwiseActivationMode);
+                                                   depthwiseActivationDesc);
             break;
         default:
             return NOT_SUPPORTED;

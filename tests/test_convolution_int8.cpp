@@ -40,7 +40,9 @@ int int8ConvolutionTest(int argc, char* argv[], DataType dt, DataType filterData
 
     CHECK_REQUIREMENT(in == 1 && on == 1);
 
-    ActivationMode am = ACTIVATION_RELU;
+    ActivationDesc activationDesc;
+    activationDesc.mode = ACTIVATION_RELU;
+    activationDesc.value[0] = 0;
 
     TensorDesc inputDesc, filterDesc, outputDesc, biasDesc;
     ConvolutionDesc convDesc;
@@ -67,7 +69,7 @@ int int8ConvolutionTest(int argc, char* argv[], DataType dt, DataType filterData
         U8 *bias   = ut_input_v(oc, dt, UT_INIT_RANDOM);
 
         INT8 *input = (INT8*)ut_input_v(in*ic*ih*iw, DT_I8, UT_INIT_ZERO);
-        F16 scale_i;
+        F16 scale_i = -1;
         quantize_tensor(inputDesc_ref, input_ref, &inputDesc, input, &scale_i);
 
         U8 *filter_ref = ut_input_v(fn*fc*fh*fw, dt, UT_INIT_ZERO);
@@ -85,7 +87,7 @@ int int8ConvolutionTest(int argc, char* argv[], DataType dt, DataType filterData
         // setup alg
         ConvolutionPolicy policy = CONVOLUTION_FASTEST;
         ConvolutionForwardAlgorithm alg = CONVOLUTION_ALGORITHM_NULL;
-        CHECK_STATUS(convolution_infer_forward_algorithm(inputDesc, filterDesc, outputDesc, convDesc, policy, &alg, DT_I8, am, UT_ARCH));
+        CHECK_STATUS(convolution_infer_forward_algorithm(inputDesc, filterDesc, outputDesc, convDesc, policy, &alg, DT_I8, activationDesc, UT_ARCH));
 
         F16 *scales;
 
@@ -103,7 +105,7 @@ int int8ConvolutionTest(int argc, char* argv[], DataType dt, DataType filterData
                 U8 *tFilter = ut_input_v(ftBytes/bytesOf(dt), dt, UT_INIT_ZERO);
 
                 filterDesc.dt = filterDataType;  // To label as int8
-                CHECK_STATUS(convolution_transform_filter(filterDesc, filter, alg, &tFilterDesc, tFilter, UT_ARCH));
+                CHECK_STATUS(convolution_transform_filter(filterDesc, filter, alg, &tFilterDesc, tFilter, NULL, UT_ARCH));
                 filterDesc.dt = dt;
 
                 ftm     = (INT8*)ut_input_v(fn*fc*6*6, DT_I8, UT_INIT_ZERO);
@@ -124,7 +126,7 @@ int int8ConvolutionTest(int argc, char* argv[], DataType dt, DataType filterData
                 
                 ftm     = (INT8*)ut_input_v(ftBytes/sizeof(INT8), DT_I8, UT_INIT_ZERO);
                 // trans filter
-                CHECK_STATUS(convolution_transform_filter(qFilterDesc, qFilter, alg, &ftmDesc, ftm, UT_ARCH));
+                CHECK_STATUS(convolution_transform_filter(qFilterDesc, qFilter, alg, &ftmDesc, ftm, NULL, UT_ARCH));
 
                 free(qFilter);
                 break;
@@ -146,7 +148,7 @@ int int8ConvolutionTest(int argc, char* argv[], DataType dt, DataType filterData
                                  biasDesc, bias,
                                  tmpBytes, tmp,
                                  outputDesc, output,
-                                 am, UT_ARCH));
+                                 activationDesc, UT_ARCH));
 
             // naive implement
             CHECK_STATUS(convolution(inputDesc_ref, input_ref,
@@ -156,7 +158,7 @@ int int8ConvolutionTest(int argc, char* argv[], DataType dt, DataType filterData
                                  biasDesc, bias,
                                  tmpBytes, tmp,
                                  outputDesc_ref, output_ref,
-                                 am, CPU_GENERAL));
+                                 activationDesc, CPU_GENERAL));
             
             U8 *out_d = ut_input_v(output_size, dt, UT_INIT_ZERO);
             for (U32 i = 0; i < output_size; i++) {
@@ -189,7 +191,7 @@ int int8ConvolutionTest(int argc, char* argv[], DataType dt, DataType filterData
                                  biasDesc, bias,
                                  tmpBytes, tmp,
                                  outputDesc, output,
-                                 am, UT_ARCH));
+                                 activationDesc, UT_ARCH));
         }
         double time_end = ut_time_ms();
         double time = (time_end - time_start) / UT_LOOPS;

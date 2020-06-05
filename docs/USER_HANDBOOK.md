@@ -106,12 +106,12 @@ We provide several demo programs, and here we will explain the usage of two typi
    
    <3> Run classification and get the result.
    
-   Parameters:    bolt_model    image_directory    image_format    scale_value    TopK    correct_label    thread_affinity
+   Parameters:    bolt_model    image_directory    image_format    scale_value    TopK    correct_label    archInfo     algorithmMapPath   
 
 Example: Run mobilenet_v1 for image classification 
 
 ```shell
-<1> adb push /home/bolt/install_llvm/bin/classification /data/local/bolt/bin/classification
+<1> adb push /home/bolt/install_llvm/kits/classification /data/local/bolt/bin/classification
 <2> adb push /home/bolt/data/ILSVRC/n02085620/ /data/local/bolt_data/cv/ILSVRC/n02085620
 <3> adb shell "./data/local/bolt/bin/classification /data/local/bolt_model/caffe/mobilenet_v1/mobilenet_v1_f16.bolt /data/local/bolt_data/cv/ILSVRC/n02085620 BGR 0.017 5 151 CPU_AFFINITY_HIGH_PERFORMANCE"
 ```
@@ -124,10 +124,27 @@ Example: Run mobilenet_v1 for image classification
   - scale_value:     The scale value requested in the input preprocessing. This value is also used in [image_processing.cpp](../image/src/image_processing.cpp). If your network required normalized inputs, the typical scale value is 0.017.
   - TopK:            The number of predictions that you are interested in for each image. Typical choice is 5.
   - correct_label:   The correct label number for the whole image directory.
-  - thread_affinity: When it is set to be CPU_AFFINITY_HIGH_PERFORMANCE, Bolt will look for a high-frequency core and bind to it. When it is set to be CPU_AFFINITY_LOW_POWER, Bolt will look for a low-frequency core. If the parameter is missing, the default value is "CPU_AFFINITY_HIGH_PERFORMANCE".
+  - archInfo: 
+        -- CPU_AFFINITY_HIGH_PERFORMANCE, Bolt will look for a high-frequency core and bind to it. 
+        -- CPU_AFFINITY_LOW_POWER, Bolt will look for a low-frequency core. 
+        -- GPU, Bolt will run the model on MALI GPU.
+        If the parameter is missing, the default value is "CPU_AFFINITY_HIGH_PERFORMANCE".
+  - algorithmMapPath The file path to save algorithm selection result info, it is strongly recommended to be set when use GPU.
 
+  More Details for using GPU on classification nets:
+  Example for running with bolt GPU: 
+                                /*bolt_model*/                   /*image_directory*/   /*image_format*/   /*scale*/  /*TopK*/   /*correct_lable*/   /*archInfo*/   /*algorithMapPath*/
+  ./classification /data/local/tmp/model/mobilenet_v1_f16.bolt  /data/local/tmp/data        BGR             0.017       5             151                GPU        /data/local/tmp
 
+  When you first running program, GPU will take lots of time to do algorithm selected and save the results to the algorithmMapPath you set.
+  After algorithm selected results been saved successfully, this step will be skipped.
+  If you want to get the best performance, please set the algorithmMapPath, and running your model after algorithm selected results been produced.
+  NOTE:
+      -- The file name of algorithm selected results are constitute with "modelname + archInfo + dataType", such as "algorithmInfo_MOBILENET_2_4".
+      -- If you modified your model, please delete the old algorithm selected results and run it again, or it may cause unpredicted errors.
 
+                   
+ 
 2. **Tinybert**
 
    <1> Push tinybert to the phone;
@@ -141,11 +158,11 @@ Example: Run mobilenet_v1 for image classification
 Example:
 
 ```shell
-<1> adb push /home/bolt/bin/tinybert /data/local/bolt/bin/tinybert
+<1> adb push /home/bolt/install_llvm/kits/tinybert /data/local/bolt/bin/tinybert
 <2> adb mkdir /data/local/bolt_data/nlp/tinybert/data
 <3> adb mkdir /data/local/bolt_data/nlp/tinybert/data/input
 <4> adb mkdir /data/local/bolt_data/nlp/tinybert/data/result
-<5> adb push /home/bolt/model-tools/tools/tensorflow2cafee/tinybert/sequence.seq /data/local/bolt_data/nlp/tinybert/data/input/0.seq
+<5> adb push /home/bolt/model-tools/tools/tensorflow2caffe/tinybert/sequence.seq /data/local/bolt_data/nlp/tinybert/data/input/0.seq
 <6> adb shell "./data/local/bolt/bin/tinybert /data/local/bolt_model/caffe/tinybert/tinybert_f16.bolt /data/local/bolt_data/nlp/tinybert/data CPU_AFFINITY_HIGH_PERFORMANCE"
 ```
 
@@ -155,6 +172,89 @@ Example:
 
   - thread_affinity: When it is set to be CPU_AFFINITY_HIGH_PERFORMANCE, Bolt will look for a high-frequency core and bind to it. When it is set to be CPU_AFFINITY_LOW_POWER, Bolt will look for a low-frequency core. If the parameter is missing, the default value is "CPU_AFFINITY_HIGH_PERFORMANCE".
 
+
+3. **Neural Machine Translation**
+
+   <1> Push nmt to the phone;
+
+   <2> Push the testing sequence data to the phone;
+
+   <3> Run nmt and get the result.
+
+   Parameters:    bolt_model    sequence_directory    thread_affinity
+
+Example:
+
+```shell
+<1> adb push /home/bolt/install_llvm/kits/nmt /data/local/bolt/bin/nmt
+<2> adb mkdir /data/local/bolt_data/nlp/machine_translation/data
+<3> adb mkdir /data/local/bolt_data/nlp/machine_translation/data/input
+<4> adb mkdir /data/local/bolt_data/nlp/machine_translation/data/result
+<5> adb push /home/bolt/model-tools/tools/tensorflow2caffe/nmt/0.seq /data/local/bolt_data/nlp/machine_translation/data/input/0.seq
+<6> adb shell "./data/local/bolt/bin/nmt /data/local/bolt_model/caffe/nmt/nmt_f16.bolt /data/local/bolt_data/nlp/machine_translation/data CPU_AFFINITY_HIGH_PERFORMANCE"
+```
+
+  After running, you should be able to see the machine translation result, and the execution time.
+
+  Here we explain a little more for some of the parameters.
+
+  - thread_affinity: When it is set to be CPU_AFFINITY_HIGH_PERFORMANCE, Bolt will look for a high-frequency core and bind to it. When it is set to be CPU_AFFINITY_LOW_POWER, Bolt will look for a low-frequency core. If the parameter is missing, the default value is "CPU_AFFINITY_HIGH_PERFORMANCE".
+
+
+4. **Automatic Speech Recognition RNNT**
+
+   <1> Push asr_rnnt to the phone;
+
+   <2> Push the testing sequence data to the phone;
+
+   <3> Run asr_rnnt and get the result.
+
+   Parameters:    bolt_model    sequence_directory    thread_affinity
+
+Example:
+
+```shell
+<1> adb push /home/bolt/install_llvm/kits/asr_rnnt /data/local/bolt/bin/asr_rnnt
+<2> adb mkdir /data/local/bolt_data/nlp/asr/asr_rnnt/data
+<3> adb mkdir /data/local/bolt_data/nlp/asr/asr_rnnt/data/input
+<4> adb mkdir /data/local/bolt_data/nlp/asr/asr_rnnt/data/result
+<5> adb push /home/bolt/model-tools/tools/tensorflow2caffe/asr/asr_rnnt.seq /data/local/bolt_data/nlp/asr/asr_rnnt/data/input/0.seq
+<6> adb shell "./data/local/bolt/bin/asr_rnnt /data/local/bolt_model/caffe/asr_rnnt/asr_rnnt_f16.bolt /data/local/bolt_data/nlp/asr/asr_rnnt/data CPU_AFFINITY_HIGH_PERFORMANCE"
+```
+
+  After running, you should be able to see the speech recognition result, and the execution time.
+
+  Here we explain a little more for some of the parameters.
+
+  - thread_affinity: When it is set to be CPU_AFFINITY_HIGH_PERFORMANCE, Bolt will look for a high-frequency core and bind to it. When it is set to be CPU_AFFINITY_LOW_POWER, Bolt will look for a low-frequency core. If the parameter is missing, the default value is "CPU_AFFINITY_HIGH_PERFORMANCE".
+
+
+5. **Automatic Speech Recognition Convolution+Transformer**
+
+   <1> Push asr_convolution_transformer to the phone;
+
+   <2> Push the testing sequence data to the phone;
+
+   <3> Run asr_convolution_transformer and get the result.
+
+   Parameters:    bolt_model    sequence_directory    thread_affinity
+
+Example:
+
+```shell
+<1> adb push /home/bolt/install_llvm/kits/asr_convolution_transformer /data/local/bolt/bin/asr_convolution_transformer
+<2> adb mkdir /data/local/bolt_data/nlp/asr/asr_convolution_transformer/data
+<3> adb push /home/bolt/model-tools/tools/tensorflow2caffe/asr /data/local/bolt_data/nlp/asr/asr_rnnt/data
+<4> adb shell "./data/local/bolt/bin/asr_convolution_transformer /data/local/bolt_model/caffe/asr_rnnt/asr_convolution_transformer_encoder_f16.bolt /data/local/bolt_data/nlp/asr/asr_convolution_transformer/data CPU_AFFINITY_HIGH_PERFORMANCE"
+<5> adb shell "./data/local/bolt/bin/asr_convolution_transformer /data/local/bolt_model/caffe/asr_rnnt/asr_convolution_transformer_prediction_net.f16.bolt /data/local/bolt_data/nlp/asr/asr_convolution_transformer/data CPU_AFFINITY_HIGH_PERFORMANCE"
+<6> adb shell "./data/local/bolt/bin/asr_convolution_transformer /data/local/bolt_model/caffe/asr_rnnt/asr_convolution_transformer_joint_net_f16.bolt /data/local/bolt_data/nlp/asr/asr_convolution_transformer/data CPU_AFFINITY_HIGH_PERFORMANCE"
+```
+
+  After running, you should be able to see the result of each sub network(encoder, prediction net, joint net), and the execution time.
+
+  Here we explain a little more for some of the parameters.
+
+  - thread_affinity: When it is set to be CPU_AFFINITY_HIGH_PERFORMANCE, Bolt will look for a high-frequency core and bind to it. When it is set to be CPU_AFFINITY_LOW_POWER, Bolt will look for a low-frequency core. If the parameter is missing, the default value is "CPU_AFFINITY_HIGH_PERFORMANCE".
 
 
 ### API

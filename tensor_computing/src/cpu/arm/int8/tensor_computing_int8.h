@@ -21,6 +21,7 @@
 #include "error.h"
 #include "tensor_desc.h"
 #include "tensor_computing_type.h"
+#include "cpu/arm/int8/arm_functions_int8.h"
 
 EE convolution_infer_forward_algorithm_int8(TensorDesc inputDesc, TensorDesc filterDesc, TensorDesc outputDesc,
     ConvolutionDesc convDesc, ConvolutionPolicy policy, ConvolutionForwardAlgorithm *algorithm);
@@ -40,7 +41,7 @@ EE convolution_int8(TensorDesc inputDesc, const INT8* input,
     TensorDesc biasDesc, const F16* bias,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, void* output,
-    ActivationMode activationMode,
+    ActivationDesc activationDesc,
     Arch arch);
 
 
@@ -54,8 +55,8 @@ EE depthwise_convolution_int8(TensorDesc inputDesc, INT8* input,
     TensorDesc biasDesc, const I32* bias,
     U32 tmpBytes, void* tmp,
     TensorDesc outputDesc, I32* output,
-    ActivationMode depthwiseActivationMode,
-    ActivationMode pointwiseActivationMode,
+    ActivationDesc depthwiseActivationDesc,
+    ActivationDesc pointwiseActivationDesc,
     Arch arch);
 
 EE pooling_int8(TensorDesc inputDesc, const INT8* input, F16* inputScale,
@@ -64,5 +65,7 @@ EE pooling_int8(TensorDesc inputDesc, const INT8* input, F16* inputScale,
 
 EE concat_int8(std::vector<TensorDesc> inputDesc, std::vector<void*> input, F32* inputScale,
                     TensorDesc outputDesc, void* output, F32* outputScale, U32 concatDim);
+
+EE quantize_tensor_int32(TensorDesc dDesc, const void* data, TensorDesc* qDesc, void* qData, F32 *scale);
 #endif
 #endif

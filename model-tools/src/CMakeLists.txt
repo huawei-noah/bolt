@@ -1,12 +1,8 @@
-file(GLOB srcs ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
+set(srcs "${CMAKE_CURRENT_SOURCE_DIR}/model_tools.cpp;${CMAKE_CURRENT_SOURCE_DIR}/model_deserialize.cpp")
 
-if(USE_CAFFE)
-    set(srcs "${srcs};${CAFFE_PROTO_HDRS};${CAFFE_PROTO_SRCS}")
-endif(USE_CAFFE)
-
-if(USE_CAFFE)
-    set(srcs "${srcs};${ONNX_PROTO_HDRS};${ONNX_PROTO_SRCS}")
-endif(USE_CAFFE)
+if(BUILD_TEST OR USE_CAFFE OR USE_ONNX OR USE_TFLITE)
+    set(srcs "${srcs};${CMAKE_CURRENT_SOURCE_DIR}/data_type_converter.cpp;${CMAKE_CURRENT_SOURCE_DIR}/model_serialize.cpp;${CMAKE_CURRENT_SOURCE_DIR}/model_print.cpp")
+endif(BUILD_TEST OR USE_CAFFE OR USE_ONNX OR USE_TFLITE)
 
 # shared library 
 ADD_LIBRARY(${PROJECT_NAME} SHARED ${srcs})

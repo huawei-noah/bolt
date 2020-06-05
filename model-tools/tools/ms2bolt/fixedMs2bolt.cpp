@@ -62,7 +62,7 @@ int main()
     int opNumOutputs0 = 1;
     char** opOutputTensorsName0 = {"conv1"};
     ConvolutionParamSpec convCps1;
-    convCps1.num_kernels = 64;
+    convCps1.num_outputs = 64;
     convCps1.kernel_size = 5;
     convCps1.stride = 1;
     convCps1.padding = 2;
@@ -100,7 +100,7 @@ int main()
     int opNumOutputs2 = 1;
     char** opOutputTensorsName2 = {"conv2"};
     ConvolutionParamSpec convCps2;
-    convCps2.num_kernels = 32;
+    convCps2.num_outputs = 32;
     convCps2.kernel_size = 5;
     convCps2.stride = 1;
     convCps2.padding = 2;

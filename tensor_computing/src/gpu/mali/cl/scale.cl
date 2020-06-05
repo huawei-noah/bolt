@@ -20,11 +20,12 @@
 
 
 __kernel void MANGLE_NAME(scale_, MD)(const int h, const int ih_str, const int iw_str, const int ih_off, const int iw_off, 
-    const int oh_str, const int ow_str, const int oh_off, const int ow_off, __global const T* alpha, __global const T* beta, __global T* input, __global T* output) {
+    const int oh_str, const int ow_str, const int oh_off, const int ow_off, const int bx, const int by, __global const T* alpha, __global const T* beta, __global T* input, __global T* output) {
 
     int idx = get_global_id(0);
     int idy = get_global_id(1);
     int idz = get_global_id(2);
+    if(idx >= bx || idy >= by) return;
 
     T4 alp = vload4(idz, alpha);
     T4 bet = 0;

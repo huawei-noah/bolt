@@ -20,6 +20,7 @@
 
 #include "gpu/mali/fp16/convolution_mali_fp16.h"
 #include "gpu/mali/fp16/convolution_direct_mali_fp16.h"
+#include "gpu/mali/fp16/convolution_wino_mali_fp16.h"
 #include "gpu/mali/fp16/convolution_direct_spe_ck_mali_fp16.h"
 
 inline EE convolution_checkpara_mali_fp16(GCLHandle_t    handle,
@@ -37,68 +38,20 @@ inline EE convolution_checkpara_mali_fp16(GCLHandle_t    handle,
     CHECK_STATUS(tensorSelectGet(inputDesc,  NULL, NULL, NULL, &ic, NULL, NULL));
     CHECK_STATUS(tensorSelectGet(filterDesc, NULL, NULL, &fn,  &fc, &fh , &fw));
     CHECK_STATUS(tensorSelectGet(outputDesc, NULL, NULL, NULL, &oc, NULL, NULL));
-    if(input->desc.memFormat == DF_NCHW){
-        if(ic != 3 && ic != 1) return NOT_MATCH;
-        if(output->desc.memFormat == DF_NCHW && fn != 1) return NOT_MATCH; 
-    }
-    /*
+    
     if(input->desc.memFormat == DF_NCWHC4){
-        if(filter->desc.memFormat != DF_NCHWN4C4) return NOT_MATCH;
         if(output->desc.memFormat != DF_NCWHC4) return NOT_MATCH;
     }
-    */
-    if(fw != 1 && fw != 3 && fw != 5) return NOT_MATCH;
+   
+    if(fw != 1 && fw != 3 && fw != 5) return NOT_SUPPORTED;
     if(fn != oc) return NOT_MATCH;
     if(input->desc.memFormat == DF_NCHWC3){
         if(ic != 3) return NOT_MATCH;
         if(output->desc.memFormat == DF_NCHW && fn != 1) return NOT_MATCH;
-        if(ic == 3 && fn == 1 && fw == 1)if(ic != fc - fn) return NOT_MATCH;
         return SUCCESS;
     }
     if(ic != fc) return NOT_MATCH;
     return SUCCESS; 
-}
-
-EE convolution_infer_forward_algorithm_mali_fp16(GCLHandle_t          handle,
-                                                 TensorDesc           inputDesc, 
-                                                 TensorDesc           filterDesc, 
-                                                 ConvolutionDesc      convDesc,
-                                                 TensorDesc           outputDesc,
-                                                 ConvolutionPolicy    policy, 
-                                                 ActivationMode       activationMode,
-                                                 ForwardRunInfoMali_t forwardRunInfo){
-    EE ret = SUCCESS;
-    ConvolutionForwardAlgorithm algorithm = (ConvolutionForwardAlgorithm)(forwardRunInfo->algorithm);
-    if(algorithm == CONVOLUTION_ALGORITHM_NULL) {
-        U32 ic, fn;
-        CHECK_STATUS(tensorSelectGet(inputDesc,  NULL, NULL, NULL, &ic,  NULL, NULL));
-        CHECK_STATUS(tensorSelectGet(filterDesc, NULL, NULL, &fn,  NULL, NULL, NULL));
-        if(ic == 3 && fn == 1){
-            forwardRunInfo->algorithm = CONVOLUTION_ALGORITHM_DIRECT_SPE_CK;
-            algorithm                 = CONVOLUTION_ALGORITHM_DIRECT_SPE_CK;
-        } else {
-            forwardRunInfo->algorithm = CONVOLUTION_ALGORITHM_DIRECT;
-            algorithm                 = CONVOLUTION_ALGORITHM_DIRECT;
-        }
-    }
-    switch (algorithm) {
-        case CONVOLUTION_ALGORITHM_DIRECT:
-            ret = convolution_direct_infer_forward_algorithm_mali_fp16(handle, inputDesc, filterDesc, convDesc, outputDesc, policy, activationMode, forwardRunInfo);
-            break;
-        case CONVOLUTION_ALGORITHM_DIRECT_SPE_CK:
-            ret = convolution_direct_spe_ck_infer_forward_algorithm_mali_fp16(handle, inputDesc, filterDesc, convDesc, outputDesc, policy, activationMode, forwardRunInfo);
-            break;
-        case CONVOLUTION_ALGORITHM_GEMM:
-            ret = NOT_SUPPORTED;
-            break;
-        case CONVOLUTION_ALGORITHM_WINOGRAD:
-            ret = NOT_SUPPORTED;
-            break;
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
 }
 
 EE convolution_transform_filter_bytes_mali_fp16(TensorDesc            filterDesc, 
@@ -118,7 +71,7 @@ EE convolution_transform_filter_bytes_mali_fp16(TensorDesc            filterDesc
             ret = NOT_SUPPORTED;
             break;
         case CONVOLUTION_ALGORITHM_WINOGRAD:
-            ret = NOT_SUPPORTED;
+            ret = convolution_wino_transform_filter_bytes_mali_fp16(filterDesc, forwardRunInfo, gclmemFilterDesc, bytes);
             break;
         default:
             ret = NOT_SUPPORTED;
@@ -132,7 +85,8 @@ EE convolution_transform_filter_mali_fp16(GCLHandle_t          handle,
                                           GCLMem_t             filter,
                                           ForwardRunInfoMali_t forwardRunInfo,
                                           TensorDesc*          fltmemDesc,
-                                          GCLMem_t             fltmem){
+                                          GCLMem_t             fltmem,
+                                          GCLMem_t             tmp){
     EE ret = SUCCESS;
     ConvolutionForwardAlgorithm algorithm = (ConvolutionForwardAlgorithm)(forwardRunInfo->algorithm);
     switch (algorithm) {
@@ -146,7 +100,7 @@ EE convolution_transform_filter_mali_fp16(GCLHandle_t          handle,
             ret = NOT_SUPPORTED;
             break;
         case CONVOLUTION_ALGORITHM_WINOGRAD:
-            ret = NOT_SUPPORTED;
+            ret = convolution_wino_transform_filter_mali_fp16(handle, filterDesc, filter, forwardRunInfo, fltmemDesc, fltmem, tmp);
             break;
         default:
             ret = NOT_SUPPORTED;
@@ -174,7 +128,7 @@ EE convolution_infer_forward_tmp_bytes_mali_fp16(TensorDesc            inputDesc
             ret = NOT_SUPPORTED;
             break;
         case CONVOLUTION_ALGORITHM_WINOGRAD:
-            ret = NOT_SUPPORTED;
+            ret = convolution_wino_infer_forward_tmp_bytes_mali_fp16(inputDesc, filterDesc, outputDesc, convDesc, forwardRunInfo, bytes);
             break;
         default:
             ret = NOT_SUPPORTED;
@@ -213,7 +167,8 @@ EE convolution_mali_fp16(GCLHandle_t           handle,
             ret = NOT_SUPPORTED;
             break;
         case CONVOLUTION_ALGORITHM_WINOGRAD:
-            ret = NOT_SUPPORTED;
+            ret = convolution_wino_mali_fp16(handle, inputDesc, input, filterDesc, filter, convDesc, forwardRunInfo,
+                    biasDesc, bias, tmpBytes, tmpBuf, outputDesc, output, activationMode);
             break;
         default:
             ret = NOT_SUPPORTED;

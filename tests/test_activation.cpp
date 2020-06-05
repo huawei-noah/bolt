@@ -24,7 +24,9 @@ int activationTest(int argc, char** argv, DataType dt) {
     U32 iw = atoi(argv[4]);
 
     DataFormat df = DF_NCHWC8;
-    ActivationMode am = ACTIVATION_RELU;
+    ActivationDesc activationDesc;
+    activationDesc.mode = ACTIVATION_RELU;
+    memset(activationDesc.value, 0, sizeof(activationDesc.value));
 
     TensorDesc dataDesc = tensor4df(dt, df, in, ic, ih, iw); 
     U32 len = tensorNumElements(dataDesc);
@@ -34,10 +36,10 @@ int activationTest(int argc, char** argv, DataType dt) {
     memcpy(dataRef, data, len*bytesOf(dt));
 
     if (UT_CHECK) {
-        CHECK_STATUS(activation(dataDesc, data, am, UT_ARCH));
+        CHECK_STATUS(activation(dataDesc, data, activationDesc, dataDesc, data, UT_ARCH));
 
         // naive implement
-        CHECK_STATUS(activation(dataDesc, dataRef, am, CPU_GENERAL));
+        CHECK_STATUS(activation(dataDesc, dataRef, activationDesc, dataDesc, dataRef, CPU_GENERAL));
 
         // check
         ut_check_v(data, dataRef, len, dt, 0, __FILE__, __LINE__);
@@ -46,7 +48,7 @@ int activationTest(int argc, char** argv, DataType dt) {
     // benchmark
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        CHECK_STATUS(activation(dataDesc, data, am, UT_ARCH));
+        CHECK_STATUS(activation(dataDesc, data, activationDesc, dataDesc, data, UT_ARCH));
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;

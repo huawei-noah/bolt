@@ -64,19 +64,17 @@ EE mvm_arm(U32 row, U32 col, DataType dt, bool transpose,
     switch (dt) {
 #ifdef _USE_FP16
         case DT_F16:
-            mvm_fp16(row, col, transpose, (F16*)matrix, (F16*)vector, (F16*)result, arch);
+            ret = mvm_fp16(row, col, transpose, (F16*)matrix, (F16*)vector, (F16*)result, arch);
             break;
 #endif
 #ifdef _USE_FP32
         case DT_F32:
-            UNUSED(arch);
-            mvm_fp32(row, col, transpose, (F32*)matrix, (F32*)vector, (F32*)result);
+            ret = mvm_fp32(row, col, transpose, (F32*)matrix, (F32*)vector, (F32*)result);
             break;
 #endif
 #ifdef _USE_INT8
         case DT_I8:
-            UNUSED(arch);
-            mvm_int8(row, col, transpose, (INT8*)matrix, (INT8*)vector, (I32*)tmp, (I32*)result);
+            ret = mvm_int8(row, col, transpose, (INT8*)matrix, (INT8*)vector, (I32*)tmp, (I32*)result);
             break;
 #endif
         default:

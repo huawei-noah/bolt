@@ -24,10 +24,27 @@ Vec<int> topK_index(Tensor data, U32 topK){
         index[i] = i;
     }
 
+    U8* res = NULL;
+    auto mem = data.get_memory();
+#ifdef _USE_MALI
+    if(mem->get_mem_type() == OCLMem) {
+        std::shared_ptr<GCLMem> oclMem = mem->get_shared_ptr_caster();
+        if(!oclMem->desc.use_map) {
+            std::cout << "Error: Not support check unmapped gcl memory value" << std::endl;
+            exit(1);
+        }
+        res = oclMem->desc.map_ptr;
+    } else {
+#endif           
+        res = (U8*)mem->get_val();
+#ifdef _USE_MALI
+    }
+#endif           
+
     switch (desc.dt) {
-#ifdef _USE_FP16
+#ifdef __aarch64__
         case DT_F16: {
-            F16* dataPtr = (F16 *)data.get_val();
+            F16* dataPtr = (F16 *)res;
             sort(index.begin(), index.end(),
                 [&](const int& a, const int& b) {
                     return (dataPtr[a] > dataPtr[b]);
@@ -37,7 +54,7 @@ Vec<int> topK_index(Tensor data, U32 topK){
         }
 #endif
         case DT_F32: {
-            F32* dataPtr = (F32 *)data.get_val();
+            F32* dataPtr = (F32 *)res;
             sort(index.begin(), index.end(),
                 [&](const int& a, const int& b) {
                     return (dataPtr[a] > dataPtr[b]);

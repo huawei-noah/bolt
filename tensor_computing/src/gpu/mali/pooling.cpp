@@ -59,8 +59,8 @@ EE pooling_infer_output_size_mali(TensorDesc   inputDesc,
         }
     }
 
-    *outputDesc = tensor4df(idt, idf, in, ic, oh, ow);
     CHECK_STATUS(infer_gclmem_desc_ncwhc4(iw, ih, ic, pw, ph, ow, oh, ic, idt, idt, gclmemInputDesc, gclmemOutputDesc));
+    if(outputDesc) *outputDesc = tensor4df(idt, idf, in, ic, oh, ow);
     return SUCCESS;
 }
 EE pooling_mali(GCLHandle_t   handle,

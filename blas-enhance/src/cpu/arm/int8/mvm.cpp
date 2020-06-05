@@ -17,10 +17,11 @@
 #include "cpu/arm/int8/mvm.h"
 
 
-void mvm_int8(U32 row, U32 col, bool transpose, INT8* matrix, INT8* vector, I32* tmp, I32* result) {
+EE mvm_int8(U32 row, U32 col, bool transpose, INT8* matrix, INT8* vector, I32* tmp, I32* result) {
     if (transpose)
         mvm_col(row, col, matrix, vector, tmp, result);
     else
         mvm_row(row, col, matrix, vector, result);
+    return SUCCESS;
 }
 #endif

@@ -25,8 +25,8 @@
 class ScaleCPU: public Scale
 {
 public:
-    ScaleCPU(DataType dt, int numChannels, int numSource) :
-    Scale(dt, numChannels, numSource)
+    ScaleCPU(DataType dt, int axis, int numChannels, int numSource):
+        Scale(dt, axis, numChannels, numSource)
     {
         this->alpha = nullptr;
         this->beta = nullptr;
@@ -35,11 +35,15 @@ public:
     virtual EE init_weight_bias_from_model(U8** modelPtr) override
     {
         auto curOpWs = this->get_weightspec_ptr();
+        U32 weightNum = 0;
         if(modelPtr == nullptr){
-            this->numChannels = curOpWs.bytes_of_weight / UNI_MAX(1, bytesOf(curOpWs.mdt));
+            weightNum = curOpWs.bytes_of_weight / UNI_MAX(1, bytesOf(curOpWs.mdt));
+            if (0 == weightNum) {
+                weightNum = curOpWs.bytes_of_vec / UNI_MAX(1, bytesOf(curOpWs.mdt));
+            }
         }
 
-        TensorDesc weightDesc = tensor1d(this->dt, this->numChannels);
+        TensorDesc weightDesc = tensor1d(this->dt, weightNum);
         TensorDesc biasDesc   = weightDesc;
         std::shared_ptr<Tensor> modelWeightTensor(new Tensor());
         std::shared_ptr<Tensor> modelBiasTensor(new Tensor());
@@ -52,7 +56,7 @@ public:
             memcpy((U8*)modelWeightTensor->get_val(), *modelPtr, weightBytes);
             *modelPtr += weightBytes;
         } else {
-            modelWeightTensor->set_val(curOpWs.weight);
+            modelWeightTensor->set_shared_ptr(std::shared_ptr<U8>(curOpWs.weight));
         }
 
         U8* biasVal = nullptr;
@@ -66,7 +70,7 @@ public:
         }
 
         if (biasVal) {
-            modelBiasTensor->set_val(biasVal);
+            modelBiasTensor->set_shared_ptr(std::shared_ptr<U8>(biasVal));
         } else {
             modelBiasTensor->alloc();
             memset((U8*)modelBiasTensor->get_val(), 0, tensorNumBytes(biasDesc));
@@ -81,54 +85,48 @@ public:
     {
         UTIL_TIME_TIC(__CLASS_FUNCTION__)
         int inputTensorNumber = this->inputTensors.size();
-        Tensor dataTensor = this->inputTensors[this->dataID];;
-        TensorDesc inputDesc = dataTensor.get_desc();
-        U8* dataPtr = dataTensor.get_val();
+        Tensor inputTensor = this->inputTensors[this->dataID];;
+        Tensor outputTensor = this->outputTensors[0];
+        TensorDesc inputDesc = inputTensor.get_desc();
+        U8* inputPtr = inputTensor.get_val();
 
         if (inputTensorNumber == 1) {
             this->alpha = this->weightTensors[0].get_val();
             this->beta = this->biasTensors[0].get_val();
-#ifdef _USE_FP16
-            if (0 != this->numChannels) {  // Assume some padding has been done to the source tensors
-                this->from_nchwc8_to_nchw(&inputDesc, (F16*)dataPtr);
-                this->from_nchw_to_nchwc8_pad_removed(&inputDesc, (F16*)dataPtr);
-            }
-#endif
-            CHECK_STATUS(scale(this->alpha, this->beta, inputDesc, dataPtr, inputDesc, NULL, this->schedule));
+            CHECK_STATUS(scale(inputDesc, inputPtr, this->axis, this->alpha, this->beta,
+                inputTensor.get_desc(), outputTensor.get_val(), this->schedule));
         } else {
-            CHECK_STATUS(scale(this->inputTensors[1-this->dataID].get_val(), nullptr, inputDesc, dataPtr, inputDesc, NULL, this->schedule));  // alpha/beta/inputDesc/data
-        }
-
-        Tensor outputTensor = this->outputTensors[0];
-        U8* outputPtr = outputTensor.get_val();
-
-        if(dataPtr != outputPtr) {
-            memcpy(outputPtr, dataPtr, tensorNumBytes(inputDesc));
+            CHECK_STATUS(scale(inputDesc, inputPtr,
+                this->axis, this->inputTensors[1-this->dataID].get_val(), nullptr,
+                inputTensor.get_desc(), outputTensor.get_val(), this->schedule));
         }
         UTIL_TIME_TOC(__CLASS_FUNCTION__)
     }
 
     virtual EE infer_output_tensors_size(Vec<TensorDesc>inDims, Vec<TensorDesc>* outDims) override 
     {
-        DataType idt;
-        DataFormat idf;
-        U32 in, ic, ih, iw;    
-        CHECK_REQUIREMENT(tensorIs4d(inDims[0]));
-        CHECK_STATUS(tensor4dGet(inDims[0], &idt, &idf, &in, &ic, &ih, &iw));
+        I32 tmpAxis = (this->axis + inDims[0].nDims) % inDims[0].nDims;
+        tmpAxis = inDims[0].nDims - 1 - tmpAxis;
+        CHECK_REQUIREMENT(tmpAxis < (I32)inDims[0].nDims);
+        U32 ic = inDims[0].dims[tmpAxis];
 
         auto curOpWs = this->get_weightspec_ptr();
         this->alpha = curOpWs.weight;
         this->beta = curOpWs.vec;
-        U32 numChannels = curOpWs.bytes_of_weight / UNI_MAX(1, bytesOf(curOpWs.mdt));
+        U32 numChannels;
+        if (0 != curOpWs.bytes_of_weight) {
+            numChannels = curOpWs.bytes_of_weight / UNI_MAX(1, bytesOf(curOpWs.mdt));
+        } else if (0 != curOpWs.bytes_of_vec) {
+            numChannels = curOpWs.bytes_of_vec / UNI_MAX(1, bytesOf(curOpWs.mdt));
+        } else {
+            numChannels = 0;
+        }
 
         TensorDesc inputDesc;
         if (ic != numChannels && 0 != numChannels) {
-            std::cout << "[Warning] ScaleCPU input channels (IC) do not match. Assume some channel padding has been done earlier.\n";
-            std::cout << "IC is now " << ic << " but should be " << numChannels << ". \n";
-            CHECK_REQUIREMENT(numChannels % 8 == 0);
-            this->numChannels = numChannels / numSource;
-            std::cout << "Retrieving the starting " << this->numChannels << " channels from " << this->numSource << " equal portions.\n";
-            inputDesc = tensor4df(idt, idf, in, numChannels, ih, iw);
+            std::cout << "[ERROR] ScaleCPU input channels (IC) do not match. Perhaps some channel padding has been done earlier" << std::endl;
+            std::cout << "          IC is now " << ic << " but should be " << numChannels << std::endl;
+            CHECK_STATUS(NOT_SUPPORTED);
         } else {
             if (inDims.size() > 1 && tensorNumElements(inDims[1]) > tensorNumElements(inDims[0])) {
                 this->dataID = 1;
@@ -137,7 +135,6 @@ public:
         }
 
         CHECK_STATUS(scale_infer_output_size(inputDesc, &((*outDims)[0]), this->schedule));
-        
         return SUCCESS;
     }
 
@@ -164,77 +161,6 @@ public:
 #endif
 
 private:
-#ifdef _USE_FP16
-    EE from_nchwc8_to_nchw(TensorDesc *desc, F16 *data)
-    {
-        if (desc == nullptr || data == nullptr) {
-            CHECK_STATUS(NULL_POINTER);
-        }
-
-        DataType idt;
-        DataFormat idf;
-        U32 in, ic, ih, iw;
-        CHECK_STATUS(tensor4dGet(*desc, &idt, &idf, &in, &ic, &ih, &iw));
-        if (idf != DF_NCHWC8) {
-            CHECK_STATUS(NOT_MATCH);
-        }
-
-        *desc = tensor4df(idt, DF_NCHW, in, ic, ih, iw);
-
-        F16 *tmp = (F16 *)malloc(tensorNumBytes(*desc));
-        ic /= 8;
-        for (U32 n = 0; n < in; n++) {
-            for (U32 c = 0; c < ic; c++) {
-                for (U32 hw = 0; hw < ih*iw; hw++) {
-                    for (U32 c8 = 0; c8 < 8; c8++) {
-                        tmp[n*ic*8*ih*iw + (c*8 + c8)*ih*iw + hw] = data[n*ic*ih*iw*8 + c*ih*iw*8 + hw*8 + c8];
-                    }
-                }
-            }
-        }
-        memcpy(data, tmp, tensorNumBytes(*desc));
-        free(tmp);
-        return SUCCESS;
-    }
-
-    EE from_nchw_to_nchwc8_pad_removed(TensorDesc *desc, F16 *data)
-    {
-        if (desc == nullptr || data == nullptr) {
-            CHECK_STATUS(NULL_POINTER);
-        }
-
-        DataType idt;
-        DataFormat idf;
-        U32 in, ic, ih, iw;
-        CHECK_STATUS(tensor4dGet(*desc, &idt, &idf, &in, &ic, &ih, &iw));
-        if (idf != DF_NCHW) {
-            CHECK_STATUS(NOT_MATCH);
-        }
-
-        U32 padding = 8 - (this->numChannels % 8);
-        U32 perPadded = this->numChannels + padding;
-        *desc = tensor4df(idt, DF_NCHWC8, in, this->numChannels * this->numSource, ih, iw);
-
-        F16 *tmp = (F16 *)malloc(tensorNumBytes(*desc));
-        for (U32 n = 0; n < in; n++) {
-            for (U32 c = 0; c < ic; c++) {
-                if (c % perPadded >= this->numChannels) {
-                    continue;
-                }
-
-                U32 actualC = (c / perPadded) * this->numChannels + c % perPadded;
-                U32 o = actualC / 8;
-                U32 c8 = actualC % 8;
-                for (U32 hw = 0; hw < ih*iw; hw++) {
-                    tmp[n*ic*ih*iw + o*ih*iw*8 + hw*8 + c8] = data[n*ic*ih*iw + c*ih*iw + hw];
-                }
-            }
-        }
-        memcpy(data, tmp, tensorNumBytes(*desc));
-        free(tmp);
-        return SUCCESS;
-    }
-#endif
     U8* alpha;
     U8* beta;
 };

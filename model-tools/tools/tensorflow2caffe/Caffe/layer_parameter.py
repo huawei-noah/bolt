@@ -1,5 +1,6 @@
 from __future__ import absolute_import
 from . import caffe_pb2 as pb
+import numpy as np
 
 
 class LayerParameter():
@@ -42,7 +43,8 @@ class LayerParameter():
             blob.dim.append(i)
         self.layerParameter.input_param.CopyFrom(input_param)
 
-    def embed_param(self, input_dim, embedding_dim, transpose=False, weight_filler='xavier', bias_filler='constant', bias_term=False):
+    def embed_param(self, input_dim, embedding_dim,
+            transpose=False, weight_filler='xavier', bias_filler='constant', bias_term=False):
         embed_param = pb.EmbedParameter()
         embed_param.input_dim = input_dim
         embed_param.num_output = embedding_dim
@@ -69,21 +71,21 @@ class LayerParameter():
         self.layerParameter.slice_param.CopyFrom(slice_param)
 
     def convolution_param(self, num_output, kernel_size, stride=(1), pad=(0,),
-                   weight_filler_type='xavier', bias_filler_type='constant',
-                   bias_term=True, dilation=None,groups=None):
+                   bias_term=True, dilation=None, groups=None,
+                   weight_filler_type='xavier', bias_filler_type='constant'):
         if self.layerType not in ['Convolution','Deconvolution']:
             raise TypeError('[ERROR] this is not Convolution or Deconvolution')
         convolution_param=pb.ConvolutionParameter()
         convolution_param.num_output = num_output
-        convolution_param.kernel_size.extend(to_array(kernel_size))
-        convolution_param.stride.extend(to_array(stride))
-        convolution_param.pad.extend(to_array(pad))
+        convolution_param.kernel_size.extend(self.to_array(kernel_size))
+        convolution_param.stride.extend(self.to_array(stride))
+        convolution_param.pad.extend(self.to_array(pad))
         convolution_param.bias_term = bias_term
         convolution_param.weight_filler.type=weight_filler_type
         if bias_term:
             convolution_param.bias_filler.type = bias_filler_type
         if dilation:
-            convolution_param.dilation.extend(to_array(dilation))
+            convolution_param.dilation.extend(self.to_array(dilation))
         if groups:
             convolution_param.group = groups
         self.layerParameter.convolution_param.CopyFrom(convolution_param)
@@ -102,14 +104,24 @@ class LayerParameter():
                 pool_param.pad = pad
         self.layerParameter.pooling_param.CopyFrom(pool_param)
 
-    def batch_norm_param(self, use_global_stats=0, moving_average_fraction=None, eps=None):
+    def batch_norm_param(self, use_global_stats=0, moving_average_fraction=None, axis=1, eps=None):
         batch_norm_param = pb.BatchNormParameter()
         batch_norm_param.use_global_stats = use_global_stats
         if moving_average_fraction:
             batch_norm_param.moving_average_fraction = moving_average_fraction
         if eps:
             batch_norm_param.eps = eps
+        batch_norm_param.axis = axis
         self.layerParameter.batch_norm_param.CopyFrom(batch_norm_param)
+
+    def scale_param(self, axis=1, num_axes=1, filler='xavier', bias_term=False, bias_filler='constant'):
+        scale_param = pb.ScaleParameter()
+        scale_param.axis = axis
+        scale_param.num_axes = num_axes
+        scale_param.filler.type = filler
+        scale_param.bias_term = bias_term
+        scale_param.bias_filler.type = bias_filler
+        self.layerParameter.scale_param.CopyFrom(scale_param)
 
     def eltwise_param(self, operation):
         eltwise_param = pb.EltwiseParameter()
@@ -314,25 +326,40 @@ class LayerParameter():
 
 
     # caffe.proto
-    #    optional AxisMeanParameter axis_mean_param = 100016;
-    #    message AxisMeanParameter {
-    #      optional int axis = 1;
+    #    optional ReductionParameter reduction_param = 100016;
+    #    message ReductionParameter {
+    #      enum ReductionOp {
+    #        SUM = 1;
+    #        ASUM = 2;
+    #        SUMSQ = 3;
+    #        MEAN = 4;
+    #      }
+    #      optional ReductionOp operation = 1 [default = SUM]; // reduction operation
+    #      optional int axis = 2 [default = 0];
+    #      optional float coeff = 3 [default = 1.0]; // coefficient for output
+    #      optional bool keep_dim = 4 [default = false];
     #    }
     #
     # prototxt example
     #     layer {
-    #       name: "axis_mean"
-    #       type: "AxisMean"
-    #       bottom: "axis_mean_input"
-    #       top: "axis_mean_output"
-    #       axis_mean_param {
+    #       name: "reduction"
+    #       type: "Reduction"
+    #       bottom: "reduction_input"
+    #       top: "reduction_output"
+    #       reduction_param {
+    #         operation: SUM
     #         axis: 1
+    #         coeff: 1.0
+    #         keep_dim: false
     #       }
     #     } 
-    def axis_mean_param(self, axis):
-        axis_mean_param = pb.AxisMeanParameter()
-        axis_mean_param.axis = axis
-        self.layerParameter.axisMean_param.CopyFrom(axis_mean_param)
+    def reduction_param(self, operation, axis, keep_dim, coeff=1.0):
+        reduction_param = pb.ReductionParameter()
+        reduction_param.operation = operation
+        reduction_param.axis = axis
+        reduction_param.coeff = coeff
+        reduction_param.keep_dim = keep_dim
+        self.layerParameter.reduction_param.CopyFrom(reduction_param)
 
     # caffe.proto
     #    optional UnsqueezeParameter unsqueeze_param = 100017;
@@ -358,7 +385,8 @@ class LayerParameter():
     # caffe.proto
     #    optional RepeatParameter repeat_param = 100018;
     #    message RepeatParameter {
-    #      optional int axis = 1;
+    #      optional int loops = 1;
+    #      optional int axis = 2;
     #    }
     #
     # prototxt example
@@ -369,18 +397,24 @@ class LayerParameter():
     #       top: "repeat_output"
     #       repeat_param {
     #         loops: 1
+    #         loops: -1
     #       }
     #     }
-    def repeat_param(self, loops):
+    def repeat_param(self, loops, axis):
         repeat_param = pb.RepeatParameter()
         repeat_param.loops = loops
+        repeat_param.axis = axis
         self.layerParameter.repeat_param.CopyFrom(repeat_param)
 
 
     # caffe.proto
     #    optional CheckParameter check_param = 100019;
     #    message CheckParameter {
-    #      optional int axis = 1;
+    #      enum CheckOp {
+    #        EQUAL = 0;
+    #        GREATEQUAL = 0;
+    #      }
+    #      optional CheckOp operation = 1;
     #    }
     #
     # prototxt example
@@ -397,6 +431,10 @@ class LayerParameter():
         check_param = pb.CheckParameter()
         if operation == "equal":
             check_param.operation = 0
+        elif operation == "great":
+            check_param.operation = 1
+        elif operation == "greatequal":
+            check_param.operation = 2
         else:
             print("[ERROR] unsupported check condition %s" % (operation))
             exit(0)
@@ -447,10 +485,13 @@ class LayerParameter():
         self.layerParameter.copy_param.CopyFrom(copy_param)
 
     # caffe.proto
-    #    optional LSTMParameter lstm_param = 100020;
+    #    optional LSTMParameter lstm_param = 100021;
     #    message LSTMParameter {
     #      optional uint32 num_output = 1;
     #      optional int32 steps = 2 [default = -1];
+    #      optional int32 num_proj = 3 [default = 0];
+    #      optional float zoneout_cell = 4 [default = 0];
+    #      optional float zoneout_output = 5 [default = 0];
     #    }
     #
     # prototxt example
@@ -462,16 +503,22 @@ class LayerParameter():
     #       lstm_param {
     #         num_output: 1024
     #         steps: -1
+    #         num_proj: 0
+    #         zoneout_cell: 0
+    #         zoneout_output: 0
     #       }
     #     }
-    def lstm_param(self, num_output, steps):
+    def lstm_param(self, num_output, steps, num_proj, zoneout_cell, zoneout_output):
         lstm_param = pb.LSTMParameter()
         lstm_param.num_output = num_output
         lstm_param.steps = steps
+        lstm_param.num_proj = num_proj
+        lstm_param.zoneout_cell = zoneout_cell
+        lstm_param.zoneout_output = zoneout_output
         self.layerParameter.lstm_param.CopyFrom(lstm_param)
 
     # caffe.proto
-    #    optional MatMulParameter matmul_param = 100020;
+    #    optional MatMulParameter matmul_param = 100022;
     #    message MatMulParameter {
     #      optional bool transpose_a = 1 [default = false]; // Whether to use transpose matrixA
     #      optional bool transpose_b = 2 [default = false]; // Whether to use transpose matrixB
@@ -494,3 +541,192 @@ class LayerParameter():
         matmul_param.transpose_a = transpose_a
         matmul_param.transpose_b = transpose_b
         self.layerParameter.matmul_param.CopyFrom(matmul_param)
+
+    # caffe.proto
+    #    optional ConcatParameter concat_param = 100023;
+    #    message ConcatParameter {
+    #      optional int axis = 1;
+    #    }
+    #
+    # prototxt example
+    #     layer {
+    #       name: "concat"
+    #       type: "Concat"
+    #       bottom: "concat_input"
+    #       top: "concat_output"
+    #       concat_param {
+    #         axis: 1
+    #       }
+    #     }
+    def concat_param(self, axis):
+        concat_param = pb.ConcatParameter()
+        concat_param.axis = axis
+        self.layerParameter.concat_param.CopyFrom(concat_param)
+
+    # caffe.proto
+    #     optional RelativePositionEmbedParameter relative_position_embed_param = 100024;
+    #     message RelativePositionEmbedParameter {
+    #       optional uint32 num_output = 1; // The number of outputs for the layer
+    #       optional uint32 input_dim = 2;
+    #       optional bool transpose = 3 [default = false]; // Whether to use transpose dict
+    #       optional int32 axis = 4 [default = 1];
+    #     }
+    #
+    # prototxt example
+    #     layer {
+    #       name: "relative_position_embedding"
+    #       type: "RelativePositionEmbed"
+    #       bottom: ""
+    #       top: "relative_embedding"
+    #       concat_param {
+    #         num_output: 512
+    #         input_dim: 10
+    #         transpose: false
+    #         axis: 1
+    #       }
+    #     }
+    def relative_position_embed_param(self, input_dim, embedding_dim,
+            transpose=False, axis=1, weight_filler='xavier', bias_filler='constant', bias_term=False):
+        embed_param = pb.RelativePositionEmbedParameter()
+        embed_param.input_dim = input_dim
+        embed_param.num_output = embedding_dim
+        embed_param.transpose = transpose
+        embed_param.axis = axis
+        embed_param.weight_filler.type = weight_filler
+        embed_param.bias_term = bias_term
+        if bias_term:
+            embed_param.bias_filler.type = bias_filler
+        self.layerParameter.relative_position_embed_param.CopyFrom(embed_param)
+
+    # caffe.proto
+    #    optional AttentionMaskParameter attention_mask_param = 100025;
+    #    message AttentionMaskParameter {
+    #      optional int32 attention_length = 1 [default = -1];
+    #      optional bool same_length = 2 [default = false];
+    #      optional float mask = 3 [default = 10000];
+    #    }
+    #
+    # prototxt example
+    #     layer {
+    #       name: "attention_mask"
+    #       type: "AttentionMask"
+    #       bottom: "attention_mask_input"
+    #       top: "attention_mask_output"
+    #       attention_mask_param {
+    #         attention_length: -1
+    #         same_langth: false
+    #         mask: 10000
+    #       }
+    #     }
+    def attention_mask_param(self, attention_length, same_length, mask):
+        attention_mask_param = pb.AttentionMaskParameter()
+        attention_mask_param.attention_length = attention_length
+        attention_mask_param.same_length = same_length
+        attention_mask_param.mask = mask
+        self.layerParameter.attention_mask_param.CopyFrom(attention_mask_param)
+
+    # caffe.proto
+    #    optional RelativeShiftParameter relative_shift_param = 100026;
+    #    message RelativeShiftParameter {
+    #      optional int32 axis = 1 [default = 1];
+    #      optional int32 shift_length = 2 [default = 1];
+    #    }
+    #
+    # prototxt example
+    #     layer {
+    #       name: "relative_shift"
+    #       type: "RelativeShift"
+    #       bottom: "relative_shift_input"
+    #       top: "relative_shift_output"
+    #       relative_shift_param {
+    #         axis: 2
+    #         shift_length: 1
+    #       }
+    #     }
+    def relative_shift_param(self, axis, shift_length):
+        relative_shift_param = pb.RelativeShiftParameter()
+        relative_shift_param.axis = axis
+        relative_shift_param.shift_length = shift_length
+        self.layerParameter.relative_shift_param.CopyFrom(relative_shift_param)
+
+    # caffe.proto
+    #    optional PaddingParameter padding_param = 100026;
+    #    message PaddingParameter {
+    #      optional int32 axis = 1 [default = 1];
+    #      optional int32 shift_length = 2 [default = 1];
+    #    }
+    #
+    # prototxt example
+    #     layer {
+    #       name: "padding"
+    #       type: "Padding"
+    #       bottom: "padding_input"
+    #       top: "padding_output"
+    #       padding_param {
+    #         shape {
+    #           dim: 1
+    #           dim: 1
+    #           dim: 1
+    #           dim: 1
+    #         }
+    #         value {
+    #           dim: 0
+    #           dim: 0
+    #           dim: 0
+    #           dim: 0
+    #         }
+    #       }
+    #     }
+    def padding_param(self, shape, value=None):
+        padding_param = pb.PaddingParameter()
+        for i in np.array(shape).flatten():
+            padding_param.shape.dim.append(i)
+        if (value is not None):
+            for i in np.array(value).flatten():
+                padding_param.value.dim.append(i)
+        self.layerParameter.padding_param.CopyFrom(padding_param)
+
+    # caffe.proto
+    #    optional SoftmaxParameter softmax_param = 100027;
+    #    message SoftmaxParameter {
+    #      optional int axis = 1;
+    #    }
+    #
+    # prototxt example
+    #     layer {
+    #       name: "softmax"
+    #       type: "Softmax"
+    #       bottom: "softmax_input"
+    #       top: "softmax_output"
+    #       softmax_param {
+    #         axis: 1
+    #       }
+    #     }
+    def softmax_param(self, axis):
+        softmax_param = pb.SoftmaxParameter()
+        softmax_param.axis = axis
+        self.layerParameter.softmax_param.CopyFrom(softmax_param)
+
+    # caffe.proto
+    #    optional ClipParameter clip_param = 100027;
+    #    message ClipParameter {
+    #      required float min = 1;
+    #      required float max = 2;
+    #    }
+    #
+    # prototxt example
+    #     layer {
+    #       name: "clip"
+    #       type: "Clip"
+    #       bottom: "clip_input"
+    #       top: "clip_output"
+    #       clip_param {
+    #         min: 0
+    #         max: 1
+    #       }
+    #     }
+    def clip_param(self, min_value, max_value):
+        clip_param = pb.ClipParameter()
+        clip_param.min = min_value
+        clip_param.max = max_value
+        self.layerParameter.clip_param.CopyFrom(clip_param)

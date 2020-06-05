@@ -102,18 +102,21 @@ extern "C" {
         switch(work_dim){
             case 1:{
                 size_t gs = global_work_size[0];
-//                size_t ls = local_work_size[0];
-                ret = clEnqueueNDRangeKernel(queue, kernel, work_dim, NULL, &gs, NULL, num_events_in_wait_list, event_in_wait_list, event);
+                size_t ls = local_work_size[0];
+                size_t* ls_ptr = (ls == 0) ? NULL : &ls;
+                ret = clEnqueueNDRangeKernel(queue, kernel, work_dim, NULL, &gs, ls_ptr, num_events_in_wait_list, event_in_wait_list, event);
                 break;}
             case 2:{
                 size_t gs[2] = {global_work_size[0], global_work_size[1]};
-//                size_t ls[2] = {local_work_size[0],  local_work_size[1]};
-                ret = clEnqueueNDRangeKernel(queue, kernel, work_dim, NULL,  gs,  NULL, num_events_in_wait_list, event_in_wait_list, event);
+                size_t ls[2] = {local_work_size[0],  local_work_size[1]};
+                size_t* ls_ptr = (ls[0] == 0 || ls[1] == 0) ? NULL : ls;
+                ret = clEnqueueNDRangeKernel(queue, kernel, work_dim, NULL,  gs,  ls_ptr, num_events_in_wait_list, event_in_wait_list, event);
                 break;}
             case 3:{
                 size_t gs[3] = {global_work_size[0], global_work_size[1], global_work_size[2]};
-//                size_t ls[3] = {local_work_size[0],  local_work_size[1],  local_work_size[2]};
-                ret = clEnqueueNDRangeKernel(queue, kernel, work_dim, NULL,  gs,  NULL, num_events_in_wait_list, event_in_wait_list, event);
+                size_t ls[3] = {local_work_size[0],  local_work_size[1],  local_work_size[2]};
+                size_t* ls_ptr = (ls[0] == 0 || ls[1] == 0 || ls[2] == 0) ? NULL : ls;
+                ret = clEnqueueNDRangeKernel(queue, kernel, work_dim, NULL,  gs,  ls_ptr, num_events_in_wait_list, event_in_wait_list, event);
                 break;}
             default:
             return NOT_SUPPORTED;

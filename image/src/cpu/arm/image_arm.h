@@ -19,6 +19,7 @@
 #include "sys.h"
 #include "tensor_desc.h"
 #include "image.h"
+#include "arm_neon_expand.h"
 
 EE resize_bilinear_arm(TensorDesc inputDesc, void* input,
             TensorDesc outputDesc, void* output);

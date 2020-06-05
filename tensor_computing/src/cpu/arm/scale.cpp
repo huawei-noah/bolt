@@ -20,25 +20,33 @@
 #include "cpu/arm/fp16/tensor_computing_fp16.h"
 #endif
 
-EE scale_arm(void *alpha, void *beta, TensorDesc inputDesc, void* data)
+EE scale_arm(TensorDesc inputDesc, void* input,
+    I32 axis, void *alpha, void *beta,
+    TensorDesc outputDesc, void* output)
 {
-    DataType idt;
-    DataFormat idf;
-    U32 in, ic, ih, iw;    
-    CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    CHECK_REQUIREMENT(idf == DF_NCHWC8);
-    U32 elements_per_channel = ih * iw;
+    UNUSED(outputDesc);
+    U32 length = tensorNumElements(inputDesc);
+    axis = (axis + inputDesc.nDims) % inputDesc.nDims;
+    I32 in = inputDesc.dims[inputDesc.nDims - 1];
+    I32 ic = inputDesc.dims[inputDesc.nDims - 1 - axis];
+    I32 elements_per_channel = length / (in * ic);
+    if (inputDesc.df == DF_NCHWC8)
+        axis = inputDesc.nDims;
     EE ret = SUCCESS;
-    switch (idt) {
+    switch (inputDesc.dt) {
 #ifdef _USE_FP32
         case DT_F32: {
-            ret = scale_nchwc8_fp32((F32*)alpha, (F32*)beta, (F32*)data, in, ic, elements_per_channel);
+            ret = scale_fp32((F32*)input, 
+                axis, inputDesc.nDims, (F32*)alpha, (F32*)beta, in, ic, elements_per_channel,
+                (F32*)output);
             break;
         }
 #endif
 #ifdef _USE_FP16
         case DT_F16: {
-            ret = scale_nchwc8_fp16((F16*)alpha, (F16*)beta, (F16*)data, in, ic, elements_per_channel);
+            ret = scale_fp16((F16*)input, 
+                axis, inputDesc.nDims, (F16*)alpha, (F16*)beta, in, ic, elements_per_channel,
+                (F16*)output);
             break;
         }
 #endif

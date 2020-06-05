@@ -36,61 +36,7 @@ public:
         return OT_Squeeze;
     }
 
-    void run() override
-    {
-        UTIL_TIME_TIC(__CLASS_FUNCTION__)
-
-        Tensor inputTensor = this->inputTensors[0];
-        TensorDesc inputDesc = inputTensor.get_desc();
-        Tensor outputTensor = this->outputTensors[0];
-        U8* inPtr = inputTensor.get_val();
-        U8* outPtr = outputTensor.get_val();
-        if(inPtr != outPtr) {
-            memcpy(outPtr, inPtr, tensorNumBytes(inputDesc));
-        }
-
-        UTIL_TIME_TOC(__CLASS_FUNCTION__)
-    }
-
-    EE infer_output_tensors_size(Vec<TensorDesc>inDims, Vec<TensorDesc>* outDims) override
-    {
-        auto outDimsPtr = &((*outDims)[0]);
-        outDimsPtr->dt = inDims[0].dt;
-        int axis = this->axis;
-        if (axis < 0)
-            axis += inDims[0].nDims;
-        if (axis >= 0 && axis < (int)(inDims[0].nDims)) {
-            axis = inDims[0].nDims - 1 - axis;
-            for (int i = 0; i < axis; i++) {
-                outDimsPtr->dims[i] = inDims[0].dims[i];
-            }
-            if (inDims[0].dims[axis] != 1) {
-                CHECK_STATUS(NOT_MATCH);
-            }
-            for (int i = axis+1; i < (int)(inDims[0].nDims); i++) {
-                outDimsPtr->dims[i-1] = inDims[0].dims[i];
-            }
-            outDimsPtr->nDims = inDims[0].nDims - 1;
-        }
-        else {
-            for (U32 i = 0; i < inDims[0].nDims; i++)
-                outDimsPtr->dims[i] = inDims[0].dims[i];
-            for (U32 i = 0; i < this->dims.size(); i++) {
-                outDimsPtr->dims[inDims[0].nDims - 1 - this->dims[i]] = 0;
-            }
-            U32 index = 0;
-            for (U32 i = 0; i < inDims[0].nDims; i++) {
-                if (outDimsPtr->dims[i] != 0)
-                    outDimsPtr->dims[index++] = outDimsPtr->dims[i];
-            }
-            CHECK_REQUIREMENT(index + this->dims.size() == inDims[0].nDims);
-            outDimsPtr->nDims = index;
-        }
-        outDimsPtr->df = getTensorDefaultDataFormat(outDimsPtr->nDims);
-        return SUCCESS;
-    }
-
-private:
+protected:
     I32 axis;
     Vec<I32> dims;
 };

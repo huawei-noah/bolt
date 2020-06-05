@@ -43,7 +43,9 @@ int dilatedConvolutionTest(int argc, char** argv, DataType dt) {
 
     CHECK_REQUIREMENT(in == 1 && on == 1);
 
-    ActivationMode am = ACTIVATION_RELU;
+    ActivationDesc activationDesc;
+    activationDesc.mode = ACTIVATION_RELU;
+    activationDesc.value[0] = 0;
 
     TensorDesc inputDesc, filterDesc, outputDesc, biasDesc;
     ConvolutionDesc convDesc;
@@ -78,7 +80,7 @@ int dilatedConvolutionTest(int argc, char** argv, DataType dt) {
     // setup alg
     ConvolutionPolicy policy = CONVOLUTION_FASTEST;
     ConvolutionForwardAlgorithm alg = CONVOLUTION_ALGORITHM_NULL;
-    CHECK_STATUS(convolution_infer_forward_algorithm(inputDesc, filterDesc, outputDesc, convDesc, policy, &alg, dt, am, UT_ARCH));
+    CHECK_STATUS(convolution_infer_forward_algorithm(inputDesc, filterDesc, outputDesc, convDesc, policy, &alg, dt, activationDesc, UT_ARCH));
 
     // setup tmp
     U32 tmpBytes;
@@ -91,7 +93,7 @@ int dilatedConvolutionTest(int argc, char** argv, DataType dt) {
     U8 *ftm     = ut_input_v(ftmBytes/bytesOf(dt), dt, UT_INIT_ZERO);
     // trans filter
     TensorDesc ftmDesc;
-    CHECK_STATUS(convolution_transform_filter(filterDesc, filter, alg, &ftmDesc, ftm, UT_ARCH));
+    CHECK_STATUS(convolution_transform_filter(filterDesc, filter, alg, &ftmDesc, ftm, tmp, UT_ARCH));
 
     if(UT_CHECK){
         CHECK_STATUS(convolution(inputDesc, input,
@@ -101,7 +103,7 @@ int dilatedConvolutionTest(int argc, char** argv, DataType dt) {
                                  biasDesc, bias,
                                  tmpBytes, tmp,
                                  outputDesc, output,
-                                 am, UT_ARCH));
+                                 activationDesc, UT_ARCH));
 
         // naive implement
         CHECK_STATUS(convolution(inputDesc, input_ref,
@@ -111,7 +113,7 @@ int dilatedConvolutionTest(int argc, char** argv, DataType dt) {
                                  biasDesc, bias,
                                  tmpBytes, tmp,
                                  outputDesc, output_ref,
-                                 am, CPU_GENERAL));
+                                 activationDesc, CPU_GENERAL));
 
         // check
         ut_check_v(output, output_ref, output_size, dt, 1, __FILE__, __LINE__);
@@ -127,7 +129,7 @@ int dilatedConvolutionTest(int argc, char** argv, DataType dt) {
                                  biasDesc, bias,
                                  tmpBytes, tmp,
                                  outputDesc, output,
-                                 am, UT_ARCH));
+                                 activationDesc, UT_ARCH));
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;

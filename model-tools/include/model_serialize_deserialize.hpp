@@ -12,13 +12,14 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
-#ifndef _H_MODELSERIALIZEDESERIALIZE
-#define _H_MODELSERIALIZEDESERIALIZE
+#ifndef _H_MODEL_SERIALIZE_DESERIALIZE
+#define _H_MODEL_SERIALIZE_DESERIALIZE
 
 #include "model_tools.h"
 #include <string>
 
 
+#if defined(_BUILD_TEST) || defined(_USE_CAFFE) || defined(_USE_ONNX) || defined(_USE_TFLITE)
 EE serialize_header(const ModelSpec* spec, std::string* tmp);
 
 EE serialize_operators(const ModelSpec* spec, std::string* tmp);
@@ -31,24 +32,20 @@ EE write_to_file(std::string* bytes, const char* fn);
 
 EE serialize_model_to_file(const ModelSpec* spec, const char* fn);
 
+EE ms_datatype_converter(ModelSpec* original_ms, ModelSpec* target_ms, DataConvertType convert_mode, bool quantStorage=false);
+#endif
+
 EE deserialize_header(char* bytes, ModelSpec* spec, U32* pos);
 
 EE deserialize_operator(char* bytes, ModelSpec* spec, U32* pos);
 
 EE deserialize_weight(char* bytes, ModelSpec* spec, U32* pos);
 
-EE opeator_relationship(ModelSpec* spec);
-
-EE deserialize_model(char* bytes, ModelSpec* spec);
-
-EE read_from_file(const char* fn, std::string* bytes);
+EE operator_relationship(ModelSpec* spec);
 
 EE deserialize_model_from_file(const char* fn, ModelSpec* spec);
 
 EE str_copy(I8 *dst, const I8 *src, I32 src_len);
 
 void* mt_new_storage(size_t size);
-
-EE ms_datatype_converter(ModelSpec* original_ms, ModelSpec* target_ms, DataConvertType convert_mode);
-
 #endif

@@ -34,6 +34,36 @@ EE check_fp32(TensorDesc inputDescA, const F32* inputA,
         const F32 *arrayA = inputA + j * length;
         const F32 *arrayB = inputB + j * length;
         switch (checkMode) {
+            case CHECK_GREAT: {
+                uint32x4_t count_v = vdupq_n_u32(0);
+                I32 i = 0;
+                for (; i < length-3; i+=4) {
+                    float32x4_t a = vld1q_f32(arrayA + i);
+                    float32x4_t b = vld1q_f32(arrayA + i);
+                    count_v = vaddq_u32(count_v, vcgtq_f32(a, b));
+                }
+                I32 count = vaddvq_u32(count_v);
+                for (; i < length; i++)
+                    if (arrayA[i] > arrayB[i])
+                        count ++;
+                output[j] = (count == length);
+                break;
+            }
+            case CHECK_GREATEQUAL: {
+                uint32x4_t count_v = vdupq_n_u32(0);
+                I32 i = 0;
+                for (; i < length-3; i+=4) {
+                    float32x4_t a = vld1q_f32(arrayA + i);
+                    float32x4_t b = vld1q_f32(arrayA + i);
+                    count_v = vaddq_u32(count_v, vcgeq_f32(a, b));
+                }
+                I32 count = vaddvq_u32(count_v);
+                for (; i < length; i++)
+                    if (arrayA[i] >= arrayB[i])
+                        count ++;
+                output[j] = (count == length);
+                break;
+            }
             case CHECK_EQUAL: {
                 uint32x4_t count_v = vdupq_n_u32(0);
                 I32 i = 0;

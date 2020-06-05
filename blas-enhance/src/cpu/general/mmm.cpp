@@ -18,19 +18,29 @@
 
 
 template<typename T1, typename T2>
-inline void mmm(U32 N, U32 M, U32 K, T1* in, T1* w, T2* out) {
+inline void mmm(U32 N, U32 M, U32 K, bool transposeA, bool transposeB, T1* matrixA, T1* matrixB, T2* matrixC) {
    for (U32 i =0; i < M; i++) {
        for (U32 n = 0; n < N; n++) {
-            F32 out_f = 0;
+            F32 value = 0;
             for (U32 j = 0; j < K; j++) {
-                out_f += in[i * K + j] * w[j * N + n];
+                U32 indexA = 0, indexB = 0;
+                if (transposeA)
+                    indexA = j * M + i;
+                else
+                    indexA = i * K + j;
+                if (transposeB)
+                    indexB = n * K + j;
+                else
+                    indexB = j * N + n;
+                value += matrixA[indexA] * matrixB[indexB];
             }
-            out[i * N + n] += out_f;
+            matrixC[i * N + n] += value;
         }
     }
 }
 
 EE mmm_general(U32 matrixC_N, U32 matrixC_M, U32 matrixA_K,
+     bool transposeA, bool transposeB,
      DataType dt,
      const void* matrixAData, const void* matrixBData,
      void* matrixCData)
@@ -39,19 +49,19 @@ EE mmm_general(U32 matrixC_N, U32 matrixC_M, U32 matrixA_K,
     switch (dt) {
 #ifdef _USE_FP16
         case DT_F16: {
-            mmm<F16, F16>(matrixC_N, matrixC_M, matrixA_K, (F16*)matrixAData, (F16*)matrixBData, (F16*)matrixCData);
+            mmm<F16, F16>(matrixC_N, matrixC_M, matrixA_K, transposeA, transposeB, (F16*)matrixAData, (F16*)matrixBData, (F16*)matrixCData);
             break;
         }
 #endif
 #ifdef _USE_INT8
         case DT_I8: {
-            mmm<INT8, I32>(matrixC_N, matrixC_M, matrixA_K, (INT8*)matrixAData, (INT8*)matrixBData, (I32*)matrixCData);
+            mmm<INT8, I32>(matrixC_N, matrixC_M, matrixA_K, transposeA, transposeB, (INT8*)matrixAData, (INT8*)matrixBData, (I32*)matrixCData);
             break;
         }
 #endif
 #ifdef _USE_FP32
         case DT_F32: {
-            mmm<F32, F32>(matrixC_N, matrixC_M, matrixA_K, (F32*)matrixAData, (F32*)matrixBData, (F32*)matrixCData);
+            mmm<F32, F32>(matrixC_N, matrixC_M, matrixA_K, transposeA, transposeB, (F32*)matrixAData, (F32*)matrixBData, (F32*)matrixCData);
             break;
         }
 #endif

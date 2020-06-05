@@ -26,37 +26,38 @@ public:
     /**
     @param mode
     */
-    ActivationOCL(ActivationMode activeMode): Activation(activeMode) {}
+    ActivationOCL(ActivationDesc activationDesc): Activation(activationDesc) {}
 
     virtual void run() override
     {
         UTIL_TIME_TIC(__CLASS_FUNCTION__)
-
+        this->handle->curOpName = this->get_op_name(); 
         Tensor inputTensor = this->inputTensors[0];
         Tensor outputTensor = this->outputTensors[0];
         GCLMem_t inPtr = inputTensor.get_val();
         GCLMem_t outPtr = outputTensor.get_val();
-        if(inPtr->mem != outPtr->mem) CHECK_STATUS(NOT_SUPPORTED);
         TensorDesc inputDesc = inputTensor.get_desc();
-        CHECK_STATUS(activation(inputDesc, outPtr, this->activeMode, this->schedule, &this->oclExtInfo));
+        TensorDesc outputDesc = outputTensor.get_desc();
+        CHECK_STATUS(activation(inputDesc, inPtr, this->activationDesc, outputDesc, outPtr, this->schedule, &this->oclExtInfo));
 
         UTIL_TIME_TOC(__CLASS_FUNCTION__)
     }
 
     virtual EE infer_output_tensors_size(Vec<TensorDesc>inDims, Vec<TensorDesc>* outDims) override
     {
-        UNUSED(inDims);
-        UNUSED(outDims);
-        CHECK_STATUS(NOT_SUPPORTED);
-        return NOT_SUPPORTED;
+        this->oclExtInfo.maliInfo.gclmemInputDesc =  NULL;
+        this->oclExtInfo.maliInfo.gclmemOutputDesc = NULL;
+        CHECK_STATUS(activation_infer_output_size(inDims[0], &((*outDims)[0]), this->schedule, &this->oclExtInfo));
+        return SUCCESS;
     }
 
     
-    virtual EE infer_output_tensors_size(Vec<TensorDesc> inDims, Vec<TensorDesc>* outDims, Vec<GCLMemDesc>* gclmemInputDesc, Vec<GCLMemDesc>* gclmemOutputDesc) override
+    virtual EE infer_gclmem_desc(Vec<GCLMemDesc>* gclmemInputDesc, Vec<GCLMemDesc>* gclmemOutputDesc) override
     {
+        TensorDesc inputDesc  = this->inputTensors[0].get_desc();
         this->oclExtInfo.maliInfo.gclmemInputDesc =  &((*gclmemInputDesc)[0]);
         this->oclExtInfo.maliInfo.gclmemOutputDesc = &((*gclmemOutputDesc)[0]);
-        CHECK_STATUS(activation_infer_output_size(inDims[0], &((*outDims)[0]), this->schedule, &this->oclExtInfo));
+        CHECK_STATUS(activation_infer_output_size(inputDesc, NULL, this->schedule, &this->oclExtInfo));
         return SUCCESS;
     }
 };

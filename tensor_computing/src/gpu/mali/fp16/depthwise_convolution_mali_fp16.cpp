@@ -20,6 +20,7 @@
 #include "gpu/mali/fp16/depthwise_convolution_mali_fp16.h"
 #include "gpu/mali/fp16/depthwise_convolution_direct_mali_fp16.h"
 #include "gpu/mali/fp16/depthwise_pointwise_convolution_direct_mali_fp16.h"
+#include "gpu/mali/fp16/depthwise_pointwise_convolution_gemm_mali_fp16.h"
 
 inline EE depthwise_convolution_checkpara_mali_fp16(GCLHandle_t    handle,
                                                     TensorDesc     inputDesc, 
@@ -47,57 +48,6 @@ inline EE depthwise_convolution_checkpara_mali_fp16(GCLHandle_t    handle,
     return SUCCESS; 
 }
 
-EE depthwise_convolution_infer_forward_algorithm_mali_fp16(GCLHandle_t          handle,
-                                                           TensorDesc           inputDesc, 
-                                                           TensorDesc           filterDesc, 
-                                                           ConvolutionDesc      convDesc,
-                                                           TensorDesc           outputDesc,
-                                                           ConvolutionPolicy    policy, 
-                                                           ActivationMode       depthwiseActivationMode,
-                                                           ActivationMode       pointwiseActivationMode,
-                                                           ForwardRunInfoMali_t forwardRunInfo){
-    UNUSED(depthwiseActivationMode);                                                           
-    UNUSED(pointwiseActivationMode);                                                           
-    EE ret = SUCCESS;
-    DepthwiseConvolutionForwardAlgorithm algorithm = (DepthwiseConvolutionForwardAlgorithm)(forwardRunInfo->algorithm);
-    DataFormat fdf;
-    CHECK_STATUS(tensorSelectGet(filterDesc, NULL, &fdf, NULL, NULL, NULL, NULL));
-    
-    switch (fdf)
-    {
-        case DF_NCHW: {
-            if(algorithm == DEPTHWISE_CONVOLUTION_ALGORITHM_NULL) {
-                forwardRunInfo->algorithm = DEPTHWISE_CONVOLUTION_ALGORITHM_DIRECT;
-                algorithm                 = DEPTHWISE_CONVOLUTION_ALGORITHM_DIRECT;
-            }
-            break;
-        }
-        case DF_CHW_NC: {
-            if(algorithm == DEPTHWISE_CONVOLUTION_ALGORITHM_NULL) {
-                forwardRunInfo->algorithm = DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_DIRECT;
-                algorithm                 = DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_DIRECT;
-            }
-            break;
-        }
-        default:
-            return NOT_MATCH;
-    }
-
-    switch (algorithm) {
-        case DEPTHWISE_CONVOLUTION_ALGORITHM_DIRECT:
-            ret = depthwise_convolution_direct_infer_forward_algorithm_mali_fp16(handle, inputDesc, filterDesc, convDesc, outputDesc, policy, 
-                    depthwiseActivationMode, forwardRunInfo);
-            break;
-        case DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_DIRECT:
-            ret = depthwise_pointwise_convolution_direct_infer_forward_algorithm_mali_fp16(handle, inputDesc, filterDesc, convDesc, outputDesc, policy, 
-                    depthwiseActivationMode, forwardRunInfo);
-            break;
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
-}
 
 EE depthwise_convolution_transform_filter_bytes_mali_fp16(TensorDesc            filterDesc, 
                                                           ForwardRunInfoMali_t  forwardRunInfo,
@@ -111,6 +61,9 @@ EE depthwise_convolution_transform_filter_bytes_mali_fp16(TensorDesc            
             break;
         case DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_DIRECT:
             ret = depthwise_pointwise_convolution_direct_transform_filter_bytes_mali_fp16(filterDesc, forwardRunInfo, gclmemFilterDesc, bytes);
+            break;
+        case DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_GEMM:
+            ret = depthwise_pointwise_convolution_gemm_transform_filter_bytes_mali_fp16(filterDesc, forwardRunInfo, gclmemFilterDesc, bytes);
             break;
         default:
             ret = NOT_SUPPORTED;
@@ -134,6 +87,9 @@ EE depthwise_convolution_transform_filter_mali_fp16(GCLHandle_t          handle,
         case DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_DIRECT:
             ret = depthwise_pointwise_convolution_direct_transform_filter_mali_fp16(handle, filterDesc, filter, forwardRunInfo, fltmemDesc, fltmem);
             break;
+        case DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_GEMM:
+            ret = depthwise_pointwise_convolution_gemm_transform_filter_mali_fp16(handle, filterDesc, filter, forwardRunInfo, fltmemDesc, fltmem);
+            break;
         default:
             ret = NOT_SUPPORTED;
             break;
@@ -155,6 +111,9 @@ EE depthwise_convolution_infer_forward_tmp_bytes_mali_fp16(TensorDesc           
             break;
         case DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_DIRECT:
             ret = depthwise_pointwise_convolution_direct_infer_forward_tmp_bytes_mali_fp16(inputDesc, filterDesc, outputDesc, convDesc, forwardRunInfo, bytes);
+            break;
+        case DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_GEMM:
+            ret = depthwise_pointwise_convolution_gemm_infer_forward_tmp_bytes_mali_fp16(inputDesc, filterDesc, outputDesc, convDesc, forwardRunInfo, bytes);
             break;
         default:
             ret = NOT_SUPPORTED;
@@ -189,6 +148,10 @@ EE depthwise_convolution_mali_fp16(GCLHandle_t           handle,
             break;
         case DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_DIRECT:
             ret = depthwise_pointwise_convolution_direct_mali_fp16(handle, inputDesc, input, filterDesc, filter, convDesc, forwardRunInfo,
+                    biasDesc, bias, tmpBytes, tmpBuf, outputDesc, output, depthwiseActivationMode, pointwiseActivationMode);
+            break;
+        case DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_GEMM:
+            ret = depthwise_pointwise_convolution_gemm_mali_fp16(handle, inputDesc, input, filterDesc, filter, convDesc, forwardRunInfo,
                     biasDesc, bias, tmpBytes, tmpBuf, outputDesc, output, depthwiseActivationMode, pointwiseActivationMode);
             break;
         default:

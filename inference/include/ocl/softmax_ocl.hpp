@@ -22,32 +22,35 @@
 class SoftmaxOCL : public Softmax {
 public:
 
-    SoftmaxOCL(DataType dt) : Softmax(dt){}
+    SoftmaxOCL(DataType dt, int axis):
+        Softmax(dt, axis) {}
     
     virtual void run() override
     {
         UTIL_TIME_TIC(__CLASS_FUNCTION__)
+        this->handle->curOpName = this->get_op_name();
         Tensor inputTensor = this->inputTensors[0];
         TensorDesc inputDesc = inputTensor.get_desc();
         Tensor outputTensor = this->outputTensors[0];
         TensorDesc outputDesc = outputTensor.get_desc();
-        CHECK_STATUS(softmax(inputDesc, inputTensor.get_val(), outputDesc, outputTensor.get_val(), this->schedule, &this->oclExtInfo));
+        CHECK_STATUS(softmax(inputDesc, inputTensor.get_val(), axis, outputDesc, outputTensor.get_val(), this->schedule, &this->oclExtInfo));
         UTIL_TIME_TOC(__CLASS_FUNCTION__)
     }
 
     virtual EE infer_output_tensors_size(Vec<TensorDesc> inDims, Vec<TensorDesc>* outDims) override
     {
-        UNUSED(inDims);
-        UNUSED(outDims);
-        CHECK_STATUS(NOT_SUPPORTED);
-        return NOT_SUPPORTED;
+        this->oclExtInfo.maliInfo.gclmemInputDesc  = NULL;
+        this->oclExtInfo.maliInfo.gclmemOutputDesc = NULL;
+        CHECK_STATUS(softmax_infer_output_size(inDims[0], &((*outDims)[0]), this->schedule, &this->oclExtInfo));
+        return SUCCESS;
     }
 
-    virtual EE infer_output_tensors_size(Vec<TensorDesc> inDims, Vec<TensorDesc>* outDims, Vec<GCLMemDesc>* gclmemInputDesc, Vec<GCLMemDesc>* gclmemOutputDesc) override
+    virtual EE infer_gclmem_desc(Vec<GCLMemDesc>* gclmemInputDesc, Vec<GCLMemDesc>* gclmemOutputDesc) override
     {
+        TensorDesc inputDesc  = this->inputTensors[0].get_desc();
         this->oclExtInfo.maliInfo.gclmemInputDesc  = &((*gclmemInputDesc)[0]);
         this->oclExtInfo.maliInfo.gclmemOutputDesc = &((*gclmemOutputDesc)[0]);
-        CHECK_STATUS(softmax_infer_output_size(inDims[0], &((*outDims)[0]), this->schedule, &this->oclExtInfo));
+        CHECK_STATUS(softmax_infer_output_size(inputDesc, NULL, this->schedule, &this->oclExtInfo));
         return SUCCESS;
     }
 };

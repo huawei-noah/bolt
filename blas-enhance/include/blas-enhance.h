@@ -36,6 +36,31 @@ extern "C" {
                               U32 bytes, void* tmp,
                               TensorDesc resultDesc, void* result, Arch arch);
 
+    inline DataFormat targetFormat4MatrixB(DataType dt)
+    {
+        switch (dt) {
+            case DT_F16: {
+                return DF_NKN24;
+            }
+            case DT_F32: {
+#ifdef __aarch64__
+                return DF_NKN12;
+#else
+                return DF_NKN8;
+#endif
+            }
+            case DT_I8: {
+                return DF_NKN12K4;
+            }
+            default: {
+                CHECK_STATUS(NOT_SUPPORTED);
+                exit(1);
+            }
+        }
+    }
+
+    EE matrix_matrix_multiply_transform_rhs(TensorDesc desc, const void* src, TensorDesc* descTran,void* dst);
+
 #ifdef __cplusplus
 }
 #endif

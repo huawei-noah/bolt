@@ -281,23 +281,27 @@ extern "C" {
         size_t si  = size;
         I32 ret = clEnqueueFillBuffer(queue, buffer, pattern, pat_size, off, si, num_wait_events, wait_events, event);
         map_cl_error_2_ee(ret);
-        }
+    }
 
-    /*
-    EE enqueue_write_buffer_rect(CommandQueue queue, Mem buffer, cl_bool blocking_write,
-            const U32 *buffer_origin, const U32 *host_origin, const U32 *region,
-            U32 buffer_row_pitch, U32 buffer_slice_pitch, U32 host_row_pitch,
-            U32 host_slice_pitch, const void *ptr, U32 num_wait_events,
-            const Event *wait_events, Event *event) {
-        I32 ret = clEnqueueWriteBufferRect(queue, buffer, blocking_write,
-                const size_t *buffer_origin, const size_t *host_origin, const size_t *region,
-                buffer_row_pitch, buffer_slice_pitch, host_row_pitch,
-                host_slice_pitch, ptr, num_wait_events, wait_events, event);
+    inline EE enqueue_write_buffer_rect(CommandQueue queue, Mem buffer, cl_bool blocking_write, const U32 *buffer_origin, const U32 *host_origin, 
+        const U32 *region, U32 buffer_row_pitch, U32 buffer_slice_pitch, U32 host_row_pitch, U32 host_slice_pitch, const void *ptr, 
+        U32 num_wait_events, const Event *wait_events, Event *event) {
+        size_t b_ori[3];
+        size_t h_ori[3];
+        size_t reg[3];
+        size_t b_rp = buffer_row_pitch;
+        size_t b_sp = buffer_slice_pitch;
+        size_t h_rp = host_row_pitch;
+        size_t h_sp = host_slice_pitch;
+        for(U32 i = 0; i < 3; i++) {
+                b_ori[i] = buffer_origin[i];
+                h_ori[i] = host_origin[i];
+                reg[i]   = region[i];
+        }
+        I32 ret = clEnqueueWriteBufferRect(queue, buffer, blocking_write, b_ori, h_ori, reg, b_rp, b_sp, h_rp, h_sp,
+            ptr, num_wait_events, wait_events, event);
         map_cl_error_2_ee(ret);
     }
-
-    }
-    */
 
     inline EE enqueue_copy_buffer(CommandQueue queue, Mem src_buffer, Mem dst_buffer,
             U32 src_offset, U32 dst_offset, U32 size, U32 num_wait_events,
@@ -382,6 +386,34 @@ extern "C" {
                 org, reg, num_wait_events, wait_events, event);
         map_cl_error_2_ee(ret);
     }
+
+    inline EE enqueue_copy_image_to_buffer(CommandQueue queue, Mem src_image, Mem dst_buffer,
+            const U32 *src_origin, const U32 *region, U32 dst_offset,
+            U32 num_wait_events, const cl_event *wait_events, cl_event *event) {
+        size_t org [3];
+        size_t reg [3];
+        for(U32 i = 0; i < 3; ++i){
+            org[i] = (size_t)src_origin[i];
+            reg[i] = (size_t)region[i];
+        }
+        I32 ret = clEnqueueCopyImageToBuffer(queue, src_image, dst_buffer, org, reg, dst_offset, 
+            num_wait_events, wait_events, event);
+        map_cl_error_2_ee(ret);
+    }
+
+    inline EE enqueue_copy_buffer_to_image(CommandQueue queue, Mem src_buffer, Mem dst_image,
+            U32 src_offset, const U32 *dst_origin, const U32 *region,
+            U32 num_wait_events, const cl_event *wait_events, cl_event *event) {
+        size_t org [3];
+        size_t reg [3];
+        for(U32 i = 0; i < 3; ++i){
+            org[i] = (size_t)dst_origin[i];
+            reg[i] = (size_t)region[i];
+        }
+        I32 ret = clEnqueueCopyBufferToImage(queue, src_buffer, dst_image,
+                src_offset, org, reg, num_wait_events, wait_events, event);
+        map_cl_error_2_ee(ret);
+    }
 /*
 
     EE enqueue_copy_image(CommandQueue queue, Mem src_image, Mem dst_image,
@@ -393,23 +425,7 @@ extern "C" {
         map_cl_error_2_ee(ret);
     }
 
-    EE enqueue_copy_image_to_buffer(CommandQueue queue, Mem src_image, Mem dst_buffer,
-            const U32 *src_origin, const U32 *region, U32 dst_offset,
-            U32 num_wait_events, const cl_event *wait_events, cl_event *event) {
-        I32 ret = clEnqueueCopyImageToBuffer(queue, src_image, dst_buffer,
-                const size_t *src_origin, const size_t *region, dst_offset,
-                num_wait_events, wait_events, event);
-        map_cl_error_2_ee(ret);
-    }
 
-    EE enqueue_copy_buffer_to_image(CommandQueue queue, Mem src_buffer, Mem dst_image,
-            U32 src_offset, const U32 *dst_origin, const U32 *region,
-            U32 num_wait_events, const cl_event *wait_events, cl_event *event) {
-        I32 ret = clEnqueueCopyBufferToImage(queue, src_buffer, dst_image,
-                src_offset, const size_t *dst_origin, const size_t *region,
-                num_wait_events, wait_events, event);
-        map_cl_error_2_ee(ret);
-    }
 
     EE enqueue_map_image(CommandQueue queue, Mem image, cl_bool blocking_map,
             cl_map_flags map_flags, const U32 *origin, const U32 *region,

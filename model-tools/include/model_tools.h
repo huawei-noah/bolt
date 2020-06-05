@@ -65,6 +65,7 @@ extern "C" {
     } CastParamSpec;
 
     typedef struct {
+        int axis;
         int num_concat;
     } ScaleParamSpec;
 
@@ -93,7 +94,7 @@ extern "C" {
     } ActivationSpec;
 
     typedef struct {
-        U32 num_kernels;
+        U32 num_outputs;
         U32 kernel_size_h;
         U32 kernel_size_w;
         U32 stride_h;
@@ -126,10 +127,15 @@ extern "C" {
 
     typedef struct {
         U32 num_outputs;
+        U32 num_slices;
+        I32 slice_point[32];
     } FullyConnectedParamSpec;
 
     typedef struct{
+        int axis;
         F32 eps;
+        F32 gama;
+        F32 momentum;
     } BatchNormParamSpec;
 
     typedef struct {
@@ -161,9 +167,9 @@ extern "C" {
     } ReshapeParamSpec;
 
     typedef struct {
-        U32 slice_points[8];
+        I32 slice_points[8];
         U32 slice_size;
-        U32 axis;
+        I32 axis;
     } SliceParamSpec;
 
     typedef struct {
@@ -180,6 +186,9 @@ extern "C" {
     typedef struct {
         U32 num_output;
         I32 steps;
+        I32 num_projection;
+        float zoneout_cell;
+        float zoneout_output;
     } LSTMParamSpec;
 
     typedef struct {
@@ -189,16 +198,19 @@ extern "C" {
     } BilateralSliceApplyParamSpec;
     typedef struct {
         I32 axis;
-    } AxisMeanParamSpec;
+        ReductionMode reduction_mode;
+        float coeff;
+        bool keep_dim;
+    } ReductionParamSpec;
 
     typedef struct {
         I32 axis;
     } ArgMaxParamSpec;
 
     typedef struct {
-        U32 src_dims[3];
-        U32 dst_dims[3];
-        U32 length;
+        I32 src_dims[3];
+        I32 dst_dims[3];
+        I32 length;
     } CopyParamSpec;
 
     typedef struct {
@@ -207,6 +219,7 @@ extern "C" {
 
     typedef struct {
         int loops;
+        int axis;
     } RepeatParamSpec;
 
     typedef struct {
@@ -221,6 +234,62 @@ extern "C" {
         bool transpose_a;
         bool transpose_b;
     } MatMulParamSpec;
+
+    typedef struct {
+        int attention_length;
+        bool same_length;
+        float mask;
+    } AttentionMaskParamSpec;
+
+    typedef struct {
+        U32 input_dim;
+        U32 num_output;
+        bool bias_term;
+        bool transpose;
+        int axis;
+    } RelativePositionEmbedParamSpec;
+
+    typedef struct {
+        int axis;
+        int shift_length;
+    } RelativeShiftParamSpec;
+
+    typedef struct {
+        int axis;
+        int num_concat;
+    } ConcatParamSpec;
+
+    typedef struct {
+        int axis;
+    } SoftmaxParamSpec;
+
+    typedef struct {
+        U32 begin_arr[8];
+        U32 size_arr[8];
+        U32 dim_size;
+    } TfSliceParamSpec;
+
+    typedef struct {
+        F32 min_sizes[2];
+        F32 max_sizes[2];
+        F32 aspect_ratios[2];
+        U32 flip;
+        U32 clip;
+        F32 variances[4];
+        U32 image_h;
+        U32 image_w;
+        F32 step_h;
+        F32 step_w;
+        F32 offset;   
+    } PriorBoxParamSpec;
+
+    typedef struct {
+        U32 num_class;
+        F32 nms_threshold;
+        U32 nms_top_k;
+        U32 keep_top_k;
+        F32 confidence_threshold;                
+    } DetectionOutputParamSpec;
 
     typedef union ParameterSpec {
         ParameterSpec() {}
@@ -246,7 +315,7 @@ extern "C" {
         CastParamSpec cast_spec;
         BilateralSliceApplyParamSpec bilateral_slice_apply_spec;
         ScaleParamSpec scale_spec;
-        AxisMeanParamSpec axis_mean_spec;
+        ReductionParamSpec reduction_spec;
         CopyParamSpec copy_spec;
         CheckParamSpec check_spec;
         RepeatParamSpec repeat_spec;
@@ -256,7 +325,20 @@ extern "C" {
         MatMulParamSpec matmul_spec;
         InterpParamSpec interp_spec;
         FlattenParamSpec flatten_spec;
+        AttentionMaskParamSpec attention_mask_spec;
+        RelativePositionEmbedParamSpec relative_position_embed_spec;
+        RelativeShiftParamSpec relative_shift_spec;
+        ConcatParamSpec concat_spec;
+        SoftmaxParamSpec softmax_spec;
+        TfSliceParamSpec tf_slice_spec;
+        PriorBoxParamSpec prior_box_spec;
+        DetectionOutputParamSpec detection_output_spec;
     } ParameterSpec;
+
+    typedef struct {
+        int num_scale;
+        F32 *scale;
+    } QuantSpec;
 
     typedef struct {
         I8 name[NAME_LEN];
@@ -266,6 +348,8 @@ extern "C" {
         U32 num_outputs;
         I8 **output_tensors_name;
         I32 *tensor_positions;
+        U32 num_quant_feature;
+        QuantSpec *feature_scale;
         ParameterSpec ps;
     } OperatorSpec;
 
@@ -276,6 +360,8 @@ extern "C" {
         U8* weight;
         U32 bytes_of_vec = 0;
         U8* vec;
+        U32 num_quant_scale;  // Merged FC may have multiple weight scales
+        QuantSpec *weight_scale;
     } WeightSpec;
 
     typedef struct {
