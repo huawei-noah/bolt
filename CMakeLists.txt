@@ -24,7 +24,7 @@ add_subdirectory(tools)
 add_subdirectory(kits)
 add_subdirectory(tests)
 add_custom_target(bolt_library ALL
-    COMMAND ./CI_SCRIPTS/build_light_bolt.sh ${CMAKE_BINARY_DIR} ${USE_MALI} ${USE_DEBUG} ${USE_LLVM_CLANG} ${CMAKE_CXX_COMPILER} ${CMAKE_AR} ${CMAKE_STRIP}
+    COMMAND ./scripts/build_light_bolt.sh ${CMAKE_BINARY_DIR} ${USE_MALI} ${USE_DEBUG} ${USE_LLVM_CLANG} ${CMAKE_CXX_COMPILER} ${CMAKE_AR} ${CMAKE_STRIP}
     WORKING_DIRECTORY $ENV{BOLT_ROOT})
 
 if (USE_MALI)

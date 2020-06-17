@@ -89,7 +89,7 @@ if [ ${exe_on_device}  == true ] ; then
         do
             adb -s ${device} push ${file} ${device_dir} || exit 1
         done
-        ${script_dir}/CI_SCRIPTS/push_third_party.sh -l ${script_dir}/third_party/llvm -d ${device} -p ${device_dir} || exit 1
+        ${script_dir}/scripts/push_third_party.sh -l ${script_dir}/third_party/llvm -d ${device} -p ${device_dir} || exit 1
     fi
 fi
 
