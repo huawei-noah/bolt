@@ -1,0 +1,22 @@
+name: "facesr_flow"
+input: "geninput"
+output: "pixel_shuffle_final_out"
+node {
+  name: "geninput"
+  type: "Input"
+  output: "geninput"
+  input_type: "FLOAT16"
+  input_format: "NCHW"
+  input_dim: 1
+  input_dim: 64
+  input_dim: 48
+  input_dim: 48
+}
+node {
+  name: "facesr_inference"
+  type: "Inference"
+  input: "geninput"
+  output: "pixel_shuffle_final_out"
+  inference_parameter: "/data/local/tmp/CI/model_zoo/caffe_models/facesr/facesr_f16.bolt"
+  inference_parameter: "/data/local/tmp/CI/test"
+}

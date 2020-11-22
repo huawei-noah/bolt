@@ -1,0 +1,139 @@
+name: "prediction"
+input: "label"
+input: "prediction_net_layer0_kmem"
+input: "prediction_net_layer0_vmem"
+input: "prediction_net_layer1_kmem"
+input: "prediction_net_layer1_vmem"
+input: "prediction_net_layer2_kmem"
+input: "prediction_net_layer2_vmem"
+input: "prediction_net_layer3_kmem"
+input: "prediction_net_layer3_vmem"
+output: "prediction_net_ln"
+output: "prediction_net_layer0_k_neg_slice"
+output: "prediction_net_layer0_v_neg_slice"
+output: "prediction_net_layer1_k_neg_slice"
+output: "prediction_net_layer1_v_neg_slice"
+output: "prediction_net_layer2_k_neg_slice"
+output: "prediction_net_layer2_v_neg_slice"
+output: "prediction_net_layer3_k_neg_slice"
+output: "prediction_net_layer3_v_neg_slice"
+node {
+  name: "label"
+  type: "Input"
+  output: "label"
+  input_type: "UINT32"
+  input_format: "NORMAL"
+  input_dim: 1
+  input_dim: 1
+}
+node {
+  name: "prediction_net_layer0_kmem"
+  type: "Input"
+  output: "prediction_net_layer0_kmem"
+  input_type: "FLOAT32"
+  input_format: "NCHW"
+  input_dim: 1
+  input_dim: 3
+  input_dim: 8
+  input_dim: 64
+}
+node {
+  name: "prediction_net_layer0_vmem"
+  type: "Input"
+  output: "prediction_net_layer0_vmem"
+  input_type: "FLOAT32"
+  input_format: "NCHW"
+  input_dim: 1
+  input_dim: 3
+  input_dim: 8
+  input_dim: 64
+}
+node {
+  name: "prediction_net_layer1_kmem"
+  type: "Input"
+  output: "prediction_net_layer1_kmem"
+  input_type: "FLOAT32"
+  input_format: "NCHW"
+  input_dim: 1
+  input_dim: 5
+  input_dim: 8
+  input_dim: 64
+}
+node {
+  name: "prediction_net_layer1_vmem"
+  type: "Input"
+  output: "prediction_net_layer1_vmem"
+  input_type: "FLOAT32"
+  input_format: "NCHW"
+  input_dim: 1
+  input_dim: 5
+  input_dim: 8
+  input_dim: 64
+}
+node {
+  name: "prediction_net_layer2_kmem"
+  type: "Input"
+  output: "prediction_net_layer2_kmem"
+  input_type: "FLOAT32"
+  input_format: "NCHW"
+  input_dim: 1
+  input_dim: 7
+  input_dim: 8
+  input_dim: 64
+}
+node {
+  name: "prediction_net_layer2_vmem"
+  type: "Input"
+  output: "prediction_net_layer2_vmem"
+  input_type: "FLOAT32"
+  input_format: "NCHW"
+  input_dim: 1
+  input_dim: 7
+  input_dim: 8
+  input_dim: 64
+}
+node {
+  name: "prediction_net_layer3_kmem"
+  type: "Input"
+  output: "prediction_net_layer3_kmem"
+  input_type: "FLOAT32"
+  input_format: "NCHW"
+  input_dim: 1
+  input_dim: 9
+  input_dim: 8
+  input_dim: 64
+}
+node {
+  name: "prediction_net_layer3_vmem"
+  type: "Input"
+  output: "prediction_net_layer3_vmem"
+  input_type: "FLOAT32"
+  input_format: "NCHW"
+  input_dim: 1
+  input_dim: 9
+  input_dim: 8
+  input_dim: 64
+}
+node {
+  name: "prediction_inference"
+  input: "label"
+  input: "prediction_net_layer0_kmem"
+  input: "prediction_net_layer0_vmem"
+  input: "prediction_net_layer1_kmem"
+  input: "prediction_net_layer1_vmem"
+  input: "prediction_net_layer2_kmem"
+  input: "prediction_net_layer2_vmem"
+  input: "prediction_net_layer3_kmem"
+  input: "prediction_net_layer3_vmem"
+  output: "prediction_net_ln"
+  output: "prediction_net_layer0_k_neg_slice"
+  output: "prediction_net_layer0_v_neg_slice"
+  output: "prediction_net_layer1_k_neg_slice"
+  output: "prediction_net_layer1_v_neg_slice"
+  output: "prediction_net_layer2_k_neg_slice"
+  output: "prediction_net_layer2_v_neg_slice"
+  output: "prediction_net_layer3_k_neg_slice"
+  output: "prediction_net_layer3_v_neg_slice"
+  infer_output_size_parameter: "predictionInferOutputSize"
+  inference_parameter: "/data/local/tmp/CI/model_zoo/caffe_models/asr_convolution_transformer_prediction_net/asr_convolution_transformer_prediction_net_f32.bolt"
+}

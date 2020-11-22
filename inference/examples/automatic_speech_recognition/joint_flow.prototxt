@@ -1,0 +1,33 @@
+name: "joint_flow"
+input: "encoder"
+input: "prediction_net"
+output: "output_argmax"
+node {
+  name: "encoder"
+  type: "Input"
+  output: "encoder"
+  input_type: "FLOAT32"
+  input_format: "MTK"
+  input_dim: 1
+  input_dim: 1
+  input_dim: 512
+}
+node {
+  name: "prediction_net"
+  type: "Input"
+  output: "prediction_net"
+  input_type: "FLOAT32"
+  input_format: "MTK"
+  input_dim: 1
+  input_dim: 1
+  input_dim: 512
+}
+node {
+  name: "joint_inference"
+  type: "Inference"
+  input: "encoder"
+  input: "prediction_net"
+  output: "output_argmax"
+  infer_output_size_parameter: "jointInferOutputSize"
+  inference_parameter: "/data/local/tmp/CI/model_zoo/caffe_models/asr_convolution_transformer_joint_net/asr_convolution_transformer_joint_net_f32.bolt"
+}

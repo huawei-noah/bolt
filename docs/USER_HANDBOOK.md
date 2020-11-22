@@ -1,338 +1,322 @@
 Before you try any step described in this document, please make sure you have installed Bolt correctly. You can refer to [INSTALL.md](INSTALL.md) for more details.
 
-
+[Basic Usage](#basic-usage)  
+&nbsp;&nbsp;&nbsp;&nbsp;[Model Conversion](#model-conversion)   
+&nbsp;&nbsp;&nbsp;&nbsp;[Model Inference](#model-inference)  
+&nbsp;&nbsp;&nbsp;&nbsp;[API](#api)   
+&nbsp;&nbsp;&nbsp;&nbsp;[Performance Profiling](#performance-profiling)  
+[Advanced Features](#advanced-features)  
+&nbsp;&nbsp;&nbsp;&nbsp;[INT8 Post Training Quantization](#int8-post-traning-quantization)  
+&nbsp;&nbsp;&nbsp;&nbsp;[BNN Network Support](#bnn-network-support)  
+&nbsp;&nbsp;&nbsp;&nbsp;[Algorithm Tuning for Key Layers](#algorithm-tuning-for-key-layers)  
+&nbsp;&nbsp;&nbsp;&nbsp;[Time-Series Data Acceleration](#time-series-data-acceleration)  
+[Feedback](#feedback) 
 
 # Basic Usage
 
-### Model Conversion
+It's quiet easy for users to get started with bolt by learning the following two steps: "Model conversion" and "Model inference". And after successfully running bolt with your model,  you can further explore the "API" section to customize your application.
 
+## Model Conversion
 
+![ModelConversion](images/ModelConversion.PNG)
 
-1. **Caffe model to Bolt model**
+[X2bolt](models_tools/tools/X2bolt/X2bolt.cpp) is a general converter, which focuses on converting different deep learning model to bolt model. Currently, X2bolt support caffe/onnx/tflite/tensorflow model conversion. Here we list the examples of two typical model conversions for ARM backend, for X86 backend the ADB tool is not required, bolt X86 only support FP32 precision inference now.
 
-  <1> Push the `caffe2bolt` executable file to the phone; 
+### resnet50(caffe) Model Conversion
 
-  <2> Push the caffe model to the phone;
+resnet50(caffe) model contains two model files : *resnet50.prototxt* and *resnet50.caffemodel*. Prepare these two model files on */home/resnet/* in advance.
 
-  <3> Use `caffe2bolt` to transform model of caffe format to model of bolt format
+<1> Push your model to the phone;
 
-  		Parameters:    caffe_model_path    caffe_model_name    precision
+```
+adb push /home/resnet50/ /data/local/tmp/models/resnet50
 
-  ​        Note: Your should make sure the .prototxt file and the .caffemodel file have the same model name
-
-Example: Transform mobilenet_v1 of caffe format into bolt format
-
-```shell
-<1> adb push /home/bolt/install_llvm/tools/caffe2bolt /data/local/bolt/tools/caffe2bolt
-<2> adb push /home/bolt/models/caffe/mobilenet_v1/ /data/local/bolt_model/caffe/mobilenet_v1
-<3> adb shell "./data/local/bolt/tools/caffe2bolt ./data/local/bolt_model/caffe/mobilenet_v1/ mobilenet_v1 FP16"
+adb shell "ls /data/local/tmp/models/resnet50"
+# command output$ resnet50.caffemodel resnet50.prototxt
 ```
 
-  After running, you can see the mobilenet_v1_f16.bolt file in the same directory with the original caffe model.
+<2> Push the ***X2bolt*** to the phone and get the help information of ***X2bolt*** ; 
 
-  The suffix "_f16" indicates that the bolt model is saved in FP16 representations, and will be run with FP16 operations (ARMv8.2) by default.
-
-  If you want to deploy the model as FP32, please set the last parameter to "FP32" for caffe2bolt. You will then get mobilenet_v1_f32.bolt.
-
-  This precision setting also applies to onnx2bolt and tflite2bolt.
-
-
-
-2. **Onnx model to Bolt model**	
-
-  <1> Push the `onnx2bolt` executable file to the phone;
-
-  <2> Push the onnx model to the phone;
-
-  <3> Use `onnx2bolt` to transform model of onnx format to model of bolt format
-
-  ​		Parameters:    onnx_model_path    onnx_model_name    remove_op_number    precision    inputN    inputC    inputH    inputW
-
-Example: Transform ghostnet of onnx format into bolt format
-
-```shell
-<1> adb push /home/bolt/tools/onnx2bolt /data/local/bolt/tools/onnx2bolt
-<2> adb push /home/bolt/models/onnx/ghostnet/ /data/local/bolt_model/caffe/ghostnet
-<3> adb shell "./data/local/bolt/tools/onnx2bolt ./data/local/bolt_model/onnx/ghostnet/ ghostnet 3 FP16 1 3 224 224"
+```
+adb push /home/bolt/install_arm_gnu/tools/X2bolt /data/local/tmp/bolt/tools/X2bolt
+    
+adb shell "ls /data/local/tmp/bolt/tools/"
+# command output$ X2bolt
+  
+adb shell "./X2bolt --help"    
 ```
 
-  After running, you can see the ghostnet_f16.bolt file in /data/local/bolt_model/onnx/ghostnet/ on the phone.
+<3> Execute ***X2bolt*** to convert a model from caffe model to bolt model. Here shows the example of float16 model conversion.
 
-  Since onnx models may not specify the input dimensions, onnx2bolt accepts 4 more parameters. If they are not provided, the .bolt model will specify 1x3x224x224 by default, which is the typical input size for ImageNet networks.
-
-
-
-3. **TensorFlow model to Bolt model**	
-
-  The process flow is : TensorFlow model to Caffe model, and then to Bolt model.
-
-  <1> Tensorflow model to Caffe model
-
-  Refer to the [tensorflow2caffe README.md](../model-tools/tools/tensorflow2caffe/README.md) for more details on transforming TensorFlow model to Caffe model.
-
-  <2> Caffe model to Bolt model
-
-  Refer to the former steps in "Caffe model to Bolt model" section in this chapter.
-
-
-
-4. **PyTorch model to Bolt model**
-
-  PyTorch should have native support for onnx format. For your own convenience, you can try that first.
-
-  The process flow is: PyTorch model to Caffe model, and then to Bolt model
-
-  <1> PyTorch model to Caffe model
-
-  Refer to the [pytorch2caffe README.md](../model-tools/tools/pytorch2caffe/README.md) for more details on transforming Pytorch model to Caffe model.
-
-  <2> Caffe model to Bolt model
-
-  Refer to the former steps in "Caffe model to Bolt model" section in this chapter.
-
-
-
-### Model Inference
-
-We provide several demo programs, and here we will explain the usage of two typical programs: image classification and tinybert.
-
-
-
-1. **Classification**
-
-   <1> Push classification to the phone;
-   
-   <2> Push the testing image data to the phone;
-   
-   <3> Run classification and get the result.
-   
-   Parameters:    bolt_model    image_directory    image_format    scale_value    TopK    correct_label    archInfo     algorithmMapPath   
-
-Example: Run mobilenet_v1 for image classification 
-
-```shell
-<1> adb push /home/bolt/install_llvm/kits/classification /data/local/bolt/bin/classification
-<2> adb push /home/bolt/data/ILSVRC/n02085620/ /data/local/bolt_data/cv/ILSVRC/n02085620
-<3> adb shell "./data/local/bolt/bin/classification /data/local/bolt_model/caffe/mobilenet_v1/mobilenet_v1_f16.bolt /data/local/bolt_data/cv/ILSVRC/n02085620 BGR 0.017 5 151 CPU_AFFINITY_HIGH_PERFORMANCE"
+```
+adb shell "/data/local/tmp/bolt/tools/X2bolt -d /data/local/tmp/models/resnet50/ -m resnet50 -i FP16"
+  
+adb shell "ls /data/local/tmp/models/resnet50"
+# command output$ resnet50_fp16.bolt
 ```
 
-  After running, you should be able to see the TopK labels for each image calculated according to the model, the Top1 and TopK accuracy, and the execution time.
+Note : Model conversion procedure of onnx and tflite is similar to caffe. 
 
-  Here we explain a little more for some of the parameters.
+### mobilenet_v1(tensorflow) Model Conversion
 
-  - image_format:    The image format requested by the model. For example, caffe models usually require BGR format. You can refer to [image_processing.cpp](../image/src/image_processing.cpp) for more details.
-  - scale_value:     The scale value requested in the input preprocessing. This value is also used in [image_processing.cpp](../image/src/image_processing.cpp). If your network required normalized inputs, the typical scale value is 0.017.
-  - TopK:            The number of predictions that you are interested in for each image. Typical choice is 5.
-  - correct_label:   The correct label number for the whole image directory.
-  - archInfo: 
-        -- CPU_AFFINITY_HIGH_PERFORMANCE, Bolt will look for a high-frequency core and bind to it. 
-        -- CPU_AFFINITY_LOW_POWER, Bolt will look for a low-frequency core. 
-        -- GPU, Bolt will run the model on MALI GPU.
-        If the parameter is missing, the default value is "CPU_AFFINITY_HIGH_PERFORMANCE".
-  - algorithmMapPath The file path to save algorithm selection result info, it is strongly recommended to be set when use GPU.
+Save your mobilenet_v1 to frozen .pb model. And preprocess your model using [tf2json](model_tools/tools/tensorflow2json/tf2json.py) which can convert the .pb to .json. Then use **X2bolt** to convert .json to .bolt model.
 
-  More Details for using GPU on classification nets:
-  Example for running with bolt GPU: 
-                                /*bolt_model*/                   /*image_directory*/   /*image_format*/   /*scale*/  /*TopK*/   /*correct_lable*/   /*archInfo*/   /*algorithMapPath*/
-  ./classification /data/local/tmp/model/mobilenet_v1_f16.bolt  /data/local/tmp/data        BGR             0.017       5             151                GPU        /data/local/tmp
+Here is the example of mobilenet_v1_frozen.pb converted to mobilenet_v1.bolt. 
 
-  When you first running program, GPU will take lots of time to do algorithm selected and save the results to the algorithmMapPath you set.
-  After algorithm selected results been saved successfully, this step will be skipped.
-  If you want to get the best performance, please set the algorithmMapPath, and running your model after algorithm selected results been produced.
-  NOTE:
-      -- The file name of algorithm selected results are constitute with "modelname + archInfo + dataType", such as "algorithmInfo_MOBILENET_2_4".
-      -- If you modified your model, please delete the old algorithm selected results and run it again, or it may cause unpredicted errors.
+<1> Prepare mobilenet_v1 model(frozen .pb) on the server;
 
-                   
+```
+file /home/mobilenet_v1/mobilenet_v1_frozen.pb
+```
+
+<2> Convert mobilenet_v1_frozen.pb to mobilenet_v1.json;
+
+```
+python3 model_tools/tools/tensorflow2json/tf2json.py /home/mobilenet_v1/mobilenet_v1_frozen.pb /home/mobilenet_v1/mobilenet_v1.json 
+
+ls /home/mobilenet_v1
+# command output$ mobilenet_v1.json
+```
+
+<3> Push the mobilenet_v1.json to the phone;
+
+```
+adb push /home/mobilenet_v1/mobilenet_v1.json /data/local/tmp/models/mobilenet_v1/mobilenet_v1.json
  
-2. **Tinybert**
-
-   <1> Push tinybert to the phone;
-
-   <2> Push the testing sequence data to the phone;
-
-   <3> Run tinybert and get the result.
-
-   Parameters:    bolt_model    sequence_directory    thread_affinity
-
-Example:
-
-```shell
-<1> adb push /home/bolt/install_llvm/kits/tinybert /data/local/bolt/bin/tinybert
-<2> adb mkdir /data/local/bolt_data/nlp/tinybert/data
-<3> adb mkdir /data/local/bolt_data/nlp/tinybert/data/input
-<4> adb mkdir /data/local/bolt_data/nlp/tinybert/data/result
-<5> adb push /home/bolt/model-tools/tools/tensorflow2caffe/tinybert/sequence.seq /data/local/bolt_data/nlp/tinybert/data/input/0.seq
-<6> adb shell "./data/local/bolt/bin/tinybert /data/local/bolt_model/caffe/tinybert/tinybert_f16.bolt /data/local/bolt_data/nlp/tinybert/data CPU_AFFINITY_HIGH_PERFORMANCE"
+adb shell "ls /data/local/tmp/models/mobilenet_v1"
+# command output$ mobilenet_v1_frozen.pb mobilenet_v1.json
 ```
 
-  After running, you should be able to see the labels for each sequence calculated according to the model, and the execution time.
+<4> Push the ***X2bolt*** to the phone and get the help information of ***X2bolt*** ; 
 
-  Here we explain a little more for some of the parameters.
-
-  - thread_affinity: When it is set to be CPU_AFFINITY_HIGH_PERFORMANCE, Bolt will look for a high-frequency core and bind to it. When it is set to be CPU_AFFINITY_LOW_POWER, Bolt will look for a low-frequency core. If the parameter is missing, the default value is "CPU_AFFINITY_HIGH_PERFORMANCE".
-
-
-3. **Neural Machine Translation**
-
-   <1> Push nmt to the phone;
-
-   <2> Push the testing sequence data to the phone;
-
-   <3> Run nmt and get the result.
-
-   Parameters:    bolt_model    sequence_directory    thread_affinity
-
-Example:
-
-```shell
-<1> adb push /home/bolt/install_llvm/kits/nmt /data/local/bolt/bin/nmt
-<2> adb mkdir /data/local/bolt_data/nlp/machine_translation/data
-<3> adb mkdir /data/local/bolt_data/nlp/machine_translation/data/input
-<4> adb mkdir /data/local/bolt_data/nlp/machine_translation/data/result
-<5> adb push /home/bolt/model-tools/tools/tensorflow2caffe/nmt/0.seq /data/local/bolt_data/nlp/machine_translation/data/input/0.seq
-<6> adb shell "./data/local/bolt/bin/nmt /data/local/bolt_model/caffe/nmt/nmt_f16.bolt /data/local/bolt_data/nlp/machine_translation/data CPU_AFFINITY_HIGH_PERFORMANCE"
+```
+adb push /home/bolt/install_arm_gnu/tools/X2bolt /data/local/tmp/bolt/tools/X2bolt
+  
+adb shell "ls /data/local/tmp/bolt/tools/"
+# command output$ X2bolt
+    
+adb shell "./X2bolt --help"
 ```
 
-  After running, you should be able to see the machine translation result, and the execution time.
+<5> Execute ***X2bolt*** to convert model from .json(converted from .pb) to bolt model. Here shows the example of float32 model conversion.
 
-  Here we explain a little more for some of the parameters.
+```
+adb shell "/data/local/tmp/bolt/tools/X2bolt -d /data/local/tmp/models/mobilenet_v1/ -m mobilenet_v1 -i FP32"
 
-  - thread_affinity: When it is set to be CPU_AFFINITY_HIGH_PERFORMANCE, Bolt will look for a high-frequency core and bind to it. When it is set to be CPU_AFFINITY_LOW_POWER, Bolt will look for a low-frequency core. If the parameter is missing, the default value is "CPU_AFFINITY_HIGH_PERFORMANCE".
-
-
-4. **Automatic Speech Recognition RNNT**
-
-   <1> Push asr_rnnt to the phone;
-
-   <2> Push the testing sequence data to the phone;
-
-   <3> Run asr_rnnt and get the result.
-
-   Parameters:    bolt_model    sequence_directory    thread_affinity
-
-Example:
-
-```shell
-<1> adb push /home/bolt/install_llvm/kits/asr_rnnt /data/local/bolt/bin/asr_rnnt
-<2> adb mkdir /data/local/bolt_data/nlp/asr/asr_rnnt/data
-<3> adb mkdir /data/local/bolt_data/nlp/asr/asr_rnnt/data/input
-<4> adb mkdir /data/local/bolt_data/nlp/asr/asr_rnnt/data/result
-<5> adb push /home/bolt/model-tools/tools/tensorflow2caffe/asr/asr_rnnt.seq /data/local/bolt_data/nlp/asr/asr_rnnt/data/input/0.seq
-<6> adb shell "./data/local/bolt/bin/asr_rnnt /data/local/bolt_model/caffe/asr_rnnt/asr_rnnt_f16.bolt /data/local/bolt_data/nlp/asr/asr_rnnt/data CPU_AFFINITY_HIGH_PERFORMANCE"
+adb shell "ls /data/local/tmp/models/mobilenet_v1"
+# command output$ mobilenet_v1.json mobilenet_v1_f32.bolt
 ```
 
-  After running, you should be able to see the speech recognition result, and the execution time.
+## Model Inference
 
-  Here we explain a little more for some of the parameters.
+### General Benchmark
 
-  - thread_affinity: When it is set to be CPU_AFFINITY_HIGH_PERFORMANCE, Bolt will look for a high-frequency core and bind to it. When it is set to be CPU_AFFINITY_LOW_POWER, Bolt will look for a low-frequency core. If the parameter is missing, the default value is "CPU_AFFINITY_HIGH_PERFORMANCE".
+[*benchmark*](../inference/examples/benchmark/benchmark.cpp) is a general tool for measuring any .bolt model inference performace.
 
+<1> Push the ***benchmark*** to the phone and check its usage;
 
-5. **Automatic Speech Recognition Convolution+Transformer**
+```
+adb push /home/bolt/install_arm_gnu/kits/benchmark /data/local/tmp/bolt/bin/benchmark
 
-   <1> Push asr_convolution_transformer to the phone;
-
-   <2> Push the testing sequence data to the phone;
-
-   <3> Run asr_convolution_transformer and get the result.
-
-   Parameters:    bolt_model    sequence_directory    thread_affinity
-
-Example:
-
-```shell
-<1> adb push /home/bolt/install_llvm/kits/asr_convolution_transformer /data/local/bolt/bin/asr_convolution_transformer
-<2> adb mkdir /data/local/bolt_data/nlp/asr/asr_convolution_transformer/data
-<3> adb push /home/bolt/model-tools/tools/tensorflow2caffe/asr /data/local/bolt_data/nlp/asr/asr_rnnt/data
-<4> adb shell "./data/local/bolt/bin/asr_convolution_transformer /data/local/bolt_model/caffe/asr_rnnt/asr_convolution_transformer_encoder_f16.bolt /data/local/bolt_data/nlp/asr/asr_convolution_transformer/data CPU_AFFINITY_HIGH_PERFORMANCE"
-<5> adb shell "./data/local/bolt/bin/asr_convolution_transformer /data/local/bolt_model/caffe/asr_rnnt/asr_convolution_transformer_prediction_net.f16.bolt /data/local/bolt_data/nlp/asr/asr_convolution_transformer/data CPU_AFFINITY_HIGH_PERFORMANCE"
-<6> adb shell "./data/local/bolt/bin/asr_convolution_transformer /data/local/bolt_model/caffe/asr_rnnt/asr_convolution_transformer_joint_net_f16.bolt /data/local/bolt_data/nlp/asr/asr_convolution_transformer/data CPU_AFFINITY_HIGH_PERFORMANCE"
+adb shell "./benchmark --help"
 ```
 
-  After running, you should be able to see the result of each sub network(encoder, prediction net, joint net), and the execution time.
+<2> Execute ***benchmark*** for your model inference performace.
 
-  Here we explain a little more for some of the parameters.
+```
+# running with fake data
+adb shell "./data/local/tmp/bolt/bin/benchmark -m /data/local/tmp/bolt_model/caffe/resnet/resnet_f16.bolt"
 
-  - thread_affinity: When it is set to be CPU_AFFINITY_HIGH_PERFORMANCE, Bolt will look for a high-frequency core and bind to it. When it is set to be CPU_AFFINITY_LOW_POWER, Bolt will look for a low-frequency core. If the parameter is missing, the default value is "CPU_AFFINITY_HIGH_PERFORMANCE".
+# running with real data
+adb shell "./data/local/tmp/bolt/bin/benchmark -m /data/local/tmp/bolt_model/caffe/resnet/resnet_f16.bolt -i /data/local/tmp/data/1_3_224_224_fp16.bin"
+```
 
+### Imagenet classification
 
-### API
+Example: Run mobilenet_v1 for image classification with CPU
 
-Currently, we provide C and Java API. After installation, you can find the API documents docs/API/html/index.html.
+<1> Push classification to the phone;
 
+```
+adb push /home/bolt/install_arm_gnu/kits/classification /data/local/tmp/bolt/bin/classification
+```
 
+<2> Push the testing image data to the phone;
+
+```
+adb push /home/bolt/data/ILSVRC/n02085620/ /data/local/tmp/bolt_data/cv/ILSVRC/n02085620
+```
+
+<3> Run CPU classification and get the result.
+
+```
+adb shell "/data/local/tmp/bolt/bin/classification -m /data/local/tmp/bolt_model/caffe/mobilenet_v1/mobilenet_v1_f16.bolt -i /data/local/tmp/bolt_data/cv/ILSVRC/n02085620 -f BGR -s 0.017 -t 5 -c 151 -a CPU_AFFINITY_HIGH_PERFORMANCE -p ./"
+```
+
+After running, you should be able to see the TopK labels for each image calculated according to the model, the Top1 and TopK accuracy, and the execution time.
+
+**Detailed explanation of the parameters:**
+
+- -f/--imageFormat: The image format requested by the model. For example, caffe models usually require BGR format. You can refer to [image_processing.cpp](../compute/image/src/image_processing.cpp) for more details.
+
+- -s/--scaleValue: The scale value requested in the input preprocessing. This value is also used in [image_processing.cpp](../compute/image/src/image_processing.cpp). If your network required normalized inputs, the typical scale value is 0.017.
+
+- -t/--topK: The number of predictions that you are interested in for each image. Typical choice is 5.correct_label:   The correct label number for the whole image directory.
+
+- -c/--correctLabels: The correct label number for the whole image directory.
+
+- -a/--archinfo:
+
+  The default value is "CPU_AFFINITY_HIGH_PERFORMANCE".
+
+  -- CPU_AFFINITY_HIGH_PERFORMANCE, Bolt will look for a high-frequency core and bind to it. 
+
+  -- CPU_AFFINITY_LOW_POWER, Bolt will look for a low-frequency core. 
+
+  -- GPU, Bolt will run the model on MALI GPU.
+
+- -p/--algoPath: The file path to save algorithm selection result info, it is strongly recommended to be set when use GPU.
+
+<4> Run GPU classification and get the result.
+
+```
+adb shell "/data/local/tmp/bolt/bin/classification -m /data/local/tmp/bolt_model/caffe/mobilenet_v1/mobilenet_v1_f16.bolt -i /data/local/tmp/bolt_data/cv/ILSVRC/n02085620 -f BGR -s 0.017 -t 5 -c 151 -a GPU -p /data/local/tmp/tmp
+```
+
+When you run the program for the first time,  GPU will take lots of time to do algorithm selected and save the results to the algorithmMapPath you set. After algorithm selected results been saved successfully, this step will be skipped.
+
+If you want to get the best performance, please set the *-p/--algoPath*, and running your model after algorithm selected results been produced.
+
+ NOTE:
+
+- The file name of algorithm selected results are constitute with "modelName + archInfo + dataType", such as "algorithmInfo_MOBILENET_2_4".
+- If you modified your model, please delete the old algorithm selected results and run it again, or it may cause unpredicted errors.    
+
+### tinybert
+
+<1> Push tinybert to the phone;
+
+```
+adb push /home/bolt/install_arm_gnu/kits/tinybert /data/local/tmp/bolt/bin/tinybert
+```
+
+<2> Push the testing sequence data to the phone;
+
+```
+adb mkdir /data/local/tmp/bolt_data/nlp/tinybert/data
+adb mkdir /data/local/tmp/bolt_data/nlp/tinybert/data/input
+adb mkdir /data/local/tmp/bolt_data/nlp/tinybert/data/result
+adb push /home/bolt/model_tools/tools/tensorflow2caffe/tinybert/sequence.seq /data/local/tmp/bolt_data/nlp/tinybert/data/input/0.seq
+```
+
+<3> Run tinybert and get the result.
+
+```
+adb shell "./data/local/tmp/bolt/bin/tinybert -m /data/local/tmp/bolt_model/caffe/tinybert/tinybert_f16.bolt -i /data/local/tmp/bolt_data/nlp/tinybert/data -a CPU_AFFINITY_HIGH_PERFORMANCE"
+```
+
+After running, you should be able to see the labels for each sequence calculated according to the model, and the execution time.
+
+### neural machine translation(nmt)
+
+<1> Push nmt to the phone;
+
+```
+adb push /home/bolt/install_llvm/kits/nmt /data/local/tmp/bolt/bin/nmt
+```
+
+<2> Push the testing sequence data to the phone;
+
+```
+adb mkdir /data/local/tmp/bolt_data/nlp/machine_translation/data
+adb mkdir /data/local/tmp/bolt_data/nlp/machine_translation/data/input
+adb mkdir /data/local/tmp/bolt_data/nlp/machine_translation/data/result
+adb push /home/bolt/model_tools/tools/tensorflow2caffe/nmt/0.seq /data/local/tmp/bolt_data/nlp/machine_translation/data/input/0.seq
+```
+
+<3> Run nmt and get the result.
+
+```
+adb shell "./data/local/tmp/bolt/bin/nmt -m /data/local/tmp/bolt_model/caffe/nmt/nmt_f16.bolt -i /data/local/tmp/bolt_data/nlp/machine_translation/data -a CPU_AFFINITY_HIGH_PERFORMANCE"
+```
+
+After running, you should be able to see the machine translation result, and the execution time.
+
+## API
+
+Please refer to [DEVELOPER.md](DEVELOPER.md#api-usage) for more details.
+
+## Performance Profiling
+
+Bolt provides a program performance visualization interface to help user identify performance bottlenecks.
+
+- ### Visualize an inference program performance
+
+<1> Edit [common/cmakes/bolt.cmake](../common/cmakes/bolt.cmake) file to open performance profile switch *USE_PROFILE*, and recompile bolt library.
+
+<2> Use the newly generated executable program or library to do inference. Bolt will print performance log in the command line window or Android log. Collect the performance log that started with *[PROFILE]*. Here is an example.
+```
+[PROFILE] thread 7738 {"name": "deserialize_model_from_file", "cat": "prepare", "ph": "X", "pid": "0", "tid": "7738", "ts": 1605748035860637, "dur": 9018},
+[PROFILE] thread 7738 {"name": "ready", "cat": "prepare", "ph": "X", "pid": "0", "tid": "7738", "ts": 1605748035889436, "dur": 8460},
+[PROFILE] thread 7738 {"name": "conv1", "cat": "OT_Conv::run", "ph": "X", "pid": "0", "tid": "7738", "ts": 1605748035898106, "dur": 764},
+[PROFILE] thread 7738 {"name": "conv2_1/dw", "cat": "OT_Conv::run", "ph": "X", "pid": "0", "tid": "7738", "ts": 1605748035898876, "dur": 2516},
+```
+
+<3> Remove the prefix of thread private information *[PROFILE] thread 7738* and the comma at the end of log, add *[* at the beginning of the file and *]* at the end of file. Save it as a JSON file. Here is an JSON file example.
+```
+[
+    {"name": "deserialize_model_from_file", "cat": "prepare", "ph": "X", "pid": "0", "tid": "7738", "ts": 1605748035860637, "dur": 9018},
+    {"name": "ready", "cat": "prepare", "ph": "X", "pid": "0", "tid": "7738", "ts": 1605748035889436, "dur": 8460},
+    {"name": "conv1", "cat": "OT_Conv::run", "ph": "X", "pid": "0", "tid": "7738", "ts": 1605748035898106, "dur": 764},
+    {"name": "conv2_1/dw", "cat": "OT_Conv::run", "ph": "X", "pid": "0", "tid": "7738", "ts": 1605748035898876, "dur": 2516}
+]
+```
+
+<4> Use Google Chrome browser to open <chrome://tracing/> extension. Load the JSON file. You can see the program execution time.
+![](/images/PerformanceProfiling.PNG)
 
 # Advanced Features
 
-### Graph Optimization
+## INT8 Post Training Quantization
 
-  By default, all graph optimizers that we have implemented are activated during model conversion. In the converters (caffe2bolt, onnx2bolt), you can find a function call:
-  ```c++
-  ms_optimizer.suggest();
-  ```
-  If you wish to turn them off, you can adjust the suggest() function, or simply call:
-  ```c++
-  ms_optimizer.empty();
-  ```
-  However, some of the optimizers are essential, which will be marked with * below.
+Operations are smartly quantized, avoiding layers that are critical to accuracy. When possible, gemm layers (e.g. conv, FC) will directly output int8 tensors so as to save dequantization time. The quantization method is symmetrical for both activation and weight. Please refer to [QUANTIZATION.md](QUANTIZATION.md) for more details.
 
-  - *DeprecatedOpOptimizer: This optimizer removes the deprecated layers from the model
-  - *ConvBNOptimizer: This optimizer folds BN parameters into the weight and bias of convolution.
-  - *BNScaleOptimizer: When a BN layer is not precedented by a convolution layer, we will fold it into the following scale layer.
-  - *ConvScaleOptimizer: This optimizer folds scale parameters into the weight and bias of convolution.
-  - InPlaceOptimizer: If the input and output of a layer are identical in dimensions, they might share the same tensor name. Typical layers include the Activation Layer.
-  - ConvActivationOptimizer: This optimizer fuses convolution and activation layers
-  - *ChannelPaddingOptimizer: This optimizer will pad the output channels to a multiple of 8 for convolution layers. This increases the model compatibility.
-  - DepthwisePointwiseOptimizer: This optimizers fuses depthwise conv and pointwise conv for computation efficiency.
-  - TransposeMulToScaleOptimizer: This is useful for some NLP models.
-  - *MemoryReuseOptimizer: When a feature map tensor is no longer needed as input or output, the storage that it occupies can be reused by other feature maps. This saves on average **two-thirds** of feature map storage for networks that we have tested.
+## BNN Network Support
 
+Bolt supports both XNOR-style and DoReFa-style BNN networks. Just save the binary weights as FP32 in an Onnx model, and X2bolt will automatically convert the storage to 1-bit representations. So far, the floating-point portion of the BNN network can only be FP16 operations, so pass "FP16" as the precision parameter to X2bolt. The number of output channels for BNN convolution layers should be divisible by 32.
 
+## Algorithm Tuning for Key Layers
 
-### INT8 Post-Training Quantization
+Bolt provides tensor_computing_library_search program for performance tuning of the operator library. Bolt currently supports convolution layer algorithm tuning.
 
-  If quantization is activated, the second convolution layer will quantize the tensors to 8-bit integers. For now, int8 operators include Convolution, Pooling and Concatenation (end-to-end support for Squeezenet). If your network includes other operators, you may need to add type casting in the front of those operators. The quantization method is symmetrical for both activation and weight.
+<1> Push tensor_computing_library_search to the phone;
 
-  If you want to activate the quantization, pass "INT8_Q" as the precision parameter to caffe2bolt or onnx2bolt during model conversion.
-
-
-
-### BNN Network Support
-
-  Bolt supports both XNOR-style and DoReFa-style BNN networks. Just save the binary weights as FP32 in an Onnx model, and onnx2bolt will automatically convert the storage to 1-bit representations. So far, the floating-point portion of the BNN network can only be FP16 operations, so pass "FP16" as the precision parameter to onnx2bolt. The number of output channels for BNN convolution layers should be divisible by 32.
-
-
-
-### Layer Performance Benchmark
-
-  If you target device is an Android phone connected to your compilation server, you can call "make test" to run a quick verification test, which runs the [quick_benchmark.sh](../quick_benchmark.sh). For more details, please refer to the individual unit test programs under [tests](../tests).
-
-
-
-### Algorithm Tuning for Key Layers
-
-   Bolt provides tensor_computing_library_search program for performance tuning of the operator library. Bolt currently supports convolution layer algorithm tuning.
-
-   <1> Push tensor_computing_library_search to the phone;
-
-   <2> Set Bolt_TensorComputing_LibraryAlgoritmMap shell environment variable
-
-   <3> Run library tuning program.
-        
-   <4> Use *CONVOLUTION_LIBRARY_SEARCH* convolution policy during model inference.
-
-Example:
-
-```shell
-<1> adb push /home/bolt/inference/tools/tensor_computing_library_search /data/local/bolt/tools/tensor_computing_library_search
-<2> adb shell "export Bolt_TensorComputing_LibraryAlgoritmMap=/data/local/bolt/tensor_computing_library_algorithm_map.txt && ./data/local/bolt/tools/tensor_computing_library_search"
+```
+adb push /home/bolt/install_arm_gnu/tools/tensor_computing_library_search /data/local/tmp/bolt/tools/tensor_computing_library_search
 ```
 
-  After running, you should be able to get algorithm map file on device.
+<2> Set Bolt_TensorComputing_LibraryAlgoritmMap shell environment variable;
 
+<3> Run library tuning program;
 
+```
+adb shell "export Bolt_TensorComputing_LibraryAlgoritmMap=/data/local/tmp/bolt/tensor_computing_library_algorithm_map.txt && ./data/local/tmp/bolt/tools/tensor_computing_library_search"
+```
+
+After running, you should be able to get algorithm map file on device.
+
+<4> Use *CONVOLUTION_LIBRARY_SEARCH* convolution policy during model inference.
+
+Modify Convolution algorithm search policy in [inference/engine/include/cpu/convolution_cpu.hpp](../inference/engine/include/cpu/convolution_cpu.hpp)
+
+## Time-Series Data Acceleration
+
+Flow is the time-series data acceleration module for Bolt. Flow simplifies the application development process. Flow uses graph as an abstraction of application deployment, and each stage (function) is viewed as a node. A node can do data preprocessing, deep learning inference or result postprocessing. Separate feature extraction can also be abstracted as a node. The bridging entity between function is data (tensor), and that can be represented as an edge.
+
+Flow provides flexible CPU multi-core parallelism and heterogeneous scheduling (CPU + GPU). User don't need to pay excessive attention to heterogeneous management and write lots of non-reusable code to implement a heterogeneous application. User can get the best end-to-end performance with the help of Flow. Flow supports data parallelism and subgraph parallelism, with a simple API.
+
+More usage information can be find in [DEVELOPER.md](docs/DEVELOPER.md#time-series-data-acceleration-by-using-flow).
 
 # Feedback
 
-  If you have encountered any difficulty, feel free to reach out to us by summitting issues. You are also encouraged to contribute your implementations. Please refer to [DEVELOPER.md](DEVELOPER.md).
+If you have encountered any difficulty, feel free to reach out to us by submitting issues. You are also encouraged to contribute your implementations. Please refer to [DEVELOPER.md](DEVELOPER.md).

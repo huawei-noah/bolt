@@ -7,6 +7,18 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](<https://semver.org/spec/v2.0.0.html>).
 
 
+## [1.0.0] - 2020-11-20
+
+### Added
+
+- Support fp32 on X86 AVX2 CPU
+- Support partial fp32 operator(convolution, lstm) multi-threads parallel
+- Support Tensorflow model
+- Support more networks(Pointnet, ...)
+- Support more networks int8 inference(TinyBert, NMT, ASR)
+- Support time-series data acceleration
+- Support Apple IOS phone
+
 
 ## [0.3.0] - 2020-06-01
 

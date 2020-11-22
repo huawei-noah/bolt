@@ -1,134 +1,84 @@
 cmake_minimum_required(VERSION 3.2)
 
-file(GLOB BOLT_CONFIGURE_FILE $ENV{BOLT_ROOT}/bolt.cmake ${BOLT_ROOT}/bolt.cmake)
+file(GLOB BOLT_CONFIGURE_FILE $ENV{BOLT_ROOT}/common/cmakes/bolt.cmake ${BOLT_ROOT}/common/cmakes/bolt.cmake)
 if (BOLT_CONFIGURE_FILE)
     include(${BOLT_CONFIGURE_FILE})
 else (BOLT_CONFIGURE_FILE)
     message(FATAL_ERROR "
-FATAL: can not find bolt.cmake in <BOLT_ROOT> directory,
+FATAL: can not find bolt.cmake in <BOLT_ROOT>/common/cmakes directory,
        please set shell or cmake environment variable BOLT_ROOT.
     ")
 endif (BOLT_CONFIGURE_FILE)
 
-project(bolt C CXX)
+if (USE_IOS_CLANG)
+    set(CMAKE_SYSTEM_NAME Darwin)
+    set(CMAKE_SYSTEM_VERSION 1)
+    set(UNIX True)
+    set(APPLE True)
+    set(IOS True)
+endif (USE_IOS_CLANG)
 
-if (USE_MALI)
-    add_subdirectory(gcl/tools/kernel_lib_compile)
-endif (USE_MALI)
-add_subdirectory(blas-enhance)
-add_subdirectory(model-tools)
-add_subdirectory(tensor_computing)
-add_subdirectory(image)
-add_subdirectory(inference)
-add_subdirectory(tools)
-add_subdirectory(kits)
-add_subdirectory(tests)
-add_custom_target(bolt_library ALL
-    COMMAND ./scripts/build_light_bolt.sh ${CMAKE_BINARY_DIR} ${USE_MALI} ${USE_DEBUG} ${USE_LLVM_CLANG} ${CMAKE_CXX_COMPILER} ${CMAKE_AR} ${CMAKE_STRIP}
-    WORKING_DIRECTORY $ENV{BOLT_ROOT})
+project(cheetah C CXX)
 
-if (USE_MALI)
-    add_dependencies(inference kernelbin)
-    add_dependencies(inference_static kernelbin_static)
-    install(TARGETS kernelbin kernelbin_static
-            LIBRARY DESTINATION lib
-            ARCHIVE DESTINATION lib)
-    install(FILES ${CMAKE_BINARY_DIR}/libOpenCL.so
-            DESTINATION lib)
-endif (USE_MALI)
-add_dependencies(tensor_computing blas-enhance)
-add_dependencies(tensor_computing_static blas-enhance_static)
-add_dependencies(inference tensor_computing model-tools image)
-add_dependencies(inference_static tensor_computing_static model-tools_static image_static)
-add_dependencies(bolt_library inference)
-add_dependencies(bolt_library inference_static)
-
-install(TARGETS blas-enhance blas-enhance_static
-                tensor_computing tensor_computing_static
-                model-tools model-tools_static
-                image image_static
-                inference inference_static
-        LIBRARY DESTINATION lib
-        ARCHIVE DESTINATION lib)
-
-if (USE_CAFFE)
-    add_dependencies(model-tools model-tools_caffe)
-    add_dependencies(model-tools_static model-tools_caffe_static)
-    install(TARGETS caffe2bolt
-                    model-tools_caffe model-tools_caffe_static
-            RUNTIME DESTINATION tools
-            LIBRARY DESTINATION lib
-            ARCHIVE DESTINATION lib)
-endif(USE_CAFFE)
-
-if (USE_ONNX)
-    add_dependencies(model-tools model-tools_onnx)
-    add_dependencies(model-tools_static model-tools_onnx_static)
-    install(TARGETS onnx2bolt
-                    model-tools_onnx model-tools_onnx_static
-            RUNTIME DESTINATION tools
-            LIBRARY DESTINATION lib
-            ARCHIVE DESTINATION lib)
-endif(USE_ONNX)
-
+set_policy()
+SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${BOLT_ROOT}/common/cmakes")
+if (USE_CAFFE OR USE_ONNX OR USE_FLOW)
+    find_package(Protobuf)
+endif()
 if (USE_TFLITE)
-    add_dependencies(model-tools model-tools_tflite)
-    add_dependencies(model-tools_static model-tools_tflite_static)
-    install(TARGETS tflite2bolt
-                    model-tools_tflite model-tools_tflite_static
-            RUNTIME DESTINATION tools
-            LIBRARY DESTINATION lib
-            ARCHIVE DESTINATION lib)
-endif(USE_TFLITE)
+    find_package(TFLite)
+endif (USE_TFLITE)
+if (USE_TENSORFLOW)
+    find_package(jsoncpp)
+endif (USE_TENSORFLOW)
+if (USE_MALI)
+    find_package(Gcl)
+endif(USE_MALI)
+if (NOT USE_IOS_CLANG)
+    if (USE_LLVM_CLANG)
+        set(USE_JNI ON)
+    else()
+        find_package(JNI)
+        if (JNI_FOUND)
+            set(USE_JNI ON)
+        endif()
+    endif()
+endif()
 
-install(DIRECTORY model-tools/tools/tensorflow2caffe
-                  model-tools/tools/pytorch2caffe
-        DESTINATION tools)
+add_subdirectory(common)
+add_subdirectory(model_tools)
+add_subdirectory(compute)
+add_subdirectory(inference)
+add_custom_target(bolt_library ALL
+    COMMAND ./scripts/build_light_bolt.sh ${CMAKE_CXX_COMPILER} ${CMAKE_AR} ${CMAKE_STRIP} ${CMAKE_BINARY_DIR} ${USE_MALI} ${USE_DEBUG} ${USE_LLVM_CLANG} ${USE_ANDROID_LOG} ${USE_IOS_CLANG} ${USE_OPENMP}
+    WORKING_DIRECTORY $ENV{BOLT_ROOT})
+add_dependencies(bolt_library engine model_tools tensor image blas_enhance uni)
+add_dependencies(bolt_library engine_static model_tools_static tensor_static image_static blas_enhance_static uni_static)
 
-if (USE_LIBRARY_TUNING)
-    install(TARGETS tensor_computing_library_search
-            RUNTIME DESTINATION tools)
-endif (USE_LIBRARY_TUNING)
-
-if (BUILD_TEST)
-    if (USE_INT8)
-        install(TARGETS ptq_calibration
-                RUNTIME DESTINATION tools)
-    endif(USE_INT8)
-    install(TARGETS classification
-                    bert
-                    tinybert
-                    nmt
-                    asr_rnnt
-                    asr_convolution_transformer
-                    tts
-                    vad
-            RUNTIME DESTINATION kits)
-endif(BUILD_TEST)
-
-install(DIRECTORY inference/exports/java
-                  inference/exports/c
-        DESTINATION include)
-
-install(FILES ${CMAKE_BINARY_DIR}/libBoltModel.so
-              ${CMAKE_BINARY_DIR}/libbolt.a
-              ${CMAKE_BINARY_DIR}/libbolt.so
+# install section
+install(FILES ${CMAKE_BINARY_DIR}/libbolt.a
         DESTINATION lib)
+if (USE_IOS_CLANG)
+    install(FILES ${CMAKE_BINARY_DIR}/libbolt.dylib
+        DESTINATION lib)
+else (USE_IOS_CLANG)
+    install(FILES ${CMAKE_BINARY_DIR}/libbolt.so
+        DESTINATION lib)
+    install(FILES ${CMAKE_BINARY_DIR}/libBoltModel.so
+        DESTINATION lib)
+endif (USE_IOS_CLANG)
 
 execute_process(COMMAND doxygen .Doxyfile WORKING_DIRECTORY $ENV{BOLT_ROOT})
 
 enable_testing()
-
 find_program (BASH_PROGRAM bash)
-
-if (BASH_PROGRAM)
-    set(parameters -t $ENV{BOLT_ROOT}/tests/bin -k $ENV{BOLT_ROOT}/kits/bin -p /data/local/tmp/uldra)
+if (BASH_PROGRAM AND USE_GENERAL)
+    set(parameters -t ${CMAKE_INSTALL_PREFIX} -p /data/local/tmp/uldra)
     if (USE_MALI)
         set(parameters ${parameters} -g)
     endif(USE_MALI)
-  
     if (USE_DYNAMIC_LIBRARY)
-        set(parameters ${parameters} -l $ENV{BOLT_ROOT}/install_llvm/lib)
+        set(parameters ${parameters} -l ${CMAKE_INSTALL_PREFIX}/lib)
     endif(USE_DYNAMIC_LIBRARY)
-    add_test (NAME quick_benchmark COMMAND $ENV{BOLT_ROOT}/quick_benchmark.sh ${parameters})
-endif (BASH_PROGRAM)
+    add_test (NAME quick_benchmark COMMAND $ENV{BOLT_ROOT}/scripts/quick_benchmark.sh ${parameters})
+endif (BASH_PROGRAM AND USE_GENERAL)

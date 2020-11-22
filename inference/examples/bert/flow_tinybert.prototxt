@@ -1,0 +1,44 @@
+name: "tinybert_flow"
+input: "tinybert_words"
+input: "tinybert_positions"
+input: "tinybert_token_type"
+output: "intent_softmax"
+output: "slot_softmax"
+node {
+  name: "tinybert_words"
+  type: "Input"
+  output: "tinybert_words"
+  input_type: "UINT32"
+  input_format: "NORMAL"
+  input_dim: 1
+  input_dim: 32
+}
+node {
+  name: "tinybert_positions"
+  type: "Input"
+  output: "tinybert_positions"
+  input_type: "UINT32"
+  input_format: "NORMAL"
+  input_dim: 1
+  input_dim: 32
+}
+node {
+  name: "tinybert_token_type"
+  type: "Input"
+  output: "tinybert_token_type"
+  input_type: "UINT32"
+  input_format: "NORMAL"
+  input_dim: 1
+  input_dim: 32
+}
+node {
+  name: "tinybert_inference"
+  type: "Inference"
+  input: "tinybert_words"
+  input: "tinybert_positions"
+  input: "tinybert_token_type"
+  output: "intent_softmax"
+  output: "slot_softmax"
+  infer_output_size_parameter: "tinybertInferOutputSize"
+  inference_parameter: "/data/local/tmp/CI/model_zoo/caffe_models/tinybert/tinybert_f32.bolt"
+}

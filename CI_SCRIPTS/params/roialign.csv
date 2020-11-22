@@ -1,0 +1,2 @@
+#in0   ic0   ih0   iw0   ih1   iw1   ilens2   on0   oc0   oh0   ow0   output_h   output_w   sampling_ratio   spatial_scale
+1   1   10   10   1   4   1   1   1   5   5   5   5   2   1

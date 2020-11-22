@@ -1,0 +1,2 @@
+#in0   ic0   ilens0   in1   ic1   ilens1   oh   ow   max_output_boxes_per_class   iou_threshold   score_threshold
+1   6   4   1   2   6   7   3   3   0.5   0

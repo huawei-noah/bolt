@@ -1,0 +1,36 @@
+name: "facesr_dlaWOdcn"
+input: "input"
+output: "594"
+output: "nms_hm"
+output: "598"
+output: "nms_hm_kp"
+output: "wh"
+output: "kps"
+output: "reg"
+output: "kp_offset"
+node {
+  name: "input"
+  type: "Input"
+  output: "input"
+  input_type: "FLOAT16"
+  input_format: "NCHW"
+  input_dim: 1
+  input_dim: 3
+  input_dim: 128
+  input_dim: 128
+}
+node {
+  name: "dlaWOdcn_inference"
+  type: "Inference"
+  input: "input"
+  output: "594"
+  output: "nms_hm"
+  output: "598"
+  output: "nms_hm_kp"
+  output: "wh"
+  output: "kps"
+  output: "reg"
+  output: "kp_offset"
+  inference_parameter: "/data/local/tmp/CI/model_zoo/onnx_models/dlaWOdcn_34_128/dlaWOdcn_34_128_f16.bolt"
+  inference_parameter: "/data/local/tmp/CI/test"
+}

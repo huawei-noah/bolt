@@ -1,165 +1,340 @@
 # Benchmark Report 
 
-We have tested kinds of neural network models with Bolt(v0.2.0) on HUAWEI 810 mobile phone and HUAWEI 990 mobile phone respectively. The benchmark data are given under different operating systems, different computing cores, and different inference accuracy. For more detailed evaluation data, please refer to the following table.
+We have tested kinds of neural network models with Bolt(v1.0.0) on HUAWEI 810 mobile phone and HUAWEI 990 mobile phone respectively. The benchmark data are given under different operating systems, different computing cores, and different inference accuracy. For more detailed evaluation data, please refer to the following table.
 
-| Model                | Framework | Os          | Compiler | Kirin Soc Version | Core          | Precision | Cpu or Gpu | Thread | Input Size  | Performance1                | Performance2             | Performance3             | Accuracy1     | Accuracy2     |
-| -------------------- | --------- | ----------- | -------- | ----------------- | ------------- | --------- | ---------- | ------ | ----------- | --------------------------- | ------------------------ | ------------------------ | ------------- | ------------- |
-| tinybert             | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55           | fp32      | cpu        | 1      | 32+32+32    | avg_time:17.5701ms/sequence |                          |                          |               |               |
-| tinybert             | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55           | fp16      | cpu        | 1      | 32+32+32    | avg_time:9.3479ms/sequence  |                          |                          |               |               |
-| tinybert             | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76           | fp32      | cpu        | 1      | 32+32+32    | avg_time:4.48315ms/sequence |                          |                          |               |               |
-| tinybert             | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76           | fp16      | cpu        | 1      | 32+32+32    | avg_time:2.6499ms/sequence  |                          |                          |               |               |
-| tinybert             | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55           | fp32      | cpu        | 1      | 32+32+32    | avg_time:16.9138ms/sequence |                          |                          |               |               |
-| tinybert             | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55           | fp16      | cpu        | 1      | 32+32+32    | avg_time:8.96313ms/sequence |                          |                          |               |               |
-| tinybert             | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76           | fp32      | cpu        | 1      | 32+32+32    | avg_time:3.69189ms/sequence |                          |                          |               |               |
-| tinybert             | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76           | fp16      | cpu        | 1      | 32+32+32    | avg_time:2.2041ms/sequence  |                          |                          |               |               |
-| tinybert             | caffe     | ubuntu16_04 | llvm     | 810               | A55           | fp32      | cpu        | 1      | 32+32+32    | avg_time:16.96ms/sequence   |                          |                          |               |               |
-| tinybert             | caffe     | ubuntu16_04 | llvm     | 810               | A55           | fp16      | cpu        | 1      | 32+32+32    | avg_time:8.88281ms/sequence |                          |                          |               |               |
-| tinybert             | caffe     | ubuntu16_04 | llvm     | 810               | A76           | fp32      | cpu        | 1      | 32+32+32    | avg_time:4.39697ms/sequence |                          |                          |               |               |
-| tinybert             | caffe     | ubuntu16_04 | llvm     | 810               | A76           | fp16      | cpu        | 1      | 32+32+32    | avg_time:2.84619ms/sequence |                          |                          |               |               |
-| tinybert             | caffe     | ubuntu16_04 | llvm     | 990               | A55           | fp32      | cpu        | 1      | 32+32+32    | avg_time:15.3071ms/sequence |                          |                          |               |               |
-| tinybert             | caffe     | ubuntu16_04 | llvm     | 990               | A55           | fp16      | cpu        | 1      | 32+32+32    | avg_time:8.33203ms/sequence |                          |                          |               |               |
-| tinybert             | caffe     | ubuntu16_04 | llvm     | 990               | A76           | fp32      | cpu        | 1      | 32+32+32    | avg_time:3.84497ms/sequence |                          |                          |               |               |
-| tinybert             | caffe     | ubuntu16_04 | llvm     | 990               | A76           | fp16      | cpu        | 1      | 32+32+32    | avg_time:2.3479ms/sequence  |                          |                          |               |               |
-| nmt                  | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55           | fp32      | cpu        | 1      | 32+32+32    | avg_time:875.392ms/sequence |                          |                          |               |               |
-| nmt                  | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55           | fp16      | cpu        | 1      | 32+32+32    | avg_time:497.91ms/sequence  |                          |                          |               |               |
-| nmt                  | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76           | fp32      | cpu        | 1      | 32+32+32    | avg_time:295.943ms/sequence |                          |                          |               |               |
-| nmt                  | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76           | fp16      | cpu        | 1      | 32+32+32    | avg_time:156.86ms/sequence  |                          |                          |               |               |
-| nmt                  | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55           | fp32      | cpu        | 1      | 32+32+32    | avg_time:975.889ms/sequence |                          |                          |               |               |
-| nmt                  | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55           | fp16      | cpu        | 1      | 32+32+32    | avg_time:492.725ms/sequence |                          |                          |               |               |
-| nmt                  | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76           | fp32      | cpu        | 1      | 32+32+32    | avg_time:285.426ms/sequence |                          |                          |               |               |
-| nmt                  | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76           | fp16      | cpu        | 1      | 32+32+32    | avg_time:136.338ms/sequence |                          |                          |               |               |
-| nmt                  | caffe     | ubuntu16_04 | llvm     | 810               | A55           | fp32      | cpu        | 1      | 32+32+32    | avg_time:874.251ms/sequence |                          |                          |               |               |
-| nmt                  | caffe     | ubuntu16_04 | llvm     | 810               | A55           | fp16      | cpu        | 1      | 32+32+32    | avg_time:457.736ms/sequence |                          |                          |               |               |
-| nmt                  | caffe     | ubuntu16_04 | llvm     | 810               | A76           | fp32      | cpu        | 1      | 32+32+32    | avg_time:300.887ms/sequence |                          |                          |               |               |
-| nmt                  | caffe     | ubuntu16_04 | llvm     | 810               | A76           | fp16      | cpu        | 1      | 32+32+32    | avg_time:160.95ms/sequence  |                          |                          |               |               |
-| nmt                  | caffe     | ubuntu16_04 | llvm     | 990               | A55           | fp32      | cpu        | 1      | 32+32+32    | avg_time:854.466ms/sequence |                          |                          |               |               |
-| nmt                  | caffe     | ubuntu16_04 | llvm     | 990               | A55           | fp16      | cpu        | 1      | 32+32+32    | avg_time:455.878ms/sequence |                          |                          |               |               |
-| nmt                  | caffe     | ubuntu16_04 | llvm     | 990               | A76           | fp32      | cpu        | 1      | 32+32+32    | avg_time:246.937ms/sequence |                          |                          |               |               |
-| nmt                  | caffe     | ubuntu16_04 | llvm     | 990               | A76           | fp16      | cpu        | 1      | 32+32+32    | avg_time:128.898ms/sequence |                          |                          |               |               |
-| ghostnet             | onnx      | ubuntu16_04 | gcc8.3   | 810               | A55           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:69.29ms/image      | min_time:58.073ms/image  | avg_time:59.0912ms/image | top5:0.973684 | top1:0.861842 |
-| ghostnet             | onnx      | ubuntu16_04 | gcc8.3   | 810               | A55           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:34.3389ms/image    | min_time:27.093ms/image  | avg_time:29.1388ms/image | top5:0.973684 | top1:0.875    |
-| ghostnet             | onnx      | ubuntu16_04 | gcc8.3   | 810               | A76           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:20.813ms/image     | min_time:18.3352ms/image | avg_time:18.4675ms/image | top5:0.973684 | top1:0.861842 |
-| ghostnet             | onnx      | ubuntu16_04 | gcc8.3   | 810               | A76           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:9.94312ms/image    | min_time:8.79199ms/image | avg_time:8.85982ms/image | top5:0.973684 | top1:0.875    |
-| ghostnet             | onnx      | ubuntu16_04 | gcc8.3   | 990               | A55           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:74.1409ms/image    | min_time:56.3591ms/image | avg_time:59.8203ms/image | top5:0.973684 | top1:0.861842 |
-| ghostnet             | onnx      | ubuntu16_04 | gcc8.3   | 990               | A55           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:36.093ms/image     | min_time:25.9141ms/image | avg_time:28.1741ms/image | top5:0.973684 | top1:0.875    |
-| ghostnet             | onnx      | ubuntu16_04 | gcc8.3   | 990               | A76           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:13.7258ms/image    | min_time:13.3469ms/image | avg_time:13.4824ms/image | top5:0.973684 | top1:0.861842 |
-| ghostnet             | onnx      | ubuntu16_04 | gcc8.3   | 990               | A76           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:7.14282ms/image    | min_time:6.92798ms/image | avg_time:7.01458ms/image | top5:0.973684 | top1:0.875    |
-| ghostnet             | onnx      | ubuntu16_04 | llvm     | 810               | A55           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:74.3708ms/image    | min_time:66.72ms/image   | avg_time:67.9283ms/image | top5:0.973684 | top1:0.861842 |
-| ghostnet             | onnx      | ubuntu16_04 | llvm     | 810               | A55           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:36.603ms/image     | min_time:32.616ms/image  | avg_time:33.2657ms/image | top5:0.973684 | top1:0.868421 |
-| ghostnet             | onnx      | ubuntu16_04 | llvm     | 810               | A76           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:27.4438ms/image    | min_time:18.6541ms/image | avg_time:18.8378ms/image | top5:0.973684 | top1:0.861842 |
-| ghostnet             | onnx      | ubuntu16_04 | llvm     | 810               | A76           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:15.4668ms/image    | min_time:9.32104ms/image | avg_time:9.45095ms/image | top5:0.973684 | top1:0.868421 |
-| ghostnet             | onnx      | ubuntu16_04 | llvm     | 990               | A55           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:70.2061ms/image    | min_time:55.4148ms/image | avg_time:61.4079ms/image | top5:0.973684 | top1:0.861842 |
-| ghostnet             | onnx      | ubuntu16_04 | llvm     | 990               | A55           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:37.0811ms/image    | min_time:27.947ms/image  | avg_time:29.9928ms/image | top5:0.973684 | top1:0.868421 |
-| ghostnet             | onnx      | ubuntu16_04 | llvm     | 990               | A76           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:15.6489ms/image    | min_time:13.8831ms/image | avg_time:14.0345ms/image | top5:0.973684 | top1:0.861842 |
-| ghostnet             | onnx      | ubuntu16_04 | llvm     | 990               | A76           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:8.07397ms/image    | min_time:7.29102ms/image | avg_time:7.38781ms/image | top5:0.973684 | top1:0.868421 |
-| mobilenet_v1         | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:190.538ms/image    | min_time:160.101ms/image | avg_time:168.335ms/image | top5:0.894737 | top1:0.638158 |
-| mobilenet_v1         | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:71.125ms/image     | min_time:63.7568ms/image | avg_time:67.3027ms/image | top5:0.894737 | top1:0.638158 |
-| mobilenet_v1         | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:50.1008ms/image    | min_time:40.907ms/image  | avg_time:41.3074ms/image | top5:0.894737 | top1:0.638158 |
-| mobilenet_v1         | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:24.7939ms/image    | min_time:19.5669ms/image | avg_time:19.6895ms/image | top5:0.894737 | top1:0.638158 |
-| mobilenet_v1         | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:174.117ms/image    | min_time:151.17ms/image  | avg_time:154.917ms/image | top5:0.894737 | top1:0.638158 |
-| mobilenet_v1         | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:74.842ms/image     | min_time:59.8052ms/image | avg_time:62.1738ms/image | top5:0.894737 | top1:0.638158 |
-| mobilenet_v1         | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:34.542ms/image     | min_time:33.5129ms/image | avg_time:33.7169ms/image | top5:0.894737 | top1:0.638158 |
-| mobilenet_v1         | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:16.0791ms/image    | min_time:15.8879ms/image | avg_time:15.9935ms/image | top5:0.894737 | top1:0.638158 |
-| mobilenet_v1         | caffe     | ubuntu16_04 | llvm     | 810               | A55           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:178.423ms/image    | min_time:167.58ms/image  | avg_time:169.656ms/image | top5:0.894737 | top1:0.638158 |
-| mobilenet_v1         | caffe     | ubuntu16_04 | llvm     | 810               | A55           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:77.3501ms/image    | min_time:66.8999ms/image | avg_time:68.3253ms/image | top5:0.894737 | top1:0.638158 |
-| mobilenet_v1         | caffe     | ubuntu16_04 | llvm     | 810               | A76           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:52.7412ms/image    | min_time:41.7322ms/image | avg_time:42.0848ms/image | top5:0.894737 | top1:0.638158 |
-| mobilenet_v1         | caffe     | ubuntu16_04 | llvm     | 810               | A76           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:26.1299ms/image    | min_time:19.927ms/image  | avg_time:20.0323ms/image | top5:0.894737 | top1:0.638158 |
-| mobilenet_v1         | caffe     | ubuntu16_04 | llvm     | 990               | A55           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:173.724ms/image    | min_time:151.815ms/image | avg_time:154.701ms/image | top5:0.894737 | top1:0.638158 |
-| mobilenet_v1         | caffe     | ubuntu16_04 | llvm     | 990               | A55           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:74.7651ms/image    | min_time:60.425ms/image  | avg_time:62.6472ms/image | top5:0.894737 | top1:0.638158 |
-| mobilenet_v1         | caffe     | ubuntu16_04 | llvm     | 990               | A76           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:36.054ms/image     | min_time:33.9338ms/image | avg_time:34.2018ms/image | top5:0.894737 | top1:0.638158 |
-| mobilenet_v1         | caffe     | ubuntu16_04 | llvm     | 990               | A76           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:17.3879ms/image    | min_time:16.575ms/image  | avg_time:16.7297ms/image | top5:0.894737 | top1:0.638158 |
-| mobilenet_v2         | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:154.487ms/image    | min_time:141.754ms/image | avg_time:145.152ms/image | top5:0.940789 | top1:0.756579 |
-| mobilenet_v2         | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:64.2239ms/image    | min_time:58.8081ms/image | avg_time:59.9808ms/image | top5:0.934211 | top1:0.756579 |
-| mobilenet_v2         | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:49.458ms/image     | min_time:38.323ms/image  | avg_time:38.5056ms/image | top5:0.940789 | top1:0.756579 |
-| mobilenet_v2         | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:23.1702ms/image    | min_time:17.5068ms/image | avg_time:17.6611ms/image | top5:0.934211 | top1:0.756579 |
-| mobilenet_v2         | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:150.025ms/image    | min_time:128.345ms/image | avg_time:132.484ms/image | top5:0.940789 | top1:0.756579 |
-| mobilenet_v2         | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:68.334ms/image     | min_time:53.7939ms/image | avg_time:55.3328ms/image | top5:0.934211 | top1:0.756579 |
-| mobilenet_v2         | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:30.573ms/image     | min_time:29.303ms/image  | avg_time:29.476ms/image  | top5:0.940789 | top1:0.756579 |
-| mobilenet_v2         | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:14.3711ms/image    | min_time:13.9141ms/image | avg_time:14.0406ms/image | top5:0.934211 | top1:0.756579 |
-| mobilenet_v2         | caffe     | ubuntu16_04 | llvm     | 810               | A55           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:165.334ms/image    | min_time:142.623ms/image | avg_time:145.197ms/image | top5:0.940789 | top1:0.756579 |
-| mobilenet_v2         | caffe     | ubuntu16_04 | llvm     | 810               | A55           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:70.1091ms/image    | min_time:63.4839ms/image | avg_time:65.2859ms/image | top5:0.934211 | top1:0.756579 |
-| mobilenet_v2         | caffe     | ubuntu16_04 | llvm     | 810               | A76           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:52.321ms/image     | min_time:39.3108ms/image | avg_time:39.6574ms/image | top5:0.940789 | top1:0.756579 |
-| mobilenet_v2         | caffe     | ubuntu16_04 | llvm     | 810               | A76           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:24.9519ms/image    | min_time:17.696ms/image  | avg_time:18.0272ms/image | top5:0.934211 | top1:0.756579 |
-| mobilenet_v2         | caffe     | ubuntu16_04 | llvm     | 990               | A55           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:154.559ms/image    | min_time:121.211ms/image | avg_time:130.884ms/image | top5:0.940789 | top1:0.756579 |
-| mobilenet_v2         | caffe     | ubuntu16_04 | llvm     | 990               | A55           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:77.2429ms/image    | min_time:52.5979ms/image | avg_time:57.1493ms/image | top5:0.934211 | top1:0.756579 |
-| mobilenet_v2         | caffe     | ubuntu16_04 | llvm     | 990               | A76           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:34.0449ms/image    | min_time:29.9241ms/image | avg_time:30.6575ms/image | top5:0.940789 | top1:0.756579 |
-| mobilenet_v2         | caffe     | ubuntu16_04 | llvm     | 990               | A76           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:15.9011ms/image    | min_time:14.261ms/image  | avg_time:14.4966ms/image | top5:0.934211 | top1:0.756579 |
-| squeezenet           | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:112.09ms/image     | min_time:83.571ms/image  | avg_time:93.3668ms/image | top5:0.875    | top1:0.618421 |
-| squeezenet           | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:53.822ms/image     | min_time:35.8259ms/image | avg_time:41.434ms/image  | top5:0.881579 | top1:0.618421 |
-| squeezenet           | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55           | int8      | cpu        | 1      | 1/3/224/224 | max_time:44.7251ms/image    | min_time:31.103ms/image  | avg_time:35.5491ms/image | top5:0.875    | top1:0.592105 |
-| squeezenet           | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:31.9202ms/image    | min_time:22.28ms/image   | avg_time:22.4415ms/image | top5:0.875    | top1:0.618421 |
-| squeezenet           | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:16.2849ms/image    | min_time:11.3989ms/image | avg_time:11.5547ms/image | top5:0.881579 | top1:0.618421 |
-| squeezenet           | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76           | int8      | cpu        | 1      | 1/3/224/224 | max_time:13.2561ms/image    | min_time:9.74902ms/image | avg_time:9.84788ms/image | top5:0.875    | top1:0.592105 |
-| squeezenet           | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:99.656ms/image     | min_time:81.1941ms/image | avg_time:83.3297ms/image | top5:0.875    | top1:0.618421 |
-| squeezenet           | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:47.0339ms/image    | min_time:34.7532ms/image | avg_time:37.4053ms/image | top5:0.881579 | top1:0.618421 |
-| squeezenet           | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55           | int8      | cpu        | 1      | 1/3/224/224 | max_time:38.6331ms/image    | min_time:30.9619ms/image | avg_time:31.3992ms/image | top5:0.875    | top1:0.592105 |
-| squeezenet           | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:18.9709ms/image    | min_time:17.4961ms/image | avg_time:17.6799ms/image | top5:0.875    | top1:0.618421 |
-| squeezenet           | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:10.2009ms/image    | min_time:9.35303ms/image | avg_time:9.4497ms/image  | top5:0.881579 | top1:0.618421 |
-| squeezenet           | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76           | int8      | cpu        | 1      | 1/3/224/224 | max_time:8.61816ms/image    | min_time:7.65796ms/image | avg_time:7.70149ms/image | top5:0.875    | top1:0.592105 |
-| squeezenet           | caffe     | ubuntu16_04 | llvm     | 810               | A55           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:107.665ms/image    | min_time:89.8459ms/image | avg_time:91.3227ms/image | top5:0.875    | top1:0.618421 |
-| squeezenet           | caffe     | ubuntu16_04 | llvm     | 810               | A55           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:52.929ms/image     | min_time:41.8279ms/image | avg_time:42.9839ms/image | top5:0.868421 | top1:0.618421 |
-| squeezenet           | caffe     | ubuntu16_04 | llvm     | 810               | A55           | int8      | cpu        | 1      | 1/3/224/224 | max_time:39.2102ms/image    | min_time:35.2351ms/image | avg_time:36.3468ms/image | top5:0.868421 | top1:0.664474 |
-| squeezenet           | caffe     | ubuntu16_04 | llvm     | 810               | A76           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:30.657ms/image     | min_time:22.5791ms/image | avg_time:22.897ms/image  | top5:0.875    | top1:0.618421 |
-| squeezenet           | caffe     | ubuntu16_04 | llvm     | 810               | A76           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:13.2539ms/image    | min_time:11.6641ms/image | avg_time:12.1377ms/image | top5:0.868421 | top1:0.618421 |
-| squeezenet           | caffe     | ubuntu16_04 | llvm     | 810               | A76           | int8      | cpu        | 1      | 1/3/224/224 | max_time:12.3049ms/image    | min_time:9.78296ms/image | avg_time:10.041ms/image  | top5:0.868421 | top1:0.664474 |
-| squeezenet           | caffe     | ubuntu16_04 | llvm     | 990               | A55           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:98.7239ms/image    | min_time:81.147ms/image  | avg_time:83.2495ms/image | top5:0.875    | top1:0.618421 |
-| squeezenet           | caffe     | ubuntu16_04 | llvm     | 990               | A55           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:45.7671ms/image    | min_time:33.8918ms/image | avg_time:36.3651ms/image | top5:0.868421 | top1:0.618421 |
-| squeezenet           | caffe     | ubuntu16_04 | llvm     | 990               | A55           | int8      | cpu        | 1      | 1/3/224/224 | max_time:40.23ms/image      | min_time:32.166ms/image  | avg_time:33.0669ms/image | top5:0.868421 | top1:0.664474 |
-| squeezenet           | caffe     | ubuntu16_04 | llvm     | 990               | A76           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:19.312ms/image     | min_time:17.6091ms/image | avg_time:17.8038ms/image | top5:0.875    | top1:0.618421 |
-| squeezenet           | caffe     | ubuntu16_04 | llvm     | 990               | A76           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:10.54ms/image      | min_time:9.58398ms/image | avg_time:9.73297ms/image | top5:0.868421 | top1:0.618421 |
-| squeezenet           | caffe     | ubuntu16_04 | llvm     | 990               | A76           | int8      | cpu        | 1      | 1/3/224/224 | max_time:8.69287ms/image    | min_time:7.7019ms/image  | avg_time:7.80628ms/image | top5:0.868421 | top1:0.664474 |
-| mobilenet_v3         | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:39.6121ms/image    | min_time:30.645ms/image  | avg_time:31.2452ms/image | top5:0.809211 | top1:0.539474 |
-| mobilenet_v3         | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:20.4729ms/image    | min_time:15.2979ms/image | avg_time:15.8074ms/image | top5:0.822368 | top1:0.546053 |
-| mobilenet_v3         | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:9.58984ms/image    | min_time:7.26196ms/image | avg_time:7.37196ms/image | top5:0.809211 | top1:0.539474 |
-| mobilenet_v3         | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:6.87085ms/image    | min_time:4.26001ms/image | avg_time:4.38828ms/image | top5:0.822368 | top1:0.546053 |
-| mobilenet_v3         | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:36.8108ms/image    | min_time:26.8101ms/image | avg_time:28.4539ms/image | top5:0.809211 | top1:0.539474 |
-| mobilenet_v3         | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:15.5039ms/image    | min_time:13.3491ms/image | avg_time:14.5589ms/image | top5:0.822368 | top1:0.546053 |
-| mobilenet_v3         | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:5.90894ms/image    | min_time:5.72192ms/image | avg_time:5.80782ms/image | top5:0.809211 | top1:0.539474 |
-| mobilenet_v3         | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:3.52197ms/image    | min_time:3.30493ms/image | avg_time:3.34958ms/image | top5:0.822368 | top1:0.546053 |
-| mobilenet_v3         | caffe     | ubuntu16_04 | llvm     | 810               | A55           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:36.0649ms/image    | min_time:31.5652ms/image | avg_time:32.6065ms/image | top5:0.809211 | top1:0.539474 |
-| mobilenet_v3         | caffe     | ubuntu16_04 | llvm     | 810               | A55           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:19.0042ms/image    | min_time:16.8479ms/image | avg_time:17.7286ms/image | top5:0.815789 | top1:0.539474 |
-| mobilenet_v3         | caffe     | ubuntu16_04 | llvm     | 810               | A76           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:15.012ms/image     | min_time:7.82007ms/image | avg_time:7.97568ms/image | top5:0.809211 | top1:0.539474 |
-| mobilenet_v3         | caffe     | ubuntu16_04 | llvm     | 810               | A76           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:6.84717ms/image    | min_time:4.59595ms/image | avg_time:4.69553ms/image | top5:0.815789 | top1:0.539474 |
-| mobilenet_v3         | caffe     | ubuntu16_04 | llvm     | 990               | A55           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:38.3628ms/image    | min_time:27.134ms/image  | avg_time:29.9821ms/image | top5:0.809211 | top1:0.539474 |
-| mobilenet_v3         | caffe     | ubuntu16_04 | llvm     | 990               | A55           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:20.6179ms/image    | min_time:15.635ms/image  | avg_time:16.1516ms/image | top5:0.815789 | top1:0.539474 |
-| mobilenet_v3         | caffe     | ubuntu16_04 | llvm     | 990               | A76           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:6.75513ms/image    | min_time:6.01196ms/image | avg_time:6.08447ms/image | top5:0.809211 | top1:0.539474 |
-| mobilenet_v3         | caffe     | ubuntu16_04 | llvm     | 990               | A76           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:4.0332ms/image     | min_time:3.573ms/image   | avg_time:3.6405ms/image  | top5:0.815789 | top1:0.539474 |
-| fingerprint_resnet18 | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55           | fp32      | cpu        | 1      | UNKNOWN     | avg_time:6.20508ms/image    |                          |                          |               |               |
-| fingerprint_resnet18 | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55           | fp16      | cpu        | 1      | UNKNOWN     | avg_time:3.82397ms/image    |                          |                          |               |               |
-| fingerprint_resnet18 | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76           | fp32      | cpu        | 1      | UNKNOWN     | avg_time:6.42603ms/image    |                          |                          |               |               |
-| fingerprint_resnet18 | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76           | fp16      | cpu        | 1      | UNKNOWN     | avg_time:3.63501ms/image    |                          |                          |               |               |
-| fingerprint_resnet18 | caffe     | ubuntu16_04 | llvm     | 810               | A55           | fp32      | cpu        | 1      | UNKNOWN     | avg_time:5.70605ms/image    |                          |                          |               |               |
-| fingerprint_resnet18 | caffe     | ubuntu16_04 | llvm     | 810               | A55           | fp16      | cpu        | 1      | UNKNOWN     | avg_time:3.38989ms/image    |                          |                          |               |               |
-| fingerprint_resnet18 | caffe     | ubuntu16_04 | llvm     | 810               | A76           | fp32      | cpu        | 1      | UNKNOWN     | avg_time:5.6731ms/image     |                          |                          |               |               |
-| fingerprint_resnet18 | caffe     | ubuntu16_04 | llvm     | 810               | A76           | fp16      | cpu        | 1      | UNKNOWN     | avg_time:3.521ms/image      |                          |                          |               |               |
-| resnet50             | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:769.38ms/image     | min_time:726.458ms/image | avg_time:738.653ms/image | top5:0.934211 | top1:0.730263 |
-| resnet50             | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:333.544ms/image    | min_time:298.813ms/image | avg_time:311.864ms/image | top5:0.934211 | top1:0.730263 |
-| resnet50             | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:194.501ms/image    | min_time:185.442ms/image | avg_time:186.798ms/image | top5:0.934211 | top1:0.730263 |
-| resnet50             | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:97.8091ms/image    | min_time:92.2888ms/image | avg_time:93.0512ms/image | top5:0.934211 | top1:0.730263 |
-| resnet50             | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:716.164ms/image    | min_time:620.755ms/image | avg_time:676.802ms/image | top5:0.934211 | top1:0.730263 |
-| resnet50             | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:298.58ms/image     | min_time:252.569ms/image | avg_time:274.926ms/image | top5:0.934211 | top1:0.730263 |
-| resnet50             | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:153.967ms/image    | min_time:152.562ms/image | avg_time:153.01ms/image  | top5:0.934211 | top1:0.730263 |
-| resnet50             | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:76.0752ms/image    | min_time:75.5671ms/image | avg_time:75.844ms/image  | top5:0.934211 | top1:0.730263 |
-| resnet50             | caffe     | ubuntu16_04 | llvm     | 990               | A55           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:956.05ms/image     | min_time:669.802ms/image | avg_time:692.174ms/image | top5:0.934211 | top1:0.730263 |
-| resnet50             | caffe     | ubuntu16_04 | llvm     | 990               | A55           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:308.14ms/image     | min_time:283.158ms/image | avg_time:287.35ms/image  | top5:0.934211 | top1:0.730263 |
-| resnet50             | caffe     | ubuntu16_04 | llvm     | 990               | A76           | fp32      | cpu        | 1      | 1/3/224/224 | max_time:157.702ms/image    | min_time:154.775ms/image | avg_time:155.15ms/image  | top5:0.934211 | top1:0.730263 |
-| resnet50             | caffe     | ubuntu16_04 | llvm     | 990               | A76           | fp16      | cpu        | 1      | 1/3/224/224 | max_time:79.03ms/image      | min_time:77.3899ms/image | avg_time:77.7673ms/image | top5:0.934211 | top1:0.730263 |
-| birealnet18          | onnx      | ubuntu16_04 | gcc8.3   | 810               | A55           | binary    | cpu        | 1      | 1/3/224/224 | max_time:103.304ms/image    | min_time:86.573ms/image  | avg_time:88.4649ms/image | top5:0.782895 | top1:0.460526 |
-| birealnet18          | onnx      | ubuntu16_04 | gcc8.3   | 810               | A76           | binary    | cpu        | 1      | 1/3/224/224 | max_time:32.9131ms/image    | min_time:30.6541ms/image | avg_time:32.1737ms/image | top5:0.782895 | top1:0.460526 |
-| birealnet18          | onnx      | ubuntu16_04 | gcc8.3   | 990               | A55           | binary    | cpu        | 1      | 1/3/224/224 | max_time:99.9858ms/image    | min_time:82.6409ms/image | avg_time:85.7396ms/image | top5:0.782895 | top1:0.460526 |
-| birealnet18          | onnx      | ubuntu16_04 | gcc8.3   | 990               | A76           | binary    | cpu        | 1      | 1/3/224/224 | max_time:25.5642ms/image    | min_time:23.6038ms/image | avg_time:24.7936ms/image | top5:0.782895 | top1:0.460526 |
-| birealnet18          | onnx      | ubuntu16_04 | llvm     | 810               | A55           | binary    | cpu        | 1      | 1/3/224/224 | max_time:89.7971ms/image    | min_time:77.2161ms/image | avg_time:78.3607ms/image | top5:0.782895 | top1:0.473684 |
-| birealnet18          | onnx      | ubuntu16_04 | llvm     | 810               | A76           | binary    | cpu        | 1      | 1/3/224/224 | max_time:27.375ms/image     | min_time:25.1851ms/image | avg_time:25.892ms/image  | top5:0.782895 | top1:0.473684 |
-| birealnet18          | onnx      | ubuntu16_04 | llvm     | 990               | A55           | binary    | cpu        | 1      | 1/3/224/224 | max_time:86.949ms/image     | min_time:73.6069ms/image | avg_time:75.5283ms/image | top5:0.782895 | top1:0.473684 |
-| birealnet18          | onnx      | ubuntu16_04 | llvm     | 990               | A76           | binary    | cpu        | 1      | 1/3/224/224 | max_time:20.3091ms/image    | min_time:19.636ms/image  | avg_time:19.7468ms/image | top5:0.782895 | top1:0.473684 |
-| mobilenet_v1         | caffe     | ubuntu16_04 | llvm     | 990               | MALI-G76-MP16 | fp16      | gpu        | 1      | 1/3/224/224 | max_time:11.2231ms/image    | min_time:7.74097ms/image | avg_time:8.5096ms/image  | top5:0.894737 | top1:0.644737 |
-| mobilenet_v2         | caffe     | ubuntu16_04 | llvm     | 990               | MALI-G76-MP16 | fp16      | gpu        | 1      | 1/3/224/224 | max_time:13.521ms/image     | min_time:8.36597ms/image | avg_time:9.10277ms/image | top5:0.940789 | top1:0.756579 |
-| mobilenet_v3         | caffe     | ubuntu16_04 | llvm     | 990               | MALI-G76-MP16 | fp16      | gpu        | 1      | 1/3/224/224 | max_time:12.2771ms/image    | min_time:5.12305ms/image | avg_time:7.50856ms/image | top5:0.671053 | top1:0.342105 |
-| squeezenet           | caffe     | ubuntu16_04 | llvm     | 990               | MALI-G76-MP16 | fp16      | gpu        | 1      | 1/3/224/224 | max_time:11.2141ms/image    | min_time:6.36304ms/image | avg_time:7.38169ms/image | top5:0.875    | top1:0.618421 |
-| ghostnet             | onnx      | ubuntu16_04 | llvm     | 990               | MALI-G76-MP16 | fp16      | gpu        | 1      | 1/3/224/224 | max_time:15.1619ms/image    | min_time:8.94604ms/image | avg_time:11.566ms/image  | top5:0.973684 | top1:0.868421 |
-| mobilenet_v1         | caffe     | ubuntu16_04 | llvm     | 810               | MALI-G52-MP6  | fp16      | gpu        | 1      | 1/3/224/224 | max_time:16.575ms/image     | min_time:11.979ms/image  | avg_time:13.0283ms/image | top5:0.894737 | top1:0.644737 |
-| mobilenet_v2         | caffe     | ubuntu16_04 | llvm     | 810               | MALI-G52-MP6  | fp16      | gpu        | 1      | 1/3/224/224 | max_time:17.498ms/image     | min_time:13.28ms/image   | avg_time:14.2388ms/image | top5:0.940789 | top1:0.756579 |
-| mobilenet_v3         | caffe     | ubuntu16_04 | llvm     | 810               | MALI-G52-MP6  | fp16      | gpu        | 1      | 1/3/224/224 | max_time:12.8831ms/image    | min_time:7.37183ms/image | avg_time:9.25686ms/image | top5:0.671053 | top1:0.342105 |
-| squeezenet           | caffe     | ubuntu16_04 | llvm     | 810               | MALI-G52-MP6  | fp16      | gpu        | 1      | 1/3/224/224 | max_time:14.5859ms/image    | min_time:9.90796ms/image | avg_time:10.5907ms/image | top5:0.875    | top1:0.618421 |
-| ghostnet             | onnx      | ubuntu16_04 | llvm     | 810               | MALI-G52-MP6  | fp16      | gpu        | 1      | 1/3/224/224 | max_time:15.1641ms/image    | min_time:12.0188ms/image | avg_time:13.2528ms/image | top5:0.973684 | top1:0.868421 |
+| Model                                       | Framework | Os          | Compiler | Kirin Soc Version | Core | Precision | Cpu or Gpu | Thread | Input Size  | avg_time                    |
+| ------------                                | --------- | ----------- | -------- | ----------------- | ---- | --------- | ---------- | ------ | ----------- | --------------------------- |
+| tinybert                                    | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55  | fp32      | cpu        | 1      | 32+32+32    | 16.605225 |
+| tinybert                                    | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55  | fp16      | cpu        | 1      | 32+32+32    | 9.114014 |
+| tinybert                                    | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55  | int8      | cpu        | 1      | 32+32+32    | 7.108154 |
+| tinybert                                    | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76  | fp32      | cpu        | 1      | 32+32+32    | 4.708984 |
+| tinybert                                    | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76  | fp16      | cpu        | 1      | 32+32+32    | 3.208984 |
+| tinybert                                    | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76  | int8      | cpu        | 1      | 32+32+32    | 2.205811 |
+| tinybert                                    | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55  | fp32      | cpu        | 1      | 32+32+32    | 17.630127 |
+| tinybert                                    | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55  | fp16      | cpu        | 1      | 32+32+32    | 9.800049 |
+| tinybert                                    | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55  | int8      | cpu        | 1      | 32+32+32    | 7.642090 |
+| tinybert                                    | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76  | fp32      | cpu        | 1      | 32+32+32    | 4.029053 |
+| tinybert                                    | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76  | fp16      | cpu        | 1      | 32+32+32    | 2.835938 |
+| tinybert                                    | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76  | int8      | cpu        | 1      | 32+32+32    | 1.875977 |
+| tinybert                                    | caffe     | ubuntu16_04 | llvm     | 810               | A55  | fp32      | cpu        | 1      | 32+32+32    | 16.586914 |
+| tinybert                                    | caffe     | ubuntu16_04 | llvm     | 810               | A55  | fp16      | cpu        | 1      | 32+32+32    | 9.926025 |
+| tinybert                                    | caffe     | ubuntu16_04 | llvm     | 810               | A55  | int8      | cpu        | 1      | 32+32+32    | 8.780029 |
+| tinybert                                    | caffe     | ubuntu16_04 | llvm     | 810               | A76  | fp32      | cpu        | 1      | 32+32+32    | 4.817139 |
+| tinybert                                    | caffe     | ubuntu16_04 | llvm     | 810               | A76  | fp16      | cpu        | 1      | 32+32+32    | 3.411133 |
+| tinybert                                    | caffe     | ubuntu16_04 | llvm     | 810               | A76  | int8      | cpu        | 1      | 32+32+32    | 2.603027 |
+| tinybert                                    | caffe     | ubuntu16_04 | llvm     | 990               | A55  | fp32      | cpu        | 1      | 32+32+32    | 17.857910 |
+| tinybert                                    | caffe     | ubuntu16_04 | llvm     | 990               | A55  | fp16      | cpu        | 1      | 32+32+32    | 10.166016 |
+| tinybert                                    | caffe     | ubuntu16_04 | llvm     | 990               | A55  | int8      | cpu        | 1      | 32+32+32    | 9.524902 |
+| tinybert                                    | caffe     | ubuntu16_04 | llvm     | 990               | A76  | fp32      | cpu        | 1      | 32+32+32    | 4.157959 |
+| tinybert                                    | caffe     | ubuntu16_04 | llvm     | 990               | A76  | fp16      | cpu        | 1      | 32+32+32    | 2.849854 |
+| tinybert                                    | caffe     | ubuntu16_04 | llvm     | 990               | A76  | int8      | cpu        | 1      | 32+32+32    | 2.161865 |
+| nmt                                         | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55  | fp32      | cpu        | 1      | 32+32+32    | 642.424072 |
+| nmt                                         | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55  | fp16      | cpu        | 1      | 32+32+32    | 356.841064 |
+| nmt                                         | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76  | fp32      | cpu        | 1      | 32+32+32    | 232.143066 |
+| nmt                                         | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76  | fp16      | cpu        | 1      | 32+32+32    | 116.806885 |
+| nmt                                         | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55  | fp32      | cpu        | 1      | 32+32+32    | 710.650879 |
+| nmt                                         | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55  | fp16      | cpu        | 1      | 32+32+32    | 373.492920 |
+| nmt                                         | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76  | fp32      | cpu        | 1      | 32+32+32    | 188.436035 |
+| nmt                                         | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76  | fp16      | cpu        | 1      | 32+32+32    | 95.020996 |
+| nmt                                         | caffe     | ubuntu16_04 | llvm     | 810               | A55  | fp32      | cpu        | 1      | 32+32+32    | 656.012939 |
+| nmt                                         | caffe     | ubuntu16_04 | llvm     | 810               | A55  | fp16      | cpu        | 1      | 32+32+32    | 355.530029 |
+| nmt                                         | caffe     | ubuntu16_04 | llvm     | 810               | A76  | fp32      | cpu        | 1      | 32+32+32    | 233.974854 |
+| nmt                                         | caffe     | ubuntu16_04 | llvm     | 810               | A76  | fp16      | cpu        | 1      | 32+32+32    | 120.966797 |
+| nmt                                         | caffe     | ubuntu16_04 | llvm     | 990               | A55  | fp32      | cpu        | 1      | 32+32+32    | 694.150146 |
+| nmt                                         | caffe     | ubuntu16_04 | llvm     | 990               | A55  | fp16      | cpu        | 1      | 32+32+32    | 370.792969 |
+| nmt                                         | caffe     | ubuntu16_04 | llvm     | 990               | A76  | fp32      | cpu        | 1      | 32+32+32    | 191.239014 |
+| nmt                                         | caffe     | ubuntu16_04 | llvm     | 990               | A76  | fp16      | cpu        | 1      | 32+32+32    | 96.389893 |
+| ghostnet                                    | onnx      | ubuntu16_04 | gcc8.3   | 810               | A55  | fp32      | cpu        | 1      | 1/3/224/224 | 59.0912 |
+| ghostnet                                    | onnx      | ubuntu16_04 | gcc8.3   | 810               | A55  | fp16      | cpu        | 1      | 1/3/224/224 | 29.1388 |
+| ghostnet                                    | onnx      | ubuntu16_04 | gcc8.3   | 810               | A76  | fp32      | cpu        | 1      | 1/3/224/224 | 18.4675  |
+| ghostnet                                    | onnx      | ubuntu16_04 | gcc8.3   | 810               | A76  | fp16      | cpu        | 1      | 1/3/224/224 | 8.85982 |
+| ghostnet                                    | onnx      | ubuntu16_04 | gcc8.3   | 990               | A55  | fp32      | cpu        | 1      | 1/3/224/224 | 59.8203 |
+| ghostnet                                    | onnx      | ubuntu16_04 | gcc8.3   | 990               | A55  | fp16      | cpu        | 1      | 1/3/224/224 | 28.1741  |
+| ghostnet                                    | onnx      | ubuntu16_04 | gcc8.3   | 990               | A76  | fp32      | cpu        | 1      | 1/3/224/224 | 13.4824 |
+| ghostnet                                    | onnx      | ubuntu16_04 | gcc8.3   | 990               | A76  | fp16      | cpu        | 1      | 1/3/224/224 | 7.01458 |
+| ghostnet                                    | onnx      | ubuntu16_04 | llvm     | 810               | A55  | fp32      | cpu        | 1      | 1/3/224/224 | 67.9283 |
+| ghostnet                                    | onnx      | ubuntu16_04 | llvm     | 810               | A55  | fp16      | cpu        | 1      | 1/3/224/224 | 33.2657  |
+| ghostnet                                    | onnx      | ubuntu16_04 | llvm     | 810               | A76  | fp32      | cpu        | 1      | 1/3/224/224 | 18.8378 |
+| ghostnet                                    | onnx      | ubuntu16_04 | llvm     | 810               | A76  | fp16      | cpu        | 1      | 1/3/224/224 | 9.45095 |
+| ghostnet                                    | onnx      | ubuntu16_04 | llvm     | 990               | A55  | fp32      | cpu        | 1      | 1/3/224/224 | 61.4079 |
+| ghostnet                                    | onnx      | ubuntu16_04 | llvm     | 990               | A55  | fp16      | cpu        | 1      | 1/3/224/224 | 29.9928 |
+| ghostnet                                    | onnx      | ubuntu16_04 | llvm     | 990               | A76  | fp32      | cpu        | 1      | 1/3/224/224 | 14.0345 |
+| ghostnet                                    | onnx      | ubuntu16_04 | llvm     | 990               | A76  | fp16      | cpu        | 1      | 1/3/224/224 | 7.38781 |
+| mobilenet_v1                                | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55  | fp32      | cpu        | 1      | 1/3/224/224 | 157.002292 |
+| mobilenet_v1                                | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55  | fp16      | cpu        | 1      | 1/3/224/224 | 58.171620 |
+| mobilenet_v1                                | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76  | fp32      | cpu        | 1      | 1/3/224/224 | 39.825202 |
+| mobilenet_v1                                | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76  | fp16      | cpu        | 1      | 1/3/224/224 | 19.578837 |
+| mobilenet_v1                                | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55  | fp32      | cpu        | 1      | 1/3/224/224 | 162.878805 |
+| mobilenet_v1                                | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55  | fp16      | cpu        | 1      | 1/3/224/224 | 60.626796 |
+| mobilenet_v1                                | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76  | fp32      | cpu        | 1      | 1/3/224/224 | 34.055518 |
+| mobilenet_v1                                | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76  | fp16      | cpu        | 1      | 1/3/224/224 | 16.632785 |
+| mobilenet_v1                                | caffe     | ubuntu16_04 | llvm     | 810               | A55  | fp32      | cpu        | 1      | 1/3/224/224 | 146.566687 |
+| mobilenet_v1                                | caffe     | ubuntu16_04 | llvm     | 810               | A55  | fp16      | cpu        | 1      | 1/3/224/224 | 56.444002 |
+| mobilenet_v1                                | caffe     | ubuntu16_04 | llvm     | 810               | A76  | fp32      | cpu        | 1      | 1/3/224/224 | 41.474450 |
+| mobilenet_v1                                | caffe     | ubuntu16_04 | llvm     | 810               | A76  | fp16      | cpu        | 1      | 1/3/224/224 | 19.824521 |
+| mobilenet_v1                                | caffe     | ubuntu16_04 | llvm     | 990               | A55  | fp32      | cpu        | 1      | 1/3/224/224 | 154.871895 |
+| mobilenet_v1                                | caffe     | ubuntu16_04 | llvm     | 990               | A55  | fp16      | cpu        | 1      | 1/3/224/224 | 58.995204 |
+| mobilenet_v1                                | caffe     | ubuntu16_04 | llvm     | 990               | A76  | fp32      | cpu        | 1      | 1/3/224/224 | 35.317029 |
+| mobilenet_v1                                | caffe     | ubuntu16_04 | llvm     | 990               | A76  | fp16      | cpu        | 1      | 1/3/224/224 | 17.012493 |
+| mobilenet_v2                                | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55  | fp32      | cpu        | 1      | 1/3/224/224 | 128.224905 |
+| mobilenet_v2                                | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55  | fp16      | cpu        | 1      | 1/3/224/224 | 52.524629 |
+| mobilenet_v2                                | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76  | fp32      | cpu        | 1      | 1/3/224/224 | 37.341060 |
+| mobilenet_v2                                | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76  | fp16      | cpu        | 1      | 1/3/224/224 | 17.874094 |
+| mobilenet_v2                                | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55  | fp32      | cpu        | 1      | 1/3/224/224 | 133.358493 |
+| mobilenet_v2                                | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55  | fp16      | cpu        | 1      | 1/3/224/224 | 54.601522 |
+| mobilenet_v2                                | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76  | fp32      | cpu        | 1      | 1/3/224/224 | 30.195150 |
+| mobilenet_v2                                | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76  | fp16      | cpu        | 1      | 1/3/224/224 | 14.732285 |
+| mobilenet_v2                                | caffe     | ubuntu16_04 | llvm     | 810               | A55  | fp32      | cpu        | 1      | 1/3/224/224 | 128.164528 |
+| mobilenet_v2                                | caffe     | ubuntu16_04 | llvm     | 810               | A55  | fp16      | cpu        | 1      | 1/3/224/224 | 52.918264 |
+| mobilenet_v2                                | caffe     | ubuntu16_04 | llvm     | 810               | A76  | fp32      | cpu        | 1      | 1/3/224/224 | 39.283749 |
+| mobilenet_v2                                | caffe     | ubuntu16_04 | llvm     | 810               | A76  | fp16      | cpu        | 1      | 1/3/224/224 | 18.219124 |
+| mobilenet_v2                                | caffe     | ubuntu16_04 | llvm     | 990               | A55  | fp32      | cpu        | 1      | 1/3/224/224 | 135.029091 |
+| mobilenet_v2                                | caffe     | ubuntu16_04 | llvm     | 990               | A55  | fp16      | cpu        | 1      | 1/3/224/224 | 53.469070 |
+| mobilenet_v2                                | caffe     | ubuntu16_04 | llvm     | 990               | A76  | fp32      | cpu        | 1      | 1/3/224/224 | 31.188000 |
+| mobilenet_v2                                | caffe     | ubuntu16_04 | llvm     | 990               | A76  | fp16      | cpu        | 1      | 1/3/224/224 | 14.823740 |
+| squeezenet                                  | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55  | fp32      | cpu        | 1      | 1/3/224/224 | 81.188454 |
+| squeezenet                                  | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55  | fp16      | cpu        | 1      | 1/3/224/224 | 41.068093 |
+| squeezenet                                  | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55  | int8      | cpu        | 1      | 1/3/224/224 | 40.926114 |
+| squeezenet                                  | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76  | fp32      | cpu        | 1      | 1/3/224/224 | 22.351720 |
+| squeezenet                                  | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76  | fp16      | cpu        | 1      | 1/3/224/224 | 12.302643 |
+| squeezenet                                  | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76  | int8      | cpu        | 1      | 1/3/224/224 | 12.866001 |
+| squeezenet                                  | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55  | fp32      | cpu        | 1      | 1/3/224/224 | 83.545513 |
+| squeezenet                                  | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55  | fp16      | cpu        | 1      | 1/3/224/224 | 38.876539 |
+| squeezenet                                  | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55  | int8      | cpu        | 1      | 1/3/224/224 | 42.012501 |
+| squeezenet                                  | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76  | fp32      | cpu        | 1      | 1/3/224/224 | 18.350247 |
+| squeezenet                                  | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76  | fp16      | cpu        | 1      | 1/3/224/224 | 10.457777 |
+| squeezenet                                  | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76  | int8      | cpu        | 1      | 1/3/224/224 | 10.791769 |
+| squeezenet                                  | caffe     | ubuntu16_04 | llvm     | 810               | A55  | fp32      | cpu        | 1      | 1/3/224/224 | 87.881422 |
+| squeezenet                                  | caffe     | ubuntu16_04 | llvm     | 810               | A55  | fp16      | cpu        | 1      | 1/3/224/224 | 41.555842 |
+| squeezenet                                  | caffe     | ubuntu16_04 | llvm     | 810               | A55  | int8      | cpu        | 1      | 1/3/224/224 | 42.674965 |
+| squeezenet                                  | caffe     | ubuntu16_04 | llvm     | 810               | A76  | fp32      | cpu        | 1      | 1/3/224/224 | 23.652636 |
+| squeezenet                                  | caffe     | ubuntu16_04 | llvm     | 810               | A76  | fp16      | cpu        | 1      | 1/3/224/224 | 12.840966 |
+| squeezenet                                  | caffe     | ubuntu16_04 | llvm     | 990               | A55  | fp32      | cpu        | 1      | 1/3/224/224 | 83.131129 |
+| squeezenet                                  | caffe     | ubuntu16_04 | llvm     | 990               | A55  | fp16      | cpu        | 1      | 1/3/224/224 | 40.010485 |
+| squeezenet                                  | caffe     | ubuntu16_04 | llvm     | 990               | A55  | int8      | cpu        | 1      | 1/3/224/224 | 42.526015 |
+| squeezenet                                  | caffe     | ubuntu16_04 | llvm     | 990               | A76  | fp32      | cpu        | 1      | 1/3/224/224 | 18.508339 |
+| squeezenet                                  | caffe     | ubuntu16_04 | llvm     | 990               | A76  | fp16      | cpu        | 1      | 1/3/224/224 | 10.512915 |
+| squeezenet                                  | caffe     | ubuntu16_04 | llvm     | 990               | A76  | int8      | cpu        | 1      | 1/3/224/224 | 10.664495 |
+| resnet50                                    | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55  | fp32      | cpu        | 1      | 1/3/224/224 | 671.152633 |
+| resnet50                                    | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55  | fp16      | cpu        | 1      | 1/3/224/224 | 285.339836 |
+| resnet50                                    | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55  | int8      | cpu        | 1      | 1/3/224/224 | 392.863447 |
+| resnet50                                    | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76  | int8      | cpu        | 1      | 1/3/224/224 | 238.454521 |
+| resnet50                                    | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55  | fp32      | cpu        | 1      | 1/3/224/224 | 704.473506 |
+| resnet50                                    | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55  | fp16      | cpu        | 1      | 1/3/224/224 | 305.267536 |
+| resnet50                                    | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55  | int8      | cpu        | 1      | 1/3/224/224 | 415.956299 |
+| resnet50                                    | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76  | fp32      | cpu        | 1      | 1/3/224/224 | 163.979900 |
+| resnet50                                    | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76  | fp16      | cpu        | 1      | 1/3/224/224 | 84.558313 |
+| resnet50                                    | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76  | int8      | cpu        | 1      | 1/3/224/224 | 107.986291 |
+| resnet50                                    | caffe     | ubuntu16_04 | llvm     | 810               | A55  | fp32      | cpu        | 1      | 1/3/224/224 | 659.161729 |
+| resnet50                                    | caffe     | ubuntu16_04 | llvm     | 810               | A55  | fp16      | cpu        | 1      | 1/3/224/224 | 291.172460 |
+| resnet50                                    | caffe     | ubuntu16_04 | llvm     | 810               | A55  | int8      | cpu        | 1      | 1/3/224/224 | 364.732873 |
+| resnet50                                    | caffe     | ubuntu16_04 | llvm     | 810               | A76  | fp32      | cpu        | 1      | 1/3/224/224 | 192.280511 |
+| resnet50                                    | caffe     | ubuntu16_04 | llvm     | 810               | A76  | fp16      | cpu        | 1      | 1/3/224/224 | 104.545466 |
+| resnet50                                    | caffe     | ubuntu16_04 | llvm     | 810               | A76  | int8      | cpu        | 1      | 1/3/224/224 | 106.067036 |
+| resnet50                                    | caffe     | ubuntu16_04 | llvm     | 990               | A55  | fp32      | cpu        | 1      | 1/3/224/224 | 696.839442 |
+| resnet50                                    | caffe     | ubuntu16_04 | llvm     | 990               | A55  | fp16      | cpu        | 1      | 1/3/224/224 | 305.819625 |
+| resnet50                                    | caffe     | ubuntu16_04 | llvm     | 990               | A55  | int8      | cpu        | 1      | 1/3/224/224 | 384.351028 |
+| resnet50                                    | caffe     | ubuntu16_04 | llvm     | 990               | A76  | fp32      | cpu        | 1      | 1/3/224/224 | 162.355430 |
+| resnet50                                    | caffe     | ubuntu16_04 | llvm     | 990               | A76  | fp16      | cpu        | 1      | 1/3/224/224 | 85.032211 |
+| resnet50                                    | caffe     | ubuntu16_04 | llvm     | 990               | A76  | int8      | cpu        | 1      | 1/3/224/224 | 87.458490 |
+| mobilenet_v3                                | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55  | fp32      | cpu        | 1      | 1/3/224/224 | 26.322640 |
+| mobilenet_v3                                | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55  | fp16      | cpu        | 1      | 1/3/224/224 | 13.424403 |
+| mobilenet_v3                                | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76  | fp32      | cpu        | 1      | 1/3/224/224 | 6.937206 |
+| mobilenet_v3                                | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76  | fp16      | cpu        | 1      | 1/3/224/224 | 4.120585 |
+| mobilenet_v3                                | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55  | fp32      | cpu        | 1      | 1/3/224/224 | 27.295058 |
+| mobilenet_v3                                | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55  | fp16      | cpu        | 1      | 1/3/224/224 | 14.080605 |
+| mobilenet_v3                                | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76  | fp32      | cpu        | 1      | 1/3/224/224 | 5.702913 |
+| mobilenet_v3                                | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76  | fp16      | cpu        | 1      | 1/3/224/224 | 3.402296 |
+| mobilenet_v3                                | caffe     | ubuntu16_04 | llvm     | 810               | A55  | fp32      | cpu        | 1      | 1/3/224/224 | 27.603806 |
+| mobilenet_v3                                | caffe     | ubuntu16_04 | llvm     | 810               | A55  | fp16      | cpu        | 1      | 1/3/224/224 | 13.785805 |
+| mobilenet_v3                                | caffe     | ubuntu16_04 | llvm     | 810               | A76  | fp32      | cpu        | 1      | 1/3/224/224 | 7.579590 |
+| mobilenet_v3                                | caffe     | ubuntu16_04 | llvm     | 810               | A76  | fp16      | cpu        | 1      | 1/3/224/224 | 4.360988 |
+| mobilenet_v3                                | caffe     | ubuntu16_04 | llvm     | 990               | A55  | fp32      | cpu        | 1      | 1/3/224/224 | 29.233688 |
+| mobilenet_v3                                | caffe     | ubuntu16_04 | llvm     | 990               | A55  | fp16      | cpu        | 1      | 1/3/224/224 | 14.552715 |
+| mobilenet_v3                                | caffe     | ubuntu16_04 | llvm     | 990               | A76  | fp32      | cpu        | 1      | 1/3/224/224 | 6.072735 |
+| mobilenet_v3                                | caffe     | ubuntu16_04 | llvm     | 990               | A76  | fp16      | cpu        | 1      | 1/3/224/224 | 3.545582 |
+| asr_rnnt                                    | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55  | fp32      | cpu        | 1      | / | 1394.038574 |
+| asr_rnnt                                    | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55  | fp16      | cpu        | 1      | / | 647.142578 |
+| asr_rnnt                                    | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76  | fp32      | cpu        | 1      | / | 491.428833 |
+| asr_rnnt                                    | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76  | fp16      | cpu        | 1      | / | 253.110596 |
+| asr_rnnt                                    | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55  | fp32      | cpu        | 1      | / | 1431.238037 |
+| asr_rnnt                                    | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55  | fp16      | cpu        | 1      | / | 717.116455 |
+| asr_rnnt                                    | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76  | fp32      | cpu        | 1      | / | 406.063965 |
+| asr_rnnt                                    | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76  | fp16      | cpu        | 1      | / | 201.946533 |
+| asr_rnnt                                    | caffe     | ubuntu16_04 | llvm     | 810               | A55  | fp32      | cpu        | 1      | / | 1373.467163 |
+| asr_rnnt                                    | caffe     | ubuntu16_04 | llvm     | 810               | A55  | fp16      | cpu        | 1      | / | 645.445068 |
+| asr_rnnt                                    | caffe     | ubuntu16_04 | llvm     | 810               | A76  | fp32      | cpu        | 1      | / | 513.895874 |
+| asr_rnnt                                    | caffe     | ubuntu16_04 | llvm     | 810               | A76  | fp16      | cpu        | 1      | / | 258.136353 |
+| asr_rnnt                                    | caffe     | ubuntu16_04 | llvm     | 990               | A55  | fp32      | cpu        | 1      | / | 1390.146973 |
+| asr_rnnt                                    | caffe     | ubuntu16_04 | llvm     | 990               | A55  | fp16      | cpu        | 1      | / | 689.771851 |
+| asr_rnnt                                    | caffe     | ubuntu16_04 | llvm     | 990               | A76  | fp32      | cpu        | 1      | / | 407.601929 |
+| asr_rnnt                                    | caffe     | ubuntu16_04 | llvm     | 990               | A76  | fp16      | cpu        | 1      | / | 204.034424 |
+| asr_convolution_transformer_encoder         | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55  | fp32      | cpu        | 1      | / | 73.672119 |
+| asr_convolution_transformer_encoder         | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55  | fp16      | cpu        | 1      | / | 38.642822 |
+| asr_convolution_transformer_encoder         | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76  | fp32      | cpu        | 1      | / | 20.154053 |
+| asr_convolution_transformer_encoder         | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76  | fp16      | cpu        | 1      | / | 11.269043 |
+| asr_convolution_transformer_encoder         | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55  | fp32      | cpu        | 1      | / | 80.286865 |
+| asr_convolution_transformer_encoder         | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55  | fp16      | cpu        | 1      | / | 43.187988 |
+| asr_convolution_transformer_encoder         | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76  | fp32      | cpu        | 1      | / | 17.701904 |
+| asr_convolution_transformer_encoder         | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76  | fp16      | cpu        | 1      | / | 9.718018 |
+| asr_convolution_transformer_encoder         | caffe     | ubuntu16_04 | llvm     | 810               | A55  | fp32      | cpu        | 1      | / | 70.837158 |
+| asr_convolution_transformer_encoder         | caffe     | ubuntu16_04 | llvm     | 810               | A55  | fp16      | cpu        | 1      | / | 38.571045 |
+| asr_convolution_transformer_encoder         | caffe     | ubuntu16_04 | llvm     | 810               | A76  | fp32      | cpu        | 1      | / | 20.748047 |
+| asr_convolution_transformer_encoder         | caffe     | ubuntu16_04 | llvm     | 810               | A76  | fp16      | cpu        | 1      | / | 11.482910 |
+| asr_convolution_transformer_encoder         | caffe     | ubuntu16_04 | llvm     | 990               | A55  | fp32      | cpu        | 1      | / | 78.658203 |
+| asr_convolution_transformer_encoder         | caffe     | ubuntu16_04 | llvm     | 990               | A55  | fp16      | cpu        | 1      | / | 41.130127 |
+| asr_convolution_transformer_encoder         | caffe     | ubuntu16_04 | llvm     | 990               | A76  | fp32      | cpu        | 1      | / | 17.866943 |
+| asr_convolution_transformer_encoder         | caffe     | ubuntu16_04 | llvm     | 990               | A76  | fp16      | cpu        | 1      | / | 9.725830 |
+| asr_convolution_transformer_joint_net       | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55  | fp32      | cpu        | 1      | / | 1.088867 |
+| asr_convolution_transformer_joint_net       | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55  | fp16      | cpu        | 1      | / | 0.776123 |
+| asr_convolution_transformer_joint_net       | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76  | fp32      | cpu        | 1      | / | 0.474121 |
+| asr_convolution_transformer_joint_net       | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76  | fp16      | cpu        | 1      | / | 0.277832 |
+| asr_convolution_transformer_joint_net       | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55  | fp32      | cpu        | 1      | / | 1.187012 |
+| asr_convolution_transformer_joint_net       | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55  | fp16      | cpu        | 1      | / | 0.599854 |
+| asr_convolution_transformer_joint_net       | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76  | fp32      | cpu        | 1      | / | 0.366211 |
+| asr_convolution_transformer_joint_net       | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76  | fp16      | cpu        | 1      | / | 0.197021 |
+| asr_convolution_transformer_prediction_net  | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55  | fp32      | cpu        | 1      | / | 12.655029 |
+| asr_convolution_transformer_prediction_net  | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55  | fp16      | cpu        | 1      | / | 5.782227 |
+| asr_convolution_transformer_prediction_net  | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76  | fp32      | cpu        | 1      | / | 3.854980 |
+| asr_convolution_transformer_prediction_net  | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76  | fp16      | cpu        | 1      | / | 2.052002 |
+| asr_convolution_transformer_prediction_net  | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55  | fp32      | cpu        | 1      | / | 12.645996 |
+| asr_convolution_transformer_prediction_net  | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55  | fp16      | cpu        | 1      | / | 6.840088 |
+| asr_convolution_transformer_prediction_net  | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76  | fp32      | cpu        | 1      | / | 3.276123 |
+| asr_convolution_transformer_prediction_net  | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76  | fp16      | cpu        | 1      | / | 1.738037 |
+| asr_convolution_transformer_prediction_net  | caffe     | ubuntu16_04 | llvm     | 810               | A55  | fp32      | cpu        | 1      | / | 11.480957 |
+| asr_convolution_transformer_prediction_net  | caffe     | ubuntu16_04 | llvm     | 810               | A55  | fp16      | cpu        | 1      | / | 6.652100 |
+| asr_convolution_transformer_prediction_net  | caffe     | ubuntu16_04 | llvm     | 810               | A76  | fp32      | cpu        | 1      | / | 3.854004 |
+| asr_convolution_transformer_prediction_net  | caffe     | ubuntu16_04 | llvm     | 810               | A76  | fp16      | cpu        | 1      | / | 2.174072 |
+| asr_convolution_transformer_prediction_net  | caffe     | ubuntu16_04 | llvm     | 990               | A55  | fp32      | cpu        | 1      | / | 12.539062 |
+| asr_convolution_transformer_prediction_net  | caffe     | ubuntu16_04 | llvm     | 990               | A55  | fp16      | cpu        | 1      | / | 6.432129 |
+| asr_convolution_transformer_prediction_net  | caffe     | ubuntu16_04 | llvm     | 990               | A76  | fp32      | cpu        | 1      | / | 3.377930 |
+| asr_convolution_transformer_prediction_net  | caffe     | ubuntu16_04 | llvm     | 990               | A76  | fp16      | cpu        | 1      | / | 1.842041 |
+| birealnet18                                 | onnx      | ubuntu16_04 | gcc8.3   | 810               | A55  | fp16      | cpu        | 1      | / | 68.122700 |
+| birealnet18                                 | onnx      | ubuntu16_04 | gcc8.3   | 810               | A76  | fp16      | cpu        | 1      | / | 27.371033 |
+| birealnet18                                 | onnx      | ubuntu16_04 | gcc8.3   | 990               | A55  | fp16      | cpu        | 1      | / | 72.439991|
+| birealnet18                                 | onnx      | ubuntu16_04 | gcc8.3   | 990               | A76  | fp16      | cpu        | 1      | / | 22.747310 |
+| birealnet18                                 | onnx      | ubuntu16_04 | llvm     | 810               | A55  | fp16      | cpu        | 1      | / | 64.079100 |
+| birealnet18                                 | onnx      | ubuntu16_04 | llvm     | 810               | A76  | fp16      | cpu        | 1      | / | 23.102961|
+| birealnet18                                 | onnx      | ubuntu16_04 | llvm     | 990               | A55  | fp16      | cpu        | 1      | / | 68.148505 |
+| birealnet18                                 | onnx      | ubuntu16_04 | llvm     | 990               | A76  | fp16      | cpu        | 1      | / | 19.146468 |
+| fingerprint_resnet18                        | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55  | fp32      | cpu        | 1      |/ | 10.235107 |
+| fingerprint_resnet18                        | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55  | fp16      | cpu        | 1      |/ | 5.970947 |
+| fingerprint_resnet18                        | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76  | fp32      | cpu        | 1      |/ | 2.722900 |
+| fingerprint_resnet18                        | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76  | fp16      | cpu        | 1      |/ | 1.936035 |
+| fingerprint_resnet18                        | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55  | fp32      | cpu        | 1      |/ | 10.719971 |
+| fingerprint_resnet18                        | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55  | fp16      | cpu        | 1      |/ | 6.263916 |
+| fingerprint_resnet18                        | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76  | fp32      | cpu        | 1      |/ | 2.169189 |
+| fingerprint_resnet18                        | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76  | fp16      | cpu        | 1      |/ | 1.608887 |
+| fingerprint_resnet18                        | caffe     | ubuntu16_04 | llvm     | 810               | A55  | fp32      | cpu        | 1      |/ | 9.856934 |
+| fingerprint_resnet18                        | caffe     | ubuntu16_04 | llvm     | 810               | A55  | fp16      | cpu        | 1      |/ | 6.613037 |
+| fingerprint_resnet18                        | caffe     | ubuntu16_04 | llvm     | 810               | A76  | fp32      | cpu        | 1      |/ | 2.770996 |
+| fingerprint_resnet18                        | caffe     | ubuntu16_04 | llvm     | 810               | A76  | fp16      | cpu        | 1      |/ | 1.895996 |
+| fingerprint_resnet18                        | caffe     | ubuntu16_04 | llvm     | 990               | A55  | fp32      | cpu        | 1      |/ | 9.671875 |
+| fingerprint_resnet18                        | caffe     | ubuntu16_04 | llvm     | 990               | A55  | fp16      | cpu        | 1      |/ | 6.834961 |
+| fingerprint_resnet18                        | caffe     | ubuntu16_04 | llvm     | 990               | A76  | fp32      | cpu        | 1      |/ | 2.219971 |
+| fingerprint_resnet18                        | caffe     | ubuntu16_04 | llvm     | 990               | A76  | fp16      | cpu        | 1      |/ | 1.579102 |
+| tinybert384                                 | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55  | fp32      | cpu        | 1      | / | 22.581055 |
+| tinybert384                                 | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55  | fp16      | cpu        | 1      | / | 11.834961 |
+| tinybert384                                 | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55  | int8      | cpu        | 1      | / | 9.236084 |
+| tinybert384                                 | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76  | fp32      | cpu        | 1      | / | 6.566895 |
+| tinybert384                                 | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76  | fp16      | cpu        | 1      | / | 4.331055 |
+| tinybert384                                 | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76  | int8      | cpu        | 1      | / | 2.608154 |
+| tinybert384                                 | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55  | fp32      | cpu        | 1      | / | 25.033936 |
+| tinybert384                                 | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55  | fp16      | cpu        | 1      | / | 12.445801 |
+| tinybert384                                 | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55  | int8      | cpu        | 1      | / | 8.791992 |
+| tinybert384                                 | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76  | fp32      | cpu        | 1      | / | 5.834229 |
+| tinybert384                                 | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76  | fp16      | cpu        | 1      | / | 4.145020 |
+| tinybert384                                 | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76  | int8      | cpu        | 1      | / | 2.248047 |
+| tinybert384                                 | caffe     | ubuntu16_04 | llvm     | 810               | A55  | fp32      | cpu        | 1      | / | 23.499023 |
+| tinybert384                                 | caffe     | ubuntu16_04 | llvm     | 810               | A55  | fp16      | cpu        | 1      | / | 11.804932 |
+| tinybert384                                 | caffe     | ubuntu16_04 | llvm     | 810               | A55  | int8      | cpu        | 1      | / | 10.481934 |
+| tinybert384                                 | caffe     | ubuntu16_04 | llvm     | 810               | A76  | fp32      | cpu        | 1      | / | 6.758057 |
+| tinybert384                                 | caffe     | ubuntu16_04 | llvm     | 810               | A76  | fp16      | cpu        | 1      | / | 4.487061 |
+| tinybert384                                 | caffe     | ubuntu16_04 | llvm     | 810               | A76  | int8      | cpu        | 1      | / | 2.980957 |
+| tinybert384                                 | caffe     | ubuntu16_04 | llvm     | 990               | A55  | fp32      | cpu        | 1      | / | 24.321045 |
+| tinybert384                                 | caffe     | ubuntu16_04 | llvm     | 990               | A55  | fp16      | cpu        | 1      | / | 11.989014 |
+| tinybert384                                 | caffe     | ubuntu16_04 | llvm     | 990               | A55  | int8      | cpu        | 1      | / | 11.645020 |
+| tinybert384                                 | caffe     | ubuntu16_04 | llvm     | 990               | A76  | fp32      | cpu        | 1      | / | 5.864990 |
+| tinybert384                                 | caffe     | ubuntu16_04 | llvm     | 990               | A76  | fp16      | cpu        | 1      | / | 3.717041 |
+| tinybert384                                 | caffe     | ubuntu16_04 | llvm     | 990               | A76  | int8      | cpu        | 1      | / | 2.541992 |
+| tts_postnet                                 | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55  | fp32      | cpu        | 1      | / | 190.645020 |
+| tts_postnet                                 | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55  | fp16      | cpu        | 1      | / | 76.032959 |
+| tts_postnet                                 | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76  | fp32      | cpu        | 1      | / | 50.892822 |
+| tts_postnet                                 | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76  | fp16      | cpu        | 1      | / | 26.031006 |
+| tts_postnet                                 | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55  | fp32      | cpu        | 1      | / | 196.128906 |
+| tts_postnet                                 | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55  | fp16      | cpu        | 1      | / | 78.461182 |
+| tts_postnet                                 | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76  | fp32      | cpu        | 1      | / | 45.419922 |
+| tts_postnet                                 | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76  | fp16      | cpu        | 1      | / | 23.227051 |
+| tts_postnet                                 | caffe     | ubuntu16_04 | llvm     | 810               | A55  | fp32      | cpu        | 1      | / | 177.791016 |
+| tts_postnet                                 | caffe     | ubuntu16_04 | llvm     | 810               | A55  | fp16      | cpu        | 1      | / | 76.929932 |
+| tts_postnet                                 | caffe     | ubuntu16_04 | llvm     | 810               | A76  | fp32      | cpu        | 1      | / | 50.316162 |
+| tts_postnet                                 | caffe     | ubuntu16_04 | llvm     | 810               | A76  | fp16      | cpu        | 1      | / | 26.363037 |
+| tts_postnet                                 | caffe     | ubuntu16_04 | llvm     | 990               | A55  | fp32      | cpu        | 1      | / | 187.880859 |
+| tts_postnet                                 | caffe     | ubuntu16_04 | llvm     | 990               | A55  | fp16      | cpu        | 1      | / | 77.622070 |
+| tts_postnet                                 | caffe     | ubuntu16_04 | llvm     | 990               | A76  | fp32      | cpu        | 1      | / | 45.151123 |
+| tts_postnet                                 | caffe     | ubuntu16_04 | llvm     | 990               | A76  | fp16      | cpu        | 1      | / | 23.705078 |
+| tinybert_onnx                               | onnx      | ubuntu16_04 | gcc8.3   | 810               | A55  | fp32      | cpu        | 1      | / | 16.797119 |
+| tinybert_onnx                               | onnx      | ubuntu16_04 | gcc8.3   | 810               | A55  | fp16      | cpu        | 1      | / | 9.298096 |
+| tinybert_onnx                               | onnx      | ubuntu16_04 | gcc8.3   | 810               | A76  | fp32      | cpu        | 1      | / | 4.791992 |
+| tinybert_onnx                               | onnx      | ubuntu16_04 | gcc8.3   | 810               | A76  | fp16      | cpu        | 1      | / | 3.198975 |
+| tinybert_onnx                               | onnx      | ubuntu16_04 | gcc8.3   | 990               | A55  | fp32      | cpu        | 1      | / | 18.088135 |
+| tinybert_onnx                               | onnx      | ubuntu16_04 | gcc8.3   | 990               | A55  | fp16      | cpu        | 1      | / | 9.281006 |
+| tinybert_onnx                               | onnx      | ubuntu16_04 | gcc8.3   | 990               | A76  | fp32      | cpu        | 1      | / | 4.185059 |
+| tinybert_onnx                               | onnx      | ubuntu16_04 | gcc8.3   | 990               | A76  | fp16      | cpu        | 1      | / | 2.751953 |
+| tinybert_onnx                               | onnx      | ubuntu16_04 | llvm     | 810               | A55  | fp32      | cpu        | 1      | / | 17.781006 |
+| tinybert_onnx                               | onnx      | ubuntu16_04 | llvm     | 810               | A55  | fp16      | cpu        | 1      | / | 10.011963 |
+| tinybert_onnx                               | onnx      | ubuntu16_04 | llvm     | 810               | A76  | fp32      | cpu        | 1      | / | 5.114014 |
+| tinybert_onnx                               | onnx      | ubuntu16_04 | llvm     | 810               | A76  | fp16      | cpu        | 1      | / | 3.356934 |
+| tinybert_onnx                               | onnx      | ubuntu16_04 | llvm     | 990               | A55  | fp32      | cpu        | 1      | / | 19.456055 |
+| tinybert_onnx                               | onnx      | ubuntu16_04 | llvm     | 990               | A55  | fp16      | cpu        | 1      | / | 10.182861 |
+| tinybert_onnx                               | onnx      | ubuntu16_04 | llvm     | 990               | A76  | fp32      | cpu        | 1      | / | 4.295898 |
+| tinybert_onnx                               | onnx      | ubuntu16_04 | llvm     | 990               | A76  | fp16      | cpu        | 1      | / | 2.818848 |
+| tts_melgan_vocoder                          | onnx      | ubuntu16_04 | gcc8.3   | 810               | A55  | fp32      | cpu        | 1      | / | 1678.862793 |
+| tts_melgan_vocoder                          | onnx      | ubuntu16_04 | gcc8.3   | 810               | A55  | fp16      | cpu        | 1      | / | 776.404053 |
+| tts_melgan_vocoder                          | onnx      | ubuntu16_04 | gcc8.3   | 810               | A76  | fp32      | cpu        | 1      | / | 525.206055 |
+| tts_melgan_vocoder                          | onnx      | ubuntu16_04 | gcc8.3   | 810               | A76  | fp16      | cpu        | 1      | / | 263.708008 |
+| tts_melgan_vocoder                          | onnx      | ubuntu16_04 | gcc8.3   | 990               | A55  | fp32      | cpu        | 1      | / | 1764.489014 |
+| tts_melgan_vocoder                          | onnx      | ubuntu16_04 | gcc8.3   | 990               | A55  | fp16      | cpu        | 1      | / | 813.339844 |
+| tts_melgan_vocoder                          | onnx      | ubuntu16_04 | gcc8.3   | 990               | A76  | fp32      | cpu        | 1      | / | 417.965088 |
+| tts_melgan_vocoder                          | onnx      | ubuntu16_04 | gcc8.3   | 990               | A76  | fp16      | cpu        | 1      | / | 215.749023 |
+| tts_melgan_vocoder                          | onnx      | ubuntu16_04 | llvm     | 810               | A55  | fp32      | cpu        | 1      | / | 1681.593994 |
+| tts_melgan_vocoder                          | onnx      | ubuntu16_04 | llvm     | 810               | A55  | fp16      | cpu        | 1      | / | 745.455078 |
+| tts_melgan_vocoder                          | onnx      | ubuntu16_04 | llvm     | 810               | A76  | fp32      | cpu        | 1      | / | 493.489014 |
+| tts_melgan_vocoder                          | onnx      | ubuntu16_04 | llvm     | 810               | A76  | fp16      | cpu        | 1      | / | 261.107910 |
+| tts_melgan_vocoder                          | onnx      | ubuntu16_04 | llvm     | 990               | A55  | fp32      | cpu        | 1      | / | 1768.612061 |
+| tts_melgan_vocoder                          | onnx      | ubuntu16_04 | llvm     | 990               | A55  | fp16      | cpu        | 1      | / | 784.126953 |
+| tts_melgan_vocoder                          | onnx      | ubuntu16_04 | llvm     | 990               | A76  | fp32      | cpu        | 1      | / | 410.212891 |
+| tts_melgan_vocoder                          | onnx      | ubuntu16_04 | llvm     | 990               | A76  | fp16      | cpu        | 1      | / | 211.166016 |
+| tts_encoder_decoder                         | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55  | fp32      | cpu        | 1      | / | 420.667969 |
+| tts_encoder_decoder                         | caffe     | ubuntu16_04 | gcc8.3   | 810               | A55  | fp16      | cpu        | 1      | / | 216.756104 |
+| tts_encoder_decoder                         | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76  | fp32      | cpu        | 1      | / | 150.831055 |
+| tts_encoder_decoder                         | caffe     | ubuntu16_04 | gcc8.3   | 810               | A76  | fp16      | cpu        | 1      | / | 76.963867 |
+| tts_encoder_decoder                         | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55  | fp32      | cpu        | 1      | / | 452.342041 |
+| tts_encoder_decoder                         | caffe     | ubuntu16_04 | gcc8.3   | 990               | A55  | fp16      | cpu        | 1      | / | 227.301025 |
+| tts_encoder_decoder                         | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76  | fp32      | cpu        | 1      | / | 126.700195 |
+| tts_encoder_decoder                         | caffe     | ubuntu16_04 | gcc8.3   | 990               | A76  | fp16      | cpu        | 1      | / | 64.525879 |
+| tts_encoder_decoder                         | caffe     | ubuntu16_04 | llvm     | 810               | A55  | fp32      | cpu        | 1      | / | 418.912109 |
+| tts_encoder_decoder                         | caffe     | ubuntu16_04 | llvm     | 810               | A55  | fp16      | cpu        | 1      | / | 210.114990|
+| tts_encoder_decoder                         | caffe     | ubuntu16_04 | llvm     | 810               | A76  | fp32      | cpu        | 1      | / | 150.854004 |
+| tts_encoder_decoder                         | caffe     | ubuntu16_04 | llvm     | 810               | A76  | fp16      | cpu        | 1      | / | 76.160156|
+| tts_encoder_decoder                         | caffe     | ubuntu16_04 | llvm     | 990               | A55  | fp32      | cpu        | 1      | / | 449.791016 |
+| tts_encoder_decoder                         | caffe     | ubuntu16_04 | llvm     | 990               | A55  | fp16      | cpu        | 1      | / | 222.086914 |
+| tts_encoder_decoder                         | caffe     | ubuntu16_04 | llvm     | 990               | A76  | fp32      | cpu        | 1      | / | 124.972168 |
+| tts_encoder_decoder                         | caffe     | ubuntu16_04 | llvm     | 990               | A76  | fp16      | cpu        | 1      | / | 65.025146 |
+| vad                                         | tflite    | ubuntu16_04 | gcc8.3   | 810               | A55  | fp32      | cpu        | 1      | / | 10.746826 |
+| vad                                         | tflite    | ubuntu16_04 | gcc8.3   | 810               | A55  | fp16      | cpu        | 1      | / | 8.893066 |
+| vad                                         | tflite    | ubuntu16_04 | gcc8.3   | 810               | A76  | fp32      | cpu        | 1      | / | 2.525146 |
+| vad                                         | tflite    | ubuntu16_04 | gcc8.3   | 810               | A76  | fp16      | cpu        | 1      | / | 2.598145 |
+| vad                                         | tflite    | ubuntu16_04 | gcc8.3   | 990               | A55  | fp32      | cpu        | 1      | / | 10.649902 |
+| vad                                         | tflite    | ubuntu16_04 | gcc8.3   | 990               | A55  | fp16      | cpu        | 1      | / | 8.578857 |
+| vad                                         | tflite    | ubuntu16_04 | gcc8.3   | 990               | A76  | fp32      | cpu        | 1      | / | 2.264893 |
+| vad                                         | tflite    | ubuntu16_04 | gcc8.3   | 990               | A76  | fp16      | cpu        | 1      | / | 2.222168 |
+| vad                                         | tflite    | ubuntu16_04 | llvm     | 810               | A55  | fp32      | cpu        | 1      | / | 11.018066 |
+| vad                                         | tflite    | ubuntu16_04 | llvm     | 810               | A55  | fp16      | cpu        | 1      | / | 11.024170 |
+| vad                                         | tflite    | ubuntu16_04 | llvm     | 810               | A76  | fp32      | cpu        | 1      | / | 3.061035 |
+| vad                                         | tflite    | ubuntu16_04 | llvm     | 810               | A76  | fp16      | cpu        | 1      | / | 2.907959 |
+| vad                                         | tflite    | ubuntu16_04 | llvm     | 990               | A55  | fp32      | cpu        | 1      | / | 11.968994 |
+| vad                                         | tflite    | ubuntu16_04 | llvm     | 990               | A55  | fp16      | cpu        | 1      | / | 11.719971 |
+| vad                                         | tflite    | ubuntu16_04 | llvm     | 990               | A76  | fp32      | cpu        | 1      | / | 2.645020 |
+| vad                                         | tflite    | ubuntu16_04 | llvm     | 990               | A76  | fp16      | cpu        | 1      | / | 2.597900 |
 

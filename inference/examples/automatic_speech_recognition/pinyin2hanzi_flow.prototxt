@@ -1,0 +1,24 @@
+name: "pinyin2hanzi_flow"
+input: "pinyin"
+output: "hanzi_squeeze/Squeeze"
+node {
+  name: "pinyin"
+  type: "Input"
+  output: "pinyin"
+  input_type: "UINT32"
+  input_format: "NORMAL"
+  input_dim: 1
+  input_dim: 32
+}
+node {
+  name: "pinyin2hanzi_inference"
+  type: "Inference"
+  input: "pinyin"
+  output: "hanzi_squeeze/Squeeze"
+  infer_output_size_parameter: "pinyin2hanziInferOutputSize"
+  preprocess_parameter: "pinyin2hanziPreProcess"
+  preprocess_parameter: "/data/local/tmp/CI/test/pinyin_lm_embedding.bin"
+  preprocess_parameter: "1601"
+  preprocess_parameter: "512"
+  inference_parameter: "/data/local/tmp/CI/model_zoo/tflite_models/cnn_pinyin_lm_b7h512e4_cn_en_20200518_cloud_fp32/cnn_pinyin_lm_b7h512e4_cn_en_20200518_cloud_fp32_f32.bolt"
+}
