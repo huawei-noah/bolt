@@ -10,9 +10,9 @@ Bolt is a light-weight library for deep learning. Bolt, as a universal deploymen
 
 Generally, there are two steps to get started with bolt. It's quiet easy for users to quickly running bolt.
 
-1. Conversion: use **[X2bolt](../model_tools/tools/X2bolt/X2bolt.cpp)** to convert your model from caffe,onnx,tflite or tensorflow to .bolt;
+1. Conversion: use **[X2bolt](model_tools/tools/X2bolt/X2bolt.cpp)** to convert your model from caffe,onnx,tflite or tensorflow to .bolt;
 
-2. Inference: run **[benchmark](../inference/examples/benchmark/benchmark.cpp)** with .bolt and data to get the inference result. 
+2. Inference: run **[benchmark](inference/examples/benchmark/benchmark.cpp)** with .bolt and data to get the inference result. 
 
    For more details about the usage of [**X2bolt**](model_tools/tools/X2bolt/X2bolt.cpp) and [**benchmark**](inference/examples/benchmark/benchmark.cpp) tools,  see [docs/USER_HANDBOOK.md](docs/USER_HANDBOOK.md). 
 
