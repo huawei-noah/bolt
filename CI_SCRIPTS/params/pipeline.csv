@@ -1,3 +1,0 @@
-OT_BilateralSliceApply 1  3  2160  3840  0  0  0  0  0  0  0  0  0  0  
-OT_Conv 1 4 2160 3840 64 4 3 3 1 1 1 1 1 1
-OT_Pooling 1  16 4  4  1  1  2  2  2  2  0  0  0  0

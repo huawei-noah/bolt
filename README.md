@@ -57,6 +57,7 @@ Everything you want to know about bolt is recorded in the detailed documentation
 - [How to use bolt to inference your ML models.](docs/USER_HANDBOOK.md)
 - [How to develop bolt to customize more models.](docs/DEVELOPER.md)
 - [Benchmark results on some universal models.](docs/BENCHMARK.md)
+- [How to build APP with kit.](docs/KIT.md)
 - [Frequently Asked Questions(FAQ)](docs/FAQ.md)
 
 # Acknowledgement

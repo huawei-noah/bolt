@@ -6,7 +6,7 @@ import numpy as np
 
 
 if __name__ == '__main__':
-    tensorflow_model_path = "/data/models/bert/bert/cased_L-12_H-768_A-12/bert_model.ckpt"
+    tensorflow_model_path = "/data/bolt/model_zoo/tensorflow_models/bert_cased_L-12_H-768_A-12/bert_model.ckpt"
     caffe_model_path_prefix = "bert_base"
     caffe_model_name = "bert_base"
 

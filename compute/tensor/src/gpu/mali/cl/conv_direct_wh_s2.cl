@@ -32,6 +32,10 @@ __kernel void MANGLE_NAME(conv_direct_wh_s2_, W, H, ON, KN)
         const int oh_off,
         const int ow_off,
         const int ow,
+        const int oc,
+        const int sh,
+        const int in_str,
+        const int on_str,
         const int bx,
         const int by,
         __global const T *in,
@@ -41,7 +45,8 @@ __kernel void MANGLE_NAME(conv_direct_wh_s2_, W, H, ON, KN)
 {
     const int idx = get_global_id(0);
     const int idy = get_global_id(1);
-    const int idz = get_global_id(2);
+    const int idz = get_global_id(2) % ((oc + 3) >> 2);
+    const int idn = get_global_id(2) / ((oc + 3) >> 2);
     if (idx >= bx || idy >= by) {
         return;
     }
@@ -58,7 +63,7 @@ __kernel void MANGLE_NAME(conv_direct_wh_s2_, W, H, ON, KN)
     LOADBIAS_IMAGE_ARRAY_V4(out_val[3], idz * KN + 3, bias);
 #endif
 
-    int in_off = ((idy << 1) * ON + iw_off) * ih_str + (idx << 1) + ih_off;
+    int in_off = idn * in_str + ((idy << 1) * ON + iw_off) * ih_str + idx * sh + ih_off;
     int flt_off = idz * ic_str * Fsq * KN;
 
     for (int i = 0; i < ic_str; ++i) {
@@ -121,7 +126,7 @@ __kernel void MANGLE_NAME(conv_direct_wh_s2_, W, H, ON, KN)
         in_off += ihw_str;
     }
 
-    int out_off = idz * KN * ohw_str + (idy * ON + ow_off) * oh_str + idx + oh_off;
+    int out_off = idn * on_str + idz * KN * ohw_str + (idy * ON + ow_off) * oh_str + idx + oh_off;
     STORE_OUTPUT_BUF_ARRAY_V4(out_val[0], out_off, oh_str, idy * ON, ow, out);
 #if (KN > 1)
     out_off += ohw_str;

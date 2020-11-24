@@ -113,7 +113,10 @@ __kernel void MANGLE_NAME(conv_direct_s1_h_, F, ON, KN)
         const int oh_off,
         const int ow_off,
         const int oh,
+        const int oc,
         const int sw,
+        const int in_str,
+        const int on_str,
         const int bx,
         const int by,
         __global const T *in,
@@ -123,7 +126,8 @@ __kernel void MANGLE_NAME(conv_direct_s1_h_, F, ON, KN)
 {
     const int idx = get_global_id(0);
     const int idy = get_global_id(1);
-    const int idz = get_global_id(2);
+    const int idz = get_global_id(2) % ((oc + 3) >> 2);
+    const int idn = get_global_id(2) / ((oc + 3) >> 2);
     if (idx >= bx || idy >= by) {
         return;
     }
@@ -147,7 +151,7 @@ __kernel void MANGLE_NAME(conv_direct_s1_h_, F, ON, KN)
     bias_val = read_imageh(bias, sampler, idz * KN + 3);
     SET_BIAS_VAL(bias_val, out_val[3]);
 #endif
-    int in_off = ((idy + iw_off) * ih_str + idx * ON + ih_off) << 2;
+    int in_off = (idn * in_str + (idy + iw_off) * ih_str + idx * ON + ih_off) << 2;
     int flt_off = idz * ic_str * Fsq * KN;
     ihw_str = ihw_str << 2;
 
@@ -181,7 +185,7 @@ __kernel void MANGLE_NAME(conv_direct_s1_h_, F, ON, KN)
         flt_off += KN;
         in_off += ihw_str;
     }
-    int out_off = (idz * KN * ohw_str + (idy + ow_off) * oh_str + idx * ON + oh_off) << 2;
+    int out_off = (idn * on_str + idz * KN * ohw_str + (idy + ow_off) * oh_str + idx * ON + oh_off) << 2;
     VSTORE_VEC(out_val[0], out_off, out);
 
 #if (KN > 1)
@@ -221,7 +225,10 @@ __kernel void MANGLE_NAME(conv_direct_s1_, F, ON, KN)
         const int oh_off,
         const int ow_off,
         const int ow,
+        const int oc,
         const int sh,
+        const int in_str,
+        const int on_str,
         const int bx,
         const int by,
         __global const T *in,
@@ -240,7 +247,9 @@ __kernel void MANGLE_NAME(conv_direct_s1_, F, ON, KN)
 {
     const int idx = get_global_id(0);
     const int idy = get_global_id(1);
-    const int idz = get_global_id(2);
+    const int idz = get_global_id(2) % ((oc + 3) >> 2);
+    const int idn = get_global_id(2) / ((oc + 3) >> 2);
+
     if (idx >= bx || idy >= by) {
         return;
     }
@@ -256,7 +265,7 @@ __kernel void MANGLE_NAME(conv_direct_s1_, F, ON, KN)
     LOADBIAS_IMAGE_ARRAY_V4(out_val[3], idz * KN + 3, bias);
 #endif
 
-    int in_off = (idy * ON + iw_off) * ih_str + idx * sh + ih_off;
+    int in_off = idn * in_str + (idy * ON + iw_off) * ih_str + idx * sh + ih_off;
     int flt_off = idz * ic_str * Fsq * KN;
 
     for (int i = 0; i < ic_str; ++i) {
@@ -319,7 +328,7 @@ __kernel void MANGLE_NAME(conv_direct_s1_, F, ON, KN)
     int elt_off = idz * KN * ehw_str + (idy * ON + ew_off) * eh_str + idx + eh_off;
     ADD_ELTWISE_BUF_ARRAY_V4(out_val[0], elt_off, eh_str, eltVal);
 #endif
-    int out_off = idz * KN * ohw_str + (idy * ON + ow_off) * oh_str + idx + oh_off;
+    int out_off = idn * on_str + idz * KN * ohw_str + (idy * ON + ow_off) * oh_str + idx + oh_off;
     STORE_OUTPUT_BUF_ARRAY_V4(out_val[0], out_off, oh_str, idy * ON, ow, out);
 #if (KN > 1)
 #if defined(USE_ELTWISE_NCWHC4)

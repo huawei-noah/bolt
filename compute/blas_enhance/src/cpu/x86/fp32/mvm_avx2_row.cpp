@@ -525,16 +525,28 @@ void mvm_row_avx_1_32(U32 bk, U32 lda, F32 *matrix, F32 *vector, F32 *result)
 void mvm_row_fp32(U32 numRows, U32 numColumns, F32 *matrix, F32 *vector, F32 *result)
 {
     // Actual layout is NK, and vector is K
-    U32 blockKSize = 0, blockNSize = 0;
     kernel_func kernel[3] = {mvm_row_avx_1_32, mvm_row_avx_2_32, mvm_row_avx_4_32};
     U32 unrollNSize[3] = {1, 2, 4};
-    for (U32 bk = 0; bk < numColumns; bk += blockKSize) {
-        blockKSize = UNI_MIN(numColumns - bk, BOLCK_K_DIM);
-        for (U32 bn = 0; bn < numRows; bn += blockNSize) {
-            blockNSize = UNI_MIN(numRows - bn, UNROLL_N);
-            blockNSize = unrollNSize[blockNSize >> 1];
-            kernel[blockNSize >> 1](
-                blockKSize, numColumns, matrix + bn * numColumns + bk, vector + bk, result + bn);
+    U32 blockNum = numRows / 4 + (numRows % 4 + 1) / 2;
+#ifdef _USE_OPENMP
+    #pragma omp parallel num_threads(OMP_NUM_THREADS)
+    {
+#endif
+        U32 private_blockKSize = 0;
+        for (U32 bk = 0; bk < numColumns; bk += private_blockKSize) {
+            private_blockKSize = UNI_MIN(numColumns - bk, BOLCK_K_DIM);
+#ifdef _USE_OPENMP
+            #pragma omp for
+#endif
+            for (U32 bIdx = 0; bIdx < blockNum; ++bIdx) {
+                U32 bn = bIdx * 4 - ((bIdx * 4) > numRows) * 2;
+                U32 blockNSize = UNI_MIN(numRows - bn, UNROLL_N);
+                blockNSize = unrollNSize[blockNSize >> 1];
+                kernel[blockNSize >> 1](
+                    private_blockKSize, numColumns, matrix + bn * numColumns + bk, vector + bk, result + bn);
+            }
         }
+#ifdef _USE_OPENMP
     }
+#endif
 }

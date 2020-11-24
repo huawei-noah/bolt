@@ -15,6 +15,7 @@
 #define _WEIGHTOPERATOR_H
 
 #include "operator.hpp"
+#include "tensor_computing.h"
 #include "model_tools.h"
 
 class WeightOperator : public Operator {

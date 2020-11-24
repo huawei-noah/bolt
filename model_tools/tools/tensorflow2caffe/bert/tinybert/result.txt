@@ -1,6 +1,0 @@
-[RESULT]:
-data/sequence.txt
-    intent: 16 0.994141
-    slot: 44 44 44 44 44 44 19 41 44 44 44 44 44 44 44 44 44 44 44 44 44 44 44 44 44 44 44 44 44 44 44 44 
-[SUMMARY]:
-time: 41.823 ms/sequence

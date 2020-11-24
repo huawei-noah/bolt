@@ -15,6 +15,7 @@
 #define _POOLING_H
 
 #include "operator.hpp"
+#include "tensor_computing.h"
 
 class Pooling : public Operator {
 public:

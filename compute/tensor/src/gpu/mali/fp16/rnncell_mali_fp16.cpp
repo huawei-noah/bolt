@@ -107,9 +107,6 @@ inline EE rnncell_core_mali_fp16(GCLHandle_t handle,
     gcl_set_kernelVec(handle, kernel, dim, &gs1, &ls1, "rnncell_build_xh");
 #ifdef _DEBUG
     CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, &gs1, &ls1, "rnncell_build_xh"));
-    CHECK_STATUS(gcl_print_memory<F16>(handle, currentX, "currentX"));
-    CHECK_STATUS(gcl_print_memory<F16>(handle, state, "state"));
-    CHECK_STATUS(gcl_print_buffer<F16>(handle, xhMem, xhNum, "xhMem"));
     handle->t_total += handle->t_execute;
 #endif
 
@@ -120,14 +117,11 @@ inline EE rnncell_core_mali_fp16(GCLHandle_t handle,
     sprintf(kernelname, "conv_direct_spe_fwhs1_%d", item_c);
     gs1 = filterRow;
     CHECK_STATUS(gcl_create_kernel(handle, kernelname, &kernel));
-    CHECK_STATUS(gcl_set_kernelArgs(kernel, 1, 1, ic_str, 0, 0, 1, 1, 0, 0, filterRow, gs1, 1,
+    CHECK_STATUS(gcl_set_kernelArgs(kernel, 1, 1, ic_str, 0, 0, 1, 1, 0, 0, filterRow, 0, 0, gs1, 1,
         xhMem, fltbuf, biasMem, interMem));
     gcl_set_kernelVec(handle, kernel, dim, &gs1, &ls1, kernelname);
 #ifdef _DEBUG
     CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, &gs1, &ls1, kernelname));
-    CHECK_STATUS(gcl_print_memory<F16>(handle, &filter[0], "filter"));
-    CHECK_STATUS(gcl_print_memory<F16>(handle, bias, "bias"));
-    CHECK_STATUS(gcl_print_buffer<F16>(handle, interMem, interNum, "interMem"));
     handle->t_total += handle->t_execute;
 #endif
 
@@ -139,9 +133,6 @@ inline EE rnncell_core_mali_fp16(GCLHandle_t handle,
     gcl_set_kernelVec(handle, kernel, dim, &gs1, &ls1, "rnncell_update_res");
 #ifdef _DEBUG
     CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, &gs1, &ls1, "rnncell_update_res"));
-    CHECK_STATUS(gcl_print_buffer<F16>(handle, sMem, col + hDim, "sMem"));
-    CHECK_STATUS(gcl_print_buffer<F16>(handle, interMem, 4 * col, "interMem"));
-    CHECK_STATUS(gcl_print_buffer<F16>(handle, outbuf, col, "outbuf"));
     handle->t_total += handle->t_execute;
 #endif
 
@@ -153,13 +144,11 @@ inline EE rnncell_core_mali_fp16(GCLHandle_t handle,
         sprintf(kernelname, "conv_direct_spe_fwhs1_nobias_%d", item_c);
         gs1 = filterRow;
         CHECK_STATUS(gcl_create_kernel(handle, kernelname, &kernel));
-        CHECK_STATUS(gcl_set_kernelArgs(kernel, 1, 1, ic_str, 0, 0, 1, 1, 0, 0, filterRow, gs1, 1,
+        CHECK_STATUS(gcl_set_kernelArgs(kernel, 1, 1, ic_str, 0, 0, 1, 1, 0, 0, filterRow, 0, 0, gs1, 1,
             outbuf, fltbuf, biasMem, output->mem));
         gcl_set_kernelVec(handle, kernel, dim, &gs1, &ls1, kernelname);
 #ifdef _DEBUG
         CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, &gs1, &ls1, kernelname));
-        CHECK_STATUS(gcl_print_memory<F16>(handle, &filter[1], "filter"));
-        CHECK_STATUS(gcl_print_memory<F16>(handle, output, "output"));
         handle->t_total += handle->t_execute;
 #endif
 
@@ -170,7 +159,6 @@ inline EE rnncell_core_mali_fp16(GCLHandle_t handle,
 #ifdef _DEBUG
         CHECK_STATUS(
             gcl_run_kernel(handle, kernel, dim, &gs1, &ls1, "rnncell_update_project_state"));
-        CHECK_STATUS(gcl_print_buffer<F16>(handle, sMem, col + hDim, "sMem"));
         handle->t_total += handle->t_execute;
 #endif
     }

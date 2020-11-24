@@ -219,25 +219,27 @@ inline EE direct_core_mali_fp16(GCLHandle_t handle,
     fltbuf = filter->mem;
     biasmem = bias->mem;
     outbuf = output->mem;
-    U32 iw, ih;
-    U32 fw, fh, fn, sw, sh, pw, ph;
+    U32 iw, ih, in;
+    U32 fw, fh, sw, sh, pw, ph;
     U32 ow, oh, oc, on;
     sw = convParamSpec.stride_w;
     sh = convParamSpec.stride_h;
     ph = convParamSpec.padding_top;
     pw = convParamSpec.padding_left;
-    tensorSelectGet(inputDesc, NULL, NULL, NULL, NULL, &ih, &iw);
-    tensorSelectGet(filterDesc, NULL, NULL, &fn, NULL, &fh, &fw);
+    tensorSelectGet(inputDesc, NULL, NULL, &in, NULL, &ih, &iw);
+    tensorSelectGet(filterDesc, NULL, NULL, NULL, NULL, &fh, &fw);
     tensorSelectGet(outputDesc, NULL, NULL, &on, &oc, &oh, &ow);
 
-    U32 iw_str, ih_str, ihw_str, ic_str, iw_off, ih_off;
-    U32 ow_str, oh_str, ohw_str, ow_off, oh_off;
+    U32 iw_str, ih_str, ihw_str, ic_str, iw_off, ih_off, in_str;
+    U32 ow_str, oh_str, ohw_str, oc_str, ow_off, oh_off, on_str;
     get_gclmem_dim(input->desc, &iw_str, &ih_str, &ic_str, &iw_off, &ih_off);
-    get_gclmem_dim(output->desc, &ow_str, &oh_str, NULL, &ow_off, &oh_off);
+    get_gclmem_dim(output->desc, &ow_str, &oh_str, &oc_str, &ow_off, &oh_off);
     ih_off -= ph;
     iw_off -= pw;
     ihw_str = ih_str * iw_str;
     ohw_str = oh_str * ow_str;
+    in_str = ihw_str * ic_str / in;
+    on_str = ohw_str * oc_str / on;
 
     U32 item_w = forwardRunInfo->best_w[0];
     U32 item_c = forwardRunInfo->best_c[0];
@@ -267,11 +269,16 @@ inline EE direct_core_mali_fp16(GCLHandle_t handle,
         }
         sprintf(kernelname, "conv_direct_spe_fwhs1_%s%d", modeName, item_c);
         ic_str = filter->desc.stride[1];
-        ow = fn;
-        gs[0] = fn;
-        gs[1] = 1;
+        gs[0] = oc;
+        gs[1] = on;
         gs[2] = 1;
-        dim = 1;
+        dim = 2;
+        if (input->desc.memFormat == DF_NCWHC4) {
+            in_str = in_str * 4;
+        }
+        if (output->desc.memFormat == DF_NCWHC4) {
+            on_str = on_str * 4;
+        }
     } else if ((item_w >> 8) > 0) {
         U32 item_h = item_w >> 8;
         item_k = item_k >> 2;
@@ -293,12 +300,13 @@ inline EE direct_core_mali_fp16(GCLHandle_t handle,
         dim = 3;
     }
     CHECK_STATUS(gcl_create_kernel(handle, kernelname, &kernel));
-    if (item_k == 0 || fw != fh) {
+    if (item_k == 0) {
         CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, ihw_str, ic_str, ih_off, iw_off, oh_str,
-            ohw_str, oh_off, ow_off, ow, gs[0], gs[1], inbuf, fltbuf, biasmem, outbuf));
+            ohw_str, oh_off, ow_off, oc, in_str, on_str, gs[0], gs[1], inbuf, fltbuf, biasmem, outbuf));
     } else {
-        CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, ihw_str, ic_str, ih_off, iw_off, oh_str,
-            ohw_str, oh_off, ow_off, ow, sh, gs[0], gs[1], inbuf, fltbuf, biasmem, outbuf));
+        CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, ihw_str, ic_str, ih_off, 
+            iw_off, oh_str, ohw_str, oh_off, ow_off, ow, oc, sh, in_str, on_str, 
+            gs[0], gs[1], inbuf, fltbuf, biasmem, outbuf));
     }
     gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelname);
 #ifdef _DEBUG
@@ -313,8 +321,8 @@ EE convolution_direct_transform_filter_bytes_mali_fp16(TensorDesc filterDesc,
     GCLMemDesc_t gclmemFilterDesc,
     U32 *bytes)
 {
-    U32 fw, fh, fc, fn;
-    tensorSelectGet(filterDesc, NULL, NULL, &fn, &fc, &fh, &fw);
+    U32 fw, fh, fc, fn, ft;
+    tensorSelectGet(filterDesc, NULL, NULL, &fn, &fc, &fh, &fw, &ft);
     U32 item_c = forwardRunInfo->best_c[0];
     U32 item_k = forwardRunInfo->best_k[0];
     U32 s0 = 0;
@@ -325,7 +333,7 @@ EE convolution_direct_transform_filter_bytes_mali_fp16(TensorDesc filterDesc,
     if (item_k == 0) {
         s0 = fn;
         s1 = (fc + item_c - 1) / item_c;
-        s2 = 1;
+        s2 = ft;
         DataFormat df = DF_CHWNC4;
         if (item_c == 8) {
             df = DF_CHWNC8;
@@ -337,13 +345,13 @@ EE convolution_direct_transform_filter_bytes_mali_fp16(TensorDesc filterDesc,
         num = s0 * s1 * s2 * item_c;
     } else if (item_c == 4) {
         U32 item_kd4 = (item_k == 1) ? 1 : (item_k >> 2);
-        s0 = fw * fh * item_kd4;
+        s0 = fw * fh * ft * item_kd4;
         s1 = (fc + item_c - 1) / item_c;
         s2 = (fn + item_k - 1) / item_k;
         gclmemFilterDesc->memFormat = DF_NCHWN4C4;
         num = s0 * s1 * s2 * item_c * item_k / item_kd4;
     } else if (item_c == 1) {
-        s0 = fw * fh;
+        s0 = fw * fh * ft;
         s1 = fc;
         s2 = (fn + item_k - 1) / item_k;
         gclmemFilterDesc->memFormat = DF_NCHWN4;

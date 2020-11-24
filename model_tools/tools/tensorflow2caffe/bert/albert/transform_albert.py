@@ -6,7 +6,7 @@ import numpy as np
 
 
 if __name__ == '__main__':
-    tensorflow_model_path = "/data/models/bert/albert/albert_base_zh_additional_36k_steps/albert_model.ckpt"
+    tensorflow_model_path = "/data/bolt/model_zoo/tensorflow_models/albert_base_zh_additional_36k_steps/albert_model.ckpt"
     encoder_layers = 12
     caffe_model_path_prefix = "albert_base"
     caffe_model_name = "albert_base"

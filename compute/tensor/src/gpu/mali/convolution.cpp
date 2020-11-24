@@ -191,9 +191,6 @@ EE convolution_infer_output_size_mali(TensorDesc inputDesc,
     if (fw > 7 || fw == 6) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
-    if (in != 1) {
-        CHECK_STATUS(NOT_SUPPORTED);
-    }
     if (fw < 1 || fh < 1) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
@@ -263,36 +260,32 @@ EE convolution_infer_output_size_mali(TensorDesc inputDesc,
     }
 
     if (fw == 1 && fh == 1 && ft == 1 && iw == 1 && ih == 1 && it == 1) {
-        CHECK_STATUS(infer_gclmem_desc_ncwhc4(iw_align, ih_align, ic, ext_w, ext_h, ow, oh, fn, idt,
-            idt, gclmemInputDesc, gclmemOutputDesc, need_pad));
+        CHECK_STATUS(infer_gclmem_desc_ncwhc4_3d(iw_align, ih_align, ic, it, in, ext_w, ext_h, 
+            ow, oh, fn, ot, in, idt, idt, gclmemInputDesc, gclmemOutputDesc, need_pad));
         return SUCCESS;
     }
 
     if (inputGclmemFormat == DF_NCHW) {
         if (fw == fh && (fw == 1 || fw == 3 || fw == 5 || fw == 7)) {
-            CHECK_STATUS(infer_gclmem_desc_nchw(iw_align, ih_align, ic * it, ext_w, ext_h, 0, 0, 0,
-                idt, idt, gclmemInputDesc, NULL, need_pad));
+            CHECK_STATUS(infer_gclmem_desc_nchw_3d(iw_align, ih_align, ic, it, in, ext_w, ext_h, 
+                0, 0, 0, 0, 0, idt, idt, gclmemInputDesc, NULL, need_pad));
         } else {
-            ic = ALIGN(ic, 4);
-            CHECK_STATUS(infer_gclmem_desc_ncwhc4(iw_align, ih_align, ic * it, ext_w, ext_h, 0, 0,
-                0, idt, idt, gclmemInputDesc, NULL, need_pad));
+            CHECK_STATUS(infer_gclmem_desc_ncwhc4_3d(iw_align, ih_align, ic, it, in, ext_w, ext_h, 
+                0, 0, 0, 0, 0, idt, idt, gclmemInputDesc, NULL, need_pad));
         }
-        fn = ALIGN(fn, 4);
-        CHECK_STATUS(infer_gclmem_desc_ncwhc4(
-            0, 0, 0, 0, 0, ow, oh, fn * ot, idt, idt, NULL, gclmemOutputDesc));
+        CHECK_STATUS(infer_gclmem_desc_ncwhc4_3d(
+            0, 0, 0, 0, 0, 0, 0, ow, oh, fn, ot, in, idt, idt, NULL, gclmemOutputDesc));
         return SUCCESS;
     }
 
-    ic = ALIGN(ic, 4);
-    CHECK_STATUS(infer_gclmem_desc_ncwhc4(iw_align, ih_align, ic * it, ext_w, ext_h, 0, 0, 0, idt,
-        idt, gclmemInputDesc, NULL, need_pad));
+    CHECK_STATUS(infer_gclmem_desc_ncwhc4_3d(iw_align, ih_align, ic, it, in, ext_w, ext_h, 
+        0, 0, 0, 0, 0, idt, idt, gclmemInputDesc, NULL, need_pad));
     if (fn == 1 && sw == 1 && (fw == fh) && ft == 1 && (fw == 1 || fw == 3 || fw == 5 || fw == 7)) {
-        CHECK_STATUS(infer_gclmem_desc_nchw(
-            0, 0, 0, 0, 0, ow, oh, fn * ot, idt, idt, NULL, gclmemOutputDesc));
+        CHECK_STATUS(infer_gclmem_desc_nchw_3d(
+            0, 0, 0, 0, 0, 0, 0, ow, oh, fn, ot, in, idt, idt, NULL, gclmemOutputDesc));
     } else {
-        fn = ALIGN(fn, 4);
-        CHECK_STATUS(infer_gclmem_desc_ncwhc4(
-            0, 0, 0, 0, 0, ow, oh, fn * ot, idt, idt, NULL, gclmemOutputDesc));
+        CHECK_STATUS(infer_gclmem_desc_ncwhc4_3d(
+            0, 0, 0, 0, 0, 0, 0, ow, oh, fn, ot, in, idt, idt, NULL, gclmemOutputDesc));
     }
     return SUCCESS;
 }

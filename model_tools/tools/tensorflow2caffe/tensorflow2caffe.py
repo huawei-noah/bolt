@@ -575,8 +575,8 @@ class Tensorflow2Caffe:
         self.caffe_model.add_layer(layer)
         self.data_dict[output_name] = Operators.power(self.data_dict[input_name], scale, shift, power, output_name)
         return output_name
-		
-	def add_div(self, input_names, output_name):
+
+    def add_div(self, input_names, output_name):
         layer = caffe_net.LayerParameter(name=output_name, type='Eltwise',
                     bottom=input_names,
                     top=[output_name])
@@ -599,8 +599,8 @@ class Tensorflow2Caffe:
             self.data_dict[output_name] = Operators.matmultiply(self.data_dict[output_name],
                                               self.data_dict[input_names[i]], output_name)
         return output_name
-		
-	def add_l2norm(self, input_name, output_name):
+
+    def add_l2norm(self, input_name, output_name):
         layer = caffe_net.LayerParameter(name=output_name, type='L2Norm',
                     bottom=[input_name],
                     top=[output_name])

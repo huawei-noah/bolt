@@ -106,21 +106,29 @@ inline EE depthwise_pointwise_direct_core_mali_fp16(GCLHandle_t handle,
     sw = 1;
     U32 item_kp = forwardRunInfo->best_k[1];
     item_kp = item_kp >> 2;
-    if (pointwiseActivationMode == ACTIVATION_NULL) {
-        sprintf(kernelname, "conv_direct_s%d_%d%d%d", sw, fw, item_wp, item_kp);
-    } else if (pointwiseActivationMode == ACTIVATION_RELU) {
-        sprintf(kernelname, "conv_direct_s%d_relu_%d%d%d", sw, fw, item_wp, item_kp);
-    } else {
-        CHECK_STATUS(NOT_SUPPORTED);
-        return NOT_SUPPORTED;
+    char modeName[16];
+    switch (pointwiseActivationMode) {
+        case ACTIVATION_RELU:
+            strcpy(modeName, "relu_");
+            break;
+        case ACTIVATION_RELU6:
+            strcpy(modeName, "relu6_");
+            break;
+        case ACTIVATION_NULL:
+            strcpy(modeName, "");
+            break;
+        default:
+            return NOT_SUPPORTED;
     }
+    sprintf(kernelname, "conv_direct_s%d_%s%d%d%d", sw, modeName, fw, item_wp, item_kp);
 
     U32 gsp[3] = {oh, (ow + item_wp - 1) / item_wp, (oc + 3) / 4 * on / item_kp};
     U32 lsp[3] = {0, 0, 0};
     U32 dimp = 3;
     CHECK_STATUS(gcl_create_kernel(handle, kernelname, &kernel));
     CHECK_STATUS(gcl_set_kernelArgs(kernel, th_str, thw_str, ic_str, th_off, tw_off, oh_str,
-        ohw_str, oh_off, ow_off, ow, 1, gsp[0], gsp[1], tmp, pwFltbuf, pwBiasimg, outbuf));
+        ohw_str, oh_off, ow_off, ow, oc, 1, 0, 0, gsp[0], gsp[1], 
+        tmp, pwFltbuf, pwBiasimg, outbuf));
     gcl_set_kernelVec(handle, kernel, dimp, gsp, lsp, kernelname);
 
 #ifdef _DEBUG

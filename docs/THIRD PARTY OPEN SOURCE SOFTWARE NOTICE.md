@@ -103,7 +103,7 @@ SOFTWARE.
 
 Copyright Notice and License Texts
 
-Software: protobuf 2.7.0 (<https://github.com/protocolbuffers/protobuf/tree/2.7.0>)
+Software: protobuf 3.13.0 (<https://github.com/protocolbuffers/protobuf/tree/v3.13.0>)
 
 Copyright (c) 2008 Google Inc. 
 

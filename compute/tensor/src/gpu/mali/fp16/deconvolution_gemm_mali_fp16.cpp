@@ -125,12 +125,10 @@ inline EE deconv_gemm_core_mali_fp16(GCLHandle_t handle,
         bool has_bias = false;
         CHECK_STATUS(gcl_create_kernel(handle, kernelname, &kernel));
         CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, ihw_str, ic_str, ih_off, iw_off, th_str,
-            thw_str, th_off, tw_off, tw, 1, gs[0], gs[1], has_bias, inbuf, fltbuf, biasmem, tmp));
+            thw_str, th_off, tw_off, tw, tc, 1, 0, 0, gs[0], gs[1], has_bias, inbuf, fltbuf, biasmem, tmp));
         gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelname);
 #ifdef _DEBUG
         CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelname));
-        CHECK_STATUS(gcl_print_memory<F16>(handle, input, "deconv_gemm_input"));
-        CHECK_STATUS(gcl_print_memory<F16>(handle, filter, "deconv_gemm_filter"));
         handle->t_total += handle->t_execute;
 #endif
 

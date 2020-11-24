@@ -53,13 +53,13 @@ bool eltwise_same_desc(std::vector<TensorDesc> inputDesc, U32 *arrayDimMax)
 
     bool sameDesc = true;
     DataFormat idf;
-    U32 in, ic, ih, iw;
-    tensorSelectGet(inputDesc[0], NULL, &idf, &in, &ic, &ih, &iw);
+    U32 in, ic, ih, iw, it;
+    tensorSelectGet(inputDesc[0], NULL, &idf, &in, &ic, &ih, &iw, &it);
     for (U32 i = 1; i < size; i++) {
         DataFormat tdf;
-        U32 tn, tc, th, tw;
-        tensorSelectGet(inputDesc[i], NULL, &tdf, &tn, &tc, &th, &tw);
-        if (tdf != idf || in != tn || ic != tc || ih != th || iw != tw) {
+        U32 tn, tc, th, tw, tt;
+        tensorSelectGet(inputDesc[i], NULL, &tdf, &tn, &tc, &th, &tw, &tt);
+        if (tdf != idf || in != tn || ic != tc || ih != th || iw != tw || it != tt) {
             sameDesc = false;
             break;
         }
@@ -76,10 +76,6 @@ inline EE eltwise_checkpara_mali_fp16(
             return NOT_SUPPORTED;
         }
     }
-    U32 num = input.size();
-    if (num > 8) {
-        return NOT_SUPPORTED;
-    }
     if (outputDesc.dt != DT_F16) {
         return NOT_SUPPORTED;
     }
@@ -94,26 +90,31 @@ inline EE eltwise_core_mali_fp16(GCLHandle_t handle,
     EltwiseParamSpec eltwiseDesc)
 {
     UNUSED(outputDesc);
-    U32 iw, ih, ic, in;
+    U32 iw, ih, ic, in, it;
     U32 arrayDimMax;
     bool sameDesc = eltwise_same_desc(inputDesc, &arrayDimMax);
-    tensorSelectGet(inputDesc[arrayDimMax], NULL, NULL, &in, &ic, &ih, &iw);
+    tensorSelectGet(inputDesc[arrayDimMax], NULL, NULL, &in, &ic, &ih, &iw, &it);
 
     U32 num = input.size();
-    GCLMem_t inputMem[8];
+    std::vector<GCLMem_t> inputMem;
     for (U32 i = 0; i < num; ++i) {
-        inputMem[i] = (GCLMem_t)input[i];
+        inputMem.push_back((GCLMem_t)input[i]);
     }
     cl_mem outbuf;
     outbuf = output->mem;
 
     U32 ow_str, oh_str, oc_str, ow_off, oh_off;
-    U32 iw_str[8];
-    U32 ih_str[8];
-    U32 iw_off[8];
-    U32 ih_off[8];
+    std::vector<U32> iw_str;
+    std::vector<U32> ih_str;
+    std::vector<U32> iw_off;
+    std::vector<U32> ih_off;
     for (U32 i = 0; i < num; ++i) {
-        get_gclmem_dim(inputMem[i]->desc, &iw_str[i], &ih_str[i], NULL, &iw_off[i], &ih_off[i]);
+        U32 w_str, h_str, w_off, h_off;
+        get_gclmem_dim(inputMem[i]->desc, &w_str, &h_str, NULL, &w_off, &h_off);
+        iw_str.push_back(w_str);
+        ih_str.push_back(h_str);
+        iw_off.push_back(w_off);
+        ih_off.push_back(h_off);
     }
     get_gclmem_dim(output->desc, &ow_str, &oh_str, &oc_str, &ow_off, &oh_off);
 
@@ -143,7 +144,7 @@ inline EE eltwise_core_mali_fp16(GCLHandle_t handle,
         default:
             return NOT_SUPPORTED;
     }
-    U32 gs[3] = {ih, iw, (ic + 3) / 4 * in};
+    U32 gs[3] = {ih, iw, (ic + 3) / 4 * in * it};
     U32 ls[3] = {0, 0, 0};
     U32 dim = 3;
     if (activeMode != ACTIVATION_NULL && !sameDesc) {
@@ -152,6 +153,7 @@ inline EE eltwise_core_mali_fp16(GCLHandle_t handle,
 
     if (sameDesc) {
         char formatName[16] = "";
+        ic = ic * in * it;
         if (inputMem[0]->desc.memFormat == DF_NCHW) {
             strcpy(formatName, "nchw_");
             gs[0] = (iw + 3) / 4;
@@ -203,22 +205,30 @@ inline EE eltwise_core_mali_fp16(GCLHandle_t handle,
         DataFormat mf[2];
         mf[0] = inputMem[arrayDimMax]->desc.memFormat;
         mf[1] = inputMem[1 - arrayDimMax]->desc.memFormat;
-        if (mf[0] == DF_NCWHC4 && mf[1] == DF_NCWHC4) {
+        if (mf[0] == DF_NCWHC4) {
             U32 w_str, h_str, c_str, w_off, h_off;
             get_gclmem_dim(inputMem[1 - arrayDimMax]->desc, &w_str, &h_str, &c_str, &w_off, &h_off);
+            U32 ic_non_max;
+            tensorSelectGet(inputDesc[1 - arrayDimMax], NULL, NULL, NULL, &ic_non_max, NULL, NULL);
+            char formatName[16] = "";
+            if(mf[1] == DF_NCHW) {
+                strcpy(formatName, "nchw_");
+            }
+            char broadAxis[16] = "";
             if (w_str == 1 && h_str == 1 && c_str == 1) {
-                sprintf(kernelName, "eltwise_broadcast_%s%d", modeName, 0);
+                strcpy(broadAxis, "_xyz");
             } else if (w_str == 1 && h_str == 1) {
-                sprintf(kernelName, "eltwise_broadcast_%s%d", modeName, 1);
+                strcpy(broadAxis, "_xy");
             } else if (w_str != 1 && h_str == 1) {
-                sprintf(kernelName, "eltwise_broadcast_%s%d", modeName, 2);
+                strcpy(broadAxis, "_y");
             } else if (w_str == 1 && h_str != 1) {
-                sprintf(kernelName, "eltwise_broadcast_%s%d", modeName, 3);
+                strcpy(broadAxis, "_x");
             } else {
                 CHECK_STATUS(NOT_SUPPORTED);
             }
+            sprintf(kernelName, "eltwise_broadcast_%s%s%s", formatName, broadAxis, modeName);
             CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel));
-            CHECK_STATUS(gcl_set_kernelArgs(kernel, ih, iw, ic, ih_str[arrayDimMax],
+            CHECK_STATUS(gcl_set_kernelArgs(kernel, ic_non_max, ih_str[arrayDimMax],
                 iw_str[arrayDimMax], ih_off[arrayDimMax], iw_off[arrayDimMax], oh_str, ow_str,
                 oh_off, ow_off, inputMem[arrayDimMax]->mem, inputMem[1 - arrayDimMax]->mem, outbuf));
             gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
@@ -227,50 +237,6 @@ inline EE eltwise_core_mali_fp16(GCLHandle_t handle,
             handle->t_total += handle->t_execute;
 #endif
             return SUCCESS;
-        } else if (mf[0] == DF_NCWHC4 && mf[1] == DF_NCHW) {
-            U32 axis_a[3];
-            U32 axis_b[3];
-            tensorSelectGet(
-                inputDesc[arrayDimMax], NULL, NULL, NULL, &axis_a[2], &axis_a[1], &axis_a[0]);
-            tensorSelectGet(
-                inputDesc[1 - arrayDimMax], NULL, NULL, NULL, &axis_b[2], &axis_b[1], &axis_b[0]);
-            U32 matchAxis[2];
-            for (U32 i = 0; i < 3; ++i) {
-                for (U32 j = 0; j < 3; ++j) {
-                    if (axis_a[i] == axis_b[j] && axis_b[j] != 1) {
-                        matchAxis[0] = i;
-                        matchAxis[1] = j;
-                        break;
-                    }
-                }
-            }
-            if (matchAxis[0] == 2) {
-                for (U32 i = 0; i < 3; ++i) {
-                    if (i != matchAxis[1]) {
-                        if (axis_b[i] != 1) {
-                            CHECK_STATUS(NOT_SUPPORTED);
-                        }
-                        if (inputMem[1 - arrayDimMax]->desc.stride[i] != 1) {
-                            CHECK_STATUS(NOT_SUPPORTED);
-                        }
-                        if (inputMem[1 - arrayDimMax]->desc.offset[i] != 0) {
-                            CHECK_STATUS(NOT_SUPPORTED);
-                        }
-                    }
-                }
-                sprintf(kernelName, "eltwise_spe_nchw_c_%s", modeName);
-                CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel));
-                CHECK_STATUS(
-                    gcl_set_kernelArgs(kernel, ih, iw, ic, ih_str[arrayDimMax], iw_str[arrayDimMax],
-                        ih_off[arrayDimMax], iw_off[arrayDimMax], oh_str, ow_str, oh_off, ow_off,
-                        inputMem[arrayDimMax]->mem, inputMem[1 - arrayDimMax]->mem, outbuf));
-                gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
-#ifdef _DEBUG
-                CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
-                handle->t_total += handle->t_execute;
-#endif
-                return SUCCESS;
-            }
         }
     }
     return NOT_SUPPORTED;

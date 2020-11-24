@@ -15,6 +15,7 @@
 #define _REDUCTION_H
 
 #include "operator.hpp"
+#include "tensor_computing.h"
 
 class Reduction : public Operator {
 public:

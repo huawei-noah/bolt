@@ -11,13 +11,13 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define MANGLE_NAME_IMPL(base, TP, N) base##TP##N
-#define MANGLE_NAME(base, TP, N) MANGLE_NAME_IMPL(base, TP, N)
+#define MANGLE_NAME_IMPL(base, TP, B_AXIS) base##TP##B_AXIS
+#define MANGLE_NAME(base, TP, B_AXIS) MANGLE_NAME_IMPL(base, TP, B_AXIS)
+
 
 #if defined(USE_SUM)
-#define calCore(in, off, v, res) \
+#define calCore(v, res)          \
     {                            \
-        v = vload4(off, in);     \
         res.s0 += v.s0;          \
         res.s1 += v.s1;          \
         res.s2 += v.s2;          \
@@ -26,17 +26,15 @@
 #endif
 
 #if defined(USE_MAX)
-#define calCore(in, off, v, res) \
+#define calCore(v, res)          \
     {                            \
-        v = vload4(off, in);     \
         res = fmax(res, v);      \
     }
 #endif
 
 #if defined(USE_PROD)
-#define calCore(in, off, v, res) \
+#define calCore(v, res)          \
     {                            \
-        v = vload4(off, in);     \
         res.s0 *= v.s0;          \
         res.s1 *= v.s1;          \
         res.s2 *= v.s2;          \
@@ -44,9 +42,12 @@
     }
 #endif
 
-__kernel void MANGLE_NAME(eltwise_broadcast_, TP, N)(const int h,
-    const int w,
-    const int c,
+#if defined(USE_NCHW)
+__kernel void MANGLE_NAME(eltwise_broadcast_nchw_, TP, B_AXIS)
+#else
+__kernel void MANGLE_NAME(eltwise_broadcast_, TP, B_AXIS)
+#endif
+(const int c,
     const int ih_str,
     const int iw_str,
     const int ih_off,
@@ -59,31 +60,90 @@ __kernel void MANGLE_NAME(eltwise_broadcast_, TP, N)(const int h,
     __global const T *in1,
     __global T *out)
 {
-    const int idx = get_global_id(0);
-    const int idy = get_global_id(1);
-    const int idz = get_global_id(2);
+    char ec = 4;
+#if defined(USE_NCHW)
+    ec = c&3;
+    if(ec == 0) {
+        ec = 4;
+    }
+#endif
+    int idx = get_global_id(0);
+    int idy = get_global_id(1);
     if (idx >= h || idy >= w) {
         return;
     }
 
-    T4 val;
+    int idn = 0;
+    int idz, in_off_res;
+    if(ec == 4) {
+        idz = get_global_id(2);
+        in_off_res = (idz * iw_str + idy + iw_off) * ih_str + idx + ih_off;
+    } else {
+        int cd4 = (c + 3) >> 2; 
+        idz = get_global_id(2) % cd4;
+        idn = get_gloabl_id(2) / cd4;
+        in_off_res = ((idn * cd4 + idz) * iw_str + idy + iw_off) * ih_str + idx + ih_off;
+        if ((idz << 2) + 4 <= c) {
+            ec = 4;
+        }
+    }
+    T4 val = 0;
     T4 res;
-    const int in_off_res = (idz * iw_str + idy + iw_off) * ih_str + idx + ih_off;
-    // c = h = w = 1 have bugs to fix
-#if (N == 0)
+
+#if defined(BROAD_XYZ)
     const int in_off_val = 0;
-    // h = w = 1
-#elif (N == 1)
+#if defined(USE_NCHW)
+    val.x = in1[in_off_val];
+    val.y = val.x;
+    val.z = val.x;
+    val.w = val.x;
+#endif
+
+#elif defined(BROAD_XY)
     const int in_off_val = idz;
-    // h = 1
-#elif (N == 2)
-    const int in_off_val = idz * iw_str + idy + iw_str;
-    // w = 1
-#elif (N == 3)
-    const int in_off_val = idz * ih_str + idx + ih_str;
+#if defined(USE_NCHW)
+    if(ec == 4) {
+        val = vload4(in_off_val, in1);
+    } else {
+        in_off_val = idn * ic + (idz << 2);
+        if(ec == 1) {
+            val.x = in1[in_off_val];
+        }
+        if(ec == 2) {
+            val.xy = vload2(0, in1 + in_off_val)
+        }
+        if(ec == 3) {
+            val.xyz = vload3(0, in1 + in_off_val)
+        }
+    }
+#endif
+
+#elif defined(BROAD_Y)
+    const int in_off_val = idz * iw_str + idy + iw_off;
+#if defined(USE_NCHW)
+    in_off_val = (idn * ic + (idz << 2)) * iw_str + idy + iw_off;
+    val.x = in1[in_off_val];
+    if (ec > 1) val.y = in1[in_off_val + iw_str];
+    if (ec > 2) val.z = in1[in_off_val + iw_str * 2];
+    if (ec > 3) val.w = in1[in_off_val + iw_str * 3];
+#endif
+
+#elif defined(BROAD_X)
+    const int in_off_val = idz * ih_str + idx + ih_off;
+#if defined(USE_NCHW)
+    in_off_val = (idn * ic + (idz << 2)) * ih_str + idx + ih_off;
+    val.x = in1[in_off_val];
+    if (ec > 1) val.y = in1[in_off_val + ih_str];
+    if (ec > 2) val.z = in1[in_off_val + ih_str * 2];
+    if (ec > 3) val.w = in1[in_off_val + ih_str * 3];
+#endif
+#endif
+
+#if !defined(USE_NCHW)
+    val = vload4(in_off_val, in1);
 #endif
     res = vload4(in_off_res, in0);
-    calCore(in1, in_off_val, val, res);
+    calCore(val, res);
     const int out_off = (idz * ow_str + idy + ow_off) * oh_str + idx + oh_off;
     vstore4(res, out_off, out);
 }

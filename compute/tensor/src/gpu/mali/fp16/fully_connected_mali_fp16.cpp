@@ -85,14 +85,10 @@ inline EE fully_connected_core_mali_fp16(GCLHandle_t handle,
             dim = 1;
             CHECK_STATUS(gcl_create_kernel(handle, kernelname, &kernel));
             CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, ihw_str, ic_str, ih_off, iw_off, oh_str,
-                ow_str, oh_off, ow_off, fn, gs[0], gs[1], inbuf, fltbuf, biasmem, outbuf));
+                ow_str, oh_off, ow_off, fn, 0, 0, gs[0], gs[1], inbuf, fltbuf, biasmem, outbuf));
             gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelname);
 #ifdef _DEBUG
             CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelname));
-            CHECK_STATUS(gcl_print_memory<F16>(handle, input, "fc_wh1_input"));
-            CHECK_STATUS(gcl_print_memory<F16>(handle, filter[0], "fc_wh1_filter"));
-            CHECK_STATUS(gcl_print_memory<F16>(handle, bias[0], "fc_wh1_bias"));
-            CHECK_STATUS(gcl_print_memory<F16>(handle, output[0], "fc_wh1_output"));
             handle->t_total += handle->t_execute;
 #endif
         }
@@ -100,7 +96,8 @@ inline EE fully_connected_core_mali_fp16(GCLHandle_t handle,
             item_k = item_k >> 2;
             U32 ic_str = input->desc.stride[2];
             U32 ohw_str;
-            U32 step = inputDesc.dims[0];
+            U32 step, k;
+            tensorSelectGet(outputDesc, NULL, NULL, NULL, &k, &step, NULL);
             sprintf(kernelname, "conv_direct_s%d_%d%d%d", 1, 1, item_w, item_k);
             for (U32 i = 0; i < filter.size(); ++i) {
                 fltbuf = filter[i]->mem;
@@ -118,20 +115,17 @@ inline EE fully_connected_core_mali_fp16(GCLHandle_t handle,
                 if (ih_str != 1 || ih_off != 0) {
                     CHECK_STATUS(NOT_SUPPORTED);
                 }
+                U32 oc = output[i]->desc.stride[2] * 4;
                 gs[0] = 1;
                 gs[1] = (step + item_w - 1) / item_w;
                 gs[2] = output[i]->desc.stride[2] / item_k;
                 CHECK_STATUS(gcl_create_kernel(handle, kernelname, &kernel));
                 CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, ihw_str, ic_str, ih_off, iw_off,
-                    oh_str, ohw_str, oh_off, ow_off, step, 1, gs[0], gs[1], inbuf, fltbuf, biasmem,
+                    oh_str, ohw_str, oh_off, ow_off, step, k, 1, 0, 0, gs[0], gs[1], inbuf, fltbuf, biasmem,
                     outbuf));
                 gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelname);
 #ifdef _DEBUG
                 CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelname));
-                CHECK_STATUS(gcl_print_memory<F16>(handle, input, "conv_direct_input"));
-                CHECK_STATUS(gcl_print_memory<F16>(handle, filter[i], "conv_direct_filter"));
-                CHECK_STATUS(gcl_print_memory<F16>(handle, bias[i], "conv_direct_bias"));
-                CHECK_STATUS(gcl_print_memory<F16>(handle, output[i], "conv_direct_output"));
                 handle->t_total += handle->t_execute;
 #endif
             }
@@ -153,9 +147,6 @@ inline EE fully_connected_core_mali_fp16(GCLHandle_t handle,
         gcl_set_kernelVec(handle, kernel, dim, gs, ls, "fc_p1");
 #ifdef _DEBUG
         CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, "fc_p1"));
-        CHECK_STATUS(gcl_print_memory<F16>(handle, input, "fc_p1_input"));
-        CHECK_STATUS(gcl_print_memory<F16>(handle, filter[0], "fc_p1_filter"));
-        CHECK_STATUS(gcl_print_buffer<F16>(handle, tmp, fh * item_w * fn * item_k, "fc_p1_output"));
         handle->t_total += handle->t_execute;
 #endif
         CHECK_STATUS(gcl_create_kernel(handle, "fc_p2", &kernel));
@@ -167,8 +158,6 @@ inline EE fully_connected_core_mali_fp16(GCLHandle_t handle,
         gcl_set_kernelVec(handle, kernel, dim, &gs2, &ls2, "fc_p2");
 #ifdef _DEBUG
         CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, &gs2, &ls2, "fc_p2"));
-        CHECK_STATUS(gcl_print_memory<F16>(handle, bias[0], "fc_p2_bias"));
-        CHECK_STATUS(gcl_print_memory<F16>(handle, output[0], "fc_p2_output"));
         handle->t_total += handle->t_execute;
 #endif
     }

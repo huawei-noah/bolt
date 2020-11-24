@@ -23,3 +23,5 @@ cp ${BOLT_ROOT}/inference/engine/include/operator.hpp ${script_dir}/image_classi
 cp ${BOLT_ROOT}/inference/flow/include/flow.h ${script_dir}/image_classification/ImageClassificationDemo/libbolt/headers/flow/
 cp ${BOLT_ROOT}/inference/flow/include/flow_function_factory.h ${script_dir}/image_classification/ImageClassificationDemo/libbolt/headers/flow/
 cp ${BOLT_ROOT}/inference/flow/include/node.h ${script_dir}/image_classification/ImageClassificationDemo/libbolt/headers/flow/
+
+cp ${BOLT_ROOT}/kit/models/ghostnet_*.bolt ${script_dir}/image_classification/ImageClassificationDemo/libbolt/

@@ -15,6 +15,7 @@
 #define _FACTORY_H
 
 #include "operator.hpp"
+#include "tensor_computing.h"
 
 #define NOT_SUPPORT       \
     Operator *cep = NULL; \

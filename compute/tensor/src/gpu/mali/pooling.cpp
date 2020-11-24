@@ -79,7 +79,7 @@ EE pooling_infer_output_size_mali(TensorDesc inputDesc,
     }
 
     ic = ALIGN(ic, 4);
-    CHECK_STATUS(infer_gclmem_desc_ncwhc4(iw_align, ih_align, ic * it, pl, pt, ow, oh, ic * ot, idt,
+    CHECK_STATUS(infer_gclmem_desc_ncwhc4_3d(iw_align, ih_align, ic, it, in, pl, pt, ow, oh, ic, ot, in, idt,
         idt, gclmemInputDesc, gclmemOutputDesc));
     return SUCCESS;
 }

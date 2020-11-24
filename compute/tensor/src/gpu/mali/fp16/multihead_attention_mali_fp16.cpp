@@ -263,8 +263,9 @@ inline void inner_product_ncwhc4(GCLHandle_t handle,
     U32 ew_str,
     Mem elt)
 {
+    item_k = item_k >> 2;
     U32 ow_align = ALIGN(ow, item_w);
-    U32 gs[3] = {1, ow_align / item_w, fn / item_k};
+    U32 gs[3] = {1, ow_align / item_w, (fn + 3) / 4 / item_k};
     U32 ls[3] = {0, 0, 0};
     U32 dim = 3;
     Kernel kernel;
@@ -287,15 +288,14 @@ inline void inner_product_ncwhc4(GCLHandle_t handle,
                 CHECK_STATUS(NOT_SUPPORTED);
         }
     }
-    item_k = item_k >> 2;
     sprintf(kernelName, "conv_direct_s%d_%s%d%d%d", 1, modeName, 1, item_w, item_k);
     CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel));
     if (useEltwise) {
         CHECK_STATUS(gcl_set_kernelArgs(kernel, 1, iw_str, ic_str, 0, 0, 1, ow_str, oh_off, ow_off,
-            ow, 1, gs[0], gs[1], in, flt, bias, out, 1, ew_str, 0, 0, elt));
+            ow, fn, 1, 0, 0, gs[0], gs[1], in, flt, bias, out, 1, ew_str, 0, 0, elt));
     } else {
         CHECK_STATUS(gcl_set_kernelArgs(kernel, 1, iw_str, ic_str, 0, 0, 1, ow_str, oh_off, ow_off,
-            ow, 1, gs[0], gs[1], in, flt, bias, out));
+            ow, fn, 1, 0, 0, gs[0], gs[1], in, flt, bias, out));
     }
     gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
 #ifdef _DEBUG

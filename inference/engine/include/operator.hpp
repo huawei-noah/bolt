@@ -18,11 +18,11 @@
 #include "sys.h"
 #include "tensor.hpp"
 #include "algorithm_map.h"
-#include "tensor_computing.h"
 #ifdef _USE_MALI
 #include "gcl.h"
 #include "gcl_engine.h"
 #endif
+// Include headers cautiously because this header is included in C++ API
 
 class Operator {
 public:

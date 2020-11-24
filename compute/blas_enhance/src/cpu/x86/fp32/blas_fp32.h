@@ -18,6 +18,7 @@
 #include "types.h"
 #include "error.h"
 #include "tensor_desc.h"
+#include "thread_affinity.h"
 
 void mvm_col_fp32(U32 row, U32 col, F32 *matrix, F32 *vector, F32 *result);
 

@@ -71,37 +71,11 @@ inline EE deconv_direct_core_mali_fp16(GCLHandle_t handle,
     U32 ls[3] = {0, 0, 0};
     U32 dim;
     Kernel kernel;
-    //    switch(activationMode) {
-    //        case ACTIVATION_RELU:
-    //            strcpy(modeName, "relu_");
-    //            break;
-    //        case ACTIVATION_RELU6:
-    //            strcpy(modeName, "relu6_");
-    //            break;
-    //        case ACTIVATION_NULL:
-    //            strcpy(modeName, "");
-    //            break;
-    //        default:
-    //            return NOT_SUPPORTED;
-    //    }
-    //    if(item_k == 0) {
-    //        if((ih_str > 1 || iw_str > 1) && (item_c != 4)) CHECK_STATUS(NOT_SUPPORTED);
-    //        sprintf(kernelname, "conv_direct_spe_fwhs1_%s%d", modeName, item_c);
-    //        ic_str = filter->desc.stride[1];
-    //        ow = fn;
-    //        gs[0] = fn;
-    //        gs[1] = 1;
-    //        gs[2] = 1;
-    //        dim   = 1;
-    //    } else {
-    // item_k = item_k >> 2;
-    // sprintf(kernelname, "conv_direct_s%d_%s%d%d%d",sw, modeName, fw, item_w, item_k);
     sprintf(kernelname, "deconv_direct");
     gs[0] = oh;
     gs[1] = ow;
     gs[2] = (oc + 3) / 4;
     dim = 3;
-    //    }
     U32 in_channel_blocks = (ic + 3) / 4;
     U32 out_channel_blocks = gs[2];
 
@@ -118,10 +92,6 @@ inline EE deconv_direct_core_mali_fp16(GCLHandle_t handle,
 
 #ifdef _DEBUG
     CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelname));
-    CHECK_STATUS(gcl_print_memory<F16>(handle, input, "deconv_direct_input"));
-    CHECK_STATUS(gcl_print_memory<F16>(handle, filter, "deconv_direct_filter"));
-    CHECK_STATUS(gcl_print_memory<F16>(handle, bias, "deconv_direct_bias"));
-    CHECK_STATUS(gcl_print_memory<F16>(handle, output, "deconv_direct_output"));
     handle->t_total += handle->t_execute;
 #endif
     return SUCCESS;

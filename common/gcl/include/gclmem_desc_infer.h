@@ -164,6 +164,7 @@ inline EE trans_gclmem_desc_nchw_ncwhc4(
     }
     return SUCCESS;
 }
+
 inline EE infer_gclmem_desc_ncwhc4(U32 iw,
     U32 ih,
     U32 ic,
@@ -257,6 +258,30 @@ inline EE infer_gclmem_desc_ncwhc4(U32 iw,
         gclmemInputDesc->need_pad = need_pad | need_pad_org;
     }
     return SUCCESS;
+}
+
+inline EE infer_gclmem_desc_ncwhc4_3d(U32 iw,
+    U32 ih,
+    U32 ic,
+    U32 it,
+    U32 in,
+    U32 pw,
+    U32 ph,
+    U32 ow,
+    U32 oh,
+    U32 oc,
+    U32 ot,
+    U32 on,
+    DataType idt,
+    DataType odt,
+    GCLMemDesc_t gclmemInputDesc,
+    GCLMemDesc_t gclmemOutputDesc,
+    bool need_pad = false)
+{
+    ic = (ic + 3) / 4 * 4 * it * in;
+    oc = (oc + 3) / 4 * 4 * ot * on;
+    return infer_gclmem_desc_ncwhc4(iw, ih, ic, pw, ph, ow, oh, oc, idt, odt, 
+        gclmemInputDesc, gclmemOutputDesc, need_pad);
 }
 
 inline EE infer_gclmem_desc_nhwc(U32 iw,
@@ -419,6 +444,30 @@ inline EE infer_gclmem_desc_nchw(U32 iw,
         gclmemInputDesc->need_pad = need_pad | need_pad_org;
     }
     return SUCCESS;
+}
+
+inline EE infer_gclmem_desc_nchw_3d(U32 iw,
+    U32 ih,
+    U32 ic,
+    U32 it,
+    U32 in,
+    U32 pw,
+    U32 ph,
+    U32 ow,
+    U32 oh,
+    U32 oc,
+    U32 ot,
+    U32 on,
+    DataType idt,
+    DataType odt,
+    GCLMemDesc_t gclmemInputDesc,
+    GCLMemDesc_t gclmemOutputDesc,
+    bool need_pad = false) 
+{
+        ic = ic * it * in;
+        oc = oc * ot * on;
+        return infer_gclmem_desc_nchw(iw, ih, ic, pw, ph, ow, oh, oc, idt, odt,
+            gclmemInputDesc, gclmemOutputDesc);
 }
 
 inline void get_nlp_mkt_val(TensorDesc desc, DataType *dt, U32 *m, U32 *k, U32 *t)
