@@ -59,7 +59,7 @@ Note : Model conversion procedure of onnx and tflite is similar to caffe.
 
 ### mobilenet_v1(tensorflow) Model Conversion
 
-Save your mobilenet_v1 to frozen .pb model. And preprocess your model using [tf2json](model_tools/tools/tensorflow2json/tf2json.py) which can convert the .pb to .json. Then use **X2bolt** to convert .json to .bolt model.
+Save your mobilenet_v1 to frozen .pb model. And preprocess your model using [tf2json](../model_tools/tools/tensorflow2json/tf2json.py) which can convert the .pb to .json. Then use **X2bolt** to convert .json to .bolt model.
 
 Here is the example of mobilenet_v1_frozen.pb converted to mobilenet_v1.bolt. 
 
