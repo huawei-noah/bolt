@@ -25,32 +25,41 @@
 #endif
 
 ConvolutionParamSpec createConvolutionParamSpec(U32 group,
-    U32 kernelH,
-    U32 kernelW,
-    U32 strideH,
-    U32 strideW,
-    U32 paddingT,
-    U32 paddingB,
-    U32 paddingL,
-    U32 paddingR,
-    U32 dilateH,
-    U32 dilateW,
+    U32 kernel_t,
+    U32 kernel_h,
+    U32 kernel_w,
+    U32 stride_t,
+    U32 stride_h,
+    U32 stride_w,
+    U32 padding_before,
+    U32 padding_after,
+    U32 padding_top,
+    U32 padding_bottom,
+    U32 padding_left,
+    U32 padding_right,
+    U32 dilateRate_t,
+    U32 dilateRate_h,
+    U32 dilateRate_w,
     U32 num_outputs,
     ConvolutionMode convMode);
 
+PoolingParamSpec createPoolingParamSpec(PoolingMode pm,
+    U32 kernel_t,
+    U32 kernel_h,
+    U32 kernel_w,
+    U32 stride_t,
+    U32 stride_h,
+    U32 stride_w,
+    U32 padding_before,
+    U32 padding_after,
+    U32 padding_top,
+    U32 padding_bottom,
+    U32 padding_left,
+    U32 padding_right,
+    RoundMode rm);
+
 FullyConnectedParamSpec createFullyConnectedParamSpec(
     U32 num_outputs, U32 num_slices, I32 *slice_point);
-
-PoolingParamSpec createPoolingParamSpec(PoolingMode pm,
-    U32 ksH,
-    U32 ksW,
-    U32 strideH,
-    U32 strideW,
-    U32 paddingT,
-    U32 paddingB,
-    U32 paddingL,
-    U32 paddingR,
-    RoundMode rm);
 
 ReshapeParamSpec createReshapeParamSpec(I32 *shape_dims, I32 shape_size, I32 axis, I32 num_axes);
 

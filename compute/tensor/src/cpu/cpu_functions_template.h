@@ -212,4 +212,25 @@ inline void array_square_and_add_template(const T *inputA, const T *inputB, T *o
         output[i] = inputA[i] + inputB[i] * inputB[i];
     }
 }
+
+template <typename T>
+inline void array_max_template(const T *inputA, const T *inputB, T *output, I32 len)
+{
+    for (I32 i = 0; i < len; i++) {
+        output[i] = UNI_MAX(inputA[i], inputB[i]);
+    }
+}
+
+template <typename T>
+F32 array_max_value_template(const T *data, I32 len)
+{
+    if (len <= 0) {
+        return 0;
+    }
+    F32 max_s = data[0];
+    for (I32 i = 1; i < len; i++) {
+        max_s = UNI_MAX(data[i], max_s);
+    }
+    return max_s;
+}
 #endif

@@ -81,7 +81,6 @@ int transposeTest(int argc, char **argv, DataType dt)
     CHECK_STATUS(transpose(inputTensorCpu, p, tmpTensorCpu, outputTensorCpu, &archInfo_org));
     //run on gpu
     std::shared_ptr<GCLHandle> handleSharedPtr = OCLContext::getInstance().handle;
-    ;
     GCLHandle_t handle = handleSharedPtr.get();
     std::vector<GCLKernelInfo> kernelVec;
     handle->kernelVec = &kernelVec;
@@ -125,7 +124,6 @@ int transposeTest(int argc, char **argv, DataType dt)
     CHECK_STATUS(gcl_run_kernelVec(handle));
 #endif
     outputDesc = outputTensor.get_desc();
-    ;
     CHECK_STATUS(ocl_get_output(handle, output, outputDesc, true));
     output_gpu = output->mapPtrArray.back();
 

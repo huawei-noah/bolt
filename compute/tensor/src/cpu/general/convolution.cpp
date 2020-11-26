@@ -32,17 +32,29 @@ inline EE convolution(TensorDesc inputDesc,
 {
     DataType idt, fdt, odt;
     DataFormat idf, fdf, odf;
-    U32 in, ic, ih, iw;
-    U32 fn, fc, fh, fw;
-    U32 on, oc, oh, ow;
-    CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-    CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
+    U32 in, ic, it, ih, iw;
+    U32 fn, fc, ft, fh, fw;
+    U32 on, oc, ot, oh, ow;
+    it = ft = ot = 1;
+    if (tensorIs4d(inputDesc)) {
+        CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+        CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
+        CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
+    } else if (tensorIs5d(inputDesc)) {
+        CHECK_STATUS(tensor5dGet(inputDesc, &idt, &idf, &in, &ic, &it, &ih, &iw));
+        CHECK_STATUS(tensor5dGet(filterDesc, &fdt, &fdf, &fn, &fc, &ft, &fh, &fw));
+        CHECK_STATUS(tensor5dGet(outputDesc, &odt, &odf, &on, &oc, &ot, &oh, &ow));
+    } else {
+        return NOT_SUPPORTED;
+    }
     U32 group = convParamSpec.group;
+    U32 strideT = convParamSpec.stride_t;
     U32 strideH = convParamSpec.stride_h;
     U32 strideW = convParamSpec.stride_w;
+    U32 paddingB = convParamSpec.padding_before;
     U32 paddingT = convParamSpec.padding_top;
     U32 paddingL = convParamSpec.padding_left;
+    U32 dilateT = convParamSpec.dilatedRate_t;
     U32 dilateH = convParamSpec.dilatedRate_h;
     U32 dilateW = convParamSpec.dilatedRate_w;
     U32 ocGroupSize = oc / group;
@@ -53,48 +65,58 @@ inline EE convolution(TensorDesc inputDesc,
     U32 oc8 = oc / 8;
     for (U32 n = 0; n < in; n++) {
         for (U32 o = 0; o < oc; o++) {
-            for (U32 h = 0; h < oh; h++) {
-                for (U32 w = 0; w < ow; w++) {
-                    T3 value = 0;
-                    U32 groupId = o / ocGroupSize;
-                    U32 icStart = groupId * fc;
-                    U32 icEnd = (groupId + 1) * fc;
-                    for (U32 c = icStart, f_off = o * fc * fh * fw; c < icEnd; c++) {
-                        for (I32 fh_idx = 0; fh_idx < (I32)fh; fh_idx++) {
-                            for (I32 fw_idx = 0; fw_idx < (I32)fw; fw_idx++, f_off++) {
-                                I32 ih_idx = h * strideH - paddingT + fh_idx * dilateH;
-                                I32 iw_idx = w * strideW - paddingL + fw_idx * dilateW;
-                                if (ih_idx >= 0 && ih_idx < (I32)ih && iw_idx >= 0 &&
-                                    iw_idx < (I32)iw) {
-                                    U32 i_off;
-                                    if (idf == DF_NCHW) {
-                                        i_off = ((n * ic + c) * ih + ih_idx) * iw + iw_idx;
-                                    } else {
-                                        i_off =
-                                            (((n * ic8 + (c / 8)) * ih + ih_idx) * iw + iw_idx) * 8 +
-                                            c % 8;
+            for (U32 t = 0; t < ot; t++) {
+                for (U32 h = 0; h < oh; h++) {
+                    for (U32 w = 0; w < ow; w++) {
+                        T3 value = 0;
+                        U32 groupId = o / ocGroupSize;
+                        U32 icStart = groupId * fc;
+                        U32 icEnd = (groupId + 1) * fc;
+                        for (U32 c = icStart, f_off = o * fc * ft * fh * fw; c < icEnd; c++) {
+                            for (I32 ft_idx = 0; ft_idx < (I32)ft; ft_idx++) {
+                                for (I32 fh_idx = 0; fh_idx < (I32)fh; fh_idx++) {
+                                    for (I32 fw_idx = 0; fw_idx < (I32)fw; fw_idx++, f_off++) {
+                                        I32 it_idx = t * strideT - paddingB + ft_idx * dilateT;
+                                        I32 ih_idx = h * strideH - paddingT + fh_idx * dilateH;
+                                        I32 iw_idx = w * strideW - paddingL + fw_idx * dilateW;
+                                        if (it_idx >= 0 && it_idx < (I32)it && ih_idx >= 0 &&
+                                            ih_idx < (I32)ih && iw_idx >= 0 && iw_idx < (I32)iw) {
+                                            U32 i_off;
+                                            if (idf == DF_NCHW) {
+                                                i_off = (((n * ic + c) * it + it_idx) * ih + ih_idx) *
+                                                        iw +
+                                                    iw_idx;
+                                            } else {
+                                                i_off = ((((n * ic8 + (c / 8)) * it + it_idx) * ih +
+                                                             ih_idx) *
+                                                                iw +
+                                                            iw_idx) *
+                                                        8 +
+                                                    c % 8;
+                                            }
+                                            value += inArray[i_off] * filterArray[f_off];
+                                        } else {
+                                            value += paddingValue * filterArray[f_off];
+                                        }
                                     }
-                                    value += inArray[i_off] * filterArray[f_off];
-                                } else {
-                                    value += paddingValue * filterArray[f_off];
                                 }
                             }
                         }
-                    }
-                    U32 o_off;
-                    if (odf == DF_NCHW) {
-                        o_off = ((n * oc + o) * oh + h) * ow + w;
-                    } else {
-                        o_off = (((n * oc8 + (o / 8)) * oh + h) * ow + w) * 8 + o % 8;
-                    }
+                        U32 o_off;
+                        if (odf == DF_NCHW) {
+                            o_off = (((n * oc + o) * ot + t) * oh + h) * ow + w;
+                        } else {
+                            o_off = ((((n * oc8 + (o / 8)) * ot + t) * oh + h) * ow + w) * 8 + o % 8;
+                        }
 
-                    T4 scale = 1;
-                    if (scaleArray != nullptr) {
-                        scale = scaleArray[o];
+                        T4 scale = 1;
+                        if (scaleArray != nullptr) {
+                            scale = scaleArray[o];
+                        }
+                        outArray[o_off] = scale * value + biasArray[o];
+                        CHECK_STATUS(activation_template<T3>(
+                            activationDesc, outArray[o_off], &outArray[o_off]));
                     }
-                    outArray[o_off] = scale * value + biasArray[o];
-                    CHECK_STATUS(
-                        activation_template<T3>(activationDesc, outArray[o_off], &outArray[o_off]));
                 }
             }
         }
@@ -203,7 +225,8 @@ EE convolution_general(TensorDesc inputDesc,
         }
 #endif
         default:
-            return NOT_SUPPORTED;
+            ret = NOT_SUPPORTED;
+            break;
     }
     return ret;
 }

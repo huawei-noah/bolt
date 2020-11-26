@@ -21,6 +21,5 @@
 #define _USE_FP32
 #define _USE_FP16
 #define _USE_INT8
-//#define _THREAD_SAFE
 
 #endif

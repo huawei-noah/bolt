@@ -14,7 +14,8 @@
 #include <string.h>
 #include "cpu/x86/fp32/tensor_computing_fp32.h"
 
-void mvm_nkn32_with_bias(U32 fn, U32 fk, const F32 *filterArray, const F32 *input, F32 *output, const F32 *bias)
+void mvm_nkn32_with_bias(
+    U32 fn, U32 fk, const F32 *filterArray, const F32 *input, F32 *output, const F32 *bias)
 {
 #ifdef _USE_OPENMP
 #pragma omp parallel for num_threads(OMP_NUM_THREADS)
@@ -30,15 +31,15 @@ void mvm_nkn32_with_bias(U32 fn, U32 fk, const F32 *filterArray, const F32 *inpu
                                  "vxorps %%ymm3, %%ymm3, %%ymm3                     \n\t"
                                  :
                                  :
-                                 :"%ymm0", "%ymm1", "%ymm2", "%ymm3");
+                                 : "%ymm0", "%ymm1", "%ymm2", "%ymm3");
         } else {
             __asm__ __volatile__("vmovups (%0), %%ymm0                     \n\t"
                                  "vmovups 0x20(%0), %%ymm1                     \n\t"
                                  "vmovups 0x40(%0), %%ymm2                     \n\t"
                                  "vmovups 0x60(%0), %%ymm3                     \n\t"
                                  :
-                                 :"r"(b)
-                                 :"%ymm0", "%ymm1", "%ymm2", "%ymm3");
+                                 : "r"(b)
+                                 : "%ymm0", "%ymm1", "%ymm2", "%ymm3");
         }
         __asm__ __volatile__("mov %1, %%rax                                     \n\t"
                              "mov %3, %%ecx                                     \n\t"
@@ -162,8 +163,8 @@ void mvm_nkn32_with_bias(U32 fn, U32 fk, const F32 *filterArray, const F32 *inpu
                              : "+r"(f)
                              : "r"(input), "r"(out), "r"(fk)
                              : "%rax", "%ecx", "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm4", "%ymm5",
-                             "%ymm6", "%ymm7", "%ymm8", "%ymm9", "%ymm10", "%ymm11", "%ymm12", "%ymm13",
-                             "memory");
+                             "%ymm6", "%ymm7", "%ymm8", "%ymm9", "%ymm10", "%ymm11", "%ymm12",
+                             "%ymm13", "memory");
     }
 }
 
@@ -239,7 +240,8 @@ EE rnncell_fp32(TensorDesc xDesc,
         F32 *lastBatchH = lastHArray + m * lastHStride;
         memcpy(xhArray, currentXArray + m * batchStrideX, xDim * sizeof(F32));
         memcpy(xhArray + xDim, lastBatchH, hDim * sizeof(F32));
-        mvm_nkn32_with_bias(fn, fk, (const F32 *)filter[0], xhArray, intermediateH, (const F32 *)bias[0]);
+        mvm_nkn32_with_bias(
+            fn, fk, (const F32 *)filter[0], xhArray, intermediateH, (const F32 *)bias[0]);
 
         F32 *out_i = intermediateH;
         F32 *out_g = out_i + column;
@@ -299,7 +301,8 @@ EE rnncell_fp32(TensorDesc xDesc,
         }
 
         if (rnnParamSpec.numProjection > 0) {
-            mvm_nkn32_with_bias(hDim / 32, rnnParamSpec.numProjection, (const F32 *)filter[1], tmpHH, tmpH, nullptr);
+            mvm_nkn32_with_bias(hDim / 32, rnnParamSpec.numProjection, (const F32 *)filter[1],
+                tmpHH, tmpH, nullptr);
         }
 
         if (rnnParamSpec.zoneoutOutput != 0) {

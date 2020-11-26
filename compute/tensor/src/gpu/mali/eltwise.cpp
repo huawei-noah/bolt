@@ -40,25 +40,24 @@ EE eltwise_infer_output_size_mali(std::vector<TensorDesc> inputDesc,
     if (sameDesc) {
         U32 size = inputDesc.size();
         bool useNCHW = true;
-        for(U32 i = 0; i < size; i++) {
-            if (gclmemInputDesc[i].memFormat != DF_NCHW && 
-                gclmemInputDesc[i].byteSize != 0) {
+        for (U32 i = 0; i < size; i++) {
+            if (gclmemInputDesc[i].memFormat != DF_NCHW && gclmemInputDesc[i].byteSize != 0) {
                 useNCHW = false;
             }
         }
         if (useNCHW) {
-            CHECK_STATUS(infer_gclmem_desc_nchw_3d(0, 0, 0, 0, 0, 0, 0, 
-                iw, ih, ic, it, in, idt, idt, NULL, gclmemOutputDesc));
+            CHECK_STATUS(infer_gclmem_desc_nchw_3d(
+                0, 0, 0, 0, 0, 0, 0, iw, ih, ic, it, in, idt, idt, NULL, gclmemOutputDesc));
             for (U32 i = 0; i < size; i++) {
-                CHECK_STATUS(infer_gclmem_desc_nchw_3d(iw, ih, ic, it, in, 
-                    0, 0, 0, 0, 0, 0, 0, idt, idt, &gclmemInputDesc[i], NULL));
+                CHECK_STATUS(infer_gclmem_desc_nchw_3d(
+                    iw, ih, ic, it, in, 0, 0, 0, 0, 0, 0, 0, idt, idt, &gclmemInputDesc[i], NULL));
             }
         } else {
-            CHECK_STATUS(infer_gclmem_desc_ncwhc4_3d(0, 0, 0, 0, 0, 0, 0,
-                iw, ih, ic, it, in, idt, idt, NULL, gclmemOutputDesc));
+            CHECK_STATUS(infer_gclmem_desc_ncwhc4_3d(
+                0, 0, 0, 0, 0, 0, 0, iw, ih, ic, it, in, idt, idt, NULL, gclmemOutputDesc));
             for (U32 i = 0; i < size; i++) {
-                CHECK_STATUS(infer_gclmem_desc_ncwhc4_3d(iw, ih, ic, it, in,
-                    0, 0, 0, 0, 0, 0, 0, idt, idt, &gclmemInputDesc[i], NULL));
+                CHECK_STATUS(infer_gclmem_desc_ncwhc4_3d(
+                    iw, ih, ic, it, in, 0, 0, 0, 0, 0, 0, 0, idt, idt, &gclmemInputDesc[i], NULL));
             }
         }
         return SUCCESS;
@@ -66,16 +65,16 @@ EE eltwise_infer_output_size_mali(std::vector<TensorDesc> inputDesc,
         if (inputDesc.size() > 2) {
             CHECK_STATUS(NOT_SUPPORTED);
         }
-        CHECK_STATUS(infer_gclmem_desc_ncwhc4_3d(iw, ih, ic, it, in, 0, 0, 
-            iw, ih, ic, it, in, idt, idt, &gclmemInputDesc[arrayDimMax], gclmemOutputDesc));
+        CHECK_STATUS(infer_gclmem_desc_ncwhc4_3d(iw, ih, ic, it, in, 0, 0, iw, ih, ic, it, in, idt,
+            idt, &gclmemInputDesc[arrayDimMax], gclmemOutputDesc));
         tensorSelectGet(inputDesc[1 - arrayDimMax], &idt, NULL, &in, &ic, &ih, &iw, &it);
         if (gclmemInputDesc[1 - arrayDimMax].byteSize == 0 ||
             gclmemInputDesc[1 - arrayDimMax].memFormat == DF_NCHW) {
-            CHECK_STATUS(infer_gclmem_desc_nchw_3d(iw, ih, ic, it, in, 0, 0, 
-                0, 0, 0, 0, 0, idt, idt, &gclmemInputDesc[1 - arrayDimMax], NULL));
+            CHECK_STATUS(infer_gclmem_desc_nchw_3d(iw, ih, ic, it, in, 0, 0, 0, 0, 0, 0, 0, idt,
+                idt, &gclmemInputDesc[1 - arrayDimMax], NULL));
         } else {
-            CHECK_STATUS(infer_gclmem_desc_ncwhc4_3d(iw, ih, ic, it, in, 0, 0, 
-                0, 0, 0, 0, 0, idt, idt, &gclmemInputDesc[1 - arrayDimMax], NULL));
+            CHECK_STATUS(infer_gclmem_desc_ncwhc4_3d(iw, ih, ic, it, in, 0, 0, 0, 0, 0, 0, 0, idt,
+                idt, &gclmemInputDesc[1 - arrayDimMax], NULL));
         }
         return SUCCESS;
     }

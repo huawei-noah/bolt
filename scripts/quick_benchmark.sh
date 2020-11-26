@@ -1,18 +1,12 @@
 #!/bin/bash
 
 script_name=$0
-script_abs=$(readlink -f "$0")
-script_dir=$(dirname $script_abs)
+script_dir=$(cd `dirname $0` && pwd)
 
 host_dir=""
 use_static_library=true
 host_lib_dir=""
 exe_on_device=true
-array=($(adb devices | sed 's/\r//' | grep ".device$"))
-device=${array[0]}
-array=($(adb devices | grep ".device$"))
-#device=${array[0]}
-device="GCL5T19822000030"
 cpu_mask="40"
 device_dir=""
 gpu=false
@@ -75,8 +69,27 @@ while true ; do
     esac
 done
 
+checkExe(){
+    if type $1 &> /dev/null;
+    then
+        return 1
+    else
+        return 0
+    fi
+}
 
 if [ ${exe_on_device}  == true ] ; then
+    checkExe adb 
+    if [ $? == 0 ] ; then
+        echo "[WARNING] detect not install adb tools and skip test on android device. If you want to run test, please install adb and set shell environment PATH to find it."
+        exit 0
+    fi
+    array=($(adb devices | sed 's/\r//' | grep ".device$"))
+    device=${array[0]}
+    if [ "${device}" == "" ]; then
+        echo "[WARNING] detect there is no android device. If you want to run test, please connect one android device."
+        exit 0
+    fi
     status=`adb -s ${device} shell "ls ${device_dir}/ && echo 'success'" | tail -n 1`
     if [ "${status}" != "success" ] ; then
         adb -s ${device} shell "rm -rf ${device_dir}"

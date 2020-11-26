@@ -40,11 +40,15 @@ void print_help(char *argv[])
     printf("usage: %s modelPath \n", argv[0]);
 }
 
-void classification(const char *modelPath, AFFINITY_TYPE affinity, DATA_TYPE dt, const char *algoPath, bool useFileStream)
+void classification(const char *modelPath,
+    AFFINITY_TYPE affinity,
+    DATA_TYPE dt,
+    const char *algoPath,
+    bool useFileStream)
 {
     DATA_TYPE precisionMode = dt;
     ModelHandle model_address;
-    if(useFileStream) {
+    if (useFileStream) {
         model_address = CreateModelWithFileStream(modelPath, affinity, algoPath);
     } else {
         model_address = CreateModel(modelPath, affinity, algoPath);
@@ -217,7 +221,7 @@ void classification(const char *modelPath, AFFINITY_TYPE affinity, DATA_TYPE dt,
     free(user_out_ptr);
     free(bolt_out_ptr);
 
-    const char* modelName = (useFileStream) ? "Use file stream" : modelPath;
+    const char *modelName = (useFileStream) ? "Use file stream" : modelPath;
     if (affinity == GPU) {
         printf("DeviceType = GPU, Model = %s\n", modelName);
     } else {
@@ -226,10 +230,11 @@ void classification(const char *modelPath, AFFINITY_TYPE affinity, DATA_TYPE dt,
     printf("avg_time: %lf ms\n", 1.0 * totalTime / loop);
     printf("max_time: %lf ms\n", 1.0 * max_time);
     printf("min_time: %lf ms\n", 1.0 * min_time);
-    fflush(stdout); 
+    fflush(stdout);
 }
 
-char* buildFileStream(const char* fileName) {
+char *buildFileStream(const char *fileName)
+{
     int fd;
     int length;
     struct stat ss;
@@ -243,12 +248,12 @@ char* buildFileStream(const char* fileName) {
         exit(-1);
     }
     length = ss.st_size;
-    char* bytes = (char*)mmap(NULL, length, PROT_READ, MAP_SHARED, fd, 0);
-    if(MAP_FAILED == bytes) {
+    char *bytes = (char *)mmap(NULL, length, PROT_READ, MAP_SHARED, fd, 0);
+    if (MAP_FAILED == bytes) {
         printf("Map file %s failed\n", fileName);
         exit(-1);
     }
-    char* res = malloc(length);
+    char *res = malloc(length);
     memcpy(res, bytes, length);
     munmap(bytes, length);
     if (-1 != fd) {
@@ -262,15 +267,16 @@ int main()
     const char *mobilenet_v1_fp16_modelPath = "/data/local/tmp/xyf/model/mobilenet_v1_f16.bolt";
     const char *algoPath = "./";
     bool useFileStream = false;
-    classification(mobilenet_v1_fp16_modelPath, CPU_HIGH_PERFORMANCE, FP_16, algoPath, useFileStream);
+    classification(
+        mobilenet_v1_fp16_modelPath, CPU_HIGH_PERFORMANCE, FP_16, algoPath, useFileStream);
     classification(mobilenet_v1_fp16_modelPath, GPU, FP_16, algoPath, useFileStream);
 
     /*Test use filestream to read algoFile*/
     useFileStream = true;
-    const char* modelFileStream = buildFileStream(mobilenet_v1_fp16_modelPath);
-    const char* algoFileStream = buildFileStream("./algorithmInfo_Mali_G52p_MOBILENET_2_4");
+    const char *modelFileStream = buildFileStream(mobilenet_v1_fp16_modelPath);
+    const char *algoFileStream = buildFileStream("./algorithmInfo_Mali_G52p_MOBILENET_2_4");
     classification(modelFileStream, GPU, FP_16, algoFileStream, useFileStream);
-    free((void*)modelFileStream);
-    free((void*)algoFileStream);
+    free((void *)modelFileStream);
+    free((void *)algoFileStream);
     return 0;
 }

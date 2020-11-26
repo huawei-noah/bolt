@@ -63,6 +63,16 @@ class LayerNormOptimizer : public OPOptimizer {
                 for (int k = backAddIndex + 1; k < forDivIndex; k++) {
                     std::string tmp_str = "";
                     if (spec->ops[k].type == OT_Pooling) {
+                        if (spec->ops[k].ps.pooling_spec.mode != POOLING_MEAN) {
+                            tag = false;
+                            break;
+                        }
+                        tmp_str = "ReduceMean";
+                    } else if (spec->ops[k].type == OT_Reduction) {
+                        if (spec->ops[k].ps.reduction_spec.reduction_mode != REDUCTION_MEAN) {
+                            tag = false;
+                            break;
+                        }
                         tmp_str = "ReduceMean";
                     } else if (spec->ops[k].type == OT_Eltwise) {
                         tmp_str = "Sub";

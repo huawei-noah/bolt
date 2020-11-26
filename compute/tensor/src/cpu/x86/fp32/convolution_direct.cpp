@@ -666,7 +666,7 @@ EE convolution_direct(TensorDesc inputDesc,
 #ifdef _USE_OPENMP
 #pragma omp for
 #endif
-                for (I32 bIdx = 0; bIdx < hwocBlockNums; ++bIdx) {
+                for (U32 bIdx = 0; bIdx < hwocBlockNums; ++bIdx) {
                     U32 hw = (bIdx / ocBlockNums) * block_hw_dim;
                     U32 hwSize = UNI_MIN(block_hw_dim, ohow - hw);
                     U32 ocIdx = bIdx % ocBlockNums;
@@ -688,7 +688,7 @@ EE convolution_direct(TensorDesc inputDesc,
                             store |= U32(activationDesc.mode) << 1;
                         }
                         U32 wSize = 0;
-                        for (I32 ihw = hw; ihw < hw + hwSize; ihw += wSize) {
+                        for (U32 ihw = hw; ihw < hw + hwSize; ihw += wSize) {
                             wSize = UNI_MIN(hw + hwSize - ihw, UNROLL_W);
                             if (wSize < 3) {
                                 wSize = 1;

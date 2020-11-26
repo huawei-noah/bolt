@@ -95,8 +95,9 @@ int depthwisePointwiseConvolutionTest(
     ActivationParamSpec pwActivationParamSpec;
     dwActivationParamSpec.mode = ACTIVATION_NULL;
     pwActivationParamSpec.mode = ACTIVATION_NULL;
-    ConvolutionParamSpec convParamSpec = createConvolutionParamSpec(group, fh, fw, stride, stride,
-        padding, padding, padding, padding, 1, 1, fn, Convolution_Depthwise_Pointwise);
+    ConvolutionParamSpec convParamSpec = createConvolutionParamSpec(group, 1, fh, fw, 1, stride,
+        stride, 0, 0, padding, padding, padding, padding, 1, 1, 1, fn,
+        Convolution_Depthwise_Pointwise);
 
     U32 dwFilterLen = 1 * fc * fh * fw;
     U32 pwFilterLen = fn * fc * 1 * 1;
@@ -116,7 +117,6 @@ int depthwisePointwiseConvolutionTest(
     U8 *pw_bias_cpu = ut_input_v(pwBiasLen, dt, UT_INIT_RANDOM);
 
     std::shared_ptr<GCLHandle> handleSharedPtr = OCLContext::getInstance().handle;
-    ;
     GCLHandle_t handle = handleSharedPtr.get();
     std::vector<GCLKernelInfo> kernelVec;
     handle->kernelVec = &kernelVec;

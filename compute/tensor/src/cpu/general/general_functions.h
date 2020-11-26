@@ -271,4 +271,45 @@ inline EE array_activation_general(
     }
     return ret;
 }
+
+inline void array_max_general(
+    DataType dt, const void *inputA, const void *inputB, void *output, I32 len)
+{
+    switch (dt) {
+#ifdef _USE_FP16
+        case DT_F16:
+            array_max_template<F16>((const F16 *)inputA, (const F16 *)inputB, (F16 *)output, len);
+            break;
+#endif
+#ifdef _USE_FP32
+        case DT_F32:
+            array_max_template<F32>((const F32 *)inputA, (const F32 *)inputB, (F32 *)output, len);
+            break;
+#endif
+        default:
+            CHECK_STATUS(NOT_SUPPORTED);
+            break;
+    }
+}
+
+inline F32 array_max_value_general(DataType dt, const void *data, I32 len)
+{
+    F32 result = 0;
+    switch (dt) {
+#ifdef _USE_FP16
+        case DT_F16:
+            result = array_max_value_template<F16>((const F16 *)data, len);
+            break;
+#endif
+#ifdef _USE_FP32
+        case DT_F32:
+            result = array_max_value_template<F32>((const F32 *)data, len);
+            break;
+#endif
+        default:
+            CHECK_STATUS(NOT_SUPPORTED);
+            break;
+    }
+    return result;
+}
 #endif

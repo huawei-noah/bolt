@@ -209,8 +209,8 @@ int main(int argc, char *argv[])
 
     switch (OType) {
         case OT_Pooling: {
-            auto p = createPoolingParamSpec(
-                PoolingMode::POOLING_MAX, fh, fw, sh, sw, pt, pb, pl, pr, RoundMode::CEIL);
+            auto p = createPoolingParamSpec(PoolingMode::POOLING_MAX, 1, fh, fw, 1, sh, sw, 0, 0,
+                pt, pb, pl, pr, RoundMode::CEIL);
             auto op = factory->createPooling(p);
             model_ptr->add(op);
             break;
@@ -231,28 +231,22 @@ int main(int argc, char *argv[])
             break;
         }
         case OT_Conv: {
+            auto p = createConvolutionParamSpec(
+                1, 1, fh, fw, 1, sh, sw, 0, 0, pt, pb, pl, pr, 1, 1, 1, fn, convMode);
+            ActivationParamSpec dwActivationParamSpec, pwActivationParamSpec;
             if (pm == "NULL") {
-                ActivationParamSpec dwActivationParamSpec, pwActivationParamSpec;
                 dwActivationParamSpec.mode = ACTIVATION_NULL;
                 pwActivationParamSpec.mode = ACTIVATION_NULL;
-                auto p = createConvolutionParamSpec(
-                    1, fh, fw, sh, sw, pt, pb, pl, pr, 1, 1, fn, convMode);
-                auto op =
-                    factory->createConvolution(dt, p, dwActivationParamSpec, pwActivationParamSpec);
-                model_ptr->add(op);
-            }
-
-            if (pm == "RELU") {
-                ActivationParamSpec dwActivationParamSpec, pwActivationParamSpec;
+            } else if (pm == "RELU") {
                 dwActivationParamSpec.mode = ACTIVATION_RELU;
                 dwActivationParamSpec.value[0] = 0;
                 pwActivationParamSpec.mode = ACTIVATION_NULL;
-                auto p = createConvolutionParamSpec(
-                    1, fh, fw, sh, sw, pt, pb, pl, pr, 1, 1, fn, convMode);
-                auto op =
-                    factory->createConvolution(dt, p, dwActivationParamSpec, pwActivationParamSpec);
-                model_ptr->add(op);
+            } else {
+                CHECK_STATUS(NOT_SUPPORTED);
             }
+            auto op =
+                factory->createConvolution(dt, p, dwActivationParamSpec, pwActivationParamSpec);
+            model_ptr->add(op);
             break;
         }
         case OT_Relu: {

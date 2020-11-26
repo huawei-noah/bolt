@@ -487,20 +487,23 @@ EE deserialize_weight(const char *bytes, ModelSpec *spec, U32 *pos)
         CHECK_REQUIREMENT(*length == weightBiasBytes);
 
         if (quantFP16) {
-            dequantize_fp16(ptr[i].bytes_of_weight / 4, (unsigned short *)serialWeight, (F32 *)ptr[i].weight);
-            dequantize_fp16(ptr[i].bytes_of_vec / 4, (unsigned short *)serialBias, (F32 *)ptr[i].vec);
+            dequantize_fp16(
+                ptr[i].bytes_of_weight / 4, (unsigned short *)serialWeight, (F32 *)ptr[i].weight);
+            dequantize_fp16(
+                ptr[i].bytes_of_vec / 4, (unsigned short *)serialBias, (F32 *)ptr[i].vec);
         } else {
             if (quantInt8) {
-                CHECK_REQUIREMENT(1 == ptr[i].num_quant_scale && 1 == ptr[i].weight_scale[0].num_scale);
+                CHECK_REQUIREMENT(
+                    1 == ptr[i].num_quant_scale && 1 == ptr[i].weight_scale[0].num_scale);
                 F32 scale = ptr[i].weight_scale[0].scale[0];
                 if (DT_F32 == ptr[i].mdt) {
-                    dequantize_int8_weight<F32>(
-                        ptr[i].bytes_of_weight / 4, scale, (INT8 *)serialWeight, (F32 *)ptr[i].weight);
+                    dequantize_int8_weight<F32>(ptr[i].bytes_of_weight / 4, scale,
+                        (INT8 *)serialWeight, (F32 *)ptr[i].weight);
                 } else {
-    #ifdef __aarch64__
-                    dequantize_int8_weight<F16>(
-                        ptr[i].bytes_of_weight / 2, scale, (INT8 *)serialWeight, (F16 *)ptr[i].weight);
-    #endif
+#ifdef __aarch64__
+                    dequantize_int8_weight<F16>(ptr[i].bytes_of_weight / 2, scale,
+                        (INT8 *)serialWeight, (F16 *)ptr[i].weight);
+#endif
                 }
             } else {
                 memcpy(ptr[i].weight, serialWeight, ptr[i].bytes_of_weight);

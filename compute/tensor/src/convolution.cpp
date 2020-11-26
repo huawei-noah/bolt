@@ -27,7 +27,7 @@
 
 inline EE convolution_infer_output_size_cpu(TensorDesc inputDesc,
     TensorDesc filterDesc,
-    ConvolutionParamSpec convParamSpec,
+    ConvolutionParamSpec p,
     TensorDesc *outputDesc,
     DataType targetDataType)
 {
@@ -36,35 +36,40 @@ inline EE convolution_infer_output_size_cpu(TensorDesc inputDesc,
     }
     DataType idt, fdt;
     DataFormat idf, fdf;
-    U32 in, ic, ih, iw;
-    U32 fn, fc, fh, fw;
-    I32 oh, ow;
-    CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-    if (fh < 1 || fw < 1) {
-        CHECK_STATUS(NOT_SUPPORTED);
+    U32 in, ic, it, ih, iw;
+    U32 fn, fc, ft, fh, fw;
+    I32 ot, oh, ow;
+    it = ft = ot = 1;
+    if (tensorIs4d(inputDesc)) {
+        CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+        CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
+    } else if (tensorIs5d(inputDesc)) {
+        CHECK_STATUS(tensor5dGet(inputDesc, &idt, &idf, &in, &ic, &it, &ih, &iw));
+        CHECK_STATUS(tensor5dGet(filterDesc, &fdt, &fdf, &fn, &fc, &ft, &fh, &fw));
+    } else {
+        return NOT_SUPPORTED;
     }
-
-    I32 strideH = convParamSpec.stride_h;
-    I32 strideW = convParamSpec.stride_w;
-    I32 paddingT = convParamSpec.padding_top;
-    I32 paddingB = convParamSpec.padding_bottom;
-    I32 paddingL = convParamSpec.padding_left;
-    I32 paddingR = convParamSpec.padding_right;
-    I32 dilateH = convParamSpec.dilatedRate_h;
-    I32 dilateW = convParamSpec.dilatedRate_w;
-
-    U32 fhDilated = (fh - 1) * dilateH + 1;
-    U32 fwDilated = (fw - 1) * dilateW + 1;
-    oh = (ih + paddingT + paddingB - fhDilated) / strideH + 1;
-    ow = (iw + paddingL + paddingR - fwDilated) / strideW + 1;
-
+    EE ret = SUCCESS;
+    if (ft < 1 || fh < 1 || fw < 1) {
+        ret = NOT_SUPPORTED;
+    }
     if (fn % 8 != 0) {
-        CHECK_STATUS(NOT_SUPPORTED);
+        ret = NOT_SUPPORTED;
     }
 
-    *outputDesc = tensor4df(targetDataType, DF_NCHWC8, in, fn, oh, ow);
-    return SUCCESS;
+    U32 ftDilated = (ft - 1) * p.dilatedRate_t + 1;
+    U32 fhDilated = (fh - 1) * p.dilatedRate_h + 1;
+    U32 fwDilated = (fw - 1) * p.dilatedRate_w + 1;
+    ot = (it + p.padding_before + p.padding_after - ftDilated) / p.stride_t + 1;
+    oh = (ih + p.padding_top + p.padding_bottom - fhDilated) / p.stride_h + 1;
+    ow = (iw + p.padding_left + p.padding_right - fwDilated) / p.stride_w + 1;
+
+    if (tensorIs4d(inputDesc)) {
+        *outputDesc = tensor4df(targetDataType, DF_NCHWC8, in, fn, oh, ow);
+    } else if (tensorIs5d(inputDesc)) {
+        *outputDesc = tensor5df(targetDataType, DF_NCHWC8, in, fn, ot, oh, ow);
+    }
+    return ret;
 }
 
 EE convolution_infer_output_size(Tensor *inputTensor,
@@ -279,7 +284,8 @@ EE convolution(Tensor inputTensor,
     auto arch = archInfo->arch;
     TensorDesc inputDesc = inputTensor.get_desc();
     if (3 == inputDesc.nDims) {
-        inputDesc = tensor4df(inputDesc.dt, DF_NCHW, inputDesc.dims[2], inputDesc.dims[1], inputDesc.dims[0], 1);
+        inputDesc = tensor4df(
+            inputDesc.dt, DF_NCHW, inputDesc.dims[2], inputDesc.dims[1], inputDesc.dims[0], 1);
     }
     void *input = get_ptr_from_tensor(inputTensor, arch);
     TensorDesc filterDesc = filterTensor.get_desc();

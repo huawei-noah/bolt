@@ -48,14 +48,8 @@ EE pooling_c8_fp16(const F16 *input,
     return ret;
 }
 
-EE pooling_c8_big_fp16(const F16 *input,
-    U32 stride,
-    int hstart,
-    int hend,
-    int wstart,
-    int wend,
-    F16 *output,
-    int poolSize)
+EE pooling_c8_big_fp16(
+    const F16 *input, U32 stride, int hstart, int hend, int wstart, int wend, F16 *output, int poolSize)
 {
     EE ret = SUCCESS;
     float32x4_t out0, out1;

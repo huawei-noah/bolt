@@ -20,7 +20,7 @@ It's quiet easy for users to get started with bolt by learning the following two
 
 ![ModelConversion](images/ModelConversion.PNG)
 
-[X2bolt](models_tools/tools/X2bolt/X2bolt.cpp) is a general converter, which focuses on converting different deep learning model to bolt model. Currently, X2bolt support caffe/onnx/tflite/tensorflow model conversion. Here we list the examples of two typical model conversions for ARM backend, for X86 backend the ADB tool is not required, bolt X86 only support FP32 precision inference now.
+[X2bolt](../model_tools/tools/X2bolt/X2bolt.cpp) is a general converter, which focuses on converting different deep learning model to bolt model. Currently, X2bolt support caffe/onnx/tflite/tensorflow model conversion. Here we list the examples of two typical model conversions for ARM backend, for X86 backend the ADB tool is not required, bolt X86 only support FP32 precision inference now.
 
 ### resnet50(caffe) Model Conversion
 

@@ -14,31 +14,30 @@
 #define MANGLE_NAME_IMPL(base, TP, B_AXIS) base##TP##B_AXIS
 #define MANGLE_NAME(base, TP, B_AXIS) MANGLE_NAME_IMPL(base, TP, B_AXIS)
 
-
 #if defined(USE_SUM)
-#define calCore(v, res)          \
-    {                            \
-        res.s0 += v.s0;          \
-        res.s1 += v.s1;          \
-        res.s2 += v.s2;          \
-        res.s3 += v.s3;          \
+#define calCore(v, res) \
+    {                   \
+        res.s0 += v.s0; \
+        res.s1 += v.s1; \
+        res.s2 += v.s2; \
+        res.s3 += v.s3; \
     }
 #endif
 
 #if defined(USE_MAX)
-#define calCore(v, res)          \
-    {                            \
-        res = fmax(res, v);      \
+#define calCore(v, res)     \
+    {                       \
+        res = fmax(res, v); \
     }
 #endif
 
 #if defined(USE_PROD)
-#define calCore(v, res)          \
-    {                            \
-        res.s0 *= v.s0;          \
-        res.s1 *= v.s1;          \
-        res.s2 *= v.s2;          \
-        res.s3 *= v.s3;          \
+#define calCore(v, res) \
+    {                   \
+        res.s0 *= v.s0; \
+        res.s1 *= v.s1; \
+        res.s2 *= v.s2; \
+        res.s3 *= v.s3; \
     }
 #endif
 
@@ -47,23 +46,23 @@ __kernel void MANGLE_NAME(eltwise_broadcast_nchw_, TP, B_AXIS)
 #else
 __kernel void MANGLE_NAME(eltwise_broadcast_, TP, B_AXIS)
 #endif
-(const int c,
-    const int ih_str,
-    const int iw_str,
-    const int ih_off,
-    const int iw_off,
-    const int oh_str,
-    const int ow_str,
-    const int oh_off,
-    const int ow_off,
-    __global const T *in0,
-    __global const T *in1,
-    __global T *out)
+    (const int c,
+        const int ih_str,
+        const int iw_str,
+        const int ih_off,
+        const int iw_off,
+        const int oh_str,
+        const int ow_str,
+        const int oh_off,
+        const int ow_off,
+        __global const T *in0,
+        __global const T *in1,
+        __global T *out)
 {
     char ec = 4;
 #if defined(USE_NCHW)
-    ec = c&3;
-    if(ec == 0) {
+    ec = c & 3;
+    if (ec == 0) {
         ec = 4;
     }
 #endif
@@ -75,11 +74,11 @@ __kernel void MANGLE_NAME(eltwise_broadcast_, TP, B_AXIS)
 
     int idn = 0;
     int idz, in_off_res;
-    if(ec == 4) {
+    if (ec == 4) {
         idz = get_global_id(2);
         in_off_res = (idz * iw_str + idy + iw_off) * ih_str + idx + ih_off;
     } else {
-        int cd4 = (c + 3) >> 2; 
+        int cd4 = (c + 3) >> 2;
         idz = get_global_id(2) % cd4;
         idn = get_gloabl_id(2) / cd4;
         in_off_res = ((idn * cd4 + idz) * iw_str + idy + iw_off) * ih_str + idx + ih_off;
@@ -102,17 +101,17 @@ __kernel void MANGLE_NAME(eltwise_broadcast_, TP, B_AXIS)
 #elif defined(BROAD_XY)
     const int in_off_val = idz;
 #if defined(USE_NCHW)
-    if(ec == 4) {
+    if (ec == 4) {
         val = vload4(in_off_val, in1);
     } else {
         in_off_val = idn * ic + (idz << 2);
-        if(ec == 1) {
+        if (ec == 1) {
             val.x = in1[in_off_val];
         }
-        if(ec == 2) {
+        if (ec == 2) {
             val.xy = vload2(0, in1 + in_off_val)
         }
-        if(ec == 3) {
+        if (ec == 3) {
             val.xyz = vload3(0, in1 + in_off_val)
         }
     }
@@ -123,9 +122,12 @@ __kernel void MANGLE_NAME(eltwise_broadcast_, TP, B_AXIS)
 #if defined(USE_NCHW)
     in_off_val = (idn * ic + (idz << 2)) * iw_str + idy + iw_off;
     val.x = in1[in_off_val];
-    if (ec > 1) val.y = in1[in_off_val + iw_str];
-    if (ec > 2) val.z = in1[in_off_val + iw_str * 2];
-    if (ec > 3) val.w = in1[in_off_val + iw_str * 3];
+    if (ec > 1)
+        val.y = in1[in_off_val + iw_str];
+    if (ec > 2)
+        val.z = in1[in_off_val + iw_str * 2];
+    if (ec > 3)
+        val.w = in1[in_off_val + iw_str * 3];
 #endif
 
 #elif defined(BROAD_X)
@@ -133,9 +135,12 @@ __kernel void MANGLE_NAME(eltwise_broadcast_, TP, B_AXIS)
 #if defined(USE_NCHW)
     in_off_val = (idn * ic + (idz << 2)) * ih_str + idx + ih_off;
     val.x = in1[in_off_val];
-    if (ec > 1) val.y = in1[in_off_val + ih_str];
-    if (ec > 2) val.z = in1[in_off_val + ih_str * 2];
-    if (ec > 3) val.w = in1[in_off_val + ih_str * 3];
+    if (ec > 1)
+        val.y = in1[in_off_val + ih_str];
+    if (ec > 2)
+        val.z = in1[in_off_val + ih_str * 2];
+    if (ec > 3)
+        val.w = in1[in_off_val + ih_str * 3];
 #endif
 #endif
 

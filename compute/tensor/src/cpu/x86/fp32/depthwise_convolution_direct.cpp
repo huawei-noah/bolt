@@ -823,10 +823,10 @@ EE depthwise_convolution_direct(TensorDesc inputDesc,
 
     if (pwFilterArray != nullptr) {
         TensorDesc pwInputDesc = tensor4df(odt, DF_NCHWC8, 1, ic, oh, ow);
-        tmpBytes -= oh * ic *oh * ow + 32;
-        tmp = (void *)((F32 *)tmp + oh * ic *oh * ow + 32);
+        tmpBytes -= oh * ic * oh * ow + 32;
+        tmp = (void *)((F32 *)tmp + oh * ic * oh * ow + 32);
         ConvolutionParamSpec p = createConvolutionParamSpec(
-            1, 1, 1, 1, 1, 0, 0, 0, 0, 1, 1, fn, Convolution_Pointwise);
+            1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, fn, Convolution_Pointwise);
         convolution_1x1_direct(pwInputDesc, useOutArray, pwFilterDesc, pwFilterArray, p,
             pwBiasArray, tmpBytes, tmp, outputDesc, outArray, pointwiseActivationParamSpec);
     }

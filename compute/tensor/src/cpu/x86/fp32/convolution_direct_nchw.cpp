@@ -26,6 +26,7 @@
 #define UNROLL_IC_BLOCK_DIM 8
 #define align_addr(addr, unit) (((uintptr_t)addr + unit - 1) / unit * unit)
 
+// clang-format off
 #define kernel4x3(m0, r0, r1, r2, r3, m1, m2, m3, m4) \
     "vbroadcastss "#m0"("#r0"), %%ymm12                        \n\t" \
     "vbroadcastss "#m0"("#r1"), %%ymm13                       \n\t" \
@@ -47,11 +48,43 @@
     "vfmadd231ps %%ymm15, %%ymm13, %%ymm10             \n\t" \
     "vfmadd231ps %%ymm15, %%ymm14, %%ymm11             \n\t"
 
-typedef void (*kernel_func)(F32 *in_0, F32 *in_1, F32 *in_2, F32 *in_3, const F32 *curW, F32 *curO, const F32 *curB, 
-    U32 fw, U32 fh, U32 oStep, U32 hStep, U32 store, U32 dw, U32 ic, U32 iStep, U32 fwStep, U32 fhStep);
+// clang-format on
+typedef void (*kernel_func)(F32 *in_0,
+    F32 *in_1,
+    F32 *in_2,
+    F32 *in_3,
+    const F32 *curW,
+    F32 *curO,
+    const F32 *curB,
+    U32 fw,
+    U32 fh,
+    U32 oStep,
+    U32 hStep,
+    U32 store,
+    U32 dw,
+    U32 ic,
+    U32 iStep,
+    U32 fwStep,
+    U32 fhStep);
 
-void avx2_conv_kernel_3x32(F32 *in_0, F32 *in_1, F32 *in_2, F32 *in_3, const F32 *curW, F32 *curO, const F32 *curB, 
-    U32 fw, U32 fh, U32 oStep, U32 hStep, U32 store, U32 dw, U32 ic, U32 iStep, U32 fwStep, U32 fhStep) {
+void avx2_conv_kernel_3x32(F32 *in_0,
+    F32 *in_1,
+    F32 *in_2,
+    F32 *in_3,
+    const F32 *curW,
+    F32 *curO,
+    const F32 *curB,
+    U32 fw,
+    U32 fh,
+    U32 oStep,
+    U32 hStep,
+    U32 store,
+    U32 dw,
+    U32 ic,
+    U32 iStep,
+    U32 fwStep,
+    U32 fhStep)
+{
     __asm__ __volatile__("mov %3, %%eax                                  \n\t"
                          "and $0x1, %%eax                                  \n\t"
                          "jne 0f                                             \n\t"
@@ -89,13 +122,11 @@ void avx2_conv_kernel_3x32(F32 *in_0, F32 *in_1, F32 *in_2, F32 *in_3, const F32
                          ".align 16                                         \n\t"
                          "1:                                      \n\t"
                          :
-                         : "r" (curO), "r" (curB), "r" (I64(oStep)), "r" (store)
-                         : "%eax", "%rax",
-                           "%ymm0",  "%ymm1",  "%ymm2",  "%ymm3",
-                           "%ymm4",  "%ymm5",  "%ymm6",  "%ymm7",
-                           "%ymm8",  "%ymm9",  "%ymm10", "%ymm11",
-                           "memory", "cc");
+                         : "r"(curO), "r"(curB), "r"(I64(oStep)), "r"(store)
+                         : "%eax", "%rax", "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm4", "%ymm5",
+                         "%ymm6", "%ymm7", "%ymm8", "%ymm9", "%ymm10", "%ymm11", "memory", "cc");
 
+    // clang-format off
     if ((fw == 7) && (fh > 0)) {
         __asm__ __volatile__(".align 16                                         \n\t"
                              "0:                                                \n\t"
@@ -302,6 +333,7 @@ void avx2_conv_kernel_3x32(F32 *in_0, F32 *in_1, F32 *in_2, F32 *in_3, const F32
                                "memory", "cc");   
     }
 
+    // clang-format on
     __asm__ __volatile__(
         // relu
         "and $0x6, %2                                      \n\t"
@@ -508,13 +540,11 @@ void avx2_conv_kernel_1x32(F32 *in_0,
                              "dec %%eax                                         \n\t"
                              "jg 0b                                             \n\t"
                              :
-                             : "r" (in_0), "r" (in_1), "r" (in_2), 
-                               "r" (curW), "r" (fh), "r" (fw), "a" (ic), 
-                               "r" (I64(hStep)), "r" (I64(dw)), "r" (I64(iStep)), "r" (I64(fwStep)), "r" (I64(fhStep))
-                             : 
-                               "%ymm0", "%ymm3", "%ymm6", "%ymm9", "%ymm11",
-                               "%ymm12", "%ymm13", "%ymm14", "%ymm15",
-                               "memory", "cc");
+                             : "r"(in_0), "r"(in_1), "r"(in_2), "r"(curW), "r"(fh), "r"(fw),
+                             "a"(ic), "r"(I64(hStep)), "r"(I64(dw)), "r"(I64(iStep)),
+                             "r"(I64(fwStep)), "r"(I64(fhStep))
+                             : "%ymm0", "%ymm3", "%ymm6", "%ymm9", "%ymm11", "%ymm12", "%ymm13",
+                             "%ymm14", "%ymm15", "memory", "cc");
     } else if ((fh > 0) && (fw > 0)) {
         __asm__ __volatile__(".align 16                                         \n\t"
                              "0:                                                \n\t"
@@ -546,13 +576,11 @@ void avx2_conv_kernel_1x32(F32 *in_0,
                              "dec %%eax                                         \n\t"
                              "jg 0b                                             \n\t"
                              :
-                             : "r" (in_0), "r" (in_1), "r" (in_2), 
-                               "r" (curW), "r" (fh), "r" (fw), "a" (ic), 
-                               "r" (I64(hStep)), "r" (I64(dw)), "r" (I64(iStep)), "r" (I64(fwStep)), "r" (I64(fhStep))
-                             : "%ecx", "%ebx",
-                               "%ymm0", "%ymm3", "%ymm6", "%ymm9", "%ymm11",
-                               "%ymm12", "%ymm13", "%ymm14", "%ymm15",
-                               "memory", "cc");
+                             : "r"(in_0), "r"(in_1), "r"(in_2), "r"(curW), "r"(fh), "r"(fw),
+                             "a"(ic), "r"(I64(hStep)), "r"(I64(dw)), "r"(I64(iStep)),
+                             "r"(I64(fwStep)), "r"(I64(fhStep))
+                             : "%ecx", "%ebx", "%ymm0", "%ymm3", "%ymm6", "%ymm9", "%ymm11",
+                             "%ymm12", "%ymm13", "%ymm14", "%ymm15", "memory", "cc");
     }
 
     __asm__ __volatile__(
@@ -1680,8 +1708,8 @@ EE convolution_direct_nchw(TensorDesc inputDesc,
                 store |= U32(activationDesc.mode) << 1;
             }
             if ((paddingL == 0) && (paddingR == 0) && (paddingT != 0 || paddingB != 0)) {
-                oh_padding_t = UNI_MIN((paddingT - 1) / strideH + 1, oh);
-                oh_padding_b = UNI_MIN((paddingB - 1) / strideH + 1, oh - oh_padding_t);
+                oh_padding_t = UNI_MIN((paddingT - 1) / strideH + 1, (int)oh);
+                oh_padding_b = UNI_MIN((paddingB - 1) / strideH + 1, (int)oh - oh_padding_t);
                 if (((ih + paddingT - fh) / strideH + 1) >= oh) {
                     oh_padding_b = 0;
                 }
@@ -1696,7 +1724,7 @@ EE convolution_direct_nchw(TensorDesc inputDesc,
                         I32 in_h_0 = h * strideH - paddingT;
                         U32 tfh = UNI_MIN(fh + in_h_0, ih);
                         iStep = ((ih - tfh) * iw) * 4;
-                        for (I32 w = 0; w < ow; w += wSize) {
+                        for (U32 w = 0; w < ow; w += wSize) {
                             wSize = UNI_MIN(ow - w, unroll_w);
                             if (wSize < unroll_w) {
                                 wSize = 1;
@@ -1710,15 +1738,16 @@ EE convolution_direct_nchw(TensorDesc inputDesc,
                             F32 *in_1 = curI + in_w_1;
                             F32 *in_2 = curI + in_w_2;
                             F32 *in_3 = curI + in_w_3;
-                            kernel[(ocSize >> 3) - 1][wSize > 1](in_0, in_1, in_2, in_3, curW + (fh - tfh) * fw * ocSize,
-                                out_ptr, curB, fw, tfh, oStep, hStep, store, dw, icSize, iStep, 0, fw * (fh - tfh) * ocSize * 4);
+                            kernel[(ocSize >> 3) - 1][wSize > 1](in_0, in_1, in_2, in_3,
+                                curW + (fh - tfh) * fw * ocSize, out_ptr, curB, fw, tfh, oStep,
+                                hStep, store, dw, icSize, iStep, 0, fw * (fh - tfh) * ocSize * 4);
                         }
                     }
                 }
             }
             if ((paddingL == 0) && (paddingR == 0)) {
                 iStep = ((ih - fh) * iw) * 4;
-                for (I32 hw = oh_padding_t * ow; hw < ohow - oh_padding_b * ow; hw += hwSize) {
+                for (I32 hw = oh_padding_t * ow; hw < ohow - oh_padding_b * (I32)ow; hw += hwSize) {
                     hwSize = UNI_MIN(BLOCK_HW_DIM, ohow - oh_padding_b * ow - hw);
                     for (U32 ocb = 0; ocb < oc; ocb += ocSize) {
                         ocSize = UNI_MIN(unroll_oc, oc - ocb);
@@ -1727,7 +1756,7 @@ EE convolution_direct_nchw(TensorDesc inputDesc,
                         curW = filterArray + ocb * ic * fh * fw + ocSize * icbb * fh * fw;
                         curB = biasArray + ocb;
                         curI = ftmp + icbb * ih * iw;
-                        for (I32 ihw = hw; ihw < hw + hwSize; ihw += wSize) {
+                        for (I32 ihw = hw; ihw < hw + (I32)hwSize; ihw += wSize) {
                             wSize = UNI_MIN(hw + hwSize - ihw, unroll_w);
                             if (wSize < unroll_w) {
                                 wSize = 1;
@@ -1759,11 +1788,11 @@ EE convolution_direct_nchw(TensorDesc inputDesc,
                     curW = filterArray + ocb * ic * fh * fw + ocSize * icbb * fh * fw;
                     curB = biasArray + ocb;
                     curI = ftmp + icbb * ih * iw;
-                    for (I32 h = oh - oh_padding_b; h < oh; ++h) {
+                    for (I32 h = oh - oh_padding_b; h < (I32)oh; ++h) {
                         I32 in_h_0 = h * strideH - paddingT;
                         U32 tfh = ih - in_h_0;
                         iStep = ((ih - tfh) * iw) * 4;
-                        for (I32 w = 0; w < ow; w += wSize) {
+                        for (I32 w = 0; w < (I32)ow; w += wSize) {
                             wSize = UNI_MIN(ow - w, unroll_w);
                             if (wSize < unroll_w) {
                                 wSize = 1;
@@ -1778,7 +1807,8 @@ EE convolution_direct_nchw(TensorDesc inputDesc,
                             F32 *in_2 = curI + in_h_0 * iw + in_w_2;
                             F32 *in_3 = curI + in_h_0 * iw + in_w_3;
                             kernel[(ocSize >> 3) - 1][wSize > 1](in_0, in_1, in_2, in_3, curW,
-                                out_ptr, curB, fw, tfh, oStep, hStep, store, dw, icSize, iStep, 0, fw * (fh - tfh) * ocSize * 4);
+                                out_ptr, curB, fw, tfh, oStep, hStep, store, dw, icSize, iStep, 0,
+                                fw * (fh - tfh) * ocSize * 4);
                         }
                     }
                 }
@@ -1786,12 +1816,12 @@ EE convolution_direct_nchw(TensorDesc inputDesc,
             if ((paddingL != 0) || (paddingR != 0)) {
                 I32 tfw = fw, tfh = fh, wh = 0;
                 I32 in_h = 0, in_w = 0;
-                I32 ow_padding_l = UNI_MIN((paddingL - 1) / strideW + 1, ow);
-                I32 ow_padding_r = UNI_MIN((paddingR - 1) / strideW + 1, ow - ow_padding_l);
+                I32 ow_padding_l = UNI_MIN((paddingL - 1) / strideW + 1, (I32)ow);
+                I32 ow_padding_r = UNI_MIN((paddingR - 1) / strideW + 1, (I32)ow - ow_padding_l);
                 if (((iw + paddingL - fw) / strideW + 1) >= ow) {
                     ow_padding_r = 0;
                 }
-                for (I32 h = 0; h < oh; ++h) {
+                for (I32 h = 0; h < (I32)oh; ++h) {
                     tfh = fh;
                     in_h = h * strideH - paddingT;
                     calW = curW;
@@ -1825,7 +1855,7 @@ EE convolution_direct_nchw(TensorDesc inputDesc,
                                 calO, curB, tfw, tfh, oStep, hStep, store, dw, icSize, iStep,
                                 (fw - tfw) * ocSize * 4, fw * (fh - tfh) * ocSize * 4);
                         }
-                        for (; w < ow - ow_padding_r; w += wSize) {
+                        for (; w < (I32)ow - ow_padding_r; w += wSize) {
                             hStep = (iw - fw * dilateW + (dilateH - 1) * iw) * 4;
                             wSize = UNI_MIN(ow - ow_padding_r - w, unroll_w);
                             if (wSize < unroll_w) {
@@ -1840,7 +1870,7 @@ EE convolution_direct_nchw(TensorDesc inputDesc,
                                 curB, fw, tfh, oStep, hStep, store, dw, icSize, iStep, 0,
                                 fw * (fh - tfh) * ocSize * 4);
                         }
-                        for (; w < ow; ++w) {
+                        for (; w < (I32)ow; ++w) {
                             I32 in_w = w * strideW - paddingL;
                             tfw = iw - in_w;
                             hStep = (iw - tfw * dilateW + (dilateH - 1) * iw) * 4;

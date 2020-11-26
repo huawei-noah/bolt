@@ -53,8 +53,8 @@ inline EE eltwise_infer_output_size_cpu(std::vector<TensorDesc> inputDesc, Tenso
             nchwc8Count++;
             // Output from 1D-conv + 3D tensors
             if (inputDesc[i].dims[0] == 1 && minDims == 3) {
-                inputDesc[i] = tensor3df(inputDesc[i].dt, DF_NCHW,
-                    inputDesc[i].dims[3], inputDesc[i].dims[2], inputDesc[i].dims[1]);
+                inputDesc[i] = tensor3df(inputDesc[i].dt, DF_NCHW, inputDesc[i].dims[3],
+                    inputDesc[i].dims[2], inputDesc[i].dims[1]);
             }
         }
     }

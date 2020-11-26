@@ -1,8 +1,6 @@
 #!/bin/bash
 
-script_name=$0
-script_abs=$(readlink -f "$0")
-script_dir=$(dirname $script_abs)
+script_dir=$(cd `dirname $0` && pwd)
 BOLT_ROOT=${script_dir}/..
 
 CXX=$1

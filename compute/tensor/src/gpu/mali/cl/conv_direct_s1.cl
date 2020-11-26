@@ -185,7 +185,8 @@ __kernel void MANGLE_NAME(conv_direct_s1_h_, F, ON, KN)
         flt_off += KN;
         in_off += ihw_str;
     }
-    int out_off = (idn * on_str + idz * KN * ohw_str + (idy + ow_off) * oh_str + idx * ON + oh_off) << 2;
+    int out_off = (idn * on_str + idz * KN * ohw_str + (idy + ow_off) * oh_str + idx * ON + oh_off)
+        << 2;
     VSTORE_VEC(out_val[0], out_off, out);
 
 #if (KN > 1)

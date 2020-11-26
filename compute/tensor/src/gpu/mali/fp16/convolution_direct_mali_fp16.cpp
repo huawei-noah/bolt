@@ -301,12 +301,13 @@ inline EE direct_core_mali_fp16(GCLHandle_t handle,
     }
     CHECK_STATUS(gcl_create_kernel(handle, kernelname, &kernel));
     if (item_k == 0) {
-        CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, ihw_str, ic_str, ih_off, iw_off, oh_str,
-            ohw_str, oh_off, ow_off, oc, in_str, on_str, gs[0], gs[1], inbuf, fltbuf, biasmem, outbuf));
+        CHECK_STATUS(
+            gcl_set_kernelArgs(kernel, ih_str, ihw_str, ic_str, ih_off, iw_off, oh_str, ohw_str,
+                oh_off, ow_off, oc, in_str, on_str, gs[0], gs[1], inbuf, fltbuf, biasmem, outbuf));
     } else {
-        CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, ihw_str, ic_str, ih_off, 
-            iw_off, oh_str, ohw_str, oh_off, ow_off, ow, oc, sh, in_str, on_str, 
-            gs[0], gs[1], inbuf, fltbuf, biasmem, outbuf));
+        CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, ihw_str, ic_str, ih_off, iw_off, oh_str,
+            ohw_str, oh_off, ow_off, ow, oc, sh, in_str, on_str, gs[0], gs[1], inbuf, fltbuf,
+            biasmem, outbuf));
     }
     gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelname);
 #ifdef _DEBUG

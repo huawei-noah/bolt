@@ -87,8 +87,8 @@ int deconvolutionTest(int argc, char *argv[], DataType dt)
 
     ActivationParamSpec activationDesc;
     activationDesc.mode = ACTIVATION_NULL;
-    ConvolutionParamSpec convParamSpec = createConvolutionParamSpec(group, fh, fw, stride, stride,
-        padding, padding, padding, padding, 1, 1, fn, Convolution_Deconvolution);
+    ConvolutionParamSpec convParamSpec = createConvolutionParamSpec(group, 1, fh, fw, 1, stride,
+        stride, 0, 0, padding, padding, padding, padding, 1, 1, 1, fn, Convolution_Deconvolution);
 
     TensorDesc inputDesc = tensor4df(dt, DF_NCHW, in, ic, ih, iw);
     TensorDesc filterDesc = tensor4df(dt, DF_NCHW, fn, fc, fh, fw);
@@ -100,7 +100,6 @@ int deconvolutionTest(int argc, char *argv[], DataType dt)
     TensorDesc inputDesc_gpu = tensor4df(dt, DF_NCHW, in, ic, ih, iw);
 
     std::shared_ptr<GCLHandle> handleSharedPtr = OCLContext::getInstance().handle;
-    ;
     GCLHandle_t handle = handleSharedPtr.get();
     std::vector<GCLKernelInfo> kernelVec;
     handle->kernelVec = &kernelVec;

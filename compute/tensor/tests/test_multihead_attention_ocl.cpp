@@ -171,7 +171,6 @@ int multiheadAttentionTest(int argc, char *argv[], DataType dt)
     U8 *output_gpu = NULL;
 
     std::shared_ptr<GCLHandle> handleSharedPtr = OCLContext::getInstance().handle;
-    ;
     GCLHandle_t handle = handleSharedPtr.get();
     std::vector<GCLKernelInfo> kernelVec;
     handle->kernelVec = &kernelVec;
@@ -361,7 +360,6 @@ int multiheadAttentionTest(int argc, char *argv[], DataType dt)
     CHECK_STATUS(gcl_run_kernelVec(handle));
 #endif
     outputDesc = outputTensor.get_desc();
-    ;
     CHECK_STATUS(ocl_get_output(handle, output, outputDesc, true));
     output_gpu = output->mapPtrArray.back();
 

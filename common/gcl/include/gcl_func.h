@@ -64,7 +64,7 @@ inline EE gcl_regist_binMap(GCLHandle_t handle)
 
 inline EE gcl_regist_sourceMap(GCLHandle_t handle)
 {
-    gcl_kernel_source *kernel_source = (gcl_kernel_source*) new kernel_source_executor();
+    gcl_kernel_source *kernel_source = (gcl_kernel_source *)new kernel_source_executor();
     handle->kernel_source = kernel_source;
     KernelOption *common_opt;
     if (!kernel_source->get_option("common", &common_opt)) {

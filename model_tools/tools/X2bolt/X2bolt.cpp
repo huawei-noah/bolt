@@ -101,8 +101,8 @@ int main(int argc, char *argv[])
         }
     }
 
-    void *onlineModel = OnlineModelConversion(
-        storagePath, modelName, inferPrecision, removeProcessOpsNum);
+    void *onlineModel =
+        OnlineModelConversion(storagePath, modelName, inferPrecision, removeProcessOpsNum);
     ModelSpec *ms = (ModelSpec *)onlineModel;
 
     std::string modelStorePath = std::string(storagePath) + "/" + std::string(modelName);

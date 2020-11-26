@@ -112,9 +112,9 @@ public final class BoltModel implements Cloneable {
 
     private native long allocSpecificResultHandle(long modelAddr, int outputNum, String[] outputName);
 
-    private native void setRuntimeDeviceJNI(int cpuId, String device);
+    private native void setRuntimeDeviceJNI(long modelAddr, int cpuId, String device);
 
-    private native void setRuntimeDeviceDynamicJNI();
+    private native void setRuntimeDeviceDynamicJNI(long modelAddr);
 
     private native void runModel(
         long modelAddr, long IResult, int inputNum, String[] inputName, float[][] inputData);
@@ -346,7 +346,7 @@ public final class BoltModel implements Cloneable {
             throw new FileNotFoundException();
         }
         String deviceString = deviceMapping(device);
-        setRuntimeDeviceJNI(cpuId, deviceString);
+        setRuntimeDeviceJNI(this.modelAddr, cpuId, deviceString);
     }
 
     /**
@@ -359,7 +359,7 @@ public final class BoltModel implements Cloneable {
         if (0 == this.modelAddr) {
             throw new FileNotFoundException();
         }
-        setRuntimeDeviceDynamicJNI();
+        setRuntimeDeviceDynamicJNI(this.modelAddr);
     }
 
     /**

@@ -280,8 +280,8 @@ inline EE infer_gclmem_desc_ncwhc4_3d(U32 iw,
 {
     ic = (ic + 3) / 4 * 4 * it * in;
     oc = (oc + 3) / 4 * 4 * ot * on;
-    return infer_gclmem_desc_ncwhc4(iw, ih, ic, pw, ph, ow, oh, oc, idt, odt, 
-        gclmemInputDesc, gclmemOutputDesc, need_pad);
+    return infer_gclmem_desc_ncwhc4(
+        iw, ih, ic, pw, ph, ow, oh, oc, idt, odt, gclmemInputDesc, gclmemOutputDesc, need_pad);
 }
 
 inline EE infer_gclmem_desc_nhwc(U32 iw,
@@ -462,12 +462,12 @@ inline EE infer_gclmem_desc_nchw_3d(U32 iw,
     DataType odt,
     GCLMemDesc_t gclmemInputDesc,
     GCLMemDesc_t gclmemOutputDesc,
-    bool need_pad = false) 
+    bool need_pad = false)
 {
-        ic = ic * it * in;
-        oc = oc * ot * on;
-        return infer_gclmem_desc_nchw(iw, ih, ic, pw, ph, ow, oh, oc, idt, odt,
-            gclmemInputDesc, gclmemOutputDesc);
+    ic = ic * it * in;
+    oc = oc * ot * on;
+    return infer_gclmem_desc_nchw(
+        iw, ih, ic, pw, ph, ow, oh, oc, idt, odt, gclmemInputDesc, gclmemOutputDesc);
 }
 
 inline void get_nlp_mkt_val(TensorDesc desc, DataType *dt, U32 *m, U32 *k, U32 *t)

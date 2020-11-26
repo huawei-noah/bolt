@@ -15,31 +15,41 @@
 #include "tensor_computing_type.h"
 
 ConvolutionParamSpec createConvolutionParamSpec(U32 group,
-    U32 kernelH,
-    U32 kernelW,
-    U32 strideH,
-    U32 strideW,
-    U32 paddingT,
-    U32 paddingB,
-    U32 paddingL,
-    U32 paddingR,
-    U32 dilateH,
-    U32 dilateW,
+    U32 kernel_t,
+    U32 kernel_h,
+    U32 kernel_w,
+    U32 stride_t,
+    U32 stride_h,
+    U32 stride_w,
+    U32 padding_before,
+    U32 padding_after,
+    U32 padding_top,
+    U32 padding_bottom,
+    U32 padding_left,
+    U32 padding_right,
+    U32 dilateRate_t,
+    U32 dilateRate_h,
+    U32 dilateRate_w,
     U32 num_outputs,
     ConvolutionMode convMode)
 {
     ConvolutionParamSpec p;
     p.group = group;
-    p.kernel_h = kernelH;
-    p.kernel_w = kernelW;
-    p.stride_h = strideH;
-    p.stride_w = strideW;
-    p.padding_top = paddingT;
-    p.padding_bottom = paddingB;
-    p.padding_left = paddingL;
-    p.padding_right = paddingR;
-    p.dilatedRate_h = dilateH;
-    p.dilatedRate_w = dilateW;
+    p.kernel_t = kernel_t;
+    p.kernel_h = kernel_h;
+    p.kernel_w = kernel_w;
+    p.stride_t = stride_t;
+    p.stride_h = stride_h;
+    p.stride_w = stride_w;
+    p.padding_before = padding_before;
+    p.padding_after = padding_after;
+    p.padding_top = padding_top;
+    p.padding_bottom = padding_bottom;
+    p.padding_left = padding_left;
+    p.padding_right = padding_right;
+    p.dilatedRate_t = dilateRate_t;
+    p.dilatedRate_h = dilateRate_h;
+    p.dilatedRate_w = dilateRate_w;
     p.num_outputs = num_outputs;
     p.convolution_type = convMode;
     return p;
@@ -60,26 +70,34 @@ FullyConnectedParamSpec createFullyConnectedParamSpec(
 }
 
 PoolingParamSpec createPoolingParamSpec(PoolingMode pm,
-    U32 ksH,
-    U32 ksW,
-    U32 strideH,
-    U32 strideW,
-    U32 paddingT,
-    U32 paddingB,
-    U32 paddingL,
-    U32 paddingR,
+    U32 kernel_t,
+    U32 kernel_h,
+    U32 kernel_w,
+    U32 stride_t,
+    U32 stride_h,
+    U32 stride_w,
+    U32 padding_before,
+    U32 padding_after,
+    U32 padding_top,
+    U32 padding_bottom,
+    U32 padding_left,
+    U32 padding_right,
     RoundMode rm)
 {
     PoolingParamSpec p;
     p.mode = pm;
-    p.kernel_h = ksH;
-    p.kernel_w = ksW;
-    p.stride_h = strideH;
-    p.stride_w = strideW;
-    p.padding_top = paddingT;
-    p.padding_bottom = paddingB;
-    p.padding_left = paddingL;
-    p.padding_right = paddingR;
+    p.kernel_t = kernel_t;
+    p.kernel_h = kernel_h;
+    p.kernel_w = kernel_w;
+    p.stride_t = stride_t;
+    p.stride_h = stride_h;
+    p.stride_w = stride_w;
+    p.padding_before = padding_before;
+    p.padding_after = padding_after;
+    p.padding_top = padding_top;
+    p.padding_bottom = padding_bottom;
+    p.padding_left = padding_left;
+    p.padding_right = padding_right;
     p.rm = rm;
     return p;
 }

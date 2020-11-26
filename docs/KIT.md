@@ -1,6 +1,6 @@
 Kit is an experimental feature based on [Flow](DEVELOPER.md), which aims to simplify the integration of bolt into applications. At this stage we are still rapidly exploring different designs. In the long run we want to provide symmetrical APIs for different platforms including iOS, Android, etc.
 
-In the [kit](../kit) directory, you can find the available demo project. In order to use the demo, bolt should be compiled first and some [headers and libraries](../kit/iOS/setup_lib_iOS.sh) need to be installed into the project, which is also taken care of in [install.sh](../install.sh). Currently we have uploaded an iOS project for image classification.
+In the [kit](../kit) directory, you can find the available demo project. In order to use the demo, bolt should be compiled first and some headers and libraries need to be installed into the project, which is also taken care of in [install.sh](../install.sh). Currently we have uploaded image classification projects for iOS and Android.
 
 - # iOS Overview
 
@@ -9,7 +9,7 @@ In the [kit](../kit) directory, you can find the available demo project. In orde
   - Compilation flags. The C++ API of Flow requires quite a few headers, and some compilation flags need to be set. For convenience, you can include [kit_flags.h](../kit/iOS/image_classification/ImageClassificationDemo/libbolt/headers/kit_flags.h) before including flow.h.
   - Model path in flow prototxt. Flow reads the model paths in prototxt in order to locate the models. On iOS, however, the exact storage path for model files is dynamically determined. [ViewController.mm](../kit/iOS/image_classification/ImageClassificationDemo/ViewController.mm) demonstrates how to update prototxt with the new model path.
 
-- # Image Classification
+- ## Image Classification
 
   <div align=center><img src="images/kit_demo.PNG" width = 30% height = 30% /></div>
 
@@ -49,4 +49,16 @@ In the [kit](../kit) directory, you can find the available demo project. In orde
 
   4. If necessary, replace imagenet_classes.txt. Add codes to handle the class index numbers that Flow outputs.
 
-  5. Please run it under file path "/data/local/tmp" for andriod devices to ensure the program get full authorities.
+
+- # Android Overview
+
+  The demo uses the C++ API of Flow via simple JNI. Mainbody of the codes is in [native-lib.cpp](../kit/Android/image_classification/app/src/main/cpp/native-lib.cpp).
+  
+  - Compilation flags. Similar to iOS, some compilation flags are also set in [kit_flags.h](../kit/Android/image_classification/app/src/main/cpp/libbolt/headers/kit_flags.h).
+  - GPU usage. The current project demonstrates CPU inference. We are still in the middle of refactoring the memory API, and when it completes the GPU usage will be symmetrical to CPU. To prevent careless mistakes, the project will only be set up when GPU compilation is off.
+
+- ## Image Classification
+
+  Basically this project uses the same settings as the iOS counterpart. If your phone is in ARMv8.2 architecture, you can also switch to the provided FP16 GhostNet model. Follow the above steps and make similar modifications.
+
+

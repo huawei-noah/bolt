@@ -137,10 +137,6 @@ public:
             this->p.kernel_h, this->p.kernel_w);
         Tensor filterTensor = Tensor(OCLMem);
         filterTensor.resize(filterDim);
-        this->p = createConvolutionParamSpec(this->p.group, this->p.kernel_h, this->p.kernel_w,
-            this->p.stride_h, this->p.stride_w, this->p.padding_top, this->p.padding_bottom,
-            this->p.padding_left, this->p.padding_right, this->p.dilatedRate_h,
-            this->p.dilatedRate_w, this->p.num_outputs, this->p.convolution_type);
 
         DataType targetType = this->dt;
         CHECK_STATUS(deconvolution_infer_output_size(

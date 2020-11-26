@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">ImageClassificationApp</string>
+    <string name="imageTip">获取图片</string>
+</resources>

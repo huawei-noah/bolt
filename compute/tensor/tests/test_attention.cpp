@@ -38,7 +38,6 @@ int attentionTest(int argc, char **argv, DataType dt)
     CHECK_STATUS(attention_infer_output_size(&inputTensor, p, &outputTensor));
     outputTensor.alloc();
     Tensor outputTensorRef = Tensor::alloc_sized<CPUMem>(outputTensor.get_desc());
-    ;
     U32 outputLength = outputTensor.length();
     for (U32 i = 0; i < batch; i++) {
         U32 threshold = p.to_sequence_length / 2 + i;

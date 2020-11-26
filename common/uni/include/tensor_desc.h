@@ -144,23 +144,23 @@ typedef struct {
 } TensorDesc;
 
 inline TensorDesc tensor5df(
-    DataType dt, DataFormat df, U32 num, U32 numChannels, U32 height, U32 width, U32 align)
+    DataType dt, DataFormat df, U32 num, U32 numChannels, U32 time, U32 height, U32 width)
 {
     TensorDesc ret;
     ret.dt = dt;
     ret.df = df;
     ret.nDims = 5;
-    ret.dims[0] = align;
-    ret.dims[1] = width;
-    ret.dims[2] = height;
+    ret.dims[0] = width;
+    ret.dims[1] = height;
+    ret.dims[2] = time;
     ret.dims[3] = numChannels;
     ret.dims[4] = num;
     return ret;
 }
 
-inline TensorDesc tensor5d(DataType dt, U32 num, U32 numChannels, U32 height, U32 width, U32 align)
+inline TensorDesc tensor5d(DataType dt, U32 num, U32 numChannels, U32 time, U32 height, U32 width)
 {
-    return tensor5df(dt, DF_NCHW, num, numChannels, height, width, align);
+    return tensor5df(dt, DF_NCHW, num, numChannels, time, height, width);
 }
 
 inline TensorDesc tensor4df(
@@ -285,6 +285,33 @@ inline EE tensor4dGet(
     return SUCCESS;
 }
 
+inline EE tensor5dGet(TensorDesc desc,
+    DataType *dt,
+    DataFormat *df,
+    U32 *num,
+    U32 *numChannels,
+    U32 *time,
+    U32 *height,
+    U32 *width)
+{
+    if (nullptr == num || nullptr == numChannels || nullptr == time || nullptr == height ||
+        nullptr == width || nullptr == dt || nullptr == df) {
+        return NULL_POINTER;
+    }
+    if (5 != desc.nDims) {
+        return NOT_MATCH;
+    }
+
+    *dt = desc.dt;
+    *df = desc.df;
+    *width = desc.dims[0];
+    *height = desc.dims[1];
+    *time = desc.dims[2];
+    *numChannels = desc.dims[3];
+    *num = desc.dims[4];
+    return SUCCESS;
+}
+
 inline EE tensorSelectGet(TensorDesc desc,
     DataType *dt,
     DataFormat *df,
@@ -403,6 +430,11 @@ inline U8 tensorIs3d(TensorDesc desc)
 inline U8 tensorIs4d(TensorDesc desc)
 {
     return 4 == desc.nDims;
+}
+
+inline U8 tensorIs5d(TensorDesc desc)
+{
+    return 5 == desc.nDims;
 }
 
 inline std::string tensorDesc2Str(TensorDesc desc)

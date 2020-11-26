@@ -51,8 +51,8 @@ int bnnConvolutionTest(int argc, char *argv[], DataType dt)
     TensorDesc inputDesc = tensor4df(dt, DF_NCHWC8, in, ic, ih, iw);
     TensorDesc filterDesc = tensor4df(fdt, DF_NCHW, oc, ic, fh, fw);
     TensorDesc biasDesc = tensor1d(dt, oc * 2);  // including scale and bias
-    ConvolutionParamSpec p = createConvolutionParamSpec(group, fh, fw, stride, stride, padding,
-        padding, padding, padding, 1, 1, oc, Convolution_Depthwise_Pointwise);
+    ConvolutionParamSpec p = createConvolutionParamSpec(group, 1, fh, fw, 1, stride, stride, 0, 0,
+        padding, padding, padding, padding, 1, 1, 1, oc, Convolution_Depthwise_Pointwise);
 
     // setup input, filter, bias
     U8 *input = ut_input_v(in * ic * ih * iw, dt, UT_INIT_RANDOM);

@@ -19,7 +19,7 @@
 template <U32 C, U32 N>
 inline void transformNCHWCxNx(U32 fc, U32 fh, U32 fw, U32 oc, const F32 *input, F32 *output)
 {
-    F32 *dest;
+    F32 *dest = nullptr;
     const F32 *src;
     U32 cSize = 0, cSizePadding = 0;
     U32 lstep = fc * fh * fw;
@@ -115,9 +115,9 @@ inline EE transformNCHWToNCHWCxNx(
     return SUCCESS;
 }
 
-
-inline void PaddingNCHWC8(F32 *data, F32 *tmp, 
-    TensorDesc inputDesc, ConvolutionParamSpec convParamSpec) {
+inline void PaddingNCHWC8(
+    F32 *data, F32 *tmp, TensorDesc inputDesc, ConvolutionParamSpec convParamSpec)
+{
     // NCHWC8
     DataType idt;
     DataFormat idf;
@@ -133,13 +133,14 @@ inline void PaddingNCHWC8(F32 *data, F32 *tmp,
     U32 coff, hoff;
 
     CHECK_REQUIREMENT((idf == DF_NCHWC8) && (ic % 8 == 0));
-    for(U32 c = 0; c < ic; c += 8) {
+    for (U32 c = 0; c < ic; c += 8) {
         coff = c * padih * padiw;
         memset(tmp + coff, 0, padiw * paddingT * 8 * bytesOf(idt));
         for (U32 h = 0; h < ih; ++h) {
             hoff = (h + paddingT) * padiw;
             memset(tmp + coff + hoff * 8, 0, paddingL * 8 * bytesOf(idt));
-            memcpy(tmp + coff + (hoff + paddingL) * 8, data + c * ih * iw + h * iw * 8, iw * 8 * bytesOf(idt));
+            memcpy(tmp + coff + (hoff + paddingL) * 8, data + c * ih * iw + h * iw * 8,
+                iw * 8 * bytesOf(idt));
             memset(tmp + coff + (hoff + (paddingL + iw)) * 8, 0, paddingR * 8 * bytesOf(idt));
         }
         memset(tmp + coff + (ih + paddingT) * padiw * 8, 0, padiw * paddingB * 8 * bytesOf(idt));

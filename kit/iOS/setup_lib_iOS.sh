@@ -1,7 +1,6 @@
 #!/bin/bash
 
-script_abs=$(readlink -f "$0")
-script_dir=$(dirname $script_abs)
+script_dir=$(cd `dirname $0` && pwd)
 
 export BOLT_ROOT=${script_dir}/../../
 
@@ -24,4 +23,4 @@ cp ${BOLT_ROOT}/inference/flow/include/flow.h ${script_dir}/image_classification
 cp ${BOLT_ROOT}/inference/flow/include/flow_function_factory.h ${script_dir}/image_classification/ImageClassificationDemo/libbolt/headers/flow/
 cp ${BOLT_ROOT}/inference/flow/include/node.h ${script_dir}/image_classification/ImageClassificationDemo/libbolt/headers/flow/
 
-cp ${BOLT_ROOT}/kit/models/ghostnet_*.bolt ${script_dir}/image_classification/ImageClassificationDemo/libbolt/
+cp ${BOLT_ROOT}/kit/assets/image_classification/* ${script_dir}/image_classification/ImageClassificationDemo/libbolt/

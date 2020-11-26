@@ -55,8 +55,8 @@ int convolutionTest(int argc, char *argv[], DataType dt)
     }
     TensorDesc filterDesc = tensor4df(dt, DF_NCHW, fn, fc, fh, fw);
     TensorDesc biasDesc = tensor1d(dt, oc);
-    ConvolutionParamSpec p = createConvolutionParamSpec(group, fh, fw, stride, stride, padding,
-        padding, padding, padding, 1, 1, fn, Convolution_Depthwise_Pointwise);
+    ConvolutionParamSpec p = createConvolutionParamSpec(group, 1, fh, fw, 1, stride, stride, 0, 0,
+        padding, padding, padding, padding, 1, 1, 1, fn, Convolution_Depthwise_Pointwise);
 
     // setup input, filter, bias
     U8 *input = ut_input_v(in * ic * ih * iw, dt, UT_INIT_RANDOM);

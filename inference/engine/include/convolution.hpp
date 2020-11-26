@@ -53,8 +53,6 @@ public:
     }
 
 public:
-    U32 numChannels;
-
     ConvolutionParamSpec p;
     ActivationParamSpec dwActivationParamSpec;
     ActivationParamSpec pwActivationParamSpec;

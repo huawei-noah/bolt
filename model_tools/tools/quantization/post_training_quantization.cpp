@@ -19,14 +19,16 @@
 
 void print_quantization_usage()
 {
-    std::cout << "post_training_quantization : " 
+    std::cout << "post_training_quantization : "
                  "./post_training_quantization -p <path2Model>\n"
                  "Parameter description:\n"
-                 "1. -p <path2Model>: Path to the input model. The suffix should be _ptq_input.bolt.\n"
+                 "1. -p <path2Model>: Path to the input model. The suffix should be "
+                 "_ptq_input.bolt.\n"
                  "2. -i [inferencePrecision]: The inference precision. Currently, you can only "
                  "choose one of "
                  "{FP32, FP16, INT8}. Default is INT8.\n"
-                 "3. -b [BatchNormFusion]: Whether to fuse convolution or FC with BN. Default is true.\n"
+                 "3. -b [BatchNormFusion]: Whether to fuse convolution or FC with BN. Default is "
+                 "true.\n"
                  "4. -q [quantStorage]: Store model in quantized form. You can choose one of"
                  "{FP16, INT8, MIX}. Default is MIX.\n"
                  "5. -c [clipValue]: To clip the input for gemm if clipValue > 0. The default "
@@ -38,7 +40,8 @@ void print_quantization_usage()
 
 int main(int argc, char *argv[])
 {
-    std::cout << "\nEnter './post_training_quantization --help' to get more usage information." << std::endl;
+    std::cout << "\nEnter './post_training_quantization --help' to get more usage information."
+              << std::endl;
     std::vector<std::string> lineArgs(argv, argv + argc);
     for (std::string arg : lineArgs) {
         if (arg == "--help" || arg == "-help" || arg == "--h" || arg == "-h") {
@@ -156,7 +159,7 @@ int main(int argc, char *argv[])
         std::cerr << "NOT SUPPORT THIS PRECISION " << inferPrecision << std::endl;
         return -1;
     }
-    
+
     CHECK_STATUS(serialize_model_to_file(targetMs, storePath.c_str()));
     CHECK_STATUS(mt_destroy_model(targetMs));
     delete targetMs;

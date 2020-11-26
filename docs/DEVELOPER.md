@@ -78,7 +78,7 @@ In [model_tools](../model_tools), you can define any operator for model conversi
 
   3. Define `pooling` parameter format.
 
-     3.1 Add `pooling` definition of bolt in [model_tools/include/model_tools.h](../common/uni/include/types.h)
+     3.1 Add `pooling` definition of bolt in [types.h](../common/uni/include/types.h)
 
      ```
      // Addition ======>
@@ -94,7 +94,7 @@ In [model_tools](../model_tools), you can define any operator for model conversi
      	RoundMode rm;
      	PoolingMode mode;
      } PoolingParamSpec;
-     // <====== Addition end
+     // <====== Addition 
      ```
 
      3.2 Modify "OperatorType" data structure in [common/uni/include/op_type.h](../common/uni/include/op_type.h)
@@ -325,7 +325,7 @@ In [model_tools](../model_tools), you can define any operator for model conversi
          // Addition ======>
          if (tfliteType == tflite::BuiltinOperator_MAX_POOL_2D) {
              return OT_Pooling;
-         } // Addition
+         } // <====== Addition
          else if (tfliteType == tflite::BuiltinOperator_CONCATENATION) {
              ...
          }

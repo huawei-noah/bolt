@@ -57,14 +57,8 @@ EE pooling_c8_fp16(const F16 *input,
     F16 *output,
     PoolingParamSpec poolingParamSpec);
 
-EE pooling_c8_big_fp16(const F16 *input,
-    U32 stride,
-    int hstart,
-    int hend,
-    int wstart,
-    int wend,
-    F16 *output,
-    int poolSize);
+EE pooling_c8_big_fp16(
+    const F16 *input, U32 stride, int hstart, int hend, int wstart, int wend, F16 *output, int poolSize);
 
 EE softmax_fp16(
     TensorDesc inputDesc, const F16 *input, int axis, TensorDesc outputDesc, F16 *output);

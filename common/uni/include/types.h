@@ -71,7 +71,8 @@ typedef enum {
     REDUCTION_SUM,
     REDUCTION_MEAN,
     REDUCTION_STD_DEVIATION,
-    REDUCTION_SCALAR_PRODUCT
+    REDUCTION_SCALAR_PRODUCT,
+    REDUCTION_MAX
 } ReductionMode;
 
 typedef enum { KeepPrecision, ToFloat, ToInt } CastPrecisionMode;

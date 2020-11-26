@@ -17,26 +17,26 @@
 
 #if (OC == 1)
 #define calCore(ov, i_off, f_off, in, flt, off) \
-    {                                      \
-        T iv = in[i_off + off];                  \
-        T fv = flt[f_off];                 \
-        ov += iv * fv;                     \
+    {                                           \
+        T iv = in[i_off + off];                 \
+        T fv = flt[f_off];                      \
+        ov += iv * fv;                          \
     }
 #endif
 
 #if (OC == 2)
 #define calCore(ov, i_off, f_off, in, flt, off) \
-    {                                      \
-        T2 iv = vload2(i_off, in + off);         \
-        T2 fv = vload2(f_off, flt);        \
-        ov += iv.x * fv.x + iv.y * fv.y;   \
+    {                                           \
+        T2 iv = vload2(i_off, in + off);        \
+        T2 fv = vload2(f_off, flt);             \
+        ov += iv.x * fv.x + iv.y * fv.y;        \
     }
 #endif
 
 #if (OC == 3)
-#define calCore(ov, i_off, f_off, in, flt, off)             \
+#define calCore(ov, i_off, f_off, in, flt, off)        \
     {                                                  \
-        T3 iv = vload3(i_off, in + off);                     \
+        T3 iv = vload3(i_off, in + off);               \
         T3 fv = vload3(f_off, flt);                    \
         ov += iv.x * fv.x + iv.y * fv.y + iv.z * fv.z; \
     }
@@ -44,32 +44,32 @@
 
 #if (OC == 4)
 #define calCore(ov, i_off, f_off, in, flt, off) \
-    {                                      \
-        T4 iv = vload4(i_off, in + off);         \
-        T4 fv = vload4(f_off, flt);        \
-        DOT_A4B4C1(iv, fv, ov);            \
+    {                                           \
+        T4 iv = vload4(i_off, in + off);        \
+        T4 fv = vload4(f_off, flt);             \
+        DOT_A4B4C1(iv, fv, ov);                 \
     }
 #endif
 
 #if (OC == 8)
-#define calCore(ov, i_off, f_off, in, flt, off)  \
-    {                                       \
-        T8 iv = vload8(i_off, in + off);          \
-        T8 fv = vload8(f_off, flt);         \
-        DOT_A4B4C1(iv.s0123, fv.s0123, ov); \
-        DOT_A4B4C1(iv.s4567, fv.s4567, ov); \
+#define calCore(ov, i_off, f_off, in, flt, off) \
+    {                                           \
+        T8 iv = vload8(i_off, in + off);        \
+        T8 fv = vload8(f_off, flt);             \
+        DOT_A4B4C1(iv.s0123, fv.s0123, ov);     \
+        DOT_A4B4C1(iv.s4567, fv.s4567, ov);     \
     }
 #endif
 
 #if (OC == 16)
-#define calCore(ov, i_off, f_off, in, flt, off)  \
-    {                                       \
-        T16 iv = vload16(i_off, in + off);        \
-        T16 fv = vload16(f_off, flt);       \
-        DOT_A4B4C1(iv.s0123, fv.s0123, ov); \
-        DOT_A4B4C1(iv.s4567, fv.s4567, ov); \
-        DOT_A4B4C1(iv.s89ab, fv.s89ab, ov); \
-        DOT_A4B4C1(iv.scdef, fv.scdef, ov); \
+#define calCore(ov, i_off, f_off, in, flt, off) \
+    {                                           \
+        T16 iv = vload16(i_off, in + off);      \
+        T16 fv = vload16(f_off, flt);           \
+        DOT_A4B4C1(iv.s0123, fv.s0123, ov);     \
+        DOT_A4B4C1(iv.s4567, fv.s4567, ov);     \
+        DOT_A4B4C1(iv.s89ab, fv.s89ab, ov);     \
+        DOT_A4B4C1(iv.scdef, fv.scdef, ov);     \
     }
 #endif
 

@@ -121,9 +121,8 @@ inline DataType get_storage_type(
             if ("INT8" == storageMode) {
                 return DT_I8;
             }
-            if (1 == ms->ops[i].num_quant_feature
-                && 1 == ms->ops[i].feature_scale[0].num_scale
-                && 0 == ms->ops[i].feature_scale[0].scale[0]) {
+            if (1 == ms->ops[i].num_quant_feature && 1 == ms->ops[i].feature_scale[0].num_scale &&
+                0 == ms->ops[i].feature_scale[0].scale[0]) {
                 return originalType;
             } else {
                 return DT_I8;

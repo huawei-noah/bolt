@@ -44,7 +44,9 @@ function (set_policy)
 endfunction(set_policy)
 
 macro (set_c_cxx_flags)
-    set(COMMON_FLAGS "-W -Wall -Wextra -Wno-unused-command-line-argument -Wno-unused-parameter -O3 -fPIC -fstack-protector")
+    set(COMMON_FLAGS "-W -Wall -Wextra -O3 -fPIC -fstack-protector")
+    set(COMMON_FLAGS "${COMMON_FLAGS} -Wno-unused-command-line-argument -Wno-unused-parameter")
+    set(COMMON_FLAGS "${COMMON_FLAGS} -Wno-unused-result -Wno-deprecated-declarations -Wno-unused-variable")
 
     if (USE_OPENMP)
         set(COMMON_FLAGS "${COMMON_FLAGS} -D_USE_OPENMP -fopenmp")

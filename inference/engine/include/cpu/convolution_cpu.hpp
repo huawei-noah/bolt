@@ -50,96 +50,70 @@ public:
             isBNN = 1;
         }
 
-        int weight_num = 1;
-        std::vector<TensorDesc> weight_desc(2), bias_desc(2);
-        switch (this->p.convolution_type) {
-            case Convolution_Pointwise: {
+        for (U32 i = 0; i < this->weightTensors.size(); i++) {
+            TensorDesc desc = this->weightTensors[i].get_desc();
+            desc.dt = filterDt;
+            this->weightTensors[i].resize(desc);
+        }
+        for (U32 i = 0; i < this->biasTensors.size(); i++) {
+            TensorDesc desc = this->biasTensors[i].get_desc();
+            desc.dt = dtNoQ;
+            if (this->p.convolution_type == Convolution_Pointwise) {
                 U32 vectorLen = this->p.num_outputs;  // bias length
                 if (isBNN == 1) {
                     this->dt = dtNoQ;  // BNN convolution should not be quantized further
                     vectorLen *= 2;  // Scale has the same vector length as bias, so double the length
                 }
-                weight_desc[0] = tensor4df(filterDt, DF_NCHW, this->p.num_outputs,
-                    this->numChannels, this->p.kernel_h, this->p.kernel_w);
-                bias_desc[0] = tensor1d(dtNoQ, vectorLen);
-                break;
+                desc = tensor1d(dtNoQ, vectorLen);
             }
-            case Convolution_Depthwise: {
-                weight_desc[0] = tensor4df(
-                    filterDt, DF_NCHW, 1, this->p.num_outputs, this->p.kernel_h, this->p.kernel_w);
-                bias_desc[0] = tensor1d(dtNoQ, this->p.num_outputs);
-                break;
-            }
-            case Convolution_Depthwise_Pointwise: {
-                weight_desc[0] = tensor4df(
-                    filterDt, DF_NCHW, 1, this->numChannels, this->p.kernel_h, this->p.kernel_w);
-                bias_desc[0] = tensor1d(dtNoQ, this->numChannels);
-                weight_desc[1] =
-                    tensor4df(filterDt, DF_NCHW, this->p.num_outputs, this->numChannels, 1, 1);
-                bias_desc[1] = tensor1d(dtNoQ, this->p.num_outputs);
-                weight_num = 2;
-                break;
-            }
-            case Convolution_Dilation: {
-                weight_desc[0] = tensor4df(filterDt, DF_NCHW, this->p.num_outputs,
-                    this->numChannels, this->p.kernel_h, this->p.kernel_w);
-                bias_desc[0] = tensor1d(dtNoQ, this->p.num_outputs);
-                break;
-            }
-            default:
-                return NOT_SUPPORTED;
+            this->biasTensors[i].resize(desc);
         }
-
         std::shared_ptr<U8> weight_ptr(curOpWs.weight);
         std::shared_ptr<U8> bias_ptr(curOpWs.vec);
         U32 weight_offset = 0;
         U32 bias_offset = 0;
-        for (int j = 0; j < weight_num; j++) {
-            Tensor weight_tensor, bias_tensor;
-            weight_tensor.resize(weight_desc[j]);
-            bias_tensor.resize(bias_desc[j]);
-            U32 weight_bytes = weight_tensor.bytes();
-            U32 bias_bytes = bias_tensor.bytes();
+        for (U32 j = 0; j < this->weightTensors.size(); j++) {
+            U32 weight_bytes = this->weightTensors[j].bytes();
+            U32 bias_bytes = this->biasTensors[j].bytes();
             U32 offset_bytes = 0;
             if (modelPtr != nullptr) {
-                weight_tensor.alloc();
-                memcpy(
-                    ((CpuMemory *)(weight_tensor.get_memory()))->get_ptr(), modelPtr, weight_bytes);
+                this->weightTensors[j].alloc();
+                memcpy(((CpuMemory *)(this->weightTensors[j].get_memory()))->get_ptr(), modelPtr,
+                    weight_bytes);
                 offset_bytes += weight_bytes;
                 if (this->hasBias) {
-                    bias_tensor.alloc();
-                    memcpy(((CpuMemory *)(bias_tensor.get_memory()))->get_ptr(),
+                    this->biasTensors[j].alloc();
+                    memcpy(((CpuMemory *)(this->biasTensors[j].get_memory()))->get_ptr(),
                         modelPtr + offset_bytes, bias_bytes);
                     offset_bytes += bias_bytes;
                 }
                 *modelPtrShared = std::shared_ptr<U8>(*modelPtrShared, modelPtr + offset_bytes);
             } else {
-                ((CpuMemory *)(weight_tensor.get_memory()))
+                ((CpuMemory *)(this->weightTensors[j].get_memory()))
                     ->set_shared_ptr(
                         std::shared_ptr<U8>(weight_ptr, weight_ptr.get() + weight_offset));
                 weight_offset += weight_bytes;
                 if (this->hasBias) {
-                    ((CpuMemory *)(bias_tensor.get_memory()))
+                    ((CpuMemory *)(this->biasTensors[j].get_memory()))
                         ->set_shared_ptr(
                             std::shared_ptr<U8>(bias_ptr, bias_ptr.get() + bias_offset));
                     bias_offset += bias_bytes;
                 }
             }
             if (!this->hasBias) {
-                bias_tensor.alloc();
+                this->biasTensors[j].alloc();
                 if (isBNN == 1) {
 #ifdef _USE_FP16
-                    U8 *ptr = (U8 *)((CpuMemory *)(bias_tensor.get_memory()))->get_ptr();
+                    U8 *ptr = (U8 *)((CpuMemory *)(this->biasTensors[j].get_memory()))->get_ptr();
                     UNI_init(p.num_outputs, DT_F16, 1.0, ptr);
                     ptr += bias_bytes / 2;
                     memset(ptr, 0, bias_bytes / 2);  // second half is bias
 #endif
                 } else {
-                    memset(((CpuMemory *)(bias_tensor.get_memory()))->get_ptr(), 0, bias_bytes);
+                    memset(((CpuMemory *)(this->biasTensors[j].get_memory()))->get_ptr(), 0,
+                        bias_bytes);
                 }
             }
-            this->weightTensors.push_back(weight_tensor);
-            this->biasTensors.push_back(bias_tensor);
         }
         return SUCCESS;
     }
@@ -298,55 +272,76 @@ public:
 
         DataType idt;
         DataFormat idf;
-        U32 in, ic, ih, iw;
-        CHECK_STATUS(tensor4dGet(inDim, &idt, &idf, &in, &ic, &ih, &iw));
+        U32 in, ic, it, ih, iw;
+        if (tensorIs5d(inDim)) {
+            CHECK_STATUS(tensor5dGet(inDim, &idt, &idf, &in, &ic, &it, &ih, &iw));
+        } else if (tensorIs4d(inDim)) {
+            CHECK_STATUS(tensor4dGet(inDim, &idt, &idf, &in, &ic, &ih, &iw));
+        } else {
+            return NOT_SUPPORTED;
+        }
         if (DF_NCHW == idf && DT_F16_8Q == this->dt && DT_F16 == idt) {
             this->dt = DT_F16;
         }
-        this->numChannels = ic;
-        if (this->p.convolution_type == Convolution_Dilation ||
-            this->p.convolution_type == Convolution_Pointwise) {
-            this->numChannels /= this->p.group;
-        }
-
-        Tensor filterTensor;
-        TensorDesc filterDim = tensor4df(this->dt, DF_NCHW, this->p.num_outputs, this->numChannels,
-            this->p.kernel_h, this->p.kernel_w);
-        filterTensor.resize(filterDim);
-
         DataType targetType = this->dt;
         if (DT_F16_8Q == this->dt && Convolution_Pointwise == this->p.convolution_type) {
             targetType = DT_I8;
         }
+        int numChannels = ic;
+        if (this->p.convolution_type == Convolution_Dilation ||
+            this->p.convolution_type == Convolution_Pointwise) {
+            numChannels /= this->p.group;
+        }
 
+        std::vector<TensorDesc> filterDesc, biasDesc;
+        int channelAxis = 0;
+        if (tensorIs5d(inDim)) {
+            channelAxis = 4;
+            filterDesc.push_back(tensor5d(this->dt, this->p.num_outputs, numChannels,
+                this->p.kernel_t, this->p.kernel_h, this->p.kernel_w));
+            if (Convolution_Depthwise_Pointwise == this->p.convolution_type) {
+                filterDesc.push_back(tensor5d(this->dt, this->p.num_outputs, numChannels, 1, 1, 1));
+            }
+        } else if (tensorIs4d(inDim)) {
+            channelAxis = 3;
+            filterDesc.push_back(tensor4d(
+                this->dt, this->p.num_outputs, numChannels, this->p.kernel_h, this->p.kernel_w));
+            if (Convolution_Depthwise_Pointwise == this->p.convolution_type) {
+                filterDesc.push_back(tensor4d(this->dt, this->p.num_outputs, numChannels, 1, 1));
+            }
+        }
+        std::vector<Tensor> filterTensor(filterDesc.size());
+        for (U32 i = 0; i < filterDesc.size(); i++) {
+            filterTensor[i].resize(filterDesc[i]);
+        }
         switch (this->p.convolution_type) {
             case Convolution_Pointwise: {
+                biasDesc.push_back(tensor1d(this->dt, this->p.num_outputs));
                 CHECK_STATUS(convolution_infer_output_size(
-                    inputTensor, filterTensor, p, outputTensor, targetType, &this->archInfo));
+                    inputTensor, filterTensor[0], p, outputTensor, targetType, &this->archInfo));
                 break;
             }
             case Convolution_Depthwise: {
-                filterDim.dims[3] = 1;
+                filterDesc[0].dims[channelAxis] = 1;
+                filterTensor[0].resize(filterDesc[0]);
+                biasDesc.push_back(tensor1d(this->dt, this->p.num_outputs));
                 CHECK_STATUS(depthwise_convolution_infer_output_size(
-                    inputTensor, filterTensor, p, outputTensor, targetType, &this->archInfo));
+                    inputTensor, filterTensor[0], p, outputTensor, targetType, &this->archInfo));
                 break;
             }
             case Convolution_Depthwise_Pointwise: {
-                TensorDesc dwFilterDesc = tensor4df(
-                    this->dt, DF_NCHW, 1, this->numChannels, this->p.kernel_h, this->p.kernel_w);
-                TensorDesc pwFilterDesc =
-                    tensor4df(this->dt, DF_NCHW, this->p.num_outputs, this->numChannels, 1, 1);
-                Tensor dwFilterTensor;
-                Tensor pwFilterTensor;
-                dwFilterTensor.resize(dwFilterDesc);
-                pwFilterTensor.resize(pwFilterDesc);
+                filterDesc[0].dims[channelAxis] = 1;
+                filterTensor[0].resize(filterDesc[0]);
+                biasDesc.push_back(tensor1d(this->dt, numChannels));
+                biasDesc.push_back(tensor1d(this->dt, this->p.num_outputs));
                 CHECK_STATUS(depthwise_pointwise_convolution_infer_output_size(inputTensor,
-                    dwFilterTensor, pwFilterTensor, p, outputTensor, targetType, &this->archInfo));
+                    filterTensor[0], filterTensor[1], p, outputTensor, targetType, &this->archInfo));
                 break;
             }
             case Convolution_Dilation: {
+                biasDesc.push_back(tensor1d(this->dt, this->p.num_outputs));
                 CHECK_STATUS(convolution_infer_output_size(
-                    inputTensor, filterTensor, p, outputTensor, targetType, &this->archInfo));
+                    inputTensor, filterTensor[0], p, outputTensor, targetType, &this->archInfo));
                 break;
             }
             default:
@@ -356,6 +351,15 @@ public:
             TensorDesc outputDesc = outputTensor->get_desc();
             outputDesc.dt = DT_F16;
             outputTensor->resize(outputDesc);
+        }
+        if (this->weightTensors.size() == 0) {
+            this->weightTensors = filterTensor;
+        }
+        if (this->biasTensors.size() == 0) {
+            this->biasTensors = std::vector<Tensor>(biasDesc.size());
+            for (U32 i = 0; i < biasDesc.size(); i++) {
+                this->biasTensors[i].resize(biasDesc[i]);
+            }
         }
         return SUCCESS;
     }

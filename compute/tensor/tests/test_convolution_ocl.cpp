@@ -106,8 +106,9 @@ int convolutionTest(int argc, char *argv[], DataType dt)
     U32 ow = (iw + paddingL + paddingR - fw) / strideW + 1;
     ActivationParamSpec activationDesc;
     activationDesc.mode = ACTIVATION_NULL;
-    ConvolutionParamSpec convParamSpec = createConvolutionParamSpec(group, fh, fw, strideH, strideW,
-        paddingT, paddingB, paddingL, paddingR, 1, 1, fn, Convolution_Depthwise_Pointwise);
+    ConvolutionParamSpec convParamSpec = createConvolutionParamSpec(group, 1, fh, fw, 1, strideH,
+        strideW, 0, 0, paddingT, paddingB, paddingL, paddingR, 1, 1, 1, fn,
+        Convolution_Depthwise_Pointwise);
 
     TensorDesc inputDesc = tensor4df(dt, DF_NCHW, in, ic, ih, iw);
     TensorDesc filterDesc = tensor4df(dt, DF_NCHW, fn, fc, fh, fw);
@@ -118,7 +119,6 @@ int convolutionTest(int argc, char *argv[], DataType dt)
     TensorDesc inputDesc_gpu = tensor4df(dt, DF_NCHW, in, ic, ih, iw);
 
     std::shared_ptr<GCLHandle> handleSharedPtr = OCLContext::getInstance().handle;
-    ;
     GCLHandle_t handle = handleSharedPtr.get();
     std::vector<GCLKernelInfo> kernelVec;
     handle->kernelVec = &kernelVec;
@@ -237,7 +237,6 @@ int convolutionTest(int argc, char *argv[], DataType dt)
     CHECK_STATUS(gcl_run_kernelVec(handle));
 #endif
     TensorDesc outputDesc = outputTensor.get_desc();
-    ;
     CHECK_STATUS(ocl_get_output(handle, output, outputDesc, true));
     void *output_gpu = output->mapPtrArray.back();
 

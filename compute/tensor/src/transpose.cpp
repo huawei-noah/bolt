@@ -111,7 +111,8 @@ inline EE transpose_infer_output_size_cpu(
         (*outputDesc).df = DF_NCHW;
     }
     if ((*outputDesc).nDims == 4 && p.trans_size == 3 && (*outputDesc).dims[0] == 1) {
-        (*outputDesc) = tensor3df(inputDesc.dt, DF_NCHW, (*outputDesc).dims[3], (*outputDesc).dims[2], (*outputDesc).dims[1]);
+        (*outputDesc) = tensor3df(inputDesc.dt, DF_NCHW, (*outputDesc).dims[3],
+            (*outputDesc).dims[2], (*outputDesc).dims[1]);
     }
     return SUCCESS;
 }

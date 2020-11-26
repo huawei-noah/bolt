@@ -1,4 +1,4 @@
-This document will help you compile and install bolt on your server.  Generally, you only need to be concerned about two parts. The first part is how to build bolt which is described in the "Download and Build Bolt" section. And the second part is when you fail to build bolt ,  you should check the "Prerequisites" section which is required by bolt.
+This document will help you compile and install bolt on your server. Generally, you only need to be concerned about two parts. The first part is how to build bolt which is described in the "Download and Build Bolt" section. The second part is when you fail to build bolt, you should check the "Prerequisites" section.
 
 [Download and Build Bolt](#download-and-build-bolt)  
 &nbsp;&nbsp;&nbsp;&nbsp;[Options](#options)   
@@ -8,13 +8,14 @@ This document will help you compile and install bolt on your server.  Generally,
 &nbsp;&nbsp;&nbsp;&nbsp;[Android Tools](#android-tools)  
 &nbsp;&nbsp;&nbsp;&nbsp;[Other Dependency Libraries](#other-dependency-libraries)  
 &nbsp;&nbsp;&nbsp;&nbsp;[Optional Software](#optional-software)  
+[Common install problem](#common-install-problem)  
 
 
 # Download and Build Bolt
 
-A simple shell script [install.sh](../install.sh) is provided to build and install the Bolt library, and you should modify it according to your scenario and environment. Set all the options correctly in [bolt.cmake](../common/cmakes/bolt.cmake) . Use help message to find more useful information.
+A simple shell script [install.sh](../install.sh) is provided to build and install the Bolt library, and you should modify it according to your scenario and environment. Set all the options correctly in [bolt.cmake](../common/cmakes/bolt.cmake). Use help message to find more useful information.
 
-NOTE: Some Build options are set by default in [install.sh](../install.sh), which will be overwritten in [bolt.cmake](common/cmakes/bolt.cmake). You should check these two files meticulously before installation.
+NOTE: Some Build options are set by default in [install.sh](../install.sh), which will overwrite the settings in [bolt.cmake](common/cmakes/bolt.cmake). You should check these two files meticulously before installation.
 
 Here are the examples of installation on different platforms(*arm_gnu*, *arm_llvm*, *arm_ndkv7* and *x86_gnu*).
 
@@ -38,11 +39,11 @@ cd bolt
 ./install.sh -c arm_ndkv7 -t 33
 ```
 
-We will install Bolt to *install_<platform>* directory, you will find these subdirectories in it.
+We will install Bolt to *install_<platform>* directory. These subdirectories will be found in it:
 
 - include
-    - [C API](inference/engine/api/c) header file
-    - [Java API](inference/engine/api/java) class file
+    - [C API](../inference/engine/api/c) header file
+    - [Java API](../inference/engine/api/java) class file
 - lib
     - libBoltModel.so: build for Java application
     - libbolt.so: build for C/C++ application
@@ -60,17 +61,17 @@ We will install Bolt to *install_<platform>* directory, you will find these subd
   - *tensor_computing_library_search* for performance tuning of the operator library
 
 - examples
-    - *benchmark* for measuring any model(.bolt) inference performance
+    - *benchmark* for measuring inference performance of any model (.bolt)
     - *tinybert* for intention identification
     - *nmt* for machine translation
     - *classification* for imagenet classification task
-    - *asr_rnnt* for automatic speech recognition task RNNT model
-    - *asr_convolution_transformer* for automatic speech recognition task Convolution+Transformer model
+    - *asr_rnnt* for automatic speech recognition task (RNNT model)
+    - *asr_convolution_transformer* for automatic speech recognition task (Convolution+Transformer model)
     - *tts* for text to speech
 - docs
     - API/html: doxygen html document for C/Java/Flow API   
 
-If you want to build [operator uni tests](compute/tensor/tests) and [C](inference/examples/c_api/test_api.c)/[Java](inference/examples/java_api/test_api_java.java)/Flow API tests, please turn on the *BUILD_TEST* option and rebuild Bolt. These executables will be installed to ***install_<platform>/tests*** directory.
+If you want to build [operator uni tests](compute/tensor/tests) and [C](inference/examples/c_api/test_api.c)/[Java](inference/examples/java_api/test_api_java.java)/Flow API tests, please turn on the *BUILD_TEST* option when you build Bolt. These executables will be installed to ***install_<platform>/tests*** directory.
 
 ## Options
 
@@ -114,7 +115,7 @@ Here are all options in [bolt.cmake](../common/cmakes/bolt.cmake).
 Some Linux shell environment variables are reserved for Bolt.
 
 - *BOLT_ROOT*: Bolt project home directory, set by user or Bolt.
-- *BOLT_MEMORY_REUSE_OPTIMIZATION*: whether to use memory reuse optimization. The default value is ON and you can set it *OFF* to disable memory reuse optimization.
+- *BOLT_MEMORY_REUSE_OPTIMIZATION*: whether to use memory reuse optimization. The default value is ON and you can set it *OFF* to disable memory reuse optimization. Note that this setting takes effect during the model conversion. Once the model (.bolt) is stored, the memory reuse behavior is fixed.
 - *Bolt_TensorComputing_LibraryAlgoritmMap*: a path on the target device set by user to save tensor_computing library performance tuning result.
 
 # Prerequisites
@@ -137,7 +138,7 @@ Some Linux shell environment variables are reserved for Bolt.
 
   <img src="images/cmake.PNG" alt="cmake -version" style="zoom:150%;" />
 
-  If cmake has been installed successfully, you can see the uniquely determined cmake version number(For example: 3.15.1). If you fail to see the version number or the number you see is lower than 3.2.0, please reinstall the cmake tool on your server. You can refer to the [cmake official docs](https://cmake.org/install/) to implement the installation of cmake and set environment **PATH** to find it.
+  If cmake has been installed successfully, you can see the uniquely determined cmake version number (e.g. 3.15.1). If you fail to see the version number or the number you see is lower than 3.2.0, please reinstall the cmake tool on your server. You can refer to the [cmake official docs](https://cmake.org/install/) to implement the installation of cmake and set environment **PATH** to find it.
 
 - ### GNU make
 
@@ -155,7 +156,7 @@ Some Linux shell environment variables are reserved for Bolt.
 
   <img src="images/make.PNG" style="zoom:150%;" />
 
-  If GNU make has been installed successfully, you can see the uniquely determined GNU make version number(For example: 4.1). If you fail to see the version number or the number you see is lower than 3.81, please reinstall the GNU make tool on your server. You can refer to the [GNU make installation example](https://stackoverflow.com/questions/35568016/install-make-3-75-on-ubuntu-15-10) to implement the installation of GNU make and set the environment **PATH** to find it.
+  If GNU make has been installed successfully, you can see the uniquely determined GNU make version number (e.g. 4.1). If you fail to see the version number or the number you see is lower than 3.81, please reinstall the GNU make tool on your server. You can refer to the [GNU make installation example](https://stackoverflow.com/questions/35568016/install-make-3-75-on-ubuntu-15-10) to implement the installation of GNU make and set the environment **PATH** to find it.
 
 - ### Cross compiler
 
@@ -195,7 +196,7 @@ Some Linux shell environment variables are reserved for Bolt.
 
     <img src="images/GNU.PNG" alt="GNU" style="zoom:150%;" />
 
-    If GNU has been installed successfully, you can see the uniquely determined GNU compiler version number(For example: 8.3.0). If you fail to see the version number or the number you see is lower than 8.3.0, please reinstall the ARM GNU compiler on your server. You can refer to the [GNU compiler installation example](https://askubuntu.com/questions/472219/how-to-install-gcc-4-7-arm-linux-gnueabihf-on-ubuntu-12-04) to implement the installation of GNU compiler and set the environment **PATH** to find it.
+    If GNU has been installed successfully, you can see the uniquely determined GNU compiler version number (e.g. 8.3.0). If you fail to see the version number or the number you see is lower than 8.3.0, please reinstall the ARM GNU compiler on your server. You can refer to the [GNU compiler installation example](https://askubuntu.com/questions/472219/how-to-install-gcc-4-7-arm-linux-gnueabihf-on-ubuntu-12-04) to install GNU compiler and set the environment **PATH** to find it.
 
 ## Android Tools
 
@@ -238,12 +239,51 @@ If you want to compile Java programs, you need to download and install [Java SE 
 
 <img src="images/JDK.PNG" alt="JDK" style="zoom:150%;" />
 
-You can see the uniquely determined JDK version number(For example: 1.8.0_265). If you fail to see the version number or the number you see is lower than 1.8.0_265, please reinstall the JDK on your server. You can refer to the [JDK installation example](https://stackoverflow.com/questions/14788345/how-to-install-the-jdk-on-ubuntu-linux?page=2&tab=Votes) to implement the installation of JDK and set the environment **PATH** to find it.
+You can see the uniquely determined JDK version number (e.g. 1.8.0_265). If you fail to see the version number or the number you see is lower than 1.8.0_265, please reinstall the JDK on your server. You can refer to the [JDK installation example](https://stackoverflow.com/questions/14788345/how-to-install-the-jdk-on-ubuntu-linux?page=2&tab=Votes) to install JDK and set the environment **PATH** to find it.
 
 - ### Android dx
 
-If you want to directly run *jar* file on Android device, you can use [Android dx tool](https://developer.android.com/studio/releases/build-tools).Install Android *v28.0.3* build tools and set Linux shell environment **PATH**. Run the command "dx --version" to verify the dx tool version.
+If you want to directly run *jar* file on Android device, you can use [Android dx tool](https://developer.android.com/studio/releases/build-tools). Install Android *v28.0.3* build tools and set Linux shell environment **PATH**. Run the command "dx --version" to verify the dx tool version.
 
 <img src="images/dx.PNG" alt="dx" style="zoom:150%;" />
 
-You can see the uniquely determined dx version number(For example: 1.16). If you fail to see the version number or the number you see is lower than 1.16, please reinstall the dx tool on your server. 
+You can see the uniquely determined dx version number (e.g. 1.16). If you fail to see the version number or the number you see is lower than 1.16, please reinstall the dx tool on your server. 
+
+
+## Common install problem
+
+- ### wget error
+
+  Use wget to download file. If you use proxy to access the network, you may be reminded to add *--no-check-certificate* flag when using wget.
+  
+- ### curl error
+  
+  Use curl to download file. If you use proxy to access the network, you may encounter this error.
+  
+  error info:
+
+    ```
+    curl: (35) error:1408F10B:SSL routines:ssl3_get_record:wrong version number
+    ```
+
+  solution: use *wget* instead, or add *-k* flag.
+
+    ```
+    wget https://github.com/google/googlemock/archive/release-1.7.0.zip
+    ```
+    
+- ### Download is limited by network proxy or time consuming.
+
+  You can download these files and save to a specified directory, Bolt will automatically use it.
+  
+  1. save <https://github.com/protocolbuffers/protobuf/releases/download/v3.1.0/protoc-3.1.0-linux-x86_64.zip> to *third_party/sources/protoc-3.1.0-linux-x86_64.zip*.
+  2. save <https://github.com/protocolbuffers/protobuf/archive/v3.1.0.tar.gz> to *third_party/sources/v3.1.0.tar.gz*.
+  3. save <https://github.com/google/flatbuffers/tree/master/include> to *third_party/sources/flatbuffers/include*.
+  4. save <https://github.com/tensorflow/tensorflow/blob/master/tensorflow/lite/schema/schema_generated.h> *third_party/sources/tflite/include/tensorflow/lite/schema/schema_generated.h*.
+  5. save <https://github.com/KhronosGroup/OpenCL-Headers/tree/master/CL> to *third_party/sources/opencl/include/CL** when using **arm_llvm** flag.
+  6. use *ADB* to pull android phone's </vendor/lib64/libOpenCL.so> and </vendor/lib64/egl/libGLES_mali.so> to *third_party/sources/opencl/lib64* when using **arm_llvm** flag.
+  7. save <http://www.ijg.org/files/jpegsrc.v9c.tar.gz> to *third_party/sources/jpegsrc.v9c.tar.gz*.
+  8. save <https://github.com/open-source-parsers/jsoncpp/archive/master.zip> to *third_party/sources/jsoncpp-master.zip*.
+  9. save <http://www.fftw.org/fftw-3.3.8.tar.gz> to *third_party/sources/fftw-3.3.8.tar.gz*.
+  10. save <https://github.com/google/googlemock/archive/release-1.7.0.zip> to *third_party/sources/googlemock-release-1.7.0.zip*.
+  11. save <https://github.com/google/googletest/archive/release-1.7.0.zip> to *third_party/sources/googletest-release-1.7.0.zip*.

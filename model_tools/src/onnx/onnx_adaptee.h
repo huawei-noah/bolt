@@ -108,9 +108,15 @@ protected:
         } else if (inputType == "Gemm") {
             return OT_FC;
         } else if (inputType == "AveragePool" || inputType == "MaxPool" ||
-            inputType == "ReduceMean" || inputType == "GlobalAveragePool" ||
-            inputType == "ReduceMax") {
+            inputType == "GlobalAveragePool") {
             return OT_Pooling;
+        } else if (inputType == "ReduceMean" || inputType == "ReduceMax") {
+            std::vector<int> axesInfo = get_node_vector_ints_attribute_by_name(node, "axes");
+            int keepdimsInfo = get_node_single_int_attribute_by_name(node, "keepdims", 0);
+            if (axesInfo.size() == 2 && axesInfo[0] == 2 && axesInfo[1] == 3 && keepdimsInfo == 1) {
+                return OT_Pooling;
+            }
+            return OT_Reduction;
         } else if (inputType == "Relu" || inputType == "LeakyRelu") {
             return OT_Relu;
         } else if (inputType == "Softmax") {
@@ -395,25 +401,13 @@ protected:
             }
             exactly_input_names.push_back(cur_input_name);
 
-            std::vector<int> dims_list;
             int node_dimension_size = input_node.type().tensor_type().shape().dim().size();
-            if (node_dimension_size == 4) {
-                // extraction for 4 dimension tensor
-                int dim_0 = input_node.type().tensor_type().shape().dim(0).dim_value();
-                if (dim_0 == 0) {
-                    dims_list.push_back(1);
-                } else {
-                    dims_list.push_back(input_node.type().tensor_type().shape().dim(0).dim_value());
+            std::vector<int> dims_list;
+            for (int j = 0; j < node_dimension_size; j++) {
+                dims_list.push_back(input_node.type().tensor_type().shape().dim(j).dim_value());
+                if (j == 0) {
+                    dims_list[j] = UNI_MAX(dims_list[j], 1);
                 }
-                dims_list.push_back(input_node.type().tensor_type().shape().dim(1).dim_value());
-                dims_list.push_back(input_node.type().tensor_type().shape().dim(2).dim_value());
-                dims_list.push_back(input_node.type().tensor_type().shape().dim(3).dim_value());
-            } else if (node_dimension_size == 3 || node_dimension_size == 2) {
-                for (int j = 0; j < node_dimension_size; j++) {
-                    dims_list.push_back(input_node.type().tensor_type().shape().dim(j).dim_value());
-                }
-            } else {
-                UNI_WARNING_LOG("not support input dimension!\n");
             }
             input_dimens.push_back(dims_list);
         }
@@ -443,8 +437,11 @@ protected:
         for (int i = 0; i < ms->num_inputs; i++) {
             int curInputDimSize = input_dimens[i].size();
             TensorDesc input_desc;
-            if (curInputDimSize == 4) {
-                input_desc = tensor4d(DT_F32, input_dimens[i][0], input_dimens[i][1],
+            if (curInputDimSize == 5) {
+                input_desc = tensor5df(DT_F32, DF_NCHW, input_dimens[i][0], input_dimens[i][1],
+                    input_dimens[i][2], input_dimens[i][3], input_dimens[i][4]);
+            } else if (curInputDimSize == 4) {
+                input_desc = tensor4df(DT_F32, DF_NCHW, input_dimens[i][0], input_dimens[i][1],
                     input_dimens[i][2], input_dimens[i][3]);
             } else if (curInputDimSize == 3) {
                 input_desc = ms->input_dims[i] = tensor3df(
@@ -453,7 +450,7 @@ protected:
                 input_desc = ms->input_dims[i] =
                     tensor2df(DT_F32, DF_NORMAL, input_dimens[i][0], input_dimens[i][1]);
             } else {
-                UNI_WARNING_LOG("not support input dimension!\n");
+                UNI_ERROR_LOG("not support input dimension!\n");
             }
             ms->input_dims[i] = input_desc;
         }
@@ -919,8 +916,8 @@ protected:
     {
         ParameterSpec curPs;
         initialization_zero(&curPs, sizeof(curPs));
-        const onnx::TensorProto& data = weights[node.input(0)];
-        const onnx::TensorProto& ind = weights[node.input(1)];
+        const onnx::TensorProto &data = weights[node.input(0)];
+        const onnx::TensorProto &ind = weights[node.input(1)];
         SharedWeightParamSpec sharedWeightPs;
         sharedWeightPs.desc.nDims = 3;
         sharedWeightPs.desc.dims[2] = 1;
@@ -928,7 +925,7 @@ protected:
         sharedWeightPs.desc.dims[0] = data.dims(1);
         sharedWeightPs.desc.df = DF_NORMAL;
         sharedWeightPs.desc.dt = DT_F32;
-        UNI_DEBUG_LOG("SharedWeight: %s\n" ,tensorDesc2Str(sharedWeightPs.desc).c_str());
+        UNI_DEBUG_LOG("SharedWeight: %s\n", tensorDesc2Str(sharedWeightPs.desc).c_str());
         curPs.shared_weight_spec = sharedWeightPs;
         return curPs;
     }
@@ -1078,47 +1075,69 @@ protected:
         cps.num_outputs = weight.dims(0);
         cps.num_outputs_origin = cps.num_outputs;
         cps.kernel_t = 1;
-        cps.stride_t = 1;
-        cps.padding_before = 0;
-        cps.padding_after = 0;
-        cps.dilatedRate_t = 1;
-        if (kernelShape.size() == 2) {
+        cps.kernel_h = 1;
+        cps.kernel_w = 1;
+        if (kernelShape.size() == 3) {
+            cps.kernel_t = kernelShape[0];
+            cps.kernel_h = kernelShape[1];
+            cps.kernel_w = kernelShape[2];
+        } else if (kernelShape.size() == 2) {
             cps.kernel_h = kernelShape[0];
             cps.kernel_w = kernelShape[1];
         } else if (kernelShape.size() == 1) {
             cps.kernel_h = kernelShape[0];
-            cps.kernel_w = 1;
         } else {
             UNI_ERROR_LOG("convolution: kernel_size unknown\n");
         }
 
-        if (dilations.size() == 2) {
+        cps.dilatedRate_t = 1;
+        cps.dilatedRate_h = 1;
+        cps.dilatedRate_w = 1;
+        if (dilations.size() == 3) {
+            cps.dilatedRate_t = dilations[0];
+            cps.dilatedRate_h = dilations[1];
+            cps.dilatedRate_w = dilations[2];
+        } else if (dilations.size() == 2) {
             cps.dilatedRate_h = dilations[0];
             cps.dilatedRate_w = dilations[1];
         } else if (dilations.size() == 1) {
             cps.dilatedRate_h = dilations[0];
-            cps.dilatedRate_w = 1;
-        } else {
-            UNI_WARNING_LOG("convolution: dilation unknown. Default to 1\n");
-            cps.dilatedRate_h = 1;
-            cps.dilatedRate_w = 1;
         }
 
-        if (strides.size() == 2) {
+        cps.stride_t = 1;
+        cps.stride_h = 1;
+        cps.stride_w = 1;
+        if (strides.size() == 3) {
+            cps.stride_t = strides[0];
+            cps.stride_h = strides[1];
+            cps.stride_w = strides[2];
+        } else if (strides.size() == 2) {
             cps.stride_h = strides[0];
             cps.stride_w = strides[1];
         } else if (strides.size() == 1) {
             cps.stride_h = strides[0];
-            cps.stride_w = 1;
         } else {
             UNI_ERROR_LOG("convolution: stride unknown\n");
         }
 
-        if (pads.size() == 4) {
+        cps.padding_before = 0;
+        cps.padding_top = 0;
+        cps.padding_left = 0;
+        cps.padding_after = 0;
+        cps.padding_bottom = 0;
+        cps.padding_right = 0;
+        if (pads.size() == 6) {
+            cps.padding_before = pads[0];
+            cps.padding_top = pads[1];
+            cps.padding_left = pads[2];
+            cps.padding_after = pads[3];
+            cps.padding_bottom = pads[4];
+            cps.padding_right = pads[5];
+        } else if (pads.size() == 4) {
             if (cps.kernel_h == cps.kernel_w && (pads[0] != pads[2] || pads[1] != pads[3])) {
                 cps.padding_top = UNI_MAX(pads[0], pads[2]);
-                cps.padding_bottom = UNI_MAX(pads[0], pads[2]);
                 cps.padding_left = UNI_MAX(pads[1], pads[3]);
+                cps.padding_bottom = UNI_MAX(pads[0], pads[2]);
                 cps.padding_right = UNI_MAX(pads[1], pads[3]);
             } else {
                 cps.padding_top = pads[0];
@@ -1129,17 +1148,13 @@ protected:
         } else if (pads.size() == 2) {
             cps.padding_top = pads[0];
             cps.padding_bottom = pads[1];
-            cps.padding_left = 0;
-            cps.padding_right = 0;
-        } else {
-            UNI_ERROR_LOG("deconvolution: pad unknown\n");
         }
 
         cps.group = group;
         if (cps.group != 1 && cps.group == cps.num_outputs) {
             cps.convolution_type = Convolution_Depthwise;
         } else {
-            if (cps.dilatedRate_h > 1 || cps.dilatedRate_w > 1) {
+            if (cps.dilatedRate_t > 1 || cps.dilatedRate_h > 1 || cps.dilatedRate_w > 1) {
                 cps.convolution_type = Convolution_Dilation;
             } else {
                 cps.convolution_type = Convolution_Pointwise;
@@ -1241,10 +1256,6 @@ protected:
         std::vector<int> strides = get_node_vector_ints_attribute_by_name(node, "strides");
         std::vector<int> pads = get_node_vector_ints_attribute_by_name(node, "pads");
 
-        pps.kernel_t = 1;
-        pps.stride_t = 1;
-        pps.padding_before = 0;
-        pps.padding_after = 0;
         if (op == "AveragePool" || op == "ReduceMean" || op == "GlobalAveragePool") {
             pps.mode = POOLING_MEAN;
         } else {
@@ -1257,34 +1268,58 @@ protected:
             pps.rm = FLOOR;
         }
 
-        if (kernelShape.size() == 2) {
+        pps.kernel_t = 0;
+        pps.kernel_h = 0;
+        pps.kernel_w = 0;
+        if (kernelShape.size() == 3) {
+            pps.kernel_t = kernelShape[0];
+            pps.kernel_h = kernelShape[1];
+            pps.kernel_w = kernelShape[2];
+        } else if (kernelShape.size() == 2) {
+            pps.kernel_t = 1;
             pps.kernel_h = kernelShape[0];
             pps.kernel_w = kernelShape[1];
-        } else {
-            pps.kernel_h = 0;
-            pps.kernel_w = 0;
-            UNI_INFO_LOG("pooling: kernel_size unknown. This could be global pooling.\n");
+        } else if (kernelShape.size() == 1) {
+            pps.kernel_t = 1;
+            pps.kernel_h = kernelShape[0];
+            pps.kernel_w = 1;
         }
 
-        if (strides.size() == 2) {
+        pps.stride_t = 1;
+        pps.stride_h = 1;
+        pps.stride_w = 1;
+        if (strides.size() == 3) {
+            pps.stride_t = strides[0];
+            pps.stride_h = strides[1];
+            pps.stride_w = strides[2];
+        } else if (strides.size() == 2) {
             pps.stride_h = strides[0];
             pps.stride_w = strides[1];
-        } else {
-            pps.stride_h = 1;
-            pps.stride_w = 1;
-            UNI_INFO_LOG("pooling: stride unknown. This could be global pooling.\n");
+        } else if (strides.size() == 1) {
+            pps.stride_h = strides[0];
         }
 
-        if (pads.size() == 4) {
+        pps.padding_before = 0;
+        pps.padding_top = 0;
+        pps.padding_left = 0;
+        pps.padding_after = 0;
+        pps.padding_bottom = 0;
+        pps.padding_right = 0;
+        if (pads.size() == 6) {
+            pps.padding_before = pads[0];
+            pps.padding_top = pads[1];
+            pps.padding_left = pads[2];
+            pps.padding_after = pads[3];
+            pps.padding_bottom = pads[4];
+            pps.padding_right = pads[5];
+        } else if (pads.size() == 4) {
             pps.padding_top = pads[0];
-            pps.padding_bottom = pads[2];
             pps.padding_left = pads[1];
+            pps.padding_bottom = pads[2];
             pps.padding_right = pads[3];
-        } else {
-            pps.padding_top = 0;
-            pps.padding_bottom = 0;
-            pps.padding_left = 0;
-            pps.padding_right = 0;
+        } else if (pads.size() == 2) {
+            pps.padding_top = pads[0];
+            pps.padding_bottom = pads[1];
         }
         curPs.pooling_spec = pps;
         return curPs;
@@ -1687,14 +1722,21 @@ protected:
         std::vector<int> axesInfo =
             get_node_vector_ints_attribute_by_name(node, "axes");  // default one element
         int keepdimsInfo = get_node_single_int_attribute_by_name(node, "keepdims", 0);
+        if (axesInfo.size() != 1) {
+            UNI_ERROR_LOG("currently not support multi-dimension reduction\n");
+        }
         rsPs.axes[0] = axesInfo[0];
         rsPs.axes_num = 1;
         rsPs.keep_dim = keepdimsInfo == 0 ? false : true;
         rsPs.coeff = 1.0;
         if (op == "ReduceSum") {
             rsPs.reduction_mode = REDUCTION_SUM;
-        } else {
+        } else if (op == "ReduceMean") {
             rsPs.reduction_mode = REDUCTION_MEAN;
+        } else if (op == "ReduceMax") {
+            rsPs.reduction_mode = REDUCTION_MAX;
+        } else {
+            UNI_ERROR_LOG("currently only support ReduceSum/ReduceMean/ReduceMax\n");
         }
         curPs.reduction_spec = rsPs;
         return curPs;

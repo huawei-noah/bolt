@@ -82,11 +82,11 @@ EE pooling_arm(TensorDesc inputDesc,
                         case DT_F16:
                             // Global average pooling kernel can be very big. Accumulate to FP32 to protect accurracy
                             if (poolSize > 256 && poolingParamSpec.mode == POOLING_MEAN) {
-                                ret = pooling_c8_big_fp16((const F16 *)inputPtr, iw, hstart, hend, wstart,
-                                    wend, (F16 *)outputPtr, poolSize);
+                                ret = pooling_c8_big_fp16((const F16 *)inputPtr, iw, hstart, hend,
+                                    wstart, wend, (F16 *)outputPtr, poolSize);
                             } else {
-                                ret = pooling_c8_fp16((const F16 *)inputPtr, iw, hstart, hend, wstart,
-                                    wend, (F16 *)outputPtr, poolingParamSpec);
+                                ret = pooling_c8_fp16((const F16 *)inputPtr, iw, hstart, hend,
+                                    wstart, wend, (F16 *)outputPtr, poolingParamSpec);
                             }
                             break;
 #endif

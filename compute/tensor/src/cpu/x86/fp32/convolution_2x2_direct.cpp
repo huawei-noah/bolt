@@ -1712,7 +1712,7 @@ EE convolution_2x2_direct(TensorDesc inputDesc,
     U32 fStep = ((ih_pad - fh) * iw_pad) * UNROLL_IC_BLOCK_DIM * 4;
     U32 sw = strideW * UNROLL_IC_BLOCK_DIM * 4;
     U32 dw = dilateW * UNROLL_IC_BLOCK_DIM * 4;
-    U32 wSize = 0, store = 0, ocSize = 0, icSize = 0, hwSize = 0;
+    I32 wSize = 0, store = 0, ocSize = 0, icSize = 0, hwSize = 0;
     I32 ih_idx = 0;
     kernel_func kernel[3][3] = {{avx2_conv_kernel_1x8, avx2_conv_kernel_2x8, avx2_conv_kernel_3x8},
         {avx2_conv_kernel_1x16, avx2_conv_kernel_2x16, avx2_conv_kernel_3x16},

@@ -1416,7 +1416,7 @@ EE mmm_avx2_fp32(
     U32 blockNNum = N / 24 + (N % 8 != 0) + (N % 24 > 4);
 
 #ifdef _USE_OPENMP
-    #pragma omp parallel num_threads(OMP_NUM_THREADS)
+#pragma omp parallel num_threads(OMP_NUM_THREADS)
     {
 #endif
         U32 blockSizeM = 0, blockSizeK = 0;
@@ -1426,7 +1426,7 @@ EE mmm_avx2_fp32(
                 blockSizeM = UNI_MIN(BOLCK_M_DIM, M - j);
                 U32 blockMNum = blockSizeM / 4 + (blockSizeM % 4 + 1) / 2;
 #ifdef _USE_OPENMP
-                #pragma omp for
+#pragma omp for
 #endif
                 for (I32 mIdx = 0; mIdx < blockMNum; ++mIdx) {
                     U32 m = mIdx * 4 - ((mIdx * 4) > blockSizeM) * 2;
@@ -1439,17 +1439,15 @@ EE mmm_avx2_fp32(
                     F32 *curB = packB + k * N;
                     F32 *curA = packA + m * blockSizeK;
                     if (transposeA) {
-                        matrix2_trans(
-                            unrollSizeM, blockSizeK, M, matrix1 + (j + m) + k * M, curA);
+                        matrix2_trans(unrollSizeM, blockSizeK, M, matrix1 + (j + m) + k * M, curA);
                     } else {
-                        matrix1_trans(
-                            unrollSizeM, blockSizeK, K, matrix1 + k + (j + m) * K, curA);
+                        matrix1_trans(unrollSizeM, blockSizeK, K, matrix1 + k + (j + m) * K, curA);
                     }
                     kernel[unrollSizeM >> 1][(blockSizeN >> 3) + (blockSizeN > 3)](
                         unrollSizeM, blockSizeN, blockSizeK, curA, curB, result + (m + j) * N, N);
                 }
 #ifdef _USE_OPENMP
-                #pragma omp for
+#pragma omp for
 #endif
                 for (int mnIdx = blockMNum; mnIdx < blockNNum * blockMNum; ++mnIdx) {
                     I32 nIdx = mnIdx / blockMNum;
@@ -1468,8 +1466,9 @@ EE mmm_avx2_fp32(
                     U32 m = mIdx * 4 - ((mIdx * 4) > blockSizeM) * 2;
                     U32 unrollSizeM = UNI_MIN(UNROLL_M, blockSizeM - m);
                     unrollSizeM = unrollMSize[unrollSizeM >> 1];
-                    kernel[unrollSizeM >> 1][(blockSizeN >> 3) + (blockSizeN > 3)](
-                        unrollSizeM, blockSizeN, blockSizeK, packA + m * blockSizeK, curB, result + (m + j) * N + n, N);
+                    kernel[unrollSizeM >> 1][(blockSizeN >> 3) + (blockSizeN > 3)](unrollSizeM,
+                        blockSizeN, blockSizeK, packA + m * blockSizeK, curB,
+                        result + (m + j) * N + n, N);
                 }
             }
         }

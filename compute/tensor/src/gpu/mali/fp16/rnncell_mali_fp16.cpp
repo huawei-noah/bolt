@@ -144,8 +144,8 @@ inline EE rnncell_core_mali_fp16(GCLHandle_t handle,
         sprintf(kernelname, "conv_direct_spe_fwhs1_nobias_%d", item_c);
         gs1 = filterRow;
         CHECK_STATUS(gcl_create_kernel(handle, kernelname, &kernel));
-        CHECK_STATUS(gcl_set_kernelArgs(kernel, 1, 1, ic_str, 0, 0, 1, 1, 0, 0, filterRow, 0, 0, gs1, 1,
-            outbuf, fltbuf, biasMem, output->mem));
+        CHECK_STATUS(gcl_set_kernelArgs(kernel, 1, 1, ic_str, 0, 0, 1, 1, 0, 0, filterRow, 0, 0,
+            gs1, 1, outbuf, fltbuf, biasMem, output->mem));
         gcl_set_kernelVec(handle, kernel, dim, &gs1, &ls1, kernelname);
 #ifdef _DEBUG
         CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, &gs1, &ls1, kernelname));

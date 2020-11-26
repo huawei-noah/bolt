@@ -119,8 +119,8 @@ EE convolution_fp32(TensorDesc inputDesc,
                 bias, tmpBytes, tmp, outputDesc, output, activationDesc);
             break;
         case CONVOLUTION_ALGORITHM_POINTWISE:
-            ret = convolution_1x1_direct(inputDesc, input, filterDesc, filter, convParamSpec,
-                bias, tmpBytes, tmp, outputDesc, output, activationDesc);
+            ret = convolution_1x1_direct(inputDesc, input, filterDesc, filter, convParamSpec, bias,
+                tmpBytes, tmp, outputDesc, output, activationDesc);
             break;
         case CONVOLUTION_ALGORITHM_GEMM_ICNCHW:
             ret = convolution_direct_nchw(inputDesc, input, filterDesc, filter, convParamSpec,

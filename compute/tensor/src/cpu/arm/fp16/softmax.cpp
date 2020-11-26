@@ -23,7 +23,7 @@ void softmax_lastAxis_fp16(const F16 *input, I32 loopOuter, I32 loops, F16 *outp
 
         float16x8_t max_v, sub_v, sum_v, tmp_v;
         F32 max_s, tmp_s;
-        max_s = array_max_f16(inputPtr, loops);
+        max_s = array_max_value_f16(inputPtr, loops);
         max_v = vdupq_n_f16(max_s);
         sum_v = vdupq_n_f16(0);
 

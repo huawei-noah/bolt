@@ -98,7 +98,6 @@ int fullyConnectedTest(int argc, char *argv[], DataType dt)
     U8 *output_gpu = NULL;
 
     std::shared_ptr<GCLHandle> handleSharedPtr = OCLContext::getInstance().handle;
-    ;
     GCLHandle_t handle = handleSharedPtr.get();
     std::vector<GCLKernelInfo> kernelVec;
     handle->kernelVec = &kernelVec;

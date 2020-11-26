@@ -36,6 +36,9 @@ typedef void (*ArraySquareAndAddFunction)(
     DataType dt, const void *inputA, const void *inputB, void *output, I32 len);
 typedef EE (*ArrayActivationFunction)(
     DataType dt, void *input, U32 len, ActivationParamSpec activationDesc, void *output);
+typedef F32 (*ArrayMaxValueFunction)(DataType dt, const void *data, I32 len);
+typedef void (*ArrayMaxFunction)(
+    DataType dt, const void *inputA, const void *inputB, void *output, I32 len);
 
 inline ArrayScaleFunction get_array_scale_function(Arch arch)
 {
@@ -222,6 +225,54 @@ inline ArrayActivationFunction get_array_activation_function(Arch arch)
 #ifdef _USE_X86
     } else if (IS_X86_AVX2(arch)) {
         func = array_activation_x86;
+        find = true;
+#endif
+    }
+    CHECK_REQUIREMENT(find);
+    return func;
+}
+
+inline ArrayMaxValueFunction get_array_max_value_function(Arch arch)
+{
+    ArrayMaxValueFunction func;
+    bool find = false;
+    if (IS_GENERAL(arch)) {
+#ifdef _USE_GENERAL
+        func = array_max_value_general;
+        find = true;
+#endif
+#ifdef _USE_NEON
+    } else if (IS_ARM(arch)) {
+        func = array_max_value_arm;
+        find = true;
+#endif
+#ifdef _USE_X86
+    } else if (IS_X86_AVX2(arch)) {
+        func = array_max_value_x86;
+        find = true;
+#endif
+    }
+    CHECK_REQUIREMENT(find);
+    return func;
+}
+
+inline ArrayMaxFunction get_array_max_function(Arch arch)
+{
+    ArrayMaxFunction func;
+    bool find = false;
+    if (IS_GENERAL(arch)) {
+#ifdef _USE_GENERAL
+        func = array_max_general;
+        find = true;
+#endif
+#ifdef _USE_NEON
+    } else if (IS_ARM(arch)) {
+        func = array_max_arm;
+        find = true;
+#endif
+#ifdef _USE_X86
+    } else if (IS_X86_AVX2(arch)) {
+        func = array_max_x86;
         find = true;
 #endif
     }

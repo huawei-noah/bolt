@@ -40,7 +40,7 @@ while true ; do
     esac
 done
 
-exeIsValid(){
+checkExe(){
     if type $1 &> /dev/null;
     then
         return 1
@@ -49,119 +49,77 @@ exeIsValid(){
     fi
 }
 
+exeIsValid(){
+    checkExe $1
+    if [ $? == 0 ] ; then
+        echo "[ERROR] please install $1 tools and set shell environment PATH to find it"
+        exit 1
+    fi
+}
+
 exeIsValid wget
-if [ $? == 0 ] ; then
-    echo "[ERROR] please install wget tools and set shell environment PATH to find it"
-    exit 1
-fi
-
-exeIsValid git
-if [ $? == 0 ] ; then
-    echo "[ERROR] please install git tools and set shell environment PATH to find it"
-    exit 1
-fi
-
+exeIsValid autoreconf
+exeIsValid libtoolize
+exeIsValid autoreconf
 exeIsValid unzip
-if [ $? == 0 ] ; then
-    echo "[ERROR] please install unzip tools and set shell environment PATH to find it"
-    exit 1
-fi
-
 exeIsValid tar
-if [ $? == 0 ] ; then
-    echo "[ERROR] please install tar tools and set shell environment PATH to find it"
-    exit 1
-fi
+exeIsValid make
 
 configure_flags=""
 dynamic_library_suffix="so"
 if [ "${compiler_arch}" == "arm_llvm" ] ; then
-    exeIsValid aarch64-linux-android21-clang && exeIsValid aarch64-linux-android21-clang++
-    if [ $? == 0 ] ; then
-        echo "[ERROR] please install android ndk aarch64-linux-android21-clang++ compiler and set shell environment PATH to find it"
-        exit 1
-    fi
     export CC=aarch64-linux-android21-clang
     export CXX=aarch64-linux-android21-clang++
     export AR=aarch64-linux-android-ar
     configure_flags="--host=arm-linux --enable-neon "
 fi
 if [ "${compiler_arch}" == "arm_gnu" ] ; then
-    exeIsValid aarch64-linux-gnu-gcc && exeIsValid aarch64-linux-gnu-g++
-    if [ $? == 0 ] ; then
-        echo "[ERROR] please install GNU gcc ARM compiler and set shell environment PATH to find it"
-        exit 1
-    fi
     export CC=aarch64-linux-gnu-gcc
     export CXX=aarch64-linux-gnu-g++
     export AR=aarch64-linux-gnu-ar
     configure_flags="--host=arm-linux "
 fi
 if [ "${compiler_arch}" == "arm_himix100" ] ; then
-    exeIsValid arm-himix100-linux-gcc && exeIsValid arm-himix100-linux-g++
-    if [ $? == 0 ] ; then
-        echo "[ERROR] please install Himix100 GNU gcc ARM compiler and set shell environment PATH to find it"
-        exit 1
-    fi
     export CC=arm-himix100-linux-gcc
     export CXX=arm-himix100-linux-g++
     export AR=arm-himix100-linux-ar
     configure_flags="--host=arm-linux "
 fi
 if [ "${compiler_arch}" == "arm_ndkv7" ] ; then
-    exeIsValid armv7a-linux-androideabi16-clang && exeIsValid armv7a-linux-androideabi16-clang++
-    if [ $? == 0 ] ; then
-        echo "[ERROR] please install android ndk armv7a-linux-androideabi19-clang++ compiler and set shell environment PATH to find it"
-        exit 1
-    fi
     export CC=armv7a-linux-androideabi16-clang
     export CXX=armv7a-linux-androideabi16-clang++
     export AR=arm-linux-androideabi-ar
     configure_flags="--host=arm-linux "
 fi
 if [ "${compiler_arch}" == "x86_gnu" ] ; then
-    exeIsValid gcc && exeIsValid g++
-    if [ $? == 0 ] ; then
-        echo "[ERROR] please install x86 gnu compiler and set shell environment PATH to find it"
-        exit 1
-    fi
     export CC=gcc
     export CXX=g++
     export AR=ar
 fi
 if [ "${compiler_arch}" == "x86_ndk" ] ; then
-    exeIsValid x86_64-linux-android21-clang && exeIsValid x86_64-linux-android21-clang++
-    if [ $? == 0 ] ; then
-        echo "[ERROR] please install android ndk x86_64-linux-android21-clang++ compiler and set shell environment PATH to find it"
-        exit 1
-    fi
     export CC=x86_64-linux-android21-clang
     export CXX=x86_64-linux-android21-clang++
     export AR=x86_64-linux-android-ar
     configure_flags="--host=x86-linux"
 fi
 if [ "${compiler_arch}" == "arm_ios" ] ; then
-    exeIsValid arm-apple-darwin11-clang && exeIsValid arm-apple-darwin11-clang++
-    if [ $? == 0 ] ; then
-        echo "[ERROR] please install ios arm-apple-darwin11-clang++ compiler and set shell environment PATH to find it"
-        exit 1
-    fi
     export CC=arm-apple-darwin11-clang
     export CXX=arm-apple-darwin11-clang++
     export AR=arm-apple-darwin11-ar
     configure_flags="--host=arm-apple-darwin11 "
     dynamic_library_suffix="dylib"
 fi
+exeIsValid ${CC}
+exeIsValid ${CXX}
+exeIsValid ${AR}
 
-script_abs=$(readlink -f "$0")
-script_dir=$(dirname $script_abs)
+script_dir=$(cd `dirname $0` && pwd)
 current_dir=${PWD}
 
 if [ ! -d "${script_dir}/sources" ]; then
     mkdir ${script_dir}/sources
 fi
 
-rm -rf ${script_dir}/${compiler_arch}
 mkdir ${script_dir}/${compiler_arch}
 env_file="${script_dir}/${compiler_arch}.sh"
 PROTOC_ROOT=${script_dir}/${compiler_arch}/protoc
@@ -179,30 +137,33 @@ rm -rf ${PROTOC_ROOT}
 mkdir ${PROTOC_ROOT}
 cd ${PROTOC_ROOT}
 if [ ! -f "${script_dir}/sources/protoc-3.1.0-linux-x86_64.zip" ]; then
-    wget https://github.com/protocolbuffers/protobuf/releases/download/v3.1.0/protoc-3.1.0-linux-x86_64.zip || exit 1
+    wget --no-check-certificate https://github.com/protocolbuffers/protobuf/releases/download/v3.1.0/protoc-3.1.0-linux-x86_64.zip || exit 1
     cp protoc-3.1.0-linux-x86_64.zip ${script_dir}/sources/
 else
     cp ${script_dir}/sources/protoc-3.1.0-linux-x86_64.zip .
 fi
-unzip protoc-3.1.0-linux-x86_64.zip
+unzip protoc-3.1.0-linux-x86_64.zip || exit 1
 rm protoc-3.1.0-linux-x86_64.zip
 export PATH=${PROTOC_ROOT}/bin:$PATH
 
 # download and build protobuf
 echo "[INFO] install protobuf in ${script_dir}..."
-rm -rf ${Protobuf_ROOT}
 mkdir ${Protobuf_ROOT}
 cd ${Protobuf_ROOT}
-if [ ! -f "${script_dir}/sources/v3.1.0.tar.gz" ]; then
-    wget https://github.com/protocolbuffers/protobuf/archive/v3.1.0.tar.gz || exit 1
-    cp v3.1.0.tar.gz ${script_dir}/sources/
-else
-    cp ${script_dir}/sources/v3.1.0.tar.gz .
+if [ ! -d "./protobuf-3.1.0" ]; then
+    if [ ! -f "${script_dir}/sources/v3.1.0.tar.gz" ]; then
+        wget --no-check-certificate https://github.com/protocolbuffers/protobuf/archive/v3.1.0.tar.gz || exit 1
+        cp v3.1.0.tar.gz ${script_dir}/sources/
+    else
+        cp ${script_dir}/sources/v3.1.0.tar.gz .
+    fi
+    tar xzf v3.1.0.tar.gz
 fi
-tar xzf v3.1.0.tar.gz
 cd protobuf-3.1.0
 if [ ! -f "./configure" ]; then
-    ./autogen.sh || (echo "./autogen.sh failed for protobuf, If it is related to curl for download, you can add -k parameter for curl in autogen.sh"; exit 1) ;
+    cp ../../../protobuf-3.1.0_autogen.sh ./autogen.sh
+    chmod +x ./autogen.sh
+    ./autogen.sh || exit 1
 fi
 ./configure ${configure_flags} --with-protoc=${PROTOC_ROOT}/bin/protoc\
             --prefix=${Protobuf_ROOT}
@@ -214,16 +175,13 @@ rm -rf v3.1.0.tar.gz protobuf-3.1.0
 
 # download flatbuffers header file
 echo "[INFO] install flatbuffers in ${script_dir}..."
-rm -rf ${FlatBuffers_ROOT}
 mkdir ${FlatBuffers_ROOT}
 cd ${FlatBuffers_ROOT}
 if [ ! -d "${script_dir}/sources/flatbuffers" ]; then
-    git init
-    git remote add -f origin https://github.com/google/flatbuffers || exit 1
-    git config core.sparsecheckout true
-    echo "include" >> .git/info/sparse-checkout
-    git pull origin master || exit 1
-    rm -rf .git*
+    wget --no-check-certificate https://github.com/google/flatbuffers/archive/v1.12.0.zip || exit 1
+    unzip v1.12.0.zip || exit 1
+    cp -r flatbuffers-1.12.0/include .
+    rm -rf v1.12.0.zip flatbuffers-1.12.0 
     cp -r ../flatbuffers ${script_dir}/sources/
 else
     cp -r ${script_dir}/sources/flatbuffers/* .
@@ -231,18 +189,15 @@ fi
 
 # download tensorflow-lite header file
 echo "[INFO] install TFLite in ${script_dir}..."
-rm -rf ${TFLite_ROOT}
 mkdir ${TFLite_ROOT}
 cd ${TFLite_ROOT}
 if [ ! -d "${script_dir}/sources/tflite" ]; then
+    wget --no-check-certificate https://raw.githubusercontent.com/tensorflow/tensorflow/master/tensorflow/lite/schema/schema_generated.h || exit 1
     mkdir include
-    cd include
-    git init
-    git remote add -f origin https://github.com/tensorflow/tensorflow || exit 1
-    git config core.sparsecheckout true
-    echo "tensorflow/lite/schema/schema_generated.h" >> .git/info/sparse-checkout
-    git pull origin master || exit 1
-    rm -rf .git*
+    mkdir include/tensorflow
+    mkdir include/tensorflow/lite
+    mkdir include/tensorflow/lite/schema
+    mv schema_generated.h include/tensorflow/lite/schema/schema_generated.h
     cp -r ../../tflite ${script_dir}/sources/
 else
     cp -r ${script_dir}/sources/tflite/* .
@@ -251,24 +206,25 @@ fi
 # download and install OpenCL
 if [ "${compiler_arch}" == "arm_llvm" ] ; then
     echo "[INFO] install opencl in ${script_dir}..."
-    rm -rf ${OpenCL_ROOT}
     mkdir ${OpenCL_ROOT}
     cd ${OpenCL_ROOT}
     if [ ! -d "${script_dir}/sources/opencl" ]; then
+        wget --no-check-certificate https://github.com/KhronosGroup/OpenCL-Headers/archive/v2020.06.16.zip || exit 1
+        unzip v2020.06.16.zip || exit 1
         mkdir include
-        cd include 
-        git init
-        git remote add -f origin https://github.com/KhronosGroup/OpenCL-Headers || exit 1
-        git config core.sparsecheckout true
-        echo "CL" >> .git/info/sparse-checkout
-        git pull origin master || exit 1
-        rm -rf .git*
-        cd ..
-    
-        mkdir lib64
-        android_device=`adb devices | head -n 2 | tail -n 1 | awk '{print $1}'`
-        adb -s ${android_device} pull /vendor/lib64/libOpenCL.so lib64/
-        adb -s ${android_device} pull /vendor/lib64/egl/libGLES_mali.so lib64/
+        cp -r OpenCL-Headers-2020.06.16/CL include/
+        rm -rf v2020.06.16.zip OpenCL-Headers-2020.06.16
+
+        checkExe adb
+        if [ $? == 1 ] ; then
+            array=($(adb devices | sed 's/\r//' | grep ".device$"))
+            android_device=${array[0]}
+            if [ "${android_device}" != "" ]; then
+                mkdir lib64
+                adb -s ${android_device} pull /vendor/lib64/libOpenCL.so lib64/
+                adb -s ${android_device} pull /vendor/lib64/egl/libGLES_mali.so lib64/
+            fi
+        fi
         cp -r ../opencl ${script_dir}/sources/
     else
         cp -r ${script_dir}/sources/opencl/* .
@@ -277,16 +233,17 @@ fi
 
 # download and build jpeg
 echo "[INFO] install jpeg in ${script_dir}..."
-rm -rf ${JPEG_ROOT}
 mkdir ${JPEG_ROOT}
 cd ${JPEG_ROOT}
-if [ ! -f "${script_dir}/sources/jpegsrc.v9c.tar.gz" ]; then
-    wget http://www.ijg.org/files/jpegsrc.v9c.tar.gz || exit 1
-    cp jpegsrc.v9c.tar.gz ${script_dir}/sources/
-else
-    cp ${script_dir}/sources/jpegsrc.v9c.tar.gz .
+if [ ! -d "./jpeg-9c" ]; then
+    if [ ! -f "${script_dir}/sources/jpegsrc.v9c.tar.gz" ]; then
+        wget --no-check-certificate http://www.ijg.org/files/jpegsrc.v9c.tar.gz || exit 1
+        cp jpegsrc.v9c.tar.gz ${script_dir}/sources/
+    else
+        cp ${script_dir}/sources/jpegsrc.v9c.tar.gz .
+    fi
+    tar xzf jpegsrc.v9c.tar.gz || exit 1
 fi
-tar xzf jpegsrc.v9c.tar.gz
 cd jpeg-9c
 if [ ! -f "./configure" ]; then
     ./autogen.sh || (echo "./autogen.sh failed for libjpeg"; exit 1) ;
@@ -299,16 +256,18 @@ rm -rf jpeg-9c jpegsrc.v9c.tar.gz
 
 # download and build jsoncpp
 echo "[INFO] install jsoncpp in ${script_dir}..."
-rm -rf ${JSONCPP_ROOT}
 mkdir ${JSONCPP_ROOT}
 cd ${JSONCPP_ROOT}
-if [ ! -f "${script_dir}/sources/jsoncpp-master.zip" ]; then
-    wget https://github.com/open-source-parsers/jsoncpp/archive/master.zip || exit 1
-    cp jsoncpp-master.zip ${script_dir}/sources/
-else
-    cp ${script_dir}/sources/jsoncpp-master.zip .
+if [ ! -d "./jsoncpp-master" ]; then
+    if [ ! -f "${script_dir}/sources/jsoncpp-master.zip" ]; then
+        wget --no-check-certificate https://github.com/open-source-parsers/jsoncpp/archive/master.zip || exit 1
+        mv master.zip jsoncpp-master.zip
+        cp jsoncpp-master.zip ${script_dir}/sources/
+    else
+        cp ${script_dir}/sources/jsoncpp-master.zip .
+    fi
+    unzip jsoncpp-master.zip || exit 1
 fi
-unzip jsoncpp-master.zip
 cd jsoncpp-master
 cp -r include ${JSONCPP_ROOT}/
 mkdir ${JSONCPP_ROOT}/lib
@@ -320,16 +279,17 @@ rm -rf jsoncpp-master*
 
 # download fftw
 echo "[INFO] install fftw in ${script_dir}..."
-rm -rf ${FFTW_ROOT}
 mkdir ${FFTW_ROOT}
 cd ${FFTW_ROOT}
-if [ ! -f "${script_dir}/sources/fftw-3.3.8.tar.gz" ]; then
-    wget http://www.fftw.org/fftw-3.3.8.tar.gz || exit 1
-    cp fftw-3.3.8.tar.gz ${script_dir}/sources/
-else
-    cp -r ${script_dir}/sources/fftw-3.3.8.tar.gz .
+if [ ! -d "./fftw-3.3.8" ]; then
+    if [ ! -f "${script_dir}/sources/fftw-3.3.8.tar.gz" ]; then
+        wget --no-check-certificate http://www.fftw.org/fftw-3.3.8.tar.gz || exit 1
+        cp fftw-3.3.8.tar.gz ${script_dir}/sources/
+    else
+        cp -r ${script_dir}/sources/fftw-3.3.8.tar.gz .
+    fi
+    tar xzf fftw-3.3.8.tar.gz || exit 1
 fi
-tar xzf fftw-3.3.8.tar.gz
 cd fftw-3.3.8
 ./configure ${configure_flags} --enable-shared=yes --enable-single --enable-fma --prefix=${FFTW_ROOT}
 make -j${build_threads} || exit 1
@@ -349,6 +309,17 @@ export FFTW_ROOT=${FFTW_ROOT}
 export PATH=\${Protobuf_ROOT}/bin:\$PATH
 export LD_LIBRARY_PATH=\${Protobuf_ROOT}/lib:\${OpenCL_ROOT}/lib64:\${JPEG_ROOT}/lib:\${JSONCPP_ROOT}/lib:\${FFTW_ROOT}/lib:\$LD_LIBRARY_PATH
 " > ${env_file}
+if [[ "${compiler_arch}" == "arm_llvm" && ! -d "${OpenCL_ROOT}/lib64" ]]; then
+    echo "
+echo \"[WARN] not successfully pull libOpenCL.so from android device.
+If you don't use ARM MALI GPU, you can skip this meessage.
+If you want to use ARM MALI GPU, you can run these commands to solve problem.
+    mkdir ${OpenCL_ROOT}/lib64
+    adb pull /vendor/lib64/libOpenCL.so ${OpenCL_ROOT}/lib64
+    adb pull /vendor/lib64/egl/libGLES_mali.so ${OpenCL_ROOT}/lib64
+\"" >> ${env_file}
+fi
+
 chmod a+x ${env_file}
 echo "[INFO] please source ${env_file} before use..."
 

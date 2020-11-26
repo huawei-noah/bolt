@@ -20,7 +20,7 @@ using namespace std;
 @interface ViewController ()<AVCaptureVideoDataOutputSampleBufferDelegate>
 
 @property (nonatomic,strong) UIImageView *imgView;
-@property (nonatomic,strong) UILabel *scoreLabel;
+@property (nonatomic,assign) IBOutlet UILabel *scoreLabel;
 @property (nonatomic,strong) AVCaptureVideoDataOutput *videoOutput;
 @property (nonatomic,strong) NSMutableArray *rgbDataArr;
 @property (nonatomic,strong) dispatch_queue_t queue;
@@ -42,7 +42,6 @@ using namespace std;
 
 @implementation ViewController
 
-
 - (void)viewDidLoad
 {
     [super viewDidLoad];
@@ -56,13 +55,6 @@ using namespace std;
     _transTypeArr=[NSArray arrayWithArray:[typeStr componentsSeparatedByString:@"\n"] ];
 
     [self setupAVCapture];
-
-    _scoreLabel=[[UILabel alloc]initWithFrame:CGRectMake(0, self.view.frame.size.height / 2 + 140, self.view.frame.size.width, 160)];
-    _scoreLabel.font=[UIFont boldSystemFontOfSize:20];
-    _scoreLabel.textColor=[UIColor blueColor];
-    _scoreLabel.textAlignment=NSTextAlignmentCenter;
-    _scoreLabel.numberOfLines=6;
-    [self.view addSubview:_scoreLabel];
     
     NSString *graphPathStr=[[NSBundle mainBundle]pathForResource:@"image_classification" ofType:@"prototxt"];
          
@@ -99,7 +91,7 @@ EE pixelProcess(std::map<std::string, std::shared_ptr<Tensor>> &inputs,
     std::vector<std::string> parameter = std::vector<std::string>())
 {
     // RGBA
-    unsigned char *myBuffer =(unsigned char *)((CpuMemory*)inputs["input:1"]->get_memory())->get_ptr();
+    unsigned char *myBuffer = (unsigned char *)((CpuMemory*)inputs["input:1"]->get_memory())->get_ptr();
 
     F32 *oneArr = (F32 *)((CpuMemory *)outputs["input:0"]->get_memory())->get_ptr();
 
@@ -127,7 +119,7 @@ EE postProcess(std::map<std::string, std::shared_ptr<Tensor>> &inputs,
     
     int *flowInferenceNodeOutput = (int *)((CpuMemory *)outputs[flowInferenceNodeOutputName]->get_memory())->get_ptr();
 
-    F32 *score1000 =(F32 *)((CpuMemory *)inputs[boltModelOutputName]->get_memory())->get_ptr();
+    F32 *score1000 = (F32 *)((CpuMemory *)inputs[boltModelOutputName]->get_memory())->get_ptr();
 
     for (int i = 0; i < topK; i++) {
         int max_index = 0;
@@ -211,7 +203,7 @@ std::map<std::string, std::shared_ptr<Tensor>> inputOutput(const unsigned char *
         std::string("image_classification"));
     double end = ut_time_ms();
     
-    int *top5 =(int *)((CpuMemory *)results[0].data["output"]->get_memory())->get_ptr();
+    int *top5 = (int *)((CpuMemory *)results[0].data["output"]->get_memory())->get_ptr();
     
     __weak typeof(self)weakSelf = self;
     dispatch_async(dispatch_get_main_queue(), ^{
@@ -250,7 +242,7 @@ std::map<std::string, std::shared_ptr<Tensor>> inputOutput(const unsigned char *
     self.queue=dispatch_queue_create("myQueue", NULL);
     [_videoOutput setSampleBufferDelegate:self queue:self.queue];
     AVCaptureVideoPreviewLayer *preLayer=[AVCaptureVideoPreviewLayer layerWithSession:session];
-    preLayer.frame=CGRectMake((self.view.frame.size.width-width)/2, (self.view.frame.size.height-height)/2-100, width, height);
+    preLayer.frame = CGRectMake((self.view.frame.size.width - width) / 2, 60, width, height);
     preLayer.videoGravity=AVLayerVideoGravityResizeAspectFill;
     [self.view.layer addSublayer:preLayer];
 

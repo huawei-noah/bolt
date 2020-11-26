@@ -46,8 +46,8 @@ int deconvolutionTest(int argc, char **argv, DataType dt)
     archInfo_org.arch = CPU_GENERAL;
     ActivationParamSpec activationDesc;
     activationDesc.mode = ACTIVATION_NULL;
-    ConvolutionParamSpec convParamSpec = createConvolutionParamSpec(group, fh, fw, stride, stride,
-        padding, padding, padding, padding, 1, 1, fn, Convolution_Deconvolution);
+    ConvolutionParamSpec convParamSpec = createConvolutionParamSpec(group, 1, fh, fw, 1, stride,
+        stride, 0, 0, padding, padding, padding, padding, 1, 1, 1, fn, Convolution_Deconvolution);
 
     TensorDesc outputDesc;
     TensorDesc inputDesc = tensor4df(dt, DF_NCHWC8, in, ic, ih, iw);

@@ -58,8 +58,8 @@ int main(int argc, char *argv[])
     pwFilterDesc = tensor4df(dt, DF_NCHW, oc, ic, 1, 1);
     dwBiasDesc = tensor1d(odt, ic);
     pwBiasDesc = tensor1d(odt, oc);
-    ConvolutionParamSpec convParamSpec = createConvolutionParamSpec(group, fh, fw, stride, stride,
-        padding, padding, padding, padding, 1, 1, fn, Convolution_Depthwise);
+    ConvolutionParamSpec convParamSpec = createConvolutionParamSpec(group, 1, fh, fw, 1, stride,
+        stride, 0, 0, padding, padding, padding, padding, 1, 1, 1, fn, Convolution_Depthwise);
 
     // setup input, filter, bias
     INT8 *input = (INT8 *)ut_input_v(in * ic * ih * iw, DT_I8, UT_INIT_RANDOM);

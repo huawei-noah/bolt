@@ -127,8 +127,7 @@ inline EE depthwise_pointwise_direct_core_mali_fp16(GCLHandle_t handle,
     U32 dimp = 3;
     CHECK_STATUS(gcl_create_kernel(handle, kernelname, &kernel));
     CHECK_STATUS(gcl_set_kernelArgs(kernel, th_str, thw_str, ic_str, th_off, tw_off, oh_str,
-        ohw_str, oh_off, ow_off, ow, oc, 1, 0, 0, gsp[0], gsp[1], 
-        tmp, pwFltbuf, pwBiasimg, outbuf));
+        ohw_str, oh_off, ow_off, ow, oc, 1, 0, 0, gsp[0], gsp[1], tmp, pwFltbuf, pwBiasimg, outbuf));
     gcl_set_kernelVec(handle, kernel, dimp, gsp, lsp, kernelname);
 
 #ifdef _DEBUG

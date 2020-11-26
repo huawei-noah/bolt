@@ -73,7 +73,7 @@ inline F32 array_var_f32(const F32 *data, I32 len, F32 mean)
 }
 
 // array max
-inline F32 array_max_f32(const F32 *data, I32 len)
+inline F32 array_max_value_f32(const F32 *data, I32 len)
 {
     F32 max_s = data[0];
     I32 i = 0;
@@ -363,6 +363,19 @@ inline void array_square_and_add_f32(const F32 *inputA, const F32 *inputB, F32 *
 
     for (; i < len; i++) {
         output[i] = inputA[i] + inputB[i] * inputB[i];
+    }
+}
+
+inline void array_max_f32(const F32 *inputA, const F32 *inputB, F32 *output, I32 len)
+{
+    I32 i = 0;
+    for (; i < len - 3; i += 4) {
+        float32x4_t a = vld1q_f32(inputA + i);
+        float32x4_t b = vld1q_f32(inputB + i);
+        vst1q_f32(output + i, vmaxq_f32(a, b));
+    }
+    for (; i < len; i++) {
+        output[i] = UNI_MAX(inputA[i], inputB[i]);
     }
 }
 

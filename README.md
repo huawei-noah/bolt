@@ -10,9 +10,9 @@ Bolt is a light-weight library for deep learning. Bolt, as a universal deploymen
 
 Generally, there are two steps to get started with bolt. It's quiet easy for users to quickly running bolt.
 
-1. Conversion: use **[X2bolt](model_tools/tools/X2bolt/X2bolt.cpp)** to convert your model from caffe,onnx,tflite or tensorflow to .bolt;
+1. Conversion: use **[X2bolt](../model_tools/tools/X2bolt/X2bolt.cpp)** to convert your model from caffe,onnx,tflite or tensorflow to .bolt;
 
-2. Inference: run **[benchmark](inference/examples/benchmark/benchmark.cpp)** with .bolt and data to get the inference result. 
+2. Inference: run **[benchmark](../inference/examples/benchmark/benchmark.cpp)** with .bolt and data to get the inference result. 
 
    For more details about the usage of [**X2bolt**](model_tools/tools/X2bolt/X2bolt.cpp) and [**benchmark**](inference/examples/benchmark/benchmark.cpp) tools,  see [docs/USER_HANDBOOK.md](docs/USER_HANDBOOK.md). 
 
@@ -36,8 +36,8 @@ Generally, there are two steps to get started with bolt. It's quiet easy for use
 
   | Application   | Models                                                       |
   | ------------- | ------------------------------------------------------------ |
-  | CV            | Squeezenet/Mobilenet_v1/Mobilenet_v2/Mobilenet_v3/Resnet50<br />/[Ghostnet]()/SSD/Yolov3/Pointnet/...etc. |
-  | NLP           | Bert/[TinyBert]()/Albert/Neural Machine Translation/Text To Speech<br />/Automatic Speech Recognition/...etc. |
+  | CV            | Squeezenet/Mobilenet_v1/Mobilenet_v2/Mobilenet_v3/Resnet50<br />/[Ghostnet](https://github.com/huawei-noah/ghostnet)/SSD/Yolov3/Pointnet/...etc. |
+  | NLP           | Bert/[TinyBert](https://github.com/huawei-noah/Pretrained-Language-Model/tree/master/TinyBERT)/Albert/Neural Machine Translation/Text To Speech<br />/Automatic Speech Recognition/...etc. |
   | More DL Tasks | ...                                                          |
 
   More models than these mentioned above are supported,  users are encouraged to further explore.

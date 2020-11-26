@@ -25,7 +25,7 @@ inline EE transformNCHWToNCHWCxNxWrapper(
         case 128:
             ret = transformNCHWToNCHWCxNx<128, N>(filterDesc, filterArray, ftmDesc, ftmArray);
             break;
-        case 8: 
+        case 8:
             ret = transformNCHWToNCHWCxNx<8, N>(filterDesc, filterArray, ftmDesc, ftmArray);
             break;
         case 1:
@@ -62,7 +62,7 @@ inline EE convolution_transform_filter_kernel_fp32(TensorDesc filterDesc,
     EE ret = SUCCESS;
     switch (ftmDataFormat) {
         case DF_NCHWCxN32: {
-        /*
+            /*
          *  NCHW => NCHWCxN32
          */
             *ftmDesc = tensor4df(fdt, ftmDataFormat, fn, fc, fh, fw);

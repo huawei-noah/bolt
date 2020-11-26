@@ -92,8 +92,8 @@ int depthwiseConvolutionTest(int argc, char *argv[], DataFormat filterDataFormat
     ow = (iw + padding * 2 - fw) / stride + 1;
     ActivationParamSpec dwActivationParamSpec;
     dwActivationParamSpec.mode = ACTIVATION_NULL;
-    ConvolutionParamSpec convParamSpec = createConvolutionParamSpec(group, fh, fw, stride, stride,
-        padding, padding, padding, padding, 1, 1, fn, Convolution_Depthwise);
+    ConvolutionParamSpec convParamSpec = createConvolutionParamSpec(group, 1, fh, fw, 1, stride,
+        stride, 0, 0, padding, padding, padding, padding, 1, 1, 1, fn, Convolution_Depthwise);
 
     U32 filterLen = fn * fc * fh * fw;
     U32 biasLen = oc;
@@ -105,7 +105,6 @@ int depthwiseConvolutionTest(int argc, char *argv[], DataFormat filterDataFormat
     U8 *bias_cpu = ut_input_v(biasLen, dt, UT_INIT_RANDOM);
 
     std::shared_ptr<GCLHandle> handleSharedPtr = OCLContext::getInstance().handle;
-    ;
     GCLHandle_t handle = handleSharedPtr.get();
     std::vector<GCLKernelInfo> kernelVec;
     handle->kernelVec = &kernelVec;

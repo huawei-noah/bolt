@@ -248,7 +248,7 @@ inline void array_power_f32(F32 *input, F32 *output, I32 len, F32 power)
     }
 }
 
-inline F32 array_max_f32(const F32 *data, I32 len)
+inline F32 array_max_value_f32(const F32 *data, I32 len)
 {
     F32 max_s = data[0];
     I32 i = 0;
@@ -358,4 +358,16 @@ inline void array_square_and_add_f32(const F32 *inputA, const F32 *inputB, F32 *
     }
 }
 
+inline void array_max_f32(const F32 *inputA, const F32 *inputB, F32 *output, I32 len)
+{
+    I32 i = 0;
+    for (; i < len - 7; i += 8) {
+        __m256 a = _mm256_loadu_ps(inputA + i);
+        __m256 b = _mm256_loadu_ps(inputB + i);
+        _mm256_storeu_ps(output + i, _mm256_max_ps(a, b));
+    }
+    for (; i < len; i++) {
+        output[i] = UNI_MAX(inputA[i], inputB[i]);
+    }
+}
 #endif  //CHEETAH_X86_FUNCTION_FP32_H

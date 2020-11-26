@@ -69,23 +69,17 @@ done
 exeIsValid(){
     if type $1 &> /dev/null;
     then
-        return 1
-    else
         return 0
+    else
+        echo "[ERROR] please install ${1} tools and set shell environment PATH to find it"
+        exit 1
     fi
 }
 
 exeIsValid cmake
-if [ $?  == 0 ] ; then
-    echo "[ERROR] please install cmake tools and set shell environment PATH to find it"
-    exit 1
-fi
+exeIsValid make
 
-script_abs=$(readlink -f "$0")
-script_dir=$(dirname $script_abs)
-
-
-export BOLT_ROOT=${script_dir}
+export BOLT_ROOT=$(cd `dirname $0` && pwd)
 echo "[INFO] build bolt in ${BOLT_ROOT}..."
 cd ${BOLT_ROOT}
 rm -rf build_${compiler_arch} install_${compiler_arch}
@@ -103,10 +97,6 @@ if [ ${skip} != true ] ; then
             -DBUILD_TEST=ON "
     if [ "${compiler_arch}" == "arm_gnu" ] ; then
         exeIsValid aarch64-linux-gnu-g++
-        if [ $? == 0 ] ; then
-            echo "[ERROR] please install ARM GNU gcc compiler and set shell environment PATH to find it"
-            exit 1
-        fi
         options="${options} \
             -DUSE_GNU_GCC=ON \
             -DUSE_LLVM_CLANG=OFF \
@@ -118,10 +108,6 @@ if [ ${skip} != true ] ; then
     fi
     if [ "${compiler_arch}" == "arm_llvm" ] ; then
         exeIsValid aarch64-linux-android21-clang++
-        if [ $? == 0 ] ; then
-            echo "[ERROR] please install android ndk aarch64-linux-android21-clang++ compiler and set shell environment PATH to find it"
-            exit 1
-        fi
         options="${options} \
             -DUSE_GNU_GCC=OFF \
             -DUSE_LLVM_CLANG=ON \
@@ -135,10 +121,6 @@ if [ ${skip} != true ] ; then
     fi
     if [ "${compiler_arch}" == "arm_himix100" ] ; then
         exeIsValid arm-himix100-linux-g++
-        if [ $? == 0 ] ; then
-            echo "[ERROR] please install Himix100 GNU gcc ARM compiler and set shell environment PATH to find it"
-            exit 1
-        fi
         options="${options} \
             -DUSE_GNU_GCC=ON \
             -DUSE_LLVM_CLANG=OFF \
@@ -155,10 +137,6 @@ if [ ${skip} != true ] ; then
     fi
     if [ "${compiler_arch}" == "arm_ndkv7" ] ; then
         exeIsValid armv7a-linux-androideabi19-clang++
-        if [ $? == 0 ] ; then
-            echo "[ERROR] please install android ndk armv7a-linux-androideabi19-clang++ compiler and set shell environment PATH to find it"
-            exit 1
-        fi
         options="${options} \
             -DUSE_GNU_GCC=OFF \
             -DUSE_LLVM_CLANG=ON \
@@ -177,10 +155,6 @@ if [ ${skip} != true ] ; then
     if [ "${compiler_arch}" == "x86_gnu" ] ; then
         export JNI_ROOT=/usr/lib/jvm/java-8-openjdk-amd64
         exeIsValid g++
-        if [ $? == 0 ] ; then
-            echo "[ERROR] please install X86 GNU compiler and set shell environment PATH to find it"
-            exit 1
-        fi
         options="${options} \
             -DUSE_GNU_GCC=ON \
             -DUSE_LLVM_CLANG=OFF \
@@ -199,10 +173,6 @@ if [ ${skip} != true ] ; then
     fi
     if [ "${compiler_arch}" == "x86_ndk" ] ; then
         exeIsValid x86_64-linux-android21-clang++
-        if [ $? == 0 ] ; then
-            echo "[ERROR] please install android ndk x86_64-linux-android21-clang++ compiler and set shell environment PATH to find it"
-            exit 1
-        fi
         options="${options} \
             -DUSE_GNU_GCC=OFF \
             -DUSE_LLVM_CLANG=ON \
@@ -221,10 +191,6 @@ if [ ${skip} != true ] ; then
     fi
     if [ "${compiler_arch}" == "arm_ios" ] ; then
         exeIsValid arm-apple-darwin11-clang++
-        if [ $? == 0 ] ; then
-            echo "[ERROR] please install ios arm-apple-darwin11-clang++ compiler and set shell environment PATH to find it"
-            exit 1
-        fi
         options="${options} \
             -DUSE_IOS_CLANG=ON \
             -DUSE_NEON=ON \
@@ -251,4 +217,7 @@ cd ..
 
 if [ "${compiler_arch}" == "arm_ios" ] ; then
     bash ./kit/iOS/setup_lib_iOS.sh
+fi
+if [[ "${compiler_arch}" == "arm_llvm" && "${llvm_gpu}" == "OFF" ]] ; then
+    bash ./kit/Android/setup_lib_Android.sh
 fi

@@ -526,6 +526,7 @@ private:
     TensorDesc filterDesc;
     TensorDesc filterDescExt;
     bool needTransInput;
+    U32 numChannels;
 
 protected:
     ForwardRunInfoMali runInfo;

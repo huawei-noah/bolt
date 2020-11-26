@@ -26,61 +26,82 @@
 #endif
 
 inline EE pooling_infer_output_size_cpu(
-    TensorDesc inputDesc, PoolingParamSpec poolingParamSpec, TensorDesc *outputDesc)
+    TensorDesc inputDesc, PoolingParamSpec p, TensorDesc *outputDesc)
 {
     if (nullptr == outputDesc) {
         CHECK_STATUS(NULL_POINTER);
     }
     DataType idt;
     DataFormat idf;
-    U32 in, ic, ih, iw;
-    CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    U32 strideH = poolingParamSpec.stride_h;
-    U32 strideW = poolingParamSpec.stride_w;
-    U32 paddingT = poolingParamSpec.padding_top;
-    U32 paddingB = poolingParamSpec.padding_bottom;
-    U32 paddingL = poolingParamSpec.padding_left;
-    U32 paddingR = poolingParamSpec.padding_right;
-    U32 kernelSizeH = poolingParamSpec.kernel_h;
-    U32 kernelSizeW = poolingParamSpec.kernel_w;
-    RoundMode rm = poolingParamSpec.rm;
-    U32 oh = 0, ow = 0;
+    U32 in, ic, it, ih, iw;
+    if (tensorIs4d(inputDesc)) {
+        CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+        it = 0;
+    } else if (tensorIs5d(inputDesc)) {
+        CHECK_STATUS(tensor5dGet(inputDesc, &idt, &idf, &in, &ic, &it, &ih, &iw));
+    } else {
+        CHECK_STATUS(NOT_SUPPORTED);
+        return NOT_SUPPORTED;
+    }
+    RoundMode rm = p.rm;
+    U32 ot = 0, oh = 0, ow = 0;
+    EE ret = SUCCESS;
     switch (rm) {
         case CEIL: {
-            oh = (U32)(ceil((double(ih + paddingT + paddingB - kernelSizeH) / strideH))) + 1;
-            ow = (U32)(ceil((double(iw + paddingL + paddingR - kernelSizeW) / strideW))) + 1;
+            ot = (U32)(ceil(
+                     (double(it + p.padding_before + p.padding_after - p.kernel_t) / p.stride_t))) +
+                1;
+            oh = (U32)(ceil(
+                     (double(ih + p.padding_top + p.padding_bottom - p.kernel_h) / p.stride_h))) +
+                1;
+            ow = (U32)(ceil(
+                     (double(iw + p.padding_left + p.padding_right - p.kernel_w) / p.stride_w))) +
+                1;
             break;
         }
         case FLOOR: {
-            oh = (U32)(floor((double(ih + paddingT + paddingB - kernelSizeH) / strideH))) + 1;
-            ow = (U32)(floor((double(iw + paddingL + paddingR - kernelSizeW) / strideW))) + 1;
+            ot = (U32)(floor(
+                     (double(it + p.padding_before + p.padding_after - p.kernel_t) / p.stride_t))) +
+                1;
+            oh = (U32)(floor(
+                     (double(ih + p.padding_top + p.padding_bottom - p.kernel_h) / p.stride_h))) +
+                1;
+            ow = (U32)(floor(
+                     (double(iw + p.padding_left + p.padding_right - p.kernel_w) / p.stride_w))) +
+                1;
             break;
         }
         default: {
-            CHECK_STATUS(NOT_SUPPORTED);
+            ret = NOT_SUPPORTED;
+            break;
         }
     }
-    *outputDesc = tensor4df(idt, idf, in, ic, oh, ow);
-    return SUCCESS;
+    if (tensorIs4d(inputDesc)) {
+        *outputDesc = tensor4df(idt, idf, in, ic, oh, ow);
+    } else if (tensorIs5d(inputDesc)) {
+        *outputDesc = tensor5df(idt, idf, in, ic, ot, oh, ow);
+    }
+    return ret;
 }
 
 EE pooling_infer_output_size(
     Tensor *inputTensor, PoolingParamSpec poolingParamSpec, Tensor *outputTensor, ArchInfo_t archInfo)
 {
-    if (inputTensor == nullptr) {
-        CHECK_STATUS(NULL_POINTER);
-    }
-    if (outputTensor == nullptr) {
+    if (inputTensor == nullptr || outputTensor == nullptr) {
         CHECK_STATUS(NULL_POINTER);
     }
     TensorDesc inputDesc = inputTensor->get_desc();
     TensorDesc outputDesc = outputTensor->get_desc();
-    EE ret = NOT_SUPPORTED;
-    if (0 == poolingParamSpec.kernel_h && 0 == poolingParamSpec.kernel_w) {  // Global pooling
-        CHECK_REQUIREMENT(4 == inputDesc.nDims);
-        poolingParamSpec.kernel_h = inputDesc.dims[1];
+    if (0 == poolingParamSpec.kernel_w) {
         poolingParamSpec.kernel_w = inputDesc.dims[0];
     }
+    if (0 == poolingParamSpec.kernel_h) {
+        poolingParamSpec.kernel_h = inputDesc.dims[1];
+    }
+    if (0 == poolingParamSpec.kernel_t) {
+        poolingParamSpec.kernel_t = inputDesc.dims[2];
+    }
+    EE ret = NOT_SUPPORTED;
     if (IS_MALI_GPU(archInfo->arch)) {
 #ifdef _USE_MALI
         GCLMemDesc gclmemInputDesc = ocl_get_desc(*inputTensor);
@@ -111,26 +132,38 @@ EE pooling(Tensor inputTensor,
     F32 scale[2] = {inputTensor.get_scale(), -1};
     void *tmp = get_ptr_from_tensor(tmpTensor, arch);
 
-    EE ret = NOT_SUPPORTED;
-    if (0 == poolingParamSpec.kernel_h && 0 == poolingParamSpec.kernel_w) {  // Global pooling
-        CHECK_REQUIREMENT(4 == inputDesc.nDims);
-        poolingParamSpec.kernel_h = inputDesc.dims[1];
+    if (0 == poolingParamSpec.kernel_w) {
         poolingParamSpec.kernel_w = inputDesc.dims[0];
+    }
+    if (0 == poolingParamSpec.kernel_h) {
+        poolingParamSpec.kernel_h = inputDesc.dims[1];
+    }
+    if (0 == poolingParamSpec.kernel_t) {
+        poolingParamSpec.kernel_t = inputDesc.dims[2];
     }
     TensorDesc inDescCPU = inputDesc;
     U8 *inputCPU = (U8 *)input;
     TensorDesc outDescCPU = outputDesc;
     U8 *outputCPU = (U8 *)output;
-    if (DF_NCHWC8 != inputDesc.df && !IS_MALI_GPU(arch)) {
-        U32 paddedC = (inputDesc.dims[2] + 7) / 8 * 8;
-        inDescCPU.dims[2] = paddedC;
+    if (DF_NCHWC8 != inputDesc.df && IS_CPU(arch)) {
+        int channelAxis = 0;
+        if (tensorIs4d(inputDesc)) {
+            channelAxis = 2;
+        } else if (tensorIs5d(inputDesc)) {
+            channelAxis = 3;
+        } else {
+            return NOT_SUPPORTED;
+        }
+        U32 paddedC = (inputDesc.dims[channelAxis] + 7) / 8 * 8;
+        inDescCPU.dims[channelAxis] = paddedC;
         inDescCPU.df = DF_NCHWC8;
-        outDescCPU.dims[2] = paddedC;
+        outDescCPU.dims[channelAxis] = paddedC;
         outDescCPU.df = DF_NCHWC8;
         inputCPU = (U8 *)tmp;
         outputCPU = inputCPU + tensorNumBytes(inDescCPU);
         transformNCHWToNCHWC8(inputDesc, input, inDescCPU, inputCPU);
     }
+    EE ret = NOT_SUPPORTED;
     if (IS_GENERAL(arch)) {
 #ifdef _USE_GENERAL
         ret = pooling_general(inDescCPU, inputCPU, poolingParamSpec, outDescCPU, outputCPU);
@@ -150,7 +183,7 @@ EE pooling(Tensor inputTensor,
             (GCLMem_t)output);
 #endif
     }
-    if (DF_NCHWC8 != outputDesc.df && !IS_MALI_GPU(arch)) {
+    if (DF_NCHWC8 != outputDesc.df && IS_CPU(arch)) {
         transformToNCHW(outDescCPU, outputCPU, outputDesc, output);
     }
     outputTensor.set_scale(scale[1]);
@@ -172,14 +205,22 @@ EE pooling_infer_forward_tmp_bytes(
 #endif
     } else {
         *bytes = 0;
+        ret = SUCCESS;
         if (DF_NCHW == inputDesc.df) {
-            U32 paddedC = (inputDesc.dims[2] + 7) / 8 * 8;
+            int channelAxis = 0;
+            if (tensorIs4d(inputDesc)) {
+                channelAxis = 2;
+            } else if (tensorIs5d(inputDesc)) {
+                channelAxis = 3;
+            } else {
+                ret = NOT_SUPPORTED;
+            }
+            U32 paddedC = (inputDesc.dims[channelAxis] + 7) / 8 * 8;
             TensorDesc outputDesc = outputTensor.get_desc();
-            inputDesc.dims[2] = paddedC;
-            outputDesc.dims[2] = paddedC;
+            inputDesc.dims[channelAxis] = paddedC;
+            outputDesc.dims[channelAxis] = paddedC;
             *bytes = tensorNumBytes(inputDesc) + tensorNumBytes(outputDesc);
         }
-        ret = SUCCESS;
     }
     return ret;
 }

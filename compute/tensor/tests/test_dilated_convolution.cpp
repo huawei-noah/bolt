@@ -54,8 +54,8 @@ int dilatedConvolutionTest(int argc, char **argv, DataType dt)
     TensorDesc inputDesc = tensor4df(dt, DF_NCHWC8, in, ic, ih, iw);
     TensorDesc filterDesc = tensor4df(dt, DF_NCHW, oc, ic, fh, fw);
     TensorDesc biasDesc = tensor1d(dt, oc);
-    ConvolutionParamSpec convParamSpec = createConvolutionParamSpec(group, fh, fw, stride, stride,
-        padding, padding, padding, padding, rate, rate, fn, Convolution_Dilation);
+    ConvolutionParamSpec convParamSpec = createConvolutionParamSpec(group, 1, fh, fw, 1, stride,
+        stride, 0, 0, padding, padding, padding, padding, 1, rate, rate, fn, Convolution_Dilation);
 
     // setup input, filter, bias
     U8 *input = ut_input_v(in * ic * ih * iw, dt, UT_INIT_RANDOM);

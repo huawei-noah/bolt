@@ -36,6 +36,8 @@ static EE reduction_kernel(TensorDesc inputDesc,
     ArrayAddFunction add_func = get_array_add_function(arch);
     ArraySquareAndAddFunction square_and_add_func = get_array_square_and_add_function(arch);
     ArrayScaleFunction scale_func = get_array_scale_function(arch);
+    ArrayMaxValueFunction max_value_func = get_array_max_value_function(arch);
+    ArrayMaxFunction max_func = get_array_max_function(arch);
 
     if (axis < 0) {
         axis = inputDesc.nDims + axis;
@@ -73,7 +75,10 @@ static EE reduction_kernel(TensorDesc inputDesc,
                     output[i] = sqrt(tmpValue);
                     break;
                 case REDUCTION_SCALAR_PRODUCT:
-                    tmpValue = var_func(inputDesc.dt, array, len, 0);
+                    output[i] = var_func(inputDesc.dt, array, len, 0);
+                    break;
+                case REDUCTION_MAX:
+                    output[i] = max_value_func(inputDesc.dt, array, len);
                     break;
                 default:
                     return NOT_SUPPORTED;
@@ -83,30 +88,30 @@ static EE reduction_kernel(TensorDesc inputDesc,
             for (U32 j = 0; j < maskLen; j += len) {
                 U32 axisIndex = j / len;
                 U32 outputIndex = (i * axisDim + axisIndex) * loopInner;
-                if (reductionMode == REDUCTION_SUM || reductionMode == REDUCTION_MEAN ||
-                    reductionMode == REDUCTION_SCALAR_PRODUCT) {
-                    memset(output + outputIndex, 0, loopInner * bytesOf(inputDesc.dt));
-                } else {
-                    return NOT_SUPPORTED;
-                }
+                auto ptr2 = output + outputIndex;
                 U32 count = 0;
                 for (U32 k = 0; k < len; k++) {
                     if (mask == nullptr || (mask != nullptr && mask[j + k] == 1)) {
-                        if (reductionMode == REDUCTION_SUM || reductionMode == REDUCTION_MEAN) {
-                            add_func(inputDesc.dt, output + outputIndex,
-                                &input[(i * len + k) * loopInner], output + outputIndex, loopInner);
+                        auto ptr1 = &input[(i * len + k) * loopInner];
+                        if (count == 0) {
+                            memcpy(ptr2, ptr1, loopInner * bytesOf(inputDesc.dt));
                             count++;
+                            continue;
+                        }
+                        if (reductionMode == REDUCTION_SUM || reductionMode == REDUCTION_MEAN) {
+                            add_func(inputDesc.dt, ptr2, ptr1, ptr2, loopInner);
                         } else if (reductionMode == REDUCTION_SCALAR_PRODUCT) {
-                            square_and_add_func(inputDesc.dt, output + outputIndex,
-                                &input[(i * len + k) * loopInner], output + outputIndex, loopInner);
+                            square_and_add_func(inputDesc.dt, ptr2, ptr1, ptr2, loopInner);
+                        } else if (reductionMode == REDUCTION_MAX) {
+                            max_func(inputDesc.dt, ptr2, ptr1, ptr2, loopInner);
                         } else {
                             return NOT_SUPPORTED;
                         }
+                        count++;
                     }
                 }
                 if (reductionMode == REDUCTION_MEAN) {
-                    scale_func(inputDesc.dt, output + outputIndex, output + outputIndex, loopInner,
-                        1.0 / count, 0);
+                    scale_func(inputDesc.dt, ptr2, ptr2, loopInner, 1.0 / count, 0);
                 }
             }
         }

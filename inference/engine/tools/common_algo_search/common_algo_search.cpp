@@ -18,7 +18,7 @@
 
 int convolutionCPUFloatAlgorithmSearch(Arch arch, DataType dt, std::string path)
 {
-    TensorDesc inputDesc, filterDesc, outputDesc;
+    TensorDesc inputDesc, filterDesc;
     ConvolutionPolicy policy = CONVOLUTION_TUNNING;
     ActivationParamSpec activationDesc;
     activationDesc.mode = ACTIVATION_RELU;
@@ -63,7 +63,6 @@ int convolutionCPUFloatAlgorithmSearch(Arch arch, DataType dt, std::string path)
                             Tensor outputTensor;
                             Tensor filterTensor;
                             inputTensor.resize(inputDesc);
-                            outputTensor.resize(outputDesc);
                             filterTensor.resize(filterDesc);
                             CHECK_STATUS(convolution_infer_output_size(&inputTensor, filterTensor,
                                 convParamSpec, &outputTensor, dt, &archInfo));

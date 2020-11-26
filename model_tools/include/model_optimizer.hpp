@@ -127,7 +127,8 @@ public:
             this->opos.push_back(std::shared_ptr<OPOptimizer>(new DepthwisePointwiseOptimizer()));
         }
 
-        this->opos.push_back(std::shared_ptr<OPOptimizer>(new NoQuantLabelOptimizer(hiddenMode, clipVal)));
+        this->opos.push_back(
+            std::shared_ptr<OPOptimizer>(new NoQuantLabelOptimizer(hiddenMode, clipVal)));
     }
 
     void empty()

@@ -81,7 +81,6 @@ int preluTest(int argc, char **argv, DataType dt)
         weightDescGPU = tensor1d(dt, ic);
     }
     std::shared_ptr<GCLHandle> handleSharedPtr = OCLContext::getInstance().handle;
-    ;
     GCLHandle_t handle = handleSharedPtr.get();
     std::vector<GCLKernelInfo> kernelVec;
     handle->kernelVec = &kernelVec;
@@ -150,7 +149,6 @@ int preluTest(int argc, char **argv, DataType dt)
     CHECK_STATUS(gcl_run_kernelVec(handle));
 #endif
     outputDescGPU = outputTensor.get_desc();
-    ;
     CHECK_STATUS(ocl_get_output(handle, output, outputDescGPU, true));
     outputGPU = output->mapPtrArray.back();
 

@@ -1637,12 +1637,12 @@ EE convolution_1x1_direct(TensorDesc inputDesc,
 
 #ifdef _USE_OPENMP
     U32 alpha = (ohow + OMP_NUM_THREADS * BLOCK_HW_DIM - 1) / (OMP_NUM_THREADS * BLOCK_HW_DIM);
-    U32 block_hw_dim = (ohow + OMP_NUM_THREADS * alpha - 1 ) / (OMP_NUM_THREADS * alpha);
+    U32 block_hw_dim = (ohow + OMP_NUM_THREADS * alpha - 1) / (OMP_NUM_THREADS * alpha);
 #else
     U32 block_hw_dim = BLOCK_HW_DIM;
 #endif
 
-    U32 hwBlockNums = (ohow + block_hw_dim - 1 ) / block_hw_dim;
+    U32 hwBlockNums = (ohow + block_hw_dim - 1) / block_hw_dim;
 
     if ((paddingT != 0) || (paddingB != 0) || (paddingL != 0) || (paddingR != 0)) {
         __m256 zero = _mm256_set1_ps(0.);
@@ -1655,14 +1655,16 @@ EE convolution_1x1_direct(TensorDesc inputDesc,
             }
             case ACTIVATION_RELU: {
                 for (U32 ocb = 0; ocb < oc; ocb += 8) {
-                    _mm256_store_ps(btmp + ocb, _mm256_max_ps(zero, _mm256_loadu_ps(biasArray + ocb)));
+                    _mm256_store_ps(
+                        btmp + ocb, _mm256_max_ps(zero, _mm256_loadu_ps(biasArray + ocb)));
                 }
                 break;
             }
             case ACTIVATION_RELU6: {
                 __m256 six = _mm256_set1_ps(6.);
                 for (U32 ocb = 0; ocb < oc; ocb += 8) {
-                    _mm256_store_ps(btmp + ocb, _mm256_min_ps(six, _mm256_max_ps(zero, _mm256_loadu_ps(biasArray + ocb))));
+                    _mm256_store_ps(btmp + ocb,
+                        _mm256_min_ps(six, _mm256_max_ps(zero, _mm256_loadu_ps(biasArray + ocb))));
                 }
                 break;
             }
@@ -1692,8 +1694,8 @@ EE convolution_1x1_direct(TensorDesc inputDesc,
                         U32 ocSize = 0, ihwSize = 0;
                         for (U32 ocb = ocbb; ocb < ocbb + ocBlocking; ocb += ocSize) {
                             ocSize = UNI_MIN(ocbb + ocBlocking - ocb, unroll_oc);
-                            ocSize = unroll_oc_array[(ocSize>>3)-1];
-                            U32 unroll_hw = unroll_hw_array[(ocSize>>3)-1];
+                            ocSize = unroll_oc_array[(ocSize >> 3) - 1];
+                            U32 unroll_hw = unroll_hw_array[(ocSize >> 3) - 1];
                             const F32 *curB = biasArray + ocb;
                             const F32 *curW = filterArray + ocb * icPadding + icb * ocSize;
                             F32 *curO = outArray + ocb * oh * ow;
@@ -1705,7 +1707,8 @@ EE convolution_1x1_direct(TensorDesc inputDesc,
                                 }
                                 F32 *calI = curI + ihw * SIMDW;
                                 F32 *calO = curO + ihw * SIMDW;
-                                kernel[ihwSize>1][(ocSize>>3)-1](calI, curW, calO, curB, oStep, store, icSize, fStep);
+                                kernel[ihwSize > 1][(ocSize >> 3) - 1](
+                                    calI, curW, calO, curB, oStep, store, icSize, fStep);
                             }
                         }
                     }
@@ -1713,12 +1716,12 @@ EE convolution_1x1_direct(TensorDesc inputDesc,
 #ifdef _USE_OPENMP
 #pragma omp parallel for num_threads(OMP_NUM_THREADS)
 #endif
-                    for (I32 h = 0; h < oh; ++h) {
-                         U32 ocSize = 0, ihwSize = 0;
+                    for (U32 h = 0; h < oh; ++h) {
+                        U32 ocSize = 0, ihwSize = 0;
                         for (U32 ocb = ocbb; ocb < ocbb + ocBlocking; ocb += ocSize) {
                             ocSize = UNI_MIN(ocbb + ocBlocking - ocb, unroll_oc);
-                            ocSize = unroll_oc_array[(ocSize>>3)-1];
-                            U32 unroll_hw = unroll_hw_array[(ocSize>>3)-1];
+                            ocSize = unroll_oc_array[(ocSize >> 3) - 1];
+                            U32 unroll_hw = unroll_hw_array[(ocSize >> 3) - 1];
                             const F32 *curB = biasArray + ocb;
                             const F32 *curW = filterArray + ocb * icPadding + icb * ocSize;
                             F32 *curO = outArray + ocb * oh * ow;
@@ -1726,16 +1729,19 @@ EE convolution_1x1_direct(TensorDesc inputDesc,
                                 F32 *calI = curI + ((h - paddingT) * iw + w - paddingL) * SIMDW;
                                 F32 *calO = curO + (h * ow + w) * SIMDW;
                                 ihwSize = 1;
-                                if ((h < paddingT) || (h >= ih + paddingT) || (w < paddingL) || (w >= paddingL + iw)) {
+                                if ((h < paddingT) || (h >= ih + paddingT) || (w < paddingL) ||
+                                    (w >= paddingL + iw)) {
                                     for (U32 oci = 0; oci < ocSize; oci += SIMDW) {
-                                        _mm256_storeu_ps(calO + ohow * oci, _mm256_load_ps(btmp + oci + ocb));
+                                        _mm256_storeu_ps(
+                                            calO + ohow * oci, _mm256_load_ps(btmp + oci + ocb));
                                     }
                                     continue;
                                 }
                                 if ((iw - (w - paddingL)) >= unroll_hw) {
                                     ihwSize = unroll_hw;
                                 }
-                                kernel[ihwSize>1][(ocSize>>3)-1](calI, curW, calO, curB, oStep, store, icSize, fStep);
+                                kernel[ihwSize > 1][(ocSize >> 3) - 1](
+                                    calI, curW, calO, curB, oStep, store, icSize, fStep);
                             }
                         }
                     }

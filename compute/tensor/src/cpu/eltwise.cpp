@@ -71,8 +71,8 @@ EE eltwise_cpu(std::vector<TensorDesc> inputDesc,
                 ptr += tensorNumBytes(inputDesc[i]);
                 // Output from 1D-conv + 3D tensors
                 if (inputDesc[i].dims[0] == 1 && minDims == 3) {
-                    inputDesc[i] = tensor3df(inputDesc[i].dt, DF_NCHW,
-                        inputDesc[i].dims[3], inputDesc[i].dims[2], inputDesc[i].dims[1]);
+                    inputDesc[i] = tensor3df(inputDesc[i].dt, DF_NCHW, inputDesc[i].dims[3],
+                        inputDesc[i].dims[2], inputDesc[i].dims[1]);
                 }
             }
         }

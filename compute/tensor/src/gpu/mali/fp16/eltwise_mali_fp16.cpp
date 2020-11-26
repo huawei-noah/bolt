@@ -211,7 +211,7 @@ inline EE eltwise_core_mali_fp16(GCLHandle_t handle,
             U32 ic_non_max;
             tensorSelectGet(inputDesc[1 - arrayDimMax], NULL, NULL, NULL, &ic_non_max, NULL, NULL);
             char formatName[16] = "";
-            if(mf[1] == DF_NCHW) {
+            if (mf[1] == DF_NCHW) {
                 strcpy(formatName, "nchw_");
             }
             char broadAxis[16] = "";

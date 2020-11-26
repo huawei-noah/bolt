@@ -155,4 +155,33 @@ inline EE array_activation_x86(
     return result;
 }
 
+inline F32 array_max_value_x86(DataType dt, const void *data, I32 len)
+{
+    F32 result = 0;
+    switch (dt) {
+#ifdef _USE_FP32
+        case DT_F32:
+            result = array_max_value_f32((const F32 *)data, len);
+            break;
+#endif
+        default:
+            CHECK_STATUS(NOT_SUPPORTED);
+            break;
+    }
+    return result;
+}
+
+inline void array_max_x86(DataType dt, const void *inputA, const void *inputB, void *output, I32 len)
+{
+    switch (dt) {
+#ifdef _USE_FP32
+        case DT_F32:
+            array_max_f32((const F32 *)inputA, (const F32 *)inputB, (F32 *)output, len);
+            break;
+#endif
+        default:
+            CHECK_STATUS(NOT_SUPPORTED);
+            break;
+    }
+}
 #endif  // _H_X86_FUNCTIONS

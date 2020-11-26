@@ -56,8 +56,8 @@ int depthwiseConvolutionTest(int argc, char *argv[], bool isFusedWithPw, DataTyp
         pwFilterDesc = tensor4df(dt, DF_NCHW, oc, ic, 1, 1);
         pwBiasDesc = tensor1d(dt, oc);
     }
-    ConvolutionParamSpec p = createConvolutionParamSpec(group, fh, fw, stride, stride, padding,
-        padding, padding, padding, 1, 1, fn, Convolution_Depthwise);
+    ConvolutionParamSpec p = createConvolutionParamSpec(group, 1, fh, fw, 1, stride, stride, 0, 0,
+        padding, padding, padding, padding, 1, 1, 1, fn, Convolution_Depthwise);
 
     // setup input, filter, bias
     U8 *dwFilter = nullptr;

@@ -487,14 +487,15 @@ static EE deconvolution_stride_greater_one_and_kernel_equal_stride_cpu(TensorDes
     U32 fhNum = fh / convParamSpec.stride_h;
     U32 fwNum = fw / convParamSpec.stride_w;
 
-    TensorDesc tmpInputDesc = tensor5df(idt, DF_NCHW, in, ic / 8, ih, iw, 8);
-    TensorDesc finalInputDesc = tensor5df(idt, DF_NCHW, in, ih, iw, ic / 8, 8);
+    U32 inputBytes = tensorNumBytes(inputDesc);
+    U32 tmpInputDescDims[5] = {8, iw, ih, ic / 8, in};
+    U32 finalInputDescDims[5] = {8, ic / 8, iw, ih, in};
     U32 inputTransformDims[5] = {0, 2, 3, 1, 4};
     void *tmpInput = tmp;
-    tmp = (U8 *)tmp + tensorNumBytes(finalInputDesc);
-    tmpBytes -= tensorNumBytes(finalInputDesc);
-    CHECK_STATUS(array_transpose(tmpInputDesc.dt, tmpInputDesc.dims, input, finalInputDesc.dims,
-        tmpInput, inputTransformDims, tmpInputDesc.nDims));
+    tmp = (U8 *)tmp + inputBytes;
+    tmpBytes -= inputBytes;
+    CHECK_STATUS(array_transpose(
+        idt, tmpInputDescDims, input, finalInputDescDims, tmpInput, inputTransformDims, 5));
 
     TensorDesc matrixADesc = tensor2df(idt, DF_NORMAL, in * ihNum * iwNum, ic * fhNum * fwNum);
     TensorDesc matrixCDesc = tensor2df(odt, DF_NORMAL, in * ihNum * iwNum, oc * fh * fw);

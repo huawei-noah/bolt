@@ -712,7 +712,9 @@ protected:
     ParameterSpec adapt_Eltwise() override
     {
         ParameterSpec curPs;
+        initialization_zero(&curPs, sizeof(curPs));
         EltwiseParamSpec eltPs;
+        initialization_zero(&eltPs, sizeof(eltPs));
         ActivationMode activationMode = ACTIVATION_NULL;
         if (opCode == tflite::BuiltinOperator_ADD) {
             eltPs.elt_mode = ELTWISE_SUM;

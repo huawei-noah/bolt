@@ -49,8 +49,8 @@ int int8ConvolutionTest(int argc, char *argv[], DataType dt, DataType filterData
     activationDesc.value[0] = 0;
 
     TensorDesc inputDesc, filterDesc, outputDesc, biasDesc;
-    ConvolutionParamSpec p = createConvolutionParamSpec(group, fh, fw, stride, stride, padding,
-        padding, padding, padding, 1, 1, fn, Convolution_Depthwise_Pointwise);
+    ConvolutionParamSpec p = createConvolutionParamSpec(group, 1, fh, fw, 1, stride, stride, 0, 0,
+        padding, padding, padding, padding, 1, 1, 1, fn, Convolution_Depthwise_Pointwise);
 
     if (ic % 8 != 0) {
         printf("[WARN] can not quantize the first layer\n");
