@@ -112,6 +112,7 @@ fi
 exeIsValid ${CC}
 exeIsValid ${CXX}
 exeIsValid ${AR}
+CXXFLAGS="-std=c++11"
 
 script_dir=$(cd `dirname $0` && pwd)
 current_dir=${PWD}
@@ -157,7 +158,7 @@ if [ ! -d "./protobuf-3.1.0" ]; then
     else
         cp ${script_dir}/sources/v3.1.0.tar.gz .
     fi
-    tar xzf v3.1.0.tar.gz
+    tar xzf v3.1.0.tar.gz || exit 1
 fi
 cd protobuf-3.1.0
 if [ ! -f "./configure" ]; then
@@ -166,7 +167,7 @@ if [ ! -f "./configure" ]; then
     ./autogen.sh || exit 1
 fi
 ./configure ${configure_flags} --with-protoc=${PROTOC_ROOT}/bin/protoc\
-            --prefix=${Protobuf_ROOT}
+            --prefix=${Protobuf_ROOT}  || exit 1
 make -j${build_threads} || exit 1
 make install -j${build_threads} || exit 1
 cp ${PROTOC_ROOT}/bin/protoc ${Protobuf_ROOT}/bin
@@ -198,7 +199,7 @@ if [ ! -d "${script_dir}/sources/tflite" ]; then
     mkdir include/tensorflow/lite
     mkdir include/tensorflow/lite/schema
     mv schema_generated.h include/tensorflow/lite/schema/schema_generated.h
-    cp -r ../../tflite ${script_dir}/sources/
+    cp -r ../tflite ${script_dir}/sources/
 else
     cp -r ${script_dir}/sources/tflite/* .
 fi
@@ -221,8 +222,8 @@ if [ "${compiler_arch}" == "arm_llvm" ] ; then
             android_device=${array[0]}
             if [ "${android_device}" != "" ]; then
                 mkdir lib64
-                adb -s ${android_device} pull /vendor/lib64/libOpenCL.so lib64/
-                adb -s ${android_device} pull /vendor/lib64/egl/libGLES_mali.so lib64/
+                adb -s ${android_device} pull /vendor/lib64/libOpenCL.so lib64/  || exit 1
+                adb -s ${android_device} pull /vendor/lib64/egl/libGLES_mali.so lib64/  || exit 1
             fi
         fi
         cp -r ../opencl ${script_dir}/sources/
@@ -246,9 +247,9 @@ if [ ! -d "./jpeg-9c" ]; then
 fi
 cd jpeg-9c
 if [ ! -f "./configure" ]; then
-    ./autogen.sh || (echo "./autogen.sh failed for libjpeg"; exit 1) ;
+    ./autogen.sh || exit 1
 fi
-./configure ${configure_flags} --prefix=${JPEG_ROOT}
+./configure ${configure_flags} --prefix=${JPEG_ROOT}  || exit 1
 make -j${build_threads} || exit 1
 make install -j${build_threads} || exit 1
 cd ..
@@ -271,9 +272,9 @@ fi
 cd jsoncpp-master
 cp -r include ${JSONCPP_ROOT}/
 mkdir ${JSONCPP_ROOT}/lib
-${CXX} -shared -fPIC src/lib_json/*.cpp -Iinclude -o ${JSONCPP_ROOT}/lib/libjsoncpp.${dynamic_library_suffix}
-${CXX} -c src/lib_json/*.cpp -Iinclude
-${AR} -crv ${JSONCPP_ROOT}/lib/libjsoncpp.a ./*.o
+${CXX} ${CXXFLAGS} -shared -fPIC src/lib_json/*.cpp -Iinclude -o ${JSONCPP_ROOT}/lib/libjsoncpp.${dynamic_library_suffix} || exit 1
+${CXX} ${CXXFLAGS} -c src/lib_json/*.cpp -Iinclude  || exit 1
+${AR} -crv ${JSONCPP_ROOT}/lib/libjsoncpp.a ./*.o  || exit 1
 cd ..
 rm -rf jsoncpp-master*
 
@@ -310,14 +311,16 @@ export PATH=\${Protobuf_ROOT}/bin:\$PATH
 export LD_LIBRARY_PATH=\${Protobuf_ROOT}/lib:\${OpenCL_ROOT}/lib64:\${JPEG_ROOT}/lib:\${JSONCPP_ROOT}/lib:\${FFTW_ROOT}/lib:\$LD_LIBRARY_PATH
 " > ${env_file}
 if [[ "${compiler_arch}" == "arm_llvm" && ! -d "${OpenCL_ROOT}/lib64" ]]; then
-    echo "
-echo \"[WARN] not successfully pull libOpenCL.so from android device.
+    if [[ ! -f "${OpenCL_ROOT}/lib64/libOpenCL.so" || ! -f "${OpenCL_ROOT}/lib64/libGLES_mali.so" ]]; then        
+        echo "
+echo \"[WARNING] not successfully pull libOpenCL.so/libGLES_mali.so from android device.
 If you don't use ARM MALI GPU, you can skip this meessage.
 If you want to use ARM MALI GPU, you can run these commands to solve problem.
     mkdir ${OpenCL_ROOT}/lib64
-    adb pull /vendor/lib64/libOpenCL.so ${OpenCL_ROOT}/lib64
-    adb pull /vendor/lib64/egl/libGLES_mali.so ${OpenCL_ROOT}/lib64
+    adb pull /vendor/lib64/libOpenCL.so ${OpenCL_ROOT}/lib64/
+    adb pull /vendor/lib64/egl/libGLES_mali.so ${OpenCL_ROOT}/lib64/
 \"" >> ${env_file}
+    fi
 fi
 
 chmod a+x ${env_file}

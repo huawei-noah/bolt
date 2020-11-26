@@ -23,6 +23,8 @@ EOF
     exit 1;
 }
 
+find . -name "*.sh" | xargs chmod +x
+
 TEMP=`getopt -o c:g:hs:t:f: --long compiler:gpu:help,skip:threads:finetune: \
      -n ${script_name} -- "$@"`
 if [ $? != 0 ] ; then echo "[ERROR] terminating..." >&2 ; exit 1 ; fi
@@ -108,6 +110,14 @@ if [ ${skip} != true ] ; then
     fi
     if [ "${compiler_arch}" == "arm_llvm" ] ; then
         exeIsValid aarch64-linux-android21-clang++
+        if [[ "${llvm_gpu}" == "ON" ]]; then
+            if [[ ! -f "${OpenCL_ROOT}/lib64/libOpenCL.so" || ! -f "${OpenCL_ROOT}/lib64/libGLES_mali.so" ]]; then
+                echo "[ERROR] If you want to use ARM MALI GPU, please pull libOpenCL.so and libGLES_mali.so from android device.
+If you don't want to  use ARM MALI GPU, you can add -g option to close ARM MALI GPU usage."
+                exit 1
+            fi
+        fi
+
         options="${options} \
             -DUSE_GNU_GCC=OFF \
             -DUSE_LLVM_CLANG=ON \
