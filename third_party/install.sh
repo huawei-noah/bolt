@@ -58,9 +58,6 @@ exeIsValid(){
 }
 
 exeIsValid wget
-exeIsValid autoreconf
-exeIsValid libtoolize
-exeIsValid autoreconf
 exeIsValid unzip
 exeIsValid tar
 exeIsValid make
