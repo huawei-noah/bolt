@@ -66,10 +66,12 @@ EE pooling_arm(TensorDesc inputDesc,
         for (U32 c = 0; c < ic; c++) {
             for (U32 h = 0; h < oh; h++) {
                 for (U32 w = 0; w < ow; w++, outputPtr += 8 * bytesOf(odt)) {
-                    int hstart = UNI_MAX((int)h * (int)strideH - (int)paddingT, 0);
-                    int wstart = UNI_MAX((int)w * (int)strideW - (int)paddingL, 0);
+                    int hstart = (int)h * (int)strideH - (int)paddingT;
+                    int wstart = (int)w * (int)strideW - (int)paddingL;
                     int hend = UNI_MIN(hstart + kernelSizeH, ih);
                     int wend = UNI_MIN(wstart + kernelSizeW, iw);
+                    hstart = UNI_MAX(hstart, 0);
+                    wstart = UNI_MAX(wstart, 0);
                     int poolSize = (hend - hstart) * (wend - wstart);
                     switch (idt) {
 #ifdef _USE_FP32
