@@ -34,7 +34,6 @@ jobs:
           pwd
           file ./install_arm_gnu/tools/X2bolt
           file ./install_x86_gnu/tools/X2bolt
-          ./install_x86_gnu/tools/X2bolt --help
         
   macos-arm:
     name: macos for arm 
