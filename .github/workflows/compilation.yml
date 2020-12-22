@@ -12,7 +12,7 @@ jobs:
         uses: actions/checkout@v2
       - name: compile armv8(cpu) with gnu on linux 
         run: |
-          chmod -R ../bolt
+          chmod -R 777 ../bolt/
           echo "compile armv8 with gnu on linux ..."
           ./install.sh -c arm_gnu -t 33
       - name: compile armv8(cpu) with llvm on linux
