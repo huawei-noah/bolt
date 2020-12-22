@@ -28,8 +28,14 @@ jobs:
       - name: compile x86(cpu) with gnu on linux
         run: |
           echo "compile x86(cpu) with gnu on linux ..."
-          echo "./install.sh -c x86_gnu -t 33[todo]"
-  
+          ./install.sh -c x86_gnu -t 33
+      - name: check the compilation files
+        run: |
+          pwd
+          file ./install_arm_gnu/tools/X2bolt
+          file ./install_x86_gnu/tools/X2bolt
+          ./install_x86_gnu/tools/X2bolt --help
+        
   macos-arm:
     name: macos for arm 
     runs-on: macos-latest
