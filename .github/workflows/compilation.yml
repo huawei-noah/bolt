@@ -13,8 +13,9 @@ jobs:
       - name: prerequisites installation
         run: |
           sudo apt-get install g++-aarch64-linux-gnu
-          aarch64-linux-gnu-g++ --version
           which aarch64-linux-gnu-g++
+          eval "aarch64-linux-gnu-g++ --version"
+          echo "aarch64 g++ preparation done..."
       - name: compile armv8(cpu) with gnu on linux 
         run: |
           chmod -R 777 ../bolt/
