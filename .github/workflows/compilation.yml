@@ -10,19 +10,26 @@ jobs:
     steps:
       - name: checkout code
         uses: actions/checkout@v2
+      - name: prerequisites installation
+        run: |
+          mkdir prere && cd prere
+          mkdir aarch64_gcc && cd aarch64_gcc
+          wget https://developer.arm.com/-/media/Files/downloads/gnu-a/8.3-2019.03/binrel/gcc-arm-8.3-2019.03-x86_64-aarch64-linux-gnu.tar.xz?revision=2e88a73f-d233-4f96-b1f4-d8b36e9bb0b9&la=en&hash=167687FADA00B73D20EED2A67D0939A197504ACD
+          tar -Jxvf gcc-arm-8.3-2019.03-x86_64-aarch64-linux-gnu.tar.xz
+          pwd
       - name: compile armv8(cpu) with gnu on linux 
         run: |
           chmod -R 777 ../bolt/
           echo "compile armv8 with gnu on linux ..."
-          ./install.sh -c arm_gnu -t 33
+          echo "./install.sh -c arm_gnu -t 33[todo]"
       - name: compile armv8(cpu) with llvm on linux
         run: |
           echo "compile armv8(cpu) with llvm on linux ..."
-          ./install.sh -c arm_llvm -t 33 -g ON
+          echo "./install.sh -c arm_llvm -t 33 -g ON[todo]"
       - name: compile x86(cpu) with gnu on linux
         run: |
           echo "compile x86(cpu) with gnu on linux ..."
-          ./install.sh -c x86_gnu -t 33
+          echo "./install.sh -c x86_gnu -t 33[todo]"
   
   macos-arm:
     name: macos for arm 
