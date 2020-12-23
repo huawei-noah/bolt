@@ -1,0 +1,55 @@
+name: Compilations on kinds of platforms
+
+on: push
+
+jobs:
+  linux:
+    name: linux for arm and x86 
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v2
+      - name: prerequisites installation
+        run: |
+          sudo apt-get install g++-aarch64-linux-gnu
+          which aarch64-linux-gnu-g++
+          eval "aarch64-linux-gnu-g++ --version"
+          echo "aarch64 g++ preparation done..."
+      - name: compile armv8(cpu) with gnu on linux 
+        run: |
+          chmod -R 777 ../bolt/
+          echo "compile armv8 with gnu on linux ..."
+          ./install.sh -c arm_gnu -t 33
+      - name: compile armv8(cpu) with llvm on linux
+        run: |
+          echo "compile armv8(cpu) with llvm on linux ..."
+          echo "./install.sh -c arm_llvm -t 33 -g ON[todo]"
+      - name: compile x86(cpu) with gnu on linux
+        run: |
+          echo "compile x86(cpu) with gnu on linux ..."
+          ./install.sh -c x86_gnu -t 33
+      - name: check the compilation files
+        run: |
+          pwd
+          file ./install_arm_gnu/tools/X2bolt
+          file ./install_x86_gnu/tools/X2bolt
+        
+  macos-arm:
+    name: macos for arm 
+    runs-on: macos-latest
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v2
+      - name: compile armv8 with llvm on mac 
+        run: echo "compilation on mac is coming..."
+          
+  windows:
+    name: windows for arm
+    runs-on: windows-latest
+
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v2
+      - name: compilation armv8 on windows
+        run: echo "compialtion on windows is coming..."
