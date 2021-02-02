@@ -315,7 +315,7 @@ Flow is the time-series data acceleration module for Bolt. Flow simplifies the a
 
 Flow provides flexible CPU multi-core parallelism and heterogeneous scheduling (CPU + GPU). User don't need to pay excessive attention to heterogeneous management and write lots of non-reusable code to implement a heterogeneous application. User can get the best end-to-end performance with the help of Flow. Flow supports data parallelism and subgraph parallelism, with a simple API.
 
-More usage information can be find in [DEVELOPER.md](docs/DEVELOPER.md#time-series-data-acceleration-by-using-flow).
+More usage information can be find in [DEVELOPER.md](DEVELOPER.md).
 
 # Feedback
 
