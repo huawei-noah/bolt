@@ -1,1 +1,0 @@
-A great many thanks to the following contributors:
