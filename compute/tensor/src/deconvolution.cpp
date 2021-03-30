@@ -49,13 +49,17 @@ inline EE deconvolution_infer_output_size_cpu(TensorDesc inputDesc,
 
     U32 strideH = convParamSpec.stride_h;
     U32 strideW = convParamSpec.stride_w;
-    U32 paddingT = convParamSpec.padding_top;
-    U32 paddingB = convParamSpec.padding_bottom;
-    U32 paddingL = convParamSpec.padding_left;
-    U32 paddingR = convParamSpec.padding_right;
-
-    oh = fh + strideH * (ih - 1) - paddingT - paddingB;
-    ow = fw + strideW * (iw - 1) - paddingL - paddingR;
+    if (convParamSpec.rm == TF_SAME) {
+        oh = strideH * ih;
+        ow = strideW * iw;
+    } else {
+        U32 paddingT = convParamSpec.padding_top;
+        U32 paddingB = convParamSpec.padding_bottom;
+        U32 paddingL = convParamSpec.padding_left;
+        U32 paddingR = convParamSpec.padding_right;
+        oh = fh + strideH * (ih - 1) - paddingT - paddingB;
+        ow = fw + strideW * (iw - 1) - paddingL - paddingR;
+    }
 
     *outputDesc = tensor4df(targetDataType, DF_NCHWC8, in, fc, oh, ow);
     return SUCCESS;
@@ -176,7 +180,7 @@ EE deconvolution_transform_filter(Tensor filterTensor,
     EE ret = NOT_SUPPORTED;
     if (IS_GENERAL(arch)) {
 #ifdef _USE_GENERAL
-        UNI_memcpy(filterTransformed, filter, tensorNumBytes(filterDesc));
+        UNI_MEMCPY(filterTransformed, filter, tensorNumBytes(filterDesc));
         ftmDesc = filterDesc;
         ret = SUCCESS;
 #endif

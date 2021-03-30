@@ -14,9 +14,6 @@
 #ifndef _H_DEPRECATEDOPOPTIMIZER
 #define _H_DEPRECATEDOPOPTIMIZER
 
-#include <vector>
-#include <string>
-#include "model_tools.h"
 #include "OPOptimizer.hpp"
 
 class DeprecatedOPOptimizer : public OPOptimizer {
@@ -58,6 +55,24 @@ class DeprecatedOPOptimizer : public OPOptimizer {
                     hasOptimized = true;
                     continue;
                 }
+            }
+
+            if (spec->ops[i].type == OT_Split || spec->ops[i].type == OT_Dropout) {
+                setOperatorInvalid(spec, i, true);
+                hasOptimized = true;
+                continue;
+            }
+            if (spec->ops[i].type == OT_Slice && spec->ops[i].num_inputs == 1 &&
+                spec->ops[i].num_outputs == 1) {
+                setOperatorInvalid(spec, i, true);
+                hasOptimized = true;
+                continue;
+            }
+
+            if (spec->ops[i].type == OT_Concat && spec->ops[i].num_inputs == 1) {
+                setOperatorInvalid(spec, i, true);
+                hasOptimized = true;
+                continue;
             }
         }
         return hasOptimized;

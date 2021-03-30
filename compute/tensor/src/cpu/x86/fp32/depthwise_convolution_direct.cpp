@@ -13,7 +13,7 @@
 
 #include "sys.h"
 #include "error.h"
-#include "types.h"
+
 #include "tensor_computing.h"
 
 #include "cpu/x86/fp32/tensor_computing_fp32.h"
@@ -21,7 +21,6 @@
 #define UNROLL_W 4
 #define SIMD_W 8
 #define UNROLL_OC_BLOCK_DIM 24
-#define align_addr(addr, unit) (((uintptr_t)addr + unit - 1) / unit * unit)
 
 typedef void (*kernel_func)(F32 *in0,
     F32 *in1,
@@ -697,13 +696,12 @@ EE depthwise_convolution_direct(TensorDesc inputDesc,
     F32 *curI, *curO, *calI, *calO;
     const F32 *curW, *curB, *calW;
     F32 *ftmp = inArray;
-    dwFilterArray = (F32 *)align_addr(dwFilterArray, 32);
 
     U32 icAlignSize = 8;
     U32 icPadding = (ic + icAlignSize - 1) / icAlignSize * icAlignSize;
     U32 ih_pad = ih + paddingT + paddingB;
     U32 iw_pad = iw + paddingL + paddingR;
-    F32 *useOutArray = (F32 *)align_addr(tmp, 32);
+    F32 *useOutArray = (F32 *)tmp;
     if (pwFilterArray == nullptr) {
         useOutArray = outArray;
     }
@@ -711,7 +709,7 @@ EE depthwise_convolution_direct(TensorDesc inputDesc,
     U32 oStep = oh * ow * SIMD_W * 4;
     U32 ocblocking = 0;
     U32 iStep = ih * iw * SIMD_W * 4;
-    U32 hStep = (iw - fw * dilateW + (dilateH - 1) * iw) * SIMD_W * 4;
+    I32 hStep = (iw - fw * dilateW + (dilateH - 1) * iw) * SIMD_W * 4;
     U32 sw = strideW * SIMD_W * 4;
     U32 dw = dilateW * SIMD_W * 4;
     U32 wSize = 0, store = 0, ocSize = 0;
@@ -760,13 +758,14 @@ EE depthwise_convolution_direct(TensorDesc inputDesc,
                 }
             } else {
                 I32 tfw = fw, tfh = fh;
-                I32 in_h = 0, in_w = 0;
-                I32 ow_padding_l = UNI_MIN((paddingL - 1) / strideW + 1, ow);
-                I32 ow_padding_r = UNI_MIN((paddingR - 1) / strideW + 1, ow - ow_padding_l);
-                if (((iw + paddingL - fw) / strideW + 1) >= ow) {
+                I32 in_h = 0, in_w = iw;
+                I32 o_h = oh, o_w = ow;
+                I32 ow_padding_l = UNI_MIN((paddingL - 1) / strideW + 1, o_w);
+                I32 ow_padding_r = UNI_MIN((paddingR - 1) / strideW + 1, o_w - ow_padding_l);
+                if (((in_w + paddingL - tfw) / strideW + 1) >= o_w) {
                     ow_padding_r = 0;
                 }
-                for (I32 h = 0; h < oh; ++h) {
+                for (I32 h = 0; h < o_h; ++h) {
                     tfh = fh;
                     in_h = h * strideH - paddingT;
                     calW = curW;
@@ -781,16 +780,19 @@ EE depthwise_convolution_direct(TensorDesc inputDesc,
                     for (; w < ow_padding_l; ++w) {
                         I32 in_w = w * strideW - paddingL;
                         tfw = UNI_MIN(fw + in_w, iw);
-                        const F32 *useW = calW + (fw - tfw) * ocSize;
+                        const F32 *useW = calW;
+                        if (in_w < 0) {
+                            useW = calW - in_w * (I32)ocSize;
+                        }
                         hStep = (iw - tfw * dilateW + (dilateH - 1) * iw) * SIMD_W * 4;
                         F32 *in_0 = curI + in_h * iw * 8;
                         calO = curO + (h * ow + w) * 8;
                         kernel[0][oc_idx](in_0, nullptr, nullptr, nullptr, useW, calO, curB, tfw,
                             tfh, oStep, iStep, hStep, store, dw, (fw - tfw) * ocSize * 4);
                     }
-                    for (; w < ow - ow_padding_r; w += wSize) {
+                    for (; w < o_w - ow_padding_r; w += wSize) {
                         hStep = (iw - fw * dilateW + (dilateH - 1) * iw) * SIMD_W * 4;
-                        wSize = UNI_MIN(ow - ow_padding_r - w, UNROLL_W);
+                        wSize = UNI_MIN(o_w - ow_padding_r - w, UNROLL_W);
                         if (wSize < 4) {
                             wSize = 1;
                         }
@@ -807,12 +809,12 @@ EE depthwise_convolution_direct(TensorDesc inputDesc,
                         kernel[wSize >> 2][oc_idx](in_0, in_1, in_2, in_3, calW, calO, curB, fw,
                             tfh, oStep, iStep, hStep, store, dw, 0);
                     }
-                    for (; w < ow; ++w) {
+                    for (; w < o_w; ++w) {
                         I32 in_w = w * strideW - paddingL;
                         tfw = iw - in_w;
                         hStep = (iw - tfw * dilateW + (dilateH - 1) * iw) * SIMD_W * 4;
                         F32 *in_0 = curI + in_h * iw * 8 + in_w * 8;
-                        calO = curO + (h * ow + w) * 8;
+                        calO = curO + (h * o_w + w) * 8;
                         kernel[0][oc_idx](in_0, nullptr, nullptr, nullptr, calW, calO, curB, tfw,
                             tfh, oStep, iStep, hStep, store, dw, (fw - tfw) * ocSize * 4);
                     }
@@ -827,7 +829,7 @@ EE depthwise_convolution_direct(TensorDesc inputDesc,
         tmp = (void *)((F32 *)tmp + oh * ic * oh * ow + 32);
         ConvolutionParamSpec p = createConvolutionParamSpec(
             1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, fn, Convolution_Pointwise);
-        convolution_1x1_direct(pwInputDesc, useOutArray, pwFilterDesc, pwFilterArray, p,
+        convolution_1x1_direct(pwInputDesc, useOutArray, nullptr, pwFilterDesc, pwFilterArray, p,
             pwBiasArray, tmpBytes, tmp, outputDesc, outArray, pointwiseActivationParamSpec);
     }
     return SUCCESS;

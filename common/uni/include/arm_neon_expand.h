@@ -13,11 +13,10 @@
 
 #ifndef _H_ARM_NEON_EXPAND
 #define _H_ARM_NEON_EXPAND
-#include <math.h>
+
 #include <arm_neon.h>
 #include <array>
-
-#include "types.h"
+#include <math.h>
 #include "error.h"
 
 #ifndef __aarch64__
@@ -268,15 +267,15 @@ inline float16x8_t vtanhq_f16(float16x8_t x)
 #endif
 }
 
-inline F32 vaddvq_f16(float16x8_t x)
+inline float vaddvq_f16(float16x8_t x)
 {
     float32x4_t a = vcvt_f32_f16(vget_high_f16(x));
     float32x4_t b = vcvt_f32_f16(vget_low_f16(x));
-    F32 sum = vaddvq_f32(vaddq_f32(a, b));
+    float sum = vaddvq_f32(vaddq_f32(a, b));
     return sum;
 }
 
-inline void vst1q_lane_f16_builtin(F16 *address, float16x8_t vec, const int laneId)
+inline void vst1q_lane_f16_builtin(__fp16 *address, float16x8_t vec, const int laneId)
 {
     switch (laneId) {
         case 0:

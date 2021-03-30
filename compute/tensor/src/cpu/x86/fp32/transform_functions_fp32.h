@@ -14,8 +14,6 @@
 #ifndef CHEETAH_X86_TRANSFORM_FUNTIONS_FP32_H
 #define CHEETAH_X86_TRANSFORM_FUNTIONS_FP32_H
 
-#include "types.h"
-
 template <U32 C, U32 N>
 inline void transformNCHWCxNx(U32 fc, U32 fh, U32 fw, U32 oc, const F32 *input, F32 *output)
 {
@@ -144,6 +142,55 @@ inline void PaddingNCHWC8(
             memset(tmp + coff + (hoff + (paddingL + iw)) * 8, 0, paddingR * 8 * bytesOf(idt));
         }
         memset(tmp + coff + (ih + paddingT) * padiw * 8, 0, padiw * paddingB * 8 * bytesOf(idt));
+    }
+}
+
+inline void deconvOverlapAndCrop(F32 *input,
+    F32 *output,
+    TensorDesc inputDesc,
+    TensorDesc outputDesc,
+    ConvolutionParamSpec convParamSpec)
+{
+    DataType idt, odt;
+    DataFormat idf, odf;
+    U32 in, ic, ih, iw, on, oc, oh, ow;
+    CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+    CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
+    U32 fh = convParamSpec.kernel_h;
+    U32 fw = convParamSpec.kernel_w;
+    U32 fhfw = fh * fw;
+    U32 strideH = convParamSpec.stride_h;
+    U32 strideW = convParamSpec.stride_w;
+    U32 paddingT = convParamSpec.padding_top;
+    U32 paddingL = convParamSpec.padding_left;
+    __m256i vindex =
+        _mm256_set_epi32(fhfw * 7, fhfw * 6, fhfw * 5, fhfw * 4, fhfw * 3, fhfw * 2, fhfw, 0);
+    for (U32 kn = 0; kn < in; ++kn) {
+        for (U32 kh = 0; kh < ih; ++kh) {
+            for (U32 kw = 0; kw < iw; ++kw) {
+                for (U32 kc = 0; kc < oc; kc += 8) {
+                    for (U32 jh = 0; jh < fh; ++jh) {
+                        for (U32 jw = 0; jw < fw; ++jw) {
+                            U32 ohIdx = kh * strideH + jh;
+                            U32 owIdx = kw * strideW + jw;
+                            if ((ohIdx < paddingT) || (ohIdx >= oh + paddingT) ||
+                                (owIdx < paddingL) || (owIdx >= ow + paddingL)) {
+                                continue;
+                            }
+                            ohIdx -= paddingT;
+                            owIdx -= paddingL;
+                            U32 oidx = (kc * oh + ohIdx * 8) * ow + owIdx * 8;
+                            U32 iidx = ((kh * iw + kw) * oc + kc) * fhfw + jh * fw + jw;
+                            __m256 x = _mm256_i32gather_ps(input + iidx, vindex, 4);
+                            x = _mm256_add_ps(x, _mm256_loadu_ps(output + oidx));
+                            _mm256_storeu_ps(output + oidx, x);
+                        }
+                    }
+                }
+            }
+        }
+        input += ic * ih * iw;
+        output += oc * oh * ow;
     }
 }
 

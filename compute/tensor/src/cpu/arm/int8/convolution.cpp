@@ -12,10 +12,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #ifdef _USE_INT8
-#include "types.h"
+
 #include "cpu/arm/int8/tensor_computing_int8.h"
 #include "cpu/arm/int8/convolution_winograd.h"
 #include "cpu/arm/int8/convolution_gemm.h"
+#include "tensor_transpose.h"
 
 EE convolution_int8(TensorDesc inputDesc,
     const INT8 *input,

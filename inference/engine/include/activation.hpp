@@ -34,6 +34,10 @@ public:
                 this->opt = OT_HSwish;
                 break;
             }
+            case ACTIVATION_H_SWISH_NODIV: {
+                this->opt = OT_HSwishNoDiv;
+                break;
+            }
             case ACTIVATION_SIGMOID: {
                 this->opt = OT_Sigmoid;
                 break;
@@ -56,6 +60,22 @@ public:
             }
             case ACTIVATION_GREATER: {
                 this->opt = OT_Greater;
+                break;
+            }
+            case ACTIVATION_EXP: {
+                this->opt = OT_Exp;
+                break;
+            }
+            case ACTIVATION_SOFTPLUS: {
+                this->opt = OT_SoftPlus;
+                break;
+            }
+            case ACTIVATION_ABS: {
+                this->opt = OT_Abs;
+                break;
+            }
+            case ACTIVATION_SIGN: {
+                this->opt = OT_Sign;
                 break;
             }
             default: {

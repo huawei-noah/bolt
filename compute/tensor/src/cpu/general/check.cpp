@@ -12,6 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "cpu/general/tensor_computing_general.h"
+#include "uni.h"
 
 template <typename T>
 static EE check(TensorDesc inputDescA,

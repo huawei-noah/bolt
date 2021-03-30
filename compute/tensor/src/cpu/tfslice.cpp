@@ -23,7 +23,7 @@ EE tfslice_infer_output_size_cpu(TensorDesc inputDesc, TfSliceParamSpec p, Tenso
     int *strides = p.strides;
     char *beginMask = p.begin_mask;
     char *endMask = p.end_mask;
-    U32 dimSize = p.dim_size;
+    U32 dimSize = inputDesc.nDims;
 
     CHECK_REQUIREMENT(dimSize == inputDesc.nDims);
     *outputDesc = inputDesc;
@@ -31,6 +31,16 @@ EE tfslice_infer_output_size_cpu(TensorDesc inputDesc, TfSliceParamSpec p, Tenso
         int axis = dimSize - 1 - i;
         int axisBegin = (beginMask[i] == 1) ? 0 : begin[i];
         int axisEnd = (endMask[i] == 1) ? inputDesc.dims[axis] : end[i];
+        if (axisBegin < 0) {
+            axisBegin = inputDesc.dims[axis] + axisBegin;
+            axisBegin = UNI_MAX(axisBegin, 0);
+        }
+        if (axisEnd < 0) {
+            axisEnd = inputDesc.dims[axis] + axisEnd;
+        } else if (axisEnd > (int)(inputDesc.dims[axis])) {
+            axisEnd = inputDesc.dims[axis];
+        }
+        CHECK_REQUIREMENT(axisBegin >= 0 && axisEnd >= 0);
         int num = (axisEnd - axisBegin) / strides[i];
         outputDesc->dims[axis] = num;
         begin[i] = axisBegin;
@@ -46,6 +56,41 @@ EE tfslice_infer_output_size_cpu(TensorDesc inputDesc, TfSliceParamSpec p, Tenso
     return SUCCESS;
 }
 
+#define TFSLICE_USE_RECURSIVE
+#ifdef TFSLICE_USE_RECURSIVE
+inline static void recursive_tfslice(U8 *src,
+    U32 *srcDims,
+    U32 srcNum,
+    U8 *dst,
+    U32 *dstDims,
+    U32 dstNum,
+    int *begin,
+    int *end,
+    int *strides,
+    int i,
+    int bound,
+    int dimNum,
+    U32 tileSize)
+{
+    if (i == bound) {
+        memcpy(dst, src, tileSize);
+        return;
+    }
+    U32 newSrcNum = srcNum / srcDims[dimNum - 1 - i];
+    U32 newDstNum = dstNum / dstDims[dimNum - 1 - i];
+    if (i + 1 == bound && strides[i] == 1) {
+        memcpy(dst, src + begin[i] * newSrcNum, tileSize * (end[i] - begin[i]));
+        return;
+    }
+    for (int j = begin[i]; j < end[i]; j += strides[i]) {
+        U8 *newSrc = src + j * newSrcNum;
+        recursive_tfslice(newSrc, srcDims, newSrcNum, dst, dstDims, newDstNum, begin, end, strides,
+            i + 1, bound, dimNum, tileSize);
+        dst += newDstNum;
+    }
+}
+#endif
+
 EE tfslice_cpu(
     TensorDesc inputDesc, void *input, TfSliceParamSpec p, TensorDesc outputDesc, void *output)
 {
@@ -54,11 +99,21 @@ EE tfslice_cpu(
     int *strides = p.strides;
     char *beginMask = p.begin_mask;
     char *endMask = p.end_mask;
-    U32 dimSize = p.dim_size;
+    U32 dimSize = inputDesc.nDims;
     for (U32 i = 0; i < dimSize; i++) {
         int axis = dimSize - 1 - i;
         int axisBegin = (beginMask[i] == 1) ? 0 : begin[i];
         int axisEnd = (endMask[i] == 1) ? inputDesc.dims[axis] : end[i];
+        if (axisBegin < 0) {
+            axisBegin = inputDesc.dims[axis] + axisBegin;
+            axisBegin = UNI_MAX(axisBegin, 0);
+        }
+        if (axisEnd < 0) {
+            axisEnd = inputDesc.dims[axis] + axisEnd;
+        } else if (axisEnd > (int)(inputDesc.dims[axis])) {
+            axisEnd = inputDesc.dims[axis];
+        }
+        CHECK_REQUIREMENT(axisBegin >= 0 && axisEnd >= 0);
         begin[i] = axisBegin;
         end[i] = axisEnd;
     }
@@ -76,21 +131,31 @@ EE tfslice_cpu(
         if (inputDesc.df == DF_NCHWC8) {
             elementNum *= 8;
             begin[1] /= 8;
+            end[1] /= 8;
             tmpInputDims[channelAxis] /= 8;
             tmpOutputDims[channelAxis] /= 8;
             tmpInputDims.insert(tmpInputDims.begin(), 8);
             tmpOutputDims.insert(tmpOutputDims.begin(), 8);
+#ifndef TFSLICE_USE_RECURSIVE
             startAxis = 1;
+#endif
         }
-        for (int i = dimSize - 1; i >= 0; i--) {
+        // aggregate dimension
+        int i;
+        for (i = dimSize - 1; i >= 0; i--) {
             int reverseAxis = dimSize - 1 - i;
-            if (begin[i] == 0 && end[i] == (int)inputDesc.dims[reverseAxis] && strides[i] == 1) {
+            if (begin[i] == 0 && end[i] == (int)tmpInputDims[reverseAxis] && strides[i] == 1) {
                 elementNum *= (end[i] - begin[i]);
             } else {
                 break;
             }
         }
         U32 tileSize = elementSize * elementNum;
+#ifdef TFSLICE_USE_RECURSIVE
+        recursive_tfslice((U8 *)input, tmpInputDims.data(), tensorNumBytes(inputDesc), dst,
+            tmpOutputDims.data(), tensorNumBytes(outputDesc), begin, end, strides, 0, i + 1,
+            tmpInputDims.size(), tileSize);
+#else
         for (U32 i = 0; i < num; i += elementNum, dst += tileSize) {
             std::vector<U32> localIndex =
                 calculateLocalIndex(i, tmpOutputDims.data(), tmpOutputDims.size());
@@ -104,8 +169,10 @@ EE tfslice_cpu(
             U8 *src = (U8 *)input + srcIndex * elementSize;
             memcpy(dst, src, tileSize);
         }
+#endif
         if (inputDesc.df == DF_NCHWC8) {
             begin[1] *= 8;
+            end[1] *= 8;
         }
     } else {
         CHECK_REQUIREMENT(inputDesc.df == DF_NCHWC8);

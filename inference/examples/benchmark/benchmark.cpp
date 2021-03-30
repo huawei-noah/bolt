@@ -15,6 +15,7 @@
 #include <getopt.h>
 #include "inference.hpp"
 #include "data_loader.hpp"
+#include "profiling.h"
 
 char *modelPath = (char *)"";
 std::string inputData = "";
@@ -93,14 +94,11 @@ void parse_options(int argc, char *argv[])
 std::map<std::string, std::shared_ptr<U8>> create_tensors_from_path(
     std::string dataPath, std::shared_ptr<CNN> pipeline)
 {
-    std::vector<std::string> inputNames = pipeline->get_model_input_tensor_names();
-    std::map<std::string, std::shared_ptr<Tensor>> inMap = pipeline->get_inputs();
+    std::map<std::string, TensorDesc> inputDescMap = pipeline->get_input_desc();
     std::vector<DataType> sourceDataTypes;
     std::vector<TensorDesc> inputDescs;
-    for (int i = 0; i < (int)(inputNames.size()); i++) {
-        std::string curName = inputNames[i];
-        TensorDesc curDesc = (*(inMap[curName])).get_desc();
-        std::cout << "Input Tensor Dimension: " << tensorDesc2Str(curDesc) << std::endl;
+    for (auto iter : inputDescMap) {
+        TensorDesc curDesc = iter.second;
         sourceDataTypes.push_back(curDesc.dt);
         inputDescs.push_back(curDesc);
     }
@@ -111,28 +109,29 @@ std::map<std::string, std::shared_ptr<U8>> create_tensors_from_path(
         input = load_bin(inputData, sourceDataTypes, inputDescs);
     }
     std::map<std::string, std::shared_ptr<U8>> model_tensors_input;
-    for (U32 index = 0; index < inputNames.size(); index++) {
-        model_tensors_input[inputNames[index]] =
-            ((CpuMemory *)input[index].get_memory())->get_shared_ptr();
+    int index = 0;
+    std::cout << "\nInput Information:" << std::endl;
+    for (auto iter : inputDescMap) {
+        std::cout << "Input Tensor " << iter.first << " " << input[index].string(8) << std::endl;
+        model_tensors_input[iter.first] = ((CpuMemory *)input[index].get_memory())->get_shared_ptr();
+        index++;
     }
     return model_tensors_input;
 }
 
 void print_result(std::map<std::string, std::shared_ptr<Tensor>> outMap)
 {
-    std::cout << "\n\nBenchmark Result:\n";
-    int outputIndex = 0;
+    std::cout << "\nBenchmark Result:" << std::endl;
     for (auto iter : outMap) {
         Tensor result = *(iter.second);
-        std::cout << "Output Tensor" << outputIndex++ << " : " << iter.first << "\n"
-                  << result.string(8) << "\n\n";
+        std::cout << "Output Tensor " << iter.first << " " << result.string(8) << std::endl;
     }
 }
 
 std::map<std::string, std::shared_ptr<Tensor>> get_output(
     std::shared_ptr<CNN> pipeline, std::string affinity)
 {
-    std::map<std::string, std::shared_ptr<Tensor>> outMap = pipeline->get_outputs();
+    std::map<std::string, std::shared_ptr<Tensor>> outMap = pipeline->get_output();
     if (affinity == "GPU") {
 #ifdef _USE_MALI
         for (auto iter : outMap) {
@@ -163,14 +162,19 @@ int main(int argc, char *argv[])
 
     // 3: warm up and run
     for (int i = 0; i < warmUp; i++) {
-        pipeline->set_input_tensors_value(model_tensors_input);
+        pipeline->set_input_by_assign(model_tensors_input);
         pipeline->run();
         outMap = get_output(pipeline, affinityPolicyName);
     }
+#ifdef _USE_MALI
+    if (strcmp(affinityPolicyName, "GPU") == 0) {
+        gcl_finish(OCLContext::getInstance().handle.get());
+    }
+#endif
 
     double timeBegin = ut_time_ms();
     for (int i = 0; i < loopTime; i++) {
-        pipeline->set_input_tensors_value(model_tensors_input);
+        pipeline->set_input_by_assign(model_tensors_input);
         pipeline->run();
         outMap = get_output(pipeline, affinityPolicyName);
     }
@@ -183,6 +187,6 @@ int main(int argc, char *argv[])
     UNI_TIME_STATISTICS
     UNI_CI_LOG("total_time:%fms(loops=%d)\n", 1.0 * totalTime, loopTime);
     UNI_CI_LOG("avg_time:%fms/data\n", 1.0 * totalTime / loopTime);
-    pipeline->saveAlgorithmMapToText(algorithmMapPath);
+    pipeline->saveAlgorithmMapToFile(algorithmMapPath);
     return 0;
 }

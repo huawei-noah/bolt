@@ -12,7 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "sys.h"
-#include "types.h"
+
 #include "tensor_desc.h"
 #include "error.h"
 #include "gpu/mali/tensor_computing_mali.h"

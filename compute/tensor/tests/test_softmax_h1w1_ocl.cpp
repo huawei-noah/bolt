@@ -97,7 +97,7 @@ int softmaxTest(int argc, char **argv, DataType dt)
     CHECK_STATUS(ocl_set_input(handle, input, in_desc_gpu, input_cpu, tmpbuf, true));
     CHECK_STATUS(softmax(inputTensor, p, tmpTensor, outputTensor, &archInfo));
     /*warp up*/
-    UNI_INFO_LOG("Warp up gpu:\n")
+    UNI_INFO_LOG("warm up gpu:\n")
     for (U32 i = 0; i < 2; i++) {
         CHECK_STATUS(gcl_run_kernelVec(handle));
     }

@@ -14,9 +14,9 @@
 #ifndef _H_CPU_FUNCTIONS_TEMPLATE
 #define _H_CPU_FUNCTIONS_TEMPLATE
 
-#include <string.h>
-#include <math.h>
-#include "types.h"
+#include "data_type.h"
+#include "parameter_spec.h"
+#include "uni.h"
 
 // copy input[index]~input[index+length] to output buffer
 template <typename T>
@@ -25,17 +25,19 @@ void get_vector(T *input, int lda, T **output, int ldb, int index, int length, T
     UNUSED(ldb);
     int local = index % lda;
     if (length == 1) {
-        *output = buffer;
-        (*output)[0] = input[local];
+        *output = input + local;
     } else if (lda == 1) {
-        *output = input;
+        *output = buffer;
+        for (int i = 0; i < length; i++) {
+            (*output)[i] = input[local];
+        }
     } else {
         int remain = lda - local;
         if (remain >= length) {
             *output = input + local;
         } else {
             *output = buffer;
-            memcpy(*output, input + local, sizeof(T) * remain);
+            UNI_MEMCPY(*output, input + local, sizeof(T) * remain);
             for (int i = 0; i < length - remain; i++) {
                 (*output)[remain + i] = input[i % lda];
             }
@@ -111,6 +113,17 @@ EE activation_template(ActivationParamSpec activationDesc, F32 input, T *output)
             result = input * (value / 6);
             break;
         }
+        case ACTIVATION_H_SWISH_NODIV: {
+            value = input + 3;
+            if (value < 0) {
+                value = 0;
+            }
+            if (value > 6) {
+                value = 6;
+            }
+            result = input * value;
+            break;
+        }
         case ACTIVATION_GELU: {
             value = input;
             F32 two_div_PI_sqrt = sqrt(2 / 3.14159265358979323846);
@@ -141,6 +154,22 @@ EE activation_template(ActivationParamSpec activationDesc, F32 input, T *output)
             }
             value = input * tanh(value);
             result = value;
+            break;
+        }
+        case ACTIVATION_SOFTPLUS: {
+            result = log(1 + exp(input));
+            break;
+        }
+        case ACTIVATION_EXP: {
+            result = exp(input);
+            break;
+        }
+        case ACTIVATION_ABS: {
+            result = UNI_ABS(input);
+            break;
+        }
+        case ACTIVATION_SIGN: {
+            result = UNI_SIGN(input);
             break;
         }
         default:
@@ -206,10 +235,10 @@ inline F32 array_sum_template(const T *data, I32 len)
 }
 
 template <typename T>
-inline void array_square_and_add_template(const T *inputA, const T *inputB, T *output, I32 len)
+inline void array_mul_template(const T *inputA, const T *inputB, T *output, I32 len)
 {
     for (I32 i = 0; i < len; i++) {
-        output[i] = inputA[i] + inputB[i] * inputB[i];
+        output[i] = inputA[i] * inputB[i];
     }
 }
 

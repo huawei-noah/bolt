@@ -47,16 +47,21 @@ public:
         this->needSetKernelVec = true;
         UNUSED(inTensors);
         outTensors[0]->resize(this->desc);
+        DataFormat df;
+        DataType dt;
+        U32 n, c, h, w;
+        tensorSelectGet(this->desc, &dt, &df, &n, &c, &h, &w);
         U32 s0, s1, s2;
-        s0 = this->desc.dims[0];
-        s1 = (this->desc.nDims > 1) ? this->desc.dims[1] : 1;
-        s2 = (this->desc.nDims > 2) ? this->desc.dims[2] : 1;
+        s0 = w;
+        s1 = h;
+        s2 = c * n;
         U32 stride[3] = {s0, s1, s2};
         U32 offset[3] = {0, 0, 0};
         GCLMemType mt = GCL_MEM_BUF;
         MemFlags flags = CL_MEM_READ_WRITE;
         GCLMemDesc gclMemDesc = gclmem_build_desc();
-        CHECK_STATUS(gclmem_set_desc_padding(&gclMemDesc, stride, offset, dt, DF_NCHW, mt, flags));
+        DataFormat mf = (df == DF_NHWC) ? DF_NHWC : DF_NCHW;
+        CHECK_STATUS(gclmem_set_desc_padding(&gclMemDesc, stride, offset, dt, mf, mt, flags));
         ocl_set_desc(outTensors[0], gclMemDesc);
         return SUCCESS;
     }
@@ -76,12 +81,14 @@ public:
         if (modelPtr) {
             weight_ptr = *modelPtr;
         } else {
-            weight_ptr = std::shared_ptr<U8>(curOpWs.weight);
+            weight_ptr = std::shared_ptr<U8>(curOpWs.weight, [](U8 *) {});
         }
+        U32 n, c, h, w;
         U32 s0, s1, s2;
-        s0 = this->desc.dims[0];
-        s1 = (this->desc.nDims > 1) ? this->desc.dims[1] : 1;
-        s2 = (this->desc.nDims > 2) ? this->desc.dims[2] : 1;
+        tensorSelectGet(this->desc, NULL, NULL, &n, &c, &h, &w);
+        s0 = w;
+        s1 = h;
+        s2 = c * n;
         this->needTrans = false;
         if (dstMemDesc.stride[0] == s0 && dstMemDesc.stride[1] == s1 && dstMemDesc.stride[2] == s2) {
             CpuMemory weight_mem_src;
@@ -105,6 +112,7 @@ public:
         if (needTrans) {
             auto dstTensor = (*this->tensorMapPtr)[this->outputTensorName];
             auto dstMem = (OclMemory *)(dstTensor->get_memory());
+            dstMem->alloc();
             GCLMem_t dst = (GCLMem_t)dstMem->get_ptr();
             auto tempMem = (OclMemory *)(this->temp.get_memory());
             GCLMem_t temp = (GCLMem_t)tempMem->get_ptr();

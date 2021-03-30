@@ -23,24 +23,28 @@
 #include <dirent.h>
 #include <algorithm>
 #include <fcntl.h>
-#include "types.h"
+
 #include "error.h"
+#include "../api/c/bolt.h"
 
 #ifdef _USE_FP16
-inline std::vector<std::string> buildModelsNameArray(std::string path, std::string postfix)
+inline std::vector<std::string> buildFileNamesArray(std::string path, std::string postfix)
 {
     struct dirent *dirTp;
     DIR *handle = opendir(path.c_str());
     std::vector<std::string> names;
     if (handle != NULL) {
         while ((dirTp = readdir(handle)) != NULL) {
-            std::string modelName = dirTp->d_name;
-            U32 len = modelName.size();
+            std::string fileName = dirTp->d_name;
+            U32 len = fileName.size();
             U32 postfix_len = postfix.size();
-            if (len > postfix_len) {
-                if (modelName.substr(len - postfix_len) == postfix) {
-                    modelName = path + modelName;
-                    names.push_back(modelName);
+            if (postfix_len == 0) {
+                if (fileName.find("algorithmInfo_") != std::string::npos) {
+                    names.push_back(fileName);
+                }
+            } else if (len > postfix_len) {
+                if (fileName.substr(len - postfix_len) == postfix) {
+                    names.push_back(fileName);
                 }
             }
         }
@@ -63,7 +67,8 @@ inline void write_to_file(std::string str, std::string path, std::string name)
     }
 }
 
-inline void runBoltModel(CI8 *modelPath, CI8 *algoPath, std::vector<std::string> *kernelNames)
+inline void runBoltModel(
+    CI8 *modelPath, CI8 *algoPath, std::map<std::string, std::vector<U8>> *kernelInfos)
 {
     if (!strstr(modelPath, "f16.bolt")) {
         UNI_ERROR_LOG("Bolt gpu only support F16(_f16.bolt) now\n");
@@ -71,61 +76,149 @@ inline void runBoltModel(CI8 *modelPath, CI8 *algoPath, std::vector<std::string>
         exit(1);
     }
 
-    UNI_INFO_LOG("Building algofile and used kernelNames for %s\n", modelPath);
-    auto cnn = createPipeline("GPU", modelPath, algoPath);
-    std::vector<TensorDesc> inputDescs = cnn->get_model_input_tensor_descs();
-    U8 **input_ptrs = new U8 *[inputDescs.size()];
-    for (U32 i = 0; i < inputDescs.size(); i++) {
-        U32 size = tensorNumBytes(inputDescs[i]);
-        input_ptrs[i] = new U8[size];
-    }
+    UNI_INFO_LOG("Building algofile and used kernelInfos for %s\n", modelPath);
 
-    std::vector<std::string> inputNames = cnn->get_model_input_tensor_names();
-    for (U32 i = 0; i < inputNames.size(); i++) {
-        cnn->copy_to_named_input(inputNames[i], input_ptrs[i]);
+    ModelHandle model_address = model_address = CreateModel(modelPath, GPU, algoPath);
+    int num_input = GetNumInputsFromModel(model_address);
+    int *n = (int *)malloc(sizeof(int) * num_input);
+    int *c = (int *)malloc(sizeof(int) * num_input);
+    int *h = (int *)malloc(sizeof(int) * num_input);
+    int *w = (int *)malloc(sizeof(int) * num_input);
+    char **name = (char **)malloc(sizeof(char *) * num_input);
+    for (int i = 0; i < num_input; i++) {
+        name[i] = (char *)malloc(sizeof(char) * 1024);
     }
+    DATA_TYPE *dt_input = (DATA_TYPE *)malloc(sizeof(DATA_TYPE) * num_input);
+    DATA_FORMAT *df_input = (DATA_FORMAT *)malloc(sizeof(DATA_FORMAT) * num_input);
+    GetInputDataInfoFromModel(model_address, num_input, name, n, c, h, w, dt_input, df_input);
+    unsigned char **input_ptr = (unsigned char **)malloc(sizeof(unsigned char *) * num_input);
+    for (int i = 0; i < num_input; i++) {
+        int length = n[i] * c[i] * h[i] * w[i];
+        F16 *ptr = (F16 *)malloc(sizeof(F16) * length);
+        for (int i = 0; i < length; i++) {
+            ptr[i] = 1;
+        }
+        input_ptr[i] = (unsigned char *)ptr;
+        break;
+    }
+    PrepareModel(model_address, num_input, (const char **)name, n, c, h, w, dt_input, df_input);
+    ResultHandle model_result = AllocAllResultHandle(model_address);
+    int model_result_num = GetNumOutputsFromResultHandle(model_result);
+    int *output_n = (int *)malloc(sizeof(int) * model_result_num);
+    int *output_c = (int *)malloc(sizeof(int) * model_result_num);
+    int *output_h = (int *)malloc(sizeof(int) * model_result_num);
+    int *output_w = (int *)malloc(sizeof(int) * model_result_num);
+    char **outputNames = (char **)malloc(sizeof(char *) * model_result_num);
+    for (int i = 0; i < model_result_num; i++) {
+        outputNames[i] = (char *)malloc(sizeof(char) * 1024);
+    }
+    DATA_TYPE *dt_output = (DATA_TYPE *)malloc(sizeof(DATA_TYPE) * model_result_num);
+    DATA_FORMAT *df_output = (DATA_FORMAT *)malloc(sizeof(DATA_FORMAT) * model_result_num);
+    GetOutputDataInfoFromResultHandle(model_result, model_result_num, outputNames, output_n,
+        output_c, output_h, output_w, dt_output, df_output);
+    RunModel(model_address, model_result, num_input, (const char **)name, (void **)input_ptr);
 
-    std::map<std::string, std::shared_ptr<Tensor>> outMap;
-    cnn->run();
-    outMap = cnn->get_outputs();
-    cnn->saveAlgorithmMapToText(algoPath);
     GCLHandle_t handle = OCLContext::getInstance().handle.get();
     for (auto p : handle->kernelMap) {
         std::string device_name = handle->deviceName;
         std::string kernelName = p.first;
         kernelName.erase(0, device_name.size() + 1);
-        if (find((*kernelNames).begin(), (*kernelNames).end(), kernelName) == (*kernelNames).end()) {
-            (*kernelNames).push_back(kernelName);
+        if ((*kernelInfos).find(kernelName) == (*kernelInfos).end()) {
+            Kernel kernel = p.second;
+            Program program;
+            get_program_info_from_kernel(kernel, &program);
+
+            U8 *binary;
+            U32 len;
+            CHECK_STATUS(gcl_get_program_info(program, &binary, &len));
+            std::vector<U8> binaryInfo;
+            for (U32 i = 0; i < len; ++i) {
+                binaryInfo.push_back(binary[i]);
+            }
+            (*kernelInfos)[kernelName] = binaryInfo;
         }
     }
+
     for (auto p : handle->programMap) {
         std::string kernelName = p.first;
-        if (find((*kernelNames).begin(), (*kernelNames).end(), kernelName) == (*kernelNames).end()) {
-            (*kernelNames).push_back(kernelName);
+        if ((*kernelInfos).find(kernelName) == (*kernelInfos).end()) {
+            Program program = p.second;
+            U8 *binary;
+            U32 len;
+            CHECK_STATUS(gcl_get_program_info(program, &binary, &len));
+            std::vector<U8> binaryInfo;
+            for (U32 i = 0; i < len; ++i) {
+                binaryInfo.push_back(binary[i]);
+            }
+            (*kernelInfos)[kernelName] = binaryInfo;
         }
     }
-
-    for (U32 i = 0; i < inputDescs.size(); i++) {
-        delete[] input_ptrs[i];
-    }
-    delete[] input_ptrs;
     CHECK_STATUS(gcl_finish(handle));
+    FreeResultHandle(model_result);
+    DestroyModel(model_address);
+
+    free(n);
+    free(c);
+    free(h);
+    free(w);
+    free(dt_input);
+    free(df_input);
+    for (int i = 0; i < num_input; i++) {
+        free(name[i]);
+        free(input_ptr[i]);
+    }
+    free(name);
+    free(input_ptr);
+    free(output_n);
+    free(output_c);
+    free(output_h);
+    free(output_w);
+    free(dt_output);
+    free(df_output);
+    for (int i = 0; i < model_result_num; i++) {
+        free(outputNames[i]);
+    }
+    free(outputNames);
 }
 
-inline void buildKernelBinFiles(
-    std::vector<std::string> kernelNames, std::string includePath, std::string cppPath)
+inline void buildFileStream(CI8 *fileName, U8 **bytesPtr, U32 *len)
 {
-    GCLHandle_t handle;
-    CHECK_STATUS(gcl_create_handle(&handle));
+    FILE *file = fopen(fileName, "rb");
+    if (file == NULL) {
+        UNI_ERROR_LOG("Cannot open file %s\n", fileName);
+        return;
+    }
+
+    fseek(file, 0, SEEK_END);
+    U32 fileLength = ftell(file);
+    rewind(file);
+
+    U8 *bytes = (U8 *)malloc(sizeof(U8) * fileLength);
+    if (bytes == NULL) {
+        UNI_ERROR_LOG("File memory allocate error.\n");
+        return;
+    }
+
+    U32 result = fread(bytes, 1, fileLength, file);
+    if (result != fileLength) {
+        UNI_ERROR_LOG("Read file %s error.\n", fileName);
+        return;
+    }
+    fclose(file);
+    *len = fileLength;
+    *bytesPtr = bytes;
+}
+
+inline void buildKernelBinFiles(std::map<std::string, std::vector<U8>> kernelInfos,
+    std::string includePath,
+    std::string cppPath,
+    std::string algoPath,
+    std::vector<std::string> algoBinNames)
+{
+    GCLHandle_t handle = OCLContext::getInstance().handle.get();
     std::string device_name = handle->deviceName;
     std::string device_name_up = device_name;
     std::transform(device_name_up.begin(), device_name_up.end(), device_name_up.begin(), ::toupper);
-
-    std::string inline_kernel_bin_head;
-    std::string inline_kernel_bin_head_name;
-    inline_kernel_bin_head_name = "inline_" + device_name + ".h";
-    inline_kernel_bin_head = "#ifndef _INLINE_" + device_name_up + "_H\n";
-    inline_kernel_bin_head += "#define _INLINE_" + device_name_up + "_H\n";
 
     std::string device_map_head;
     std::string device_map_head_name;
@@ -134,6 +227,8 @@ inline void buildKernelBinFiles(
     device_map_head += "#define " + device_name_up + "_MAP_H\n";
     device_map_head += "extern \"C\" {\n";
     device_map_head += "    gcl_kernel_binmap* create_" + device_name + "_kernelbin_map();\n";
+    device_map_head +=
+        "    const char* get_" + device_name + "_algorithm_info(std::string algoName);\n";
     device_map_head += "}\n";
     device_map_head += "#endif";
     write_to_file(device_map_head, includePath, device_map_head_name);
@@ -141,9 +236,56 @@ inline void buildKernelBinFiles(
     std::string device_map;
     std::string device_map_name;
     device_map_name = device_name + "_map.cpp";
-    device_map = "#include \"gcl_kernel_binmap.h\"\n";
-    device_map += "#include\"" + device_map_head_name + "\"\n";
-    device_map += "#include\"" + inline_kernel_bin_head_name + "\"\n";
+    device_map += "#include \"gcl_kernel_binmap.h\"\n";
+    device_map += "#include \"" + device_map_head_name + "\"\n";
+
+    for (auto p : kernelInfos) {
+        std::string kernelName = p.first;
+        std::vector<U8> binaryInfo = p.second;
+        U32 len = binaryInfo.size();
+
+        std::string func = device_name + "_" + kernelName;
+        device_map += "const unsigned int " + func + "_len = " + std::to_string(len) + ";\n";
+        device_map += "const unsigned char " + func + "[] = " + "{";
+        for (U32 i = 0; i < len; i++) {
+            I8 tempstr[4];
+            if (i % 20 == 0) {
+                device_map += "\n";
+            }
+            sprintf(tempstr, "0x%02x", binaryInfo[i]);
+            device_map += std::string(tempstr);
+            if (i != len - 1) {
+                device_map += ", ";
+            } else {
+                device_map += "};\n";
+            }
+        }
+    }
+
+    for (auto algoName : algoBinNames) {
+        U8 *bytes;
+        U32 len;
+        std::string algo = algoPath + algoName;
+        buildFileStream(algo.c_str(), &bytes, &len);
+        device_map += "const unsigned int " + algoName + "_len = " + std::to_string(len) + ";\n";
+        device_map += "const unsigned char " + algoName + "[] = " + "{";
+        for (U32 i = 0; i < len; i++) {
+            I8 tempstr[4];
+            if (i % 20 == 0) {
+                device_map += "\n";
+            }
+            sprintf(tempstr, "0x%02x", bytes[i]);
+            device_map += std::string(tempstr);
+            if (i != len - 1) {
+                device_map += ", ";
+            } else {
+                device_map += "};\n";
+            }
+        }
+        free(bytes);
+    }
+    write_to_file(device_map, cppPath, device_map_name);
+
     device_map += "class " + device_name + " : public gcl_kernel_binmap {\n";
     device_map += "public:\n";
     device_map += "    " + device_name + "() {\n";
@@ -152,50 +294,27 @@ inline void buildKernelBinFiles(
     device_map += "    void loadKernelBin();\n";
     device_map += "};\n";
     device_map += "void " + device_name + "::loadKernelBin() {\n";
-
-    std::string device_kernel_bin;
-    std::string device_kernel_bin_name;
-    device_kernel_bin_name = device_name + "_kernel_bin.cpp";
-    device_kernel_bin = "#include\"" + inline_kernel_bin_head_name + "\"\n";
-
-    for (auto p : kernelNames) {
-        Kernel kernel;
-        U8 *binary;
-        U32 len;
-        CHECK_STATUS(gcl_create_kernel(handle, p.c_str(), &kernel));
-        Program program = handle->programMap[p];
-        CHECK_STATUS(gcl_get_program_info(program, &binary, &len));
-        std::string func = device_name + "_" + p;
-        inline_kernel_bin_head += "extern const unsigned int " + func + "_len;\n";
-        inline_kernel_bin_head += "extern const unsigned char " + func + "[];\n";
+    for (auto p : kernelInfos) {
+        std::string kernelName = p.first;
+        std::string func = device_name + "_" + kernelName;
         device_map += "    put(\"" + func + "\", " + "{" + func + ", " + func + "_len});\n";
-        device_kernel_bin += "const unsigned int " + func + "_len = " + std::to_string(len) + ";\n";
-        device_kernel_bin += "const unsigned char " + func + "[] = " + "{";
-        for (U32 i = 0; i < len; i++) {
-            char tempstr[4];
-            if (i % 20 == 0) {
-                device_kernel_bin += "\n";
-            }
-            sprintf(tempstr, "0x%02x", binary[i]);
-            device_kernel_bin += std::string(tempstr);
-            if (i != len - 1) {
-                device_kernel_bin += ", ";
-            } else {
-                device_kernel_bin += "};\n";
-            }
-        }
-        CHECK_STATUS(release_kernel(kernel));
     }
-    inline_kernel_bin_head += "#endif";
     device_map += "}\n";
     device_map += "gcl_kernel_binmap* create_" + device_name + "_kernelbin_map(){\n";
     device_map += "    " + device_name + "* kernelbin = new " + device_name + "();\n";
     device_map += "    return (gcl_kernel_binmap*) kernelbin;\n";
-    device_map += "}";
-    write_to_file(inline_kernel_bin_head, cppPath, inline_kernel_bin_head_name);
+    device_map += "}\n";
     write_to_file(device_map, cppPath, device_map_name);
-    write_to_file(device_kernel_bin, cppPath, device_kernel_bin_name);
-    gcl_destroy_handle(handle);
+
+    device_map += "const char* get_" + device_name + "_algorithm_info(std::string algoName){\n";
+    for (auto algoName : algoBinNames) {
+        device_map += "    if (algoName == \"" + algoName + "\") {\n";
+        device_map += "        return (const char*)" + algoName + ";\n";
+        device_map += "    }\n";
+    }
+    device_map += "    return nullptr;\n";
+    device_map += "}\n";
+    write_to_file(device_map, cppPath, device_map_name);
 }
 #endif
 
@@ -239,14 +358,16 @@ int main(int argc, char *argv[])
         cppPath += "/";
     }
 
-    std::vector<std::string> modelsNameArray;
-    modelsNameArray = buildModelsNameArray(modelsPath, ".bolt");
-    std::vector<std::string> kernelNames;
-    for (auto name : modelsNameArray) {
-        runBoltModel(name.c_str(), algoPath.c_str(), &kernelNames);
+    std::vector<std::string> modelNamesArray;
+    modelNamesArray = buildFileNamesArray(modelsPath, ".bolt");
+    std::map<std::string, std::vector<U8>> kernelInfos;
+    for (auto name : modelNamesArray) {
+        name = modelsPath + name;
+        runBoltModel(name.c_str(), algoPath.c_str(), &kernelInfos);
     }
-
-    buildKernelBinFiles(kernelNames, includePath, cppPath);
+    std::vector<std::string> algoBinNamesArray;
+    algoBinNamesArray = buildFileNamesArray(algoPath, "");
+    buildKernelBinFiles(kernelInfos, includePath, cppPath, algoPath, algoBinNamesArray);
 #endif
     return 0;
 }

@@ -197,7 +197,7 @@ EE convolution_transform_filter(Tensor filterTensor,
     EE ret = NOT_SUPPORTED;
     if (IS_GENERAL(arch)) {
 #ifdef _USE_GENERAL
-        UNI_memcpy(filterTransformed, filter, tensorNumBytes(filterDesc));
+        UNI_MEMCPY(filterTransformed, filter, tensorNumBytes(filterDesc));
         ftmDesc = filterDesc;
         ret = SUCCESS;
 #endif
@@ -257,6 +257,9 @@ EE convolution_infer_forward_tmp_bytes(Tensor inputTensor,
             convParamSpec, ((MaliPara_t)(archInfo->archPara))->forwardRunInfo, bytes);
 #endif
     }
+    if (inputDesc.df == DF_NHWC) {
+        *bytes += tensorNumBytes(inputDesc);
+    }
     return ret;
 }
 
@@ -270,7 +273,7 @@ inline void convolution_process_bnn_scale(
     *bias += vecLen * bytesOf(DT_F16);
 }
 
-EE convolution(Tensor inputTensor,
+EE convolution(std::vector<Tensor> inputTensors,
     Tensor filterTensor,
     ConvolutionParamSpec convParamSpec,
     ConvolutionForwardAlgorithm algorithm,
@@ -282,12 +285,13 @@ EE convolution(Tensor inputTensor,
     ArchInfo_t archInfo)
 {
     auto arch = archInfo->arch;
-    TensorDesc inputDesc = inputTensor.get_desc();
+    TensorDesc inputDesc = inputTensors[0].get_desc();
     if (3 == inputDesc.nDims) {
         inputDesc = tensor4df(
             inputDesc.dt, DF_NCHW, inputDesc.dims[2], inputDesc.dims[1], inputDesc.dims[0], 1);
     }
-    void *input = get_ptr_from_tensor(inputTensor, arch);
+
+    void *input = get_ptr_from_tensor(inputTensors[0], arch);
     TensorDesc filterDesc = filterTensor.get_desc();
     void *filter = get_ptr_from_tensor(filterTensor, arch);
     TensorDesc biasDesc = biasTensor.get_desc();
@@ -297,6 +301,26 @@ EE convolution(Tensor inputTensor,
     TensorDesc outputDesc = outputTensor.get_desc();
     void *output = get_ptr_from_tensor(outputTensor, arch);
     TensorDesc scaleDesc = filterDesc;
+
+    // process fused-add
+    ActivationParamSpec eltwiseActDesc = activationDesc;
+    void *eltwiseInput = nullptr;
+    bool isEltwiseSeperate = true;
+    TensorDesc eltwiseInputDesc;
+    if (inputTensors.size() > 1) {
+        eltwiseInput = get_ptr_from_tensor(inputTensors[1], arch);
+        eltwiseInputDesc = inputTensors[1].get_desc();
+        activationDesc.mode = ACTIVATION_NULL;
+    }
+#if defined(_USE_GENERAL) || defined(_USE_X86)
+    if (tensorNumElements(eltwiseInputDesc) == tensorNumElements(outputDesc) &&
+        eltwiseInputDesc.df == outputDesc.df) {
+        isEltwiseSeperate = false;
+        activationDesc = eltwiseActDesc;
+    } else {
+        eltwiseInput = nullptr;
+    }
+#endif
 
     EE ret = NOT_SUPPORTED;
 #ifdef _USE_FP16
@@ -310,16 +334,17 @@ EE convolution(Tensor inputTensor,
         }
     }
 #endif
+
     if (IS_GENERAL(arch)) {
 #ifdef _USE_GENERAL
-        ret = convolution_general(inputDesc, input, filterDesc, filter, convParamSpec, scaleDesc,
-            scale, biasDesc, bias, outputDesc, output, activationDesc);
+        ret = convolution_general(inputDesc, input, eltwiseInput, filterDesc, filter, convParamSpec,
+            scaleDesc, scale, biasDesc, bias, outputDesc, output, activationDesc);
 #endif
 #ifdef _USE_X86
     } else if (IS_X86_AVX2(arch)) {
-        ret = convolution_x86(inputDesc, input, filterDesc, filter, convParamSpec, algorithm,
-            scaleDesc, scale, biasDesc, bias, tmpBytes, tmp, outputDesc, output, activationDesc,
-            archInfo->arch);
+        ret = convolution_x86(inputDesc, input, eltwiseInput, filterDesc, filter, convParamSpec,
+            algorithm, scaleDesc, scale, biasDesc, bias, tmpBytes, tmp, outputDesc, output,
+            activationDesc, archInfo->arch);
 #endif
 #ifdef _USE_NEON
     } else if (IS_ARM(arch)) {
@@ -336,5 +361,18 @@ EE convolution(Tensor inputTensor,
             activationDesc.mode);
 #endif
     }
+
+    // process fused-add
+#ifdef _USE_CPU
+    if (inputTensors.size() > 1 && isEltwiseSeperate) {
+        std::vector<Tensor> eltwiseInputTensors = {outputTensor, inputTensors[1]};
+        EltwiseParamSpec eltwiseDesc;
+        eltwiseDesc.elt_mode = ELTWISE_SUM;
+        eltwiseDesc.activation_type = eltwiseActDesc.mode;
+        eltwiseDesc.activation_spec = convParamSpec.activation_spec;
+        ret = eltwise(eltwiseInputTensors, eltwiseDesc, tmpTensor, outputTensor, archInfo);
+    }
+#endif
+
     return ret;
 }

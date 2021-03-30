@@ -12,7 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "error.h"
-#include "types.h"
+
 #include "cpu/arm/blas_arm.h"
 #ifdef _USE_FP16
 #include "cpu/arm/fp16/blas_fp16.h"

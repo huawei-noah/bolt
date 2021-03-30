@@ -18,6 +18,9 @@
 #ifdef _USE_NEON
 #include "cpu/arm/tensor_computing_arm.h"
 #endif
+#ifdef _USE_X86
+#include "cpu/x86/tensor_computing_x86.h"
+#endif
 #ifdef _USE_MALI
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
@@ -81,8 +84,7 @@ EE prelu(Tensor inputTensor,
 #endif
 #ifdef _USE_X86
     } else if (IS_X86_AVX2(arch)) {
-        UNI_WARNING_LOG("The x86 prelu operator is not optimized now.\n");
-        ret = prelu_general(inputDesc, input, weight, preluDesc, outputDesc, output);
+        ret = prelu_x86(inputDesc, input, weight, preluDesc, outputDesc, output);
 #endif
 #ifdef _USE_NEON
     } else if (IS_ARM(arch)) {

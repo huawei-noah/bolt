@@ -15,6 +15,7 @@
 #ifdef _USE_FP32
 #include "cpu/x86/fp32/tensor_computing_fp32.h"
 #endif
+#include "tensor_transpose.h"
 
 EE depthwise_pointwise_convolution_transform_filter_x86(TensorDesc dwFilterDesc,
     const void *dwFilter,
@@ -63,11 +64,20 @@ EE depthwise_pointwise_convolution_x86(TensorDesc inputDesc,
     ActivationParamSpec pointwiseActivationParamSpec,
     Arch arch)
 {
+    TensorDesc newInputDesc = inputDesc;
+    void *newInput = input;
+    if (inputDesc.df != DF_NCHWC8) {
+        newInputDesc.df = DF_NCHWC8;
+        newInput = tmp;
+        tmp = (U8 *)tmp + tensorNumBytes(inputDesc);
+        tmpBytes -= tensorNumBytes(inputDesc);
+        transformNCHWToNCHWC8(inputDesc, input, newInputDesc, newInput);
+    }
     EE ret = SUCCESS;
     switch (dwFilterDesc.dt) {
 #ifdef _USE_FP32
         case DT_F32: {
-            ret = depthwise_pointwise_convolution_fp32(inputDesc, (F32 *)input, dwFilterDesc,
+            ret = depthwise_pointwise_convolution_fp32(newInputDesc, (F32 *)newInput, dwFilterDesc,
                 (const F32 *)dwFilter, pwFilterDesc, (const F32 *)pwFilter, convParamSpec,
                 algorithm, dwBiasDesc, (const F32 *)dwBias, pwBiasDesc, (const F32 *)pwBias,
                 tmpBytes, tmp, outputDesc, (F32 *)output, depthwiseActivationParamSpec,

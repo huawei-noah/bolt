@@ -21,6 +21,7 @@
 #ifdef _USE_INT8
 #include "cpu/arm/int8/tensor_computing_int8.h"
 #endif
+#include "tensor_transpose.h"
 
 EE depthwise_pointwise_convolution_infer_forward_algorithm_arm(TensorDesc inputDesc,
     TensorDesc dwFilterDesc,
@@ -147,6 +148,9 @@ EE depthwise_pointwise_convolution_infer_forward_tmp_bytes_arm(TensorDesc inputD
         default:
             break;
     }
+    if (idf != DF_NCHWC8) {
+        *bytes += tensorNumBytes(inputDesc);
+    }
     *bytes += 32;
     return ret;
 }
@@ -171,11 +175,20 @@ EE depthwise_pointwise_convolution_arm(TensorDesc inputDesc,
     ActivationParamSpec pointwiseActivationParamSpec,
     Arch arch)
 {
+    TensorDesc newInputDesc = inputDesc;
+    void *newInput = input;
+    if (inputDesc.df != DF_NCHWC8) {
+        newInputDesc.df = DF_NCHWC8;
+        newInput = tmp;
+        tmp = (U8 *)tmp + tensorNumBytes(inputDesc);
+        tmpBytes -= tensorNumBytes(inputDesc);
+        transformNCHWToNCHWC8(inputDesc, input, newInputDesc, newInput);
+    }
     EE ret = SUCCESS;
     switch (dwFilterDesc.dt) {
 #ifdef _USE_FP16
         case DT_F16: {
-            ret = depthwise_pointwise_convolution_fp16(inputDesc, (F16 *)input, dwFilterDesc,
+            ret = depthwise_pointwise_convolution_fp16(newInputDesc, (F16 *)newInput, dwFilterDesc,
                 (const F16 *)dwFilter, pwFilterDesc, (const F16 *)pwFilter, convParamSpec,
                 algorithm, dwBiasDesc, (const F16 *)dwBias, pwBiasDesc, (const F16 *)pwBias,
                 tmpBytes, tmp, outputDesc, (F16 *)output, depthwiseActivationParamSpec,
@@ -185,7 +198,7 @@ EE depthwise_pointwise_convolution_arm(TensorDesc inputDesc,
 #endif
 #ifdef _USE_FP32
         case DT_F32: {
-            ret = depthwise_pointwise_convolution_fp32(inputDesc, (F32 *)input, dwFilterDesc,
+            ret = depthwise_pointwise_convolution_fp32(newInputDesc, (F32 *)newInput, dwFilterDesc,
                 (const F32 *)dwFilter, pwFilterDesc, (const F32 *)pwFilter, convParamSpec,
                 algorithm, dwBiasDesc, (const F32 *)dwBias, pwBiasDesc, (const F32 *)pwBias,
                 tmpBytes, tmp, outputDesc, (F32 *)output, depthwiseActivationParamSpec,
@@ -195,7 +208,7 @@ EE depthwise_pointwise_convolution_arm(TensorDesc inputDesc,
 #endif
 #ifdef _USE_INT8
         case DT_I8: {
-            ret = depthwise_pointwise_convolution_int8(inputDesc, (INT8 *)input, dwFilterDesc,
+            ret = depthwise_pointwise_convolution_int8(newInputDesc, (INT8 *)newInput, dwFilterDesc,
                 (const INT8 *)dwFilter, pwFilterDesc, (const INT8 *)pwFilter, convParamSpec,
                 algorithm, dwBiasDesc, (const I32 *)dwBias, pwBiasDesc, (const I32 *)pwBias,
                 tmpBytes, tmp, outputDesc, (I32 *)output, depthwiseActivationParamSpec,

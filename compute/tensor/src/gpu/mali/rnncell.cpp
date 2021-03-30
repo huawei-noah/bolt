@@ -12,7 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "sys.h"
-#include "types.h"
+
 #include "tensor_desc.h"
 #include "error.h"
 #include "gpu/mali/tensor_computing_mali.h"
@@ -26,7 +26,7 @@ inline EE rnncell_checkpara_mali(GCLHandle_t handle,
     GCLMem_t filter,
     GCLMem_t bias,
     GCLMem_t state,
-    RNNParamSpec rnncellDesc,
+    RNNParamSpec rnnPara,
     GCLMem_t tmpBuf,
     TensorDesc hDesc,
     GCLMem_t output)
@@ -38,26 +38,12 @@ inline EE rnncell_checkpara_mali(GCLHandle_t handle,
     DataFormat df;
     DataType dt;
     U32 iB, iX;
-    if (xDesc.nDims == 2) {
-        CHECK_STATUS(tensor2dGet(xDesc, &dt, &df, &iB, &iX));
-    }
-    if (xDesc.nDims == 3) {
-        if (xDesc.df != DF_MTK && xDesc.df != DF_MKT) {
-            CHECK_STATUS(NOT_SUPPORTED);
-        }
-        U32 m, k, t;
-        get_nlp_mkt_val(xDesc, &dt, &m, &k, &t);
-        iB = m;
-        iX = k;
-        if (t != 1) {
-            CHECK_STATUS(NOT_SUPPORTED);
-        }
-    }
+    CHECK_STATUS(tensor2dGet(xDesc, &dt, &df, &iB, &iX));
     if (iB != 1) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
-    U32 hDim = rnncellDesc.numOutput;
-    U32 col = (rnncellDesc.numProjection > 0) ? rnncellDesc.numProjection : hDim;
+    U32 hDim = rnnPara.numOutput;
+    U32 col = (rnnPara.numProjection > 0) ? rnnPara.numProjection : hDim;
     U32 filterRow, filterCol;
     tensorSelectGet(filterDesc, NULL, NULL, NULL, NULL, &filterRow, &filterCol);
     if (filterCol != hDim + iX) {
@@ -76,52 +62,29 @@ inline EE rnncell_checkpara_mali(GCLHandle_t handle,
 }
 
 EE rnncell_infer_output_size_mali(TensorDesc inputDesc,
-    RNNParamSpec rnncellDesc,
-    TensorDesc *outputDesc,
+    RNNParamSpec rnnPara,
+    TensorDesc outputDesc,
     GCLMemDesc_t gclmemInputDesc,
     GCLMemDesc_t gclmemStateDesc,
     GCLMemDesc_t gclmemOutputDesc)
 {
+    if (gclmemInputDesc == nullptr || gclmemOutputDesc == nullptr || gclmemStateDesc == nullptr) {
+        CHECK_STATUS(NULL_POINTER);
+    }
+
     DataType dt;
-    DataFormat df;
-    U32 iB, iX;
-    U32 hDim = rnncellDesc.numOutput;
-    if (inputDesc.nDims == 2) {
-        CHECK_STATUS(tensor2dGet(inputDesc, &dt, &df, &iB, &iX));
-    } else if (inputDesc.nDims == 3) {
-        if (inputDesc.df != DF_MTK && inputDesc.df != DF_MKT) {
-            CHECK_STATUS(NOT_SUPPORTED);
-        }
-        U32 m, k, t;
-        get_nlp_mkt_val(inputDesc, &dt, &m, &k, &t);
-        iB = m;
-        iX = k;
-    } else {
-        return NOT_SUPPORTED;
-    }
+    U32 iw, ih;
+    U32 ow, oh;
+    CHECK_STATUS(tensorSelectGet(inputDesc, &dt, NULL, NULL, NULL, &ih, &iw));
+    CHECK_STATUS(tensorSelectGet(outputDesc, &dt, NULL, NULL, NULL, &oh, &ow));
 
-    if (outputDesc) {
-        *outputDesc = inputDesc;
-        if (inputDesc.nDims == 2) {
-            (*outputDesc).dims[0] = hDim;
-        }
-        if (inputDesc.df == DF_MTK) {
-            (*outputDesc).dims[0] = hDim;
-        }
-        if (inputDesc.df == DF_MKT) {
-            (*outputDesc).dims[1] = hDim;
-        }
-    }
-
-    // U32 item_c = forwardRunInfo->best_c[0];
-    // U32 iX_align = (iX + item_c - 1) / item_c * item_c;
-    CHECK_STATUS(infer_gclmem_desc_ncwhc4(
-        1, 1, iX, 0, 0, 1, 1, hDim, dt, dt, gclmemInputDesc, gclmemOutputDesc));
-    U32 hdim = rnncellDesc.numOutput;
-    U32 col = (rnncellDesc.numProjection > 0) ? rnncellDesc.numProjection : hDim;
-    U32 numState = col + (hdim + 3) / 4 * 4;
+    CHECK_STATUS(infer_gclmem_desc_nchw(
+        iw, ih, 1, 0, 0, ow, oh, 1, dt, dt, gclmemInputDesc, gclmemOutputDesc));
+    U32 hDim = rnnPara.numOutput;
+    U32 col = (rnnPara.numProjection > 0) ? rnnPara.numProjection : hDim;
+    U32 numState = col + (hDim + 3) / 4 * 4;
     CHECK_STATUS(
-        infer_gclmem_desc_nchw(1, 1, numState, 0, 0, 0, 0, 0, dt, dt, gclmemStateDesc, NULL));
+        infer_gclmem_desc_nchw(numState, 1, 1, 0, 0, 0, 0, 0, dt, dt, gclmemStateDesc, NULL));
     return SUCCESS;
 }
 
@@ -129,10 +92,13 @@ EE rnncell_infer_forward_algorithm_mali(GCLHandle_t handle,
     TensorDesc xDesc,
     TensorDesc filterDesc,
     TensorDesc biasDesc,
-    RNNParamSpec rnncellDesc,
+    RNNParamSpec rnnPara,
     U32 batchStrideX,
     U32 batchStrideH,
     TensorDesc hDesc,
+    GCLMemDesc inputMemDesc,
+    GCLMemDesc stateMemDesc,
+    GCLMemDesc outputMemDesc,
     ForwardRunInfoMali_t forwardRunInfo)
 {
     if (forwardRunInfo == nullptr) {
@@ -148,33 +114,21 @@ EE rnncell_infer_forward_algorithm_mali(GCLHandle_t handle,
     GCLMem_t state = gcl_create_gclmem();
     GCLMem_t filter0 = gcl_create_gclmem();
     GCLMem_t filter1 = gcl_create_gclmem();
-    GCLMem_t bias = gcl_create_gclmem();
+    GCLMem_t bias0 = gcl_create_gclmem();
+    GCLMem_t bias1 = gcl_create_gclmem();
     GCLMem_t tmpbuf = gcl_create_gclmem();
     GCLMem_t currentH = gcl_create_gclmem();
 
     std::vector<ForwardRunInfoMali> runInfos;
     ForwardRunInfoMali runInfo;
     runInfo.algorithm = (I32)CONVOLUTION_ALGORITHM_DIRECT;
-    std::vector<GCLMemDesc> currentXMemDescs;
-    std::vector<GCLMemDesc> stateMemDescs;
-    std::vector<GCLMemDesc> currentHMemDescs;
     std::vector<GCLMemDesc> filterMemDescs;
     std::vector<GCLMemDesc> filterMemProDescs;
     U32 configInfo[3][64];
     U32 configNum = 3;
     U32 bytes = 0;
     U32 maxBytes = 0;
-    U32 maxCurrentXSize = 0;
-    U32 maxStateSize = 0;
-    U32 maxCurrentHSize = 0;
     U32 maxFilterSize = 0;
-    U32 hDim = rnncellDesc.numOutput;
-    U32 col = (rnncellDesc.numProjection > 0) ? rnncellDesc.numProjection : hDim;
-    U32 biasNum = col * 4;
-    U32 stride[3] = {0, 0, 0};
-    U32 offset[3] = {0, 0, 0};
-    DataType dt = xDesc.dt;
-    bool useProject = (rnncellDesc.numProjection > 0) ? true : false;
     for (U32 i = 0; i < configNum; ++i) {
         configInfo[0][i] = 1;
         configInfo[1][i] = 1 << (2 + i);
@@ -184,10 +138,9 @@ EE rnncell_infer_forward_algorithm_mali(GCLHandle_t handle,
         configInfo[2][i + configNum] = 0;
     }
 
+    U32 stride[3] = {0, 0, 0};
+    U32 offset[3] = {0, 0, 0};
     for (U32 i = 0; i < configNum; ++i) {
-        GCLMemDesc currentXMemDesc = gcl_mem_desc(stride, offset, DT_U8, DF_NCWHC4);
-        GCLMemDesc stateMemDesc = gcl_mem_desc(stride, offset, DT_U8, DF_NCHW);
-        GCLMemDesc currentHMemDesc = gcl_mem_desc(stride, offset, DT_U8, DF_NCWHC4);
         GCLMemDesc filterMemDesc[2];
         filterMemDesc[0] = gcl_mem_desc(stride, offset, DT_U8, DF_NCWHC4);
         filterMemDesc[1] = gcl_mem_desc(stride, offset, DT_U8, DF_NCWHC4);
@@ -197,32 +150,19 @@ EE rnncell_infer_forward_algorithm_mali(GCLHandle_t handle,
         runInfo.best_w[1] = configInfo[0][i + configNum];
         runInfo.best_c[1] = configInfo[1][i + configNum];
         runInfo.best_k[1] = configInfo[2][i + configNum];
-        if (rnncell_infer_output_size_mali(xDesc, rnncellDesc, NULL, &currentXMemDesc,
-                &stateMemDesc, &currentHMemDesc) != SUCCESS) {
-            continue;
-        }
-        if (rnn_transform_filter_bytes_mali(
-                filterDesc, rnncellDesc, filterMemDesc, &bytes, &runInfo) != SUCCESS) {
+        if (rnn_transform_filter_bytes_mali(filterDesc, rnnPara, filterMemDesc, &bytes, &runInfo) !=
+            SUCCESS) {
             continue;
         }
         if (maxBytes < bytes) {
             maxBytes = bytes;
         }
         if (rnncell_infer_forward_tmp_bytes_mali(
-                xDesc, filterDesc, hDesc, rnncellDesc, &bytes, &runInfo) != SUCCESS) {
+                xDesc, filterDesc, hDesc, rnnPara, &bytes, &runInfo) != SUCCESS) {
             continue;
         }
         if (maxBytes < bytes) {
             maxBytes = bytes;
-        }
-        if (maxCurrentXSize < currentXMemDesc.byteSize) {
-            maxCurrentXSize = currentXMemDesc.byteSize;
-        }
-        if (maxStateSize < stateMemDesc.byteSize) {
-            maxStateSize = stateMemDesc.byteSize;
-        }
-        if (maxCurrentHSize < currentHMemDesc.byteSize) {
-            maxCurrentHSize = currentHMemDesc.byteSize;
         }
         if (maxFilterSize < filterMemDesc[0].byteSize) {
             maxFilterSize = filterMemDesc[0].byteSize;
@@ -230,9 +170,6 @@ EE rnncell_infer_forward_algorithm_mali(GCLHandle_t handle,
         if (maxFilterSize < filterMemDesc[1].byteSize) {
             maxFilterSize = filterMemDesc[1].byteSize;
         }
-        currentXMemDescs.push_back(currentXMemDesc);
-        stateMemDescs.push_back(stateMemDesc);
-        currentHMemDescs.push_back(currentHMemDesc);
         filterMemDescs.push_back(filterMemDesc[0]);
         filterMemProDescs.push_back(filterMemDesc[1]);
         runInfos.push_back(runInfo);
@@ -242,59 +179,56 @@ EE rnncell_infer_forward_algorithm_mali(GCLHandle_t handle,
     if (algosNum == 0) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
-    currentXMemDescs[0].byteSize = maxCurrentXSize;
-    stateMemDescs[0].byteSize = maxStateSize;
-    currentHMemDescs[0].byteSize = maxCurrentHSize;
+    bool useProject = (rnnPara.numProjection > 0) ? true : false;
+    U32 col = (useProject) ? rnnPara.numProjection : rnnPara.numOutput;
+    stride[0] = col * 4;
+    stride[1] = 1;
+    stride[2] = 1;
+    DataType dt = xDesc.dt;
+    CHECK_STATUS(gclmem_set_desc_padding(
+        &bias0->desc, stride, offset, dt, DF_NHWC, GCL_MEM_BUF, CL_MEM_READ_WRITE));
+    stride[0] = rnnPara.numOutput;
+    CHECK_STATUS(gclmem_set_desc_padding(
+        &bias1->desc, stride, offset, dt, DF_NHWC, GCL_MEM_BUF, CL_MEM_READ_WRITE));
+
     filterMemDescs[0].byteSize = maxFilterSize;
     filterMemProDescs[0].byteSize = maxFilterSize;
 
-    currentX->desc = currentXMemDescs[0];
-    state->desc = stateMemDescs[0];
-    currentH->desc = currentHMemDescs[0];
+    currentX->desc = inputMemDesc;
+    state->desc = stateMemDesc;
+    currentH->desc = outputMemDesc;
     filter0->desc = filterMemDescs[0];
     filter1->desc = filterMemProDescs[0];
-    bias->desc.stride[0] = biasNum;
-    bias->desc.stride[1] = 1;
-    bias->desc.stride[2] = 1;
-    bias->desc.offset[0] = 0;
-    bias->desc.offset[1] = 0;
-    bias->desc.offset[2] = 0;
-    bias->desc.num = biasNum;
-    bias->desc.memFormat = DF_NHWC;
-    bias->desc.byteSize = biasNum * bytesOf(dt);
-    bias->desc.memType = GCL_MEM_BUF;
     tmpbuf->desc.byteSize = maxBytes;
     gcl_create_memory(handle, currentX);
     gcl_create_memory(handle, state);
     gcl_create_memory(handle, currentH);
     gcl_create_memory(handle, filter0);
     gcl_create_memory(handle, filter1);
-    gcl_create_memory(handle, bias);
+    gcl_create_memory(handle, bias0);
+    gcl_create_memory(handle, bias1);
     if (maxBytes) {
         gcl_create_memory(handle, tmpbuf);
     }
 
     U32 runKernelBe = 0;
-    U32 runKernelEnd = 0;
     double minTime = DBL_MAX;
     double minTimePro = DBL_MAX;
     ForwardRunInfoMali bestRunInfo;
     for (U32 i = 0; i < algosNum; i++) {
-        currentX->desc = currentXMemDescs[i];
-        state->desc = currentXMemDescs[i];
-        currentH->desc = currentHMemDescs[i];
         filter0->desc = filterMemDescs[i];
         filter1->desc = filterMemProDescs[i];
         GCLMem filter[2];
+        GCLMem bias[2];
         filter[0] = *filter0;
         filter[1] = *filter1;
+        bias[0] = *bias0;
+        bias[1] = *bias1;
 
-        runKernelBe = handle->kernelVec->size() + 1;
-        runKernelEnd = handle->kernelVec->size() + 2;
         if (rnncell_mali(handle, xDesc, currentX, filterDesc, filter, biasDesc, bias, state,
-                rnncellDesc, batchStrideX, batchStrideH, maxBytes, tmpbuf, hDesc, currentH,
+                rnnPara, batchStrideX, batchStrideH, maxBytes, tmpbuf, hDesc, currentH,
                 &runInfos[i]) == SUCCESS) {
-            gcl_run_kernelVec_timing(handle, runKernelBe, runKernelEnd);
+            gcl_run_kernelVec_timing(handle, runKernelBe + 1, runKernelBe + 2);
             if (minTime > handle->t_execute) {
                 minTime = handle->t_execute;
                 bestRunInfo.algorithm = runInfos[i].algorithm;
@@ -303,17 +237,16 @@ EE rnncell_infer_forward_algorithm_mali(GCLHandle_t handle,
                 bestRunInfo.best_k[0] = runInfos[i].best_k[0];
             }
             if (useProject) {
-                runKernelBe += 2;
-                runKernelEnd += 2;
-                gcl_run_kernelVec_timing(handle, runKernelBe, runKernelEnd);
+                gcl_run_kernelVec_timing(handle, runKernelBe + 3, runKernelBe + 4);
                 if (minTimePro > handle->t_execute) {
-                    minTime = handle->t_execute;
+                    minTimePro = handle->t_execute;
                     bestRunInfo.algorithm = runInfos[i].algorithm;
                     bestRunInfo.best_w[1] = runInfos[i].best_w[1];
                     bestRunInfo.best_c[1] = runInfos[i].best_c[1];
                     bestRunInfo.best_k[1] = runInfos[i].best_k[1];
                 }
             }
+            runKernelBe = handle->kernelVec->size();
         }
     }
     if (minTime == DBL_MAX) {
@@ -329,14 +262,13 @@ EE rnncell_infer_forward_algorithm_mali(GCLHandle_t handle,
     gcl_destroy_gclmem(currentH);
     gcl_destroy_gclmem(filter0);
     gcl_destroy_gclmem(filter1);
-    gcl_destroy_gclmem(bias);
+    gcl_destroy_gclmem(bias0);
+    gcl_destroy_gclmem(bias1);
     runInfos.clear();
-    currentXMemDescs.clear();
-    stateMemDescs.clear();
-    currentHMemDescs.clear();
     filterMemDescs.clear();
     filterMemProDescs.clear();
     CHECK_STATUS(gcl_clean_kernelVec(handle));
+    CHECK_STATUS(gcl_clean_programMap(handle));
     CHECK_STATUS(gcl_off_queue_profiling(handle));
     return SUCCESS;
 }
@@ -386,7 +318,7 @@ EE rnn_transform_filter_mali(GCLHandle_t handle,
 EE rnncell_infer_forward_tmp_bytes_mali(TensorDesc inputDesc,
     TensorDesc filterDesc,
     TensorDesc outputDesc,
-    RNNParamSpec rnncellDesc,
+    RNNParamSpec rnnPara,
     U32 *bytes,
     ForwardRunInfoMali_t forwardRunInfo)
 {
@@ -394,7 +326,7 @@ EE rnncell_infer_forward_tmp_bytes_mali(TensorDesc inputDesc,
     switch (inputDesc.dt) {
         case DT_F16: {
             ret = rnncell_infer_forward_tmp_bytes_mali_fp16(
-                inputDesc, filterDesc, outputDesc, rnncellDesc, bytes, forwardRunInfo);
+                inputDesc, filterDesc, outputDesc, rnnPara, bytes, forwardRunInfo);
             break;
         }
         default:
@@ -412,7 +344,7 @@ EE rnncell_mali(GCLHandle_t handle,
     TensorDesc biasDesc,
     GCLMem_t bias,
     GCLMem_t state,
-    RNNParamSpec rnncellDesc,
+    RNNParamSpec rnnPara,
     U32 batchStrideX,
     U32 batchStrideH,
     U32 tmpBytes,
@@ -422,12 +354,12 @@ EE rnncell_mali(GCLHandle_t handle,
     ForwardRunInfoMali_t forwardRunInfo)
 {
     EE ret = SUCCESS;
-    ret = rnncell_checkpara_mali(handle, xDesc, currentX, filterDesc, filter, bias, state,
-        rnncellDesc, tmpBuf, hDesc, output);
+    ret = rnncell_checkpara_mali(
+        handle, xDesc, currentX, filterDesc, filter, bias, state, rnnPara, tmpBuf, hDesc, output);
     switch (xDesc.dt) {
         case DT_F16: {
             ret = rnncell_mali_fp16(handle, xDesc, currentX, filterDesc, filter, biasDesc, bias,
-                state, tmpBytes, tmpBuf, rnncellDesc, batchStrideX, batchStrideH, hDesc, output,
+                state, tmpBytes, tmpBuf, rnnPara, batchStrideX, batchStrideH, hDesc, output,
                 forwardRunInfo);
             break;
         }

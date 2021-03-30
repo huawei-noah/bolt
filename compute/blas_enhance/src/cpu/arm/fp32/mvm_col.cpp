@@ -12,7 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include <arm_neon.h>
-#include "types.h"
+
 #include "blas_fp32.h"
 
 inline void mvm_col_tail(U32 N, U32 K, F32 *matrix, F32 *vector, F32 *result)

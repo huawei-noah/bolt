@@ -11,9 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <math.h>
-#include <bitset>
-#include "types.h"
 #include "cpu/general/tensor_computing_general.h"
 #include "cpu/general/general_functions.h"
 
@@ -113,7 +110,7 @@ inline EE convolution(TensorDesc inputDesc,
                         if (scaleArray != nullptr) {
                             scale = scaleArray[o];
                         }
-                        outArray[o_off] = scale * value + biasArray[o];
+                        outArray[o_off] += scale * value + biasArray[o];
                         CHECK_STATUS(activation_template<T3>(
                             activationDesc, outArray[o_off], &outArray[o_off]));
                     }
@@ -167,6 +164,7 @@ void bnn_filter_process(TensorDesc filterDesc, BIN8 *filter, short *filterTransf
 
 EE convolution_general(TensorDesc inputDesc,
     void *input,
+    void *eltwiseInput,
     TensorDesc filterDesc,
     const void *filter,
     ConvolutionParamSpec convParamSpec,
@@ -180,6 +178,12 @@ EE convolution_general(TensorDesc inputDesc,
 {
     UNUSED(scaleDesc);
     UNUSED(biasDesc);
+
+    if (eltwiseInput == nullptr) {
+        memset(output, 0, tensorNumBytes(outputDesc));
+    } else {
+        memcpy(output, eltwiseInput, tensorNumBytes(outputDesc));
+    }
 
     EE ret = SUCCESS;
     switch (filterDesc.dt) {

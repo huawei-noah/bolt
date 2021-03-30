@@ -22,7 +22,7 @@
 #include "gcl.h"
 #include "gcl_engine.h"
 #endif
-// Include headers cautiously because this header is included in C++ API
+#include "parameter_spec.h"
 
 class Operator {
 public:
@@ -70,11 +70,11 @@ public:
 
     virtual void set_input_output_tensors(std::vector<Tensor> it, std::vector<Tensor> ot)
     {
-        this->inputTensors = it;
-        this->outputTensors = ot;
+        set_input_tensors(it);
+        set_output_tensors(ot);
     }
 
-    virtual void set_input_tensors(std::vector<Tensor> it)
+    virtual void set_input_tensors(std::vector<Tensor> &it)
     {
         this->inputTensors = it;
     }
@@ -84,7 +84,7 @@ public:
         return this->inputTensors;
     }
 
-    virtual void set_output_tensors(std::vector<Tensor> ot)
+    virtual void set_output_tensors(std::vector<Tensor> &ot)
     {
         this->outputTensors = ot;
     }

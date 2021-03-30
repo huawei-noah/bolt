@@ -13,11 +13,8 @@
 
 #ifndef _TENSOR_H
 #define _TENSOR_H
-
 #include <memory>
-#include <vector>
-#include <set>
-#include <map>
+
 #include "memory_cpu.hpp"
 #ifdef _USE_MALI
 #include "memory_ocl.hpp"
@@ -148,21 +145,4 @@ private:
     std::shared_ptr<Memory> val;
     std::shared_ptr<F32> scale;
 };
-
-#include "sys.h"
-
-// deprecated API, this will be remove
-inline void *get_ptr_from_tensor(Tensor tensor, Arch arch)
-{
-    void *ptr = nullptr;
-    if (arch == MALI) {
-#ifdef _USE_MALI
-        ptr = ((OclMemory *)(tensor.get_memory()))->get_ptr();
-#endif
-    } else {
-        ptr = ((CpuMemory *)(tensor.get_memory()))->get_ptr();
-    }
-    return ptr;
-}
-
 #endif  // _TENSOR_H

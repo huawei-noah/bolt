@@ -13,9 +13,8 @@
 
 #ifndef _CHANNEL_RESIZE_MALI_FP16
 #define _CHANNEL_RESIZE_MALI_FP16
-#include "sys.h"
-#include "types.h"
-#include "tensor_computing_type.h"
+
+#include "gpu/mali/fp16/tensor_computing_fp16.h"
 
 EE channel_resize_mali_fp16(GCLHandle_t handle,
     TensorDesc inputDesc,

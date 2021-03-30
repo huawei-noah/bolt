@@ -80,7 +80,9 @@ class WeightScaleOptimizer : public OPOptimizer {
                         ptr[m] = 1;
                     }
                 }
-                F32 *weightTemp = (F32 *)spec->ws[convWeightIndex].weight;
+                F32 *weightTemp = (F32 *)mt_new_storage(spec->ws[convWeightIndex].bytes_of_weight);
+                memcpy(weightTemp, spec->ws[convWeightIndex].weight,
+                    spec->ws[convWeightIndex].bytes_of_weight);
                 if (spec->ws[convWeightIndex].vec == nullptr) {
                     spec->ws[convWeightIndex].bytes_of_vec = channelCur * sizeof(F32);
                     if (isBNN == 1) {
@@ -88,19 +90,29 @@ class WeightScaleOptimizer : public OPOptimizer {
                     }
                     spec->ws[convWeightIndex].vec =
                         (U8 *)mt_new_storage(spec->ws[convWeightIndex].bytes_of_vec);
-                    memset(spec->ws[convWeightIndex].vec, 0, spec->ws[convWeightIndex].bytes_of_vec);
+                    if (isBNN == 1) {
+                        F32 *scale = (F32 *)spec->ws[convWeightIndex].vec;
+                        F32 *bias = scale + channelCur;
+                        for (U32 m = 0; m < channelCur; m++) {
+                            scale[m] = 1;
+                            bias[m] = 0;
+                        }
+                    } else {
+                        memset(spec->ws[convWeightIndex].vec, 0,
+                            spec->ws[convWeightIndex].bytes_of_vec);
+                    }
                 }
-                F32 *vecTemp = (F32 *)spec->ws[convWeightIndex].vec;
+                F32 *vecTemp = (F32 *)mt_new_storage(spec->ws[convWeightIndex].bytes_of_vec);
+                memcpy(
+                    vecTemp, spec->ws[convWeightIndex].vec, spec->ws[convWeightIndex].bytes_of_vec);
                 if (isBNN == 1) {
                     F32 *scale = vecTemp;
                     F32 *bias = vecTemp + channelCur;
                     for (U32 m = 0; m < channelCur; m++) {
-                        if (scale[m] == 0) {
-                            scale[m] = alphaPtr[m];
-                        } else {
+                        if (alphaPtr != nullptr) {
                             scale[m] *= alphaPtr[m];
+                            bias[m] *= alphaPtr[m];
                         }
-                        bias[m] *= alphaPtr[m];
                         if (betaPtr != nullptr) {
                             bias[m] += betaPtr[m];
                         }
@@ -123,19 +135,39 @@ class WeightScaleOptimizer : public OPOptimizer {
                         }
                     }
                 }
+
+                // free origin spec->ws[convWeightIndex] memory
+                if (spec->ws[convWeightIndex].vec != nullptr) {
+                    if (outOfFileMapRange(spec->ws[convWeightIndex].vec, spec->mfd)) {
+                        delete spec->ws[convWeightIndex].vec;
+                    }
+                }
+                if (spec->ws[convWeightIndex].weight != nullptr) {
+                    if (outOfFileMapRange(spec->ws[convWeightIndex].weight, spec->mfd)) {
+                        delete spec->ws[convWeightIndex].weight;
+                    }
+                }
+                spec->ws[convWeightIndex].vec = (U8 *)vecTemp;
+                spec->ws[convWeightIndex].weight = (U8 *)weightTemp;
+
                 // free scale memory
                 if (spec->ws[scaleWeightIndex].weight != nullptr) {
                     spec->ws[scaleWeightIndex].bytes_of_weight = 0;
-                    delete spec->ws[scaleWeightIndex].weight;
+                    if (outOfFileMapRange(spec->ws[scaleWeightIndex].weight, spec->mfd)) {
+                        delete spec->ws[scaleWeightIndex].weight;
+                    }
                     spec->ws[scaleWeightIndex].weight = nullptr;
                 }
                 if (spec->ws[scaleWeightIndex].vec != nullptr) {
                     spec->ws[scaleWeightIndex].bytes_of_vec = 0;
-                    delete spec->ws[scaleWeightIndex].vec;
+                    if (outOfFileMapRange(spec->ws[scaleWeightIndex].vec, spec->mfd)) {
+                        delete spec->ws[scaleWeightIndex].vec;
+                    }
                     spec->ws[scaleWeightIndex].vec = nullptr;
                 }
                 setOperatorInvalid(spec, scaleOpIndex, true);
                 hasOptimized = true;
+                i--;
             }
         }
         return hasOptimized;

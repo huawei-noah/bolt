@@ -13,7 +13,6 @@
 
 #include "cpu/x86/fp32/blas_fp32.h"
 #include "error.h"
-#include "types.h"
 
 #define UNROLL_N 4
 #define BOLCK_K_DIM 512

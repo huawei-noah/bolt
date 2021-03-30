@@ -17,7 +17,7 @@
 #ifdef _USE_INT8
 #include <math.h>
 #include <string.h>
-#include "types.h"
+
 #include "error.h"
 #include "cpu/arm/fp16/convolution_winograd_transform.h"
 

@@ -43,7 +43,7 @@ int main(int argc, char *argv[])
     auto pipeline = createPipeline(affinityPolicyName, modelPath);
 
     // load sequences
-    std::map<std::string, std::shared_ptr<Tensor>> inMap = pipeline->get_inputs();
+    std::map<std::string, std::shared_ptr<Tensor>> inMap = pipeline->get_input();
     std::vector<TensorDesc> sequenceDescs;
     TensorDesc wordInputDesc = (*(inMap["bert_words"])).get_desc();
     wordInputDesc.dt = DT_U32;
@@ -69,11 +69,12 @@ int main(int argc, char *argv[])
         inputDescMap["bert_token_type"] = sequence[2].get_desc();
         pipeline->reready(inputDescMap);
 
-        auto modelInputTensorNames = pipeline->get_model_input_tensor_names();
-        for (int index = 0; index < (int)modelInputTensorNames.size(); index++) {
-            U8 *tmp = (U8 *)((CpuMemory *)(sequence[index].get_memory()))->get_ptr();
-            pipeline->copy_to_named_input(modelInputTensorNames[index], tmp);
-        }
+        std::map<std::string, U8 *> input;
+        input["bert_words"] = (U8 *)((CpuMemory *)(sequence[0].get_memory()))->get_ptr();
+        input["bert_positions"] = (U8 *)((CpuMemory *)(sequence[1].get_memory()))->get_ptr();
+        input["bert_token_type"] = (U8 *)((CpuMemory *)(sequence[2].get_memory()))->get_ptr();
+
+        pipeline->set_input_by_copy(input);
 
         double timeBegin = ut_time_ms();
         pipeline->run();
@@ -81,7 +82,7 @@ int main(int argc, char *argv[])
         totalTime += (timeEnd - timeBegin);
 
         // stage5: process result
-        std::map<std::string, std::shared_ptr<Tensor>> outMap = pipeline->get_outputs();
+        std::map<std::string, std::shared_ptr<Tensor>> outMap = pipeline->get_output();
         for (auto iter : outMap) {
             std::string key = iter.first;
             std::shared_ptr<Tensor> value = iter.second;

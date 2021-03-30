@@ -16,16 +16,13 @@
 #include <fstream>
 #include <string>
 #include <memory>
-#include <typeinfo>
 #include <vector>
 #include <map>
 #include <tensorflow/lite/schema/schema_generated.h>
-#include <limits>
-#include "converter.h"
-#include "model_tools.h"
+
 #include "model_adaptee.h"
-#include "types.h"
-#include "ut_util.h"
+#include "tensor_transpose.h"
+#include "array_transpose.h"
 
 class TfliteAdaptee : public ModelAdaptee {
 public:
@@ -86,24 +83,49 @@ protected:
         } else if (tfliteOperatorType == tflite::BuiltinOperator_CONCATENATION ||
             tfliteOperatorType == tflite::BuiltinOperator_PACK) {
             return OT_Concat;
-        } else if (tfliteOperatorType == tflite::BuiltinOperator_CONV_2D) {
-            return OT_Conv;
-        } else if (tfliteOperatorType == tflite::BuiltinOperator_DEPTHWISE_CONV_2D) {
+        } else if (tfliteOperatorType == tflite::BuiltinOperator_CONV_2D ||
+            tfliteOperatorType == tflite::BuiltinOperator_DEPTHWISE_CONV_2D) {
             return OT_Conv;
         } else if (tfliteOperatorType == tflite::BuiltinOperator_LOGISTIC) {
             return OT_Sigmoid;
-        } else if (tfliteOperatorType == tflite::BuiltinOperator_MAX_POOL_2D) {
-            return OT_Pooling;
-        } else if (tfliteOperatorType == tflite::BuiltinOperator_AVERAGE_POOL_2D) {
+        } else if (tfliteOperatorType == tflite::BuiltinOperator_MAX_POOL_2D ||
+            tfliteOperatorType == tflite::BuiltinOperator_AVERAGE_POOL_2D) {
             return OT_Pooling;
         } else if (tfliteOperatorType == tflite::BuiltinOperator_RESHAPE) {
             return OT_Reshape;
-        } else if (tfliteOperatorType == tflite::BuiltinOperator_RESIZE_BILINEAR) {
+        } else if (tfliteOperatorType == tflite::BuiltinOperator_RESIZE_BILINEAR ||
+            tfliteOperatorType == tflite::BuiltinOperator_RESIZE_NEAREST_NEIGHBOR) {
             return OT_Resize;
         } else if (tfliteOperatorType == tflite::BuiltinOperator_SOFTMAX) {
             return OT_Softmax;
         } else if (tfliteOperatorType == tflite::BuiltinOperator_FULLY_CONNECTED) {
             if (weightInputIndex.size() > 0) {
+                bool ttW = (weightInputIndex.size() == 1 && weightInputIndex[0] == 2) ? true : false;
+                bool wtW = (weightInputIndex.size() == 2 && weightInputIndex[0] == 0 &&
+                               weightInputIndex[1] == 2)
+                    ? true
+                    : false;
+                if (ttW || wtW) {
+                    bool fullZero = true;
+                    const int biasIndex =
+                        this->tfliteOperators[this->tfliteOperatorIndex]->inputs[2];
+                    const auto &biasTensor = this->tfliteTensors[biasIndex];
+                    std::vector<float> bias = transformTfliteTensorToVector(biasTensor);
+                    for (U32 k = 0; k < bias.size(); k++) {
+                        if (bias[k] != 0) {
+                            fullZero = false;
+                            break;
+                        }
+                    }
+                    if (fullZero) {
+                        return OT_MatMul;
+                    } else {
+                        UNI_ERROR_LOG("operator location:%d type:%s not support bias with "
+                                      "non-zero weights.\n",
+                            this->tfliteOperatorIndex,
+                            tflite::EnumNamesBuiltinOperator()[tfliteOperatorType]);
+                    }
+                }
                 return OT_FC;
             } else {
                 return OT_MatMul;
@@ -130,7 +152,11 @@ protected:
                 return OT_Pooling;
             }
         } else if (tfliteOperatorType == tflite::BuiltinOperator_MAXIMUM) {
-            return OT_Clip;
+            if (weightInputIndex.size() == 0) {
+                return OT_Eltwise;
+            } else {
+                return OT_Clip;
+            }
         } else if (tfliteOperatorType == tflite::BuiltinOperator_MINIMUM) {
             return OT_Clip;
         } else if (tfliteOperatorType == tflite::BuiltinOperator_TRANSPOSE_CONV) {
@@ -155,8 +181,27 @@ protected:
             return OT_Unsqueeze;
         } else if (tfliteOperatorType == tflite::BuiltinOperator_NEG) {
             return OT_Power;
+        } else if (tfliteOperatorType == tflite::BuiltinOperator_TOPK_V2) {
+            return OT_TopK;
+        } else if (tfliteOperatorType == tflite::BuiltinOperator_GATHER) {
+            return OT_Embedding;
+        } else if (tfliteOperatorType == tflite::BuiltinOperator_PRELU) {
+            return OT_PRelu;
+        } else if (tfliteOperatorType == tflite::BuiltinOperator_SPACE_TO_BATCH_ND) {
+            return OT_SpaceToBatchNd;
+        } else if (tfliteOperatorType == tflite::BuiltinOperator_BATCH_TO_SPACE_ND) {
+            return OT_BatchToSpaceNd;
+        } else if (tfliteOperatorType == tflite::BuiltinOperator_ABS) {
+            return OT_Abs;
+        } else if (tfliteOperatorType == tflite::BuiltinOperator_QUANTIZE ||
+            tfliteOperatorType == tflite::BuiltinOperator_FAKE_QUANT) {
+            return OT_Split;
+        } else if (tfliteOperatorType == tflite::BuiltinOperator_SPLIT) {
+            return OT_Slice;
+        } else if (tfliteOperatorType == tflite::BuiltinOperator_EXP) {
+            return OT_Exp;
         } else {
-            UNI_ERROR_LOG("tflite operator %s not implemented yet\n",
+            UNI_ERROR_LOG("operator locate:%d type:%s not supported.\n", this->tfliteOperatorIndex,
                 tflite::EnumNamesBuiltinOperator()[tfliteOperatorType]);
             return OT_None;
         }
@@ -172,7 +217,7 @@ protected:
         std::string model_name = dir + "/" + mfn + tfliteSuffix;
         std::ifstream inputFile(model_name.c_str(), std::ios::binary);
         if (!inputFile.is_open()) {
-            UNI_ERROR_LOG("can not find tflite model file %s\n", model_name.c_str());
+            UNI_ERROR_LOG("can not find tflite model file %s.\n", model_name.c_str());
         }
         inputFile.seekg(0, std::ios::end);
         const auto size = inputFile.tellg();
@@ -227,6 +272,27 @@ protected:
         return ret;
     }
 
+    DataType TfliteTensorType2BoltDataType(tflite::TensorType type)
+    {
+        DataType dt = DT_F32;
+        switch (type) {
+            case tflite::TensorType_FLOAT32: {
+                dt = DT_F32;
+                break;
+            }
+            case tflite::TensorType_INT32: {
+                dt = DT_I32;
+                break;
+            }
+            default: {
+                UNI_ERROR_LOG(
+                    "can not process tflite data type %s.\n", tflite::EnumNamesTensorType()[type]);
+                break;
+            }
+        }
+        return dt;
+    }
+
     EE adapt_operators(ModelSpec *ms) override
     {
         this->modelWeightOpNum = 0;
@@ -239,35 +305,17 @@ protected:
         for (I32 i = 0; i < ms->num_inputs; i++) {
             const int inputIdx = inputs[i];
             const auto &inputTensor = this->tfliteTensors[inputIdx];
-            std::vector<int> inputShape(inputTensor->shape);
             ms->input_names[i] = (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
             str_copy(ms->input_names[i], (inputTensor->name).c_str(), (inputTensor->name).length());
+            std::vector<int> inputShape(inputTensor->shape);
             if (this->weightFormat == DF_NHWC) {
                 shiftRight<int>(inputShape.data(), inputShape.size(), 1, inputShape.size() - 1);
             }
-            switch (inputShape.size()) {
-                case 1: {
-                    ms->input_dims[i] = tensor1d(DT_F32, inputShape[0]);
-                    break;
-                }
-                case 2: {
-                    ms->input_dims[i] = tensor2df(DT_F32, DF_NORMAL, inputShape[0], inputShape[1]);
-                    break;
-                }
-                case 3: {
-                    ms->input_dims[i] =
-                        tensor3df(DT_F32, DF_MTK, inputShape[0], inputShape[1], inputShape[2]);
-                    break;
-                }
-                case 4: {
-                    ms->input_dims[i] = tensor4df(DT_F32, DF_NCHW, inputShape[0], inputShape[1],
-                        inputShape[2], inputShape[3]);
-                    break;
-                }
-                default: {
-                    UNI_ERROR_LOG("unsupport tflite input size %d\n", (int)inputShape.size());
-                    break;
-                }
+            ms->input_dims[i].nDims = inputShape.size();
+            ms->input_dims[i].dt = TfliteTensorType2BoltDataType(inputTensor->type);
+            ms->input_dims[i].df = getTensorDefaultDataFormat(ms->input_dims[i].nDims);
+            for (U32 j = 0; j < ms->input_dims[i].nDims; j++) {
+                ms->input_dims[i].dims[ms->input_dims[i].nDims - 1 - j] = inputShape[j];
             }
         }
         ms->num_outputs = outputs.size();
@@ -284,7 +332,7 @@ protected:
         for (this->boltOperatorIndex = 0, this->tfliteOperatorIndex = 0;
              this->tfliteOperatorIndex < this->tfliteOperators.size();
              this->boltOperatorIndex++, this->tfliteOperatorIndex++) {
-            UNI_DEBUG_LOG("load and process operator %d\n", this->tfliteOperatorIndex);
+            UNI_DEBUG_LOG("process operator location:%d parameter.\n", this->tfliteOperatorIndex);
             std::string operatorName = "op" + std::to_string(this->tfliteOperatorIndex);
             str_copy(this->boltOperators[this->boltOperatorIndex].name, operatorName.c_str(),
                 operatorName.length());
@@ -302,11 +350,12 @@ protected:
             int inputStartPoint = 0;
             if (opCode == tflite::BuiltinOperator_TRANSPOSE_CONV) {
                 inputStartPoint = 2;
-            }
-            if (opCode == tflite::BuiltinOperator_MUL) {
+            } else if (opCode == tflite::BuiltinOperator_MUL) {
                 std::vector<int> tensorInputIndex =
                     getOperatorTensorInputIndex(this->tfliteOperatorIndex);
                 inputStartPoint = tensorInputIndex[0];
+            } else if (opCode == tflite::BuiltinOperator_SPLIT) {
+                inputStartPoint = 1;
             }
 
             for (U32 iter = 0; iter < this->boltOperators[this->boltOperatorIndex].num_inputs;
@@ -411,7 +460,7 @@ protected:
             case tflite::TensorType_FLOAT32: {
                 auto weight = reinterpret_cast<const float *>(
                     this->tfliteModelBuffer[tensor->buffer]->data.data());
-                UNI_memcpy(result.data(), weight, sizeof(float) * size);
+                UNI_MEMCPY(result.data(), weight, sizeof(float) * size);
                 break;
             }
             case tflite::TensorType_INT64: {
@@ -433,20 +482,44 @@ protected:
             case tflite::TensorType_INT8: {
                 auto weight = reinterpret_cast<const int8_t *>(
                     this->tfliteModelBuffer[tensor->buffer]->data.data());
-                float scale = 1, shift = 0;
-                CHECK_REQUIREMENT(tensor->quantization->scale.size() == 1);
-                scale = tensor->quantization->scale[0];
-                if (tensor->quantization->zero_point.size() > 0) {
-                    shift = tensor->quantization->zero_point[0];
+                // if scale_size > 1, this is per channel quantization
+                int scale_size = tensor->quantization->scale.size();
+                int shift_size = tensor->quantization->zero_point.size();
+                int loops = size / scale_size;
+                for (int i = 0, index = 0; i < scale_size; i++) {
+                    float scale = tensor->quantization->scale[i % scale_size];
+                    float shift = 0;
+                    if (shift_size > 0) {
+                        shift = tensor->quantization->zero_point[i % shift_size];
+                    }
+                    for (int j = 0; j < loops; j++, index++) {
+                        result[index] = weight[index] * scale + shift;
+                    }
                 }
-                for (U32 i = 0; i < size; i++) {
-                    result[i] = weight[i] * scale + shift;
+                break;
+            }
+            case tflite::TensorType_UINT8: {
+                auto weight = reinterpret_cast<const uint8_t *>(
+                    this->tfliteModelBuffer[tensor->buffer]->data.data());
+                // if scale_size > 1, this is per channel quantization
+                int scale_size = tensor->quantization->scale.size();
+                int shift_size = tensor->quantization->zero_point.size();
+                int loops = size / scale_size;
+                for (int i = 0, index = 0; i < scale_size; i++) {
+                    float scale = tensor->quantization->scale[i % scale_size];
+                    float shift = 0;
+                    if (shift_size > 0) {
+                        shift = tensor->quantization->zero_point[i % shift_size];
+                    }
+                    for (int j = 0; j < loops; j++, index++) {
+                        result[index] = (weight[index] - shift) * scale;
+                    }
                 }
                 break;
             }
             default: {
-                UNI_ERROR_LOG("tflite adaptor not support %s type weight data\n",
-                    tflite::EnumNamesTensorType()[tensor->type]);
+                UNI_ERROR_LOG("can not process operator location:%d %s type weight data.\n",
+                    this->tfliteOperatorIndex, tflite::EnumNamesTensorType()[tensor->type]);
                 break;
             }
         }
@@ -461,11 +534,12 @@ protected:
             wsPtr[j].weight_scale = nullptr;
         }
         ms->ws = wsPtr;
-        UNI_memcpy(ms->ws, this->boltSharedWeights.data(),
+        UNI_MEMCPY(ms->ws, this->boltSharedWeights.data(),
             this->boltSharedWeights.size() * sizeof(WeightSpec));
         int weightMovIndex = this->boltSharedWeights.size();
         for (this->tfliteOperatorIndex = 0;
              this->tfliteOperatorIndex < this->tfliteOperators.size(); this->tfliteOperatorIndex++) {
+            UNI_DEBUG_LOG("process operator location:%d weight.\n", this->tfliteOperatorIndex);
             std::string operatorName = "op" + std::to_string(this->tfliteOperatorIndex);
             this->boltOperatorIndex = this->boltOperatorNameMap[operatorName];
             const int opcodeIndex = this->tfliteOperators[this->tfliteOperatorIndex]->opcode_index;
@@ -521,8 +595,8 @@ protected:
                 std::vector<int> weightInputIndex =
                     getOperatorWeightInputIndex(this->tfliteOperatorIndex);
                 if (weightInputIndex.size() == 0) {
-                    UNI_ERROR_LOG("recognize op %d to scale operator is not supported\n",
-                        this->tfliteOperatorIndex);
+                    UNI_ERROR_LOG("can not map operator location:%d type:%s to Scale.\n",
+                        this->tfliteOperatorIndex, tflite::EnumNamesBuiltinOperator()[this->opCode]);
                 }
                 switch (opCode) {
                     case tflite::BuiltinOperator_ADD: {
@@ -602,7 +676,9 @@ protected:
                         break;
                     }
                     default: {
-                        CHECK_STATUS(NOT_SUPPORTED);
+                        UNI_ERROR_LOG("can not map operator location:%d type:%s to Scale.\n",
+                            this->tfliteOperatorIndex, tflite::EnumNamesBuiltinOperator()[opCode]);
+                        break;
                     }
                 }
                 weightMovIndex++;
@@ -653,13 +729,51 @@ protected:
                 U32 filterDims[4] = {conv2d_ci, conv2d_kw, conv2d_kh, conv2d_co};
                 U32 ftmDims[4] = {conv2d_kw, conv2d_kh, conv2d_co, conv2d_ci};
                 U32 filterTransformDims[4] = {3, 0, 1, 2};
-                CHECK_STATUS(array_transpose(DT_F32, filterDims, deConvWeight.data(), ftmDims,
-                    wsPtr[weightMovIndex].weight, filterTransformDims, 4));
+                array_transpose(bytesOf(DT_F32), filterDims, deConvWeight.data(), ftmDims,
+                    wsPtr[weightMovIndex].weight, filterTransformDims, 4, 4);
                 if (this->tfliteOperators[this->tfliteOperatorIndex]->inputs.size() == 4) {
-                    UNI_ERROR_LOG("tflite adaptor not support to process deconvolution's bias\n");
+                    UNI_ERROR_LOG(
+                        "can not process operator location:%d bias.\n", this->tfliteOperatorIndex);
                 }
                 wsPtr[weightMovIndex].bytes_of_vec = 0;
                 wsPtr[weightMovIndex].vec = nullptr;
+                weightMovIndex++;
+            } else if (OT_PRelu == ms->ops[this->boltOperatorIndex].type) {
+                str_copy(wsPtr[weightMovIndex].op_name, operatorName.c_str(), operatorName.length());
+                wsPtr[weightMovIndex].mdt = DT_F32;
+                const int slopeIndex = this->tfliteOperators[this->tfliteOperatorIndex]->inputs[1];
+                const auto &slopeTensor = this->tfliteTensors[slopeIndex];
+                std::vector<float> slopeWeight = transformTfliteTensorToVector(slopeTensor);
+                wsPtr[weightMovIndex].bytes_of_weight = slopeWeight.size() * sizeof(float);
+                wsPtr[weightMovIndex].weight =
+                    (U8 *)mt_new_storage(wsPtr[weightMovIndex].bytes_of_weight);
+                memcpy(wsPtr[weightMovIndex].weight, &(slopeWeight[0]),
+                    wsPtr[weightMovIndex].bytes_of_weight);
+                wsPtr[weightMovIndex].bytes_of_vec = 0;
+                wsPtr[weightMovIndex].vec = nullptr;
+                weightMovIndex++;
+            } else if (OT_SpaceToBatchNd == ms->ops[this->boltOperatorIndex].type ||
+                OT_BatchToSpaceNd == ms->ops[this->boltOperatorIndex].type) {
+                str_copy(wsPtr[weightMovIndex].op_name, operatorName.c_str(), operatorName.length());
+                wsPtr[weightMovIndex].mdt = DT_F32;
+                const int blockShapeIndex =
+                    this->tfliteOperators[this->tfliteOperatorIndex]->inputs[1];
+                const auto &blockShapeTp = this->tfliteTensors[blockShapeIndex];
+                std::vector<float> blockShapeWeight = transformTfliteTensorToVector(blockShapeTp);
+                wsPtr[weightMovIndex].bytes_of_weight = blockShapeWeight.size() * sizeof(float);
+                wsPtr[weightMovIndex].weight =
+                    (U8 *)mt_new_storage(wsPtr[weightMovIndex].bytes_of_weight);
+                memcpy(wsPtr[weightMovIndex].weight, &(blockShapeWeight[0]),
+                    wsPtr[weightMovIndex].bytes_of_weight);
+
+                const int paddingsIndex =
+                    this->tfliteOperators[this->tfliteOperatorIndex]->inputs[2];
+                const auto &paddingsTp = this->tfliteTensors[paddingsIndex];
+                std::vector<float> paddingsWeight = transformTfliteTensorToVector(paddingsTp);
+                wsPtr[weightMovIndex].bytes_of_vec = paddingsWeight.size() * sizeof(float);
+                wsPtr[weightMovIndex].vec = (U8 *)mt_new_storage(wsPtr[weightMovIndex].bytes_of_vec);
+                memcpy(wsPtr[weightMovIndex].vec, &(paddingsWeight[0]),
+                    wsPtr[weightMovIndex].bytes_of_vec);
                 weightMovIndex++;
             }
         }
@@ -681,7 +795,7 @@ protected:
                 ret = ACTIVATION_RELU6;
                 break;
             default:
-                UNI_ERROR_LOG("tflite activation %s not recognized\n",
+                UNI_ERROR_LOG("can not process operator location:%d type:%s.\n", tfliteOperatorIndex,
                     tflite::EnumNamesActivationFunctionType()[tfliteActivationType]);
                 break;
         }
@@ -700,8 +814,11 @@ protected:
         if (activationMode == ACTIVATION_RELU) {
             activation = mt_create_operator(name, OT_Relu, 1, 1);
             activation.ps.relu_spec.neg_slope = 0;
+        } else if (activationMode == ACTIVATION_RELU6) {
+            activation = mt_create_operator(name, OT_Relu6, 1, 1);
         } else {
-            UNI_ERROR_LOG("tflite adaptor not support %d type activation fusion\n", activationMode);
+            UNI_ERROR_LOG("operator location:%d not support %d type activation fusion.\n",
+                this->tfliteOperatorIndex, activationMode);
         }
         str_copy(activation.input_tensors_name[0], name, NAME_LEN);
         str_copy(activation.output_tensors_name[0], name, NAME_LEN);
@@ -712,9 +829,9 @@ protected:
     ParameterSpec adapt_Eltwise() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         EltwiseParamSpec eltPs;
-        initialization_zero(&eltPs, sizeof(eltPs));
+        memset(&eltPs, 0, sizeof(eltPs));
         ActivationMode activationMode = ACTIVATION_NULL;
         if (opCode == tflite::BuiltinOperator_ADD) {
             eltPs.elt_mode = ELTWISE_SUM;
@@ -743,7 +860,8 @@ protected:
             activationMode =
                 getActivationOperatorType(tfliteEltwiseOption->fused_activation_function);
         } else {
-            CHECK_STATUS(NOT_IMPLEMENTED);
+            UNI_ERROR_LOG("can not map operator location:%d type:%s to Eltwise.\n",
+                this->tfliteOperatorIndex, tflite::EnumNamesBuiltinOperator()[this->opCode]);
         }
         eltPs.activation_type = activationMode;
         curPs.eltwise_spec = eltPs;
@@ -753,19 +871,29 @@ protected:
     ParameterSpec adapt_Scale() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         modelWeightOpNum++;
         ScaleParamSpec scalePs;
-        initialization_zero(&scalePs, sizeof(scalePs));
+        memset(&scalePs, 0, sizeof(scalePs));
         scalePs.axis = 1;
         curPs.scale_spec = scalePs;
+
+        if (opCode == tflite::BuiltinOperator_ADD) {
+            const auto &addOption =
+                this->tfliteOperators[this->tfliteOperatorIndex]->builtin_options.AsAddOptions();
+            if (getActivationOperatorType(addOption->fused_activation_function) != ACTIVATION_NULL) {
+                insertActivationOperator(
+                    getActivationOperatorType(addOption->fused_activation_function));
+            }
+        }
+
         return curPs;
     }
 
     ParameterSpec adapt_Conv() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         modelWeightOpNum++;
         const int weightIndex = this->tfliteOperators[this->tfliteOperatorIndex]->inputs[1];
         const auto &weightTensor = this->tfliteTensors[weightIndex];
@@ -774,7 +902,7 @@ protected:
         CHECK_REQUIREMENT(weightShape.size() == 4);
 
         ConvolutionParamSpec convPs;
-        initialization_zero(&convPs, sizeof(convPs));
+        memset(&convPs, 0, sizeof(convPs));
         convPs.kernel_h = weightShape[1];
         convPs.kernel_w = weightShape[2];
         convPs.kernel_t = 1;
@@ -884,7 +1012,8 @@ protected:
                 convPs.pw_activation_type = ACTIVATION_NULL;
             }
         } else {
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("can not map operator location:%d type:%s to Convolution.\n",
+                this->tfliteOperatorIndex, tflite::EnumNamesBuiltinOperator()[this->opCode]);
         }
         curPs.conv_spec = convPs;
         return curPs;
@@ -893,13 +1022,14 @@ protected:
     ParameterSpec adapt_Reduction() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         ReductionParamSpec reductionPs;
-        initialization_zero(&curPs, sizeof(reductionPs));
+        memset(&curPs, 0, sizeof(reductionPs));
         if (opCode == tflite::BuiltinOperator_MEAN) {
             reductionPs.reduction_mode = REDUCTION_MEAN;
         } else {
-            UNI_ERROR_LOG("not support this reduction mode\n");
+            UNI_ERROR_LOG("can not map operator location:%d type:%s to Reduction.\n",
+                this->tfliteOperatorIndex, tflite::EnumNamesBuiltinOperator()[this->opCode]);
         }
 
         const auto &inputTensor =
@@ -925,9 +1055,9 @@ protected:
     ParameterSpec adapt_Pooling() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         PoolingParamSpec poolingPs;
-        initialization_zero(&poolingPs, sizeof(poolingPs));
+        memset(&poolingPs, 0, sizeof(poolingPs));
         poolingPs.kernel_t = 1;
         poolingPs.stride_t = 1;
         poolingPs.padding_before = 0;
@@ -938,12 +1068,11 @@ protected:
         poolingPs.padding_right = 0;
         poolingPs.rm = CEIL;
 
+        const auto &inputTensor =
+            this->tfliteTensors[this->tfliteOperators[this->tfliteOperatorIndex]->inputs[0]];
+        const auto &inputShape = inputTensor->shape;
+        CHECK_REQUIREMENT(inputShape.size() == 4);
         if (opCode == tflite::BuiltinOperator_MEAN) {  // Interpret as global pooling
-            const auto &inputTensor =
-                this->tfliteTensors[this->tfliteOperators[this->tfliteOperatorIndex]->inputs[0]];
-            const auto &inputShape = inputTensor->shape;
-            CHECK_REQUIREMENT(inputShape.size() == 4);
-
             const auto &axisTensor =
                 this->tfliteTensors[this->tfliteOperators[this->tfliteOperatorIndex]->inputs[1]];
             const auto &axisData = tfliteModelBuffer[axisTensor->buffer]->data;
@@ -961,6 +1090,27 @@ protected:
             poolingPs.kernel_w = tflitePoolOption->filter_width;
             poolingPs.stride_h = tflitePoolOption->stride_h;
             poolingPs.stride_w = tflitePoolOption->stride_w;
+            int tfPaddingRoundMode = tflitePoolOption->padding;
+            if (tfPaddingRoundMode == 0) {
+                poolingPs.rm = TF_SAME;
+
+                int oLength = (inputShape[2] + poolingPs.stride_w - 1) / poolingPs.stride_w;
+                int padLength = UNI_MAX(
+                    (oLength - 1) * poolingPs.stride_w + poolingPs.kernel_w - inputShape[2], 0);
+                poolingPs.padding_left = padLength / 2;
+                poolingPs.padding_right = padLength - poolingPs.padding_left;
+
+                oLength = (inputShape[1] + poolingPs.stride_h - 1) / poolingPs.stride_h;
+                padLength = UNI_MAX(
+                    (oLength - 1) * poolingPs.stride_h + poolingPs.kernel_h - inputShape[1], 0);
+                poolingPs.padding_top = padLength / 2;
+                poolingPs.padding_bottom = padLength - poolingPs.padding_top;
+            } else if (tfPaddingRoundMode == 1) {
+                poolingPs.rm = TF_VALID;
+            } else {
+                UNI_ERROR_LOG("can not process operator location:%d Pooling round mode.\n",
+                    this->tfliteOperatorIndex);
+            }
             if (opCode == tflite::BuiltinOperator_MAX_POOL_2D) {
                 poolingPs.mode = POOLING_MAX;
             } else if (opCode == tflite::BuiltinOperator_AVERAGE_POOL_2D) {
@@ -976,28 +1126,20 @@ protected:
     ParameterSpec adapt_Reshape() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         const auto &shapeTensor =
             this->tfliteTensors[this->tfliteOperators[this->tfliteOperatorIndex]->inputs[1]];
         const auto &shapeData = tfliteModelBuffer[shapeTensor->buffer]->data;
         ReshapeParamSpec reshapePs;
-        initialization_zero(&reshapePs, sizeof(reshapePs));
-        if (shapeTensor->shape.size() == 1) {
-            CHECK_REQUIREMENT((shapeTensor->shape[0]) == (int)(shapeData.size() / sizeof(int)));
-            reshapePs.shape_size = shapeTensor->shape[0];
-        } else if (shapeTensor->shape.size() == 2) {
-            CHECK_REQUIREMENT((shapeTensor->shape[1]) == (int)(shapeData.size() / sizeof(int)));
-            reshapePs.shape_size = shapeTensor->shape[1];
-        }
+        memset(&reshapePs, 0, sizeof(reshapePs));
+        reshapePs.shape_size = (int)(shapeData.size() / sizeof(int));
         auto reshapeDimPtr = reinterpret_cast<const int32_t *>(shapeData.data());
-        std::vector<int> reshapeDim(reshapeDimPtr, reshapeDimPtr + reshapePs.shape_size);
-
-        for (int iter = 0; iter < (int)reshapeDim.size(); iter++) {
+        for (int iter = 0; iter < reshapePs.shape_size; iter++) {
             int axis = iter;
             if (this->weightFormat == DF_NHWC) {
-                axis = NHWCAxisToNCHWAxis(iter, reshapeDim.size());
+                axis = NHWCAxisToNCHWAxis(iter, reshapePs.shape_size);
             }
-            reshapePs.shape_dims[axis] = reshapeDim[iter];
+            reshapePs.shape_dims[axis] = reshapeDimPtr[iter];
         }
         reshapePs.axis = 8;
         reshapePs.num_axes = -1;
@@ -1008,9 +1150,9 @@ protected:
     ParameterSpec adapt_Transpose() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         TransposeParamSpec transPs;
-        initialization_zero(&transPs, sizeof(transPs));
+        memset(&transPs, 0, sizeof(transPs));
         const auto &dimsTensor =
             this->tfliteTensors[this->tfliteOperators[this->tfliteOperatorIndex]->inputs[1]];
         const auto &dimsData = tfliteModelBuffer[dimsTensor->buffer]->data;
@@ -1031,9 +1173,9 @@ protected:
     ParameterSpec adapt_TfSlice() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         TfSliceParamSpec tfSlicePs;
-        initialization_zero(&tfSlicePs, sizeof(tfSlicePs));
+        memset(&tfSlicePs, 0, sizeof(tfSlicePs));
         if (opCode == tflite::BuiltinOperator_STRIDED_SLICE) {
             const auto &stridedSliceOption = this->tfliteOperators[this->tfliteOperatorIndex]
                                                  ->builtin_options.AsStridedSliceOptions();
@@ -1101,11 +1243,38 @@ protected:
     ParameterSpec adapt_MatMul() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         MatMulParamSpec matmulPs;
-        initialization_zero(&matmulPs, sizeof(matmulPs));
+        memset(&matmulPs, 0, sizeof(matmulPs));
         matmulPs.transpose_a = false;
         matmulPs.transpose_b = false;
+        std::vector<int> weightInputIndex = getOperatorWeightInputIndex(this->tfliteOperatorIndex);
+        if (weightInputIndex.size() == 2 && weightInputIndex[0] == 0 && weightInputIndex[1] == 2) {
+            matmulPs.transpose_b = true;
+
+            OperatorSpec sharedWeight = mt_create_operator(
+                this->boltOperators[this->boltOperatorIndex].input_tensors_name[0], OT_SharedWeight,
+                0, 1);
+            str_copy(sharedWeight.output_tensors_name[0],
+                this->boltOperators[this->boltOperatorIndex].input_tensors_name[0], NAME_LEN);
+            const auto &inputWeightTensor =
+                this->tfliteTensors[this->tfliteOperators[this->tfliteOperatorIndex]->inputs[0]];
+            std::vector<int> inputWeightShape(inputWeightTensor->shape);
+            SharedWeightParamSpec sharedWeightPs;
+            sharedWeightPs.desc =
+                tensor2df(DT_F32, DF_NORMAL, inputWeightShape[0], inputWeightShape[1]);
+            WeightSpec weightSpec =
+                mt_create_weight(this->boltOperators[this->boltOperatorIndex].input_tensors_name[0],
+                    DT_F32, tensorNumBytes(sharedWeightPs.desc), 0, 0);
+            std::vector<float> inputWeightFloats = transformTfliteTensorToVector(inputWeightTensor);
+            memcpy(weightSpec.weight, &(inputWeightFloats[0]), tensorNumBytes(sharedWeightPs.desc));
+            this->boltSharedWeights.push_back(weightSpec);
+            sharedWeight.ps.shared_weight_spec = sharedWeightPs;
+            this->boltOperators.insert(
+                this->boltOperators.begin() + this->boltOperatorIndex, sharedWeight);
+            this->boltOperatorInsertBefore++;
+            this->modelWeightOpNum++;
+        }
         curPs.matmul_spec = matmulPs;
         return curPs;
     }
@@ -1114,9 +1283,9 @@ protected:
     {
         modelWeightOpNum++;
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         FullyConnectedParamSpec ips;
-        initialization_zero(&ips, sizeof(ips));
+        memset(&ips, 0, sizeof(ips));
         const int index = this->tfliteOperators[this->tfliteOperatorIndex]->inputs[1];
         const auto &tensor = this->tfliteTensors[index];
         I32 size = tfliteModelBuffer[tensor->buffer]->data.size();
@@ -1136,9 +1305,9 @@ protected:
     ParameterSpec adapt_Concat() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         ConcatParamSpec concatPs;
-        initialization_zero(&concatPs, sizeof(concatPs));
+        memset(&concatPs, 0, sizeof(concatPs));
         std::vector<int> pinnedInput;
         if (this->opCode == tflite::BuiltinOperator_CONCATENATION) {
             const auto &tfliteConcatOption = this->tfliteOperators[this->tfliteOperatorIndex]
@@ -1156,6 +1325,13 @@ protected:
         }
         for (U32 i = 0; i < pinnedInput.size(); i++) {
             int id = pinnedInput[i];
+            std::string tmpOpName =
+                std::string(this->boltOperators[this->boltOperatorIndex].input_tensors_name[id]);
+            if (sharedWeightName.find(tmpOpName) == sharedWeightName.end()) {
+                sharedWeightName[tmpOpName] = 1;
+            } else {
+                continue;
+            }
             OperatorSpec sharedWeight = mt_create_operator(
                 this->boltOperators[this->boltOperatorIndex].input_tensors_name[id],
                 OT_SharedWeight, 0, 1);
@@ -1164,13 +1340,31 @@ protected:
             SharedWeightParamSpec sharedWeightPs;
             const auto &weightTensor =
                 this->tfliteTensors[this->tfliteOperators[this->tfliteOperatorIndex]->inputs[id]];
-            auto weightData = reinterpret_cast<const int32_t *>(
-                (tfliteModelBuffer[weightTensor->buffer]->data).data());
-            sharedWeightPs.desc = tensor1d(DT_U32, 1);
+
+            sharedWeightPs.desc.nDims = weightTensor->shape.size();
+            sharedWeightPs.desc.dt = TfliteTensorType2BoltDataType(weightTensor->type);
+            sharedWeightPs.desc.df = getTensorDefaultDataFormat(sharedWeightPs.desc.nDims);
+            if (sharedWeightPs.desc.nDims == 4 && this->weightFormat == DF_NHWC) {
+                sharedWeightPs.desc.df = DF_NHWC;
+            }
+            for (U32 j = 0; j < sharedWeightPs.desc.nDims; j++) {
+                sharedWeightPs.desc.dims[sharedWeightPs.desc.nDims - 1 - j] = weightTensor->shape[j];
+            }
+
+            auto weightData =
+                reinterpret_cast<U8 *>((tfliteModelBuffer[weightTensor->buffer]->data).data());
             WeightSpec weightSpec = mt_create_weight(
-                this->boltOperators[this->boltOperatorIndex].input_tensors_name[id], DT_F32,
-                bytesOf(DT_F32), 0, 0);
-            ((float *)weightSpec.weight)[0] = weightData[0];
+                this->boltOperators[this->boltOperatorIndex].input_tensors_name[id],
+                sharedWeightPs.desc.dt, tensorNumBytes(sharedWeightPs.desc), 0, 0);
+            if (sharedWeightPs.desc.df == DF_NHWC) {
+                TensorDesc nchwDesc = tensor4df(sharedWeightPs.desc.dt, DF_NCHW,
+                    weightTensor->shape[0], weightTensor->shape[3], weightTensor->shape[1],
+                    weightTensor->shape[2]);
+                transformToNCHW(sharedWeightPs.desc, weightData, nchwDesc, weightSpec.weight);
+                sharedWeightPs.desc = nchwDesc;
+            } else {
+                memcpy(weightSpec.weight, weightData, tensorNumBytes(sharedWeightPs.desc));
+            }
             this->boltSharedWeights.push_back(weightSpec);
             sharedWeight.ps.shared_weight_spec = sharedWeightPs;
             this->boltOperators.insert(
@@ -1195,9 +1389,9 @@ protected:
         CHECK_REQUIREMENT(1 == tfliteSoftmaxOption->beta);
 
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         SoftmaxParamSpec softmaxPs;
-        initialization_zero(&softmaxPs, sizeof(softmaxPs));
+        memset(&softmaxPs, 0, sizeof(softmaxPs));
         softmaxPs.axis = -1;
 
         const auto &inputTensor =
@@ -1213,9 +1407,9 @@ protected:
     ParameterSpec adapt_Resize() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         ResizeParamSpec resizePs;
-        initialization_zero(&resizePs, sizeof(resizePs));
+        memset(&resizePs, 0, sizeof(resizePs));
         const auto &dimsTensor =
             this->tfliteTensors[this->tfliteOperators[this->tfliteOperatorIndex]->inputs[1]];
         const auto &dimsData = tfliteModelBuffer[dimsTensor->buffer]->data;
@@ -1225,6 +1419,14 @@ protected:
         resizePs.sizes[1] = dims[1];
         resizePs.num_sizes = 2;
         resizePs.num_scales = 0;
+        if (this->opCode == tflite::BuiltinOperator_RESIZE_BILINEAR) {
+            resizePs.mode = LINEAR;
+        } else if (this->opCode == tflite::BuiltinOperator_RESIZE_NEAREST_NEIGHBOR) {
+            resizePs.mode = NEAREST;
+        } else {
+            UNI_ERROR_LOG("can not map operator location:%d type:%s to Resize.\n",
+                this->tfliteOperatorIndex, tflite::EnumNamesBuiltinOperator()[this->opCode]);
+        }
         curPs.resize_spec = resizePs;
         return curPs;
     }
@@ -1232,9 +1434,9 @@ protected:
     ParameterSpec adapt_Clip() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         ClipParamSpec clipPs;
-        initialization_zero(&clipPs, sizeof(clipPs));
+        memset(&clipPs, 0, sizeof(clipPs));
         const auto &clipTensor =
             this->tfliteTensors[this->tfliteOperators[this->tfliteOperatorIndex]->inputs[1]];
         const auto &clipData = tfliteModelBuffer[clipTensor->buffer]->data;
@@ -1244,6 +1446,9 @@ protected:
         } else if (opCode == tflite::BuiltinOperator_MAXIMUM) {
             clipPs.max = std::numeric_limits<float>::max();
             clipPs.min = clipData[0];
+        } else {
+            UNI_ERROR_LOG("can not map operator location:%d type:%s to Clip.\n",
+                this->tfliteOperatorIndex, tflite::EnumNamesBuiltinOperator()[this->opCode]);
         }
         curPs.clip_spec = clipPs;
         return curPs;
@@ -1252,7 +1457,7 @@ protected:
     ParameterSpec adapt_Deconvolution() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         modelWeightOpNum++;
         const int weightIndex = this->tfliteOperators[this->tfliteOperatorIndex]->inputs[1];
         const auto &weightTensor = this->tfliteTensors[weightIndex];
@@ -1261,7 +1466,7 @@ protected:
         CHECK_REQUIREMENT(weightShape.size() == 4);
 
         ConvolutionParamSpec convPs;
-        initialization_zero(&convPs, sizeof(convPs));
+        memset(&convPs, 0, sizeof(convPs));
         convPs.kernel_t = 1;
         convPs.kernel_h = weightShape[1];
         convPs.kernel_w = weightShape[2];
@@ -1285,15 +1490,27 @@ protected:
         convPs.padding_before = 0;
         convPs.padding_after = 0;
         if (tfliteDeConvOption->padding == 1) {
+            convPs.rm = TF_VALID;
             convPs.padding_top = 0;
             convPs.padding_bottom = 0;
             convPs.padding_left = 0;
             convPs.padding_right = 0;
         } else {
-            convPs.padding_top = (convPs.kernel_h - convPs.stride_h) / 2;
-            convPs.padding_bottom = convPs.kernel_h - convPs.stride_h - convPs.padding_top;
-            convPs.padding_left = (convPs.kernel_w - convPs.stride_w) / 2;
-            convPs.padding_right = convPs.kernel_w - convPs.stride_w - convPs.padding_left;
+            convPs.rm = TF_SAME;
+            if (convPs.kernel_h < convPs.stride_h) {
+                convPs.padding_top = 0;
+                convPs.padding_bottom = 0;
+            } else {
+                convPs.padding_top = (convPs.kernel_h - convPs.stride_h) / 2;
+                convPs.padding_bottom = convPs.kernel_h - convPs.stride_h - convPs.padding_top;
+            }
+            if (convPs.kernel_w < convPs.stride_w) {
+                convPs.padding_left = 0;
+                convPs.padding_right = 0;
+            } else {
+                convPs.padding_left = (convPs.kernel_w - convPs.stride_w) / 2;
+                convPs.padding_right = convPs.kernel_w - convPs.stride_w - convPs.padding_left;
+            }
         }
 
         curPs.conv_spec = convPs;
@@ -1303,9 +1520,9 @@ protected:
     ParameterSpec adapt_Power() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         PowerParamSpec powerPs;
-        initialization_zero(&powerPs, sizeof(powerPs));
+        memset(&powerPs, 0, sizeof(powerPs));
         powerPs.scale = 1;
         powerPs.shift = 0;
         powerPs.power = 1;
@@ -1332,18 +1549,29 @@ protected:
         } else if (opCode == tflite::BuiltinOperator_NEG) {
             powerPs.scale = -1.0;
         } else {
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("can not map operator location:%d type:%s to Power.\n",
+                this->tfliteOperatorIndex, tflite::EnumNamesBuiltinOperator()[this->opCode]);
         }
         curPs.power_spec = powerPs;
+
+        if (opCode == tflite::BuiltinOperator_ADD) {
+            const auto &addOption =
+                this->tfliteOperators[this->tfliteOperatorIndex]->builtin_options.AsAddOptions();
+            if (getActivationOperatorType(addOption->fused_activation_function) != ACTIVATION_NULL) {
+                insertActivationOperator(
+                    getActivationOperatorType(addOption->fused_activation_function));
+            }
+        }
+
         return curPs;
     }
 
     ParameterSpec adapt_Pad() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         PadParamSpec padPs;
-        initialization_zero(&padPs, sizeof(padPs));
+        memset(&padPs, 0, sizeof(padPs));
         const auto &beginTensor =
             this->tfliteTensors[this->tfliteOperators[this->tfliteOperatorIndex]->inputs[1]];
         auto beginData = reinterpret_cast<const int32_t *>(
@@ -1367,9 +1595,9 @@ protected:
     ParameterSpec adapt_Relu() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         ReLUParamSpec reluPs;
-        initialization_zero(&reluPs, sizeof(reluPs));
+        memset(&reluPs, 0, sizeof(reluPs));
         if (this->opCode == tflite::BuiltinOperator_RELU) {
             reluPs.neg_slope = 0;
         } else {
@@ -1384,9 +1612,9 @@ protected:
     ParameterSpec adapt_Squeeze() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         SqueezeParamSpec squeezePs;
-        initialization_zero(&squeezePs, sizeof(squeezePs));
+        memset(&squeezePs, 0, sizeof(squeezePs));
         const auto &tfliteSqueezeOption =
             this->tfliteOperators[this->tfliteOperatorIndex]->builtin_options.AsSqueezeOptions();
         squeezePs.axes_num = tfliteSqueezeOption->squeeze_dims.size();
@@ -1408,18 +1636,17 @@ protected:
     ParameterSpec adapt_Unsqueeze() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         UnsqueezeParamSpec unsqueezePs;
-        initialization_zero(&unsqueezePs, sizeof(unsqueezePs));
+        memset(&unsqueezePs, 0, sizeof(unsqueezePs));
         const auto &weightTensor =
             this->tfliteTensors[this->tfliteOperators[this->tfliteOperatorIndex]->inputs[1]];
-        auto weightData = reinterpret_cast<const int32_t *>(
-            (tfliteModelBuffer[weightTensor->buffer]->data).data());
+        auto weightData = transformTfliteTensorToVector(weightTensor);
         const auto &inputTensor =
             this->tfliteTensors[this->tfliteOperators[this->tfliteOperatorIndex]->inputs[0]];
         const auto &inputShape = inputTensor->shape;
         if (this->weightFormat == DF_NHWC) {
-            unsqueezePs.axes[0] = NHWCAxisToNCHWAxis(weightData[0], inputShape.size());
+            unsqueezePs.axes[0] = NHWCAxisToNCHWAxis((int)weightData[0], inputShape.size());
         } else {
             unsqueezePs.axes[0] = weightData[0];
         }
@@ -1428,11 +1655,97 @@ protected:
         return curPs;
     }
 
+    ParameterSpec adapt_TopK() override
+    {
+        ParameterSpec curPs;
+        memset(&curPs, 0, sizeof(curPs));
+        TopKParamSpec p;
+        memset(&p, 0, sizeof(p));
+        p.axis = 0;
+        p.largest = 1;
+        p.sorted = 1;
+        const auto &weightTensor =
+            this->tfliteTensors[this->tfliteOperators[this->tfliteOperatorIndex]->inputs[1]];
+        auto weightData = transformTfliteTensorToVector(weightTensor);
+        p.topk = weightData[0];
+        curPs.topk_spec = p;
+        return curPs;
+    }
+
+    ParameterSpec adapt_Embedding() override
+    {
+        ParameterSpec curPs;
+        memset(&curPs, 0, sizeof(curPs));
+        EmbedParamSpec p;
+        memset(&p, 0, sizeof(p));
+        p.input_dim = -1;
+        p.num_output = -1;
+        p.bias_term = false;
+        p.transpose = false;
+        curPs.embed_spec = p;
+        return curPs;
+    }
+
+    ParameterSpec adapt_PRelu() override
+    {
+        modelWeightOpNum++;
+        ParameterSpec curPs;
+        memset(&curPs, 0, sizeof(curPs));
+        return curPs;
+    }
+
+    ParameterSpec adapt_SpaceToBatchNd() override
+    {
+        modelWeightOpNum++;
+        ParameterSpec curPs;
+        memset(&curPs, 0, sizeof(curPs));
+        return curPs;
+    }
+
+    ParameterSpec adapt_BatchToSpaceNd() override
+    {
+        modelWeightOpNum++;
+        ParameterSpec curPs;
+        memset(&curPs, 0, sizeof(curPs));
+        return curPs;
+    }
+
+    ParameterSpec adapt_Slice() override
+    {
+        ParameterSpec curPs;
+        memset(&curPs, 0, sizeof(curPs));
+        SliceParamSpec slice_ps;
+        memset(&slice_ps, 0, sizeof(slice_ps));
+        if (this->opCode == tflite::BuiltinOperator_SPLIT) {
+            const auto &tfliteSplit =
+                this->tfliteOperators[this->tfliteOperatorIndex]->builtin_options.AsSplitOptions();
+            const auto &weightTensor =
+                this->tfliteTensors[this->tfliteOperators[this->tfliteOperatorIndex]->inputs[0]];
+            const auto &inputTensor =
+                this->tfliteTensors[this->tfliteOperators[this->tfliteOperatorIndex]->inputs[1]];
+            const auto &inputShape = inputTensor->shape;
+            std::vector<float> axisData = transformTfliteTensorToVector(weightTensor);
+            if (this->weightFormat == DF_NHWC) {
+                slice_ps.axis = NHWCAxisToNCHWAxis((int)axisData[0], inputShape.size());
+            } else {
+                slice_ps.axis = axisData[0];
+            }
+            slice_ps.slice_size = tfliteSplit->num_splits - 1;
+            memset(slice_ps.slice_points, 0, slice_ps.slice_size * sizeof(I32));
+        } else {
+            UNI_ERROR_LOG("can not map operator location:%d type:%s to Slice.\n",
+                this->tfliteOperatorIndex, tflite::EnumNamesBuiltinOperator()[this->opCode]);
+        }
+        curPs.slice_spec = slice_ps;
+        return curPs;
+    }
+
 public:
     std::map<OperatorType, int> modifiedInputsOp{{OT_Conv, 1}, {OT_Reshape, 1}, {OT_Resize, 1},
         {OT_Transpose, 1}, {OT_FC, 1}, {OT_Slice, 1}, {OT_Scale, 1}, {OT_Pooling, 1}, {OT_Clip, 1},
         {OT_Deconvolution, 1}, {OT_SqDiff, 1}, {OT_Reduction, 1}, {OT_Pad, 1}, {OT_Power, 1},
-        {OT_TfSlice, 1}};
+        {OT_TfSlice, 1}, {OT_SpaceToBatchNd, 1}, {OT_BatchToSpaceNd, 1}, {OT_MatMul, 2},
+        {OT_PRelu, 1}};
 
 private:
     DataFormat weightFormat;
@@ -1453,5 +1766,6 @@ private:
     std::map<std::string, int> boltOperatorNameMap;
     std::vector<OperatorSpec> boltOperators;
     std::vector<WeightSpec> boltSharedWeights;
+    std::map<std::string, int> sharedWeightName;
 };
 #endif

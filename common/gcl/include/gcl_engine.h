@@ -23,6 +23,7 @@
         GCLHandle_t handle = OCLContext::getInstance().handle.get();                            \
         handle->kernelVec = &this->opKernelVec;                                                 \
         if (this->needSetKernelVec) {                                                           \
+            CHECK_STATUS(gcl_clean_kernelVec(handle));                                          \
             run_prepare();                                                                      \
             this->needSetKernelVec = false;                                                     \
             if (this->needSelectKernelLS) {                                                     \

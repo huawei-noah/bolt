@@ -12,13 +12,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "sys.h"
-#include "types.h"
+
 #include "tensor_desc.h"
 #include "error.h"
 #include "gpu/mali/tensor_computing_mali.h"
 #include "gpu/mali/fp16/depthwise_convolution_mali_fp16.h"
 
-inline void depthwise_convolution_produce_algos_paras(
+inline void depthwise_convolution_produce_algos_paras(U32 dw,
     std::vector<DepthwiseConvolutionForwardAlgorithm> *depthwiseConvAlgorithms,
     std::vector<U32> *algoNumIndex,
     std::vector<U32> *vecW,
@@ -26,7 +26,8 @@ inline void depthwise_convolution_produce_algos_paras(
     std::vector<U32> *vecK)
 {
     U32 configNum = 8;
-    for (U32 i = 0; i < configNum; i++) {
+    U32 j = (dw == 2) ? 2 : 0;
+    for (U32 i = j; i < configNum; i++) {
         if (vecW) {
             (*vecW).push_back(i + 1);
         }
@@ -41,7 +42,7 @@ inline void depthwise_convolution_produce_algos_paras(
         (*depthwiseConvAlgorithms).push_back(DEPTHWISE_CONVOLUTION_ALGORITHM_DIRECT);
     }
     if (algoNumIndex) {
-        (*algoNumIndex).push_back(configNum);
+        (*algoNumIndex).push_back(configNum - j);
     }
 }
 
@@ -56,7 +57,7 @@ EE depthwise_convolution_infer_output_size_mali(TensorDesc inputDesc,
     DataFormat idf;
     U32 iw, ih, ic, in;
     U32 fw, fh;
-    U32 ow, oh;
+    I32 ow, oh;
     U32 sw, sh, pl, pt, dw, dh, pr, pb;
     tensorSelectGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw);
     tensorSelectGet(filterDesc, NULL, NULL, NULL, NULL, &fh, &fw);
@@ -71,30 +72,29 @@ EE depthwise_convolution_infer_output_size_mali(TensorDesc inputDesc,
     if (fw < 1 || fh < 1) {
         return NOT_SUPPORTED;
     }
-    if (dw != 1 || dh != 1) {
-        return NOT_SUPPORTED;
-    }
-    if (sw != sh) {
-        return NOT_SUPPORTED;
-    }
     if ((ic & 3) != 0) {
         return NOT_SUPPORTED;
     }
-    ow = (iw + pl + pr - fw) / sw + 1;
-    oh = (ih + pt + pb - fh) / sh + 1;
+    U32 fwd = (fw - 1) * dw + 1;
+    U32 fhd = (fh - 1) * dh + 1;
+    ow = (iw + pl + pr - fwd) / sw + 1;
+    oh = (ih + pt + pb - fhd) / sh + 1;
+    if (ow <= 0 || oh <= 0) {
+        CHECK_STATUS(NOT_MATCH);
+    }
     if (outputDesc) {
         *outputDesc = tensor4df(idt, idf, in, ic, oh, ow);
     }
     bool need_pad = false;
 
     std::vector<U32> vecW;
-    depthwise_convolution_produce_algos_paras(NULL, NULL, &vecW, NULL, NULL);
+    depthwise_convolution_produce_algos_paras(dw, NULL, NULL, &vecW, NULL, NULL);
     U32 iw_align = ow;
     for (auto item_w : vecW) {
         U32 i = ALIGN(ow, item_w);
         iw_align = (iw_align < i) ? i : iw_align;
     }
-    U32 ext_w = (fw / 2 < pl) ? pl : fw / 2;
+    U32 ext_w = (fwd / 2 < pl) ? pl : fwd / 2;
     iw_align = iw_align * sw;
     if (pl < ext_w) {
         iw_align = iw_align + 2 * (ext_w - pl);
@@ -134,13 +134,14 @@ EE depthwise_convolution_infer_forward_algorithm_mali(GCLHandle_t handle,
     if (policy == CONVOLUTION_FASTEST) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
+    U32 dw = convParamSpec.dilatedRate_w;
     std::vector<DepthwiseConvolutionForwardAlgorithm> depthwiseConvAlgorithms;
     std::vector<U32> algoNumIndex;
     std::vector<U32> vecW;
     std::vector<U32> vecC;
     std::vector<U32> vecK;
     depthwise_convolution_produce_algos_paras(
-        &depthwiseConvAlgorithms, &algoNumIndex, &vecW, &vecC, &vecK);
+        dw, &depthwiseConvAlgorithms, &algoNumIndex, &vecW, &vecC, &vecK);
 
     if (policy == CONVOLUTION_TUNNING) {
         CHECK_STATUS(gcl_clean_kernelVec(handle));
@@ -245,6 +246,7 @@ EE depthwise_convolution_infer_forward_algorithm_mali(GCLHandle_t handle,
         runInfos.clear();
         filterMemDescs.clear();
         CHECK_STATUS(gcl_clean_kernelVec(handle));
+        CHECK_STATUS(gcl_clean_programMap(handle));
         CHECK_STATUS(gcl_off_queue_profiling(handle));
         return SUCCESS;
     }

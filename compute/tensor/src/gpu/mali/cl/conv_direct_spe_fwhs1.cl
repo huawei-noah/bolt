@@ -12,8 +12,18 @@
 // OUT OF OR IN COCNECTIOC WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "kernel_def.h"
-#define MANGLE_NAME_IMPL(base, OC) base##OC
-#define MANGLE_NAME(base, OC) MANGLE_NAME_IMPL(base, OC)
+
+#define MANGLE_NAME_IMPL(base, AM, GM, BM, OC) base##AM##GM##BM##OC
+#define MANGLE_NAME(base, AM, GM, BM, OC) MANGLE_NAME_IMPL(base, AM, GM, BM, OC)
+
+#define GM
+#define BM
+#if defined(NO_BIAS)
+#define BM nobias_
+#endif
+#if defined(USE_GEMV)
+#define GM gemv_
+#endif
 
 #if (OC == 1)
 #define calCore(ov, i_off, f_off, in, flt, off) \
@@ -73,43 +83,24 @@
     }
 #endif
 
-#if defined(USE_RELU)
-#if defined(NO_BIAS)
-__kernel MANGLE_NAME(void conv_direct_spe_fwhs1_nobias_relu_, OC)
-#else
-__kernel MANGLE_NAME(void conv_direct_spe_fwhs1_relu_, OC)
-#endif
-#elif defined(USE_RELU6)
-#if defined(NO_BIAS)
-__kernel MANGLE_NAME(void conv_direct_spe_fwhs1_nobias_relu6_, OC)
-#else
-__kernel MANGLE_NAME(void conv_direct_spe_fwhs1_relu6_, OC)
-#endif
-#else
-#if defined(NO_BIAS)
-__kernel MANGLE_NAME(void conv_direct_spe_fwhs1_nobias_, OC)
-#else
-__kernel MANGLE_NAME(void conv_direct_spe_fwhs1_, OC)
-#endif
-#endif
-    (const int ih_str,
-        const int ihw_str,
-        const int ic_str,
-        const int ih_off,
-        const int iw_off,
-        const int oh_str,
-        const int ow_str,
-        const int oh_off,
-        const int ow_off,
-        const int flt_str,
-        const int in_str,
-        const int on_str,
-        const int bx,
-        const int by,
-        __global const T *in,
-        __global const T *flt,
-        __global const T *bias,
-        __global T *out)
+__kernel MANGLE_NAME(void conv_direct_spe_fwhs1_, AM, GM, BM, OC)(const int ih_str,
+    const int ihw_str,
+    const int ic_str,
+    const int ih_off,
+    const int iw_off,
+    const int oh_str,
+    const int ow_str,
+    const int oh_off,
+    const int ow_off,
+    const int flt_str,
+    const int in_str,
+    const int on_str,
+    const int bx,
+    const int by,
+    __global const T *in,
+    __global const T *flt,
+    __global const T *bias,
+    __global T *out)
 {
     const int idx = get_global_id(0);
     const int idy = get_global_id(1);
@@ -129,8 +120,13 @@ __kernel MANGLE_NAME(void conv_direct_spe_fwhs1_, OC)
     }
 
     ACTIVATION_V1(out_val);
+#if defined(USE_GEMV)
+    int out_off = idy * on_str + idx + oh_off * ow_str + ow_off;
+    out[out_off] = out_val;
+#else
     const int ox = idx >> 2;
     const int oy = idx & 3;
     int out_off = (ox * ow_str + ow_off) * oh_str + oh_off + idy * on_str;
     out[out_off * 4 + oy] = out_val;
+#endif
 }

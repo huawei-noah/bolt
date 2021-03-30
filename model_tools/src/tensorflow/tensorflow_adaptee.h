@@ -15,17 +15,12 @@
 #define _H_TENSORFLOWADAPTEE
 #include <json/json.h>
 #include <fstream>
-#include <iostream>
 #include <sstream>
 #include <string>
 #include <vector>
 #include <math.h>
-#include <typeinfo>
-#include <cstdlib>
-#include "converter.h"
-#include "model_tools.h"
+
 #include "model_adaptee.h"
-#include "ut_util.h"
 
 class TensorflowAdaptee : public ModelAdaptee {
 public:
@@ -115,7 +110,8 @@ protected:
         } else if (tfType.compare("Shape") == 0) {
             return OT_Shape;
         } else {
-            UNI_ERROR_LOG("tensorflow op %s is not supported yet\n", tfType.c_str());
+            UNI_ERROR_LOG("operator name:%s type:%s not supported.\n", this->layerName.c_str(),
+                tfType.c_str());
             return OT_None;
         }
     }
@@ -129,6 +125,9 @@ protected:
         std::string::size_type idx;
         std::ifstream inFile;
         inFile.open(modelAbsPath);
+        if (!inFile.is_open()) {
+            UNI_ERROR_LOG("can not open tensorflow model file %s.\n", modelAbsPath.c_str());
+        }
         std::stringstream strStream;
         strStream << inFile.rdbuf();
         std::string strValueFromPy = strStream.str();
@@ -165,6 +164,19 @@ protected:
         return ret;
     }
 
+    template <typename T>
+    void shiftRight(T *array, int length, int left, int right)
+    {
+        // only transpose 4-dim parameter
+        if (length >= 4) {
+            T data = array[right];
+            for (int i = right; i > left; i--) {
+                array[i] = array[i - 1];
+            }
+            array[left] = data;
+        }
+    }
+
     EE adapt_operators(ModelSpec *ms) override
     {
         EE ret = SUCCESS;
@@ -187,7 +199,8 @@ protected:
         if (reader.parse(newStrValue, value)) {
             this->ttValue = value;
             for (int i = 0; i < (int)(value["node"].size()); i++) {
-                std::string layerName = value["node"][i]["name"].asString();
+                layerName = value["node"][i]["name"].asString();
+                UNI_DEBUG_LOG("process operator name:%s parameter.\n", layerName.c_str());
                 this->opType = value["node"][i]["op"].asString();
                 if (opType.compare("Placeholder") == 0) {
                     ms->input_names[traverseInputLayerIndex] =
@@ -196,31 +209,24 @@ protected:
                         layerName.length());
                     int placeholder_shape_size =
                         value["node"][i]["attr"]["shape"]["shape"]["dim"].size();
-                    std::vector<int> placeholderDimVec;
-                    for (int j = 0; j < placeholder_shape_size; j++) {
-                        placeholderDimVec.push_back(std::stoi(
-                            value["node"][i]["attr"]["shape"]["shape"]["dim"][j]["size"].asString()));
-                    }
                     if (placeholder_shape_size == 0) {
-                        UNI_ERROR_LOG("The input dimensions are not specific, please provide a new "
-                                      "model with confirmed input.");
+                        UNI_ERROR_LOG("model input %s dimensions are not specific.\n",
+                            ms->input_names[traverseInputLayerIndex]);
                     }
-                    if (placeholder_shape_size == 1) {
-                        ms->input_dims[traverseInputLayerIndex] =
-                            tensor1d(DT_F32, placeholderDimVec[0]);
-                    } else if (placeholder_shape_size == 2) {
-                        ms->input_dims[traverseInputLayerIndex] = tensor2df(
-                            DT_F32, DF_NORMAL, placeholderDimVec[0], placeholderDimVec[1]);
-                    } else if (placeholder_shape_size == 3) {
-                        ms->input_dims[traverseInputLayerIndex] = tensor3df(DT_F32, DF_MTK,
-                            placeholderDimVec[0], placeholderDimVec[1], placeholderDimVec[2]);
-                    } else if (placeholder_shape_size == 4) {
-                        placeholderDimVec[0] = 1;
-                        ms->input_dims[traverseInputLayerIndex] = tensor4df(DT_F32, DF_NCHW,
-                            placeholderDimVec[0], placeholderDimVec[3], placeholderDimVec[1],
-                            placeholderDimVec[2]);
-                    } else {
-                        UNI_ERROR_LOG("NOT SUPPORT THIS INPUT CURRENTLY\n");
+                    std::vector<int> inputShape(placeholder_shape_size);
+                    for (int j = 0; j < placeholder_shape_size; j++) {
+                        inputShape[j] = std::stoi(
+                            value["node"][i]["attr"]["shape"]["shape"]["dim"][j]["size"].asString());
+                    }
+                    shiftRight<int>(inputShape.data(), inputShape.size(), 1, inputShape.size() - 1);
+                    ms->input_dims[traverseInputLayerIndex].nDims = inputShape.size();
+                    ms->input_dims[traverseInputLayerIndex].dt = DT_F32;
+                    ms->input_dims[traverseInputLayerIndex].df =
+                        getTensorDefaultDataFormat(ms->input_dims[traverseInputLayerIndex].nDims);
+                    for (U32 j = 0; j < ms->input_dims[traverseInputLayerIndex].nDims; j++) {
+                        ms->input_dims[traverseInputLayerIndex]
+                            .dims[ms->input_dims[traverseInputLayerIndex].nDims - 1 - j] =
+                            inputShape[j];
                     }
                     traverseInputLayerIndex++;
                 } else if (opType.compare("Const") == 0) {
@@ -315,7 +321,7 @@ protected:
                 }
             }
         } else {
-            std::cout << "reading failed" << std::endl;
+            UNI_ERROR_LOG("can not read tensorflow model.\n");
         }
         return ret;
     }
@@ -338,6 +344,7 @@ protected:
                 std::string weightOpName = value["node"][curWeightIndex]["name"].asString();
                 str_copy(wsPtr[j].op_name, weightOpName.c_str(), weightOpName.length());
                 std::vector<std::string> constList = weightConstInput[weightOpName];
+                UNI_DEBUG_LOG("process operator name:%s weight.\n", weightOpName.c_str());
                 if (weightOpType.compare("Conv2D") == 0 ||
                     weightOpType.compare("Conv2DBackpropInput") == 0 ||
                     weightOpType.compare("MatMul") == 0 ||
@@ -480,9 +487,9 @@ protected:
     ParameterSpec adapt_Eltwise() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         EltwiseParamSpec eps;
-        initialization_zero(&eps, sizeof(eps));
+        memset(&eps, 0, sizeof(eps));
         if (opType == "Add") {
             eps.elt_mode = ELTWISE_SUM;
             eps.activation_type = ACTIVATION_NULL;
@@ -497,9 +504,9 @@ protected:
     ParameterSpec adapt_ArgMax() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         ArgMaxParamSpec aps;
-        initialization_zero(&aps, sizeof(aps));
+        memset(&aps, 0, sizeof(aps));
         aps.axis = 1;  // TODO
         curPs.argmax_spec = aps;
         return curPs;
@@ -508,9 +515,9 @@ protected:
     ParameterSpec adapt_Conv() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         ConvolutionParamSpec convPs;
-        initialization_zero(&convPs, sizeof(convPs));
+        memset(&convPs, 0, sizeof(convPs));
         convPs.kernel_t = 1;
         convPs.stride_t = 1;
         convPs.padding_before = 0;
@@ -558,7 +565,7 @@ protected:
         }
 
         if (convWeightKernels.size() < 4) {
-            UNI_ERROR_LOG("Not support this conv");
+            UNI_ERROR_LOG("can not process operator name:%s kernel.\n", this->layerName.c_str());
         }
         if (opType.compare("DepthwiseConv2dNative") == 0) {
             convPs.num_outputs = convWeightKernels[2];
@@ -608,9 +615,9 @@ protected:
     ParameterSpec adapt_BatchNorm() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         BatchNormParamSpec bps;
-        initialization_zero(&bps, sizeof(bps));
+        memset(&bps, 0, sizeof(bps));
         bps.axis = 0;
         bps.eps = nodeV["attr"]["epsilon"]["f"].asFloat();
         bps.gama = 0;
@@ -622,9 +629,9 @@ protected:
     ParameterSpec adapt_Fc() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         FullyConnectedParamSpec fps;
-        initialization_zero(&fps, sizeof(fps));
+        memset(&fps, 0, sizeof(fps));
         // to locate the const weight op
         std::string curOpName = nodeV["name"].asString();
         std::vector<std::string> curConvIdens = this->weightConstInput[curOpName];
@@ -648,9 +655,9 @@ protected:
     ParameterSpec adapt_Pooling() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         PoolingParamSpec pps;
-        initialization_zero(&pps, sizeof(pps));
+        memset(&pps, 0, sizeof(pps));
         std::vector<int> kernelSize;  // ihwo
         std::vector<int> stridesInfo;
         for (int i = 0; i < (int)(nodeV["attr"]["ksize"]["list"]["i"].size()); i++) {
@@ -685,13 +692,14 @@ protected:
     {
         // Mapping to <Mean>
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         ReductionParamSpec reductionPs;
-        initialization_zero(&reductionPs, sizeof(reductionPs));
+        memset(&reductionPs, 0, sizeof(reductionPs));
         if (opType.compare("Mean") == 0) {
             reductionPs.reduction_mode = REDUCTION_MEAN;
         } else {
-            UNI_ERROR_LOG("not support this reduction mode\n");
+            UNI_ERROR_LOG("can not map operator name:%s type:%s to Reduction.\n",
+                this->layerName.c_str(), opType.c_str());
         }
         std::string reductionOpName = nodeV["name"].asString();
         std::vector<std::string> constInputs = weightConstInput[reductionOpName];
@@ -717,9 +725,9 @@ protected:
     ParameterSpec adapt_Pad() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         PadParamSpec padPs;
-        initialization_zero(&padPs, sizeof(padPs));
+        memset(&padPs, 0, sizeof(padPs));
 
         std::string curOpName = nodeV["name"].asString();
         std::vector<std::string> curConvIdens = this->weightConstInput[curOpName];
@@ -758,9 +766,9 @@ protected:
     ParameterSpec adapt_Concat() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         ConcatParamSpec concatPs;
-        initialization_zero(&concatPs, sizeof(concatPs));
+        memset(&concatPs, 0, sizeof(concatPs));
         concatPs.axis = std::stoi(nodeV["attr"]["N"]["i"].asString());
         curPs.concat_spec = concatPs;
         return curPs;
@@ -769,9 +777,9 @@ protected:
     ParameterSpec adapt_Resize() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         ResizeParamSpec resizePs;
-        initialization_zero(&resizePs, sizeof(resizePs));
+        memset(&resizePs, 0, sizeof(resizePs));
 
         std::string curOpName = nodeV["name"].asString();
         std::vector<std::string> curConvIdens = this->weightConstInput[curOpName];
@@ -803,9 +811,9 @@ protected:
     ParameterSpec adapt_Power() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         PowerParamSpec powerPs;
-        initialization_zero(&curPs, sizeof(powerPs));
+        memset(&curPs, 0, sizeof(powerPs));
         float curScale = 1.0;
         float curShift = 0.0;
 
@@ -851,9 +859,9 @@ protected:
     ParameterSpec adapt_Transpose() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         TransposeParamSpec transPs;
-        initialization_zero(&transPs, sizeof(transPs));
+        memset(&transPs, 0, sizeof(transPs));
         // extract the perm info from the const input
         std::string curOpName = nodeV["name"].asString();
         std::vector<std::string> curConvIdens = this->weightConstInput[curOpName];
@@ -880,9 +888,9 @@ protected:
     ParameterSpec adapt_Reshape() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         ReshapeParamSpec reshapePs;
-        initialization_zero(&reshapePs, sizeof(reshapePs));
+        memset(&reshapePs, 0, sizeof(reshapePs));
 
         std::string curOpName = nodeV["name"].asString();
         std::vector<std::string> curConvIdens = this->weightConstInput[curOpName];
@@ -912,9 +920,9 @@ protected:
     ParameterSpec adapt_Squeeze() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         SqueezeParamSpec squeezePs;
-        initialization_zero(&squeezePs, sizeof(squeezePs));
+        memset(&squeezePs, 0, sizeof(squeezePs));
         std::vector<int> squeezeDimsInfo;
         squeezePs.axes_num = nodeV["attr"]["squeeze_dims"]["list"]["i"].size();
         for (int i = 0; i < (int)(nodeV["attr"]["squeeze_dims"]["list"]["i"].size()); i++) {
@@ -927,9 +935,9 @@ protected:
     ParameterSpec adapt_Unsqueeze() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         UnsqueezeParamSpec unsqueezePs;
-        initialization_zero(&unsqueezePs, sizeof(unsqueezePs));
+        memset(&unsqueezePs, 0, sizeof(unsqueezePs));
         std::string unsqueeze_op = nodeV["name"].asString();
         int expandDimIndex = constId[idenConst[weightConstInput[unsqueeze_op][0]]];
         unsqueezePs.axes_num =
@@ -946,10 +954,10 @@ protected:
     ParameterSpec adapt_Cast() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         CastParamSpec castPs;
-        initialization_zero(&castPs, sizeof(castPs));
-        castPs.castPrecision = ToFloat;
+        memset(&castPs, 0, sizeof(castPs));
+        castPs.targetDt = DT_F32;
         curPs.cast_spec = castPs;
         return curPs;
     }
@@ -963,6 +971,7 @@ private:
     Json::Value nodeV;
     int curNodeIndex;
     std::string opType;
+    std::string layerName;
 
     Json::Value ttValue;
 

@@ -11,8 +11,18 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define MANGLE_NAME_IMPL(base, N) base##N
-#define MANGLE_NAME(base, N) MANGLE_NAME_IMPL(base, N)
+#define MANGLE_NAME_IMPL(base, AXIS, N) base##AXIS##N
+#define MANGLE_NAME(base, AXIS, N) MANGLE_NAME_IMPL(base, AXIS, N)
+
+#if defined(AXIS_W)
+#define AXIS w_
+#elif defined(AXIS_H)
+#define AXIS h_
+#elif defined(AXIS_C)
+#define AXIS c_
+#elif defined(NON_ALIGN_AXIS_C)
+#define AXIS non_align_c_
+#endif
 
 #define LOAD_VAL(idx, idy, idz, h_str, w_str, h_off, w_off, val, buf) \
     {                                                                 \
@@ -20,18 +30,7 @@
         val = vload4(off, buf);                                       \
     }
 
-__kernel void
-#if defined(NON_ALIGN_C)
-    MANGLE_NAME(concat_nonalign_c_p1_, N)
-#else
-#if defined(AXIS_W)
-    MANGLE_NAME(concat_w, N)
-#elif defined(AXIS_H)
-    MANGLE_NAME(concat_h, N)
-#elif defined(AXIS_C)
-    MANGLE_NAME(concat_c, N)
-#endif
-#endif
+__kernel void MANGLE_NAME(concat_, AXIS, N)
         (const int oh_str,
             const int ohw_str,
             const int oh_off,
@@ -86,7 +85,7 @@ __kernel void
     int id_axis = idy - axis_max;
 #elif defined(AXIS_H)
     int id_axis = idx - axis_max;
-#elif defined(AXIS_C)
+#elif defined(AXIS_C) || defined(NON_ALIGN_AXIS_C)
     int id_axis = idz - axis_max;
 #endif
     int idn = nmax;
@@ -117,11 +116,11 @@ __kernel void
     in_idy = id_axis;
 #elif defined(AXIS_H)
     in_idx = id_axis;
-#elif defined(AXIS_C)
+#elif defined(AXIS_C) || defined(NON_ALIGN_AXIS_C)
     in_idz = id_axis;
 #endif
 
-#if defined(NON_ALIGN_C)
+#if defined(NON_ALIGN_AXIS_C)
     char ec = 4;
     int out_off = id_axis * ohw_str * 4 + idy * oh_str + idx;
 #else
@@ -129,7 +128,7 @@ __kernel void
 #endif
     if (idn == 0) {
         LOAD_VAL(in_idx, in_idy, in_idz, ih_str0, iw_str0, ih_off0, iw_off0, val, in0);
-#if defined(NON_ALIGN_C)
+#if defined(NON_ALIGN_AXIS_C)
         if (id_axis * 4 + 4 > ic0) {
             ec = ic0 & 3;
         }
@@ -138,7 +137,7 @@ __kernel void
 #if (N > 1)
     if (idn == 1) {
         LOAD_VAL(in_idx, in_idy, in_idz, ih_str1, iw_str1, ih_off1, iw_off1, val, in1);
-#if defined(NON_ALIGN_C)
+#if defined(NON_ALIGN_AXIS_C)
         out_off += ic0 * ohw_str;
         if (id_axis * 4 + 4 > ic1) {
             ec = ic1 & 3;
@@ -149,7 +148,7 @@ __kernel void
 #if (N > 2)
     if (idn == 2) {
         LOAD_VAL(in_idx, in_idy, in_idz, ih_str2, iw_str2, ih_off2, iw_off2, val, in2);
-#if defined(NON_ALIGN_C)
+#if defined(NON_ALIGN_AXIS_C)
         out_off += (ic0 + ic1) * ohw_str;
         if (id_axis * 4 + 4 > ic2) {
             ec = ic2 & 3;
@@ -160,7 +159,7 @@ __kernel void
 #if (N > 3)
     if (idn == 3) {
         LOAD_VAL(in_idx, in_idy, in_idz, ih_str3, iw_str3, ih_off3, iw_off3, val, in3);
-#if defined(NON_ALIGN_C)
+#if defined(NON_ALIGN_AXIS_C)
         out_off += (ic0 + ic1 + ic2) * ohw_str;
         if (id_axis * 4 + 4 > ic3) {
             ec = ic3 & 3;
@@ -169,7 +168,7 @@ __kernel void
     }
 #endif
 
-#if defined(NON_ALIGN_C)
+#if defined(NON_ALIGN_AXIS_C)
     out[out_size + out_off] = val.x;
     if (ec > 1) {
         out[out_size + out_off + ohw_str] = val.y;

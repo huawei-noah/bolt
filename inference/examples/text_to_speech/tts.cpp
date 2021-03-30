@@ -191,14 +191,13 @@ int main(int argc, char *argv[])
         std::map<std::string, Tensor> input =
             prepareStates(dt, sequenceDirectory, "input_shape.txt");
         std::map<std::string, TensorDesc> inputDescMap;
+        std::map<std::string, U8 *> inputMap;
         for (auto iter : input) {
             inputDescMap[iter.first] = iter.second.get_desc();
+            inputMap[iter.first] = (U8 *)((CpuMemory *)(iter.second.get_memory()))->get_ptr();
         }
         pipeline->reready(inputDescMap);
-        for (auto iter : input) {
-            U8 *tensorPointer = (U8 *)((CpuMemory *)(iter.second.get_memory()))->get_ptr();
-            pipeline->copy_to_named_input(iter.first, tensorPointer);
-        }
+        pipeline->set_input_by_copy(inputMap);
 
         double timeBegin = ut_time_ms();
         pipeline->run();

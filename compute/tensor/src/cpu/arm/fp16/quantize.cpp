@@ -11,9 +11,9 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <math.h>
 #include <arm_neon.h>
 #include "cpu/arm/fp16/tensor_computing_fp16.h"
+#include "cpu/arm/int8/arm_functions_int8.h"
 
 inline void apply_scale_f16(U32 numData, F16 *array, F16 scale, INT8 *qArray, bool clamp)
 {

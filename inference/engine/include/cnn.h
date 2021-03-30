@@ -15,12 +15,9 @@
 #define _CNN_H
 
 #include <string>
-#include <cstring>
 #include "model.hpp"
 #include "memory_tracker.hpp"
-#ifdef _USE_MALI
-#include "gcl_common.h"
-#endif
+#include "model_spec.h"
 
 class CNN : public Model {
 public:
@@ -41,57 +38,52 @@ public:
 
     void ready(std::map<std::string, TensorDesc> inputDescMap) override;
 
-    void reready(std::map<std::string, TensorDesc> inputDescMap);
-
     EE mark_input_output();
 
-    void copy_to_named_input(std::string inputName, const U8 *data);
+    std::map<std::string, TensorDesc> get_input_desc();
 
-    void set_input_tensors_value(std::map<std::string, std::shared_ptr<U8>> modelTensorsInput);
+    std::map<std::string, std::shared_ptr<Tensor>> get_input();
 
-    std::map<std::string, std::shared_ptr<Tensor>> get_inputs();
+    void set_input_by_assign(std::map<std::string, std::shared_ptr<U8>> modelTensorsInput);
 
-    std::map<std::string, std::shared_ptr<Tensor>> get_outputs();
+    void set_input_by_copy(std::map<std::string, U8 *> modelTensorsInput);
+
+    void run() override;
+
+    std::map<std::string, TensorDesc> get_output_desc();
+
+    std::map<std::string, std::shared_ptr<Tensor>> get_output();
+
+    void reready(std::map<std::string, TensorDesc> inputDescMap);
 
     Tensor get_tensor_by_name(std::string tensorName);
 
     TensorDesc get_tensor_desc_by_name(std::string tensorName);
 
-    std::vector<std::string> get_model_input_tensor_names();
-
-    std::vector<TensorDesc> get_model_input_tensor_descs();
-
-    std::vector<std::string> get_model_output_tensor_names();
-
-    EE infer_output_tensors_size(std::map<std::string, TensorDesc> inputDescMap) override;
-
-    void assign_output_tensor() override;
-
-    void addOutputTensorNames(std::vector<std::string> outputTensorNames);
-
-    void run() override;
-
-#ifdef _USE_MALI
-    void mali_prepare(bool reset);
-#endif
 private:
     std::shared_ptr<Tensor> allocate_tensor(U32 size = 0);
 
     void add(std::shared_ptr<Operator> op,
-        std::vector<std::string> inputTensorsName,
-        std::vector<std::string> outputTensorsName);
+        std::vector<std::string> &inputTensorsName,
+        std::vector<std::string> &outputTensorsName);
 
     void infer_layout_desc();
 
     void update_op_tensors();
 
-    void set_input_tensors_desc(std::map<std::string, TensorDesc> inputDescMap);
+    void set_input_desc(std::map<std::string, TensorDesc> inputDescMap);
 
     void infer_tmp_memory_size() override;
 
     void assign_tmp_tensor() override;
 
     void check_memory_reuse_ratio();
+
+    EE infer_output_tensors_size(std::map<std::string, TensorDesc> inputDescMap) override;
+
+    void assign_output_tensor() override;
+
+    void clean_tensorMap_desc();
 
 private:
     std::map<std::string, std::shared_ptr<Tensor>> tensorMap;
@@ -106,9 +98,6 @@ private:
 
     std::vector<std::string> sortedOps;
 
-    std::vector<std::string> modelInputTensorNames;
-    std::vector<TensorDesc> modelInputTensorDescs;
-    std::vector<std::string> modelOutputTensorNames;
     MemoryTracker memoryTracker;
 };
 #endif

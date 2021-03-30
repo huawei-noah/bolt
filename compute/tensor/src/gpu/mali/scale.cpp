@@ -12,7 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "sys.h"
-#include "types.h"
+
 #include "tensor_desc.h"
 #include "error.h"
 #include "gpu/mali/tensor_computing_mali.h"
@@ -26,39 +26,46 @@ EE scale_infer_output_size_mali(TensorDesc inputDesc,
     /*tensorDesc record cpu org data format info*/
     /*gclmemDesc record gpu trans data format info*/
 
+    if (outputDesc == nullptr || gclmemInputDesc == nullptr || gclmemOutputDesc == nullptr) {
+        CHECK_STATUS(NOT_SUPPORTED);
+    }
     DataType idt;
     DataFormat idf;
     U32 iw, ih, ic, in;
     tensorSelectGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw);
+    *outputDesc = inputDesc;
 
-    if (idf == DF_NCHW) {
-        if (outputDesc) {
-            *outputDesc = inputDesc;
-        }
-        U32 ih_align = (ih + 1) / 2 * 2;
+    if (gclmemInputDesc->memFormat == DF_NCHW || gclmemInputDesc->byteSize == 0) {
+        iw = ALIGN(iw, 4);
+        CHECK_STATUS(infer_gclmem_desc_nchw(
+            iw, ih, ic, 0, 0, iw, ih, ic, idt, idt, gclmemInputDesc, gclmemOutputDesc));
+    } else {
         CHECK_STATUS(infer_gclmem_desc_ncwhc4(
-            iw, ih_align, ic, 0, 0, iw, ih_align, ic, idt, idt, gclmemInputDesc, gclmemOutputDesc));
-        if (gclmemInputDesc && gclmemOutputDesc) {
-            *gclmemOutputDesc = *gclmemInputDesc;  // the input and output mem maybe the same
-        }
-        return SUCCESS;
+            iw, ih, ic, 0, 0, iw, ih, ic, idt, idt, gclmemInputDesc, gclmemOutputDesc));
     }
-    return NOT_SUPPORTED;
+
+    if (gclmemInputDesc && gclmemOutputDesc) {
+        *gclmemOutputDesc = *gclmemInputDesc;  // the input and output mem maybe the same
+    }
+    return SUCCESS;
 }
 
 inline EE scale_checkpara_mali(GCLHandle_t handle,
     GCLMem_t alpha,
+    GCLMem_t beta,
     TensorDesc inputDesc,
     GCLMem_t input,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
-    if (handle == nullptr || nullptr == alpha || nullptr == input || nullptr == output) {
-        return NULL_POINTER;
+    if (handle == nullptr || nullptr == input || nullptr == output) {
+        CHECK_STATUS(NULL_POINTER);
     }
-    // if(inputDesc.df != outputDesc.df || inputDesc.df != DF_NCHW)                              return NOT_SUPPORTED;
-    if (input->desc.memFormat != output->desc.memFormat || input->desc.memFormat != DF_NCWHC4) {
-        return NOT_SUPPORTED;
+    if (alpha == nullptr && beta == nullptr) {
+        CHECK_STATUS(NULL_POINTER);
+    }
+    if (input->desc.memFormat != output->desc.memFormat) {
+        CHECK_STATUS(NOT_SUPPORTED);
     }
     return SUCCESS;
 }
@@ -72,7 +79,7 @@ EE scale_mali(GCLHandle_t handle,
     GCLMem_t output)
 {
     EE ret = SUCCESS;
-    CHECK_STATUS(scale_checkpara_mali(handle, alpha, inputDesc, input, outputDesc, output));
+    CHECK_STATUS(scale_checkpara_mali(handle, alpha, beta, inputDesc, input, outputDesc, output));
     switch (inputDesc.dt) {
         case DT_F16: {
             ret = scale_mali_fp16(handle, alpha, beta, inputDesc, input, outputDesc, output);

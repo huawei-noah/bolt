@@ -11,7 +11,7 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <fftw3.h>
+#include "ffts/ffts.h"
 #include "audio_feature.h"
 #include "error.h"
 
@@ -150,6 +150,7 @@ std::vector<std::vector<float>> AudioFeatureExtractor::GetLinearToMelMatrix()
     return melWeightsMat;
 }
 
+typedef float ffts_complex[2];
 std::vector<float> AudioFeatureExtractor::GetMelBankForSingleFrame(std::vector<float> frame)
 {
     std::vector<float> powerSpec;
@@ -158,15 +159,15 @@ std::vector<float> AudioFeatureExtractor::GetMelBankForSingleFrame(std::vector<f
     AddHammingWindow(frame);
     CentralPadding(frame, framePadded);
 
-    fftwf_complex *in = static_cast<fftwf_complex *>(fftwf_malloc(sizeof(fftwf_complex) * N_FFT));
-    fftwf_complex *out = static_cast<fftwf_complex *>(fftwf_malloc(sizeof(fftwf_complex) * N_FFT));
+    ffts_complex *in = static_cast<ffts_complex *>(malloc(sizeof(ffts_complex) * N_FFT));
+    ffts_complex *out = static_cast<ffts_complex *>(malloc(sizeof(ffts_complex) * N_FFT));
     for (int i = 0; i < N_FFT; i++) {
         in[i][0] = framePadded[i];
         in[i][1] = 1.0f;
     }
 
-    fftwf_plan p = fftwf_plan_dft_1d(N_FFT, in, out, FFTW_FORWARD, FFTW_ESTIMATE);
-    fftwf_execute(p);
+    ffts_plan_t *p = ffts_init_1d(N_FFT, FFTS_FORWARD);
+    ffts_execute(p, in, out);
 
     std::vector<double> specInput(N_FFT * 2);
     for (int i = 0; i < N_FFT; i++) {
@@ -178,9 +179,9 @@ std::vector<float> AudioFeatureExtractor::GetMelBankForSingleFrame(std::vector<f
             specInput[2 * i + 1] = out[i][1];
         }
     }
-    fftwf_destroy_plan(p);
-    fftwf_free(in);
-    fftwf_free(out);
+    ffts_free(p);
+    free(in);
+    free(out);
 
     powerSpec = ComputePowerSpec(specInput);
 

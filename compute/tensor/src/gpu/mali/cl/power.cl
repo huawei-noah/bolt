@@ -11,16 +11,26 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define MANGLE_NAME_IMPL(base, DT) base##DT
-#define MANGLE_NAME(base, DT) MANGLE_NAME_IMPL(base, DT)
-__kernel void MANGLE_NAME(power_, DT)(const int ih_str,
-    const int iw_str,
-    const int ih_off,
+#define MANGLE_NAME_IMPL(base, FM, DT) base##FM##DT
+#define MANGLE_NAME(base, FM, DT) MANGLE_NAME_IMPL(base, FM, DT)
+
+#define FM
+#define DT
+#if defined(USE_I32)
+#define DT _i32
+#endif
+#if defined(USE_NCHW)
+#define FM _nchw
+#endif
+
+__kernel void MANGLE_NAME(power, FM, DT)(const int iw_str,
+    const int ih_str,
     const int iw_off,
-    const int oh_str,
+    const int ih_off,
     const int ow_str,
-    const int oh_off,
+    const int oh_str,
     const int ow_off,
+    const int oh_off,
     const int w,
     const int bx,
     const int by,
@@ -37,57 +47,51 @@ __kernel void MANGLE_NAME(power_, DT)(const int ih_str,
     if (idx >= bx || idy >= by) {
         return;
     }
+#if defined(USE_NCHW)
     char ew = (((idx << 2) + 4) <= w) ? 4 : (w & 3);
-
     int in_off = (idz * ih_str + idy + ih_off) * iw_str + (idx << 2) + iw_off;
     int out_off = (idz * oh_str + idy + oh_off) * ow_str + (idx << 2) + ow_off;
+#else
+    char ew = 4;
+    int in_off = ((idz * iw_str + idy + iw_off) * ih_str + idx + ih_off) << 2;
+    int out_off = ((idz * ow_str + idy + ow_off) * oh_str + idx + oh_off) << 2;
+#endif
+    T4 val = 0;
     if (ew == 4) {
-        T4 val;
         val = vload4(0, input + in_off);
-        val.x = (T)(((float)val.x) * alp + bet);
-        val.y = (T)(((float)val.y) * alp + bet);
-        val.z = (T)(((float)val.z) * alp + bet);
-        val.w = (T)(((float)val.w) * alp + bet);
-        if (has_power) {
-            val.x = pow((float)val.x, power);
-            val.y = pow((float)val.y, power);
-            val.z = pow((float)val.z, power);
-            val.w = pow((float)val.w, power);
+    } else {
+        if (ew == 1) {
+            val.x = input[in_off];
         }
+        if (ew == 2) {
+            val.xy = vload2(0, input + in_off);
+        }
+        if (ew == 3) {
+            val.xyz = vload3(0, input + in_off);
+        }
+    }
+    val.x = (T)(((float)val.x) * alp + bet);
+    val.y = (T)(((float)val.y) * alp + bet);
+    val.z = (T)(((float)val.z) * alp + bet);
+    val.w = (T)(((float)val.w) * alp + bet);
+    if (has_power) {
+        val.x = pow((float)val.x, power);
+        val.y = pow((float)val.y, power);
+        val.z = pow((float)val.z, power);
+        val.w = pow((float)val.w, power);
+    }
+
+    if (ew == 4) {
         vstore4(val, 0, output + out_off);
     } else {
         if (ew == 1) {
-            T val;
-            val = input[in_off];
-            val = ((float)val) * alp + bet;
-            if (has_power) {
-                val = pow((float)val, power);
-            }
-            output[out_off] = (T)val;
+            output[out_off] = (T)val.x;
         }
         if (ew == 2) {
-            T2 val;
-            val = vload2(0, input + in_off);
-            val.x = (T)(((float)val.x) * alp + bet);
-            val.y = (T)(((float)val.y) * alp + bet);
-            if (has_power) {
-                val.x = pow((float)val.x, power);
-                val.y = pow((float)val.y, power);
-            }
-            vstore2(val, 0, output + out_off);
+            vstore2(val.xy, 0, output + out_off);
         }
         if (ew == 3) {
-            T3 val;
-            val = vload3(0, input + in_off);
-            val.x = (T)(((float)val.x) * alp + bet);
-            val.y = (T)(((float)val.y) * alp + bet);
-            val.z = (T)(((float)val.z) * alp + bet);
-            if (has_power) {
-                val.x = pow((float)val.x, power);
-                val.y = pow((float)val.y, power);
-                val.z = pow((float)val.z, power);
-            }
-            vstore3(val, 0, output + out_off);
+            vstore3(val.xyz, 0, output + out_off);
         }
     }
 }

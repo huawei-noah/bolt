@@ -12,11 +12,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include <math.h>
-#include <string.h>
-#include "types.h"
-#include "tensor_desc.h"
-#include "error.h"
-#include "image.h"
 #include "cpu/general/image_general.h"
 
 template <typename IT, typename OT>
@@ -66,10 +61,18 @@ EE resize_bilinear(TensorDesc inputDesc, IT *inArray, TensorDesc outputDesc, OT 
                     F32 hC = strideH * h;
                     F32 wC = strideW * w;
 
-                    I32 hT = floor(hC);
-                    I32 hB = ceil(hC);
-                    I32 wL = floor(wC);
-                    I32 wR = ceil(wC);
+                    U32 hT = floor(hC);
+                    U32 hB = ceil(hC);
+                    U32 wL = floor(wC);
+                    U32 wR = ceil(wC);
+
+                    // process edge pixel, linear
+                    if (hB >= ih) {
+                        hB = ih - 1;
+                    }
+                    if (wR >= iw) {
+                        wR = iw - 1;
+                    }
 
                     if (hT == hB && wL == wR) {
                         outArray[outBase + h * ow + w] = inArray[inBase + hT * iw + wL];
@@ -104,7 +107,7 @@ EE resize_bilinear(TensorDesc inputDesc, IT *inArray, TensorDesc outputDesc, OT 
 
 EE resize_bilinear_general(TensorDesc inputDesc, void *input, TensorDesc outputDesc, void *output)
 {
-    EE ret = SUCCESS;
+    EE ret = NOT_SUPPORTED;
     switch (inputDesc.dt) {
 #ifdef __aarch64__
         case DT_F16: {
@@ -132,7 +135,7 @@ EE resize_bilinear_general(TensorDesc inputDesc, void *input, TensorDesc outputD
             break;
         }
         default:
-            return NOT_SUPPORTED;
+            break;
     }
     return ret;
 }

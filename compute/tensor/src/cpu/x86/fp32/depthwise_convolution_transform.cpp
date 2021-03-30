@@ -27,7 +27,6 @@ inline EE depthwise_convolution_transform_filter_kernel_fp32(TensorDesc filterDe
     DataFormat fdf;
     U32 fn, fc, fh, fw;
     CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-    ftmArray = (F32 *)(((uintptr_t)ftmArray + 32 - 1) / 32 * 32);
     if (fdf == ftmDataFormat) {
         *ftmDesc = filterDesc;
         memcpy(ftmArray, filterArray, fn * fc * fh * fw * bytesOf(fdt));

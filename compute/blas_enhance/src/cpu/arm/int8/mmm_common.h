@@ -18,9 +18,11 @@
 #include <string.h>
 #include <arm_neon.h>
 
-#include "types.h"
+
 #include "error.h"
 #include "arm_neon_expand.h"
+#include "data_type.h"
+#include "uni.h"
 
 inline void matrix1_trans_n8(U32 blockK, U32 K, INT8 *src, INT8 *dst)
 {

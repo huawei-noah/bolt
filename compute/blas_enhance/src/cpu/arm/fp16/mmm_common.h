@@ -15,8 +15,8 @@
 #define _H_MMM_COMMON
 #include <string.h>
 #include <arm_neon.h>
-
-#include "types.h"
+#include "data_type.h"
+#include "uni.h"
 
 inline void matrix1_trans(U32 size, U32 blockK, U32 K, F16 *src, F16 *dst)
 {

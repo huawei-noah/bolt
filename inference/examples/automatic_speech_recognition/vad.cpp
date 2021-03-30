@@ -62,7 +62,7 @@ int main(int argc, char *argv[])
 
     auto pipeline = createPipeline(affinityPolicyName, modelPath);
 
-    std::map<std::string, std::shared_ptr<Tensor>> inMap = pipeline->get_inputs();
+    std::map<std::string, std::shared_ptr<Tensor>> inMap = pipeline->get_input();
     TensorDesc cacheDesc = (*(inMap["input_cache"])).get_desc();
 
     std::map<std::string, TensorDesc> inputDescMap;
@@ -76,9 +76,11 @@ int main(int argc, char *argv[])
     double totalTime = 0;
     int loops = 1;
     U32 falseResult = 0;
+    std::map<std::string, U8 *> input;
+    input["input_cache"] = cache.data();
+    input["input_fea"] = cache.data();
     for (int i = 0; i < loops; i++) {
-        pipeline->copy_to_named_input("input_cache", cache.data());
-        pipeline->copy_to_named_input("input_fea", cache.data());
+        pipeline->set_input_by_copy(input);
 
         double timeBegin = ut_time_ms();
         pipeline->run();

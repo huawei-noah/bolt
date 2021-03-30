@@ -15,7 +15,8 @@
 #define CHEETAH_X86_FUNCTIONS_FP32_H
 #include <math.h>
 #include "x86_avx2_expand.h"
-#include "types.h"
+#include "parameter_spec.h"
+#include "uni.h"
 
 inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDesc, F32 *output)
 {
@@ -24,10 +25,12 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
     __m256 one = _mm256_set1_ps(1.);
     __m256 three = _mm256_set1_ps(3.);
     __m256 six = _mm256_set1_ps(6.);
+    __m256 signm = _mm256_set1_ps(-0.0);
     U32 len_main = len / 8;
     U32 len_tail = len % 8;
 
     F32 value;
+    EE ret = SUCCESS;
     switch (activationDesc.mode) {
         case ACTIVATION_NULL: {
             break;
@@ -121,6 +124,26 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
             }
             break;
         }
+        case ACTIVATION_H_SWISH_NODIV: {
+            for (U32 i = 0; i < len_main; i++) {
+                in = _mm256_loadu_ps(input);
+                out = _mm256_add_ps(in, three);
+                out = _mm256_max_ps(out, zero);
+                out = _mm256_min_ps(out, six);
+                out = _mm256_mul_ps(out, in);
+                _mm256_storeu_ps(output, out);
+                input += 8;
+                output += 8;
+            }
+            for (U32 i = 0; i < len_tail; i++) {
+                value = input[i] + 3;
+                value = (value < 0) ? 0 : value;
+                value = (value > 6) ? 6 : value;
+                value = input[i] * value;
+                output[i] = value;
+            }
+            break;
+        }
         case ACTIVATION_GELU: {
             F32 two_div_PI_sqrt = sqrt(2 / 3.14159265358979323846);
             __m256 vec0 = _mm256_set1_ps(two_div_PI_sqrt);
@@ -193,11 +216,56 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
             }
             break;
         }
+        case ACTIVATION_SOFTPLUS: {
+            for (U32 i = 0; i < len_main; i++) {
+                in = _mm256_loadu_ps(input);
+                out = _mm256_log_ps(_mm256_add_ps(_mm256_exp_ps(in), one));
+                _mm256_storeu_ps(output, out);
+                input += 8;
+                output += 8;
+            }
+            for (U32 i = 0; i < len_tail; i++) {
+                output[i] = log(1 + exp(input[i]));
+            }
+            break;
+        }
+        case ACTIVATION_EXP: {
+            for (U32 i = 0; i < len_main; i++) {
+                in = _mm256_loadu_ps(input);
+                out = _mm256_exp_ps(in);
+                _mm256_storeu_ps(output, out);
+                input += 8;
+                output += 8;
+            }
+            for (U32 i = 0; i < len_tail; i++) {
+                output[i] = exp(input[i]);
+            }
+            break;
+        }
+        case ACTIVATION_ABS: {
+            for (U32 i = 0; i < len_main; i++) {
+                in = _mm256_loadu_ps(input);
+                out = _mm256_andnot_ps(signm, in);
+                _mm256_storeu_ps(output, out);
+                input += 8;
+                output += 8;
+            }
+            for (U32 i = 0; i < len_tail; i++) {
+                output[i] = UNI_ABS(input[i]);
+            }
+            break;
+        }
+        case ACTIVATION_SIGN: {
+            for (U32 i = 0; i < len; i++) {
+                output[i] = UNI_SIGN(input[i]);
+            }
+            break;
+        }
         default:
-            return NOT_SUPPORTED;
+            ret = NOT_SUPPORTED;
+            break;
     }
-
-    return SUCCESS;
+    return ret;
 }
 
 inline void array_scale_f32(const F32 *input, F32 *output, I32 len, F32 alpha, F32 beta)
@@ -223,6 +291,13 @@ inline void array_power_f32(F32 *input, F32 *output, I32 len, F32 power)
         for (i = 0; i < len - 7; i += 8) {
             __m256 in = _mm256_loadu_ps(input + i);
             __m256 tmp_v = _mm256_div_ps(one_v, in);
+            _mm256_storeu_ps(output + i, tmp_v);
+        }
+    } else if (power == -0.5) {
+        __m256 one_v = _mm256_set1_ps(1);
+        for (i = 0; i < len - 7; i += 8) {
+            __m256 in = _mm256_loadu_ps(input + i);
+            __m256 tmp_v = _mm256_div_ps(one_v, _mm256_sqrt_ps(in));
             _mm256_storeu_ps(output + i, tmp_v);
         }
     } else if (power == 0.5) {
@@ -342,19 +417,18 @@ inline void array_add_f32(const F32 *inputA, const F32 *inputB, F32 *output, I32
     }
 }
 
-inline void array_square_and_add_f32(const F32 *inputA, const F32 *inputB, F32 *output, I32 len)
+inline void array_mul_f32(const F32 *inputA, const F32 *inputB, F32 *output, I32 len)
 {
     I32 i = 0;
     for (i = 0; i < len - 7; i += 8) {
         __m256 a = _mm256_loadu_ps(inputA + i);
         __m256 b = _mm256_loadu_ps(inputB + i);
-        b = _mm256_mul_ps(b, b);
-        __m256 c = _mm256_add_ps(a, b);
+        __m256 c = _mm256_mul_ps(a, b);
         _mm256_storeu_ps(output + i, c);
     }
 
     for (; i < len; i++) {
-        output[i] = inputA[i] + inputB[i] * inputB[i];
+        output[i] = inputA[i] * inputB[i];
     }
 }
 

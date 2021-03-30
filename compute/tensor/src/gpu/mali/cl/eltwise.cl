@@ -12,34 +12,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "kernel_def.h"
-#define MANGLE_NAME_IMPL(base, TP, N) base##TP##N
-#define MANGLE_NAME(base, TP, N) MANGLE_NAME_IMPL(base, TP, N)
-
-#if defined(USE_SUM)
-#define calCore(v, res) \
-    {                   \
-        res.s0 += v.s0; \
-        res.s1 += v.s1; \
-        res.s2 += v.s2; \
-        res.s3 += v.s3; \
-    }
-#endif
-
-#if defined(USE_MAX)
-#define calCore(v, res)     \
-    {                       \
-        res = fmax(res, v); \
-    }
-#endif
-
-#if defined(USE_PROD)
-#define calCore(v, res) \
-    {                   \
-        res.s0 *= v.s0; \
-        res.s1 *= v.s1; \
-        res.s2 *= v.s2; \
-        res.s3 *= v.s3; \
-    }
+#define MANGLE_NAME_IMPL(base, AM, EM, FM, N) base##AM##EM##FM##N
+#define MANGLE_NAME(base, AM, EM, FM, N) MANGLE_NAME_IMPL(base, AM, EM, FM, N)
+#define FM
+#if defined(USE_NCHW)
+#define FM nchw_
 #endif
 
 #if defined(USE_NCHW)
@@ -94,55 +71,42 @@
     }
 #endif
 
-#if (USE_NCHW)
-#if (USE_RELU)
-__kernel void MANGLE_NAME(eltwise_nchw_relu_, TP, N)
-#else
-__kernel void MANGLE_NAME(eltwise_nchw_, TP, N)
-#endif
-#else
-#if (USE_RELU)
-__kernel void MANGLE_NAME(eltwise_relu_, TP, N)
-#else
-__kernel void MANGLE_NAME(eltwise_, TP, N)
-#endif
-#endif
-    (const int h,
-        const int w,
-        const int c,
-        const int oh_str,
-        const int ow_str,
-        const int oh_off,
-        const int ow_off,
-        const int bx,
-        const int by,
-        const int ih0_str,
-        const int iw0_str,
-        const int ih0_off,
-        const int iw0_off,
-        __global const T *in0,
+__kernel void MANGLE_NAME(eltwise_, AM, EM, FM, N)(const int h,
+    const int w,
+    const int c,
+    const int oh_str,
+    const int ow_str,
+    const int oh_off,
+    const int ow_off,
+    const int bx,
+    const int by,
+    const int ih0_str,
+    const int iw0_str,
+    const int ih0_off,
+    const int iw0_off,
+    __global const T *in0,
 #if (N > 1)
-        const int ih1_str,
-        const int iw1_str,
-        const int ih1_off,
-        const int iw1_off,
-        __global const T *in1,
+    const int ih1_str,
+    const int iw1_str,
+    const int ih1_off,
+    const int iw1_off,
+    __global const T *in1,
 #endif
 #if (N > 2)
-        const int ih2_str,
-        const int iw2_str,
-        const int ih2_off,
-        const int iw2_off,
-        __global const T *in2,
+    const int ih2_str,
+    const int iw2_str,
+    const int ih2_off,
+    const int iw2_off,
+    __global const T *in2,
 #endif
 #if (N > 3)
-        const int ih3_str,
-        const int iw3_str,
-        const int ih3_off,
-        const int iw3_off,
-        __global const T *in3,
+    const int ih3_str,
+    const int iw3_str,
+    const int ih3_off,
+    const int iw3_off,
+    __global const T *in3,
 #endif
-        __global T *out)
+    __global T *out)
 {
     const int idx = get_global_id(0);
     const int idy = get_global_id(1);
@@ -152,7 +116,7 @@ __kernel void MANGLE_NAME(eltwise_, TP, N)
     }
     char ew = 0;
 #if defined(USE_NCHW)
-    ew = ((idx << 2) + 4 < w) ? 4 : (w & 3);
+    ew = ((idx << 2) + 4 <= w) ? 4 : (w & 3);
 #endif
 
     T4 val;
@@ -160,15 +124,15 @@ __kernel void MANGLE_NAME(eltwise_, TP, N)
     LOAD_VAL(ew, idx, idy, idz, ih0_str, iw0_str, ih0_off, iw0_off, in0, res);
 #if (N > 1)
     LOAD_VAL(ew, idx, idy, idz, ih1_str, iw1_str, ih1_off, iw1_off, in1, val);
-    calCore(val, res);
+    ELTWISE_V4(val, res);
 #endif
 #if (N > 2)
     LOAD_VAL(ew, idx, idy, idz, ih2_str, iw2_str, ih2_off, iw2_off, in2, val);
-    calCore(val, res);
+    ELTWISE_V4(val, res);
 #endif
 #if (N > 3)
     LOAD_VAL(ew, idx, idy, idz, ih3_str, iw3_str, ih3_off, iw3_off, in3, val);
-    calCore(val, res);
+    ELTWISE_V4(val, res);
 #endif
     ACTIVATION_V4(res);
     STORE_VAL(ew, idx, idy, idz, oh_str, ow_str, oh_off, ow_off, out, res);

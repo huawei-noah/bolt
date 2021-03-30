@@ -145,7 +145,8 @@ EE reduction_cpu(TensorDesc inputDesc,
         for (int i = (int)inputDesc.nDims - 1; i >= 0; i--) {
             tmpDesc.dims[i + 1] = tmpDesc.dims[i];
         }
-        tmpDesc.dims[3] /= 8;
+        int channel = tmpDesc.nDims - 1;
+        tmpDesc.dims[channel] /= 8;
         tmpDesc.dims[0] = 8;
         tmpDesc.nDims += 1;
     }

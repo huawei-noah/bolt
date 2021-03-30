@@ -13,9 +13,17 @@
 #ifndef _OCL_DATA_TRANS
 #define _OCL_DATA_TRANS
 
-#include "types.h"
 #include "tensor_desc.h"
 #include "gcl_common.h"
+typedef enum { NCHW_TO_NCWHC4 = 0, NCWHC4_TO_NCHW = 1, NCHW_TO_NCHW = 2 } DataTransFormType;
+
+EE ocl_data_trans_form(GCLHandle_t handle,
+    GCLMem_t input,
+    GCLMem_t output,
+    U32 in_off,
+    U32 out_off,
+    DataTransFormType type,
+    bool setKernelVec = true);
 
 EE ocl_set_input(GCLHandle_t handle,
     GCLMem_t input,
@@ -29,5 +37,8 @@ EE ocl_get_output(GCLHandle_t handle, const GCLMem_t input, TensorDesc hostDesc,
 EE ocl_trans_mem(
     GCLHandle_t handle, GCLMem_t src, GCLMemDesc srcDesc, GCLMem_t dst, GCLMemDesc dstDesc);
 
-EE ocl_map_mem(GCLHandle_t handle, GCLMem_t gclMem, GCLMemDesc desc);
+EE ocl_map_mem_write(
+    GCLHandle_t handle, GCLMem_t gclMem, GCLMemDesc desc, TensorDesc hostDesc, U8 *host_ptr);
+
+EE ocl_map_mem_read(GCLHandle_t handle, GCLMem_t gclMem, GCLMemDesc desc);
 #endif

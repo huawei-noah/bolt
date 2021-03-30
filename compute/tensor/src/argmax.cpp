@@ -92,8 +92,8 @@ EE argmax_infer_output_size(
         }
         outputDesc.nDims = inputDesc.nDims - 1;
         outputDesc.dt = DT_U32;
-        outputTensor->resize(outputDesc);
         ret = SUCCESS;
     }
+    outputTensor->resize(outputDesc);
     return ret;
 }

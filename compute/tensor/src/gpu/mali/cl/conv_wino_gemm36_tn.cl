@@ -52,5 +52,5 @@ __kernel void MANGLE_NAME(conv_wino_gemm36_tn_, LM, LN)(int M,
 
     int c_off = iy * N + ix + c_str;
     GEMM_MUL_C((float)(0.1111111111), 0, c);
-    GEMM_STORE_C(c, c_off, N, C);
+    GEMM_STORE_C(c, c_off, N, LN, LM, C);
 }

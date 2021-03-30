@@ -11,7 +11,7 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-__kernel void transpose_nchw(const int iw_str,
+__kernel void transpose_3d_nchw(const int iw_str,
     const int ih_str,
     const int iw_off,
     const int ih_off,

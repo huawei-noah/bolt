@@ -15,7 +15,7 @@
 #define _H_BLAS_INT8
 
 #include "sys.h"
-#include "types.h"
+
 #include "error.h"
 #include "tensor_desc.h"
 

@@ -52,8 +52,11 @@ OCLContext::OCLContext()
     this->registerBinaryKernelMap();
     if (!this->handle->useBinMap) {
         this->registerSourceKernelMap();
-        this->registerSourceKernelsExt();
     }
+    CHECK_STATUS(gcl_get_device_max_ls_size(this->handle.get(), this->handle->device_max_ls_size));
+    CHECK_STATUS(gcl_get_device_max_cu(this->handle.get(), &this->handle->device_max_cu));
+    CHECK_STATUS(
+        gcl_get_device_max_work_group(this->handle.get(), &this->handle->device_max_work_group));
     UNI_DEBUG_LOG("OCLContext %p constructor end\n", (char *)this);
 }
 
@@ -96,29 +99,56 @@ void OCLContext::setDeviceName()
     U32 len;
     I8 *data;
     CHECK_STATUS(get_device_info(device, CL_DEVICE_NAME, (void **)&data, &len));
-    I8 devName[64];
+    std::string devName = std::string(data);
     for (U32 i = 0; i < len - 1; i++) {
-        if (data[i] == '-') {
-            data[i] = '_';
+        if (devName[i] == '-') {
+            devName[i] = '_';
         }
-        if (data[i] == ' ') {
-            data[i] = '_';
+        if (devName[i] == ' ') {
+            devName[i] = '_';
         }
-        devName[i] = data[i];
+        if (devName[i] == '(') {
+            devName[i] = '_';
+        }
+        if (devName[i] == ')') {
+            devName[i] = '_';
+        }
     }
+
     U32 version_len;
     free(data);
     CHECK_STATUS(get_device_info(device, CL_DEVICE_VERSION, (void **)&data, &version_len));
     std::string deviceV = std::string(data);
+    if (devName.find("QUALCOMM") != std::string::npos) {
+        U32 be = deviceV.find("Adreno");
+        std::string subDevName = deviceV.substr(be);
+        if (subDevName.find("(TM)") != std::string::npos) {
+            subDevName.erase(subDevName.find("(TM)"), 4);
+        }
+        devName = "QUALCOMM_";
+        devName += subDevName;
+        for (U32 i = 0; i < devName.length(); i++) {
+            if (devName[i] == '-') {
+                devName[i] = '_';
+            }
+            if (devName[i] == ' ') {
+                devName[i] = '_';
+            }
+            if (devName[i] == '(') {
+                devName[i] = '_';
+            }
+            if (devName[i] == ')') {
+                devName[i] = '_';
+            }
+        }
+    }
+
     U32 be = deviceV.find("r");
     U32 end = deviceV.find("p", be + 1);
     std::string numV = deviceV.substr(be + 1, end - be - 1);
     U32 i = atoi(numV.c_str());
     if (i >= 14) {
-        devName[len - 1] = 'p';
-        devName[len] = '\0';
-    } else {
-        devName[len - 1] = '\0';
+        devName += "p";
     }
     free(data);
     this->handle->deviceName = devName;
@@ -169,15 +199,6 @@ void OCLContext::registerSourceKernelMap()
     }
     CHECK_STATUS(create_program_from_source(this->handle->context, (U32 *)&head_source->len,
         head_source->data, this->handle->source_head));
-}
-
-void OCLContext::registerSourceKernelsExt()
-{
-    Kernel tmpK;
-    CHECK_STATUS(gcl_get_kernel_from_map(this->handle.get(), "padding_input_gclmem", &tmpK));
-    CHECK_STATUS(gcl_get_kernel_from_map(this->handle.get(), "mem_trans_nchw_to_ncwhc4", &tmpK));
-    CHECK_STATUS(gcl_get_kernel_from_map(this->handle.get(), "mem_trans_ncwhc4_to_nchw", &tmpK));
-    CHECK_STATUS(gcl_get_kernel_from_map(this->handle.get(), "mem_trans_ncwhc4_to_mtk", &tmpK));
 }
 
 OCLContext &OCLContext::getInstance()

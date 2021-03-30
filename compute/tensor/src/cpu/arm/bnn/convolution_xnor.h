@@ -15,11 +15,10 @@
 #define _H_CONVOLUTION_XNOR
 
 #ifdef _USE_FP16
-#include <string.h>
-#include <math.h>
 #include "sys.h"
-#include "types.h"
-#include "error.h"
+#include "uni.h"
+#include "tensor_desc.h"
+#include "parameter_spec.h"
 
 EE convolution_xnor_A55(TensorDesc inputDesc,
     const F16 *input,

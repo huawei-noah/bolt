@@ -12,12 +12,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "sys.h"
-#include "types.h"
+
 #include "tensor_desc.h"
 #include "error.h"
 #include "gpu/mali/tensor_computing_mali.h"
 #include "gpu/mali/fp16/multihead_attention_mali_fp16.h"
-#include "tensor_computing_type.h"
 
 inline bool find_vector(std::vector<U32> vec, U32 val)
 {
@@ -600,6 +599,7 @@ EE multihead_attention_infer_forward_algorithm_mali(GCLHandle_t handle,
     filterMemDescs[2].clear();
     filterMemDescs[3].clear();
     CHECK_STATUS(gcl_clean_kernelVec(handle));
+    CHECK_STATUS(gcl_clean_programMap(handle));
     CHECK_STATUS(gcl_off_queue_profiling(handle));
     return SUCCESS;
 }

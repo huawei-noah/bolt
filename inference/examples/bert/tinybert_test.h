@@ -31,7 +31,8 @@ static std::string tinybertTestKernel(U32 sequenceIndex,
     int *falseIntent,
     int *falseSlot,
     const char **inputNames,
-    const char **outputNames)
+    const char **outputNames,
+    bool useGPU)
 {
     std::map<std::string, TensorDesc> inputDescMap;
     inputDescMap[inputNames[0]] = sequence[0].get_desc();
@@ -43,13 +44,21 @@ static std::string tinybertTestKernel(U32 sequenceIndex,
     inputs[inputNames[0]] = ((CpuMemory *)sequence[0].get_memory())->get_shared_ptr();
     inputs[inputNames[1]] = ((CpuMemory *)sequence[1].get_memory())->get_shared_ptr();
     inputs[inputNames[2]] = ((CpuMemory *)sequence[2].get_memory())->get_shared_ptr();
-    pipeline->set_input_tensors_value(inputs);
+
+    pipeline->set_input_by_assign(inputs);
 
     pipeline->run();
 
     Tensor intentSoftmax = pipeline->get_tensor_by_name(outputNames[0]);
+
     U32 intentNum = intentSoftmax.length();
     U32 intentMaxIndex = 0;
+#ifdef _USE_MALI
+    if (useGPU) {
+        auto mem = (OclMemory *)intentSoftmax.get_memory();
+        mem->get_mapped_ptr();
+    }
+#endif
     for (U32 index = 1; index < intentNum; index++) {
         if (intentSoftmax.element(index) > intentSoftmax.element(intentMaxIndex)) {
             intentMaxIndex = index;
@@ -69,10 +78,12 @@ static std::string tinybertTestKernel(U32 sequenceIndex,
     auto slotDesc = slotSoftmax.get_desc();
     U32 slotNum = slotDesc.dims[1];
     U32 slotRange = slotDesc.dims[0];
-    if (slotDesc.df == DF_MKT) {
-        slotNum = slotDesc.dims[0];
-        slotRange = slotDesc.dims[1];
+#ifdef _USE_MALI
+    if (useGPU) {
+        auto mem = (OclMemory *)slotSoftmax.get_memory();
+        mem->get_mapped_ptr();
     }
+#endif
     std::vector<U32> slotSoftmaxResult;
     log += std::string(" slot: ");
     for (U32 i = 0; i < slotNum; i++) {
@@ -114,6 +125,7 @@ inline void tinybertTest(int argc,
     char *sequenceDirectory = (char *)"";
     char *affinityPolicyName = (char *)"";
     char *algorithmMapPath = (char *)"";
+    int loopTime = 1;
 
     if (!parse_res.model.second) {
         exit(-1);
@@ -130,13 +142,17 @@ inline void tinybertTest(int argc,
     if (parse_res.algoPath.second) {
         algorithmMapPath = parse_res.algoPath.first;
     }
+    if (parse_res.loopTime.second) {
+        loopTime = parse_res.loopTime.first;
+    }
 
+    bool useGPU = (strcmp(affinityPolicyName, "GPU") == 0) ? true : false;
     std::shared_ptr<CNN> pipelineBase;
     UNI_PROFILE(pipelineBase = createPipeline(affinityPolicyName, modelPath, algorithmMapPath),
         std::string("bolt::prepare"), std::string("prepare"));
 
     // load sequences
-    std::map<std::string, std::shared_ptr<Tensor>> inMap = pipelineBase->get_inputs();
+    std::map<std::string, std::shared_ptr<Tensor>> inMap = pipelineBase->get_input();
     std::vector<TensorDesc> sequenceDescs;
     TensorDesc wordInputDesc = (*(inMap[inputNames[0]])).get_desc();
     wordInputDesc.dt = DT_U32;
@@ -164,10 +180,14 @@ inline void tinybertTest(int argc,
 
     int falseIntent = 0;
     int falseSlot = 0;
-    double timeBegin = ut_time_ms();
 #ifdef _USE_OPENMP
+    double timeBegin = ut_time_ms();
 #pragma omp parallel num_threads(OMP_NUM_THREADS)
     {
+        if (useGPU) {
+            UNI_ERROR_LOG("GPU mode has not support OpenMP for tinybert\n");
+            exit(1);
+        }
         std::shared_ptr<CNN> pipeline = std::shared_ptr<CNN>(new CNN());
         int threadId = omp_get_thread_num();
         UNI_PROFILE(*pipeline = pipelineBase->clone(),
@@ -177,20 +197,30 @@ inline void tinybertTest(int argc,
         for (U32 sequenceIndex = 0; sequenceIndex < sequences.size(); sequenceIndex++) {
             std::string log = sequencePaths[sequenceIndex] + ":" +
                 tinybertTestKernel(sequenceIndex, sequences[sequenceIndex], pipeline, intents,
-                    slots, &falseIntent, &falseSlot, inputNames, outputNames);
+                    slots, &falseIntent, &falseSlot, inputNames, outputNames, useGPU);
             UNI_INFO_LOG("%s\n", log.c_str());
         }
     }
 #else
-    for (U32 sequenceIndex = 0; sequenceIndex < sequences.size(); sequenceIndex++) {
-        std::string log = sequencePaths[sequenceIndex] + ":" +
-            tinybertTestKernel(sequenceIndex, sequences[sequenceIndex], pipelineBase, intents,
-                slots, &falseIntent, &falseSlot, inputNames, outputNames);
-        UNI_INFO_LOG("%s\n", log.c_str());
+#ifdef _USE_MALI
+    /*warp up*/
+    if (useGPU) {
+        pipelineBase->run();
+    }
+#endif
+    double timeBegin = ut_time_ms();
+    for (int i = 0; i < loopTime; ++i) {
+        for (U32 sequenceIndex = 0; sequenceIndex < sequences.size(); sequenceIndex++) {
+            std::string log = sequencePaths[sequenceIndex] + ":" +
+                tinybertTestKernel(sequenceIndex, sequences[sequenceIndex], pipelineBase, intents,
+                    slots, &falseIntent, &falseSlot, inputNames, outputNames, useGPU);
+            UNI_INFO_LOG("%s\n", log.c_str());
+        }
     }
 #endif
     double timeEnd = ut_time_ms();
-    double totalTime = (timeEnd - timeBegin);
+    pipelineBase->saveAlgorithmMapToFile(algorithmMapPath);
+    double totalTime = (timeEnd - timeBegin) / loopTime;
     UNI_TIME_STATISTICS
     U32 validSequence = UNI_MAX(1, sequences.size());
     *intentRate = 100.0 * (validSequence - falseIntent) / validSequence;

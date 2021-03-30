@@ -458,8 +458,8 @@ class LayerParameter():
     #      optional uint32 num_output = 1;
     #      optional int32 steps = 2 [default = -1];
     #      optional int32 num_proj = 3 [default = 0];
-    #      optional float zoneoutCell = 4 [default = 0];
-    #      optional float zoneoutOutput = 5 [default = 0];
+    #      optional float zoneout_cell = 4 [default = 0];
+    #      optional float zoneout_output = 5 [default = 0];
     #    }
     #
     # prototxt example
@@ -472,17 +472,17 @@ class LayerParameter():
     #         num_output: 1024
     #         steps: -1
     #         num_proj: 0
-    #         zoneoutCell: 0
-    #         zoneoutOutput: 0
+    #         zoneout_cell: 0
+    #         zoneout_output: 0
     #       }
     #     }
-    def lstm_param(self, num_output, steps, num_proj, zoneoutCell, zoneoutOutput):
+    def lstm_param(self, num_output, steps, num_proj, zoneout_cell, zoneout_output):
         lstm_param = pb.LSTMParameter()
         lstm_param.num_output = num_output
         lstm_param.steps = steps
         lstm_param.num_proj = num_proj
-        lstm_param.zoneoutCell = zoneoutCell
-        lstm_param.zoneoutOutput = zoneoutOutput
+        lstm_param.zoneout_cell = zoneout_cell
+        lstm_param.zoneout_output = zoneout_output
         self.layerParameter.lstm_param.CopyFrom(lstm_param)
 
     # caffe.proto
@@ -698,3 +698,10 @@ class LayerParameter():
         clip_param.min = min_value
         clip_param.max = max_value
         self.layerParameter.clip_param.CopyFrom(clip_param)
+
+    def exp_param(self, base, scale, shift):
+        exp_param = pb.ExpParameter()
+        exp_param.base = base
+        exp_param.scale = scale
+        exp_param.shift = shift
+        self.layerParameter.exp_param.CopyFrom(exp_param)

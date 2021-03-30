@@ -14,10 +14,10 @@
 #ifndef _H_DEPTHWISE_POINTWISE_CONVOLUTION_DIRECT
 #define _H_DEPTHWISE_POINTWISE_CONVOLUTION_DIRECT
 
-#include <string.h>
 #include "sys.h"
-#include "types.h"
-#include "error.h"
+#include "uni.h"
+#include "tensor_desc.h"
+#include "parameter_spec.h"
 
 EE depthwise_pointwise_convolution_direct_A55(TensorDesc inputDesc,
     F16 *inArray,

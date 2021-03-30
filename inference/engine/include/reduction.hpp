@@ -25,34 +25,9 @@ public:
         this->p = p;
     }
 
-    std::shared_ptr<Operator> clone() override
-    {
-        std::shared_ptr<Reduction> mem =
-            std::shared_ptr<Reduction>(new Reduction(this->dt, this->p));
-        *mem = *this;
-        return mem;
-    }
-
     OperatorType get_type() override
     {
         return OT_Reduction;
-    }
-
-    void run() override
-    {
-        Tensor inputTensor = this->inputTensors[0];
-        Tensor outputTensor = this->outputTensors[0];
-        Tensor maskTensor;
-        if (this->inputTensors.size() > 1) {
-            maskTensor = this->inputTensors[1];
-        } else {
-            TensorDesc maskDesc;
-            maskDesc.nDims = 0;
-            maskTensor.resize(maskDesc);
-        }
-
-        CHECK_STATUS(
-            reduction(inputTensor, maskTensor, this->p, this->temp, outputTensor, &this->archInfo));
     }
 
     U32 infer_tmp_memory_size() override
@@ -66,7 +41,11 @@ public:
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
-        Tensor maskTensor;
+        MemoryType type = CPUMem;
+        if (this->archInfo.arch == MALI) {
+            type = OCLMem;
+        }
+        Tensor maskTensor(type);
         if (inTensors.size() > 1) {
             maskTensor = *(inTensors[1]);
         } else {
@@ -74,10 +53,11 @@ public:
             maskDesc.nDims = 0;
             maskTensor.resize(maskDesc);
         }
-        return reduction_infer_output_size(inTensors[0], maskTensor, this->p, outTensors[0]);
+        return reduction_infer_output_size(
+            inTensors[0], maskTensor, this->p, outTensors[0], &this->archInfo);
     }
 
-private:
+protected:
     ReductionParamSpec p;
 };
 

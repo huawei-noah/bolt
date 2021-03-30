@@ -11,10 +11,9 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "sys.h"
-#include "error.h"
-#include "types.h"
 #include "gpu/mali/fp16/depthwise_pointwise_convolution_gemm_mali_fp16.h"
+#include "gpu/mali/cl/kernel_option/conv_depthwise_opt.h"
+#include "gpu/mali/cl/kernel_option/gemm_tn_opt.h"
 
 inline EE depthwise_pointwise_gemm_core_mali_fp16(GCLHandle_t handle,
     TensorDesc inputDesc,
@@ -49,12 +48,15 @@ inline EE depthwise_pointwise_gemm_core_mali_fp16(GCLHandle_t handle,
     pwBiasbuf = pwBias->mem;
     outbuf = output->mem;
     tmp = tmpBuf->mem;
-    U32 fw, sw, pw, ph, fc;
+    U32 fw, fh, sw, sh, pw, ph, dw, dh, fc;
     U32 ow, oh, oc, on;
     sw = convParamSpec.stride_w;
+    sh = convParamSpec.stride_h;
     ph = convParamSpec.padding_top;
     pw = convParamSpec.padding_left;
-    tensorSelectGet(dwFilterDesc, NULL, NULL, NULL, &fc, NULL, &fw);
+    dw = convParamSpec.dilatedRate_w;
+    dh = convParamSpec.dilatedRate_h;
+    tensorSelectGet(dwFilterDesc, NULL, NULL, NULL, &fc, &fh, &fw);
     tensorSelectGet(outputDesc, NULL, NULL, &on, &oc, &oh, &ow);
 
     U32 iw_str, ih_str, ihw_str, ic_str, ih_off, iw_off;
@@ -81,49 +83,51 @@ inline EE depthwise_pointwise_gemm_core_mali_fp16(GCLHandle_t handle,
     U32 gs[3] = {oh, ALIGN(ow, item_wd) / item_wd, ALIGN(fc, 4) / 4};
     U32 ls[3] = {0, 0, 0};
     U32 dim = 3;
-    char kernelname[128];
+    char kernelName[128];
     Kernel kernel;
-    if (depthwiseActivationMode == ACTIVATION_NULL) {
-        sprintf(kernelname, "conv_depthwise_s%d_ncwh_%d%d", sw, fw, item_wd);
-    } else if (depthwiseActivationMode == ACTIVATION_RELU) {
-        sprintf(kernelname, "conv_depthwise_s%d_relu_ncwh_%d%d", sw, fw, item_wd);
-    } else if (depthwiseActivationMode == ACTIVATION_RELU6) {
-        sprintf(kernelname, "conv_depthwise_s%d_relu6_ncwh_%d%d", sw, fw, item_wd);
+    KernelOpt kernelOpt;
+    if (dw > 1 || dh > 1) {
+        CHECK_STATUS(set_conv_depthwise_dila_opt_mali(fw, fh, sw, dw, item_wd,
+            depthwiseActivationMode, true, DT_F16, kernelName, &kernelOpt));
+        CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
+        CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, ihw_str, ic_str, ih_off, iw_off, th_str,
+            tw_str, thw_str, th_off, tw_off, ow, sh, dw, dh, gs[0], gs[1], inbuf, dwFltbuf,
+            dwBiasimg, tmp));
     } else {
-        CHECK_STATUS(NOT_SUPPORTED);
-        return NOT_SUPPORTED;
+        CHECK_STATUS(set_conv_depthwise_opt_mali(
+            fw, fh, sw, item_wd, depthwiseActivationMode, true, DT_F16, kernelName, &kernelOpt));
+        CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
+        CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, ihw_str, ic_str, ih_off, iw_off, th_str,
+            tw_str, thw_str, th_off, tw_off, ow, sh, gs[0], gs[1], inbuf, dwFltbuf, dwBiasimg, tmp));
     }
-    CHECK_STATUS(gcl_create_kernel(handle, kernelname, &kernel));
-    CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, ihw_str, ic_str, ih_off, iw_off, th_str, tw_str,
-        thw_str, th_off, tw_off, ow, gs[0], gs[1], inbuf, dwFltbuf, dwBiasimg, tmp));
-    gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelname);
-
+    gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
 #ifdef _DEBUG
-    CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelname));
+    CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
     handle->t_total += handle->t_execute;
 #endif
-    if (pointwiseActivationMode == ACTIVATION_NULL) {
-        sprintf(kernelname, "gemm_tn_ncwhc4_%d%d", item_kp, item_whp);
-    } else if (pointwiseActivationMode == ACTIVATION_RELU) {
-        sprintf(kernelname, "gemm_tn_relu_ncwhc4_%d%d", item_kp, item_whp);
-    } else {
-        CHECK_STATUS(NOT_SUPPORTED);
-        return NOT_SUPPORTED;
-    }
 
+    CHECK_STATUS(set_gemm_tn_opt_mali(item_kp, item_whp, true, false, true, pointwiseActivationMode,
+        DT_F16, kernelName, &kernelOpt));
     U32 M, N, K;
     M = ALIGN(oc, item_kp);
     N = thw_str;
     K = fc;
-    U32 gsp[3] = {N / item_whp, M / item_kp};
-    U32 lsp[3] = {0, 0};
-    U32 dimp = 2;
-    CHECK_STATUS(gcl_create_kernel(handle, kernelname, &kernel));
-    CHECK_STATUS(gcl_set_kernelArgs(kernel, M, N, K, oh, ow, oc, oh_str, ow_str, ohw_str, oh_off,
-        ow_off, gsp[0], gsp[1], pwFltbuf, tmp, pwBiasbuf, outbuf));
-    gcl_set_kernelVec(handle, kernel, dimp, gsp, lsp, kernelname);
+    U32 flt_str = M * K;
+    U32 tmp_str = N * K;
+    U32 out_str = ow_str * oh_str;
+    U32 flt_off = 0;
+    U32 tmp_off = 0;
+    U32 out_off = ow_off * oh_str + oh_off;
+
+    U32 gsp[3] = {N / item_whp, M / item_kp, 1};
+    U32 lsp[3] = {0, 0, 0};
+    U32 dimp = 3;
+    CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
+    CHECK_STATUS(gcl_set_kernelArgs(kernel, M, N, K, flt_str, tmp_str, out_str, flt_off, tmp_off,
+        out_off, oh_str, ow, oh, oc, gsp[0], gsp[1], pwFltbuf, tmp, pwBiasbuf, outbuf));
+    gcl_set_kernelVec(handle, kernel, dimp, gsp, lsp, kernelName);
 #ifdef _DEBUG
-    CHECK_STATUS(gcl_run_kernel(handle, kernel, dimp, gsp, lsp, kernelname));
+    CHECK_STATUS(gcl_run_kernel(handle, kernel, dimp, gsp, lsp, kernelName));
     handle->t_total += handle->t_execute;
 #endif
     return SUCCESS;
@@ -202,25 +206,25 @@ EE depthwise_pointwise_convolution_gemm_transform_filter_mali_fp16(GCLHandle_t h
     U32 item_kd = forwardRunInfo->best_k[0];
     U32 item_kp = forwardRunInfo->best_k[1];
     U32 item_c = forwardRunInfo->best_c[1];
-    char kernelname[128];
+    char kernelName[128];
     Kernel kernel;
-    sprintf(kernelname, "conv_depthwise_trans_fltbuf_%d", item_kd);
-    CHECK_STATUS(gcl_get_kernel_from_map(handle, kernelname, &kernel));
+    sprintf(kernelName, "conv_depthwise_trans_fltbuf_%d", item_kd);
+    CHECK_STATUS(gcl_get_kernel_from_map(handle, kernelName, &kernel));
     CHECK_STATUS(gcl_set_kernelArgs(kernel, dfwh, dfc, dwFilter->mem, dwFltmem->mem));
     U32 gs[2] = {dfwh, (dfc + item_kd - 1) / item_kd};
     U32 ls[2] = {0, 0};
     U32 dim = 2;
-    CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelname));
+    CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
     *dwFltmemDesc = dwFilterDesc;
 
     U32 fn_align = ALIGN(pfn, item_kp);
-    sprintf(kernelname, "conv_direct_trans_fltbuf_%d%d", item_c, 0);
-    CHECK_STATUS(gcl_get_kernel_from_map(handle, kernelname, &kernel));
+    sprintf(kernelName, "conv_direct_trans_fltbuf_%d%d", item_c, 0);
+    CHECK_STATUS(gcl_get_kernel_from_map(handle, kernelName, &kernel));
     CHECK_STATUS(gcl_set_kernelArgs(kernel, 1, pfc, fn_align, pwFilter->mem, pwFltmem->mem));
     U32 gsc[3] = {1, ALIGN(pfc, item_c) / item_c, fn_align};
     U32 lsc[3] = {0, 0, 0};
     U32 dimc = 3;
-    CHECK_STATUS(gcl_run_kernel(handle, kernel, dimc, gsc, lsc, kernelname));
+    CHECK_STATUS(gcl_run_kernel(handle, kernel, dimc, gsc, lsc, kernelName));
     *pwFltmemDesc = pwFilterDesc;
     return SUCCESS;
 }

@@ -51,7 +51,7 @@ public:
         UNI_DEBUG_LOG("graph %s clone begin\n", this->name.c_str());
         Graph graph = *this;
         for (unsigned int i = 0; i < this->nodes.size(); i++) {
-            this->nodes[i] = this->nodes[i].clone();
+            graph.nodes[i] = this->nodes[i].clone();
         }
         CHECK_STATUS(graph.manageDataTensors());
         CHECK_STATUS(graph.manageTmpBuffer());

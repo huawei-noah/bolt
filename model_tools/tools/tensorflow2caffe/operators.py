@@ -173,33 +173,6 @@ class Operators:
                 y[:, f, :, :] += bias[f]
         y = y.reshape(x_shape[0], num_output//8, 8, h, w)
         y = y.transpose(0, 1, 3, 4, 2)
-
-        #y = np.zeros(x_shape[0], num_output//8, h, w, 8)
-        #for n in range(y.shape[0]):
-        #    for c in range(y.shape[1]):
-        #        for h in range(y.shape[2]):
-        #            hh_base = h * strides[0] - paddings[0];
-        #            for w in range(y.shape[3]):
-        #                ww_base = w * strides[1] - paddings[2];
-        #                for i in range(y.shape[4]):
-        #                    oc = c * 8 + i
-        #                    value = 0
-        #                    if bias is not None:
-        #                        value += bias[c*8+i]
-        #                    for j in range(x.shape[1] // groups):
-        #                        for k in range(kernel_size[0]):
-        #                            hh = hh_base + k * dilation;
-        #                            if (hh >= 0 and hh < x.shape[2]):
-        #                                for l in range(kernel_size[1]):
-        #                                    ww = ww_base + l * dilation;
-        #                                    if (ww >= 0 and ww < x.shape[3]):
-        #                                        v = x[n][j][hh][ww]
-        #                                    else:
-        #                                        v = 0
-        #                                    value = value + v * kernels[oc][j][k][l]
-        #                    y[n][c][h][w][i] = value
-        #x = x.reshape(_x_shape)
-
         Operators.print_data(y, name)
         return y
 
@@ -475,7 +448,7 @@ class Operators:
         if (len(_w.shape) == 2):
             w = _w
         elif (len(_w.shape) == 3):
-            w = _w[0]
+            w = _w.reshape([-1, _w.shape[2]])
         else:
             print("[ERROR] can not support more dimension embedding")
             exit(0)
@@ -525,6 +498,33 @@ class Operators:
         x = np.maximum(_x, 0, _x)
         x = np.minimum(_x, max_value, _x)
         #x[x < 0] = 0
+        Operators.print_data(x, name)
+        return x
+
+    @staticmethod
+    def exp(_x, base, scale, shift, name):
+        if (not Operators.calculate):
+            return None;
+
+        assert(base == -1)
+        x = np.exp(scale * _x + shift)
+        Operators.print_data(x, name)
+        return x
+
+    @staticmethod
+    def softplus(_x, name):
+        if (not Operators.calculate):
+            return None;
+
+        x = np.log(1 + np.exp(_x))
+        Operators.print_data(x, name)
+        return x
+
+    @staticmethod
+    def mish(_x, name):
+        if (not Operators.calculate):
+            return None;
+        x = _x * np.tanh(np.log(1 + np.exp(_x)))
         Operators.print_data(x, name)
         return x
 
@@ -617,7 +617,7 @@ class Operators:
         return x
     
     @staticmethod
-    def lstm(inputs, state, w, b, projection, projection_bias, zoneoutCell, zoneoutOutput,
+    def lstm(inputs, state, w, b, projection, projection_bias, zoneout_cell, zoneout_output,
         name, state_name, printFlag=True):
         if (not Operators.calculate):
             return None, None
@@ -641,8 +641,8 @@ class Operators:
             new_h = np.matmul(new_h, projection)
             if (projection_bias is not None):
                 new_h = new_h + projection_bias
-        o_c = new_c * (1 - zoneoutCell) + c * zoneoutCell
-        o_h = new_h * (1 - zoneoutOutput) + h * zoneoutOutput
+        o_c = new_c * (1 - zoneout_cell) + c * zoneout_cell
+        o_h = new_h * (1 - zoneout_output) + h * zoneout_output
         new_state = np.concatenate([o_c, o_h], axis = 1)
 
         if (printFlag):
@@ -651,21 +651,112 @@ class Operators:
         return new_h, new_state
 
     @staticmethod
-    def fw_lstm(inputs, w, b, projection, projection_bias, zoneoutCell, zoneoutOutput, name):
+    def gru(inputs, state, w, b, name, state_name, printFlag=True):
+        if (not Operators.calculate):
+            return None, None
+        w = w.transpose([1, 0])
+        inputs = np.reshape(inputs, [1, inputs.shape[-1]])
+        zr_length = w.shape[-1] // 3 * 2
+        w_zr = w[:, :zr_length]
+        w_h = w[:, zr_length:]
+        h = state
+        x = np.concatenate([inputs, h], axis = 1)
+        x = np.matmul(x, w_zr)
+        if (b is not None):
+            b_zr = b[:zr_length]
+            x = x + b_zr
+
+        z, r = np.split(Operators._sigmoid(x), indices_or_sections = 2, axis = 1)
+        h = np.multiply(r, h)
+        x = np.concatenate([inputs, h], axis = 1)
+        x = np.matmul(x, w_h)
+        if (b is not None):
+            b_h = b[zr_length:]
+            x = x + b_h
+        x = np.tanh(x)
+        new_h = np.multiply(z, state) + np.multiply((1 - z), x)
+        new_state = new_h
+
+        if (printFlag):
+            Operators.print_data(new_h, name)
+            Operators.print_data(new_state, state_name)
+        return new_h, new_state
+
+    @staticmethod
+    def gru_lbr(inputs, state, w, b, name, state_name, printFlag=True):
+        if (not Operators.calculate):
+            return None, None
+        w = w.transpose([1, 0])
+        x_dim = inputs.shape[-1]
+        inputs = np.reshape(inputs, [1, x_dim])
+        hidden = w.shape[-1] // 3
+        zr_length = hidden * 2
+        w_zr = w[:, :zr_length]
+        w_h = w[:, zr_length:]
+        h = state
+        x = np.concatenate([inputs, h], axis = 1)
+        x = np.matmul(x, w_zr)
+        if (b is not None):
+            b_zr = b[:zr_length]
+            x = x + b_zr
+
+        z, r = np.split(Operators._sigmoid(x), indices_or_sections = 2, axis = 1)
+        w_h_x = w_h[:x_dim, :]
+        w_h_h = w_h[x_dim:, :]
+        x = np.matmul(inputs, w_h_x)
+        h = np.matmul(state, w_h_h)
+        if (b is not None):
+            b_h_x = b[zr_length:zr_length+hidden]
+            x = x + b_h_x
+            b_h_h = b[zr_length+hidden:]
+            if (b_h_h.size > 0):
+                h = h + b_h_h
+        x = np.multiply(r, h) + x
+        x = np.tanh(x)
+        new_h = np.multiply(z, state) + np.multiply((1 - z), x)
+        new_state = new_h
+
+        if (printFlag):
+            Operators.print_data(new_h, name)
+            Operators.print_data(new_state, state_name)
+        return new_h, new_state
+
+    @staticmethod
+    def rnn(mode, inputs, state, w, b, projection, projection_bias, zoneout_cell, zoneout_output,
+        name, state_name, printFlag=True):
+        if (mode == "LSTM"):
+            result, state = Operators.lstm(inputs, state, w, b, projection, projection_bias,
+                zoneout_cell, zoneout_output, None, None, False)
+        elif (mode == "GRU"):
+            result, state = Operators.gru(inputs, state, w, b, name, state_name, printFlag)
+        elif (mode == "GRU_LBR"):
+            result, state = Operators.gru_lbr(inputs, state, w, b, name, state_name, printFlag)
+        else:
+            print("[ERROR] RNN can not support %s" % (mode))
+            exit(1)
+        return result, state
+
+    @staticmethod
+    def fw_rnn(mode, inputs, w, b, projection, projection_bias, zoneout_cell, zoneout_output, name):
         if (not Operators.calculate):
             return None
         inputs = np.reshape(inputs, [-1, inputs.shape[-1]])
-        state_length = w.shape[0] // 4
-        if (projection is not None):
-            state_length += projection.shape[0]
-        else:
-            state_length += w.shape[0] // 4
+        if (mode == "LSTM"):
+            gates = 4;
+        elif (mode == "GRU" or mode == "GRU_LBR"):
+            gates = 3
+        state_length = w.shape[0] // gates
+        if (mode == "LSTM"):
+            if (projection is not None):
+                state_length = state_length + projection.shape[0]
+            else:
+                state_length = 2 * state_length
         state = np.zeros([1, state_length])
         loops = inputs.shape[0]
         results = []
         for i in range(loops):
-            result, state = Operators.lstm(inputs[i], state, w, b, projection, projection_bias,
-                zoneoutCell, zoneoutOutput, None, None, False)
+            result, state = Operators.rnn(mode, inputs[i], state, w, b, projection, projection_bias,
+                zoneout_cell, zoneout_output, None, None, False)
             results.append(result)
         results = np.array(results)
         shape = results.shape
@@ -674,7 +765,7 @@ class Operators:
         return results
 
     @staticmethod
-    def bi_lstm(inputs, w, b, projection, projection_bias, zoneoutCell, zoneoutOutput, name):
+    def bi_rnn(mode, inputs, w, b, projection, projection_bias, zoneout_cell, zoneout_output, name):
         if (not Operators.calculate):
             return None
         fw = w[0]
@@ -709,13 +800,13 @@ class Operators:
         loops = inputs.shape[0]
         fw_results = []
         for i in range(loops):
-            fw_result, fw_state = Operators.lstm(inputs[i], fw_state, fw, fb, fp, fpb,
-                zoneoutCell, zoneoutOutput, None, None, False)
+            fw_result, fw_state = Operators.rnn(mode, inputs[i], fw_state, fw, fb, fp, fpb,
+                zoneout_cell, zoneout_output, None, None, False)
             fw_results.append(fw_result)
         bw_results = []
         for i in range(loops):
-            bw_result, bw_state = Operators.lstm(inputs[loops-1-i], bw_state, bw, bb, bp, bpb,
-                zoneoutCell, zoneoutOutput, None, None, False)
+            bw_result, bw_state = Operators.rnn(mode, inputs[loops-1-i], bw_state, bw, bb, bp, bpb,
+                zoneout_cell, zoneout_output, None, None, False)
             bw_results.append(bw_result)
         results = []
         for i in range(loops):
@@ -757,8 +848,6 @@ class Operators:
         dst_shape = dst.shape
         src = src.reshape([src_shape[0], src.size//src_shape[0]])
         dst = dst.reshape([dst_shape[0], dst.size//dst_shape[0]])
-        print("%d %d %d %d %d %d" % (src_batch_stride, src_stride, src_offset,
-            dst_batch_stride, dst_stride, dst_offset))
         if (length < 0):
             length = src.size;
         if (src_batch_stride < 0):
@@ -769,8 +858,6 @@ class Operators:
             dst_batch_stride = dst.shape[1]
         if (dst_stride < 0):
             dst_stride = dst.shape[1]
-        print("%d %d %d %d %d %d" % (src_batch_stride, src_stride, src_offset,
-            dst_batch_stride, dst_stride, dst_offset))
         for i in range(batch):
             src_j = 0
             if src_index is not None:

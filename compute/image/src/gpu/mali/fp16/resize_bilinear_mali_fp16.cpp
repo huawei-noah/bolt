@@ -11,13 +11,7 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "sys.h"
-#include "types.h"
-#include "tensor_desc.h"
-#include "error.h"
-#include "image.h"
 #include "gpu/mali/fp16/resize_bilinear_mali_fp16.h"
-#include <iostream>
 
 inline EE resize_checkpara_mali_fp16(TensorDesc inputDesc, TensorDesc outputDesc)
 {

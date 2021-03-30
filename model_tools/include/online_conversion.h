@@ -13,19 +13,11 @@
 
 #ifndef _H_ONLINE_CONVERSION
 #define _H_ONLINE_CONVERSION
-#include "types.h"
-#include "error.h"
-#include "model_tools.h"
-#include "model_serialize_deserialize.hpp"
-#include "model_optimizer.hpp"
-#include "converter.h"
-#include "model_print.h"
 
 void *OnlineModelConversion(const char *storagePath,
     const char *modelName,
     const char *inferPrecision,
-    I32 removeProcessOpsNum);
+    int removeProcessOpsNum);
 
 void OnlineModelReclaim(void *ms);
-
 #endif

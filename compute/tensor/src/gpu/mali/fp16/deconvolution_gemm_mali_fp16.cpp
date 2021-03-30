@@ -11,11 +11,9 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "sys.h"
-#include "error.h"
-#include "types.h"
 #include "gpu/mali/fp16/deconvolution_mali_fp16.h"
 #include "gpu/mali/fp16/deconvolution_gemm_mali_fp16.h"
+#include "gpu/mali/cl/kernel_option/conv_direct_opt.h"
 
 inline EE deconv_gemm_core_mali_fp16(GCLHandle_t handle,
     TensorDesc inputDesc,
@@ -61,7 +59,8 @@ inline EE deconv_gemm_core_mali_fp16(GCLHandle_t handle,
     U32 item_w = forwardRunInfo->best_w[0];
     U32 item_c = forwardRunInfo->best_c[0];
     item_c = item_c >> 2;
-    char kernelname[128];
+    char kernelName[128];
+    KernelOpt kernelOpt;
     char modeName[16];
     U32 gs[3];
     U32 ls[3] = {0, 0, 0};
@@ -81,22 +80,22 @@ inline EE deconv_gemm_core_mali_fp16(GCLHandle_t handle,
     if (fw == 2 && fh == 2 && sw == 2 && sh == 2) {
         if ((item_w >> 8) > 0) {
             U32 item_h = item_w >> 8;
-            sprintf(kernelname, "deconv_gemm_f2s2_h_%s%d%d", modeName, item_h, item_c);
+            sprintf(kernelName, "deconv_gemm_f2s2_h_%s%d%d", modeName, item_h, item_c);
             gs[0] = ((oh + 1) / 2 + item_h - 1) / item_h;
             gs[1] = (ow + 1) / 2;
             gs[2] = (fc * fw * fh + 3) / 4 / item_c;
         } else {
-            sprintf(kernelname, "deconv_gemm_f2s2_%s%d%d", modeName, item_w, item_c);
+            sprintf(kernelName, "deconv_gemm_f2s2_%s%d%d", modeName, item_w, item_c);
             gs[0] = (oh + 1) / 2;
             gs[1] = ((ow + 1) / 2 + item_w - 1) / item_w;
             gs[2] = (fc * fw * fh + 3) / 4 / item_c;
         }
-        CHECK_STATUS(gcl_create_kernel(handle, kernelname, &kernel));
+        CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel));
         CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, ihw_str, ic_str, ih_off, iw_off, oh_str,
             ohw_str, oh_off, ow_off, ow, gs[0], gs[1], inbuf, fltbuf, biasmem, outbuf));
-        gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelname);
+        gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
 #ifdef _DEBUG
-        CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelname));
+        CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
         handle->t_total += handle->t_execute;
 #endif
     } else {
@@ -111,38 +110,40 @@ inline EE deconv_gemm_core_mali_fp16(GCLHandle_t handle,
         U32 thw_str = th_str * tw_str;
         if ((item_w >> 8) > 0) {
             U32 item_h = item_w >> 8;
-            sprintf(kernelname, "conv_direct_s1_h_1%d%d", item_w, item_c);
+            CHECK_STATUS(set_conv_direct_reuse_h_opt_mali(
+                1, 1, 1, 1, item_h, item_c, ACTIVATION_NULL, DT_F16, kernelName, &kernelOpt));
             gs[0] = (th + item_h - 1) / item_h;
             gs[1] = tw;
             gs[2] = (tc + 3) / 4 / item_c;
         } else {
-            sprintf(kernelname, "conv_direct_s1_1%d%d", item_w, item_c);
+            CHECK_STATUS(set_conv_direct_opt_mali(
+                1, 1, 1, 1, item_w, item_c, ACTIVATION_NULL, DT_F16, kernelName, &kernelOpt));
             gs[0] = th;
             gs[1] = (tw + item_w - 1) / item_w;
             gs[2] = (tc + 3) / 4 / item_c;
         }
 
         bool has_bias = false;
-        CHECK_STATUS(gcl_create_kernel(handle, kernelname, &kernel));
+        CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
         CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, ihw_str, ic_str, ih_off, iw_off, th_str,
             thw_str, th_off, tw_off, tw, tc, 1, 0, 0, gs[0], gs[1], has_bias, inbuf, fltbuf,
             biasmem, tmp));
-        gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelname);
+        gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
 #ifdef _DEBUG
-        CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelname));
+        CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
         handle->t_total += handle->t_execute;
 #endif
 
         gs[0] = oh * ow * (oc + 3) / 4;
         ls[0] = 0;
         dim = 1;
-        sprintf(kernelname, "col2im");
-        CHECK_STATUS(gcl_create_kernel(handle, kernelname, &kernel));
+        sprintf(kernelName, "col2im");
+        CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel));
         CHECK_STATUS(gcl_set_kernelArgs(kernel, th, tw, tc, fw, fh, pw, ph, sw, sh, oh_str, ow_str,
             oh_off, ow_off, oh, ow, gs[0], biasmem, tmp, outbuf));
-        gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelname);
+        gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
 #ifdef _DEBUG
-        CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelname));
+        CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
         CHECK_STATUS(gcl_print_memory<F16>(handle, bias, "deconv_col2im_bias"));
         CHECK_STATUS(gcl_print_memory<F16>(handle, output, "deconv_col2im_output"));
         handle->t_total += handle->t_execute;
@@ -201,16 +202,16 @@ EE deconvolution_gemm_transform_filter_mali_fp16(GCLHandle_t handle,
     U32 fwhc = fwh * fc;
     U32 item_c = forwardRunInfo->best_c[0];
     U32 item_k = forwardRunInfo->best_k[0];
-    char kernelname[128];
+    char kernelName[128];
     Kernel kernel;
-    sprintf(kernelname, "deconv_gemm_trans_fltbuf_%d%d", (item_c >> 2), item_k);
-    CHECK_STATUS(gcl_get_kernel_from_map(handle, kernelname, &kernel));
+    sprintf(kernelName, "deconv_gemm_trans_fltbuf_%d%d", (item_c >> 2), item_k);
+    CHECK_STATUS(gcl_get_kernel_from_map(handle, kernelName, &kernel));
 
     CHECK_STATUS(gcl_set_kernelArgs(kernel, fw, fwh, fwhc, fc, fn, filter->mem, fltmem->mem));
     U32 gs[2] = {fwh * ((fc + 3) / 4), (fn + 3) / 4};
     U32 ls[2] = {0, 0};
     U32 dim = 2;
-    CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelname));
+    CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
     *fltmemDesc = tensor4df(fdt, fdf, fn, fc, fh, fw);
 #ifdef _DEBUG
     CHECK_STATUS(gcl_print_memory<F16>(handle, filter, "deconv_gemm_filter_org"));

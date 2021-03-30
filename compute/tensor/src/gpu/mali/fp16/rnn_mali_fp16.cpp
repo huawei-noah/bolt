@@ -11,9 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "sys.h"
-#include "error.h"
-#include "types.h"
 #include "gpu/mali/fp16/rnn_mali_fp16.h"
 
 inline EE rnn_checkpara_mali_fp16(
@@ -142,10 +139,6 @@ EE rnn_transform_filter_mali_fp16(GCLHandle_t handle,
         gs[1] = (filterCol + item_c - 1) / item_c;
         gs[2] = filterRow;
         CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelname));
-#ifdef _DEBUG
-        CHECK_STATUS(gcl_print_memory<F16>(handle, filter, "fc_filter_org"));
-        CHECK_STATUS(gcl_print_memory<F16>(handle, fltmem, "fc_filter_tran"));
-#endif
         fltmemDesc[i] = tensor2df(fdt, DF_NORMAL, filterRow, filterCol);
     }
     return SUCCESS;

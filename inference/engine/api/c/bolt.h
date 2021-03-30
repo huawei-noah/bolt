@@ -18,6 +18,9 @@
  * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
  * @endcode
  */
+
+#ifndef _BOLT_C_H
+#define _BOLT_C_H
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -65,9 +68,9 @@ typedef enum {
 
 /**
  * @brief create model from file
- * @param  modelPath     model file path
- * @param  affinity      CPU affinity setting
- * @param  algoPath      the file path to save and load algos info
+ * @param  modelPath            model file path
+ * @param  affinity             CPU affinity setting
+ * @param  algorithmMapPath     the file path to save and load algorithm map file
  *
  * @return inference pipeline handle
  *
@@ -77,24 +80,15 @@ typedef enum {
  *     ...
  *     DestroyModel(handle);
  * @endcode
- * valid algoPath can reduce PrepareModel significantly
- * if you set a valid algoPath, algorithm selected only need to run once, which is usually time consuming
- * the algorithm select result will be saved to the file path you set, and loaded when you run it next time,
- * which avoid to do the algorithm selected again
- * it is strongly suggest that set a valid algoPath, especiall for GPU running
+ * algorithmMapPath is for GPU. If you don't need it, please set it NULL.
+ * If algorithmMapPath is set to a existed valid algorithm map file, inference will directly use it.
+ * If algorithmMapPath is not existed, inference will run algorithm tuning, which is usually time consuming.
+ * Inference will write algorithm tuning result to file.
  * @note
- * if your inputSize changed, please delete the old algorithm file be saved
- * if your model     changed, please delete the old algorithm file be saved
- * if any unexpected error happen, you can try to delete algorithm file and run it again
+ * If your input tensor size or model is changed, please delete the old algorithm map file.
+ * If any unexpected error happen, you can try to delete algorithm file and run it again.
  */
-ModelHandle CreateModel(const char *modelPath, AFFINITY_TYPE affinity, const char *algoPath);
-
-/**
- * @brief create model from file stream
- * Other info is the same with CreateModel
- **/
-ModelHandle CreateModelWithFileStream(
-    const char *modelFileStream, AFFINITY_TYPE affinity, const char *algoFileStream);
+ModelHandle CreateModel(const char *modelPath, AFFINITY_TYPE affinity, const char *algorithmMapPath);
 
 /**
  * @brief get the number of model input from ModelHandle
@@ -105,10 +99,10 @@ ModelHandle CreateModelWithFileStream(
 int GetNumInputsFromModel(ModelHandle ih);
 
 /**
- * @brief get input Data info set in model handle, which is read from .bolt
+ * @brief get input data info set in model handle, which is read from .bolt
  * @param  ih            inference pipeline handle
- * @param  number_inputs the number of input
- * @param  inputNames    the array of all input data's name
+ * @param  num_inputs    the number of input
+ * @param  name          the array of all input data's name
  * @param  n             the array of all input data's n dimension
  * @param  c             the array of all input data's c dimension
  * @param  h             the array of all input data's h dimension
@@ -118,11 +112,12 @@ int GetNumInputsFromModel(ModelHandle ih);
  *
  * @return
  * @note
- * ptr of inputNames/n/c/h/w need be managed by user, the space must be larger than numInputs * Bytesof(dataType)
+ * name/n/c/h/w/dt/df array space must be allocated before calling, the array length must be equal to num_inputs.
+ * each element of name must be allocated, the array length must be equal to 128.
  */
 void GetInputDataInfoFromModel(ModelHandle ih,
-    const int number_inputs,
-    char **inputNames,
+    int num_inputs,
+    char **name,
     int *n,
     int *c,
     int *h,
@@ -133,65 +128,29 @@ void GetInputDataInfoFromModel(ModelHandle ih,
 /**
  * @brief complete model inference engine prepare
  * @param  ih            model inference handle
- * @param  num_input     the number of input data
+ * @param  num_inputs    the number of input data
  * @param  name          the array of all input data's name in string format
  * @param  n             the array of all input data's n dimension
  * @param  c             the array of all input data's c dimension
  * @param  h             the array of all input data's h dimension
  * @param  w             the array of all input data's w dimension
- * @param  dt_input      the array of all input data's data type
- * @param  df_input      the array of all input data's data format
+ * @param  dt            the array of all input data's data type
+ * @param  df            the array of all input data's data format
  *
  * @return
+ * @note
+ * name/n/c/h/w/dt/df array space must be allocated before calling, the array length must be equal to num_inputs.
+ * each element of name must be allocated, the array length must be equal to 128.
  */
 void PrepareModel(ModelHandle ih,
-    const int num_input,
-    char **name,
+    const int num_inputs,
+    const char **name,
     const int *n,
     const int *c,
     const int *h,
     const int *w,
-    const DATA_TYPE *dt_input,
-    const DATA_FORMAT *df_input);
-
-/**
- * @brief clone model from a model
- * @param ih   a inference pipeline handle pointer of a model
- *
- * @return inference pipeline handle
- **/
-ModelHandle CloneModel(ModelHandle ih);
-
-/**
- * @brief resize model input size
- * @param  ih            model inference handle
- * @param  num_input     the number of input data
- * @param  n             the array of all input data's n dimension
- * @param  c             the array of all input data's c dimension
- * @param  h             the array of all input data's h dimension
- * @param  w             the array of all input data's w dimension
- * @param  name          the array of all input data's name in string format
- * @param  dt_input      the array of all input data's data type
- * @param  df_input      the array of all input data's data format
- *
- * @return
- *
- * @code
- *     // model_resize must behind PrepareModel;
- *     PrepareModel(...);
- *     ResizeModelInput(...);
- *     RunModel(...);
- * @endcode
- */
-void ResizeModelInput(ModelHandle ih,
-    const int num_input,
-    char **name,
-    const int *n,
-    const int *c,
-    const int *h,
-    const int *w,
-    const DATA_TYPE *dt_input,
-    const DATA_FORMAT *df_input);
+    const DATA_TYPE *dt,
+    const DATA_FORMAT *df);
 
 /**
  * @brief malloc result data memory
@@ -202,20 +161,196 @@ void ResizeModelInput(ModelHandle ih,
 ResultHandle AllocAllResultHandle(ModelHandle ih);
 
 /**
+ * @brief inference result from input
+ * @param  ih            inference pipeline handle
+ * @param  ir            result data memory handle
+ * @param  num_inputs    the number of input data
+ * @param  name          the array of all input data's name
+ * @param  data          the array of all input data
+ *
+ * @return
+ */
+void RunModel(ModelHandle ih, ResultHandle ir, int num_inputs, const char **name, void **data);
+
+/**
+ * @brief get the number of model output from ResultHandle
+ * @param  ir            result data memory handle
+ *
+ * @return the number of output
+ */
+int GetNumOutputsFromResultHandle(ResultHandle ir);
+
+/**
+ * @brief get output Data info from ResultHandle
+ * @param  ir            result data memory handle
+ * @param  num_outputs   the number of output data
+ * @param  outputNames   the array of all output data's name
+ * @param  n             the array of all output data's n dimension
+ * @param  c             the array of all output data's c dimension
+ * @param  h             the array of all output data's h dimension
+ * @param  w             the array of all output data's w dimension
+ * @param  dt            the array of all output data's data type
+ * @param  df            the array of all output data's data format
+ *
+ * @return
+ * @note
+ * name/n/c/h/w/dt/df array space must be allocated before calling, the array length must be equal to num_inputs.
+ * each element of name must be allocated, the array length must be equal to 128.
+ */
+void GetOutputDataInfoFromResultHandle(ResultHandle ir,
+    int num_outputs,
+    char **outputNames,
+    int *n,
+    int *c,
+    int *h,
+    int *w,
+    DATA_TYPE *dt,
+    DATA_FORMAT *df);
+
+/**
+ * @brief get output data from ResultHandle, default to pass value of output ptr,
+ * @param  ir            result data memory handle
+ * @param  num_outputs   the number of output data
+ * @param  data          the array of all output data's content
+ *
+ * @return
+ */
+void GetOutputDataFromResultHandle(ResultHandle ir, int num_outputs, void **data);
+
+/**
+ * @brief free result data memory
+ * @param  ir            result data memory handle
+ *
+ * @return
+ */
+void FreeResultHandle(ResultHandle ir);
+
+/**
+ * @brief destroy model
+ * @param  ih            inference pipeline handle
+ *
+ * @return
+ */
+void DestroyModel(ModelHandle ih);
+
+/**
+ *Copy current GPU device name to gpuDeviceName
+ *User need to alloc memory of gpuDeviceName
+ *used with CreateModelWithFileStream to help user choose algoFile
+ */
+void GetGpuDeviceName(char *gpuDeviceName);
+
+/**
+ * @brief create model from file stream
+ * Other info is the same with CreateModel
+ **/
+ModelHandle CreateModelWithFileStream(
+    const char *modelFileStream, AFFINITY_TYPE affinity, const char *algorithmMapFileStream);
+
+/**
+ * @brief get input Data info set in model handle, when input data is 5d
+ * input dims (n,c,t,h,w)
+ * other info please reference GetInputDataInfoFromModel
+ */
+void GetInputDataInfoFromModel5D(ModelHandle ih,
+    int num_inputs,
+    char **name,
+    int *n,
+    int *c,
+    int *t,
+    int *h,
+    int *w,
+    DATA_TYPE *dt,
+    DATA_FORMAT *df);
+
+/**
+ * @brief complete model inference engine prepare when input data dim is 5d
+ * input dims (n,c,t,h,w)
+ * other info please reference PrepareModel
+ */
+void PrepareModel5D(ModelHandle ih,
+    int num_input,
+    const char **name,
+    const int *n,
+    const int *c,
+    const int *t,
+    const int *h,
+    const int *w,
+    const DATA_TYPE *dt_input,
+    const DATA_FORMAT *df_input);
+
+/**
+ * @brief resize model input size
+ * @param  ih            model inference handle
+ * @param  num_inputs    the number of input data
+ * @param  name          the array of all input data's name in string format
+ * @param  n             the array of all input data's n dimension
+ * @param  c             the array of all input data's c dimension
+ * @param  h             the array of all input data's h dimension
+ * @param  w             the array of all input data's w dimension
+ * @param  dt            the array of all input data's data type
+ * @param  df            the array of all input data's data format
+ *
+ * @return
+ * @note
+ * name/n/c/h/w/dt/df array space must be allocated before calling, the array length must be equal to num_inputs.
+ * each element of name must be allocated, the array length must be equal to 128.
+ *
+ * @code
+ *     // model_resize must behind PrepareModel;
+ *     PrepareModel(...);
+ *     ResizeModelInput(...);
+ *     RunModel(...);
+ * @endcode
+ */
+void ResizeModelInput(ModelHandle ih,
+    int num_inputs,
+    const char **name,
+    const int *n,
+    const int *c,
+    const int *h,
+    const int *w,
+    const DATA_TYPE *dt,
+    const DATA_FORMAT *df);
+
+/**
  * @brief malloc result data memory according to user specification
  * @param  ih            inference pipeline handle
  * @param  num_outputs   the number of tensor that needed
- * @param  outputNames   the array of tesor name that needed
+ * @param  name          the array of tesor name that needed
  *
  * @return result data memory handle
  */
-ResultHandle AllocSpecificResultHandle(ModelHandle ih, const int num_outputs, char **outputNames);
+ResultHandle AllocSpecificResultHandle(ModelHandle ih, int num_outputs, const char **name);
+
+/**
+ * @brief clone model from a model
+ * @param ih   a inference pipeline handle pointer of a model
+ *
+ * @return inference pipeline handle
+ * @note
+ * This function can not be called before PrepareModel.
+ * The model that being cloned can not be changed before all threads complete clone function.
+ * @code
+ *     ModelHandle handle = CreateModel(...);
+ *     PrepareModel(handle);
+ *     ModelHandle clone_handle = CloneModel(handle);
+ *     ...
+ *     DestroyModel(handle);
+ *     DestroyModel(clone_handle);
+ * @endcode
+
+ * 
+ **/
+ModelHandle CloneModel(ModelHandle ih);
 
 /**
  * @brief clone result handle
  * @param ir   a result data handle
  *
  * @return result data memory handle
+ * @note
+ * The result handle that being cloned can not be changed before all threads complete clone function.
  **/
 ResultHandle CloneResultHandle(ResultHandle ir);
 
@@ -237,105 +372,7 @@ void SetRuntimeDevice(ModelHandle ih, int cpu_id, DEVICE_TYPE device);
  */
 void SetRuntimeDeviceDynamic(ModelHandle ih);
 
-/**
- * @brief inference result from input
- * @param  ih            inference pipeline handle
- * @param  ir            result data memory handle
- * @param  num_input     the number of input data
- * @param  inputNames    the array of all input data's name in string format
- * @param  mem           the array of all input data
- *
- * @return
- */
-void RunModel(ModelHandle ih, ResultHandle ir, const int num_input, char **inputNames, void **mem);
-
-/**
- * @brief get the number of model output from ResultHandle
- * @param  ir            result data memory handle
- *
- * @return the number of output
- */
-int GetNumOutputsFromResultHandle(ResultHandle ir);
-
-/**
- * @brief get output Data info from ResultHandle
- * @param  ir            result data memory handle
- * @param  num_outputs   the number of output data
- * @param  outputNames   the array of all output data's name
- * @param  n             the array of all output data's n dimension
- * @param  c             the array of all output data's c dimension
- * @param  h             the array of all output data's h dimension
- * @param  w             the array of all output data's w dimension
- * @param  dt_output     the array of all output data's data type
- * @param  df_output     the array of all output data's data format
- *
- * @return
- * @note
- * ptr of outputNames/n/c/h/w/ need be managed by user, the space must be larger than num_outputs * Bytesof(dataType)
- */
-void GetOutputDataInfoFromResultHandle(ResultHandle ir,
-    int num_outputs,
-    char **outputNames,
-    int *n,
-    int *c,
-    int *h,
-    int *w,
-    DATA_TYPE *dt_output,
-    DATA_FORMAT *df_output);
-/**
- * @brief get data from ResultHandle, default to pass value of output ptr,
- * if need copy data to your own ptr, please use CopyOutputsFromResultHandle
- * @param  ir            result data memory handle
- * @param  num_outputs   the number of output data
- * @param  outputNames   the array of all output data's name
- * @param  data          the array of all output data's content
- * @param  n             the array of all output data's n dimension
- * @param  c             the array of all output data's c dimension
- * @param  h             the array of all output data's h dimension
- * @param  w             the array of all output data's w dimension
- * @param  dt_output     the array of all output data's data type
- * @param  df_output     the array of all output data's data format
- *
- * @return
- */
-void GetPtrFromResultHandle(ResultHandle ir,
-    int num_outputs,
-    char **outputNames,
-    void **data,
-    int *n,
-    int *c,
-    int *h,
-    int *w,
-    DATA_TYPE *dt_output,
-    DATA_FORMAT *df_output);
-
-/**
- * @brief get data ptr from ResultHandle with memcpy
- * @param  ir            result data memory handle
- * @param  num_outputs   the number of output data
- * @param  size          the array of size of output
- * @param  data          the array of all output data's content
- *
- * @return
- * ptr of data need be managed by user, the space must be >= size
- */
-void CopyOutputsFromResultHandle(ResultHandle ir, int num_outputs, const int *size, void **data);
-
-/**
- * @brief free result data memory
- * @param  ir            result data memory handle
- *
- * @return
- */
-void FreeResultHandle(ResultHandle ir);
-
-/**
- * @brief destroy model
- * @param  ih            inference pipeline handle
- *
- * @return
- */
-void DestroyModel(ModelHandle ih);
 #ifdef __cplusplus
 }
+#endif
 #endif

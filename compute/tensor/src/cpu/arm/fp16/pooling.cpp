@@ -13,73 +13,75 @@
 
 #include "cpu/arm/fp16/tensor_computing_fp16.h"
 
-EE pooling_c8_fp16(const F16 *input,
-    U32 stride,
-    int hstart,
-    int hend,
-    int wstart,
-    int wend,
-    F16 *output,
-    PoolingParamSpec poolingParamSpec)
+EE pooling_c8_fp16(I32 tstart,
+    I32 tend,
+    I32 hstart,
+    I32 hend,
+    I32 wstart,
+    I32 wend,
+    I32 poolSize,
+    const F16 *input,
+    I32 it,
+    I32 ih,
+    I32 iw,
+    PoolingParamSpec p,
+    F16 *output)
 {
     EE ret = SUCCESS;
-    PoolingMode pm = poolingParamSpec.mode;
-    float16x8_t in1, out1;
-    float16x8_t poolSize = vdupq_n_f16(float16_t((hend - hstart) * (wend - wstart)));
-    out1 = vdupq_n_f16(float16_t((pm == POOLING_MAX) ? UNI_F16_MIN : 0));
-    for (int kernelH = hstart; kernelH < hend; kernelH++) {
-        for (int kernelW = wstart; kernelW < wend; kernelW++) {
-            const U32 index = (kernelH * stride + kernelW) * 8;
-            in1 = vld1q_f16(input + index);
-            switch (pm) {
-                case POOLING_MAX:
-                    out1 = vmaxq_f16(in1, out1);
-                    break;
-                case POOLING_MEAN:
-                    out1 = vaddq_f16(out1, in1);
-                    break;
-                default:
-                    ret = NOT_SUPPORTED;
-                    break;
+    PoolingMode pm = p.mode;
+    if (poolSize > 256 && p.mode == POOLING_MEAN) {
+        float32x4_t poolSize_v = vdupq_n_f32(poolSize);
+        float16x4_t temp0 = vdup_n_f16(0);
+        float16x4_t temp1 = temp0;
+        float32x4_t out0 = vdupq_n_f32(0);
+        float32x4_t out1 = out0;
+        int count = 0;
+        for (int kernelT = tstart; kernelT < tend; kernelT++) {
+            for (int kernelH = hstart; kernelH < hend; kernelH++) {
+                for (int kernelW = wstart; kernelW < wend; kernelW++, count++) {
+                    U32 index = ((kernelT * ih + kernelH) * iw + kernelW) * 8;
+                    float16x4_t in0 = vld1_f16(input + index);
+                    float16x4_t in1 = vld1_f16(input + index + 4);
+                    temp0 = vadd_f16(temp0, in0);
+                    temp1 = vadd_f16(temp1, in1);
+                    if (count % 256 == 255) {
+                        out0 = vaddq_f32(out0, vcvt_f32_f16(temp0));
+                        out1 = vaddq_f32(out1, vcvt_f32_f16(temp1));
+                        temp0 = vdup_n_f16(0);
+                        temp1 = temp0;
+                    }
+                }
             }
         }
-    }
-    vst1q_f16(output, ((pm == POOLING_MAX) ? out1 : vdivq_f16(out1, poolSize)));
-    return ret;
-}
-
-EE pooling_c8_big_fp16(
-    const F16 *input, U32 stride, int hstart, int hend, int wstart, int wend, F16 *output, int poolSize)
-{
-    EE ret = SUCCESS;
-    float32x4_t out0, out1;
-    float32x4_t p = vdupq_n_f32(poolSize);
-    float16x4_t in0, in1, temp0, temp1;
-    temp0 = vdup_n_f16(0);
-    temp1 = temp0;
-    out0 = vdupq_n_f32(0);
-    out1 = out0;
-    int count = 0;
-    for (int kernelH = hstart; kernelH < hend; kernelH++) {
-        for (int kernelW = wstart; kernelW < wend; kernelW++, count++) {
-            const U32 index = (kernelH * stride + kernelW) * 8;
-            in0 = vld1_f16(input + index);
-            in1 = vld1_f16(input + index + 4);
-            temp0 = vadd_f16(temp0, in0);
-            temp1 = vadd_f16(temp1, in1);
-            if (count % 256 == 255) {
-                out0 = vaddq_f32(out0, vcvt_f32_f16(temp0));
-                out1 = vaddq_f32(out1, vcvt_f32_f16(temp1));
-                temp0 = vdup_n_f16(0);
-                temp1 = temp0;
+        out0 = vaddq_f32(out0, vcvt_f32_f16(temp0));
+        out1 = vaddq_f32(out1, vcvt_f32_f16(temp1));
+        out0 = (pm == POOLING_MAX) ? out0 : vdivq_f32(out0, poolSize_v);
+        out1 = (pm == POOLING_MAX) ? out1 : vdivq_f32(out1, poolSize_v);
+        vst1_f16(output, vcvt_f16_f32(out0));
+        vst1_f16(output + 4, vcvt_f16_f32(out1));
+    } else {
+        float16x8_t poolSize_v = vdupq_n_f16(poolSize);
+        float16x8_t out1 = vdupq_n_f16(float16_t((pm == POOLING_MAX) ? UNI_F16_MIN : 0));
+        for (int kernelT = tstart; kernelT < tend; kernelT++) {
+            for (int kernelH = hstart; kernelH < hend; kernelH++) {
+                for (int kernelW = wstart; kernelW < wend; kernelW++) {
+                    U32 index = ((kernelT * ih + kernelH) * iw + kernelW) * 8;
+                    float16x8_t in1 = vld1q_f16(input + index);
+                    switch (pm) {
+                        case POOLING_MAX:
+                            out1 = vmaxq_f16(in1, out1);
+                            break;
+                        case POOLING_MEAN:
+                            out1 = vaddq_f16(out1, in1);
+                            break;
+                        default:
+                            ret = NOT_SUPPORTED;
+                            break;
+                    }
+                }
             }
         }
+        vst1q_f16(output, ((pm == POOLING_MAX) ? out1 : vdivq_f16(out1, poolSize_v)));
     }
-    out0 = vaddq_f32(out0, vcvt_f32_f16(temp0));
-    out1 = vaddq_f32(out1, vcvt_f32_f16(temp1));
-    out0 = vdivq_f32(out0, p);
-    out1 = vdivq_f32(out1, p);
-    vst1_f16(output, vcvt_f16_f32(out0));
-    vst1_f16(output + 4, vcvt_f16_f32(out1));
     return ret;
 }

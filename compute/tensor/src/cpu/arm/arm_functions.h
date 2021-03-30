@@ -208,6 +208,25 @@ inline EE array_activation_arm(
     return ret;
 }
 
+inline void array_mul_arm(DataType dt, const void *inputA, const void *inputB, void *output, I32 len)
+{
+    switch (dt) {
+#ifdef _USE_FP16
+        case DT_F16:
+            array_mul_f16((const F16 *)inputA, (const F16 *)inputB, (F16 *)output, len);
+            break;
+#endif
+#ifdef _USE_FP32
+        case DT_F32:
+            array_mul_f32((const F32 *)inputA, (const F32 *)inputB, (F32 *)output, len);
+            break;
+#endif
+        default:
+            CHECK_STATUS(NOT_SUPPORTED);
+            break;
+    }
+}
+
 inline void array_add_arm(DataType dt, const void *inputA, const void *inputB, void *output, I32 len)
 {
     switch (dt) {
@@ -230,21 +249,8 @@ inline void array_add_arm(DataType dt, const void *inputA, const void *inputB, v
 inline void array_square_and_add_arm(
     DataType dt, const void *inputA, const void *inputB, void *output, I32 len)
 {
-    switch (dt) {
-#ifdef _USE_FP16
-        case DT_F16:
-            array_square_and_add_f16((const F16 *)inputA, (const F16 *)inputB, (F16 *)output, len);
-            break;
-#endif
-#ifdef _USE_FP32
-        case DT_F32:
-            array_square_and_add_f32((const F32 *)inputA, (const F32 *)inputB, (F32 *)output, len);
-            break;
-#endif
-        default:
-            CHECK_STATUS(NOT_SUPPORTED);
-            break;
-    }
+    array_mul_arm(dt, inputB, inputB, output, len);
+    array_add_arm(dt, inputA, output, output, len);
 }
 
 inline void array_max_arm(DataType dt, const void *inputA, const void *inputB, void *output, I32 len)

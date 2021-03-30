@@ -13,14 +13,12 @@
 
 #ifndef _H_MODEL_QUANTIZATION
 #define _H_MODEL_QUANTIZATION
-#include <iostream>
-#include <fstream>
-#include <sstream>
-#include <map>
-#include "online_conversion.h"
+
+#include <vector>
+#include <string>
+#include "model_spec.h"
 
 std::vector<std::string> SplitScale(const std::string &s, char delim);
 
 void add_scale_from_file(ModelSpec *spec, const char *scaleFile);
-
 #endif

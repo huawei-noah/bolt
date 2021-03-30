@@ -12,7 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "error.h"
-#include "types.h"
+
 #include "blas_enhance.h"
 #include "cpu/x86/blas_x86.h"
 #ifdef _USE_FP32
@@ -107,7 +107,7 @@ EE mmm_x86(U32 matrixC_N,
     U32 matrixC_M,
     U32 matrixA_K,
     DataType dt,
-    bool transposeA,
+    DataFormat matrixADataFormat,
     const void *matrixAData,
     const void *matrixBData,
     void *tmp,
@@ -117,8 +117,8 @@ EE mmm_x86(U32 matrixC_N,
     switch (dt) {
 #ifdef _USE_FP32
         case DT_F32: {
-            ret = mmm_avx2_fp32(matrixC_N, matrixC_M, matrixA_K, transposeA, (F32 *)matrixAData,
-                (F32 *)matrixBData, (F32 *)tmp, (F32 *)matrixCData);
+            ret = mmm_avx2_fp32(matrixC_N, matrixC_M, matrixA_K, matrixADataFormat,
+                (F32 *)matrixAData, (F32 *)matrixBData, (F32 *)tmp, (F32 *)matrixCData);
             break;
         }
 #endif

@@ -65,6 +65,7 @@
 
 __kernel void rnncell_update_res(const int col,
     const uchar noproject,
+    const int out_off,
     const int bx,
     float fbias,
     float zonecell,
@@ -136,28 +137,28 @@ __kernel void rnncell_update_res(const int col,
 
     if (ec == 4) {
         store_float4(off, cval, smem);
-        store_float4(off, res, out);
+        store_float4(off + out_off, res, out);
         if (noproject) {
             store_float4(off + col, hres, smem);
         }
     } else {
         if (ec == 1) {
             smem[off] = (T)cval.x;
-            out[off] = (T)res.x;
+            out[off + out_off] = (T)res.x;
             if (noproject) {
                 smem[off + col] = (T)hres.x;
             }
         }
         if (ec == 2) {
             store_float2(off, cval, smem);
-            store_float2(off, res, out);
+            store_float2(off + out_off, res, out);
             if (noproject) {
                 store_float2(off + col, hres, smem);
             }
         }
         if (ec == 3) {
             store_float3(off, cval, smem);
-            store_float3(off, res, out);
+            store_float3(off + out_off, res, out);
             if (noproject) {
                 store_float3(off + col, hres, smem);
             }

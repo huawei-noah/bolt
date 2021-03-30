@@ -14,17 +14,16 @@
 #ifndef _H_MODELADAPTEE
 #define _H_MODELADAPTEE
 
-#include "model_tools.h"
-#include "ut_util.h"
+#include "uni.h"
+#include "model_common.h"
 
-#define REGISTER_EMPTY_ADAPT_OPERATOR(name)                                                   \
-    virtual ParameterSpec name()                                                              \
-    {                                                                                         \
-        UNI_ERROR_LOG(                                                                        \
-            "%s %s %d UNIMPLEMENT THIS OPERATOR CURRENTLY \n", __FILE__, __func__, __LINE__); \
-        ParameterSpec curPs;                                                                  \
-        initialization_zero(&curPs, sizeof(ParameterSpec));                                   \
-        return curPs;                                                                         \
+#define REGISTER_EMPTY_ADAPT_OPERATOR(name)                                                \
+    virtual ParameterSpec name()                                                           \
+    {                                                                                      \
+        UNI_WARNING_LOG("%s use default(0) operator parmeter as return.\n", __FUNCTION__); \
+        ParameterSpec curPs;                                                               \
+        memset(&curPs, 0, sizeof(ParameterSpec));                                          \
+        return curPs;                                                                      \
     }
 
 class ModelAdaptee {
@@ -142,6 +141,22 @@ protected:
             *ps = adapt_Tile();
         } else if (type == OT_Splice) {
             *ps = adapt_Splice();
+        } else if (type == OT_SoftPlus) {
+            *ps = adapt_SoftPlus();
+        } else if (type == OT_Exp) {
+            *ps = adapt_Exp();
+        } else if (type == OT_Tdnn) {
+            *ps = adapt_Tdnn();
+        } else if (type == OT_TopK) {
+            *ps = adapt_TopK();
+        } else if (type == OT_SpaceToBatchNd) {
+            *ps = adapt_SpaceToBatchNd();
+        } else if (type == OT_BatchToSpaceNd) {
+            *ps = adapt_BatchToSpaceNd();
+        } else if (type == OT_Where) {
+            *ps = adapt_Where();
+        } else {
+            memset(ps, 0, sizeof(ParameterSpec));
         }
         return SUCCESS;
     }
@@ -163,7 +178,7 @@ protected:
     virtual ParameterSpec adapt_Softmax()
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(ParameterSpec));
+        memset(&curPs, 0, sizeof(ParameterSpec));
         curPs.softmax_spec.axis = -1;
         return curPs;
     }
@@ -174,7 +189,7 @@ protected:
     virtual ParameterSpec adapt_Relu()
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(ParameterSpec));
+        memset(&curPs, 0, sizeof(ParameterSpec));
         curPs.relu_spec.neg_slope = 0;
         return curPs;
     }
@@ -187,7 +202,7 @@ protected:
     virtual ParameterSpec adapt_Concat()
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(ParameterSpec));
+        memset(&curPs, 0, sizeof(ParameterSpec));
         curPs.concat_spec.axis = 1;
         return curPs;
     }
@@ -215,5 +230,12 @@ protected:
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Yolov3DetectionOutput)
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Tile)
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Splice)
+    REGISTER_EMPTY_ADAPT_OPERATOR(adapt_SoftPlus)
+    REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Exp)
+    REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Tdnn)
+    REGISTER_EMPTY_ADAPT_OPERATOR(adapt_TopK)
+    REGISTER_EMPTY_ADAPT_OPERATOR(adapt_SpaceToBatchNd)
+    REGISTER_EMPTY_ADAPT_OPERATOR(adapt_BatchToSpaceNd)
+    REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Where)
 };
 #endif

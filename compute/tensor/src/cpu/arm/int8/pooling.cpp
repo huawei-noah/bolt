@@ -13,24 +13,27 @@
 
 #include "cpu/arm/int8/tensor_computing_int8.h"
 
-EE pooling_c8_int8(const INT8 *input,
-    U32 stride,
-    int hstart,
-    int hend,
-    int wstart,
-    int wend,
+EE pooling_c8_int8(I32 tstart,
+    I32 tend,
+    I32 hstart,
+    I32 hend,
+    I32 wstart,
+    I32 wend,
+    I32 poolSize,
+    const INT8 *input,
+    I32 it,
+    I32 ih,
+    I32 iw,
+    PoolingParamSpec p,
     INT8 *output,
-    PoolingParamSpec poolingParamSpec,
     void *scale)
 {
     EE ret = SUCCESS;
-    PoolingMode pm = poolingParamSpec.mode;
-    U32 kernelSizeH = poolingParamSpec.kernel_h;
-    U32 kernelSizeW = poolingParamSpec.kernel_w;
-    if (kernelSizeH * kernelSizeW > 256 && pm == POOLING_MEAN) {
+    PoolingMode pm = p.mode;
+    int khkw = p.kernel_t * p.kernel_h * p.kernel_w;
+    if (khkw > 256 && pm == POOLING_MEAN) {
         ret = NOT_SUPPORTED;
     }
-    short khkw = kernelSizeH * kernelSizeW;
     short factor = 256 / khkw;
     F32 *inputScale = (F32 *)scale;
     F32 *outputScale = inputScale + 1;
@@ -48,29 +51,29 @@ EE pooling_c8_int8(const INT8 *input,
             break;
         }
     }
-    int8x8_t in1, out1;
     int16x8_t out_mean = {0};
-    out1 = vdup_n_s8(-128);
-    short pool_size = (hend - hstart) * (wend - wstart);
-    for (int kernelH = hstart; kernelH < hend; kernelH++) {
-        for (int kernelW = wstart; kernelW < wend; kernelW++) {
-            const U32 index = (kernelH * stride + kernelW) * 8;
-            in1 = vld1_s8(input + index);
-            switch (pm) {
-                case POOLING_MAX:
-                    out1 = vmax_s8(out1, in1);
-                    break;
-                case POOLING_MEAN:
-                    out_mean = vaddw_s8(out_mean, in1);
-                    break;
-                default:
-                    ret = NOT_SUPPORTED;
-                    break;
+    int8x8_t out1 = vdup_n_s8(-128);
+    for (int kernelT = tstart; kernelT < tend; kernelT++) {
+        for (int kernelH = hstart; kernelH < hend; kernelH++) {
+            for (int kernelW = wstart; kernelW < wend; kernelW++) {
+                U32 index = ((kernelT * ih + kernelH) * iw + kernelW) * 8;
+                int8x8_t in1 = vld1_s8(input + index);
+                switch (pm) {
+                    case POOLING_MAX:
+                        out1 = vmax_s8(out1, in1);
+                        break;
+                    case POOLING_MEAN:
+                        out_mean = vaddw_s8(out_mean, in1);
+                        break;
+                    default:
+                        ret = NOT_SUPPORTED;
+                        break;
+                }
             }
         }
     }
     if (pm == POOLING_MEAN) {
-        short pool_factor = factor * khkw / pool_size;
+        short pool_factor = factor * khkw / poolSize;
         if (pool_factor > 1) {
             out_mean = vmulq_n_s16(out_mean, pool_factor);
         }

@@ -38,15 +38,13 @@ EE prelu_fp16(TensorDesc inputDesc,
     }
 
     CHECK_REQUIREMENT(in == on && ic == oc && ih == oh && iw == ow);
-    ic /= 8;
     float16x8_t slope;
     uint16x8_t mask;
     float16x8_t in0, out0;
     for (U32 n = 0; n < in; n++) {
-        for (U32 c = 0; c < ic; c++) {
+        for (U32 c = 0; c < ic; c += 8) {
+            slope = preluDesc.propagate_down ? vdupq_n_f16(weight[0]) : vld1q_f16(weight + c);
             for (U32 hw = 0; hw < ih * iw; hw++) {
-                slope = preluDesc.propagate_down ? vdupq_n_f16(weight[0])
-                                                 : vld1q_f16(weight + c * 8);
                 in0 = vld1q_f16(input);
                 mask = vcleq_f16(in0, vdupq_n_f16(0.f));
                 float16x8_t tmp = vmulq_f16(in0, slope);

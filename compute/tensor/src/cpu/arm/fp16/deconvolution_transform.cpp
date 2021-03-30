@@ -20,21 +20,16 @@ inline EE deconvolution_transform_filter_kernel_fp16(TensorDesc filterDesc,
     F16 *ftmArray,
     DataFormat ftmDataFormat)
 {
-    // Procedure should be the same, but fhfw is reversed
     if (nullptr == filterArray || nullptr == ftmDesc || nullptr == ftmArray) {
         CHECK_STATUS(NULL_POINTER);
     }
-    DataType fdt;
-    DataFormat fdf;
-    U32 fn, fc, fh, fw;
-    CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-    if (fdf == ftmDataFormat) {
+    if (filterDesc.df == ftmDataFormat) {
         *ftmDesc = filterDesc;
-        memcpy(ftmArray, filterArray, fn * fc * fh * fw * bytesOf(fdt));
+        memcpy(ftmArray, filterArray, tensorNumBytes(filterDesc));
         return SUCCESS;
     }
-    if (fdf != DF_NCHW) {
-        CHECK_STATUS(NOT_SUPPORTED);
+    if (filterDesc.df != DF_NCHW) {
+        return NOT_SUPPORTED;
     }
     EE ret = SUCCESS;
     switch (ftmDataFormat) {
@@ -43,21 +38,21 @@ inline EE deconvolution_transform_filter_kernel_fp16(TensorDesc filterDesc,
          *  CNHW => NHWCN16
          *  if there is remainder, it should be NHWCN8
          */
-            *ftmDesc = tensor4df(fdt, ftmDataFormat, fc, fn, fh, fw);
-            transformCNHWToNHWCNx<F16, 16>(filterDesc, filterArray, *ftmDesc, ftmArray);
+            ret = transformCNHWToNHWCNx<F16, 16>(
+                filterDesc, filterArray, ftmDataFormat, ftmDesc, ftmArray);
             break;
         }
         case DF_HWNCN16: {
             /*
          *  CNHW => NHWCN16 + NHWCN8 if there is remainder divided by 16
          */
-            *ftmDesc = tensor4df(fdt, ftmDataFormat, fc, fn, 6, 6);
-            transformCNHWToHWNCNx<F16, 16>(filterDesc, filterArray, *ftmDesc, ftmArray);
+            ret = transformCNHWToHWNCNx<F16, 16>(
+                filterDesc, filterArray, ftmDataFormat, ftmDesc, ftmArray);
             break;
         }
         case DF_NCHWC8: {
-            *ftmDesc = tensor4df(fdt, DF_NCHWC8, fn, fc, fh, fw);
-            transformCNHWToNCHWC8<F16>(filterDesc, filterArray, *ftmDesc, ftmArray);
+            ret = transformCNHWToNCHWC8<F16>(
+                filterDesc, filterArray, ftmDataFormat, ftmDesc, ftmArray);
             break;
         }
         default:

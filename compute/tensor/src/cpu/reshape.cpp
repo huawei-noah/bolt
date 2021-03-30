@@ -42,6 +42,9 @@ EE reshape_infer_output_size_cpu(TensorDesc inputDesc, ReshapeParamSpec p, Tenso
     if (shape_size == 2) {
         (*outputDesc).df = DF_NORMAL;
     }
+    if (shape_size == 3) {
+        (*outputDesc).df = DF_MTK;
+    }
     if (shape_size >= 4) {
         (*outputDesc).df = DF_NCHW;
     }
@@ -87,7 +90,7 @@ EE reshape_cpu(TensorDesc inputDesc, void *input, TensorDesc outputDesc, void *o
         CHECK_REQUIREMENT(tensorNumElements(inputDesc) >= tensorNumElements(outputDesc));
         inputDesc.df = DF_NCHW;
     }
-    if (DF_NCHWC8 != inputDesc.df) {
+    if (DF_NCHWC8 != inputDesc.df || inputDesc.nDims != 4) {
         if (output != input) {
             memcpy(output, input, tensorNumBytes(outputDesc));
         }

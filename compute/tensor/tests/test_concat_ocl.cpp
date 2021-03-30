@@ -66,6 +66,10 @@ int concatTest(int argc, char **argv, DataType dt)
         std::shared_ptr<Tensor> tensor(new Tensor(OCLMem));
         tensorCpu->resize(inputDesc[i]);
         tensor->resize(inputDesc[i]);
+        U32 str[3] = {1, 1, 1};
+        U32 off[3] = {0, 0, 0};
+        GCLMemDesc inputMemDesc = gcl_mem_desc(str, off, DT_U8, DF_NCWHC4);
+        ocl_set_desc(tensor.get(), inputMemDesc);
         inputTensorCpu.push_back(*tensorCpu.get());
         inputTensor.push_back(*tensor.get());
     }
@@ -135,7 +139,7 @@ int concatTest(int argc, char **argv, DataType dt)
     CHECK_STATUS(concat(inputTensor, p, tmpTensor, outputTensor, &archInfo));
 
     /*warp up*/
-    UNI_INFO_LOG("Warp up gpu:\n")
+    UNI_INFO_LOG("warm up gpu:\n")
     for (U32 i = 0; i < 2; i++) {
         CHECK_STATUS(gcl_run_kernelVec(handle));
     }

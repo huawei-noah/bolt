@@ -14,45 +14,52 @@
 #include <float.h>
 #include "cpu/arm/fp32/tensor_computing_fp32.h"
 
-EE pooling_c8_fp32(const F32 *input,
-    U32 stride,
-    int hstart,
-    int hend,
-    int wstart,
-    int wend,
-    F32 *output,
-    PoolingParamSpec poolingParamSpec)
+EE pooling_c8_fp32(I32 tstart,
+    I32 tend,
+    I32 hstart,
+    I32 hend,
+    I32 wstart,
+    I32 wend,
+    I32 poolSize,
+    const F32 *input,
+    I32 it,
+    I32 ih,
+    I32 iw,
+    PoolingParamSpec p,
+    F32 *output)
 {
     EE ret = SUCCESS;
-    PoolingMode pm = poolingParamSpec.mode;
+    PoolingMode pm = p.mode;
+    float32x4_t poolSize_v = vdupq_n_f32(poolSize);
     float32x4_t in0, in1, out0, out1;
-    float32x4_t poolSize = vdupq_n_f32((hend - hstart) * (wend - wstart));
     out0 = vdupq_n_f32((pm == POOLING_MAX) ? -FLT_MAX : 0);
     out1 = out0;
-    for (int kernelH = hstart; kernelH < hend; kernelH++) {
-        for (int kernelW = wstart; kernelW < wend; kernelW++) {
-            const U32 index = (kernelH * stride + kernelW) * 8;
-            in0 = vld1q_f32(input + index);
-            in1 = vld1q_f32(input + index + 4);
-            switch (pm) {
-                case POOLING_MAX: {
-                    out0 = vmaxq_f32(in0, out0);
-                    out1 = vmaxq_f32(in1, out1);
-                    break;
+    for (int kernelT = tstart; kernelT < tend; kernelT++) {
+        for (int kernelH = hstart; kernelH < hend; kernelH++) {
+            for (int kernelW = wstart; kernelW < wend; kernelW++) {
+                U32 index = ((kernelT * ih + kernelH) * iw + kernelW) * 8;
+                in0 = vld1q_f32(input + index);
+                in1 = vld1q_f32(input + index + 4);
+                switch (pm) {
+                    case POOLING_MAX: {
+                        out0 = vmaxq_f32(in0, out0);
+                        out1 = vmaxq_f32(in1, out1);
+                        break;
+                    }
+                    case POOLING_MEAN: {
+                        out0 = vaddq_f32(out0, in0);
+                        out1 = vaddq_f32(out1, in1);
+                        break;
+                    }
+                    default:
+                        ret = NOT_SUPPORTED;
+                        break;
                 }
-                case POOLING_MEAN: {
-                    out0 = vaddq_f32(out0, in0);
-                    out1 = vaddq_f32(out1, in1);
-                    break;
-                }
-                default:
-                    ret = NOT_SUPPORTED;
-                    break;
             }
         }
     }
-    vst1q_f32(output, ((pm == POOLING_MAX) ? out0 : vdivq_f32(out0, poolSize)));
-    vst1q_f32(output + 4, ((pm == POOLING_MAX) ? out1 : vdivq_f32(out1, poolSize)));
+    vst1q_f32(output, ((pm == POOLING_MAX) ? out0 : vdivq_f32(out0, poolSize_v)));
+    vst1q_f32(output + 4, ((pm == POOLING_MAX) ? out1 : vdivq_f32(out1, poolSize_v)));
     return ret;
 }
 

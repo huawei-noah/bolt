@@ -49,6 +49,22 @@ EE matmul_infer_output_size_cpu(TensorDesc matrixADesc,
     int j = 0;
     int dimA = matrixADesc.nDims;
     int dimB = matrixBDesc.nDims;
+
+    if (dimA > 2 && dimB > 2 && dimA == dimB && matrixBDesc.dims[1] == matrixADesc.dims[0]) {
+        (*matrixCDesc) = matrixADesc;
+        (*matrixCDesc).dims[0] = matrixBDesc.dims[0];
+        (*matrixCDesc).dims[1] = matrixADesc.dims[1];
+        for (int i = 2; i < dimA; i++) {
+            if (matrixADesc.dims[i] == 1 || matrixBDesc.dims[i] == 1 ||
+                matrixBDesc.dims[i] == matrixADesc.dims[i]) {
+                (*matrixCDesc).dims[i] = matrixADesc.dims[i] > matrixBDesc.dims[i]
+                    ? matrixADesc.dims[i]
+                    : matrixBDesc.dims[i];
+            }
+        }
+        return SUCCESS;
+    }
+
     while (i < dimA - 2 || j < dimB - 2) {
         if (matrixADesc.dims[dimA - 1 - i] != matrixBDesc.dims[dimB - 1 - j]) {
             if (matrixADesc.dims[dimA - 1 - i] == 1) {
@@ -145,8 +161,12 @@ EE matmul_infer_forward_algorithm(Tensor matrixATensor,
         TensorDesc matrixADesc = matrixATensor.get_desc();
         TensorDesc matrixBDesc = matrixBTensor.get_desc();
         TensorDesc matrixCDesc = matrixCTensor.get_desc();
+        GCLMemDesc gclmemMatrixADesc = ocl_get_desc(matrixATensor);
+        GCLMemDesc gclmemMatrixBDesc = ocl_get_desc(matrixBTensor);
+        GCLMemDesc gclmemMatrixCDesc = ocl_get_desc(matrixCTensor);
         CHECK_STATUS(matmul_infer_forward_algorithm_mali(((MaliPara_t)(archInfo->archPara))->handle,
-            matrixADesc, transposeA, matrixBDesc, transposeB, matrixCDesc,
+            matrixADesc, transposeA, matrixBDesc, transposeB, matrixCDesc, gclmemMatrixADesc,
+            gclmemMatrixBDesc, gclmemMatrixCDesc,
             ((MaliPara_t)(archInfo->archPara))->forwardRunInfo));
     } else {
 #endif

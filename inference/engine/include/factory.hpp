@@ -174,12 +174,24 @@ public:
 
     virtual std::shared_ptr<Operator> createShape() = 0;
 
+    virtual std::shared_ptr<Operator> createWhere(DataType dt) = 0;
+
+    virtual std::shared_ptr<Operator> createTdnn(DataType dt, TdnnParamSpec p) = 0;
+
+    virtual std::shared_ptr<Operator> createBatchNorm(DataType dt, BatchNormParamSpec p) = 0;
+
+    virtual std::shared_ptr<Operator> createTopK(DataType dt, TopKParamSpec p) = 0;
+
+    virtual std::shared_ptr<Operator> createCast(DataType dt, CastParamSpec p) = 0;
+
+    virtual std::shared_ptr<Operator> createEqual(DataType dt) = 0;
+
     std::shared_ptr<Operator> createOperators(OperatorSpec curOps,
         DataType dt,
-        std::map<std::string, U32> operatorIndexMap,
+        std::map<std::string, U32> &operatorIndexMap,
         std::map<std::string, std::shared_ptr<Tensor>> *tensorMapPtr,
-        std::vector<std::string> inputTensorsName,
-        std::vector<std::string> outputTensorsName,
+        std::vector<std::string> &inputTensorsName,
+        std::vector<std::string> &outputTensorsName,
         std::set<std::string> *weightOpOutputNames)
     {
         OperatorType opType = curOps.type;
@@ -233,6 +245,12 @@ public:
             case OT_HSwish: {
                 ActivationParamSpec activationDesc;
                 activationDesc.mode = ACTIVATION_H_SWISH;
+                op = createActivation(activationDesc);
+                break;
+            }
+            case OT_HSwishNoDiv: {
+                ActivationParamSpec activationDesc;
+                activationDesc.mode = ACTIVATION_H_SWISH_NODIV;
                 op = createActivation(activationDesc);
                 break;
             }
@@ -451,6 +469,54 @@ public:
             }
             case OT_Shape: {
                 op = createShape();
+                break;
+            }
+            case OT_Where: {
+                op = createWhere(dt);
+                break;
+            }
+            case OT_SoftPlus: {
+                ActivationParamSpec activationDesc;
+                activationDesc.mode = ACTIVATION_SOFTPLUS;
+                op = createActivation(activationDesc);
+                break;
+            }
+            case OT_Exp: {
+                ActivationParamSpec activationDesc;
+                activationDesc.mode = ACTIVATION_EXP;
+                op = createActivation(activationDesc);
+                break;
+            }
+            case OT_Tdnn: {
+                op = createTdnn(dt, curPs.tdnn_spec);
+                break;
+            }
+            case OT_BatchNorm: {
+                op = createBatchNorm(dt, curPs.bn_spec);
+                break;
+            }
+            case OT_TopK: {
+                op = createTopK(dt, curPs.topk_spec);
+                break;
+            }
+            case OT_Abs: {
+                ActivationParamSpec activationDesc;
+                activationDesc.mode = ACTIVATION_ABS;
+                op = createActivation(activationDesc);
+                break;
+            }
+            case OT_Cast: {
+                op = createCast(dt, curPs.cast_spec);
+                break;
+            }
+            case OT_Equal: {
+                op = createEqual(dt);
+                break;
+            }
+            case OT_Sign: {
+                ActivationParamSpec activationDesc;
+                activationDesc.mode = ACTIVATION_SIGN;
+                op = createActivation(activationDesc);
                 break;
             }
             default: {

@@ -13,12 +13,12 @@
 
 #ifndef _H_CONVOLUTION_GEMM
 #define _H_CONVOLUTION_GEMM
-#ifdef _USE_INT8
-#include <string.h>
 
 #include "sys.h"
-#include "types.h"
+#include "uni.h"
+#include "arm_functions_int8.h"
 
+#ifdef _USE_INT8
 template <typename OT>
 EE convolution_gemm_A55(TensorDesc inputDesc,
     const void *input,

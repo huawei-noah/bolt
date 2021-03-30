@@ -12,7 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "sys.h"
-#include "types.h"
+
 #include "tensor_desc.h"
 #include "error.h"
 #include "gpu/mali/tensor_computing_mali.h"
@@ -20,36 +20,33 @@
 
 EE embedding_infer_output_size_mali(TensorDesc inputDesc,
     EmbedParamSpec p,
-    DataType dt,
+    DataType odt,
     TensorDesc *outputDesc,
     GCLMemDesc_t gclmemInputDesc,
     GCLMemDesc_t gclmemOutputDesc)
 {
-    DataType idt;
+    if (outputDesc == nullptr || gclmemInputDesc == nullptr || gclmemOutputDesc == nullptr) {
+        CHECK_STATUS(NULL_POINTER);
+    }
+    DataType dt;
     DataFormat df;
-    U32 batch, step;
-    CHECK_REQUIREMENT(tensorIs2d(inputDesc));
-    CHECK_STATUS(tensor2dGet(inputDesc, &idt, &df, &batch, &step));
-    if (outputDesc) {
-        *outputDesc = tensor3df(dt, DF_MKT, batch, p.num_output, step);
+    U32 batch, step, nDims;
+    nDims = inputDesc.nDims;
+    dt = inputDesc.dt;
+    if (nDims == 1) {
+        batch = 1;
+        step = inputDesc.dims[0];
+        *outputDesc = tensor2df(odt, DF_NORMAL, step, p.num_output);
+    } else if (nDims == 2) {
+        batch = inputDesc.dims[1];
+        step = inputDesc.dims[0];
+        *outputDesc = tensor3df(odt, DF_MTK, batch, step, p.num_output);
+    } else {
+        return NOT_SUPPORTED;
     }
-
-    if (df == DF_NORMAL) {
-        U32 iw = step;
-        U32 ih = batch;
-        U32 ic = 1;
-        CHECK_STATUS(
-            infer_gclmem_desc_nchw(iw, ih, ic, 0, 0, 0, 0, 0, idt, dt, gclmemInputDesc, NULL));
-
-        U32 m = 1;
-        U32 ow, oh, oc;
-        map_nlp_mkt_to_ncwhc4(m, p.num_output, step, &ow, &oh, &oc);
-        /*oc has been divided 4 in map_nlp_xxx, need to mul 4 for infer_xxx_ncwhc4*/
-        CHECK_STATUS(infer_gclmem_desc_ncwhc4(
-            0, 0, 0, 0, 0, ow, oh, oc * 4, idt, dt, NULL, gclmemOutputDesc));
-        return SUCCESS;
-    }
-    return NOT_SUPPORTED;
+    CHECK_STATUS(infer_gclmem_desc_nchw(step, batch, 1, 0, 0, p.num_output, step, batch, dt, dt,
+        gclmemInputDesc, gclmemOutputDesc));
+    return SUCCESS;
 }
 
 inline EE embedding_checkpara_mali(

@@ -30,9 +30,10 @@ EE depthwise_pointwise_convolution_transform_filter_fp32(TensorDesc dwFilterDesc
         return ret;
     }
 
-    ConvolutionParamSpec nullSpec;
-    ret = convolution_transform_filter_fp32(pwFilterDesc, pwFilter, nullSpec,
-        CONVOLUTION_ALGORITHM_POINTWISE, pwFtmDesc, pwFilterTransformed);
+    ConvolutionParamSpec p = createConvolutionParamSpec(1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1,
+        1, pwFilterDesc.dims[pwFilterDesc.nDims - 1], Convolution_Pointwise);
+    ret = convolution_transform_filter_fp32(
+        pwFilterDesc, pwFilter, p, CONVOLUTION_ALGORITHM_POINTWISE, pwFtmDesc, pwFilterTransformed);
     CHECK_STATUS(ret);
     return ret;
 }

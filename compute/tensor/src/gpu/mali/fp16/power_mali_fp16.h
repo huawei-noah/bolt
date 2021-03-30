@@ -13,8 +13,8 @@
 
 #ifndef _POWER_MALI_FP16
 #define _POWER_MALI_FP16
-#include "types.h"
-#include "tensor_computing_type.h"
+
+#include "gpu/mali/fp16/tensor_computing_fp16.h"
 
 EE power_mali_fp16(GCLHandle_t handle,
     TensorDesc inputDesc,

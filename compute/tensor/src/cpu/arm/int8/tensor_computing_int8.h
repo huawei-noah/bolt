@@ -16,7 +16,7 @@
 #ifdef _USE_INT8
 #include <vector>
 #include "sys.h"
-#include "types.h"
+
 #include "error.h"
 #include "cpu/arm/int8/arm_functions_int8.h"
 
@@ -73,14 +73,19 @@ EE depthwise_pointwise_convolution_int8(TensorDesc inputDesc,
     ActivationParamSpec pointwiseActivationParamSpec,
     Arch arch);
 
-EE pooling_c8_int8(const INT8 *input,
-    U32 stride,
-    int hstart,
-    int hend,
-    int wstart,
-    int wend,
+EE pooling_c8_int8(I32 tstart,
+    I32 tend,
+    I32 hstart,
+    I32 hend,
+    I32 wstart,
+    I32 wend,
+    I32 poolSize,
+    const INT8 *input,
+    I32 it,
+    I32 ih,
+    I32 iw,
+    PoolingParamSpec p,
     INT8 *output,
-    PoolingParamSpec poolingParamSpec,
     void *scale);
 
 EE concat_int8(std::vector<TensorDesc> inputDesc,

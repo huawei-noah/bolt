@@ -15,8 +15,9 @@
 #define _H_DEPTHWISE_POINTWISE_CONVOLUTION
 
 #include "sys.h"
+#include "uni.h"
 #include "tensor_desc.h"
-#include "tensor_computing_type.h"
+#include "parameter_spec.h"
 
 EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc,
     INT8 *inArray,

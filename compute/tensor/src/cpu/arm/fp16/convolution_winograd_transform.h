@@ -93,6 +93,7 @@ inline EE trans_O_4x4_3x3(F16 *const Ow[36],
     float16x8_t v_0 = vmovq_n_f16(0);
     float16x8_t v_2 = vmovq_n_f16(2);
     float16x8_t v_4 = vmovq_n_f16(4);
+    float16x8_t v_6 = vmovq_n_f16(6);
     float16x8_t v_8 = vmovq_n_f16(8);
 
     for (U32 i = 0; i < 6; i++) {
@@ -202,6 +203,24 @@ inline EE trans_O_4x4_3x3(F16 *const Ow[36],
                 }
                 break;
             }
+            case ACTIVATION_RELU6: {
+                if (pad_w_mod_4 == 0) {
+                    vst1q_f16(O[i * 4 + 0], vminq_f16(vmaxq_f16(vaddq_f16(v_O0, v_b), v_0), v_6));
+                    vst1q_f16(O[i * 4 + 1], vminq_f16(vmaxq_f16(vaddq_f16(v_O1, v_b), v_0), v_6));
+                    vst1q_f16(O[i * 4 + 2], vminq_f16(vmaxq_f16(vaddq_f16(v_O2, v_b), v_0), v_6));
+                    vst1q_f16(O[i * 4 + 3], vminq_f16(vmaxq_f16(vaddq_f16(v_O3, v_b), v_0), v_6));
+                } else if (pad_w_mod_4 == 1) {                                                   
+                    vst1q_f16(O[i * 4 + 0], vminq_f16(vmaxq_f16(vaddq_f16(v_O0, v_b), v_0), v_6));
+                    vst1q_f16(O[i * 4 + 1], vminq_f16(vmaxq_f16(vaddq_f16(v_O1, v_b), v_0), v_6));
+                    vst1q_f16(O[i * 4 + 2], vminq_f16(vmaxq_f16(vaddq_f16(v_O2, v_b), v_0), v_6));
+                } else if (pad_w_mod_4 == 2) {                                                   
+                    vst1q_f16(O[i * 4 + 0], vminq_f16(vmaxq_f16(vaddq_f16(v_O0, v_b), v_0), v_6));
+                    vst1q_f16(O[i * 4 + 1], vminq_f16(vmaxq_f16(vaddq_f16(v_O1, v_b), v_0), v_6));
+                } else if (pad_w_mod_4 == 3) {                                                   
+                    vst1q_f16(O[i * 4 + 0], vminq_f16(vmaxq_f16(vaddq_f16(v_O0, v_b), v_0), v_6));
+                }
+                break;
+            }            
             default:
                 return NOT_SUPPORTED;
         }

@@ -13,7 +13,7 @@
 
 #ifdef _USE_FP16
 #include "sys.h"
-#include "types.h"
+
 #include "tensor_desc.h"
 #include "error.h"
 

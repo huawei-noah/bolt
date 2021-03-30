@@ -11,7 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string.h>
 #include "image.h"
 #include "ut_util.h"
 
@@ -34,45 +33,51 @@ int resizeTest(int argc, char *argv[], DataType dt)
     archInfo_org.arch = CPU_GENERAL;
 
     CHECK_REQUIREMENT(in == 1 && on == 1);
-    CHECK_REQUIREMENT(ic % 8 == 0 && oc % 8 == 0);
 
     TensorDesc inputDesc, outputDesc;
-    ResizeDesc resizeDesc;
-    inputDesc = tensor4df(dt, DF_NCHWC8, in, ic, ih, iw);
+    inputDesc = tensor4df(dt, DF_NCHW, in, ic, ih, iw);
 
-    resizeDesc.paramDT = DT_F32;
+    DataType paramDT = DT_F32;
     F32 scales[2];
     scales[0] = (F32)oh / (F32)ih;
     scales[1] = (F32)ow / (F32)iw;
 
-    // setup input, filter
+    // setup input
     U8 *input = ut_input_v(in * ic * ih * iw, dt, UT_INIT_RANDOM);
-    U8 *input_ref = ut_input_v(in * ic * ih * iw, dt, UT_INIT_ZERO);
-    memcpy(input_ref, input, bytesOf(dt) * in * ic * ih * iw);
+    Tensor inputTensor;
+    inputTensor.resize(inputDesc);
+    inputTensor.alloc();
+    memcpy(get_ptr_from_tensor(inputTensor, UT_ARCH), input, tensorNumBytes(inputDesc));
 
     // setup output
     U32 outputBytes;
+    Tensor outputTensor;
     CHECK_STATUS(resize_infer_output_size(
-        inputDesc, resizeDesc, scales, &outputDesc, &outputBytes, &archInfo));
+        &inputTensor, paramDT, scales, &outputTensor, &outputBytes, &archInfo));
+    outputDesc = outputTensor.get_desc();
     CHECK_REQUIREMENT(tensorNumElements(outputDesc) == on * oc * oh * ow);
-    U32 output_size = outputBytes / bytesOf(dt);
-    U8 *output = ut_input_v(output_size, dt, UT_INIT_ZERO);
-    U8 *output_ref = ut_input_v(output_size, dt, UT_INIT_ZERO);
+    outputTensor.alloc();
+    Tensor outputTensorRef = Tensor::alloc_sized<CPUMem>(outputDesc);
+    Tensor tmpTensor = Tensor::alloc_sized<CPUMem>(tensor1d(DT_U8, 8 * tensorNumBytes(inputDesc)));
 
+    ResizeParamSpec p;
+    p.mode = LINEAR;
     if (UT_CHECK) {
-        CHECK_STATUS(resize(inputDesc, input, nullptr, outputDesc, output, &archInfo));
+        CHECK_STATUS(resize(inputTensor, tmpTensor, outputTensor, p, &archInfo));
 
         // naive implement
-        CHECK_STATUS(resize(inputDesc, input_ref, nullptr, outputDesc, output_ref, &archInfo_org));
+        CHECK_STATUS(resize(inputTensor, tmpTensor, outputTensorRef, p, &archInfo_org));
 
         // check
-        ut_check_v(output, output_ref, output_size, dt, 0.05, __FILE__, __LINE__);
+        ut_check_v(get_ptr_from_tensor(outputTensor, UT_ARCH),
+            get_ptr_from_tensor(outputTensorRef, UT_ARCH), outputTensor.length(), dt, 0.05,
+            __FILE__, __LINE__);
     }
 
     // benchmark
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        CHECK_STATUS(resize(inputDesc, input_ref, nullptr, outputDesc, output_ref, &archInfo_org));
+        CHECK_STATUS(resize(inputTensor, tmpTensor, outputTensor, p, &archInfo));
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;
@@ -86,9 +91,6 @@ int resizeTest(int argc, char *argv[], DataType dt)
     ut_log(dt, buffer, ops, time);
 
     free(input);
-    free(output);
-    free(input_ref);
-    free(output_ref);
     return 0;
 }
 

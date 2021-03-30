@@ -14,91 +14,8 @@
 #ifndef _GCLMEM_DESC_INFER
 #define _GCLMEM_DESC_INFER
 #include <stdio.h>
-#include <tensor_desc.h>
+#include "tensor_desc.h"
 #include "gcl_func.h"
-
-inline EE infer_gclmem_desc_nchwc3_to_nchw(U32 iw,
-    U32 ih,
-    U32 ic,
-    U32 pw,
-    U32 ph,
-    U32 ow,
-    U32 oh,
-    U32 oc,
-    GCLMemDesc_t gclmemInputDesc,
-    GCLMemDesc_t gclmemOutputDesc,
-    bool need_pad = false)
-{
-    /*Intend to deprecate this API*/
-    if (gclmemInputDesc == nullptr || gclmemOutputDesc == nullptr) {
-        return NULL_POINTER;
-    }
-    U32 s0, s1, s2;
-    s0 = ow;
-    s1 = oh;
-    s2 = oc;
-
-    U32 num, byteSize;
-    num = s0 * s1 * s2;
-    byteSize = num * bytesOf(DT_F16);
-    gclmemOutputDesc->stride[0] = s0;
-    gclmemOutputDesc->stride[1] = s1;
-    gclmemOutputDesc->stride[2] = s2;
-    gclmemOutputDesc->offset[0] = 0;
-    gclmemOutputDesc->offset[1] = 0;
-    gclmemOutputDesc->offset[2] = 0;
-    gclmemOutputDesc->num = num;
-    gclmemOutputDesc->byteSize = byteSize;
-
-    U32 pw_org, ph_org;
-    U32 s0_org, s1_org, s2_org;
-    U32 byteSize_org;
-
-    s0_org = gclmemInputDesc->stride[0];
-    s1_org = gclmemInputDesc->stride[1];
-    s2_org = gclmemInputDesc->stride[2];
-    pw_org = gclmemInputDesc->offset[0];
-    ph_org = gclmemInputDesc->offset[1];
-    byteSize_org = gclmemInputDesc->byteSize;
-    bool need_pad_org = gclmemInputDesc->need_pad;
-    if (byteSize_org != 0 && gclmemInputDesc->memFormat != DF_NCHWC3) {
-        return NOT_SUPPORTED;
-    }
-
-    pw = (pw > pw_org) ? pw : pw_org;
-    ph = (ph > ph_org) ? ph : ph_org;
-
-    s0 = iw + (pw << 1);
-    s1 = ih + (ph << 1);
-    s2 = (ic + 2) / 3;
-    s0 = (s0 > s0_org) ? s0 : s0_org;
-    s1 = (s1 > s1_org) ? s1 : s1_org;
-    s2 = (s2 > s2_org) ? s2 : s2_org;
-
-    num = s0 * s1 * s2 * 3;
-    byteSize = num * bytesOf(DT_F16);
-    byteSize = (byteSize > byteSize_org) ? byteSize : byteSize_org;
-
-    gclmemInputDesc->stride[0] = s0;
-    gclmemInputDesc->stride[1] = s1;
-    gclmemInputDesc->stride[2] = s2;
-    gclmemInputDesc->offset[0] = pw;
-    gclmemInputDesc->offset[1] = ph;
-    gclmemInputDesc->offset[2] = 0;
-    gclmemInputDesc->num = num;
-    gclmemInputDesc->byteSize = byteSize;
-
-    gclmemInputDesc->memType = GCL_MEM_BUF;
-    gclmemInputDesc->memFormat = DF_NCHWC3;
-    gclmemInputDesc->flags = CL_MEM_READ_WRITE;
-    gclmemInputDesc->host_ptr = NULL;
-    gclmemOutputDesc->memType = GCL_MEM_BUF;
-    gclmemOutputDesc->memFormat = DF_NCHW;
-    gclmemOutputDesc->flags = CL_MEM_READ_WRITE;
-    gclmemOutputDesc->host_ptr = NULL;
-    gclmemOutputDesc->need_pad = need_pad | need_pad_org;
-    return SUCCESS;
-}
 
 inline EE trans_gclmem_desc_nchw_ncwhc4(
     U32 iw, U32 ih, U32 ic, U32 pw, U32 ph, DataType dt, GCLMemDesc_t gclmemDesc, bool need_pad = false)
@@ -585,14 +502,8 @@ inline EE fill_output_zero(GCLHandle_t handle, GCLMem_t output, TensorDesc outpu
     Kernel kernel;
     U32 ow, oh;
     if (outGCLDesc.memFormat == DF_NCWHC4) {
-        if (outputDesc.df == DF_NCHW || outputDesc.df == DF_MKT || outputDesc.df == DF_MTK) {
-            if (outputDesc.df == DF_NCHW) {
-                tensorSelectGet(outputDesc, &dt, NULL, NULL, NULL, &oh, &ow);
-            }
-            if (outputDesc.df == DF_MKT || outputDesc.df == DF_MTK) {
-                get_nlp_mkt_val(outputDesc, &dt, NULL, NULL, &oh);
-                ow = 1;
-            }
+        if (outputDesc.df == DF_NCHW) {
+            tensorSelectGet(outputDesc, &dt, NULL, NULL, NULL, &oh, &ow);
             if (ow_str != ow || oh_str != oh) {
                 if (dt == DT_F16) {
                     sprintf(kernelname, "fill_memory_zero_vec4_f16");
@@ -613,7 +524,8 @@ inline EE fill_output_zero(GCLHandle_t handle, GCLMem_t output, TensorDesc outpu
             CHECK_STATUS(NOT_SUPPORTED);
         }
     } else if (outGCLDesc.memFormat == DF_NCHW || outGCLDesc.memFormat == DF_NHWC) {
-        if (outputDesc.df == DF_NCHW || outputDesc.df == DF_NORMAL || outputDesc.df == DF_NHWC) {
+        if (outputDesc.df == DF_NCHW || outputDesc.df == DF_NORMAL || outputDesc.df == DF_NHWC ||
+            outputDesc.df == DF_MTK) {
             tensorSelectGet(outputDesc, &dt, NULL, NULL, NULL, &oh, &ow);
             if (ow_str != ow || oh_str != oh) {
                 if (dt == DT_F16) {
@@ -706,56 +618,43 @@ inline EE gclmem_set_desc_padding(GCLMemDesc *desc,
     return SUCCESS;
 }
 
-inline EE gclmem_get_desc_non_padding(
+inline EE gclmem_get_desc_dim(
     GCLMemDesc desc, DataType *dt, DataFormat *df, U32 *num, U32 *numChannels, U32 *height, U32 *width)
 {
+    TensorDesc cpuDesc;
+    cpuDesc.dt = desc.dt;
+    cpuDesc.nDims = desc.nDims;
+    for (U32 i = 0; i < desc.nDims; ++i) {
+        cpuDesc.dims[i] = desc.dims[i];
+    }
+    tensorSelectGet(cpuDesc, dt, df, num, numChannels, height, width);
+    return SUCCESS;
+}
+
+inline EE gclmem_get_desc_dim_5d(GCLMemDesc desc,
+    DataType *dt,
+    DataFormat *df,
+    U32 *num,
+    U32 *numChannels,
+    U32 *time,
+    U32 *height,
+    U32 *width)
+{
     U32 ndims = desc.nDims;
-    if (dt) {
-        *dt = desc.dt;
-    }
-    if (df) {
-        *df = desc.df;
-    }
-    if (desc.df == DF_MKT) {
-        if (num) {
-            *num = desc.dims[2];
-        }
-        if (numChannels) {
-            *numChannels = desc.dims[1];
-        }
-        if (height) {
-            *height = desc.dims[0];
-        }
-        if (width) {
-            *width = 1;
-        }
-    } else if (desc.df == DF_MTK) {
-        if (num) {
-            *num = desc.dims[2];
-        }
-        if (numChannels) {
-            *numChannels = desc.dims[0];
-        }
-        if (height) {
-            *height = desc.dims[1];
-        }
-        if (width) {
-            *width = 1;
-        }
-    } else {
-        if (width) {
-            *width = desc.dims[0];
-        }
-        if (height) {
-            *height = (ndims > 1) ? desc.dims[1] : 1;
-        }
-        if (numChannels) {
-            *numChannels = (ndims > 2) ? desc.dims[2] : 1;
-        }
-        if (num) {
-            *num = (ndims > 3) ? desc.dims[3] : 1;
+    if (time) {
+        if (ndims == 5) {
+            *time = desc.dims[2];
+        } else {
+            *time = 1;
         }
     }
+    return gclmem_get_desc_dim(desc, dt, df, num, numChannels, height, width);
+}
+
+inline EE gclmem_get_desc_padding(
+    GCLMemDesc desc, U32 *w_str, U32 *h_str, U32 *c_str, U32 *w_off, U32 *h_off)
+{
+    get_gclmem_dim(desc, w_str, h_str, c_str, w_off, h_off);
     return SUCCESS;
 }
 

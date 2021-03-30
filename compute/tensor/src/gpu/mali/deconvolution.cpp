@@ -13,7 +13,7 @@
 
 #include <vector>
 #include "sys.h"
-#include "types.h"
+
 #include "tensor_desc.h"
 #include "error.h"
 #include "gpu/mali/tensor_computing_mali.h"
@@ -315,6 +315,7 @@ EE deconvolution_infer_forward_algorithm_mali(GCLHandle_t handle,
         runInfos.clear();
         filterMemDescs.clear();
         CHECK_STATUS(gcl_clean_kernelVec(handle));
+        CHECK_STATUS(gcl_clean_programMap(handle));
         CHECK_STATUS(gcl_off_queue_profiling(handle));
         return SUCCESS;
     }

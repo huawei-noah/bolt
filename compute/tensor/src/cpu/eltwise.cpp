@@ -12,6 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include <vector>
+#include <set>
 #include "cpu/tensor_computing_cpu.h"
 #ifdef _USE_GENERAL
 #include "cpu/general/tensor_computing_general.h"
@@ -22,6 +23,7 @@
 #ifdef _USE_X86
 #include "cpu/x86/tensor_computing_x86.h"
 #endif
+#include "tensor_transpose.h"
 
 static std::vector<U32> calculateRelativeLocalIndex_cpu(U32 *indexes, U32 *dims, U32 nDims)
 {
@@ -49,32 +51,24 @@ EE eltwise_cpu(std::vector<TensorDesc> inputDesc,
         return NOT_MATCH;
     }
     std::vector<void *> input = input_;
-    U32 nchwc8Count = 0;
-    U32 minDims = inputDesc[0].nDims;
-    for (U32 i = 0; i < num; i++) {
-        if (inputDesc[i].df == DF_NCHWC8) {
-            nchwc8Count++;
-        }
-        if (inputDesc[i].nDims < minDims) {
-            minDims = inputDesc[i].nDims;
-        }
-    }
     U8 *ptr = (U8 *)tmp;
-    if (nchwc8Count > 0 && nchwc8Count != num) {
-        for (U32 i = 0; i < num; i++) {
-            if (inputDesc[i].df == DF_NCHWC8) {
-                TensorDesc tmpDesc = inputDesc[i];
-                tmpDesc.df = DF_NCHW;
-                transformToNCHW(inputDesc[i], input[i], tmpDesc, ptr);
-                inputDesc[i] = tmpDesc;
-                input[i] = ptr;
-                ptr += tensorNumBytes(inputDesc[i]);
-                // Output from 1D-conv + 3D tensors
-                if (inputDesc[i].dims[0] == 1 && minDims == 3) {
-                    inputDesc[i] = tensor3df(inputDesc[i].dt, DF_NCHW, inputDesc[i].dims[3],
-                        inputDesc[i].dims[2], inputDesc[i].dims[1]);
-                }
+    std::set<DataFormat> nchw = {DF_NORMAL, DF_MTK, DF_MKT, DF_NCHW};
+    for (U32 i = 0; i < num; i++) {
+        if (inputDesc[i].nDims <= 2 ||
+            (nchw.find(inputDesc[i].df) != nchw.end() && nchw.find(outputDesc.df) != nchw.end())) {
+            continue;
+        }
+        if (inputDesc[i].df != outputDesc.df ||
+            tensorNumElements(inputDesc[i]) != tensorNumElements(outputDesc)) {
+            // Kaldi tdnn special case
+            if (inputDesc[i].df == DF_NHWC && inputDesc[i].nDims == 3) {
+                inputDesc[i] = tensor4df(inputDesc[i].dt, DF_NHWC, inputDesc[i].dims[2],
+                    inputDesc[i].dims[0], inputDesc[i].dims[1], 1);
             }
+            CHECK_STATUS(transformFormat(inputDesc[i], input[i], outputDesc, ptr));
+            inputDesc[i] = outputDesc;
+            input[i] = ptr;
+            ptr += tensorNumBytes(outputDesc);
         }
     }
 
@@ -107,14 +101,17 @@ EE eltwise_cpu(std::vector<TensorDesc> inputDesc,
     U32 size = tensorNumElements(newOutputDesc);
     int lastDimSize = newOutputDesc.dims[0];
     std::vector<int> lastDimSizes(num);
+    bool sameDim = true;
     for (U32 i = 0; i < num; i++) {
         lastDimSizes[i] = newInputDesc[i].dims[0];
-        if (lastDimSizes[i] != lastDimSize && newInputDesc[0].df == DF_NCHWC8) {
-            UNI_ERROR_LOG("For NCHWc8, eltwise can only handle inputs with matching widths\n");
+        if (lastDimSizes[i] != lastDimSize) {
+            sameDim = false;
+            if (newInputDesc[0].df == DF_NCHWC8) {
+                UNI_ERROR_LOG("For NCHWc8, eltwise can only handle inputs with matching widths\n");
+            }
         }
     }
     for (U32 i = 1; i < newOutputDesc.nDims; i++) {
-        bool sameDim = true;
         for (U32 j = 0; j < num; j++) {
             if (newInputDesc[j].dims[i] != newOutputDesc.dims[i]) {
                 sameDim = false;

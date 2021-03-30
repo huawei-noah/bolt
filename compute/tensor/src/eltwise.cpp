@@ -11,8 +11,9 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+#include <set>
 #include "tensor_computing.h"
-#if defined(_USE_GENERAL) || defined(_USE_X86) || defined(_USE_NEON)
+#if defined(_USE_CPU)
 #include "cpu/tensor_computing_cpu.h"
 #endif
 #ifdef _USE_MALI
@@ -48,6 +49,7 @@ inline EE eltwise_infer_output_size_cpu(std::vector<TensorDesc> inputDesc, Tenso
         }
     }
     U32 nchwc8Count = 0;
+    U32 nhwcCount = 0;
     for (U32 i = 0; i < num; i++) {
         if (inputDesc[i].df == DF_NCHWC8) {
             nchwc8Count++;
@@ -57,20 +59,37 @@ inline EE eltwise_infer_output_size_cpu(std::vector<TensorDesc> inputDesc, Tenso
                     inputDesc[i].dims[2], inputDesc[i].dims[1]);
             }
         }
+        // Kaldi tdnn special case
+        if (inputDesc[i].df == DF_NHWC && inputDesc[i].nDims == 3) {
+            nhwcCount++;
+            std::swap(inputDesc[i].dims[0], inputDesc[i].dims[1]);
+        }
     }
 
     U32 dim = inputDesc[arrayDimMax].nDims;
     *outputDesc = inputDesc[arrayDimMax];
 
-    if (nchwc8Count > 0 && nchwc8Count != num) {
-        outputDesc->df = DF_NCHW;
-    }
-
     for (U32 i = 0; i < dim; i++) {
         for (U32 j = 0; j < num; j++) {
             if (inputDesc[j].nDims > i) {
-                outputDesc->dims[i] = UNI_MAX(outputDesc->dims[i], inputDesc[j].dims[i]);
+                int max_value = UNI_MAX(outputDesc->dims[i], inputDesc[j].dims[i]);
+                int min_value = UNI_MIN(outputDesc->dims[i], inputDesc[j].dims[i]);
+                if (max_value % min_value == 0) {
+                    outputDesc->dims[i] = max_value;
+                } else {
+                    outputDesc->dims[i] = min_value;
+                }
             }
+        }
+    }
+    if (nchwc8Count > 0 && nchwc8Count != num) {
+        outputDesc->df = DF_NCHW;
+    }
+    if (nchwc8Count > 0 && nhwcCount > 0) {
+        outputDesc->df = DF_NCHWC8;
+        if (outputDesc->nDims == 3) {
+            *outputDesc = tensor4df(outputDesc->dt, DF_NCHWC8, outputDesc->dims[2],
+                outputDesc->dims[1], outputDesc->dims[0], 1);
         }
     }
     return SUCCESS;
@@ -87,16 +106,11 @@ EE eltwise_infer_output_size(
     EE ret = NOT_SUPPORTED;
     if (IS_MALI_GPU(archInfo->arch)) {
 #ifdef _USE_MALI
-        std::vector<GCLMemDesc> gclmemInputDescs;
-        for (auto p : inputTensor) {
-            gclmemInputDescs.push_back(ocl_get_desc(*p));
-        }
+        std::vector<GCLMemDesc> gclmemInputDescs = ocl_get_descs_ptr(inputTensor);
         GCLMemDesc gclmemOutputDesc = ocl_get_desc(*outputTensor);
         ret = eltwise_infer_output_size_mali(
             inputDesc, &outputDesc, gclmemInputDescs.data(), &gclmemOutputDesc);
-        for (U32 i = 0; i < inputTensor.size(); i++) {
-            ocl_set_desc(inputTensor[i], gclmemInputDescs[i]);
-        }
+        ocl_set_descs(inputTensor, gclmemInputDescs);
         ocl_set_desc(outputTensor, gclmemOutputDesc);
 #endif
     } else {
@@ -110,18 +124,25 @@ EE eltwise_infer_forward_tmp_bytes(
     std::vector<Tensor> inputTensor, Tensor outputTensor, U32 *bytes, ArchInfo_t archInfo)
 {
     std::vector<TensorDesc> inputDesc = get_desc_from_tensors(inputTensor);
-    UNUSED(outputTensor);
-
-    *bytes = 0;
-    U32 nchwc8Count = 0;
-    for (U32 i = 0; i < inputDesc.size(); i++) {
-        if (inputDesc[i].df == DF_NCHWC8) {
-            nchwc8Count++;
-            *bytes += tensorNumBytes(inputDesc[i]);
-        }
-    }
-    if (nchwc8Count == inputDesc.size() || nchwc8Count == 0) {
+    TensorDesc outputDesc = outputTensor.get_desc();
+    if (IS_MALI_GPU(archInfo->arch)) {
+#ifdef _USE_MALI
+        std::vector<GCLMemDesc> gclmemInputDesc = ocl_get_descs(inputTensor);
+        CHECK_STATUS(eltwise_infer_forward_tmp_bytes_mali(inputDesc, gclmemInputDesc, bytes));
+#endif
+    } else {
+        std::set<DataFormat> nchw = {DF_NORMAL, DF_MTK, DF_MKT, DF_NCHW};
         *bytes = 0;
+        for (U32 i = 0; i < inputDesc.size(); i++) {
+            if (inputDesc[i].nDims <= 2 ||
+                (nchw.find(inputDesc[i].df) != nchw.end() && nchw.find(outputDesc.df) != nchw.end())) {
+                continue;
+            }
+            if (inputDesc[i].df != outputDesc.df ||
+                tensorNumElements(inputDesc[i]) != tensorNumElements(outputDesc)) {
+                *bytes += tensorNumBytes(inputDesc[i]);
+            }
+        }
     }
     return SUCCESS;
 }
@@ -169,7 +190,7 @@ EE eltwise(std::vector<Tensor> inputTensor,
 #ifdef _USE_MALI
     } else if (IS_MALI_GPU(arch)) {
         ret = eltwise_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc, input,
-            eltwiseDesc, outputDesc, (GCLMem_t)output);
+            eltwiseDesc, (GCLMem_t)tmp, outputDesc, (GCLMem_t)output);
 #endif
     }
     return ret;

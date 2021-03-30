@@ -190,7 +190,7 @@ EE depthwise_convolution_transform_filter(Tensor filterTensor,
     EE ret = NOT_SUPPORTED;
     if (IS_GENERAL(arch)) {
 #ifdef _USE_GENERAL
-        UNI_memcpy(filterTransformed, filter, tensorNumBytes(filterDesc));
+        UNI_MEMCPY(filterTransformed, filter, tensorNumBytes(filterDesc));
         ftmDesc = filterDesc;
         ret = SUCCESS;
 #endif

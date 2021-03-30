@@ -62,6 +62,14 @@ public:
         return SUCCESS;
     }
 
+    U32 infer_tmp_memory_size() override
+    {
+        Tensor inputTensor = this->inputTensors[0];
+        U32 bytes = 0;
+        CHECK_STATUS(normalization_infer_forward_tmp_bytes(inputTensor, &bytes, &this->archInfo));
+        return bytes;
+    }
+
     inline void run_prepare()
     {
         OCLContext::getInstance().handle.get()->curOpName = this->get_name();
@@ -70,7 +78,7 @@ public:
         Tensor biasTensor = this->biasTensors[0];
         Tensor outputTensor = this->outputTensors[0];
         CHECK_STATUS(layer_normalization(
-            inputTensor, weightTensor, biasTensor, outputTensor, &this->archInfo));
+            inputTensor, weightTensor, biasTensor, this->temp, outputTensor, &this->archInfo));
     }
 
     EE infer_output_tensors_size(

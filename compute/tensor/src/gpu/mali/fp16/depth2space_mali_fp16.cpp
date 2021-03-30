@@ -11,9 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "sys.h"
-#include "error.h"
-#include "types.h"
 #include "gpu/mali/fp16/depth2space_mali_fp16.h"
 
 inline EE depth2space_checkpara_mali_fp16(TensorDesc inputDesc, TensorDesc outputDesc)
@@ -37,7 +34,9 @@ inline EE depth2space_core_mali_fp16(GCLHandle_t handle,
 {
     UNUSED(outputDesc);
     U32 iw, ih, ic, in;
+    U32 oc;
     tensorSelectGet(inputDesc, NULL, NULL, &in, &ic, &ih, &iw);
+    tensorSelectGet(outputDesc, NULL, NULL, NULL, &oc, NULL, NULL);
     U32 iw_str, ih_str, iw_off, ih_off, iwh_str, ic_str;
     U32 ow_str, oh_str, ow_off, oh_off, owh_str;
     get_gclmem_dim(input->desc, &iw_str, &ih_str, &ic_str, &iw_off, &ih_off);
@@ -48,23 +47,30 @@ inline EE depth2space_core_mali_fp16(GCLHandle_t handle,
     inbuf = input->mem;
     outbuf = output->mem;
     tmp = tmpBuf->mem;
-    DataFormat memFormat = input->desc.memFormat;
+    DataFormat imf = input->desc.memFormat;
+    DataFormat omf = output->desc.memFormat;
 
-    if (memFormat == DF_NCWHC4 && p.blockSize == 2) {
+    if (imf == DF_NCWHC4 && p.blockSize == 2) {
         U32 gs[3] = {ih, iw, (ic_str + 3) / 4};
         U32 ls[3] = {0, 0, 0};
         U32 dim = 3;
         Kernel kernel;
-        CHECK_STATUS(gcl_create_kernel(handle, "depth2space_ncwhc4_2x2", &kernel));
+        char kernelname[128];
+        if (omf == DF_NCHW) {
+            sprintf(kernelname, "depth2space_ncwhc4_2x2_nchw");
+        } else {
+            sprintf(kernelname, "depth2space_ncwhc4_2x2");
+        }
+
+        CHECK_STATUS(gcl_create_kernel(handle, kernelname, &kernel));
         CHECK_STATUS(gcl_set_kernelArgs(kernel, p.blockSize, ih_str, iwh_str, ic_str, ih_off,
-            iw_off, oh_str, owh_str, oh_off, ow_off, ih, iw, inbuf, outbuf));
-        gcl_set_kernelVec(handle, kernel, dim, gs, ls, "depth2space_ncwhc4_2x2");
+            iw_off, oh_str, ow_str, owh_str, oh_off, ow_off, ih, iw, oc, inbuf, outbuf));
+        gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelname);
 #ifdef _DEBUG
-        CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, "depth2space_ncwhc4_2x2"));
+        CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelname));
 #endif
-        return SUCCESS;
-    } else if (memFormat == DF_NCHW || memFormat == DF_NCWHC4) {
-        if (memFormat == DF_NCWHC4) {
+    } else {
+        if (imf == DF_NCWHC4) {
             U32 gs0[3] = {ih, (iw + 3) / 4, (ic + 3) / 4};
             U32 ls0[3] = {0, 0, 0};
             U32 dim0 = 3;
@@ -91,9 +97,8 @@ inline EE depth2space_core_mali_fp16(GCLHandle_t handle,
 #ifdef _DEBUG
         CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, "depth2space_nchw"));
 #endif
-        return SUCCESS;
     }
-    return NOT_SUPPORTED;
+    return SUCCESS;
 }
 
 EE depth2space_infer_tmpBuf_size_mali_fp16(

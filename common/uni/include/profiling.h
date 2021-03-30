@@ -14,15 +14,9 @@
 #ifndef _H_PROFILING
 #define _H_PROFILING
 
-#include "ut_util.h"
+#include <string>
 
-std::string extract_class_function(std::string &&pretty_function);
-std::string extract_file_function(std::string &&pretty_function);
-
-#define __CLASS_FUNCTION__ extract_class_function(std::string(__PRETTY_FUNCTION__))
-#define __FILE_FUNCTION__ \
-    extract_file_function(std::string(__FILE__) + "::" + std::string(__FUNCTION__))
-
+double ut_time_ms();
 void ut_time_init();
 void ut_time_process(
     const std::string &name, const std::string &category, double time_start_ms, double time_end_ms);

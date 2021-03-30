@@ -11,45 +11,24 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string>
 #include <map>
 #include <vector>
 #include <algorithm>
+#include <sys/time.h>
 
 #include "profiling.h"
+#include "error.h"
 
 #ifdef _THREAD_SAFE
 pthread_mutex_t uniThreadMutex = PTHREAD_MUTEX_INITIALIZER;
 #endif
 
-std::string extract_class_function(std::string &&pretty_function)
+double ut_time_ms()
 {
-    auto pos = pretty_function.find('(');
-    if (pos != std::string::npos) {
-        pretty_function.erase(pretty_function.begin() + pos, pretty_function.end());
-    }
-
-    pos = pretty_function.rfind(' ');
-    if (pos != std::string::npos) {
-        pretty_function.erase(pretty_function.begin(), pretty_function.begin() + pos + 1);
-    }
-
-    return std::move(pretty_function);
-}
-
-std::string extract_file_function(std::string &&pretty_function)
-{
-    auto pos = pretty_function.find('(');
-    if (pos != std::string::npos) {
-        pretty_function.erase(pretty_function.begin() + pos, pretty_function.end());
-    }
-
-    pos = pretty_function.rfind('/');
-    if (pos != std::string::npos) {
-        pretty_function.erase(pretty_function.begin(), pretty_function.begin() + pos + 1);
-    }
-
-    return std::move(pretty_function);
+    struct timeval tv;
+    gettimeofday(&tv, NULL);
+    double time = tv.tv_sec * 1000.0 + tv.tv_usec / 1000.0;
+    return time;
 }
 
 std::map<std::string, double> time_statistics;
@@ -85,7 +64,7 @@ void ut_time_statistics()
         [&](const std::pair<std::string, double> &a, const std::pair<std::string, double> &b) {
             return (a.second > b.second);
         });
-    for (U32 i = 0; i < vec.size(); ++i) {
+    for (int i = 0; i < (int)vec.size(); ++i) {
         UNI_INFO_LOG("%s\t%lfms\n", vec[i].first.c_str(), vec[i].second);
     }
 }

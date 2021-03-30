@@ -14,7 +14,6 @@
 #include <arm_neon.h>
 #include <math.h>
 
-#include "types.h"
 #include "error.h"
 #include "cpu/arm/fp16/mmm_common.h"
 #include "cpu/arm/fp16/mmm.h"
@@ -98,6 +97,7 @@ inline void mmm_4x24_A76(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
         "ld1 {v14.8h, v15.8h, v16.8h}, [x26]\n"
 
         "mov x20, %3\n"
+        "cbz x20, 2f\n"
 
         "0:\n"
         // w- > v4, in0- > v2/v3/v1, out0=v5~v28
@@ -113,6 +113,7 @@ inline void mmm_4x24_A76(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
         "subs x20, x20, #0x2\n"
         "bne 0b\n"
 
+        "2:\n"
         "cbz %5, 1f\n"
         "ld1 {v2.8h}, [%1], #16\n" MMM_FMA_4x8_V5V14s3_V1xV0
         "ld1 {v3.8h}, [%1], #16\n" MMM_FMA_4x8_V6V15s3_V2xV0 MMM_FMA_4x8_V7V16s3_V3xV0
@@ -187,6 +188,7 @@ inline void mmm_8x4_A76(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
                  "ld1 {v14.h}[7], [x26], #2\n"
 
                  "mov x20, %3\n"
+                 "cbz x20, 2f\n"
 
                  "0:\n"
                  "ld1 {v4.4h}, [%1], #8\n"
@@ -196,6 +198,7 @@ inline void mmm_8x4_A76(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
                  "subs x20, x20, 0x2\n"
                  "bne 0b\n"
 
+                 "2:\n"
                  "cbz %5, 1f\n" MMM_FMA_4x8_V5V14s3_V1xV0
 
                  "1:\n"
@@ -267,6 +270,7 @@ inline void mmm_4x8_A76(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
                  "ld1 {v14.8h}, [x26]\n"
 
                  "mov x20, %3\n"
+                 "cbz x20, 2f\n"
 
                  "0:\n"
                  "ld1 {v29.8h}, [%1], #16\n"
@@ -276,6 +280,7 @@ inline void mmm_4x8_A76(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
                  "subs x20, x20, 0x2\n"
                  "bne 0b\n"
 
+                 "2:\n"
                  "cbz %5, 1f\n" MMM_FMA_4x8_V5V14s3_V1xV0
 
                  "1:\n"
@@ -308,6 +313,7 @@ inline void mmm_4x4_A76(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
                  "ld1 {v14.4h}, [x26]\n"
 
                  "mov x20, %3\n"
+                 "cbz x20, 2f\n"
 
                  "0:\n"
                  "ld1 {v29.4h}, [%1], #8\n"
@@ -317,6 +323,7 @@ inline void mmm_4x4_A76(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
                  "subs x20, x20, 0x2\n"
                  "bne 0b\n"
 
+                 "2:\n"
                  "cbz %5, 1f\n" MMM_FMA_4x8_V5V14s3_V1xV0
 
                  "1:\n"
@@ -358,6 +365,7 @@ inline void mmm_8x8_A76(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
 
                  "ld1 {v1.8h}, [%1], #16\n"
                  "ld1 {v0.8h}, [%2], #16\n"
+                 "cbz x20, 2f\n"
 
                  "0:\n"
                  "ld1 {v29.8h}, [%1], #16\n"
@@ -369,6 +377,7 @@ inline void mmm_8x8_A76(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
                  "subs x20, x20, 0x2\n"
                  "bne 0b\n"
 
+                 "2:\n"
                  "cbz %5, 1f\n" MMM_FMA_4x8_V5V14s3_V1xV0 MMM_FMA_4x8_V17V26s3_V1xV0
 
                  "1:\n"
@@ -420,6 +429,7 @@ inline void mmm_8x24_A76(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
         "ld1 {v26.8h, v27.8h, v28.8h}, [x26]\n"
 
         "mov x20, %3\n"
+        "cbz x20, 2f\n"
 
         "0:\n"
         // w- > v4, in0- > v2/v3/v1, out0=v5~v28
@@ -441,6 +451,7 @@ inline void mmm_8x24_A76(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
 
         "bne 0b\n"
 
+        "2:\n"
         "cbz %5, 1f\n"
         "ld1 {v2.8h}, [%1], #16\n"
         "ld1 {v3.8h}, [%1], #16\n" MMM_FMA_4x8_V5V14s3_V1xV0 MMM_FMA_4x8_V17V26s3_V1xV0

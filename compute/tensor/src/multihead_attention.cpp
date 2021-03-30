@@ -79,16 +79,15 @@ EE multihead_attention_infer_forward_algorithm(Tensor inputTensor,
             outputDesc, ((MaliPara_t)(archInfo->archPara))->forwardRunInfo);
 #endif
     } else {
-        UNUSED(inputTensor);
-        UNUSED(filterTensor);
+        UNUSED(inputDesc);
+        UNUSED(filterDesc);
         UNUSED(multiplyAlpha);
         UNUSED(multiplyBeta);
         UNUSED(firstFCSliceNum);
         UNUSED(matmulSliceLen);
         UNUSED(eltwiseWithLayerNormIn);
         UNUSED(activation);
-        UNUSED(outputTensor);
-        UNUSED(archInfo);
+        UNUSED(outputDesc);
     }
     return ret;
 }
@@ -112,13 +111,12 @@ EE multihead_attention_infer_forward_tmp_bytes(Tensor inputTensor,
             ((MaliPara_t)(archInfo->archPara))->forwardRunInfo);
 #endif
     } else {
-        UNUSED(inputTensor);
-        UNUSED(filterTensor);
+        UNUSED(inputDesc);
+        UNUSED(filterDesc);
         UNUSED(eltwiseWithLayerNormIn);
         UNUSED(firstFCSliceNum);
         UNUSED(matmulSliceLen);
         UNUSED(bytes);
-        UNUSED(archInfo);
     }
     return ret;
 }
@@ -210,7 +208,7 @@ EE multihead_attention(Tensor inputTensor,
 #endif
     } else {
         UNUSED(inputDesc);
-        UNUSED(filterTensor);
+        UNUSED(filterDesc);
         UNUSED(biasTensor);
         UNUSED(layerNormAlpha);
         UNUSED(layerNormBeta);
@@ -221,7 +219,8 @@ EE multihead_attention(Tensor inputTensor,
         UNUSED(eltwiseWithLayerNormIn);
         UNUSED(activation);
         UNUSED(tmpTensor);
-        UNUSED(outputTensor);
+        UNUSED(outputDesc);
+        UNUSED(output);
     }
     return ret;
 }

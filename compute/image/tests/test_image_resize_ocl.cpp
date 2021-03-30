@@ -11,7 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "types.h"
 #include "image.h"
 #include "ut_util.h"
 #include "gcl.h"
@@ -66,11 +65,10 @@ int resizeTest(int argc, char *argv[], DataType dt)
     archInfo_org.arch = CPU_GENERAL;
 
     TensorDesc inputDesc_cpu, inputDesc_gpu, outputDesc_cpu, outputDesc_gpu;
-    ResizeDesc resizeDesc;
     inputDesc_cpu = tensor4df(dt, DF_NCHW, in, ic, ih, iw);
     inputDesc_gpu = tensor4df(dt, DF_NCHW, in, ic, ih, iw);
 
-    resizeDesc.paramDT = DT_F32;
+    DataType paramDT = DT_F32;
     F32 scales[2];
     scales[0] = (F32)oh / (F32)ih;
     scales[1] = (F32)ow / (F32)iw;
@@ -86,12 +84,15 @@ int resizeTest(int argc, char *argv[], DataType dt)
     Tensor tmpTensorCpu;
     U32 outputBytes;
     CHECK_STATUS(resize_infer_output_size(
-        &inputTensorCpu, resizeDesc, scales, &outputTensorCpu, &outputBytes, &archInfo_org));
+        &inputTensorCpu, paramDT, scales, &outputTensorCpu, &outputBytes, &archInfo_org));
     outputTensorCpu.alloc();
 
+    ResizeParamSpec p;
+    p.mode = LINEAR;
+    p.trans_mode = ALIGN_CORNERS;
     // naive implement
     // CPU output
-    CHECK_STATUS(resize(inputTensorCpu, tmpTensorCpu, outputTensorCpu, &archInfo_org));
+    CHECK_STATUS(resize(inputTensorCpu, tmpTensorCpu, outputTensorCpu, p, &archInfo_org));
     std::shared_ptr<GCLHandle> handleSharedPtr = OCLContext::getInstance().handle;
     ;
     GCLHandle_t handle = handleSharedPtr.get();
@@ -108,7 +109,7 @@ int resizeTest(int argc, char *argv[], DataType dt)
     archInfo.archPara = &maliPara;
 
     CHECK_STATUS(resize_infer_output_size(
-        &inputTensor, resizeDesc, scales, &outputTensor, &outputBytes, &archInfo));
+        &inputTensor, paramDT, scales, &outputTensor, &outputBytes, &archInfo));
     U32 maxBytes = 0;
     U32 tmpBytes = 0;
 
@@ -120,9 +121,9 @@ int resizeTest(int argc, char *argv[], DataType dt)
     GCLMem_t tmpbuf = alloc_bytes(tmpTensor, maxBytes);
     CHECK_STATUS(ocl_set_input(handle, input, inputDesc_gpu, input_cpu, tmpbuf, true));
 
-    CHECK_STATUS(resize(inputTensor, tmpTensor, outputTensor, &archInfo));
+    CHECK_STATUS(resize(inputTensor, tmpTensor, outputTensor, p, &archInfo));
     /*warp up*/
-    UNI_INFO_LOG("Warp up gpu:\n")
+    UNI_INFO_LOG("warm up gpu:\n")
     for (U32 i = 0; i < 2; i++) {
         CHECK_STATUS(gcl_run_kernelVec(handle));
     }

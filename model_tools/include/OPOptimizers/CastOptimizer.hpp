@@ -14,22 +14,28 @@
 #ifndef _H_CastOPTIMIZER
 #define _H_CastOPTIMIZER
 
-#include "model_tools.h"
 #include "OPOptimizer.hpp"
 
 class CastOptimizer : public OPOptimizer {
     bool optimize(ModelSpec *spec) override
     {
-        // const int queryNum = 3;
-        // OperatorType queryOps[queryNum] = {OT_Conv, OT_FC, OT_Deconvolution};
-
         bool hasOptimized = false;
         for (int i = 1; i < spec->num_operator_specs; i++) {
             if (spec->ops[i].type == OT_Cast) {
-                // rewrite the relationship
-                // the op[i-1].output ==> op[i+1].input
-                str_copy(spec->ops[i + 1].input_tensors_name[0],
-                    spec->ops[i - 1].output_tensors_name[0], NAME_LEN);
+                if (spec->ops[i].ps.cast_spec.targetDt == DT_I32) {
+                    continue;
+                }
+                std::string castInput = std::string(spec->ops[i].input_tensors_name[0]);
+                std::string castOutput = std::string(spec->ops[i].output_tensors_name[0]);
+
+                for (int k = 0; k < (int)(spec->ops[i + 1].num_inputs); k++) {
+                    if (spec->ops[i + 1].input_tensors_name[k] == castOutput) {
+                        str_copy(
+                            spec->ops[i + 1].input_tensors_name[k], castInput.c_str(), NAME_LEN);
+                        break;
+                    }
+                }
+
                 hasOptimized = true;
                 // cut off the op[i] input and output information
                 for (U32 j = 0; j < spec->ops[i].num_inputs; j++) {
@@ -41,7 +47,7 @@ class CastOptimizer : public OPOptimizer {
                 }
                 spec->ops[i].num_outputs = 0;
 
-                setOperatorInvalid(spec, i);
+                setOperatorInvalid(spec, i, true);
             }
         }
         return hasOptimized;

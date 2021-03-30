@@ -17,7 +17,7 @@
 #include "sys.h"
 #include "error.h"
 #include "thread_affinity.h"
-#include "types.h"
+
 #include "cpu/arm/fp32/arm_functions_fp32.h"
 
 EE convolution_transform_filter_fp32(TensorDesc filterDesc,
@@ -117,14 +117,19 @@ EE deconvolution_transform_filter_fp32(TensorDesc filterDesc,
     TensorDesc *ftmDesc,
     F32 *filterTransformed);
 
-EE pooling_c8_fp32(const F32 *input,
-    U32 stride,
-    int hstart,
-    int hend,
-    int wstart,
-    int wend,
-    F32 *output,
-    PoolingParamSpec poolingParamSpec);
+EE pooling_c8_fp32(I32 tstart,
+    I32 tend,
+    I32 hstart,
+    I32 hend,
+    I32 wstart,
+    I32 wend,
+    I32 poolSize,
+    const F32 *input,
+    I32 it,
+    I32 ih,
+    I32 iw,
+    PoolingParamSpec p,
+    F32 *output);
 
 EE pooling_bp_c8_fp32(const F32 *input,
     int hstart,
@@ -181,6 +186,38 @@ EE eltwise_fp32(std::vector<void *> input,
     EltwiseMode eltwiseMode);
 
 EE rnncell_fp32(TensorDesc xDesc,
+    const void *currentX,
+    const TensorDesc *filterDesc,
+    const void **filter,
+    const TensorDesc *biasDesc,
+    const void **bias,
+    void *state,
+    U32 tmpBytes,
+    void *tmp,
+    RNNParamSpec rnnParamSpec,
+    U32 batchStrideX,
+    U32 batchStrideH,
+    TensorDesc hDesc,
+    void *output,
+    Arch arch);
+
+EE lstmcell_fp32(TensorDesc xDesc,
+    const void *currentX,
+    const TensorDesc *filterDesc,
+    const void **filter,
+    const TensorDesc *biasDesc,
+    const void **bias,
+    void *state,
+    U32 tmpBytes,
+    void *tmp,
+    RNNParamSpec rnnParamSpec,
+    U32 batchStrideX,
+    U32 batchStrideH,
+    TensorDesc hDesc,
+    void *output,
+    Arch arch);
+
+EE grucell_fp32(TensorDesc xDesc,
     const void *currentX,
     const TensorDesc *filterDesc,
     const void **filter,

@@ -63,8 +63,8 @@ public:
         modelWeightTensor->resize(weightDesc);
 
         bool set_ptr = false;
+        modelWeightTensor->alloc();
         if (modelPtr != nullptr) {
-            modelWeightTensor->alloc();
             memcpy(
                 ((CpuMemory *)(modelWeightTensor->get_memory()))->get_ptr(), modelPtr, weightBytes);
             *modelPtrShared = std::shared_ptr<U8>(*modelPtrShared, modelPtr + weightBytes);
@@ -72,8 +72,8 @@ public:
         } else {
             auto curOpWs = this->get_weightspec();
             if (curOpWs.weight != nullptr) {
-                ((CpuMemory *)(modelWeightTensor->get_memory()))
-                    ->set_shared_ptr(std::shared_ptr<U8>(curOpWs.weight));
+                memcpy(((CpuMemory *)(modelWeightTensor->get_memory()))->get_ptr(), curOpWs.weight,
+                    weightBytes);
                 set_ptr = true;
             }
         }

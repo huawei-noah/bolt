@@ -71,6 +71,18 @@ inline EE pooling_infer_output_size_cpu(
                 1;
             break;
         }
+        case TF_SAME: {
+            ot = (U32)(ceil((double(it) / p.stride_t)));
+            oh = (U32)(ceil((double(ih) / p.stride_h)));
+            ow = (U32)(ceil((double(iw) / p.stride_w)));
+            break;
+        }
+        case TF_VALID: {
+            ot = (U32)(ceil((double(it - p.kernel_t + 1) / p.stride_t)));
+            oh = (U32)(ceil((double(ih - p.kernel_h + 1) / p.stride_h)));
+            ow = (U32)(ceil((double(iw - p.kernel_w + 1) / p.stride_w)));
+            break;
+        }
         default: {
             ret = NOT_SUPPORTED;
             break;
@@ -146,14 +158,7 @@ EE pooling(Tensor inputTensor,
     TensorDesc outDescCPU = outputDesc;
     U8 *outputCPU = (U8 *)output;
     if (DF_NCHWC8 != inputDesc.df && IS_CPU(arch)) {
-        int channelAxis = 0;
-        if (tensorIs4d(inputDesc)) {
-            channelAxis = 2;
-        } else if (tensorIs5d(inputDesc)) {
-            channelAxis = 3;
-        } else {
-            return NOT_SUPPORTED;
-        }
+        int channelAxis = inputDesc.nDims - 2;
         U32 paddedC = (inputDesc.dims[channelAxis] + 7) / 8 * 8;
         inDescCPU.dims[channelAxis] = paddedC;
         inDescCPU.df = DF_NCHWC8;

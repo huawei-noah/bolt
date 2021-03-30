@@ -1188,6 +1188,14 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         v.s2 = 1.0 / (1.0 + exp(-1.0 * v.s2)); \
         v.s3 = 1.0 / (1.0 + exp(-1.0 * v.s3)); \
     }
+#elif defined(USE_ABS)
+#define ACTIVATION_V4(v)                       \
+    {                                          \
+        v.s0 = fabs(v.s0); \
+        v.s1 = fabs(v.s1); \
+        v.s2 = fabs(v.s2); \
+        v.s3 = fabs(v.s3); \
+    }
 #else
 #define ACTIVATION_V1(v) \
     {}
@@ -1224,6 +1232,52 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
 
 #define ACTIVATION_ARRAY8(v) \
     {}
+#endif
+/*
+* eltwise
+*/
+#if defined(USE_SUM)
+#define ELTWISE_V4(v, res) \
+    {                      \
+        res.s0 += v.s0;    \
+        res.s1 += v.s1;    \
+        res.s2 += v.s2;    \
+        res.s3 += v.s3;    \
+    }
+#elif defined(USE_SUB)
+#define ELTWISE_V4(v, res) \
+    {                      \
+        res.s0 -= v.s0;    \
+        res.s1 -= v.s1;    \
+        res.s2 -= v.s2;    \
+        res.s3 -= v.s3;    \
+    }
+#elif defined(USE_PROD)
+#define ELTWISE_V4(v, res) \
+    {                      \
+        res.s0 *= v.s0;    \
+        res.s1 *= v.s1;    \
+        res.s2 *= v.s2;    \
+        res.s3 *= v.s3;    \
+    }
+#elif defined(USE_DIV)
+#define ELTWISE_V4(v, res) \
+    {                      \
+        res.s0 /= v.s0;    \
+        res.s1 /= v.s1;    \
+        res.s2 /= v.s2;    \
+        res.s3 /= v.s3;    \
+    }
+#elif defined(USE_MAX)
+#define ELTWISE_V4(v, res)  \
+    {                       \
+        res = fmax(res, v); \
+    }
+#elif defined(USE_MIN)
+#define ELTWISE_V4(v, res)  \
+    {                       \
+        res = fmin(res, v); \
+    }
 #endif
 
 /*
@@ -1433,9 +1487,14 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         V[0] = vload4(off, buf);                  \
     }
 
-#define GEMM_SET_C_BIAS_X(v, reg) \
-    {                             \
-        SET_REG_ARRAY1(v, reg);   \
+#define GEMM_SET_C_BIAS_A_X(v, reg) \
+    {                               \
+        SET_REG_ARRAY1(v, reg);     \
+    }
+
+#define GEMM_SET_C_BIAS_B_X(v, reg) \
+    {                               \
+        reg[0] = v[0];              \
     }
 
 #define GEMM_SET_C_EDGE_ZERO_X(reg, ex) \
@@ -1461,9 +1520,9 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         MUL_REG_NORMAL_ARRAY1(a, b, reg); \
     }
 
-#define GEMM_STORE_C_X(v, off, buf)    \
-    {                                  \
-        STORE_BUF_ARRAY1(v, off, buf); \
+#define GEMM_STORE_C_X(v, off, ex, buf) \
+    {                                   \
+        STORE_BUF_ARRAY1(v, off, buf);  \
     }
 
 #define GEMM_NT_LOAD_B(v, off, str, buf) \
@@ -1477,9 +1536,15 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         V[1] = vload4(off + str, buf);            \
     }
 
-#define GEMM_SET_C_BIAS_X(v, reg) \
-    {                             \
-        SET_REG_ARRAY2(v, reg);   \
+#define GEMM_SET_C_BIAS_A_X(v, reg) \
+    {                               \
+        SET_REG_ARRAY2(v, reg);     \
+    }
+
+#define GEMM_SET_C_BIAS_B_X(v, reg) \
+    {                               \
+        reg[0] = v[0];              \
+        reg[1] = v[1];              \
     }
 
 #define GEMM_SET_C_EDGE_ZERO_X(reg, ex) \
@@ -1507,9 +1572,13 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         MUL_REG_NORMAL_ARRAY2(a, b, reg); \
     }
 
-#define GEMM_STORE_C_X(v, off, buf)    \
-    {                                  \
-        STORE_BUF_ARRAY2(v, off, buf); \
+#define GEMM_STORE_C_X(v, off, ex, buf)    \
+    {                                      \
+        if (ex > 1) {                      \
+            STORE_BUF_ARRAY2(v, off, buf); \
+        } else {                           \
+            STORE_BUF_ARRAY1(v, off, buf); \
+        }                                  \
     }
 
 #define GEMM_NT_LOAD_B(v, off, str, buf) \
@@ -1525,9 +1594,16 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         V[2] = vload4(off + str * 2, buf);        \
     }
 
-#define GEMM_SET_C_BIAS_X(v, reg) \
-    {                             \
-        SET_REG_ARRAY3(v, reg);   \
+#define GEMM_SET_C_BIAS_A_X(v, reg) \
+    {                               \
+        SET_REG_ARRAY3(v, reg);     \
+    }
+
+#define GEMM_SET_C_BIAS_B_X(v, reg) \
+    {                               \
+        reg[0] = v[0];              \
+        reg[1] = v[1];              \
+        reg[2] = v[2];              \
     }
 
 #define GEMM_SET_C_EDGE_ZERO_X(reg, ex) \
@@ -1557,9 +1633,15 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         MUL_REG_NORMAL_ARRAY3(a, b, reg); \
     }
 
-#define GEMM_STORE_C_X(v, off, buf)    \
-    {                                  \
-        STORE_BUF_ARRAY3(v, off, buf); \
+#define GEMM_STORE_C_X(v, off, ex, buf)    \
+    {                                      \
+        if (ex > 2) {                      \
+            STORE_BUF_ARRAY3(v, off, buf); \
+        } else if (ex > 1) {               \
+            STORE_BUF_ARRAY2(v, off, buf); \
+        } else {                           \
+            STORE_BUF_ARRAY1(v, off, buf); \
+        }                                  \
     }
 
 #define GEMM_NT_LOAD_B(v, off, str, buf)    \
@@ -1577,9 +1659,17 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         V[3] = vload4(off + str * 3, buf);        \
     }
 
-#define GEMM_SET_C_BIAS_X(v, reg) \
-    {                             \
-        SET_REG_ARRAY4(v, reg);   \
+#define GEMM_SET_C_BIAS_A_X(v, reg) \
+    {                               \
+        SET_REG_ARRAY4(v, reg);     \
+    }
+
+#define GEMM_SET_C_BIAS_B_X(v, reg) \
+    {                               \
+        reg[0] = v[0];              \
+        reg[1] = v[1];              \
+        reg[2] = v[2];              \
+        reg[3] = v[3];              \
     }
 
 #define GEMM_SET_C_EDGE_ZERO_X(reg, ex) \
@@ -1611,9 +1701,17 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         MUL_REG_NORMAL_ARRAY4(a, b, reg); \
     }
 
-#define GEMM_STORE_C_X(v, off, buf)    \
-    {                                  \
-        STORE_BUF_ARRAY4(v, off, buf); \
+#define GEMM_STORE_C_X(v, off, ex, buf)    \
+    {                                      \
+        if (ex > 3) {                      \
+            STORE_BUF_ARRAY4(v, off, buf); \
+        } else if (ex > 2) {               \
+            STORE_BUF_ARRAY3(v, off, buf); \
+        } else if (ex > 1) {               \
+            STORE_BUF_ARRAY2(v, off, buf); \
+        } else {                           \
+            STORE_BUF_ARRAY1(v, off, buf); \
+        }                                  \
     }
 
 #define GEMM_NT_LOAD_B(v, off, str, buf)    \
@@ -1633,9 +1731,18 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         V[4] = vload4(off + str * 4, buf);        \
     }
 
-#define GEMM_SET_C_BIAS_X(v, reg) \
-    {                             \
-        SET_REG_ARRAY5(v, reg);   \
+#define GEMM_SET_C_BIAS_A_X(v, reg) \
+    {                               \
+        SET_REG_ARRAY5(v, reg);     \
+    }
+
+#define GEMM_SET_C_BIAS_B_X(v, reg) \
+    {                               \
+        reg[0] = v[0];              \
+        reg[1] = v[1];              \
+        reg[2] = v[2];              \
+        reg[3] = v[3];              \
+        reg[4] = v[4];              \
     }
 
 #define GEMM_SET_C_EDGE_ZERO_X(reg, ex) \
@@ -1669,9 +1776,19 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         MUL_REG_NORMAL_ARRAY5(a, b, reg); \
     }
 
-#define GEMM_STORE_C_X(v, off, buf)    \
-    {                                  \
-        STORE_BUF_ARRAY5(v, off, buf); \
+#define GEMM_STORE_C_X(v, off, ex, buf)    \
+    {                                      \
+        if (ex > 4) {                      \
+            STORE_BUF_ARRAY5(v, off, buf); \
+        } else if (ex > 3) {               \
+            STORE_BUF_ARRAY4(v, off, buf); \
+        } else if (ex > 2) {               \
+            STORE_BUF_ARRAY3(v, off, buf); \
+        } else if (ex > 1) {               \
+            STORE_BUF_ARRAY2(v, off, buf); \
+        } else {                           \
+            STORE_BUF_ARRAY1(v, off, buf); \
+        }                                  \
     }
 
 #define GEMM_NT_LOAD_B(v, off, str, buf)    \
@@ -1693,9 +1810,19 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         V[5] = vload4(off + str * 5, buf);        \
     }
 
-#define GEMM_SET_C_BIAS_X(v, reg) \
-    {                             \
-        SET_REG_ARRAY6(v, reg);   \
+#define GEMM_SET_C_BIAS_A_X(v, reg) \
+    {                               \
+        SET_REG_ARRAY6(v, reg);     \
+    }
+
+#define GEMM_SET_C_BIAS_B_X(v, reg) \
+    {                               \
+        reg[0] = v[0];              \
+        reg[1] = v[1];              \
+        reg[2] = v[2];              \
+        reg[3] = v[3];              \
+        reg[4] = v[4];              \
+        reg[5] = v[5];              \
     }
 
 #define GEMM_SET_C_EDGE_ZERO_X(reg, ex) \
@@ -1731,9 +1858,21 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         MUL_REG_NORMAL_ARRAY6(a, b, reg); \
     }
 
-#define GEMM_STORE_C_X(v, off, buf)    \
-    {                                  \
-        STORE_BUF_ARRAY6(v, off, buf); \
+#define GEMM_STORE_C_X(v, off, ex, buf)    \
+    {                                      \
+        if (ex > 5) {                      \
+            STORE_BUF_ARRAY6(v, off, buf); \
+        } else if (ex > 4) {               \
+            STORE_BUF_ARRAY5(v, off, buf); \
+        } else if (ex > 3) {               \
+            STORE_BUF_ARRAY4(v, off, buf); \
+        } else if (ex > 2) {               \
+            STORE_BUF_ARRAY3(v, off, buf); \
+        } else if (ex > 1) {               \
+            STORE_BUF_ARRAY2(v, off, buf); \
+        } else {                           \
+            STORE_BUF_ARRAY1(v, off, buf); \
+        }                                  \
     }
 
 #define GEMM_NT_LOAD_B(v, off, str, buf)    \
@@ -1757,9 +1896,20 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         V[6] = vload4(off + str * 6, buf);        \
     }
 
-#define GEMM_SET_C_BIAS_X(v, reg) \
-    {                             \
-        SET_REG_ARRAY7(v, reg);   \
+#define GEMM_SET_C_BIAS_A_X(v, reg) \
+    {                               \
+        SET_REG_ARRAY7(v, reg);     \
+    }
+
+#define GEMM_SET_C_BIAS_B_X(v, reg) \
+    {                               \
+        reg[0] = v[0];              \
+        reg[1] = v[1];              \
+        reg[2] = v[2];              \
+        reg[3] = v[3];              \
+        reg[4] = v[4];              \
+        reg[5] = v[5];              \
+        reg[6] = v[6];              \
     }
 
 #define GEMM_SET_C_EDGE_ZERO_X(reg, ex) \
@@ -1797,9 +1947,23 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         MUL_REG_NORMAL_ARRAY7(a, b, reg); \
     }
 
-#define GEMM_STORE_C_X(v, off, buf)    \
-    {                                  \
-        STORE_BUF_ARRAY7(v, off, buf); \
+#define GEMM_STORE_C_X(v, off, ex, buf)    \
+    {                                      \
+        if (ex > 6) {                      \
+            STORE_BUF_ARRAY7(v, off, buf); \
+        } else if (ex > 5) {               \
+            STORE_BUF_ARRAY6(v, off, buf); \
+        } else if (ex > 4) {               \
+            STORE_BUF_ARRAY5(v, off, buf); \
+        } else if (ex > 3) {               \
+            STORE_BUF_ARRAY4(v, off, buf); \
+        } else if (ex > 2) {               \
+            STORE_BUF_ARRAY3(v, off, buf); \
+        } else if (ex > 1) {               \
+            STORE_BUF_ARRAY2(v, off, buf); \
+        } else {                           \
+            STORE_BUF_ARRAY1(v, off, buf); \
+        }                                  \
     }
 
 #define GEMM_NT_LOAD_B(v, off, str, buf)    \
@@ -1825,9 +1989,21 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         V[7] = vload4(off + str * 7, buf);        \
     }
 
-#define GEMM_SET_C_BIAS_X(v, reg) \
-    {                             \
-        SET_REG_ARRAY8(v, reg);   \
+#define GEMM_SET_C_BIAS_A_X(v, reg) \
+    {                               \
+        SET_REG_ARRAY8(v, reg);     \
+    }
+
+#define GEMM_SET_C_BIAS_B_X(v, reg) \
+    {                               \
+        reg[0] = v[0];              \
+        reg[1] = v[1];              \
+        reg[2] = v[2];              \
+        reg[3] = v[3];              \
+        reg[4] = v[4];              \
+        reg[5] = v[5];              \
+        reg[6] = v[6];              \
+        reg[7] = v[7];              \
     }
 
 #define GEMM_SET_C_EDGE_ZERO_X(reg, ex) \
@@ -1867,9 +2043,25 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         MUL_REG_NORMAL_ARRAY8(a, b, reg); \
     }
 
-#define GEMM_STORE_C_X(v, off, buf)    \
-    {                                  \
-        STORE_BUF_ARRAY8(v, off, buf); \
+#define GEMM_STORE_C_X(v, off, ex, buf)    \
+    {                                      \
+        if (ex > 7) {                      \
+            STORE_BUF_ARRAY8(v, off, buf); \
+        } else if (ex > 6) {               \
+            STORE_BUF_ARRAY7(v, off, buf); \
+        } else if (ex > 5) {               \
+            STORE_BUF_ARRAY6(v, off, buf); \
+        } else if (ex > 4) {               \
+            STORE_BUF_ARRAY5(v, off, buf); \
+        } else if (ex > 3) {               \
+            STORE_BUF_ARRAY4(v, off, buf); \
+        } else if (ex > 2) {               \
+            STORE_BUF_ARRAY3(v, off, buf); \
+        } else if (ex > 1) {               \
+            STORE_BUF_ARRAY2(v, off, buf); \
+        } else {                           \
+            STORE_BUF_ARRAY1(v, off, buf); \
+        }                                  \
     }
 
 #define GEMM_NT_LOAD_B(v, off, str, buf)    \
@@ -1952,14 +2144,19 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         LOAD_BUF_ARRAY1(v, off, buf); \
     }
 
-#define GEMM_SET_C_BIAS(v, reg)          \
-    {                                    \
-        GEMM_SET_C_BIAS_X(v[0], reg[0]); \
+#define GEMM_SET_C_BIAS_A(v, reg)          \
+    {                                      \
+        GEMM_SET_C_BIAS_A_X(v[0], reg[0]); \
     }
 
-#define GEMM_SET_C_ZERO(reg)          \
-    {                                 \
-        GEMM_SET_C_BIAS_X(0, reg[0]); \
+#define GEMM_SET_C_BIAS_B(v, reg)       \
+    {                                   \
+        GEMM_SET_C_BIAS_B_X(v, reg[0]); \
+    }
+
+#define GEMM_SET_C_ZERO(reg)            \
+    {                                   \
+        GEMM_SET_C_BIAS_A_X(0, reg[0]); \
     }
 
 #define GEMM_SET_C_EDGE_ZERO_H(reg, ey) \
@@ -1980,9 +2177,9 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         GEMM_MUL_C_X(a, b, reg[0]); \
     }
 
-#define GEMM_STORE_C(v, off, str, buf)  \
-    {                                   \
-        GEMM_STORE_C_X(v[0], off, buf); \
+#define GEMM_STORE_C(v, off, str, ex, ey, buf) \
+    {                                          \
+        GEMM_STORE_C_X(v[0], off, ex, buf);    \
     }
 
 #define GEMM_NT_LOAD_A(v, off, str, buf) \
@@ -1995,21 +2192,27 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         LOAD_BUF_ARRAY2(v, off, buf); \
     }
 
-#define GEMM_SET_C_BIAS(v, reg)          \
-    {                                    \
-        GEMM_SET_C_BIAS_X(v[0], reg[0]); \
-        GEMM_SET_C_BIAS_X(v[1], reg[1]); \
+#define GEMM_SET_C_BIAS_A(v, reg)          \
+    {                                      \
+        GEMM_SET_C_BIAS_A_X(v[0], reg[0]); \
+        GEMM_SET_C_BIAS_A_X(v[1], reg[1]); \
     }
 
-#define GEMM_SET_C_ZERO(reg)          \
-    {                                 \
-        GEMM_SET_C_BIAS_X(0, reg[0]); \
-        GEMM_SET_C_BIAS_X(0, reg[1]); \
+#define GEMM_SET_C_BIAS_B(v, reg)       \
+    {                                   \
+        GEMM_SET_C_BIAS_B_X(v, reg[0]); \
+        GEMM_SET_C_BIAS_B_X(v, reg[1]); \
+    }
+
+#define GEMM_SET_C_ZERO(reg)            \
+    {                                   \
+        GEMM_SET_C_BIAS_A_X(0, reg[0]); \
+        GEMM_SET_C_BIAS_A_X(0, reg[1]); \
     }
 
 #define GEMM_SET_C_EDGE_ZERO_H(reg, ey) \
     {                                   \
-        GEMM_SET_C_BIAS_X(0, reg[1]);   \
+        GEMM_SET_C_BIAS_A_X(0, reg[1]); \
     }
 
 #define GEMM_SET_C_EDGE_ZERO_W(reg, ex)     \
@@ -2037,10 +2240,11 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         GEMM_MUL_C_X(a, b, reg[1]); \
     }
 
-#define GEMM_STORE_C(v, off, str, buf)        \
-    {                                         \
-        GEMM_STORE_C_X(v[0], off, buf);       \
-        GEMM_STORE_C_X(v[1], off + str, buf); \
+#define GEMM_STORE_C(v, off, str, ex, ey, buf)        \
+    {                                                 \
+        GEMM_STORE_C_X(v[0], off, ex, buf);           \
+        if (ey > 1)                                   \
+            GEMM_STORE_C_X(v[1], off + str, ex, buf); \
     }
 
 #define GEMM_NT_LOAD_A(v, off, str, buf) \
@@ -2054,25 +2258,32 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         LOAD_BUF_ARRAY3(v, off, buf); \
     }
 
-#define GEMM_SET_C_BIAS(v, reg)          \
-    {                                    \
-        GEMM_SET_C_BIAS_X(v[0], reg[0]); \
-        GEMM_SET_C_BIAS_X(v[1], reg[1]); \
-        GEMM_SET_C_BIAS_X(v[2], reg[2]); \
+#define GEMM_SET_C_BIAS_A(v, reg)          \
+    {                                      \
+        GEMM_SET_C_BIAS_A_X(v[0], reg[0]); \
+        GEMM_SET_C_BIAS_A_X(v[1], reg[1]); \
+        GEMM_SET_C_BIAS_A_X(v[2], reg[2]); \
     }
 
-#define GEMM_SET_C_ZERO(reg)          \
-    {                                 \
-        GEMM_SET_C_BIAS_X(0, reg[0]); \
-        GEMM_SET_C_BIAS_X(0, reg[1]); \
-        GEMM_SET_C_BIAS_X(0, reg[2]); \
+#define GEMM_SET_C_BIAS_B(v, reg)       \
+    {                                   \
+        GEMM_SET_C_BIAS_B_X(v, reg[0]); \
+        GEMM_SET_C_BIAS_B_X(v, reg[1]); \
+        GEMM_SET_C_BIAS_B_X(v, reg[2]); \
     }
 
-#define GEMM_SET_C_EDGE_ZERO_H(reg, ey)   \
-    {                                     \
-        if (ey > 1)                       \
-            GEMM_SET_C_BIAS_X(0, reg[1]); \
-        GEMM_SET_C_BIAS_X(0, reg[2]);     \
+#define GEMM_SET_C_ZERO(reg)            \
+    {                                   \
+        GEMM_SET_C_BIAS_A_X(0, reg[0]); \
+        GEMM_SET_C_BIAS_A_X(0, reg[1]); \
+        GEMM_SET_C_BIAS_A_X(0, reg[2]); \
+    }
+
+#define GEMM_SET_C_EDGE_ZERO_H(reg, ey)     \
+    {                                       \
+        if (ey > 1)                         \
+            GEMM_SET_C_BIAS_A_X(0, reg[1]); \
+        GEMM_SET_C_BIAS_A_X(0, reg[2]);     \
     }
 
 #define GEMM_SET_C_EDGE_ZERO_W(reg, ex)     \
@@ -2096,11 +2307,13 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         GEMM_MUL_C_X(a, b, reg[2]); \
     }
 
-#define GEMM_STORE_C(v, off, str, buf)            \
-    {                                             \
-        GEMM_STORE_C_X(v[0], off, buf);           \
-        GEMM_STORE_C_X(v[1], off + str, buf);     \
-        GEMM_STORE_C_X(v[2], off + str * 2, buf); \
+#define GEMM_STORE_C(v, off, str, ex, ey, buf)            \
+    {                                                     \
+        GEMM_STORE_C_X(v[0], off, ex, buf);               \
+        if (ey > 1)                                       \
+            GEMM_STORE_C_X(v[1], off + str, ex, buf);     \
+        if (ey > 2)                                       \
+            GEMM_STORE_C_X(v[2], off + str * 2, ex, buf); \
     }
 
 #define GEMM_NT_LOAD_A(v, off, str, buf)    \
@@ -2115,29 +2328,37 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         LOAD_BUF_ARRAY4(v, off, buf); \
     }
 
-#define GEMM_SET_C_BIAS(v, reg)          \
-    {                                    \
-        GEMM_SET_C_BIAS_X(v[0], reg[0]); \
-        GEMM_SET_C_BIAS_X(v[1], reg[1]); \
-        GEMM_SET_C_BIAS_X(v[2], reg[2]); \
-        GEMM_SET_C_BIAS_X(v[3], reg[3]); \
+#define GEMM_SET_C_BIAS_A(v, reg)          \
+    {                                      \
+        GEMM_SET_C_BIAS_A_X(v[0], reg[0]); \
+        GEMM_SET_C_BIAS_A_X(v[1], reg[1]); \
+        GEMM_SET_C_BIAS_A_X(v[2], reg[2]); \
+        GEMM_SET_C_BIAS_A_X(v[3], reg[3]); \
     }
 
-#define GEMM_SET_C_ZERO(reg)          \
-    {                                 \
-        GEMM_SET_C_BIAS_X(0, reg[0]); \
-        GEMM_SET_C_BIAS_X(0, reg[1]); \
-        GEMM_SET_C_BIAS_X(0, reg[2]); \
-        GEMM_SET_C_BIAS_X(0, reg[3]); \
+#define GEMM_SET_C_BIAS_B(v, reg)       \
+    {                                   \
+        GEMM_SET_C_BIAS_B_X(v, reg[0]); \
+        GEMM_SET_C_BIAS_B_X(v, reg[1]); \
+        GEMM_SET_C_BIAS_B_X(v, reg[2]); \
+        GEMM_SET_C_BIAS_B_X(v, reg[3]); \
     }
 
-#define GEMM_SET_C_EDGE_ZERO_H(reg, ey)   \
-    {                                     \
-        if (ey > 2)                       \
-            GEMM_SET_C_BIAS_X(0, reg[1]); \
-        if (ey > 1)                       \
-            GEMM_SET_C_BIAS_X(0, reg[2]); \
-        GEMM_SET_C_BIAS_X(0, reg[3]);     \
+#define GEMM_SET_C_ZERO(reg)            \
+    {                                   \
+        GEMM_SET_C_BIAS_A_X(0, reg[0]); \
+        GEMM_SET_C_BIAS_A_X(0, reg[1]); \
+        GEMM_SET_C_BIAS_A_X(0, reg[2]); \
+        GEMM_SET_C_BIAS_A_X(0, reg[3]); \
+    }
+
+#define GEMM_SET_C_EDGE_ZERO_H(reg, ey)     \
+    {                                       \
+        if (ey > 2)                         \
+            GEMM_SET_C_BIAS_A_X(0, reg[1]); \
+        if (ey > 1)                         \
+            GEMM_SET_C_BIAS_A_X(0, reg[2]); \
+        GEMM_SET_C_BIAS_A_X(0, reg[3]);     \
     }
 
 #define GEMM_SET_C_EDGE_ZERO_W(reg, ex)     \
@@ -2172,12 +2393,15 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         GEMM_MUL_C_X(a, b, reg[3]); \
     }
 
-#define GEMM_STORE_C(v, off, str, buf)            \
-    {                                             \
-        GEMM_STORE_C_X(v[0], off, buf);           \
-        GEMM_STORE_C_X(v[1], off + str, buf);     \
-        GEMM_STORE_C_X(v[2], off + str * 2, buf); \
-        GEMM_STORE_C_X(v[3], off + str * 3, buf); \
+#define GEMM_STORE_C(v, off, str, ex, ey, buf)            \
+    {                                                     \
+        GEMM_STORE_C_X(v[0], off, ex, buf);               \
+        if (ey > 1)                                       \
+            GEMM_STORE_C_X(v[1], off + str, ex, buf);     \
+        if (ey > 2)                                       \
+            GEMM_STORE_C_X(v[2], off + str * 2, ex, buf); \
+        if (ey > 3)                                       \
+            GEMM_STORE_C_X(v[3], off + str * 3, ex, buf); \
     }
 
 #define GEMM_NT_LOAD_A(v, off, str, buf)    \
@@ -2193,33 +2417,42 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         LOAD_BUF_ARRAY5(v, off, buf); \
     }
 
-#define GEMM_SET_C_BIAS(v, reg)          \
-    {                                    \
-        GEMM_SET_C_BIAS_X(v[0], reg[0]); \
-        GEMM_SET_C_BIAS_X(v[1], reg[1]); \
-        GEMM_SET_C_BIAS_X(v[2], reg[2]); \
-        GEMM_SET_C_BIAS_X(v[3], reg[3]); \
-        GEMM_SET_C_BIAS_X(v[4], reg[4]); \
+#define GEMM_SET_C_BIAS_A(v, reg)          \
+    {                                      \
+        GEMM_SET_C_BIAS_A_X(v[0], reg[0]); \
+        GEMM_SET_C_BIAS_A_X(v[1], reg[1]); \
+        GEMM_SET_C_BIAS_A_X(v[2], reg[2]); \
+        GEMM_SET_C_BIAS_A_X(v[3], reg[3]); \
+        GEMM_SET_C_BIAS_A_X(v[4], reg[4]); \
     }
 
-#define GEMM_SET_C_ZERO(reg)          \
-    {                                 \
-        GEMM_SET_C_BIAS_X(0, reg[0]); \
-        GEMM_SET_C_BIAS_X(0, reg[1]); \
-        GEMM_SET_C_BIAS_X(0, reg[2]); \
-        GEMM_SET_C_BIAS_X(0, reg[3]); \
-        GEMM_SET_C_BIAS_X(0, reg[4]); \
+#define GEMM_SET_C_BIAS_B(v, reg)       \
+    {                                   \
+        GEMM_SET_C_BIAS_B_X(v, reg[0]); \
+        GEMM_SET_C_BIAS_B_X(v, reg[1]); \
+        GEMM_SET_C_BIAS_B_X(v, reg[2]); \
+        GEMM_SET_C_BIAS_B_X(v, reg[3]); \
+        GEMM_SET_C_BIAS_B_X(v, reg[4]); \
     }
 
-#define GEMM_SET_C_EDGE_ZERO_H(reg, ey)   \
-    {                                     \
-        if (ey > 3)                       \
-            GEMM_SET_C_BIAS_X(0, reg[1]); \
-        if (ey > 2)                       \
-            GEMM_SET_C_BIAS_X(0, reg[2]); \
-        if (ey > 1)                       \
-            GEMM_SET_C_BIAS_X(0, reg[3]); \
-        GEMM_SET_C_BIAS_X(0, reg[4]);     \
+#define GEMM_SET_C_ZERO(reg)            \
+    {                                   \
+        GEMM_SET_C_BIAS_A_X(0, reg[0]); \
+        GEMM_SET_C_BIAS_A_X(0, reg[1]); \
+        GEMM_SET_C_BIAS_A_X(0, reg[2]); \
+        GEMM_SET_C_BIAS_A_X(0, reg[3]); \
+        GEMM_SET_C_BIAS_A_X(0, reg[4]); \
+    }
+
+#define GEMM_SET_C_EDGE_ZERO_H(reg, ey)     \
+    {                                       \
+        if (ey > 3)                         \
+            GEMM_SET_C_BIAS_A_X(0, reg[1]); \
+        if (ey > 2)                         \
+            GEMM_SET_C_BIAS_A_X(0, reg[2]); \
+        if (ey > 1)                         \
+            GEMM_SET_C_BIAS_A_X(0, reg[3]); \
+        GEMM_SET_C_BIAS_A_X(0, reg[4]);     \
     }
 
 #define GEMM_SET_C_EDGE_ZERO_W(reg, ex)     \
@@ -2249,13 +2482,17 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         GEMM_MUL_C_X(a, b, reg[4]); \
     }
 
-#define GEMM_STORE_C(v, off, str, buf)            \
-    {                                             \
-        GEMM_STORE_C_X(v[0], off, buf);           \
-        GEMM_STORE_C_X(v[1], off + str, buf);     \
-        GEMM_STORE_C_X(v[2], off + str * 2, buf); \
-        GEMM_STORE_C_X(v[3], off + str * 3, buf); \
-        GEMM_STORE_C_X(v[4], off + str * 4, buf); \
+#define GEMM_STORE_C(v, off, str, ex, ey, buf)            \
+    {                                                     \
+        GEMM_STORE_C_X(v[0], off, ex, buf);               \
+        if (ey > 1)                                       \
+            GEMM_STORE_C_X(v[1], off + str, ex, buf);     \
+        if (ey > 2)                                       \
+            GEMM_STORE_C_X(v[2], off + str * 2, ex, buf); \
+        if (ey > 3)                                       \
+            GEMM_STORE_C_X(v[3], off + str * 3, ex, buf); \
+        if (ey > 4)                                       \
+            GEMM_STORE_C_X(v[4], off + str * 4, ex, buf); \
     }
 
 #define GEMM_NT_LOAD_A(v, off, str, buf)    \
@@ -2272,37 +2509,47 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         LOAD_BUF_ARRAY6(v, off, buf); \
     }
 
-#define GEMM_SET_C_BIAS(v, reg)          \
-    {                                    \
-        GEMM_SET_C_BIAS_X(v[0], reg[0]); \
-        GEMM_SET_C_BIAS_X(v[1], reg[1]); \
-        GEMM_SET_C_BIAS_X(v[2], reg[2]); \
-        GEMM_SET_C_BIAS_X(v[3], reg[3]); \
-        GEMM_SET_C_BIAS_X(v[4], reg[4]); \
-        GEMM_SET_C_BIAS_X(v[5], reg[5]); \
+#define GEMM_SET_C_BIAS_A(v, reg)          \
+    {                                      \
+        GEMM_SET_C_BIAS_A_X(v[0], reg[0]); \
+        GEMM_SET_C_BIAS_A_X(v[1], reg[1]); \
+        GEMM_SET_C_BIAS_A_X(v[2], reg[2]); \
+        GEMM_SET_C_BIAS_A_X(v[3], reg[3]); \
+        GEMM_SET_C_BIAS_A_X(v[4], reg[4]); \
+        GEMM_SET_C_BIAS_A_X(v[5], reg[5]); \
     }
 
-#define GEMM_SET_C_ZERO(reg)          \
-    {                                 \
-        GEMM_SET_C_BIAS_X(0, reg[0]); \
-        GEMM_SET_C_BIAS_X(0, reg[1]); \
-        GEMM_SET_C_BIAS_X(0, reg[2]); \
-        GEMM_SET_C_BIAS_X(0, reg[3]); \
-        GEMM_SET_C_BIAS_X(0, reg[4]); \
-        GEMM_SET_C_BIAS_X(0, reg[5]); \
+#define GEMM_SET_C_BIAS_B(v, reg)       \
+    {                                   \
+        GEMM_SET_C_BIAS_B_X(v, reg[0]); \
+        GEMM_SET_C_BIAS_B_X(v, reg[1]); \
+        GEMM_SET_C_BIAS_B_X(v, reg[2]); \
+        GEMM_SET_C_BIAS_B_X(v, reg[3]); \
+        GEMM_SET_C_BIAS_B_X(v, reg[4]); \
+        GEMM_SET_C_BIAS_B_X(v, reg[5]); \
     }
 
-#define GEMM_SET_C_EDGE_ZERO_H(reg, ey)   \
-    {                                     \
-        if (ey > 4)                       \
-            GEMM_SET_C_BIAS_X(0, reg[1]); \
-        if (ey > 3)                       \
-            GEMM_SET_C_BIAS_X(0, reg[2]); \
-        if (ey > 2)                       \
-            GEMM_SET_C_BIAS_X(0, reg[3]); \
-        if (ey > 1)                       \
-            GEMM_SET_C_BIAS_X(0, reg[4]); \
-        GEMM_SET_C_BIAS_X(0, reg[5]);     \
+#define GEMM_SET_C_ZERO(reg)            \
+    {                                   \
+        GEMM_SET_C_BIAS_A_X(0, reg[0]); \
+        GEMM_SET_C_BIAS_A_X(0, reg[1]); \
+        GEMM_SET_C_BIAS_A_X(0, reg[2]); \
+        GEMM_SET_C_BIAS_A_X(0, reg[3]); \
+        GEMM_SET_C_BIAS_A_X(0, reg[4]); \
+        GEMM_SET_C_BIAS_A_X(0, reg[5]); \
+    }
+
+#define GEMM_SET_C_EDGE_ZERO_H(reg, ey)     \
+    {                                       \
+        if (ey > 4)                         \
+            GEMM_SET_C_BIAS_A_X(0, reg[1]); \
+        if (ey > 3)                         \
+            GEMM_SET_C_BIAS_A_X(0, reg[2]); \
+        if (ey > 2)                         \
+            GEMM_SET_C_BIAS_A_X(0, reg[3]); \
+        if (ey > 1)                         \
+            GEMM_SET_C_BIAS_A_X(0, reg[4]); \
+        GEMM_SET_C_BIAS_A_X(0, reg[5]);     \
     }
 
 #define GEMM_SET_C_EDGE_ZERO_W(reg, ex)     \
@@ -2335,14 +2582,19 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         GEMM_MUL_C_X(a, b, reg[5]); \
     }
 
-#define GEMM_STORE_C(v, off, str, buf)            \
-    {                                             \
-        GEMM_STORE_C_X(v[0], off, buf);           \
-        GEMM_STORE_C_X(v[1], off + str, buf);     \
-        GEMM_STORE_C_X(v[2], off + str * 2, buf); \
-        GEMM_STORE_C_X(v[3], off + str * 3, buf); \
-        GEMM_STORE_C_X(v[4], off + str * 4, buf); \
-        GEMM_STORE_C_X(v[5], off + str * 5, buf); \
+#define GEMM_STORE_C(v, off, str, ex, ey, buf)            \
+    {                                                     \
+        GEMM_STORE_C_X(v[0], off, ex, buf);               \
+        if (ey > 1)                                       \
+            GEMM_STORE_C_X(v[1], off + str, ex, buf);     \
+        if (ey > 2)                                       \
+            GEMM_STORE_C_X(v[2], off + str * 2, ex, buf); \
+        if (ey > 3)                                       \
+            GEMM_STORE_C_X(v[3], off + str * 3, ex, buf); \
+        if (ey > 4)                                       \
+            GEMM_STORE_C_X(v[4], off + str * 4, ex, buf); \
+        if (ey > 5)                                       \
+            GEMM_STORE_C_X(v[5], off + str * 5, ex, buf); \
     }
 
 #define GEMM_NT_LOAD_A(v, off, str, buf)    \
@@ -2360,41 +2612,52 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         LOAD_BUF_ARRAY7(v, off, buf); \
     }
 
-#define GEMM_SET_C_BIAS(v, reg)          \
-    {                                    \
-        GEMM_SET_C_BIAS_X(v[0], reg[0]); \
-        GEMM_SET_C_BIAS_X(v[1], reg[1]); \
-        GEMM_SET_C_BIAS_X(v[2], reg[2]); \
-        GEMM_SET_C_BIAS_X(v[3], reg[3]); \
-        GEMM_SET_C_BIAS_X(v[4], reg[4]); \
-        GEMM_SET_C_BIAS_X(v[5], reg[5]); \
-        GEMM_SET_C_BIAS_X(v[6], reg[6]); \
+#define GEMM_SET_C_BIAS_A(v, reg)          \
+    {                                      \
+        GEMM_SET_C_BIAS_A_X(v[0], reg[0]); \
+        GEMM_SET_C_BIAS_A_X(v[1], reg[1]); \
+        GEMM_SET_C_BIAS_A_X(v[2], reg[2]); \
+        GEMM_SET_C_BIAS_A_X(v[3], reg[3]); \
+        GEMM_SET_C_BIAS_A_X(v[4], reg[4]); \
+        GEMM_SET_C_BIAS_A_X(v[5], reg[5]); \
+        GEMM_SET_C_BIAS_A_X(v[6], reg[6]); \
     }
 
-#define GEMM_SET_C_ZERO(reg)          \
-    {                                 \
-        GEMM_SET_C_BIAS_X(0, reg[0]); \
-        GEMM_SET_C_BIAS_X(0, reg[1]); \
-        GEMM_SET_C_BIAS_X(0, reg[2]); \
-        GEMM_SET_C_BIAS_X(0, reg[3]); \
-        GEMM_SET_C_BIAS_X(0, reg[4]); \
-        GEMM_SET_C_BIAS_X(0, reg[5]); \
-        GEMM_SET_C_BIAS_X(0, reg[6]); \
+#define GEMM_SET_C_BIAS_B(v, reg)       \
+    {                                   \
+        GEMM_SET_C_BIAS_B_X(v, reg[0]); \
+        GEMM_SET_C_BIAS_B_X(v, reg[1]); \
+        GEMM_SET_C_BIAS_B_X(v, reg[2]); \
+        GEMM_SET_C_BIAS_B_X(v, reg[3]); \
+        GEMM_SET_C_BIAS_B_X(v, reg[4]); \
+        GEMM_SET_C_BIAS_B_X(v, reg[5]); \
+        GEMM_SET_C_BIAS_B_X(v, reg[6]); \
     }
 
-#define GEMM_SET_C_EDGE_ZERO_H(reg, ey)   \
-    {                                     \
-        if (ey > 5)                       \
-            GEMM_SET_C_BIAS_X(0, reg[1]); \
-        if (ey > 4)                       \
-            GEMM_SET_C_BIAS_X(0, reg[2]); \
-        if (ey > 3)                       \
-            GEMM_SET_C_BIAS_X(0, reg[3]); \
-        if (ey > 2)                       \
-            GEMM_SET_C_BIAS_X(0, reg[4]); \
-        if (ey > 1)                       \
-            GEMM_SET_C_BIAS_X(0, reg[5]); \
-        GEMM_SET_C_BIAS_X(0, reg[6]);     \
+#define GEMM_SET_C_ZERO(reg)            \
+    {                                   \
+        GEMM_SET_C_BIAS_A_X(0, reg[0]); \
+        GEMM_SET_C_BIAS_A_X(0, reg[1]); \
+        GEMM_SET_C_BIAS_A_X(0, reg[2]); \
+        GEMM_SET_C_BIAS_A_X(0, reg[3]); \
+        GEMM_SET_C_BIAS_A_X(0, reg[4]); \
+        GEMM_SET_C_BIAS_A_X(0, reg[5]); \
+        GEMM_SET_C_BIAS_A_X(0, reg[6]); \
+    }
+
+#define GEMM_SET_C_EDGE_ZERO_H(reg, ey)     \
+    {                                       \
+        if (ey > 5)                         \
+            GEMM_SET_C_BIAS_A_X(0, reg[1]); \
+        if (ey > 4)                         \
+            GEMM_SET_C_BIAS_A_X(0, reg[2]); \
+        if (ey > 3)                         \
+            GEMM_SET_C_BIAS_A_X(0, reg[3]); \
+        if (ey > 2)                         \
+            GEMM_SET_C_BIAS_A_X(0, reg[4]); \
+        if (ey > 1)                         \
+            GEMM_SET_C_BIAS_A_X(0, reg[5]); \
+        GEMM_SET_C_BIAS_A_X(0, reg[6]);     \
     }
 
 #define GEMM_SET_C_EDGE_ZERO_W(reg, ex)     \
@@ -2430,15 +2693,21 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         GEMM_MUL_C_X(a, b, reg[6]); \
     }
 
-#define GEMM_STORE_C(v, off, str, buf)            \
-    {                                             \
-        GEMM_STORE_C_X(v[0], off, buf);           \
-        GEMM_STORE_C_X(v[1], off + str, buf);     \
-        GEMM_STORE_C_X(v[2], off + str * 2, buf); \
-        GEMM_STORE_C_X(v[3], off + str * 3, buf); \
-        GEMM_STORE_C_X(v[4], off + str * 4, buf); \
-        GEMM_STORE_C_X(v[5], off + str * 5, buf); \
-        GEMM_STORE_C_X(v[6], off + str * 6, buf); \
+#define GEMM_STORE_C(v, off, str, ex, ey, buf)            \
+    {                                                     \
+        GEMM_STORE_C_X(v[0], off, ex, buf);               \
+        if (ey > 1)                                       \
+            GEMM_STORE_C_X(v[1], off + str, ex, buf);     \
+        if (ey > 2)                                       \
+            GEMM_STORE_C_X(v[2], off + str * 2, ex, buf); \
+        if (ey > 3)                                       \
+            GEMM_STORE_C_X(v[3], off + str * 3, ex, buf); \
+        if (ey > 4)                                       \
+            GEMM_STORE_C_X(v[4], off + str * 4, ex, buf); \
+        if (ey > 5)                                       \
+            GEMM_STORE_C_X(v[5], off + str * 5, ex, buf); \
+        if (ey > 6)                                       \
+            GEMM_STORE_C_X(v[6], off + str * 6, ex, buf); \
     }
 
 #define GEMM_NT_LOAD_A(v, off, str, buf)    \
@@ -2457,45 +2726,57 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         LOAD_BUF_ARRAY8(v, off, buf); \
     }
 
-#define GEMM_SET_C_BIAS(v, reg)          \
-    {                                    \
-        GEMM_SET_C_BIAS_X(v[0], reg[0]); \
-        GEMM_SET_C_BIAS_X(v[1], reg[1]); \
-        GEMM_SET_C_BIAS_X(v[2], reg[2]); \
-        GEMM_SET_C_BIAS_X(v[3], reg[3]); \
-        GEMM_SET_C_BIAS_X(v[4], reg[4]); \
-        GEMM_SET_C_BIAS_X(v[5], reg[5]); \
-        GEMM_SET_C_BIAS_X(v[6], reg[6]); \
-        GEMM_SET_C_BIAS_X(v[7], reg[7]); \
+#define GEMM_SET_C_BIAS_A(v, reg)          \
+    {                                      \
+        GEMM_SET_C_BIAS_A_X(v[0], reg[0]); \
+        GEMM_SET_C_BIAS_A_X(v[1], reg[1]); \
+        GEMM_SET_C_BIAS_A_X(v[2], reg[2]); \
+        GEMM_SET_C_BIAS_A_X(v[3], reg[3]); \
+        GEMM_SET_C_BIAS_A_X(v[4], reg[4]); \
+        GEMM_SET_C_BIAS_A_X(v[5], reg[5]); \
+        GEMM_SET_C_BIAS_A_X(v[6], reg[6]); \
+        GEMM_SET_C_BIAS_A_X(v[7], reg[7]); \
     }
 
-#define GEMM_SET_C_ZERO(reg)          \
-    {                                 \
-        GEMM_SET_C_BIAS_X(0, reg[0]); \
-        GEMM_SET_C_BIAS_X(0, reg[1]); \
-        GEMM_SET_C_BIAS_X(0, reg[2]); \
-        GEMM_SET_C_BIAS_X(0, reg[3]); \
-        GEMM_SET_C_BIAS_X(0, reg[4]); \
-        GEMM_SET_C_BIAS_X(0, reg[5]); \
-        GEMM_SET_C_BIAS_X(0, reg[6]); \
-        GEMM_SET_C_BIAS_X(0, reg[7]); \
+#define GEMM_SET_C_BIAS_B(v, reg)       \
+    {                                   \
+        GEMM_SET_C_BIAS_B_X(v, reg[0]); \
+        GEMM_SET_C_BIAS_B_X(v, reg[1]); \
+        GEMM_SET_C_BIAS_B_X(v, reg[2]); \
+        GEMM_SET_C_BIAS_B_X(v, reg[3]); \
+        GEMM_SET_C_BIAS_B_X(v, reg[4]); \
+        GEMM_SET_C_BIAS_B_X(v, reg[5]); \
+        GEMM_SET_C_BIAS_B_X(v, reg[6]); \
+        GEMM_SET_C_BIAS_B_X(v, reg[7]); \
     }
 
-#define GEMM_SET_C_EDGE_ZERO_H(reg, ey)   \
-    {                                     \
-        if (ey > 6)                       \
-            GEMM_SET_C_BIAS_X(0, reg[1]); \
-        if (ey > 5)                       \
-            GEMM_SET_C_BIAS_X(0, reg[2]); \
-        if (ey > 4)                       \
-            GEMM_SET_C_BIAS_X(0, reg[3]); \
-        if (ey > 3)                       \
-            GEMM_SET_C_BIAS_X(0, reg[4]); \
-        if (ey > 2)                       \
-            GEMM_SET_C_BIAS_X(0, reg[5]); \
-        if (ey > 1)                       \
-            GEMM_SET_C_BIAS_X(0, reg[6]); \
-        GEMM_SET_C_BIAS_X(0, reg[7]);     \
+#define GEMM_SET_C_ZERO(reg)            \
+    {                                   \
+        GEMM_SET_C_BIAS_A_X(0, reg[0]); \
+        GEMM_SET_C_BIAS_A_X(0, reg[1]); \
+        GEMM_SET_C_BIAS_A_X(0, reg[2]); \
+        GEMM_SET_C_BIAS_A_X(0, reg[3]); \
+        GEMM_SET_C_BIAS_A_X(0, reg[4]); \
+        GEMM_SET_C_BIAS_A_X(0, reg[5]); \
+        GEMM_SET_C_BIAS_A_X(0, reg[6]); \
+        GEMM_SET_C_BIAS_A_X(0, reg[7]); \
+    }
+
+#define GEMM_SET_C_EDGE_ZERO_H(reg, ey)     \
+    {                                       \
+        if (ey > 6)                         \
+            GEMM_SET_C_BIAS_A_X(0, reg[1]); \
+        if (ey > 5)                         \
+            GEMM_SET_C_BIAS_A_X(0, reg[2]); \
+        if (ey > 4)                         \
+            GEMM_SET_C_BIAS_A_X(0, reg[3]); \
+        if (ey > 3)                         \
+            GEMM_SET_C_BIAS_A_X(0, reg[4]); \
+        if (ey > 2)                         \
+            GEMM_SET_C_BIAS_A_X(0, reg[5]); \
+        if (ey > 1)                         \
+            GEMM_SET_C_BIAS_A_X(0, reg[6]); \
+        GEMM_SET_C_BIAS_A_X(0, reg[7]);     \
     }
 
 #define GEMM_SET_C_EDGE_ZERO_W(reg, ex)     \
@@ -2546,16 +2827,23 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         GEMM_MUL_C_X(a, b, reg[7]); \
     }
 
-#define GEMM_STORE_C(v, off, str, buf)            \
-    {                                             \
-        GEMM_STORE_C_X(v[0], off, buf);           \
-        GEMM_STORE_C_X(v[1], off + str, buf);     \
-        GEMM_STORE_C_X(v[2], off + str * 2, buf); \
-        GEMM_STORE_C_X(v[3], off + str * 3, buf); \
-        GEMM_STORE_C_X(v[4], off + str * 4, buf); \
-        GEMM_STORE_C_X(v[5], off + str * 5, buf); \
-        GEMM_STORE_C_X(v[6], off + str * 6, buf); \
-        GEMM_STORE_C_X(v[7], off + str * 7, buf); \
+#define GEMM_STORE_C(v, off, str, ex, ey, buf)            \
+    {                                                     \
+        GEMM_STORE_C_X(v[0], off, ex, buf);               \
+        if (ey > 1)                                       \
+            GEMM_STORE_C_X(v[1], off + str, ex, buf);     \
+        if (ey > 2)                                       \
+            GEMM_STORE_C_X(v[2], off + str * 2, ex, buf); \
+        if (ey > 3)                                       \
+            GEMM_STORE_C_X(v[3], off + str * 3, ex, buf); \
+        if (ey > 4)                                       \
+            GEMM_STORE_C_X(v[4], off + str * 4, ex, buf); \
+        if (ey > 5)                                       \
+            GEMM_STORE_C_X(v[5], off + str * 5, ex, buf); \
+        if (ey > 6)                                       \
+            GEMM_STORE_C_X(v[6], off + str * 6, ex, buf); \
+        if (ey > 7)                                       \
+            GEMM_STORE_C_X(v[7], off + str * 7, ex, buf); \
     }
 
 #define GEMM_NT_LOAD_A(v, off, str, buf)    \
@@ -3421,4 +3709,59 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         SET_REG_ARRAY8(v, reg); \
     }
 #endif
+
+#if defined(DILATION2)
+#define LOAD_INPUT_EXCESS_DILATION2(reg, off, str, LN, buf) \
+    {                                                       \
+        reg[LN] = vload4(off + LN * str, buf);              \
+        reg[LN + 1] = vload4(off + (LN + 1) * str, buf);    \
+    }
+#if (ON == 3)
+#define UPDATE_REG_DILATION2(reg) \
+    {                             \
+        reg[0] = reg[2];          \
+    }
+#elif (ON == 4)
+#define UPDATE_REG_DILATION2(reg) \
+    {                             \
+        reg[0] = reg[2];          \
+        reg[1] = reg[3];          \
+    }
+#elif (ON == 5)
+#define UPDATE_REG_DILATION2(reg) \
+    {                             \
+        reg[0] = reg[2];          \
+        reg[1] = reg[3];          \
+        reg[2] = reg[4];          \
+    }
+#elif (ON == 6)
+#define UPDATE_REG_DILATION2(reg) \
+    {                             \
+        reg[0] = reg[2];          \
+        reg[1] = reg[3];          \
+        reg[2] = reg[4];          \
+        reg[3] = reg[5];          \
+    }
+#elif (ON == 7)
+#define UPDATE_REG_DILATION2(reg) \
+    {                             \
+        reg[0] = reg[2];          \
+        reg[1] = reg[3];          \
+        reg[2] = reg[4];          \
+        reg[3] = reg[5];          \
+        reg[4] = reg[6];          \
+    }
+#elif (ON == 8)
+#define UPDATE_REG_DILATION2(reg) \
+    {                             \
+        reg[0] = reg[2];          \
+        reg[1] = reg[3];          \
+        reg[2] = reg[4];          \
+        reg[3] = reg[5];          \
+        reg[4] = reg[6];          \
+        reg[5] = reg[7];          \
+    }
 #endif
+#endif
+
+#endif  //_KERNEL_DEF

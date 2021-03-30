@@ -99,11 +99,11 @@ EE fully_connected_infer_forward_algorithm(
         TensorDesc inputDesc = inputTensor.get_desc();
         TensorDesc filterDesc = filterTensor.get_desc();
         TensorDesc outputDesc = outputTensor.get_desc();
-        std::vector<TensorDesc> outputDescs;
-        outputDescs.push_back(outputDesc);
+        GCLMemDesc gclmemInputDesc = ocl_get_desc(inputTensor);
+        GCLMemDesc gclmemOutputDesc = ocl_get_desc(outputTensor);
         ret = fully_connected_infer_forward_algorithm_mali(
-            ((MaliPara_t)(archInfo->archPara))->handle, inputDesc, filterDesc, outputDescs,
-            ((MaliPara_t)(archInfo->archPara))->forwardRunInfo);
+            ((MaliPara_t)(archInfo->archPara))->handle, inputDesc, filterDesc, outputDesc,
+            gclmemInputDesc, gclmemOutputDesc, ((MaliPara_t)(archInfo->archPara))->forwardRunInfo);
 #endif
     } else {
         UNUSED(inputTensor);
@@ -230,6 +230,9 @@ EE fully_connected_transform_filter_kernel(TensorDesc inputDesc,
         }
     } else if (idf == DF_NCHWC8) {
         U32 align = 8;
+        if (ic % align != 0) {
+            align = 1;
+        }
         U32 ic_new = ic / align;
         T *f_ptr = (T *)filter;
         T *ftm_ptr = (T *)filterTransformed;
@@ -284,10 +287,8 @@ EE fully_connected_transform_filter(
     EE ret = NOT_SUPPORTED;
     if (IS_MALI_GPU(arch)) {
 #ifdef _USE_MALI
-        std::vector<GCLMem_t> filterTransVec;
-        filterTransVec.push_back((GCLMem_t)filterTransformed);
         ret = fully_connected_transform_filter_mali(((MaliPara_t)(archInfo->archPara))->handle,
-            filterDesc, (GCLMem_t)filter, &ftmDesc, filterTransVec,
+            filterDesc, (GCLMem_t)filter, &ftmDesc, (GCLMem_t)filterTransformed,
             ((MaliPara_t)(archInfo->archPara))->forwardRunInfo);
 #endif
     } else {
@@ -337,15 +338,10 @@ EE fully_connected(Tensor inputTensor,
     EE ret = NOT_SUPPORTED;
     if (IS_MALI_GPU(arch)) {
 #ifdef _USE_MALI
-        std::vector<GCLMem_t> filterVec;
-        std::vector<GCLMem_t> biasVec;
-        std::vector<GCLMem_t> outputVec;
-        filterVec.push_back((GCLMem_t)filter);
-        biasVec.push_back((GCLMem_t)bias);
-        outputVec.push_back((GCLMem_t)output);
         ret = fully_connected_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc,
-            (GCLMem_t)input, filterDesc, &filterVec, biasDesc, &biasVec, tmpBytes, (GCLMem_t)tmp,
-            outputDesc, &outputVec, ((MaliPara_t)(archInfo->archPara))->forwardRunInfo);
+            (GCLMem_t)input, filterDesc, (GCLMem_t)filter, biasDesc, (GCLMem_t)bias, tmpBytes,
+            (GCLMem_t)tmp, outputDesc, (GCLMem_t)output,
+            ((MaliPara_t)(archInfo->archPara))->forwardRunInfo);
 #endif
     } else {
         if (input == nullptr || filter == nullptr || output == nullptr) {
@@ -406,7 +402,6 @@ EE fully_connected(Tensor inputTensor,
 
         if (bias != nullptr) {
             CHECK_STATUS(tensor1dGet(biasDesc, &bdt, &bdf, &bw));
-
             if (bw != ow) {
                 CHECK_STATUS(NOT_MATCH);
             } else {

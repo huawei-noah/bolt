@@ -46,8 +46,8 @@ EE matrix_vector_multiply_transform_weight_int8(TensorDesc desc, INT8 *src, INT8
                 int base = i;
                 INT8 *basePtr = dst + i * K4;
                 for (int j = 0; j < (int)K; j++) {
-                    for (; i < (int)N; i++) {
-                        basePtr[(i - base) * K + j] = src[j * N + i];
+                    for (int k = base; k < (int)N; k++) {
+                        basePtr[(k - base) * K + j] = src[j * N + k];
                     }
                 }
             }

@@ -11,14 +11,7 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <iostream>
-#include <memory>
-#include <cstring>
 #include "image.h"
-#include "tensor_desc.h"
-#include "tensor.hpp"
-#include "types.h"
-#include "error.h"
 
 template <typename T>
 std::shared_ptr<Tensor> get_resize_image(
@@ -93,6 +86,8 @@ std::shared_ptr<Tensor> get_resize_image(
             return nullptr;
     }
 
+    ResizeParamSpec p;
+    p.mode = LINEAR;
     // consider the dataformat
     if (targetImageFormat == RGB_SC) {  // Specific for Birealnet18, scale short edge to 224 first
         F32 scale = 224.0 / UNI_MIN(height, width);
@@ -107,7 +102,7 @@ std::shared_ptr<Tensor> get_resize_image(
         TensorDesc scaledDesc = tensor4df(imageDt, imageDf, imageNum, imageChannel, height, width);
         scaleTensor.resize(scaledDesc);
         scaleTensor.alloc();
-        resize(rgbTensor, temp, scaleTensor, &archInfo);
+        resize(rgbTensor, temp, scaleTensor, p, &archInfo);
 
         U32 h0 = (U32)((height - 224) * 0.5);
         U32 w0 = (U32)((width - 224) * 0.5);
@@ -125,7 +120,7 @@ std::shared_ptr<Tensor> get_resize_image(
             }
         }
     } else if (targetImageFormat == RGB_RAW) {
-        resize(rgbTensor, temp, *transferSpaceTensor.get(), &archInfo);
+        resize(rgbTensor, temp, *transferSpaceTensor.get(), p, &archInfo);
     } else if (targetImageFormat == RGB_SC_RAW || targetImageFormat == BGR_SC_RAW) {
         F32 scale = 256.0 / UNI_MIN(height, width);
         if (height < width) {
@@ -139,7 +134,7 @@ std::shared_ptr<Tensor> get_resize_image(
         TensorDesc scaledDesc = tensor4df(imageDt, imageDf, imageNum, imageChannel, height, width);
         scaleTensor.resize(scaledDesc);
         scaleTensor.alloc();
-        resize(rgbTensor, temp, scaleTensor, &archInfo);
+        resize(rgbTensor, temp, scaleTensor, p, &archInfo);
 
         U32 h0 = (U32)((height - 224) * 0.5);
         U32 w0 = (U32)((width - 224) * 0.5);
@@ -156,7 +151,7 @@ std::shared_ptr<Tensor> get_resize_image(
         Tensor scaleTensor;
         scaleTensor.resize(imageDesc);
         scaleTensor.alloc();
-        resize(rgbTensor, temp, scaleTensor, &archInfo);
+        resize(rgbTensor, temp, scaleTensor, p, &archInfo);
 
         T *resized = (T *)get_ptr_from_tensor(scaleTensor, arch);
         for (U32 c : transform) {
@@ -239,29 +234,4 @@ std::shared_ptr<U8> gen_fake_image(TensorDesc inputDesc)
 
     std::shared_ptr<U8> val((U8 *)transferSpacePtr);
     return val;
-}
-
-std::shared_ptr<U8> load_fake_image(TensorDesc inputDesc)
-{
-    DataType dt = DT_F32;
-    DataFormat df;
-    U32 in, ic, ih, iw;
-    CHECK_STATUS(tensor4dGet(inputDesc, &dt, &df, &in, &ic, &ih, &iw));
-
-    switch (dt) {
-#ifdef __aarch64__
-        case DT_F16: {
-            return gen_fake_image<F16>(inputDesc);
-        }
-#endif
-#ifdef _USE_FP32
-        case DT_F32: {
-            return gen_fake_image<F32>(inputDesc);
-        }
-#endif
-        default: {
-            CHECK_STATUS(NOT_SUPPORTED);
-            return nullptr;
-        }
-    }
 }

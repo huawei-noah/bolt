@@ -16,9 +16,13 @@
 
 #include <vector>
 #include "sys.h"
-#include "types.h"
-#include "tensor.hpp"
-#include "tensor_computing_type.h"
+#include "parameter_spec.h"
+#include "tensor_auxiliary.h"
+#ifdef _USE_MALI
+#include "gcl.h"
+#include "ocl_desc_trans.h"
+#define ALIGN(len, align_num) ((len + align_num - 1) / align_num * align_num)
+#endif
 
 EE convolution_infer_output_size(Tensor *inputTensor,
     Tensor filterTensor,
@@ -58,7 +62,7 @@ EE convolution_infer_forward_tmp_bytes(Tensor inputTensor,
     U32 *bytes,
     ArchInfo_t archInfo);
 
-EE convolution(Tensor inputTensor,
+EE convolution(std::vector<Tensor> inputTensors,
     Tensor filterTensor,
     ConvolutionParamSpec convParamSpec,
     ConvolutionForwardAlgorithm algorithm,
@@ -323,8 +327,10 @@ EE softmax(Tensor inputTensor,
 
 EE softmax_infer_forward_tmp_bytes(Tensor inputTensor, U32 *bytes, ArchInfo_t archInfo);
 
-EE rnn_infer_output_size(
-    Tensor *inputTensor, RNNParamSpec rnnParamSpec, Tensor *outputTensor, ArchInfo_t archInfo);
+EE rnn_infer_output_size(std::vector<Tensor *> inputTensor,
+    RNNParamSpec rnnParamSpec,
+    std::vector<Tensor *> outputTensor,
+    ArchInfo_t archInfo);
 
 EE rnn_infer_forward_tmp_bytes(Tensor inputTensor,
     Tensor filterTensor,
@@ -364,6 +370,7 @@ EE rnncell_infer_forward_tmp_bytes(Tensor inputTensor,
 EE rnncell_infer_forward_algorithm(Tensor xTensor,
     Tensor filterTensor,
     Tensor biasTensor,
+    Tensor stateTensor,
     RNNParamSpec rnncellDesc,
     U32 batchStrideX,
     U32 batchStrideH,
@@ -391,6 +398,30 @@ EE scale(Tensor inputTensor,
     Tensor outputTensor,
     ArchInfo_t archInfo);
 
+EE batch_norm_infer_output_size(
+    Tensor *inputTensor, BatchNormParamSpec bnParamSpec, Tensor *outputTensor, ArchInfo_t archInfo);
+
+EE batch_norm_transform_filter_bytes(Tensor varianceTensor,
+    Tensor meanTensor,
+    BatchNormParamSpec bnParamSpec,
+    U32 *bytes,
+    ArchInfo_t archInfo);
+
+// transform batch norm weight to scale weight
+EE batch_norm_transform_filter(Tensor varianceTensor,
+    Tensor meanTensor,
+    BatchNormParamSpec bnParamSpec,
+    Tensor alphaTensor,
+    Tensor betaTensor,
+    ArchInfo_t archInfo);
+
+EE batch_norm(Tensor inputTensor,
+    Tensor alphaTensor,
+    Tensor betaTensor,
+    BatchNormParamSpec p,
+    Tensor outputTensor,
+    ArchInfo_t archInfo);
+
 EE prelu_infer_output_size(Tensor *inputTensor, Tensor *outputTensor, ArchInfo_t archInfo);
 
 EE prelu(Tensor inputTensor,
@@ -401,21 +432,41 @@ EE prelu(Tensor inputTensor,
 
 EE normalization_infer_output_size(Tensor *inputTensor, Tensor *outputTensor, ArchInfo_t archInfo);
 
+EE normalization_infer_forward_tmp_bytes(Tensor inputTensor, U32 *bytes, ArchInfo_t archInfo);
+
 EE layer_normalization(Tensor inputTensor,
     Tensor alphaTensor,
     Tensor betaTensor,
+    Tensor tmpTensor,
     Tensor outputTensor,
     ArchInfo_t archInfo);
 
 EE slice_infer_output_size(
     Tensor *inputTensor, SliceParamSpec p, std::vector<Tensor *> outputTensor, ArchInfo_t archInfo);
 
-EE slice(
-    Tensor inputTensor, SliceParamSpec p, std::vector<Tensor> outputTensor, ArchInfo_t archInfo);
+EE slice_infer_forward_tmp_bytes(Tensor inputTensor,
+    SliceParamSpec p,
+    std::vector<Tensor> outputTensor,
+    U32 *bytes,
+    ArchInfo_t archInfo);
+
+EE slice(Tensor inputTensor,
+    SliceParamSpec p,
+    Tensor tmpTensor,
+    std::vector<Tensor> outputTensor,
+    ArchInfo_t archInfo);
 
 EE tfslice_infer_output_size(
     Tensor *inputTensor, TfSliceParamSpec p, Tensor *outputTensor, ArchInfo_t archInfo);
 
+EE tfslice_infer_forward_tmp_bytes(
+    Tensor inputTensor, Tensor outputTensor, U32 *bytes, ArchInfo_t archInfo);
+
+EE tfslice(Tensor inputTensor,
+    TfSliceParamSpec p,
+    Tensor tmpTensor,
+    Tensor outputTensor,
+    ArchInfo_t archInfo);
 EE tfslice(Tensor inputTensor, TfSliceParamSpec p, Tensor outputTensor, ArchInfo_t archInfo);
 
 EE transpose_infer_output_size(
@@ -510,8 +561,11 @@ EE argmax_infer_forward_tmp_bytes(
 EE argmax(
     Tensor inputTensor, ArgMaxParamSpec p, Tensor tmpTensor, Tensor outputTensor, ArchInfo_t archInfo);
 
-EE reduction_infer_output_size(
-    Tensor *inputTensor, Tensor maskTensor, ReductionParamSpec p, Tensor *outputTensor);
+EE reduction_infer_output_size(Tensor *inputTensor,
+    Tensor maskTensor,
+    ReductionParamSpec p,
+    Tensor *outputTensor,
+    ArchInfo_t archInfo);
 
 EE reduction_infer_forward_tmp_bytes(
     Tensor inputTensor, ReductionParamSpec p, Tensor outputTensor, U32 *bytes, ArchInfo_t archInfo);
@@ -535,12 +589,18 @@ EE check(Tensor inputTensorA,
 EE squeeze_infer_output_size(
     Tensor *inputTensor, SqueezeParamSpec p, Tensor *outputTensor, ArchInfo_t archInfo);
 
-EE squeeze(Tensor inputTensor, Tensor outputTensor, ArchInfo_t archInfo);
+EE squeeze_infer_forward_tmp_bytes(
+    Tensor inputTensor, Tensor outputTensor, U32 *bytes, ArchInfo_t archInfo);
+
+EE squeeze(Tensor inputTensor, Tensor tmpTensor, Tensor outputTensor, ArchInfo_t archInfo);
 
 EE unsqueeze_infer_output_size(
     Tensor *inputTensor, UnsqueezeParamSpec p, Tensor *outputTensor, ArchInfo_t archInfo);
 
-EE unsqueeze(Tensor inputTensor, Tensor outputTensor, ArchInfo_t archInfo);
+EE unsqueeze_infer_forward_tmp_bytes(
+    Tensor inputTensor, Tensor outputTensor, U32 *bytes, ArchInfo_t archInfo);
+
+EE unsqueeze(Tensor inputTensor, Tensor tmpTensor, Tensor outputTensor, ArchInfo_t archInfo);
 
 EE space2depth_infer_output_size(Tensor *inputTensor, Tensor *outputTensor, ArchInfo_t archInfo);
 
@@ -683,8 +743,45 @@ EE tile_infer_output_size(
 
 EE tile(Tensor inputTensor, TileParamSpec tileParamSpec, Tensor outputTensor, ArchInfo_t archInfo);
 
+EE where_infer_output_size(Tensor *inputTensor, Tensor *outputTensor, ArchInfo_t archInfo);
+
+EE where(Tensor inputTensor,
+    Tensor conditionTensor,
+    Tensor yTensor,
+    Tensor outputTensor,
+    ArchInfo_t archInfo);
+
+EE cast_infer_output_size(
+    Tensor *inputTensor, Tensor *outputTensor, CastParamSpec p, ArchInfo_t archInfo);
+
+EE cast(Tensor inputTensor, Tensor outputTensor, CastParamSpec p, ArchInfo_t archInfo);
+
+EE equal_infer_output_size(Tensor *inputTensor, Tensor *outputTensor, ArchInfo_t archInfo);
+
+EE equal(Tensor inputTensor, Tensor compareTensor, Tensor outputTensor, ArchInfo_t archInfo);
+
 EE quantize_tensor(TensorDesc dDesc, const void *data, TensorDesc *qDesc, void *qData, void *scale);
 
+EE topk_infer_output_size(Tensor *inputTensor,
+    TopKParamSpec p,
+    Tensor *outputTensor,
+    Tensor *outputIndicesTensor,
+    ArchInfo_t archInfo);
+
+EE topk_infer_forward_tmp_bytes(
+    Tensor inputTensor, TopKParamSpec p, Tensor outputTensor, U32 *bytes, ArchInfo_t archInfo);
+
+EE topk(Tensor inputTensor,
+    TopKParamSpec p,
+    Tensor tmpTensor,
+    Tensor outputTensor,
+    Tensor outputIndicesTensor,
+    ArchInfo_t archInfo);
+
+EE cast_infer_output_size(
+    Tensor *inputTensor, CastParamSpec p, Tensor *outputTensor, ArchInfo_t archInfo);
+
+EE cast(Tensor inputTensor, CastParamSpec p, Tensor outputTensor, ArchInfo_t archInfo);
 #if defined(_USE_NEON) && defined(_USE_INT8)
 void dequantize_int8_to_fp16(U32 len, INT8 *q, F32 scale, F16 *d);
 

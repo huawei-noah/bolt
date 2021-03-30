@@ -128,11 +128,17 @@ public:
                 }
             } else {
                 this->val->desc = this->desc;  //TODO DELETE AFTER SPLITE DESC FROM GCLMEM
-                if (size > this->desc.byteSize) {
-                    size = this->desc.byteSize;
+                TensorDesc hostDesc = ((CpuMemory *)other)->get_desc();
+                if (this->mapped) {
+                    CHECK_STATUS(ocl_map_mem_write(OCLContext::getInstance().handle.get(),
+                        this->val.get(), this->desc, hostDesc, (U8 *)host_ptr));
+                } else {
+                    if (size > this->desc.byteSize) {
+                        size = this->desc.byteSize;
+                    }
+                    CHECK_STATUS(gcl_trans_memory(OCLContext::getInstance().handle.get(), host_ptr,
+                        this->val.get(), &size, HOST_TO_DEVICE_BUF, CL_TRUE));
                 }
-                CHECK_STATUS(gcl_trans_memory(OCLContext::getInstance().handle.get(), host_ptr,
-                    this->val.get(), &size, HOST_TO_DEVICE_BUF, CL_TRUE));
             }
         } else if (other->get_mem_type() == OCLMem) {
             if (!allocated) {
@@ -143,7 +149,14 @@ public:
                 GCLMemType dstMt = this->desc.memType;
                 void *srcPtr = ((OclMemory *)other)->get_ptr();
                 void *dstPtr = this->val.get();
-                if (srcMt != GCL_MEM_BUF && dstMt == GCL_MEM_BUF) {
+                if (srcMt == GCL_MEM_BUF && dstMt == GCL_MEM_BUF) {
+                    if (srcDesc.byteSize > this->desc.byteSize) {
+                        CHECK_STATUS(NOT_MATCH);
+                    }
+                    U32 size = srcDesc.byteSize;
+                    CHECK_STATUS(gcl_trans_memory(OCLContext::getInstance().handle.get(), srcPtr,
+                        dstPtr, &size, DEVICE_BUF_TO_BUF, CL_TRUE));
+                } else if (srcMt != GCL_MEM_BUF && dstMt == GCL_MEM_BUF) {
                     if (srcDesc.byteSize > this->desc.byteSize) {
                         CHECK_STATUS(NOT_MATCH);
                     }
@@ -193,11 +206,13 @@ public:
 
     void mapped_alloc()
     {
-        this->desc.flags = CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR;
-        this->desc.byteSize *= 2;
-        this->allocated = this->mapped;
-        this->mapped = true;
-        this->alloc();
+        if (!this->mapped) {
+            this->desc.flags = CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR;
+            this->desc.byteSize *= 2;
+            this->allocated = this->mapped;
+            this->mapped = true;
+            this->alloc();
+        }
     }
 
     void *get_mapped_ptr()
@@ -205,7 +220,7 @@ public:
         if (!mapped) {
             CHECK_STATUS(NOT_MATCH);
         }
-        ocl_map_mem(OCLContext::getInstance().handle.get(), this->val.get(), this->desc);
+        ocl_map_mem_read(OCLContext::getInstance().handle.get(), this->val.get(), this->desc);
         return this->val->mapPtrArray.back();
     }
 
@@ -231,7 +246,11 @@ public:
 
     U32 length() override
     {
-        return this->desc.num;
+        U32 num = 1;
+        for (U32 i = 0; i < this->desc.nDims; i++) {
+            num *= this->desc.dims[i];
+        }
+        return num;
     }
 
     U32 bytes() override
@@ -249,6 +268,9 @@ public:
         std::string line = "desc: " + gclMemDesc2Str(this->desc) + "data: \n";
 #ifdef _DEBUG
         DataType dt = (this->desc.dt == DT_U8) ? DT_F16 : this->desc.dt;
+        if (dt == DT_U32) {
+            dt = DT_I32;
+        }
         switch (dt) {
             case DT_F16:
                 line += gcl_check_data<F16>(
@@ -276,12 +298,27 @@ public:
     {
         F32 result = 0;
         if (this->mapped) {
-            F16 *res = (F16 *)this->val->mapPtrArray.back();
-            result = res[index];
+            if (desc.dt == DT_F16) {
+                F16 *res = (F16 *)this->val->mapPtrArray.back();
+                result = res[index];
+            } else if (desc.dt == DT_F32) {
+                F32 *res = (F32 *)this->val->mapPtrArray.back();
+                result = res[index];
+            } else if (desc.dt == DT_I32 || desc.dt == DT_U32) {
+                I32 *res = (I32 *)this->val->mapPtrArray.back();
+                result = res[index];
+            } else {
+                UNI_ERROR_LOG("Get mapped ptr data type not support\n");
+            }
         } else {
             UNI_ERROR_LOG("Currently not support to get element on OCL memory\n");
         }
         return result;
+    }
+
+    bool check_mapped()
+    {
+        return this->mapped;
     }
 
 private:

@@ -21,6 +21,7 @@
 #include "cpu/x86/tensor_computing_x86.h"
 #endif
 #include "cpu/tensor_computing_cpu.h"
+#include "tensor_transpose.h"
 
 EE convolution_cpu(TensorDesc inputDesc,
     void *input,
@@ -39,17 +40,24 @@ EE convolution_cpu(TensorDesc inputDesc,
     ActivationParamSpec activationDesc,
     Arch arch)
 {
+    if (inputDesc.df == DF_NHWC) {
+        TensorDesc tmpTensorDesc = inputDesc;
+        tmpTensorDesc.df = DF_NCHW;
+        transformToNCHW(inputDesc, input, tmpTensorDesc, tmp);
+        input = tmp;
+        tmp = (U8 *)tmp + tensorNumBytes(inputDesc);
+    }
     EE ret = NOT_SUPPORTED;
     if (IS_GENERAL(arch)) {
 #ifdef _USE_GENERAL
-        ret = convolution_general(inputDesc, input, filterDesc, filter, convParamSpec, scaleDesc,
-            scale, biasDesc, bias, outputDesc, output, activationDesc);
+        ret = convolution_general(inputDesc, input, nullptr, filterDesc, filter, convParamSpec,
+            scaleDesc, scale, biasDesc, bias, outputDesc, output, activationDesc);
 #endif
 #ifdef _USE_X86
     } else if (IS_X86_AVX2(arch)) {
-        ret = convolution_x86(inputDesc, input, filterDesc, filter, convParamSpec, algorithm,
-            scaleDesc, scale, biasDesc, bias, tmpBytes, tmp, outputDesc, output, activationDesc,
-            arch);
+        ret = convolution_x86(inputDesc, input, nullptr, filterDesc, filter, convParamSpec,
+            algorithm, scaleDesc, scale, biasDesc, bias, tmpBytes, tmp, outputDesc, output,
+            activationDesc, arch);
 #endif
 #ifdef _USE_NEON
     } else if (IS_ARM(arch)) {

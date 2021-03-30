@@ -71,7 +71,17 @@ int convolutionTest(int argc, char *argv[], DataType dt)
     U32 paddingB = 1;
     U32 paddingL = 1;
     U32 paddingR = 1;
-    if (argc == 9) {
+    U32 it = 1;
+    U32 fc = ic;
+    U32 ft = 1;
+    U32 strideT = 1;
+    U32 paddingTF = 0;
+    U32 paddingTB = 0;
+    U32 use_nchw = 0;
+    U32 dilationH = 1;
+    U32 dilationW = 1;
+
+    if (argc == 9 || argc == 10) {
         ic = atoi(argv[1]);
         ih = atoi(argv[2]);
         iw = atoi(argv[3]);
@@ -84,6 +94,9 @@ int convolutionTest(int argc, char *argv[], DataType dt)
         paddingB = atoi(argv[8]);
         paddingL = atoi(argv[8]);
         paddingR = atoi(argv[8]);
+        if (argc == 10) {
+            use_nchw = atoi(argv[9]);
+        }
     }
     if (argc == 13) {
         ic = atoi(argv[1]);
@@ -99,24 +112,75 @@ int convolutionTest(int argc, char *argv[], DataType dt)
         paddingL = atoi(argv[11]);
         paddingR = atoi(argv[12]);
     }
-    U32 fc = ic;
-    U32 on = 1;
+
+    if (argc == 16) {
+        in = atoi(argv[1]);
+        ic = atoi(argv[2]);
+        ih = atoi(argv[3]);
+        iw = atoi(argv[4]);
+        fn = atoi(argv[5]);
+        fh = atoi(argv[6]);
+        fw = atoi(argv[7]);
+        strideH = atoi(argv[8]);
+        strideW = atoi(argv[9]);
+        paddingT = atoi(argv[10]);
+        paddingB = atoi(argv[11]);
+        paddingL = atoi(argv[12]);
+        paddingR = atoi(argv[13]);
+        dilationH = atoi(argv[14]);
+        dilationW = atoi(argv[15]);
+    }
+
+    if (argc == 20) {
+        in = atoi(argv[1]);
+        ic = atoi(argv[2]);
+        it = atoi(argv[3]);
+        ih = atoi(argv[4]);
+        iw = atoi(argv[5]);
+        fn = atoi(argv[6]);
+        fc = atoi(argv[7]);
+        ft = atoi(argv[8]);
+        fh = atoi(argv[9]);
+        fw = atoi(argv[10]);
+        strideT = atoi(argv[11]);
+        strideH = atoi(argv[12]);
+        strideW = atoi(argv[13]);
+        paddingTF = atoi(argv[14]);
+        paddingTB = atoi(argv[15]);
+        paddingT = atoi(argv[16]);
+        paddingB = atoi(argv[17]);
+        paddingL = atoi(argv[18]);
+        paddingR = atoi(argv[19]);
+    }
+    fc = ic;
+    U32 fhd = (fh - 1) * dilationH + 1;
+    U32 fwd = (fw - 1) * dilationW + 1;
+    U32 on = in;
     U32 oc = fn;
-    U32 oh = (ih + paddingT + paddingB - fh) / strideH + 1;
-    U32 ow = (iw + paddingL + paddingR - fw) / strideW + 1;
+    U32 oh = (ih + paddingT + paddingB - fhd) / strideH + 1;
+    U32 ow = (iw + paddingL + paddingR - fwd) / strideW + 1;
+    U32 ot = (it + paddingTB + paddingTF - ft) / strideT + 1;
     ActivationParamSpec activationDesc;
     activationDesc.mode = ACTIVATION_NULL;
-    ConvolutionParamSpec convParamSpec = createConvolutionParamSpec(group, 1, fh, fw, 1, strideH,
-        strideW, 0, 0, paddingT, paddingB, paddingL, paddingR, 1, 1, 1, fn,
-        Convolution_Depthwise_Pointwise);
+    ConvolutionParamSpec convParamSpec = createConvolutionParamSpec(group, ft, fh, fw, strideT,
+        strideH, strideW, paddingTF, paddingTB, paddingT, paddingB, paddingL, paddingR, 1,
+        dilationH, dilationW, fn, Convolution_Depthwise_Pointwise);
 
-    TensorDesc inputDesc = tensor4df(dt, DF_NCHW, in, ic, ih, iw);
-    TensorDesc filterDesc = tensor4df(dt, DF_NCHW, fn, fc, fh, fw);
+    TensorDesc inputDesc, filterDesc, inputDesc_gpu;
+    if (it > 1) {
+        inputDesc = tensor5df(dt, DF_NCHW, in, ic, it, ih, iw);
+        filterDesc = tensor5df(dt, DF_NCHW, fn, fc, ft, fh, fw);
+        inputDesc_gpu = tensor5df(dt, DF_NCHW, in, ic, it, ih, iw);
+    } else {
+        inputDesc = tensor4df(dt, DF_NCHW, in, ic, ih, iw);
+        filterDesc = tensor4df(dt, DF_NCHW, fn, fc, fh, fw);
+        inputDesc_gpu = tensor4df(dt, DF_NCHW, in, ic, ih, iw);
+    }
+
     TensorDesc biasDesc = tensor1d(dt, oc);
-    U8 *input_cpu = ut_input_v(in * ic * ih * iw, dt, UT_INIT_RANDOM);
-    U8 *filter_cpu = ut_input_v(fn * fc * fh * fw, dt, UT_INIT_RANDOM);
+    U8 *input_cpu = ut_input_v(in * ic * it * ih * iw, dt, UT_INIT_RANDOM);
+    U8 *filter_cpu = ut_input_v(fn * fc * ft * fh * fw, dt, UT_INIT_RANDOM);
     U8 *bias_cpu = ut_input_v(oc, dt, UT_INIT_RANDOM);
-    TensorDesc inputDesc_gpu = tensor4df(dt, DF_NCHW, in, ic, ih, iw);
 
     std::shared_ptr<GCLHandle> handleSharedPtr = OCLContext::getInstance().handle;
     GCLHandle_t handle = handleSharedPtr.get();
@@ -133,6 +197,11 @@ int convolutionTest(int argc, char *argv[], DataType dt)
     filterTensorOrg.resize(filterDesc);
     biasTensor.resize(biasDesc);
     U32 str[3] = {1, 1, 1};
+    if (use_nchw) {
+        str[0] = 0;
+        str[1] = 0;
+        str[2] = 0;
+    }
     U32 off[3] = {0, 0, 0};
     GCLMemDesc inputMemDesc = gcl_mem_desc(str, off, DT_U8, DF_NCWHC4);
     ocl_set_desc(&inputTensor, inputMemDesc);
@@ -169,7 +238,7 @@ int convolutionTest(int argc, char *argv[], DataType dt)
     CHECK_STATUS(gcl_fill_memory_zero(handle, input));
 
     GCLMemDesc desc = gclmem_build_desc();
-    if ((fh == 1 && fw == 1 && ih == 1 && iw == 1) || fn == 1) {
+    if ((fh == 1 && fw == 1 && ih == 1 && iw == 1 && it == 1) || fn == 1) {
         biasNum = oc;
         desc.memType = GCL_MEM_BUF;
         desc.byteSize = biasNum * bytesOf(dt);
@@ -199,14 +268,14 @@ int convolutionTest(int argc, char *argv[], DataType dt)
 
     desc = filterMemDesc;
     alloc_desc(filterTensor, desc);
-    desc.stride[0] = fw * fh;
+    desc.stride[0] = fw * fh * ft;
     desc.stride[1] = fc;
     desc.stride[2] = fn;
     desc.offset[0] = 0;
     desc.offset[1] = 0;
     desc.offset[2] = 0;
-    desc.byteSize = fw * fh * fc * fn * bytesOf(dt);
-    desc.num = fw * fh * fc * fn;
+    desc.byteSize = fw * fh * fc * fn * ft * bytesOf(dt);
+    desc.num = fw * fh * fc * fn * ft;
     desc.memType = GCL_MEM_BUF;
     desc.memFormat = DF_NCHW;
     desc.flags = CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR;
@@ -222,17 +291,40 @@ int convolutionTest(int argc, char *argv[], DataType dt)
 
     CHECK_STATUS(ocl_set_input(handle, input, inputDesc_gpu, input_cpu, tmpbuf, true));
 
-    CHECK_STATUS(convolution(inputTensor, filterTensor, convParamSpec, alg, nullptr, biasTensor,
+    std::vector<Tensor> inputTensors(1, inputTensor);
+    CHECK_STATUS(convolution(inputTensors, filterTensor, convParamSpec, alg, nullptr, biasTensor,
         tmpTensor, outputTensor, activationDesc, &archInfo));
     /*warp up*/
-    UNI_INFO_LOG("Warp up gpu:\n")
+    UNI_INFO_LOG("warm up gpu:\n")
     for (U32 i = 0; i < 2; i++) {
         CHECK_STATUS(gcl_run_kernelVec(handle));
     }
 
 #ifdef _DEBUG
-    CHECK_STATUS(gcl_run_kernelVec_timing(handle, 0, handle->kernelVec->size()));
-    double time = handle->t_execute * 0.001;
+    std::vector<U32> kernelIndex;
+    for (U32 i = 0; i < handle->kernelVec->size(); i++) {
+        kernelIndex.push_back(i);
+    }
+    CHECK_STATUS(gcl_run_kernelVec_select_ls(handle, kernelIndex));
+    CHECK_STATUS(gcl_finish(handle));
+    double time = 0;
+    double min_time = DBL_MAX;
+    double max_time = 0;
+    U32 loop = 16;
+    for (U32 i = 0; i < loop; i++) {
+        CHECK_STATUS(gcl_run_kernelVec_timing(handle, 0, handle->kernelVec->size()));
+        double t = handle->t_execute * 0.001;
+        if (t < min_time)
+            min_time = t;
+        if (t > max_time)
+            max_time = t;
+        time += t;
+    }
+    time = (time - min_time - max_time) / (loop - 2);
+    UNI_INFO_LOG("min_time = %lf\n", min_time);
+    UNI_INFO_LOG("max_time = %lf\n", max_time);
+    UNI_INFO_LOG("avg_time = %lf\n", time);
+    time = min_time;
 #else
     CHECK_STATUS(gcl_run_kernelVec(handle));
 #endif
@@ -242,12 +334,13 @@ int convolutionTest(int argc, char *argv[], DataType dt)
 
     char buffer[150];
     char params[120];
-    sprintf(params, "(%u %u %u %u)+(%u %u %u %u)/(%u %u %u %u %u %u %u)=(%u %u %u %u)", in, ic, ih,
-        iw, fn, fc, fh, fw, group, strideH, strideW, paddingT, paddingB, paddingL, paddingR, on, oc,
-        oh, ow);
+    sprintf(params,
+        "(%u %u %u %u %u)+(%u %u %u %u %u)/(%u %u %u %u %u %u %u %u %u %u)=(%u %u %u %u %u)", in,
+        ic, it, ih, iw, fn, fc, ft, fh, fw, group, strideT, strideH, strideW, paddingTF, paddingTB,
+        paddingT, paddingB, paddingL, paddingR, on, oc, ot, oh, ow);
     sprintf(buffer, "%20s, %80s", "Convolution", params);
 #ifdef _DEBUG
-    double ops = (1.0 * on * oc * oh * ow) * (2.0 * ic * fh * fw / group + 1);
+    double ops = (1.0 * on * oc * oh * ow * ot) * (2.0 * ic * ft * fh * fw / group + 1);
     ut_log(dt, buffer, ops, time);
 #endif
     Tensor inputTensorCpu;
@@ -270,10 +363,12 @@ int convolutionTest(int argc, char *argv[], DataType dt)
     outputTensorCpu.alloc();
 
     Tensor tmpTensorCpu;
+    std::vector<Tensor> inputTensorsCpu(1, inputTensorCpu);
     CHECK_STATUS(
-        convolution(inputTensorCpu, filterTensorCpu, convParamSpec, CONVOLUTION_ALGORITHM_GEMM,
+        convolution(inputTensorsCpu, filterTensorCpu, convParamSpec, CONVOLUTION_ALGORITHM_GEMM,
             nullptr, biasTensorCpu, tmpTensorCpu, outputTensorCpu, activationDesc, &archInfo_org));
-    ut_check_a(output_gpu, get_ptr_from_tensor(outputTensorCpu, UT_ARCH), on * oc * ow * oh, dt);
+    ut_check_a(
+        output_gpu, get_ptr_from_tensor(outputTensorCpu, UT_ARCH), on * oc * ow * oh * ot, dt);
 
     CHECK_STATUS(gcl_finish(handle));
     CHECK_STATUS(gcl_clean_kernelVec(handle));

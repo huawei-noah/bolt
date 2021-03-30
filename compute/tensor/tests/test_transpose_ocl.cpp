@@ -45,16 +45,46 @@ inline GCLMem_t alloc_bytes(Tensor tensor, U32 size)
 
 int transposeTest(int argc, char **argv, DataType dt)
 {
-    CHECK_REQUIREMENT(argc == 9);
-    U32 in = atoi(argv[1]);
-    U32 ic = atoi(argv[2]);
-    U32 ih = atoi(argv[3]);
-    U32 iw = atoi(argv[4]);
-    TransposeParamSpec p;
-    p.trans_size = 4;
-    for (int i = 0; i < 4; i++) {
-        I32 value = atoi(argv[5 + i]);
-        p.trans_dims[i] = value;
+    CHECK_REQUIREMENT(argc == 9 || argc == 11);
+    U32 in = 1;
+    U32 ic = 1;
+    U32 ih = 1;
+    U32 iw = 1;
+    U32 it = 1;
+    TransposeParamSpec p, p_inv;
+    TensorDesc inDesc;
+    DataFormat df = DF_NCHW;
+    TensorDesc inputDesc_cpu, inputDesc_gpu;
+
+    if (argc == 9) {
+        in = atoi(argv[1]);
+        ic = atoi(argv[2]);
+        ih = atoi(argv[3]);
+        iw = atoi(argv[4]);
+        p.trans_size = 4;
+        p_inv.trans_size = 4;
+        for (int i = 0; i < 4; i++) {
+            I32 value = atoi(argv[5 + i]);
+            p.trans_dims[i] = value;
+            p_inv.trans_dims[value] = i;
+        }
+        inputDesc_cpu = tensor4df(dt, DF_NCHW, in, ic, ih, iw);
+        inputDesc_gpu = tensor4df(dt, DF_NCHW, in, ic, ih, iw);
+    } else {
+        in = atoi(argv[1]);
+        ic = atoi(argv[2]);
+        it = atoi(argv[3]);
+        ih = atoi(argv[4]);
+        iw = atoi(argv[5]);
+        p.trans_size = 5;
+        p_inv.trans_size = 5;
+        for (int i = 0; i < 5; i++) {
+            I32 value = atoi(argv[6 + i]);
+            p.trans_dims[i] = value;
+            p_inv.trans_dims[value] = i;
+        }
+        inputDesc_cpu = tensor5df(dt, DF_NCHW, in, ic, it, ih, iw);
+        inputDesc_gpu = tensor5df(dt, DF_NCHW, in, ic, it, ih, iw);
     }
 
     ArchInfo archInfo;
@@ -62,10 +92,7 @@ int transposeTest(int argc, char **argv, DataType dt)
     archInfo.arch = MALI;
     archInfo_org.arch = CPU_GENERAL;
 
-    TensorDesc inputDesc_cpu, inputDesc_gpu, outputDesc;
-    inputDesc_cpu = tensor4df(dt, DF_NCHW, in, ic, ih, iw);
-    inputDesc_gpu = tensor4df(dt, DF_NCHW, in, ic, ih, iw);
-
+    TensorDesc outputDesc;
     U32 len = tensorNumElements(inputDesc_cpu);
     U8 *input_cpu = ut_input_v(len, dt, UT_INIT_RANDOM);
 
@@ -111,7 +138,7 @@ int transposeTest(int argc, char **argv, DataType dt)
     CHECK_STATUS(ocl_set_input(handle, input, inputDesc_gpu, input_cpu, tmpbuf, true));
     CHECK_STATUS(transpose(inputTensor, p, tmpTensor, outputTensor, &archInfo));
     /*warp up*/
-    UNI_INFO_LOG("Warp up gpu:\n")
+    UNI_INFO_LOG("warm up gpu:\n")
     for (U32 i = 0; i < 2; i++) {
         CHECK_STATUS(gcl_run_kernelVec(handle));
     }
@@ -129,11 +156,9 @@ int transposeTest(int argc, char **argv, DataType dt)
 
     char buffer[150];
     char params[120];
-    U32 on = outputDesc.dims[3];
-    U32 oc = outputDesc.dims[2];
-    U32 oh = outputDesc.dims[1];
-    U32 ow = outputDesc.dims[0];
-    sprintf(params, "(%u %u %u %u)=(%u %u %u %u)", in, ic, ih, iw, on, oc, oh, ow);
+    U32 on, oc, ot, oh, ow;
+    tensorSelectGet(outputDesc, NULL, NULL, &on, &oc, &oh, &ow, &ot);
+    sprintf(params, "(%u %u %u %u %u)=(%u %u %u %u %u)", in, ic, it, ih, iw, on, oc, ot, oh, ow);
     sprintf(buffer, "%20s, %80s", "Transpose", params);
 #ifdef _DEBUG
     double ops = len;

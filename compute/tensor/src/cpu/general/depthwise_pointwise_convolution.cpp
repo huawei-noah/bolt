@@ -11,7 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "types.h"
 #include "cpu/general/tensor_computing_general.h"
 #include "cpu/general/general_functions.h"
 
@@ -69,6 +68,9 @@ inline EE depthwise_pointwise_convolution(TensorDesc inputDesc,
     U32 strideW = convParamSpec.stride_w;
     U32 paddingT = convParamSpec.padding_top;
     U32 paddingL = convParamSpec.padding_left;
+    U32 dilatedRateH = convParamSpec.dilatedRate_h;
+    U32 dilatedRateW = convParamSpec.dilatedRate_w;
+
     bool fuseDepthwisePointwise = (pwFilterArray == nullptr) ? false : true;
 
     T3 *pwArray;
@@ -88,8 +90,8 @@ inline EE depthwise_pointwise_convolution(TensorDesc inputDesc,
                     T3 value = dwBiasArray[c];
                     for (U32 fh_idx = 0; fh_idx < fh; fh_idx++) {
                         for (U32 fw_idx = 0; fw_idx < fw; fw_idx++) {
-                            I32 ih_idx = h * strideH - paddingT + fh_idx;
-                            I32 iw_idx = w * strideW - paddingL + fw_idx;
+                            I32 ih_idx = h * strideH - paddingT + fh_idx * dilatedRateH;
+                            I32 iw_idx = w * strideW - paddingL + fw_idx * dilatedRateW;
                             if (ih_idx >= 0 && ih_idx < (I32)ih && iw_idx >= 0 && iw_idx < (I32)iw) {
                                 U32 i_off;
                                 if (idf == DF_NCHW) {

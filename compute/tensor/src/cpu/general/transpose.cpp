@@ -24,11 +24,10 @@ EE transpose_general(
 
     U32 inputDim = inputDesc.nDims;
     U32 outputDim = outputDesc.nDims;
-    CHECK_REQUIREMENT(inputDim == outputDim);
+    CHECK_REQUIREMENT(inputDim >= outputDim);
 
     U32 outputSize = tensorNumElements(outputDesc);
-    CHECK_REQUIREMENT(inputDim == outputDim);
-    std::vector<U32> inputLocalIndex(inputDim);
+    std::vector<U32> inputLocalIndex(inputDim, 0);
     U8 *input_ptr = (U8 *)input;
     U8 *output_ptr = (U8 *)output;
     for (U32 i = 0; i < outputSize; i++) {
@@ -46,6 +45,5 @@ EE transpose_general(
         memcpy(output_ptr + i * bytesOf(outputDesc.dt),
             input_ptr + inputIndex * bytesOf(inputDesc.dt), bytesOf(inputDesc.dt));
     }
-
     return SUCCESS;
 }

@@ -14,6 +14,7 @@
 #ifndef _H_GENERAL_FUNCTIONS
 #define _H_GENERAL_FUNCTIONS
 
+#include "error.h"
 #include "cpu/cpu_functions_template.h"
 
 template <typename T>
@@ -151,6 +152,26 @@ inline void array_power_general(DataType dt, void *input, void *output, I32 len,
     }
 }
 
+inline void array_mul_general(
+    DataType dt, const void *inputA, const void *inputB, void *output, I32 len)
+{
+    switch (dt) {
+#ifdef _USE_FP16
+        case DT_F16:
+            array_mul_template<F16>((const F16 *)inputA, (const F16 *)inputB, (F16 *)output, len);
+            break;
+#endif
+#ifdef _USE_FP32
+        case DT_F32:
+            array_mul_template<F32>((const F32 *)inputA, (const F32 *)inputB, (F32 *)output, len);
+            break;
+#endif
+        default:
+            CHECK_STATUS(NOT_SUPPORTED);
+            break;
+    }
+}
+
 inline void array_add_general(
     DataType dt, const void *inputA, const void *inputB, void *output, I32 len)
 {
@@ -221,23 +242,8 @@ inline F32 array_sum_general(DataType dt, const void *data, I32 len)
 inline void array_square_and_add_general(
     DataType dt, const void *inputA, const void *inputB, void *output, I32 len)
 {
-    switch (dt) {
-#ifdef _USE_FP16
-        case DT_F16:
-            array_square_and_add_template<F16>(
-                (const F16 *)inputA, (const F16 *)inputB, (F16 *)output, len);
-            break;
-#endif
-#ifdef _USE_FP32
-        case DT_F32:
-            array_square_and_add_template<F32>(
-                (const F32 *)inputA, (const F32 *)inputB, (F32 *)output, len);
-            break;
-#endif
-        default:
-            CHECK_STATUS(NOT_SUPPORTED);
-            break;
-    }
+    array_mul_general(dt, inputB, inputB, output, len);
+    array_add_general(dt, inputA, output, output, len);
 }
 
 inline EE array_activation_general(

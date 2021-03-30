@@ -102,8 +102,10 @@ int nonmaxsuppressionTest(int argc, char **argv, DataType dt)
         F32 *output_f32 = (F32 *)get_ptr_from_tensor(outputTensor, UT_ARCH);
         int idx = 0;
         for (U32 i = 0; i < 1 + num_detected_max; i++) {
-            std::cout << " 1 : " << output_f32[idx] << " 2 : " << output_f32[idx + 1]
-                      << " 3 : " << output_f32[idx + 2] << std::endl;
+            for (int j = 0; j < 3; j++) {
+                printf("%d:%f ", j, output_f32[idx + j]);
+            }
+            printf("\n");
             idx = idx + 3;
         }
     }
@@ -112,8 +114,10 @@ int nonmaxsuppressionTest(int argc, char **argv, DataType dt)
         F16 *output_f16 = (F16 *)get_ptr_from_tensor(outputTensorRef, UT_ARCH);
         int idx = 0;
         for (U32 i = 0; i < 1 + num_detected_max; i++) {
-            std::cout << " 1 : " << output_f16[idx] << " 2 : " << output_f16[idx + 1]
-                      << " 3 : " << output_f16[idx + 2] << std::endl;
+            for (int j = 0; j < 3; j++) {
+                printf("%d:%f ", j + 1, output_f16[idx + j]);
+            }
+            printf("\n");
             idx = idx + 3;
         }
     }
@@ -126,14 +130,14 @@ int nonmaxsuppressionTest(int argc, char **argv, DataType dt)
 int main(int argc, char **argv)
 {
 #ifdef _USE_FP16
-    std::cout << "----- Testing FP16 Nonmaxsuppression -----" << std::endl;
+    printf("----- Testing FP16 Nonmaxsuppression -----\n");
     nonmaxsuppressionTest(argc, argv, DT_F16);
-    std::cout << "----- Finished FP16 Nonmaxsuppression -----" << std::endl;
+    printf("----- Finished FP16 Nonmaxsuppression -----\n");
 #endif
 #ifdef _USE_FP32
-    std::cout << "----- Testing FP32 Nonmaxsuppression -----" << std::endl;
+    printf("----- Testing FP32 Nonmaxsuppression -----\n");
     nonmaxsuppressionTest(argc, argv, DT_F32);
-    std::cout << "----- Finished FP32 Nonmaxsuppression -----" << std::endl;
+    printf("----- Finished FP32 Nonmaxsuppression -----\n");
 #endif
     return 0;
 }

@@ -13,70 +13,60 @@
 
 #include <float.h>
 #include "error.h"
-#include "types.h"
+
 #include "cpu/general/tensor_computing_general.h"
 
 template <typename T>
 EE pooling(T *input,
     T *output,
-    U32 in,
-    U32 ic,
-    U32 it,
-    U32 ih,
-    U32 iw,
-    U32 stride_t,
-    U32 stride_h,
-    U32 stride_w,
-    U32 padding_before,
-    U32 padding_after,
-    U32 padding_top,
-    U32 padding_bottom,
-    U32 padding_left,
-    U32 padding_right,
-    U32 kernel_t,
-    U32 kernel_h,
-    U32 kernel_w,
+    I32 in,
+    I32 ic,
+    I32 it,
+    I32 ih,
+    I32 iw,
+    I32 ot,
+    I32 oh,
+    I32 ow,
+    I32 stride_t,
+    I32 stride_h,
+    I32 stride_w,
+    I32 padding_before,
+    I32 padding_after,
+    I32 padding_top,
+    I32 padding_bottom,
+    I32 padding_left,
+    I32 padding_right,
+    I32 kernel_t,
+    I32 kernel_h,
+    I32 kernel_w,
     PoolingMode pm,
     RoundMode rm,
-    U32 alignSize,
+    I32 alignSize,
     F32 minValue)
 {
-    U32 ot = 0, oh = 0, ow = 0;
-    if (rm == CEIL) {
-        ot = (U32)(ceil((double(it + padding_before + padding_after - kernel_t) / stride_t))) + 1;
-        oh = (U32)(ceil((double(ih + padding_top + padding_bottom - kernel_h) / stride_h))) + 1;
-        ow = (U32)(ceil((double(iw + padding_left + padding_right - kernel_w) / stride_w))) + 1;
-    } else if (rm == FLOOR) {
-        ot = (U32)(floor((double(it + padding_before + padding_after - kernel_t) / stride_t))) + 1;
-        oh = (U32)(floor((double(ih + padding_top + padding_bottom - kernel_h) / stride_h))) + 1;
-        ow = (U32)(floor((double(iw + padding_left + padding_right - kernel_w) / stride_w))) + 1;
-    } else {
-        return NOT_SUPPORTED;
-    }
-
     CHECK_REQUIREMENT(ic % alignSize == 0);
     ic = ic / alignSize;
 
-    for (U32 n = 0; n < in; n++) {
-        for (U32 c = 0; c < ic; c++) {
-            for (U32 j = 0; j < alignSize; j++) {
-                for (I32 t = 0; t < (I32)ot; t++) {
-                    for (I32 h = 0; h < (I32)oh; h++) {
-                        for (I32 w = 0; w < (I32)ow; w++) {
-                            int tstart = int(t * stride_t - padding_before);
-                            int hstart = int(h * stride_h - padding_top);
-                            int wstart = int(w * stride_w - padding_left);
+    EE ret = SUCCESS;
+    for (I32 n = 0; n < in; n++) {
+        for (I32 c = 0; c < ic; c++) {
+            for (I32 j = 0; j < alignSize; j++) {
+                for (I32 t = 0; t < ot; t++) {
+                    for (I32 h = 0; h < oh; h++) {
+                        for (I32 w = 0; w < ow; w++) {
+                            int tstart = t * stride_t - padding_before;
+                            int hstart = h * stride_h - padding_top;
+                            int wstart = w * stride_w - padding_left;
                             int tend = tstart + kernel_t;
                             int hend = hstart + kernel_h;
                             int wend = wstart + kernel_w;
-                            tstart = (tstart < 0) ? 0 : tstart;
-                            hstart = (hstart < 0) ? 0 : hstart;
-                            wstart = (wstart < 0) ? 0 : wstart;
-                            tend = (tend > (int)it) ? it : tend;
-                            hend = (hend > (int)ih) ? ih : hend;
-                            wend = (wend > (int)iw) ? iw : wend;
+                            tstart = UNI_MAX(tstart, 0);
+                            hstart = UNI_MAX(hstart, 0);
+                            wstart = UNI_MAX(wstart, 0);
+                            tend = UNI_MIN(tend, it);
+                            hend = UNI_MIN(hend, ih);
+                            wend = UNI_MIN(wend, iw);
                             float poolSize = (tend - tstart) * (hend - hstart) * (wend - wstart);
-
                             T value;
                             switch (pm) {
                                 case POOLING_MAX:
@@ -88,6 +78,8 @@ EE pooling(T *input,
                                 default:
                                     return NOT_SUPPORTED;
                             }
+                            U32 out_off =
+                                ((((n * ic + c) * ot + t) * oh + h) * ow + w) * alignSize + j;
                             for (int z = tstart; z < tend; z++) {
                                 for (int x = hstart; x < hend; x++) {
                                     for (int y = wstart; y < wend; y++) {
@@ -103,7 +95,8 @@ EE pooling(T *input,
                                                 value += input[in_off];
                                                 break;
                                             default:
-                                                return NOT_SUPPORTED;
+                                                ret = NOT_SUPPORTED;
+                                                break;
                                         }
                                     }
                                 }
@@ -115,11 +108,10 @@ EE pooling(T *input,
                                     value = value / poolSize;
                                     break;
                                 default:
-                                    return NOT_SUPPORTED;
+                                    ret = NOT_SUPPORTED;
+                                    break;
                             }
 
-                            U32 out_off =
-                                ((((n * ic + c) * ot + t) * oh + h) * ow + w) * alignSize + j;
                             output[out_off] = value;
                         }
                     }
@@ -127,7 +119,7 @@ EE pooling(T *input,
             }
         }
     }
-    return SUCCESS;
+    return ret;
 }
 
 EE pooling_general(
@@ -158,18 +150,18 @@ EE pooling_general(
     switch (idt) {
 #ifdef _USE_FP32
         case DT_F32:
-            ret = pooling((F32 *)input, (F32 *)output, in, ic, it, ih, iw, p.stride_t, p.stride_h,
-                p.stride_w, p.padding_before, p.padding_after, p.padding_top, p.padding_bottom,
-                p.padding_left, p.padding_right, p.kernel_t, p.kernel_h, p.kernel_w, p.mode, p.rm,
-                8, -FLT_MAX);
+            ret = pooling((F32 *)input, (F32 *)output, in, ic, it, ih, iw, ot, oh, ow, p.stride_t,
+                p.stride_h, p.stride_w, p.padding_before, p.padding_after, p.padding_top,
+                p.padding_bottom, p.padding_left, p.padding_right, p.kernel_t, p.kernel_h,
+                p.kernel_w, p.mode, p.rm, 8, -FLT_MAX);
             break;
 #endif
 #ifdef _USE_FP16
         case DT_F16:
-            ret = pooling((F16 *)input, (F16 *)output, in, ic, it, ih, iw, p.stride_t, p.stride_h,
-                p.stride_w, p.padding_before, p.padding_after, p.padding_top, p.padding_bottom,
-                p.padding_left, p.padding_right, p.kernel_t, p.kernel_h, p.kernel_w, p.mode, p.rm,
-                8, -UNI_F16_MAX);
+            ret = pooling((F16 *)input, (F16 *)output, in, ic, it, ih, iw, ot, oh, ow, p.stride_t,
+                p.stride_h, p.stride_w, p.padding_before, p.padding_after, p.padding_top,
+                p.padding_bottom, p.padding_left, p.padding_right, p.kernel_t, p.kernel_h,
+                p.kernel_w, p.mode, p.rm, 8, -UNI_F16_MAX);
             break;
 #endif
         default:

@@ -43,8 +43,8 @@ __kernel void mem_trans_3d_ncwhc4_to_nchw(const int iw_str,
     }
     int in_off = (idz * iw_str + (idy << 2) + iw_off) * ih_str + idx + ih_off;
 
-    int out_off =
-        ((idc << 2) * ot + idt * oh_str + idx + oh_off) * ow_str + (idy << 2) + ow_off + offset_out;
+    int out_off = (((idc << 2) * ot + idt) * oh_str + idx + oh_off) * ow_str + (idy << 2) + ow_off +
+        offset_out;
     char iex = ((idy << 2) + 4 <= iw) ? 4 : (iw & 3);
     char oex = ((idy << 2) + 4 <= ow) ? 4 : (ow & 3);
     if (idx >= ih || (idy << 2) >= iw || idz >= ((ic + 3) >> 2) * it) {

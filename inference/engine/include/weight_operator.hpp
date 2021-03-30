@@ -16,7 +16,7 @@
 
 #include "operator.hpp"
 #include "tensor_computing.h"
-#include "model_tools.h"
+#include "model_spec.h"
 
 class WeightOperator : public Operator {
 public:
@@ -135,10 +135,11 @@ public:
             weight_ptr = *modelPtr;
             bias_ptr = *modelPtr;
         } else {
-            weight_ptr = std::shared_ptr<U8>(curOpWs.weight);
-            bias_ptr = std::shared_ptr<U8>(curOpWs.vec);
+            weight_ptr = std::shared_ptr<U8>(curOpWs.weight, [](U8 *) {});
+            bias_ptr = std::shared_ptr<U8>(curOpWs.vec, [](U8 *) {});
         }
 
+        std::set<OperatorType> weightReuseSet = {OT_Conv, OT_FC, OT_Deconvolution, OT_RNN};
         U32 weight_offset = 0;
         for (auto weight_tensor : this->weightTensors) {
             TensorDesc desc = weight_tensor.get_desc();
@@ -146,7 +147,11 @@ public:
             weight_mem_src.resize(desc);
             weight_mem_src.set_shared_ptr(
                 std::shared_ptr<U8>(weight_ptr, weight_ptr.get() + weight_offset));
-            weight_mem_dst->reuse(&weight_mem_src);
+            if (weightReuseSet.count(this->get_type())) {
+                weight_mem_dst->reuse(&weight_mem_src);
+            } else {
+                weight_mem_dst->copy_from(&weight_mem_src);
+            }
             weight_offset += tensorNumBytes(desc);
         }
 
@@ -158,7 +163,7 @@ public:
                 bias_mem_src.resize(desc);
                 bias_mem_src.set_shared_ptr(
                     std::shared_ptr<U8>(bias_ptr, bias_ptr.get() + bias_offset));
-                bias_mem_dst->reuse(&bias_mem_src);
+                bias_mem_dst->copy_from(&bias_mem_src);
                 bias_offset += tensorNumBytes(desc);
             }
         } else {

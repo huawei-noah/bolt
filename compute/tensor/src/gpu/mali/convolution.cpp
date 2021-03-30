@@ -13,7 +13,7 @@
 
 #include <vector>
 #include "sys.h"
-#include "types.h"
+
 #include "tensor_desc.h"
 #include "error.h"
 #include "gpu/mali/tensor_computing_mali.h"
@@ -30,51 +30,61 @@ inline void convolution_produce_algos_paras(TensorDesc inputDesc,
     std::vector<U32> *vecK)
 {
     DataFormat idf;
-    U32 ic, ih, iw, fn, fh, fw, sh, sw;
-    tensorSelectGet(inputDesc, NULL, &idf, NULL, &ic, &ih, &iw);
-    tensorSelectGet(filterDesc, NULL, NULL, &fn, NULL, &fh, &fw);
+    U32 in, ic, it, ih, iw, fn, ft, fh, fw, sh, sw, dh, dw;
+    tensorSelectGet(inputDesc, NULL, &idf, &in, &ic, &ih, &iw, &it);
+    tensorSelectGet(filterDesc, NULL, NULL, &fn, NULL, &fh, &fw, &ft);
     sh = convParamSpec.stride_h;
     sw = convParamSpec.stride_w;
+    dh = convParamSpec.dilatedRate_h;
+    dw = convParamSpec.dilatedRate_w;
+
     U32 configInfo[3][128];
     U32 configNums[2];
     ConvolutionForwardAlgorithm algo[2];
     U32 algoNum = 1;
+    U32 configNum = 0;
     algo[0] = CONVOLUTION_ALGORITHM_DIRECT;
-    if (inputGclmemFormat == DF_NCHW && (ih != 1 || iw != 1 || fw != 1 || fh != 1)) {
-        configInfo[0][0] = (8 * sw - (fw - 1)) / sw;
-        configInfo[1][0] = 1;
-        configInfo[2][0] = 4;
-        configNums[0] = 1;
-    } else if (fn == 1 && sw == 1 && (fw == fh) && (fw == 1 || fw == 3 || fw == 5 || fw == 7)) {
-        configInfo[0][0] = (fw == 7) ? 6 : 8;
-        configInfo[1][0] = 4;
-        configInfo[2][0] = 1;
-        configNums[0] = 1;
-    } else {
-        if (fw == 3 && fh == 3 && sw == 1 && sh == 1) {
-            algo[1] = CONVOLUTION_ALGORITHM_WINOGRAD;
-            algoNum = 2;
+    if (inputGclmemFormat == DF_NCHW) {
+        for (U32 i = 2; i <= 8; i++) {
+            configInfo[0][configNum] = i;
+            configInfo[1][configNum] = 1;
+            configInfo[2][configNum] = 4;
+            configNum++;
         }
-        U32 configNum = 0;
-        for (U32 ii = 0; ii < algoNum; ii++) {
-            if (algo[ii] == CONVOLUTION_ALGORITHM_DIRECT) {
-                if (ih == 1 && iw == 1 && fh == 1 && fw == 1) {
-                    U32 j = 8;
-                    for (U32 i = 0; i < 3; i++) {
-                        configInfo[0][configNum] = 1;
-                        configInfo[1][configNum] = 1 << (2 + i);
-                        configInfo[2][configNum] = 0;
-                        configNum++;
-                        if (ic % j != 0) {
-                            break;
-                        }
-                        j = j << 1;
-                    }
-                } else {
+        configNums[0] = configNum;
+    } else {
+        if (fn * sw * ft == 1 && (fw == fh) && (fw == 1 || fw == 3 || fw == 5 || fw == 7) &&
+            dw == 1 && dh == 1) {  //spe case for fn = 1
+            configInfo[0][0] = (fw == 7) ? 6 : 8;
+            configInfo[1][0] = 4;
+            configInfo[2][0] = 1;
+            configNums[0] = 1;
+        } else if (fw * fh * ft * iw * ih * it * dw * dh ==
+            1) {  //spe case for iw = ih = fw = fh = 1, fn > 1
+            U32 j = 8;
+            for (U32 i = 0; i < 3; i++) {
+                configInfo[0][configNum] = 1;
+                configInfo[1][configNum] = 1 << (2 + i);
+                configInfo[2][configNum] = 0;
+                configNum++;
+                if (ic % j != 0) {
+                    break;
+                }
+                j = j << 1;
+            }
+            configNums[0] = configNum;
+        } else {
+            if (fw == 3 && fh == 3 && sw == 1 && sh == 1 && in == 1 && dw == 1 && dh == 1) {
+                algo[1] = CONVOLUTION_ALGORITHM_WINOGRAD;
+                algoNum = 2;
+            }
+            for (U32 ii = 0; ii < algoNum; ii++) {
+                if (algo[ii] == CONVOLUTION_ALGORITHM_DIRECT) {
                     U32 k = 4;
                     U32 nj = 8;
-                    for (U32 i = 0; i < 2; i++) {
-                        for (U32 j = 0; j < nj; j++) {
+                    U32 be_w = (dw == 2) ? 2 : 0;
+                    for (U32 i = 0; i < 2; i++) {  //normal case for use k = 4 / 8 and reuse on w
+                        for (U32 j = be_w; j < nj; j++) {
                             configInfo[0][configNum] = j + 1;
                             configInfo[1][configNum] = 4;
                             configInfo[2][configNum] = k;
@@ -86,7 +96,21 @@ inline void convolution_produce_algos_paras(TensorDesc inputDesc,
                         }
                         nj = 4;
                     }
-                    if (fw == 1 && fh == 1 && sw == 1 && sh == 1) {
+
+                    if ((fw == 1 || fw == 3) && sw == 1 && sw == sh && fw == fh && dw == 1 &&
+                        dh == 1) {  //spe case for use k = 16
+                        if (fn % 16 == 0) {
+                            for (U32 i = 0; i < 3; i++) {
+                                configInfo[0][configNum] = i + 1;
+                                configInfo[1][configNum] = 4;
+                                configInfo[2][configNum] = 16;
+                                configNum++;
+                            }
+                        }
+                    }
+
+                    if (fw == 1 && fh == 1 && sw == 1 && sh == 1 && dw == 1 &&
+                        dh == 1) {  //spe case for fw = fh = 1 and reuse on h
                         U32 k = 4;
                         U32 nj = 2;
                         for (U32 i = 0; i < 3; i++) {
@@ -109,32 +133,45 @@ inline void convolution_produce_algos_paras(TensorDesc inputDesc,
                                 break;
                             }
                         }
-                        if (fn % 16 == 0) {
-                            for (U32 i = 0; i < 3; i++) {
-                                configInfo[0][configNum] = i + 1;
-                                configInfo[1][configNum] = 4;
-                                configInfo[2][configNum] = 16;
-                                configNum++;
+                    }
+
+                    if (fw == 3 && fw == fh && in > 1 && dw == 1 &&
+                        dh == 1) {  //spe case for mul batch and reuse on batch
+                        for (U32 item_n = 2; item_n <= 4; item_n++) {
+                            for (U32 item_k = 4; item_k <= 8; item_k += 4) {
+                                for (U32 item_w = 1; item_w <= 3; item_w++) {
+                                    if (item_k == 8 && (item_w > 1 || fn % item_k != 0)) {
+                                        continue;
+                                    }
+                                    if (item_n > 2 && (item_w * item_k > 8 || item_w > 1)) {
+                                        continue;
+                                    }
+                                    configInfo[0][configNum] = item_w + (item_n << 4);
+                                    configInfo[1][configNum] = 4;
+                                    configInfo[2][configNum] = item_k;
+                                    configNum += 1;
+                                }
                             }
                         }
                     }
                 }
-            }
 
-            if (algo[ii] == CONVOLUTION_ALGORITHM_WINOGRAD) {
-                for (U32 i = 1; i <= 8; i++) {
-                    for (U32 j = 4; j <= 8; j += 4) {
-                        if (i * j <= 2) {
-                            continue;
+                if (algo[ii] ==
+                    CONVOLUTION_ALGORITHM_WINOGRAD) {  //case for winograd, config on matmul
+                    for (U32 i = 1; i <= 8; i++) {
+                        for (U32 j = 4; j <= 8; j += 4) {
+                            if (i * j <= 2) {
+                                continue;
+                            }
+                            configInfo[0][configNum] = i;
+                            configInfo[1][configNum] = 1;
+                            configInfo[2][configNum] = j;
+                            configNum++;
                         }
-                        configInfo[0][configNum] = i;
-                        configInfo[1][configNum] = 1;
-                        configInfo[2][configNum] = j;
-                        configNum++;
                     }
                 }
+                configNums[ii] = configNum;
             }
-            configNums[ii] = configNum;
         }
     }
 
@@ -157,6 +194,35 @@ inline void convolution_produce_algos_paras(TensorDesc inputDesc,
     }
 }
 
+inline void infer_align_val(ConvolutionForwardAlgorithm algo,
+    U32 algoNum,
+    std::vector<U32> vecW,
+    U32 ow,
+    U32 in,
+    U32 *iw_align,
+    U32 *in_align)
+{
+    U32 w_val = *iw_align;
+    U32 n_val = *in_align;
+    if (algo == CONVOLUTION_ALGORITHM_WINOGRAD) {
+        w_val = std::max(ALIGN(ow, 16), w_val);
+    } else {
+        for (U32 i = 0; i < algoNum; i++) {
+            U32 item_w = vecW[i];
+            if ((item_w >> 8 > 0)) {
+                item_w = 1;
+            } else if ((item_w >> 4) > 0) {
+                U32 item_n = item_w >> 4;
+                item_w = item_w & 15;
+                n_val = std::max(ALIGN(in, item_n), n_val);
+            }
+            w_val = std::max(ALIGN(ow, item_w), w_val);
+        }
+    }
+    *iw_align = w_val;
+    *in_align = n_val;
+}
+
 EE convolution_infer_output_size_mali(TensorDesc inputDesc,
     TensorDesc filterDesc,
     ConvolutionParamSpec convParamSpec,
@@ -171,9 +237,10 @@ EE convolution_infer_output_size_mali(TensorDesc inputDesc,
     DataFormat idf, fdf;
     U32 iw, ih, ic, in, it;
     U32 fw, fh, fc, fn, ft;
-    U32 ow, oh, ot;
-    U32 sw, sh, st, dw, dh, fdw, fdh;
+    I32 ow, oh, ot;
+    U32 sw, sh, st, dw, dh, fwd, fhd;
     U32 pl, pr, pt, pb, pt_b, pt_a;
+    U32 inDims;
     tensorSelectGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw, &it);
     tensorSelectGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw, &ft);
     pl = convParamSpec.padding_left;
@@ -187,14 +254,9 @@ EE convolution_infer_output_size_mali(TensorDesc inputDesc,
     pt_b = convParamSpec.padding_before;
     pt_a = convParamSpec.padding_after;
     st = convParamSpec.stride_t;
+    inDims = inputDesc.nDims;
 
-    if (fw > 7 || fw == 6) {
-        CHECK_STATUS(NOT_SUPPORTED);
-    }
     if (fw < 1 || fh < 1) {
-        CHECK_STATUS(NOT_SUPPORTED);
-    }
-    if (dw != 1 || dh != 1) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
     if (sw != 1 && sw != 2) {
@@ -203,51 +265,59 @@ EE convolution_infer_output_size_mali(TensorDesc inputDesc,
     if (sh != 1 && sh != 2) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
-    fdw = (fw - 1) * dw + 1;
-    fdh = (fh - 1) * dh + 1;
-    ow = (iw + pl + pr - fdw) / sw + 1;
-    oh = (ih + pt + pb - fdh) / sh + 1;
-    ot = (inputDesc.df == DF_NCTHW) ? (it + pt_b + pt_a - ft) / st + 1 : 1;
-
-    U32 iw_align, ih_align, item_w, ext_w, ext_h;
-    bool need_pad = false;
-
-    if (inputDesc.df == DF_NCTHW) {
+    fwd = (fw - 1) * dw + 1;
+    fhd = (fh - 1) * dh + 1;
+    ow = (iw + pl + pr - fwd) / sw + 1;
+    oh = (ih + pt + pb - fhd) / sh + 1;
+    ot = (inDims == 5) ? (it + pt_b + pt_a - ft) / st + 1 : 1;
+    if (ow < 0 || oh < 0 || ot < 0) {
+        CHECK_STATUS(NOT_MATCH);
+    }
+    if (inDims == 5) {
         *outputDesc = tensor5df(idt, idf, in, fn, ot, oh, ow);
     } else {
         *outputDesc = tensor4df(idt, idf, in, fn, oh, ow);
     }
-    ext_w = (fw / 2 < pl) ? pl : fw / 2;  // if fw / 2 < pl, use pl as offset
+
+    U32 iw_align, ih_align, in_align, ext_w, ext_h;
+    bool need_pad = false;
+    ext_w = (fwd / 2 < pl) ? pl : fwd / 2;  // if fw / 2 < pl, use pl as offset
     ext_h = pt;
+    iw_align = ow;
+    in_align = in;
+    ih_align = ih + pt + pb;
+    ih_align = ih_align - ext_h * 2;
+
+    DataFormat inputGclmemFormat;
+    if (dw > 1 || dh > 1) {
+        inputGclmemFormat = DF_NCWHC4;
+    } else if (gclmemInputDesc->byteSize == 0) {
+        inputGclmemFormat = DF_NCHW;
+    } else {
+        inputGclmemFormat = gclmemInputDesc->memFormat;
+    }
+
+    if (inputGclmemFormat == DF_NCHW) {
+        if (fw * fh * ft * iw * ih * it == 1) {
+            inputGclmemFormat = DF_NCWHC4;  //use spe case for fw = fh = iw = ih = 1
+        }
+        if (fn * sw * ft == 1 && (fw == fh) &&
+            (fw == 1 || fw == 3 || fw == 5 || fw == 7)) {  //spe case for fn = 1
+            inputGclmemFormat = DF_NCWHC4;                 //use spe case for fn = 1
+        }
+    }
 
     std::vector<ConvolutionForwardAlgorithm> convolutionAlgorithms;
     std::vector<U32> algoNumIndex;
     std::vector<U32> vecW;
-    DataFormat inputGclmemFormat = DF_NCWHC4;
-    if (gclmemInputDesc->byteSize == 0) {
-        inputGclmemFormat = DF_NCHW;
-    }
     convolution_produce_algos_paras(inputDesc, filterDesc, convParamSpec, inputGclmemFormat,
         &convolutionAlgorithms, &algoNumIndex, &vecW, NULL, NULL);
-    iw_align = ow;
-    for (auto p : convolutionAlgorithms) {
-        U32 tmp_align = 0;
-        if (p == CONVOLUTION_ALGORITHM_WINOGRAD) {
-            tmp_align = ALIGN(ow, 16);
-        } else {
-            for (U32 i = 0; i < algoNumIndex[0]; i++) {
-                item_w = vecW[i];
-                item_w = ((item_w >> 8) > 0) ? 1 : item_w;
-                U32 j = ALIGN(ow, item_w);
-                tmp_align = (tmp_align < j) ? j : tmp_align;
-            }
-        }
-        iw_align = (iw_align < tmp_align) ? tmp_align : iw_align;
+    for (U32 i = 0; i < convolutionAlgorithms.size(); i++) {
+        infer_align_val(
+            convolutionAlgorithms[i], algoNumIndex[i], vecW, ow, in, &iw_align, &in_align);
     }
-    iw_align = iw_align * sw;
-    ih_align = ih + pt + pb;
-    ih_align = ih_align - ext_h * 2;
 
+    iw_align = iw_align * sw;
     if (pl < ext_w) {  // if fw / 2 > pl, use pl as offset, and pad (ext_w - pl) * 2 in the end
         iw_align = iw_align + 2 * (ext_w - pl);
         ext_w = pl;
@@ -259,28 +329,18 @@ EE convolution_infer_output_size_mali(TensorDesc inputDesc,
         need_pad = true;
     }
 
-    if (fw == 1 && fh == 1 && ft == 1 && iw == 1 && ih == 1 && it == 1) {
-        CHECK_STATUS(infer_gclmem_desc_ncwhc4_3d(iw_align, ih_align, ic, it, in, ext_w, ext_h, ow,
-            oh, fn, ot, in, idt, idt, gclmemInputDesc, gclmemOutputDesc, need_pad));
-        return SUCCESS;
-    }
-
     if (inputGclmemFormat == DF_NCHW) {
-        if (fw == fh && (fw == 1 || fw == 3 || fw == 5 || fw == 7)) {
-            CHECK_STATUS(infer_gclmem_desc_nchw_3d(iw_align, ih_align, ic, it, in, ext_w, ext_h, 0,
-                0, 0, 0, 0, idt, idt, gclmemInputDesc, NULL, need_pad));
-        } else {
-            CHECK_STATUS(infer_gclmem_desc_ncwhc4_3d(iw_align, ih_align, ic, it, in, ext_w, ext_h,
-                0, 0, 0, 0, 0, idt, idt, gclmemInputDesc, NULL, need_pad));
-        }
+        CHECK_STATUS(infer_gclmem_desc_nchw_3d(iw_align, ih_align, ic, it, in_align, ext_w, ext_h,
+            0, 0, 0, 0, 0, idt, idt, gclmemInputDesc, NULL, need_pad));
         CHECK_STATUS(infer_gclmem_desc_ncwhc4_3d(
             0, 0, 0, 0, 0, 0, 0, ow, oh, fn, ot, in, idt, idt, NULL, gclmemOutputDesc));
         return SUCCESS;
     }
 
-    CHECK_STATUS(infer_gclmem_desc_ncwhc4_3d(iw_align, ih_align, ic, it, in, ext_w, ext_h, 0, 0, 0,
-        0, 0, idt, idt, gclmemInputDesc, NULL, need_pad));
-    if (fn == 1 && sw == 1 && (fw == fh) && ft == 1 && (fw == 1 || fw == 3 || fw == 5 || fw == 7)) {
+    CHECK_STATUS(infer_gclmem_desc_ncwhc4_3d(iw_align, ih_align, ic, it, in_align, ext_w, ext_h, 0,
+        0, 0, 0, 0, idt, idt, gclmemInputDesc, NULL, need_pad));
+
+    if (fn * ft * sw == 1 && (fw == fh) && (fw == 1 || fw == 3 || fw == 5 || fw == 7)) {
         CHECK_STATUS(infer_gclmem_desc_nchw_3d(
             0, 0, 0, 0, 0, 0, 0, ow, oh, fn, ot, in, idt, idt, NULL, gclmemOutputDesc));
     } else {
@@ -481,6 +541,7 @@ EE convolution_infer_forward_algorithm_mali(GCLHandle_t handle,
         runInfos.clear();
         filterMemDescs.clear();
         CHECK_STATUS(gcl_clean_kernelVec(handle));
+        CHECK_STATUS(gcl_clean_programMap(handle));
         CHECK_STATUS(gcl_off_queue_profiling(handle));
         return SUCCESS;
     }

@@ -18,7 +18,6 @@
 #include <bitset>
 #include <string.h>
 
-#include "types.h"
 #include "tensor_desc.h"
 #include "error.h"
 #include "tensor_computing.h"

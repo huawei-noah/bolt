@@ -57,7 +57,7 @@ int depthwisePointwiseConvolutionTest(
 {
     U32 in, ic, ih, iw;
     U32 fn, fc, fh, fw;
-    U32 group, stride, padding;
+    U32 group, stride, padding, dilation;
     U32 on, oc, oh, ow;
     U32 biasNum;
     ArchInfo archInfo;
@@ -75,8 +75,9 @@ int depthwisePointwiseConvolutionTest(
     group = 1;
     stride = 1;
     padding = 1;
+    dilation = 1;
 
-    if (argc == 9) {
+    if (argc == 9 || argc == 10) {
         ic = atoi(argv[1]);
         ih = atoi(argv[2]);
         iw = atoi(argv[3]);
@@ -85,18 +86,23 @@ int depthwisePointwiseConvolutionTest(
         fw = atoi(argv[6]);
         stride = atoi(argv[7]);
         padding = atoi(argv[8]);
+        if (argc == 10) {
+            dilation = atoi(argv[9]);
+        }
     }
     fc = ic;
+    U32 fhd = (fh - 1) * dilation + 1;
+    U32 fwd = (fw - 1) * dilation + 1;
     on = 1;
     oc = fn;
-    oh = (ih + padding * 2 - fh) / stride + 1;
-    ow = (iw + padding * 2 - fw) / stride + 1;
+    oh = (ih + padding * 2 - fhd) / stride + 1;
+    ow = (iw + padding * 2 - fwd) / stride + 1;
     ActivationParamSpec dwActivationParamSpec;
     ActivationParamSpec pwActivationParamSpec;
     dwActivationParamSpec.mode = ACTIVATION_NULL;
     pwActivationParamSpec.mode = ACTIVATION_NULL;
     ConvolutionParamSpec convParamSpec = createConvolutionParamSpec(group, 1, fh, fw, 1, stride,
-        stride, 0, 0, padding, padding, padding, padding, 1, 1, 1, fn,
+        stride, 0, 0, padding, padding, padding, padding, dilation, dilation, dilation, fn,
         Convolution_Depthwise_Pointwise);
 
     U32 dwFilterLen = 1 * fc * fh * fw;
@@ -272,7 +278,7 @@ int depthwisePointwiseConvolutionTest(
         convParamSpec, alg, dwBiasTensor, pwBiasTensor, tmpTensor, outputTensor,
         dwActivationParamSpec, pwActivationParamSpec, &archInfo));
     /*warp up*/
-    UNI_INFO_LOG("Warp up gpu:\n")
+    UNI_INFO_LOG("warm up gpu:\n")
     for (U32 i = 0; i < 2; i++) {
         CHECK_STATUS(gcl_run_kernelVec(handle));
     }

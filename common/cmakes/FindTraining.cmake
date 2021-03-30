@@ -1,0 +1,22 @@
+set(TRAINING_PROJECT_NAME "RaulLib")
+unset(TRAINING_ROOT)
+find_path(TRAINING_ROOT NAMES training HINTS ${BOLT_ROOT} $ENV{BOLT_ROOT})
+set(TRAINING_ROOT "${TRAINING_ROOT}/training")
+
+set(TRAINING_INCLUDE_DIR "${TRAINING_ROOT}/include")
+set(TRAINING_LIBRARY "${CMAKE_BINARY_DIR}/lib${TRAINING_PROJECT_NAME}.so")
+
+if (TRAINING_INCLUDE_DIR AND TRAINING_LIBRARY)
+    set(TRAINING_FOUND true)
+endif (TRAINING_INCLUDE_DIR AND TRAINING_LIBRARY)
+
+if (TRAINING_FOUND)
+    include_directories(${TRAINING_INCLUDE_DIR})
+    message(STATUS "Found ${TRAINING_INCLUDE_DIR}")
+    message(STATUS "Found ${TRAINING_PROJECT_NAME}: ${TRAINING_LIBRARY}")
+else (TRAINING_FOUND)
+    message(FATAL_ERROR "
+FATAL: can not find ${TRAINING_PROJECT_NAME} library under <BOLT_ROOT>/ directory,
+       please set shell or cmake environment variable BOLT_ROOT.
+    ")
+endif (TRAINING_FOUND)

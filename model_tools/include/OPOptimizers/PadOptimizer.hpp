@@ -27,13 +27,12 @@ class PadOptimizer : public OPOptimizer {
                 std::vector<std::pair<int, int>> nextOpIndexes = searchOperatorIndexByInput(spec,
                     spec->ops[padOpIndex].output_tensors_name[0], padOpIndex + 1,
                     spec->num_operator_specs);
-                if (nextOpIndexes.size() != 1 ||
-                    OT_Pooling != spec->ops[nextOpIndexes[0].first].type ||
-                    OT_Conv != spec->ops[nextOpIndexes[0].first].type) {
+                if (!(nextOpIndexes.size() == 1 &&
+                        (OT_Pooling == spec->ops[nextOpIndexes[0].first].type ||
+                            OT_Conv == spec->ops[nextOpIndexes[0].first].type))) {
                     continue;
                 }
                 int nextOpIndex = nextOpIndexes[0].first;
-
                 if (spec->ops[nextOpIndex].type == OT_Pooling) {
                     spec->ops[nextOpIndex].ps.pooling_spec.padding_before +=
                         spec->ops[padOpIndex].ps.pad_spec.before;

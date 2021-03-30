@@ -71,16 +71,26 @@ class WeightBNOptimizer : public OPOptimizer {
                     }
                     spec->ws[convWeightIndex].vec =
                         (U8 *)mt_new_storage(spec->ws[convWeightIndex].bytes_of_vec);
-                    memset(spec->ws[convWeightIndex].vec, 0, spec->ws[convWeightIndex].bytes_of_vec);
+                    if (isBNN == 1) {
+                        F32 *scale = (F32 *)spec->ws[convWeightIndex].vec;
+                        F32 *bias = scale + channelCur;
+                        for (U32 m = 0; m < channelCur; m++) {
+                            scale[m] = 1;
+                            bias[m] = 0;
+                        }
+                    } else {
+                        memset(spec->ws[convWeightIndex].vec, 0,
+                            spec->ws[convWeightIndex].bytes_of_vec);
+                    }
                 }
                 F32 *vecTemp = (F32 *)spec->ws[convWeightIndex].vec;
                 if (isBNN == 1) {  // Do not modify weights for BNN
                     F32 *scale = vecTemp;
                     F32 *bias = vecTemp + channelCur;
                     for (U32 m = 0; m < channelCur; m++) {
-                        scale[m] = 1.0 /
-                            stdValue[m];  // This is the first possible source of a meaningful scale, so just initilize
-                        bias[m] = (bias[m] - meanPtr[m]) / stdValue[m];
+                        // This is the first possible source of a meaningful scale, so just initilize
+                        scale[m] /= stdValue[m];
+                        bias[m] = (bias[m] - gamaCur * meanPtr[m]) / stdValue[m];
                     }
                 } else {
                     int weightDataSize = spec->ws[convWeightIndex].bytes_of_weight /
@@ -98,12 +108,16 @@ class WeightBNOptimizer : public OPOptimizer {
                 // free BN memory
                 if (spec->ws[bnWeightIndex].weight != nullptr) {
                     spec->ws[bnWeightIndex].bytes_of_weight = 0;
-                    delete spec->ws[bnWeightIndex].weight;
+                    if (outOfFileMapRange(spec->ws[bnWeightIndex].weight, spec->mfd)) {
+                        delete spec->ws[bnWeightIndex].weight;
+                    }
                     spec->ws[bnWeightIndex].weight = nullptr;
                 }
                 if (spec->ws[bnWeightIndex].vec != nullptr) {
                     spec->ws[bnWeightIndex].bytes_of_vec = 0;
-                    delete spec->ws[bnWeightIndex].vec;
+                    if (outOfFileMapRange(spec->ws[bnWeightIndex].vec, spec->mfd)) {
+                        delete spec->ws[bnWeightIndex].vec;
+                    }
                     spec->ws[bnWeightIndex].vec = nullptr;
                 }
                 setOperatorInvalid(spec, bnOpIndex, true);

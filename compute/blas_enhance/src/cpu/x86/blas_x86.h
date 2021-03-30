@@ -18,15 +18,13 @@
 #include "sys.h"
 #include "tensor_desc.h"
 
+EE matrix_vector_multiply_transform_weight_x86(
+    TensorDesc desc, const void *src, TensorDesc *descTran, void *dst);
+
 EE matrix_vector_multiply_tmp_bytes_x86(bool transpose, DataType dt, U32 *bytes);
 
-EE mvm_x86(U32 row,
-    U32 col,
-    DataType dt,
-    bool transpose,
-    const void *matrix,
-    const void *vector,
-    void *result);
+EE mvm_x86(
+    U32 row, U32 col, DataType dt, DataFormat df, const void *matrix, const void *vector, void *result);
 
 EE matrix_matrix_multiply_tmp_bytes_x86(
     U32 matrixA_M, U32 matrixA_K, U32 matrixB_K, U32 matrixB_N, DataType dt, U32 *bytes);
@@ -38,7 +36,7 @@ EE mmm_x86(U32 matrixC_N,
     U32 matrixC_M,
     U32 matrixA_K,
     DataType matrixADataType,
-    bool transposeA,
+    DataFormat matrixADataFormat,
     const void *matrixAData,
     const void *matrixBData,
     void *tmp,

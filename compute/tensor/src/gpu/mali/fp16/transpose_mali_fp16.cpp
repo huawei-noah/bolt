@@ -11,9 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "sys.h"
-#include "types.h"
-#include "error.h"
 #include "gpu/mali/fp16/transpose_mali_fp16.h"
 
 inline EE transpose_checkpara_mali_fp16(TensorDesc inputDesc, TensorDesc outputDesc)
@@ -126,16 +123,16 @@ inline EE transpose_core_mali_fp16(GCLHandle_t handle,
         gs[0] = ih;
         gs[1] = (iw + 3) / 4;
         gs[2] = (ic + 3) / 4 * it;
-        if (df == DF_NCTHW) {
+        if (nDims == 5) {
             sprintf(kernelName, "mem_trans_3d_ncwhc4_to_nchw");
             CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel));
             CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, iw_off, ih_off, iw, ih, 0, 0,
-                iw, ih, ic, iw, ih, ic, 0, 0, inbuf, tmp));
+                iw, ih, ic, it, iw, ih, ic, it, 0, 0, inbuf, tmp));
         } else {
             sprintf(kernelName, "mem_trans_ncwhc4_to_nchw");
             CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel));
             CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, iw_off, ih_off, iw, ih, 0, 0,
-                iw, ih, ic, it, iw, ih, ic, it, 0, 0, inbuf, tmp));
+                iw, ih, ic, iw, ih, ic, 0, 0, inbuf, tmp));
         }
         gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
 #ifdef _DEBUG
@@ -162,7 +159,7 @@ inline EE transpose_core_mali_fp16(GCLHandle_t handle,
     gs[0] = (iw + 3) / 4;
     gs[1] = ih;
     gs[2] = ic * it;
-    if (df == DF_NCTHW) {
+    if (nDims == 5) {
         sprintf(kernelName, "transpose_3d_nchw");
         CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel));
         CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, iw_off, ih_off, ow_str_val,
@@ -180,7 +177,7 @@ inline EE transpose_core_mali_fp16(GCLHandle_t handle,
     CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
 #endif
     if (omf == DF_NCWHC4) {
-        if (df == DF_NCTHW) {
+        if (nDims == 5) {
             CHECK_STATUS(NOT_SUPPORTED);
         }
         sprintf(kernelName, "mem_trans_nchw_to_ncwhc4");

@@ -14,10 +14,13 @@
 #include "cpu/x86/tensor_computing_x86.h"
 #ifdef _USE_FP32
 #include "cpu/x86/fp32/tensor_computing_fp32.h"
+#include "cpu/x86/fp32/transform_functions_fp32.h"
 #endif
 #ifdef _USE_FP16
 #include "cpu/x86/fp16/tensor_computing_fp16.h"
 #endif
+#include "cpu/x86/x86_functions.h"
+#include "blas_enhance.h"
 
 EE deconvolution_transform_filter_x86(TensorDesc filterDesc,
     const void *filter,
@@ -39,4 +42,23 @@ EE deconvolution_transform_filter_x86(TensorDesc filterDesc,
             break;
     }
     return ret;
+}
+
+EE deconvolution_overlap_crop_x86(void *input,
+    void *output,
+    TensorDesc inputDesc,
+    TensorDesc outputDesc,
+    ConvolutionParamSpec convParamSpec)
+{
+    switch (outputDesc.dt) {
+#ifdef _USE_FP32
+        case DT_F32: {
+            deconvOverlapAndCrop((F32 *)input, (F32 *)output, inputDesc, outputDesc, convParamSpec);
+            break;
+        }
+#endif
+        default:
+            return NOT_SUPPORTED;
+    }
+    return SUCCESS;
 }

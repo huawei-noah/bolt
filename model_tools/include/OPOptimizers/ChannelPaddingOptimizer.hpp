@@ -14,8 +14,6 @@
 #ifndef _H_CHANNELPADDINGOPTIMIZER
 #define _H_CHANNELPADDINGOPTIMIZER
 
-#include <vector>
-#include <string>
 #include "OPOptimizer.hpp"
 
 class ChannelPaddingOptimizer : public OPOptimizer {
@@ -107,7 +105,9 @@ class ChannelPaddingOptimizer : public OPOptimizer {
                     (U8 *)mt_new_storage(spec->ws[weightIndex].bytes_of_weight);
                 memcpy(spec->ws[weightIndex].weight, weight, weightSize);
                 memset(spec->ws[weightIndex].weight + weightSize, 0, weightSizeNew - weightSize);
-                delete weight;
+                if (outOfFileMapRange(weight, spec->mfd)) {
+                    delete weight;
+                }
                 U8 *vec = spec->ws[weightIndex].vec;
                 if (vec != nullptr) {
                     U32 vecSize = spec->ws[weightIndex].bytes_of_vec;
@@ -117,7 +117,9 @@ class ChannelPaddingOptimizer : public OPOptimizer {
                         (U8 *)mt_new_storage(spec->ws[weightIndex].bytes_of_vec);
                     memcpy((U8 *)(spec->ws[weightIndex].vec), vec, vecSize);
                     memset((U8 *)(spec->ws[weightIndex].vec + vecSize), 0, vecSizeNew - vecSize);
-                    delete vec;
+                    if (outOfFileMapRange(vec, spec->mfd)) {
+                        delete vec;
+                    }
                 }
                 std::string channelResizeName1 = channelResizeNamePrefix + std::to_string(i);
                 std::string channelResizeName2 = channelResizeNamePrefix + std::to_string(i + 2);
@@ -165,37 +167,58 @@ class ChannelPaddingOptimizer : public OPOptimizer {
                 memset(spec->ws[weightIndex].weight, 0, weightSizeNew);
                 U32 ocGroupSize = numKernels / groups;
                 U32 ocGroupSizeNew = numKernelsNew / groups;
-                U32 icGroupSize = inputChannels / groups;
-                U32 icGroupSizeNew = inputChannelsNew / groups;
-                for (U32 g = 0; g < groups; g++) {
-                    for (U32 oc = 0; oc < ocGroupSize; oc++) {
-                        for (U32 ic = 0; ic < icGroupSize; ic++) {
-                            U32 index, indexNew;
-                            if (spec->ops[i].type == OT_Deconvolution) {
-                                index = (((g * icGroupSize + ic) * ocGroupSize) + oc) * tileSize;
-                                indexNew =
-                                    (((g * icGroupSizeNew + ic) * ocGroupSizeNew) + oc) * tileSize;
-                            } else {
-                                index = (((g * ocGroupSize + oc) * icGroupSize) + ic) * tileSize;
-                                indexNew =
-                                    (((g * ocGroupSizeNew + oc) * icGroupSizeNew) + ic) * tileSize;
+
+                if (spec->ops[i].type == OT_Deconvolution) {  //CNHW
+                    U32 icGroupSize = inputChannels / groups;
+                    U32 icGroupSizeNew = inputChannelsNew / groups;
+                    for (U32 cg = 0; cg < groups; ++cg) {
+                        for (U32 ic = 0; ic < icGroupSize; ++ic) {
+                            for (U32 og = 0; og < groups; ++og) {
+                                U32 index =
+                                    ((cg * icGroupSize + ic) * numKernels + og * ocGroupSize) *
+                                    tileSize;
+                                U32 indexNew = ((cg * icGroupSizeNew + ic) * numKernelsNew +
+                                                   og * ocGroupSizeNew) *
+                                    tileSize;
+                                memcpy((U8 *)(spec->ws[weightIndex].weight) + indexNew,
+                                    weight + index, tileSize * ocGroupSize);
                             }
-                            memcpy((U8 *)(spec->ws[weightIndex].weight) + indexNew, weight + index,
-                                tileSize);
+                        }
+                    }
+                } else {  // NCHW
+                    for (U32 og = 0; og < groups; ++og) {
+                        for (U32 oc = 0; oc < ocGroupSize; ++oc) {
+                            for (U32 c = 0; c < inputChannels; ++c) {
+                                U32 index = ((og * ocGroupSize + oc) * inputChannels + c) * tileSize;
+                                U32 indexNew =
+                                    ((og * ocGroupSizeNew + oc) * inputChannels + c) * tileSize;
+                                memcpy((U8 *)(spec->ws[weightIndex].weight) + indexNew,
+                                    weight + index, tileSize);
+                            }
                         }
                     }
                 }
-                delete weight;
+                if (outOfFileMapRange(weight, spec->mfd)) {
+                    delete weight;
+                }
                 U8 *vec = spec->ws[weightIndex].vec;
-                if (vec != nullptr) {
+                if (vec != nullptr && numKernels != numKernelsNew) {
                     U32 vecSize = spec->ws[weightIndex].bytes_of_vec;
                     U32 vecSizeNew = spec->ws[weightIndex].bytes_of_vec / numKernels * numKernelsNew;
                     spec->ws[weightIndex].bytes_of_vec = vecSizeNew;
                     spec->ws[weightIndex].vec =
                         (U8 *)mt_new_storage(spec->ws[weightIndex].bytes_of_vec);
-                    memcpy((U8 *)(spec->ws[weightIndex].vec), vec, vecSize);
-                    memset((U8 *)(spec->ws[weightIndex].vec + vecSize), 0, vecSizeNew - vecSize);
-                    delete vec;
+                    U32 tile = vecSize / groups;
+                    U32 tileNew = vecSizeNew / groups;
+                    for (U32 g = 0; g < groups; g++) {
+                        memcpy(
+                            (U8 *)(spec->ws[weightIndex].vec) + g * tileNew, vec + g * tile, tile);
+                        memset((U8 *)(spec->ws[weightIndex].vec) + g * tileNew + tile, 0,
+                            tileNew - tile);
+                    }
+                    if (outOfFileMapRange(vec, spec->mfd)) {
+                        delete vec;
+                    }
                 }
                 int channelResizeIndex1 = i;
                 int channelResizeIndex2 = i + 2;
@@ -226,6 +249,35 @@ class ChannelPaddingOptimizer : public OPOptimizer {
                 }
                 continue;
             }
+            if (spec->ops[i].type == OT_PRelu) {
+                OperatorSpec currentOperator = spec->ops[i];
+                int weightIndex = searchWeightIndex(spec, currentOperator.name);
+                CHECK_REQUIREMENT(weightIndex >= 0);
+                U32 weightSize = spec->ws[weightIndex].bytes_of_weight;
+                int inputChannels = weightSize / bytesOf(spec->ws[weightIndex].mdt);
+                int inputChannelsNew =
+                    (inputChannels + channelAlign - 1) / channelAlign * channelAlign;
+                if (inputChannels > 1 && inputChannels != inputChannelsNew) {
+                    U32 weightSizeNew = weightSize / inputChannels * inputChannelsNew;
+                    U8 *weight = spec->ws[weightIndex].weight;
+                    spec->ws[weightIndex].bytes_of_weight = weightSizeNew;
+                    spec->ws[weightIndex].weight =
+                        (U8 *)mt_new_storage(spec->ws[weightIndex].bytes_of_weight);
+                    memset(spec->ws[weightIndex].weight, 0, weightSizeNew);
+                    memcpy(spec->ws[weightIndex].weight, weight, weightSize);
+                    delete weight;
+                    std::string channelResizeName1 = channelResizeNamePrefix + std::to_string(i);
+                    std::string channelResizeName2 = channelResizeNamePrefix + std::to_string(i + 2);
+                    insertChannelResizeOperator(spec, i, channelResizeName1.c_str(),
+                        currentOperator.input_tensors_name[0], channelResizeName2.c_str(), 1,
+                        inputChannels, inputChannelsNew);
+                    insertChannelResizeOperator(spec, i + 2, channelResizeName2.c_str(),
+                        currentOperator.output_tensors_name[0], nullptr, 1, inputChannelsNew,
+                        inputChannels);
+                    i += 2;
+                }
+                continue;
+            }
         }
 
         for (int i = 0; i < spec->num_operator_specs; i++) {
@@ -240,8 +292,11 @@ class ChannelPaddingOptimizer : public OPOptimizer {
                         canMergeChannelCutSpan(spec->ops[i], spec->ops[nextIndex])) {
                         if (output.size() == 1) {
                             setOperatorInvalid(spec, i, true);
-                            setOperatorInvalid(spec, nextIndex, true);
+                        } else {
+                            str_copy(spec->ops[nextIndex].input_tensors_name[0],
+                                spec->ops[i].input_tensors_name[0], NAME_LEN);
                         }
+                        setOperatorInvalid(spec, nextIndex, true);
                         if (nextIndex + 2 < spec->num_operator_specs &&
                             isBlankChannelResizeOperator(spec->ops[nextIndex + 2])) {
                             spec->ops[nextIndex + 2].ps = spec->ops[i].ps;
@@ -341,11 +396,15 @@ class ChannelPaddingOptimizer : public OPOptimizer {
                             spec->ws[weightIndex].weight + newIndex, weight + oldIndex, blockSize);
                     }
                 }
-                delete weight;
+                if (outOfFileMapRange(weight, spec->mfd)) {
+                    delete weight;
+                }
                 // process bias
                 if (vec != nullptr) {
                     memcpy(spec->ws[weightIndex].vec, vec, vecBytes);
-                    delete vec;
+                    if (outOfFileMapRange(vec, spec->mfd)) {
+                        delete vec;
+                    }
                 }
 
                 hasOptimized = true;

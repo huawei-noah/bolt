@@ -11,10 +11,8 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "sys.h"
-#include "error.h"
-#include "types.h"
 #include "gpu/mali/fp16/matmul_mali_fp16.h"
+#include "gpu/mali/cl/kernel_option/gemm_tn_opt.h"
 
 inline EE matmul_checkpara_mali_fp16(
     TensorDesc matrixADesc, TensorDesc matrixBDesc, TensorDesc matrixCDesc)
@@ -23,6 +21,39 @@ inline EE matmul_checkpara_mali_fp16(
         matrixADesc.dt != DT_F16) {
         return NOT_MATCH;
     }
+    return SUCCESS;
+}
+
+inline EE transpose_matrix(GCLHandle_t handle,
+    U32 iw_str,
+    U32 ih_str,
+    U32 iw_off,
+    U32 ih_off,
+    U32 ow_str,
+    U32 oh_str,
+    U32 ow_off,
+    U32 oh_off,
+    U32 w,
+    U32 h,
+    U32 c,
+    Mem inbuf,
+    Mem outbuf)
+{
+    U32 gs[3] = {(w + 3) / 4, h, c};
+    U32 ls[3] = {0, 0, 0};
+    U32 dim = 3;
+    U32 dimTran[3] = {1, 0, 2};
+    Kernel kernel;
+    char kernelName[128];
+    sprintf(kernelName, "transpose_nchw");
+    CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel));
+    CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, iw_off, ih_off, ow_str, oh_str, ow_off,
+        oh_off, dimTran[0], dimTran[1], dimTran[2], w, gs[0], gs[1], inbuf, outbuf));
+    gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
+#ifdef _DEBUG
+    CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
+    handle->t_total += handle->t_execute;
+#endif
     return SUCCESS;
 }
 
@@ -38,127 +69,85 @@ inline EE matmul_core_mali_fp16(GCLHandle_t handle,
     GCLMem_t matrixC,
     ForwardRunInfoMali_t forwardRunInfo)
 {
-    UNUSED(tmp);
-    UNUSED(matrixCDesc);
-    U32 adims = matrixADesc.nDims;
-    U32 ac = (adims > 2) ? matrixADesc.dims[2] : 1;
-    U32 ah = matrixADesc.dims[1];
-    U32 aw = matrixADesc.dims[0];
-    U32 bh = matrixBDesc.dims[1];
-    U32 bw = matrixBDesc.dims[0];
+    DataType dt;
+    U32 ac, ah, aw;
+    U32 bc, bh, bw;
+    U32 cc, ch, cw;
+    U32 aw_str, ah_str, aw_off, ah_off;
+    U32 bw_str, bh_str, bw_off, bh_off;
+    U32 cw_str, ch_str, cw_off, ch_off;
+    CHECK_STATUS(gclmem_get_desc_dim(matrixA->desc, &dt, NULL, NULL, &ac, &ah, &aw));
+    CHECK_STATUS(gclmem_get_desc_dim(matrixB->desc, NULL, NULL, NULL, &bc, &bh, &bw));
+    CHECK_STATUS(gclmem_get_desc_dim(matrixC->desc, NULL, NULL, NULL, &cc, &ch, &cw));
+    CHECK_STATUS(gclmem_get_desc_padding(matrixA->desc, &aw_str, &ah_str, NULL, &aw_off, &ah_off));
+    CHECK_STATUS(gclmem_get_desc_padding(matrixB->desc, &bw_str, &bh_str, NULL, &bw_off, &bh_off));
+    CHECK_STATUS(gclmem_get_desc_padding(matrixC->desc, &cw_str, &ch_str, NULL, &cw_off, &ch_off));
 
-    U32 item_w = forwardRunInfo->best_w[0];
-    U32 item_c = forwardRunInfo->best_c[0];
-    U32 item_k = forwardRunInfo->best_k[0];
-    cl_mem A, B, C;
-    A = matrixA->mem;
-    B = matrixB->mem;
-    C = matrixC->mem;
-    char kernelname[128];
+    U32 M, N, K;
+    U32 A_str, B_str, C_str;
+    U32 A_off, B_off, C_off;
+    U32 item_a = forwardRunInfo->best_k[0];
+    U32 item_b = forwardRunInfo->best_w[0];
+    Mem A = matrixA->mem;
+    Mem B = matrixB->mem;
+    Mem C = matrixC->mem;
+    Mem tmpbuf = tmp->mem;
+    U32 offset = 0;
+    A_off = 0;
+    B_off = 0;
+    C_off = ch_off * cw_str + cw_off;
+    C_str = cw_str * ch_str;
+
+    if (!transposeA) {
+        Mem subA;
+        M = ALIGN(ah, item_a);
+        K = aw;
+        U32 size_A = M * K * ac * bytesOf(dt);
+        CHECK_STATUS(gcl_create_sub_buffer(size_A, &offset, tmp, &subA));
+        CHECK_STATUS(transpose_matrix(
+            handle, aw_str, ah_str, aw_off, ah_off, M, K, 0, 0, aw, ah, ac, A, subA));
+        A_str = M * K;
+        A = subA;
+    } else {
+        A_off = ah_off * aw_str + aw_off;
+        A_str = aw_str * ah_str;
+        M = aw_str;
+        K = ah;
+    }
+
+    if (transposeB) {
+        Mem subB;
+        N = ALIGN(bh, item_b);
+        U32 size_B = N * K * bc * bytesOf(dt);
+        CHECK_STATUS(gcl_create_sub_buffer(size_B, &offset, tmp, &subB));
+        CHECK_STATUS(transpose_matrix(
+            handle, bw_str, bh_str, bw_off, bh_off, N, K, 0, 0, bw, bh, bc, B, subB));
+        B_str = N * K;
+        B = subB;
+    } else {
+        B_off = bh_off * bw_str + bw_off;
+        B_str = bw_str * bh_str;
+        N = bw_str;
+    }
+
+    char kernelName[128];
     Kernel kernel;
-    U32 gs[3];
+    KernelOpt kernelOpt;
+    U32 gs[3] = {(cw + item_b - 1) / item_b, (ch + item_a - 1) / item_a, cc};
     U32 ls[3] = {0, 0, 0};
     U32 dim = 3;
-    if (matrixA->desc.offset[0] != 0 || matrixA->desc.offset[1] != 0 ||
-        matrixB->desc.offset[0] != 0 || matrixB->desc.offset[1] != 0 ||
-        matrixC->desc.offset[0] != 0 || matrixC->desc.offset[1] != 0) {
-        CHECK_STATUS(NOT_SUPPORTED);
-    }
-    if (transposeA && !transposeB) {
-        U32 M = matrixA->desc.stride[0];
-        U32 N = matrixB->desc.stride[0];
-        U32 K = ah;
-        U32 ow_str = matrixC->desc.stride[0];
-        U32 A_str = M * matrixA->desc.stride[1];
-        U32 B_str = N * matrixB->desc.stride[1];
-        U32 C_str = ow_str * matrixC->desc.stride[1];
-        U32 batch = ac;
-        gs[0] = (bw + item_w - 1) / item_w;
-        gs[1] = (aw + item_k - 1) / item_k;
-        gs[2] = batch;
-        sprintf(kernelname, "gemm_tn_nobias_%d%d", item_k, item_w);
-        CHECK_STATUS(gcl_create_kernel(handle, kernelname, &kernel));
-        CHECK_STATUS(gcl_set_kernelArgs(kernel, M, N, K, ow_str, A_str, B_str, C_str, 0, 0, bw, aw,
-            gs[0], gs[1], 0, 0, A, B, C));
-        gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelname);
-#ifdef _DEBUG
-        CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelname));
-        CHECK_STATUS(gcl_print_memory<F16>(handle, matrixA, "gemm_tn_a"));
-        CHECK_STATUS(gcl_print_memory<F16>(handle, matrixB, "gemm_tn_b"));
-        CHECK_STATUS(gcl_print_memory<F16>(handle, matrixC, "gemm_tn_c"));
-        handle->t_total += handle->t_execute;
-#endif
-        return SUCCESS;
-    }
 
-    if (!transposeA && transposeB) {
-        U32 KA = matrixA->desc.stride[0];
-        U32 KB = matrixB->desc.stride[0];
-        U32 K = (aw + item_c - 1) / item_c * item_c;
-        U32 ow_str = matrixC->desc.stride[0];
-        U32 A_str = KA * matrixA->desc.stride[1];
-        U32 B_str = KB * matrixB->desc.stride[1];
-        U32 C_str = ow_str * matrixC->desc.stride[1];
-        U32 batch = ac;
-        gs[0] = (bh + item_w - 1) / item_w;
-        gs[1] = (ah + item_k - 1) / item_k;
-        gs[2] = batch;
-        sprintf(kernelname, "gemm_nt_nobias_%d%d%d", item_k, item_w, (item_c >> 1));
-        CHECK_STATUS(gcl_create_kernel(handle, kernelname, &kernel));
-        CHECK_STATUS(gcl_set_kernelArgs(
-            kernel, KA, KB, K, ow_str, A_str, B_str, C_str, 0, 0, bh, ah, gs[0], gs[1], A, B, C));
-        gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelname);
+    CHECK_STATUS(set_gemm_tn_opt_mali(
+        item_a, item_b, false, false, false, ACTIVATION_NULL, DT_F16, kernelName, &kernelOpt));
+    CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
+    CHECK_STATUS(gcl_set_kernelArgs(kernel, M, N, K, A_str, B_str, C_str, A_off, B_off, C_off,
+        cw_str, cw, ch, cc, gs[0], gs[1], A, B, C));
+    gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
 #ifdef _DEBUG
-        CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelname));
-        CHECK_STATUS(gcl_print_memory<F16>(handle, matrixA, "gemm_nt_a"));
-        CHECK_STATUS(gcl_print_memory<F16>(handle, matrixB, "gemm_nt_b"));
-        CHECK_STATUS(gcl_print_memory<F16>(handle, matrixC, "gemm_nt_c"));
-        handle->t_total += handle->t_execute;
+    CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
+    handle->t_total += handle->t_execute;
 #endif
-        return SUCCESS;
-    }
-
-    if (transposeA && transposeB) {
-        if (matrixADesc.df != DF_MKT) {
-            CHECK_STATUS(NOT_SUPPORTED);
-        }
-        U32 m, k, t;
-        get_nlp_mkt_val(matrixADesc, NULL, &m, &k, &t);
-        if (t != 1) {
-            CHECK_STATUS(NOT_SUPPORTED);
-        }
-        if (m != 1) {
-            CHECK_STATUS(NOT_SUPPORTED);
-        }
-        if (aw != 1) {
-            CHECK_STATUS(NOT_SUPPORTED);
-        }
-        if (ah != k) {
-            CHECK_STATUS(NOT_MATCH);
-        }
-        U32 KA = matrixA->desc.stride[2] * 4;
-        U32 KB = matrixB->desc.stride[0];
-        U32 K = (ah + item_c - 1) / item_c * item_c;
-        U32 ow_str = matrixC->desc.stride[0];
-        U32 batch = 1;
-        gs[0] = (bh + item_w - 1) / item_w;
-        gs[1] = 1;
-        gs[2] = batch;
-        sprintf(kernelname, "gemm_nt_nobias_%d%d%d", item_k, item_w, (item_c >> 1));
-        CHECK_STATUS(gcl_create_kernel(handle, kernelname, &kernel));
-        CHECK_STATUS(gcl_set_kernelArgs(
-            kernel, KA, KB, K, ow_str, 0, 0, 0, 0, 0, bh, 1, gs[0], gs[1], A, B, C));
-        gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelname);
-#ifdef _DEBUG
-        CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelname));
-        CHECK_STATUS(gcl_print_memory<F16>(handle, matrixA, "gemm_nt_a"));
-        CHECK_STATUS(gcl_print_memory<F16>(handle, matrixB, "gemm_nt_b"));
-        CHECK_STATUS(gcl_print_memory<F16>(handle, matrixC, "gemm_nt_c"));
-        handle->t_total += handle->t_execute;
-#endif
-        return SUCCESS;
-    }
-    return NOT_SUPPORTED;
+    return SUCCESS;
 }
 
 EE matmul_infer_forward_tmp_bytes_mali_fp16(TensorDesc matrixADesc,
@@ -168,12 +157,23 @@ EE matmul_infer_forward_tmp_bytes_mali_fp16(TensorDesc matrixADesc,
     U32 *bytes,
     ForwardRunInfoMali_t forwardRunInfo)
 {
-    UNUSED(matrixADesc);
-    UNUSED(transposeA);
-    UNUSED(matrixBDesc);
-    UNUSED(transposeB);
-    UNUSED(forwardRunInfo);
-    *bytes = 0;
+    U32 item_a = forwardRunInfo->best_k[0];
+    U32 item_b = forwardRunInfo->best_w[0];
+    DataType dt;
+    U32 ac, ah, aw;
+    U32 bc, bh, bw;
+    CHECK_STATUS(tensorSelectGet(matrixADesc, &dt, NULL, NULL, &ac, &ah, &aw));
+    CHECK_STATUS(tensorSelectGet(matrixBDesc, NULL, NULL, NULL, &bc, &bh, &bw));
+    U32 size = 0;
+    if (!transposeA) {
+        size += ALIGN(ah, item_a) * aw * ac * bytesOf(dt);
+        size = ALIGN(size, 1024);
+    }
+
+    if (transposeB) {
+        size += ALIGN(bh, item_b) * bw * bc * bytesOf(dt);
+    }
+    *bytes = size;
     return SUCCESS;
 }
 

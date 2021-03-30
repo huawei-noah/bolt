@@ -11,9 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "sys.h"
-#include "error.h"
-#include "types.h"
 #include "gpu/mali/fp16/padding_mali_fp16.h"
 
 inline EE padding_checkpara_mali_fp16(GCLHandle_t handle,
@@ -27,12 +24,6 @@ inline EE padding_checkpara_mali_fp16(GCLHandle_t handle,
         return NULL_POINTER;
     }
     if (inputDesc.dt != outputDesc.dt || inputDesc.dt != DT_F16) {
-        return NOT_SUPPORTED;
-    }
-    if (inputDesc.df != outputDesc.df || inputDesc.df != DF_NCHW) {
-        return NOT_SUPPORTED;
-    }
-    if (input->desc.memFormat != output->desc.memFormat || input->desc.memFormat != DF_NCWHC4) {
         return NOT_SUPPORTED;
     }
     if (padParamSpec.pad_mode == Pad_Reflect &&
@@ -63,93 +54,60 @@ inline EE padding_core_mali_fp16(GCLHandle_t handle,
     outbuf = output->mem;
 
     U32 iw_str, ih_str, iw_off, ih_off;
-    ih_str = input->desc.stride[0];
-    iw_str = input->desc.stride[1];
-    ih_off = input->desc.offset[0];
-    iw_off = input->desc.offset[1];
-
     U32 ow_str, oh_str, ow_off, oh_off;
-    oh_str = output->desc.stride[0];
-    ow_str = output->desc.stride[1];
-    oh_off = output->desc.offset[0];
-    ow_off = output->desc.offset[1];
+    get_gclmem_dim(input->desc, &iw_str, &ih_str, NULL, &iw_off, &ih_off);
+    get_gclmem_dim(output->desc, &ow_str, &oh_str, NULL, &ow_off, &oh_off);
 
-    U32 pw, ph, pr, pb;
-    pw = padParamSpec.left;
+    U32 pl, pr, pt, pb;
+    pl = padParamSpec.left;
     pr = padParamSpec.right;
-    ph = padParamSpec.top;
+    pt = padParamSpec.top;
     pb = padParamSpec.bottom;
 
-    Kernel kernel;
-    switch (padParamSpec.pad_mode) {
-        case Pad_Constant: {
-            CHECK_STATUS(gcl_create_kernel(handle, "padding_constant", &kernel));
-            CHECK_STATUS(gcl_set_kernelArgs(kernel, ih, iw, ih_str, iw_str, ih_off, iw_off, oh, ow,
-                oh_str, ow_str, oh_off, ow_off, ph, pb, pw, pr, inbuf, outbuf));
-
-            U32 gs[3] = {oh, ow, (oc + 3) / 4 * on};
-            U32 ls[3] = {0, 0, 0};
-            U32 dim = 3;
-            gcl_set_kernelVec(handle, kernel, dim, gs, ls, "padding_constant");
-#ifdef _DEBUG
-            CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, "padding_constant"));
-            CHECK_STATUS(gcl_print_memory<F16>(handle, input, "padding_constant_input"));
-            CHECK_STATUS(gcl_print_memory<F16>(handle, output, "padding_constant_output"));
-#endif
-            break;
-        }
-        case Pad_Reflect: {
-            CHECK_STATUS(gcl_create_kernel(handle, "padding_reflect", &kernel));
-            CHECK_STATUS(gcl_set_kernelArgs(kernel, ih, iw, ih_str, iw_str, ih_off, iw_off, oh, ow,
-                oh_str, ow_str, oh_off, ow_off, ph, pb, pw, pr, inbuf, outbuf));
-
-            U32 gs[3] = {oh, ow, (oc + 3) / 4 * on};
-            U32 ls[3] = {0, 0, 0};
-            U32 dim = 3;
-            gcl_set_kernelVec(handle, kernel, dim, gs, ls, "padding_reflect");
-#ifdef _DEBUG
-            CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, "padding_reflect"));
-            CHECK_STATUS(gcl_print_memory<F16>(handle, input, "padding_reflect_input"));
-            CHECK_STATUS(gcl_print_memory<F16>(handle, output, "padding_reflect_output"));
-#endif
-            break;
-        }
-        case Pad_Edge: {
-            CHECK_STATUS(gcl_create_kernel(handle, "padding_edge", &kernel));
-            CHECK_STATUS(gcl_set_kernelArgs(kernel, ih, iw, ih_str, iw_str, ih_off, iw_off, oh, ow,
-                oh_str, ow_str, oh_off, ow_off, ph, pb, pw, pr, inbuf, outbuf));
-
-            U32 gs[3] = {oh, ow, (oc + 3) / 4 * on};
-            U32 ls[3] = {0, 0, 0};
-            U32 dim = 3;
-            gcl_set_kernelVec(handle, kernel, dim, gs, ls, "padding_edge");
-#ifdef _DEBUG
-            CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, "padding_edge"));
-            CHECK_STATUS(gcl_print_memory<F16>(handle, input, "padding_edge_input"));
-            CHECK_STATUS(gcl_print_memory<F16>(handle, output, "padding_edge_output"));
-#endif
-            break;
-        }
-        case Pad_Symmetric: {
-            CHECK_STATUS(gcl_create_kernel(handle, "padding_symmetric", &kernel));
-            CHECK_STATUS(gcl_set_kernelArgs(kernel, ih, iw, ih_str, iw_str, ih_off, iw_off, oh, ow,
-                oh_str, ow_str, oh_off, ow_off, ph, pb, pw, pr, inbuf, outbuf));
-
-            U32 gs[3] = {oh, ow, (oc + 3) / 4 * on};
-            U32 ls[3] = {0, 0, 0};
-            U32 dim = 3;
-            gcl_set_kernelVec(handle, kernel, dim, gs, ls, "padding_symmetric");
-#ifdef _DEBUG
-            CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, "padding_symmetric"));
-            CHECK_STATUS(gcl_print_memory<F16>(handle, input, "padding_symmetric_input"));
-            CHECK_STATUS(gcl_print_memory<F16>(handle, output, "padding_symmetric_output"));
-#endif
-            break;
-        }
-        default: {
-            CHECK_STATUS(NOT_SUPPORTED);
-        }
+    char kernelName[128];
+    char formatName[128];
+    char modeName[128];
+    U32 gs[3] = {0, 0, 0};
+    U32 ls[3] = {0, 0, 0};
+    U32 dim = 3;
+    if (input->desc.memFormat == DF_NCHW) {
+        strcpy(formatName, "nchw_");
+        gs[0] = (ow + 3) / 4;
+        gs[1] = oh;
+        gs[2] = oc * on;
+    } else if (input->desc.memFormat == DF_NCWHC4) {
+        strcpy(formatName, "");
+        gs[0] = oh;
+        gs[1] = ow;
+        gs[2] = (oc + 3) / 4 * on;
+    } else {
+        CHECK_STATUS(NOT_SUPPORTED)
     }
+    switch (padParamSpec.pad_mode) {
+        case Pad_Constant:
+            strcpy(modeName, "constant");
+            break;
+        case Pad_Edge:
+            strcpy(modeName, "edge");
+            break;
+        case Pad_Reflect:
+            strcpy(modeName, "reflect");
+            break;
+        case Pad_Symmetric:
+            strcpy(modeName, "symmetric");
+            break;
+        default:
+            return NOT_SUPPORTED;
+    }
+    sprintf(kernelName, "padding_%s%s", formatName, modeName);
+    Kernel kernel;
+    CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel));
+    CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, iw_off, ih_off, ow_str, oh_str, ow_off,
+        oh_off, iw, ih, ow, oh, pt, pb, pl, pr, 0, 0, gs[0], gs[1], inbuf, outbuf));
+    gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
+#ifdef _DEBUG
+    CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, "padding_constant"));
+#endif
     return SUCCESS;
 }
 

@@ -178,12 +178,14 @@ int int8ConvolutionTest(int argc, char *argv[], DataType dt, DataType filterData
         tmpTensor.resize(tensor1d(DT_U8, tmpBytes));
         tmpTensor.alloc();
 
+        std::vector<Tensor> inputTensors(1, inputTensor);
+        std::vector<Tensor> inputTensorsRef(1, inputTensorRef);
         if (UT_CHECK) {
-            CHECK_STATUS(convolution(inputTensor, ftmTensor, p, alg, scales, biasTensor, tmpTensor,
+            CHECK_STATUS(convolution(inputTensors, ftmTensor, p, alg, scales, biasTensor, tmpTensor,
                 outputTensor, activationDesc, &archInfo));
 
             // naive implement
-            CHECK_STATUS(convolution(inputTensorRef, filterTensorRef, p, alg, nullptr, biasTensor,
+            CHECK_STATUS(convolution(inputTensorsRef, filterTensorRef, p, alg, nullptr, biasTensor,
                 tmpTensor, outputTensorRef, activationDesc, &archInfo_org));
 
             U32 output_size = outputTensor.length();
@@ -213,7 +215,7 @@ int int8ConvolutionTest(int argc, char *argv[], DataType dt, DataType filterData
         // benchmark
         double time_start = ut_time_ms();
         for (int iter = 0; iter < UT_LOOPS; iter++) {
-            CHECK_STATUS(convolution(inputTensor, ftmTensor, p, alg, scales, biasTensor, tmpTensor,
+            CHECK_STATUS(convolution(inputTensors, ftmTensor, p, alg, scales, biasTensor, tmpTensor,
                 outputTensor, activationDesc, &archInfo));
         }
         double time_end = ut_time_ms();

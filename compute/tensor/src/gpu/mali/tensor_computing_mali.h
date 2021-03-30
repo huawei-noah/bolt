@@ -13,8 +13,12 @@
 
 #ifndef _H_TENSOR_COMPUTING_MALI
 #define _H_TENSOR_COMPUTING_MALI
-#include "types.h"
-#include "tensor_computing_type.h"
+
+#include "tensor_desc.h"
+#include "parameter_spec.h"
+#include "gcl.h"
+#include "ocl_desc_trans.h"
+#define ALIGN(len, align_num) ((len + align_num - 1) / align_num * align_num)
 
 EE pooling_infer_forward_tmp_bytes_mali(
     TensorDesc inputDesc, U32 *bytes, ForwardRunInfoMali_t forwardRunInfo);
@@ -306,10 +310,14 @@ EE eltwise_infer_output_size_mali(std::vector<TensorDesc> inputDesc,
     GCLMemDesc_t gclmemInputDesc,
     GCLMemDesc_t gclmemOutputDesc);
 
+EE eltwise_infer_forward_tmp_bytes_mali(
+    std::vector<TensorDesc> inputDesc, std::vector<GCLMemDesc> gclmemInputDesc, U32 *bytes);
+
 EE eltwise_mali(GCLHandle_t handle,
     std::vector<TensorDesc> inputDesc,
     std::vector<void *> input,
     EltwiseParamSpec eltwiseDesc,
+    GCLMem_t tmpbuf,
     TensorDesc outputDesc,
     GCLMem_t output);
 
@@ -350,7 +358,9 @@ EE fully_connected_infer_output_size_mali(TensorDesc inputDesc,
 EE fully_connected_infer_forward_algorithm_mali(GCLHandle_t handle,
     TensorDesc inputDesc,
     TensorDesc filterDesc,
-    std::vector<TensorDesc> outputDescs,
+    TensorDesc outputDesc,
+    GCLMemDesc inputMemDesc,
+    GCLMemDesc outputMemDesc,
     ForwardRunInfoMali_t forwardRunInfo);
 
 EE fully_connected_transform_filter_bytes_mali(TensorDesc filterDesc,
@@ -362,7 +372,7 @@ EE fully_connected_transform_filter_mali(GCLHandle_t handle,
     TensorDesc filterDesc,
     GCLMem_t filter,
     TensorDesc *fltmemDesc,
-    std::vector<GCLMem_t> fltmem,
+    GCLMem_t fltmem,
     ForwardRunInfoMali_t forwardRunInfo);
 
 EE fully_connected_infer_forward_tmp_bytes_mali(
@@ -372,13 +382,13 @@ EE fully_connected_mali(GCLHandle_t handle,
     TensorDesc inputDesc,
     const GCLMem_t input,
     TensorDesc filterDesc,
-    std::vector<GCLMem_t> *filter,
+    GCLMem_t filter,
     TensorDesc biasDesc,
-    std::vector<GCLMem_t> *bias,
+    GCLMem_t bias,
     U32 tmpBytes,
     GCLMem_t tmpBuf,
     TensorDesc outputDesc,
-    std::vector<GCLMem_t> *output,
+    GCLMem_t output,
     ForwardRunInfoMali_t forwardRunInfo);
 
 EE scale_infer_output_size_mali(TensorDesc inputDesc,
@@ -413,7 +423,9 @@ EE concat_infer_output_size_mali(std::vector<TensorDesc> inputDesc,
     GCLMemDesc_t gclmemInputDesc,
     GCLMemDesc_t gclmemOutputDesc);
 
-EE concat_infer_forward_tmp_bytes_mali(std::vector<TensorDesc> inputDesc, U32 *bytes);
+EE concat_infer_forward_tmp_bytes_mali(std::vector<TensorDesc> inputDesc, 
+    std::vector<GCLMemDesc> gclmemInputDesc,
+    U32 *bytes);
 
 EE concat_mali(GCLHandle_t handle,
     std::vector<TensorDesc> inputDesc,
@@ -438,20 +450,40 @@ EE clip_mali(GCLHandle_t handle,
     GCLMem_t output);
 
 EE squeeze_infer_output_size_mali(TensorDesc inputDesc,
-    TensorDesc *outputDesc,
+    TensorDesc outputDesc,
     GCLMemDesc_t gclmemInputDesc,
     GCLMemDesc_t gclmemOutputDesc);
 
-EE squeeze_mali(
-    GCLHandle_t handle, TensorDesc inputDesc, GCLMem_t input, TensorDesc outputDesc, GCLMem_t output);
+EE squeeze_infer_forward_tmp_bytes_mali(TensorDesc inputDesc,
+    GCLMemDesc gclmemInputDesc,
+    TensorDesc outputDesc,
+    GCLMemDesc gclmemOutputDesc,
+    U32 *bytes);
+
+EE squeeze_mali(GCLHandle_t handle,
+    TensorDesc inputDesc,
+    GCLMem_t input,
+    GCLMem_t tmpbuf,
+    TensorDesc outputDesc,
+    GCLMem_t output);
 
 EE unsqueeze_infer_output_size_mali(TensorDesc inputDesc,
-    TensorDesc *outputDesc,
+    TensorDesc outputDesc,
     GCLMemDesc_t gclmemInputDesc,
     GCLMemDesc_t gclmemOutputDesc);
 
-EE unsqueeze_mali(
-    GCLHandle_t handle, TensorDesc inputDesc, GCLMem_t input, TensorDesc outputDesc, GCLMem_t output);
+EE unsqueeze_infer_forward_tmp_bytes_mali(TensorDesc inputDesc,
+    GCLMemDesc gclmemInputDesc,
+    TensorDesc outputDesc,
+    GCLMemDesc gclmemOutputDesc,
+    U32 *bytes);
+
+EE unsqueeze_mali(GCLHandle_t handle,
+    TensorDesc inputDesc,
+    GCLMem_t input,
+    GCLMem_t tmpbuf,
+    TensorDesc outputDesc,
+    GCLMem_t output);
 
 EE reshape_infer_output_size_mali(TensorDesc inputDesc,
     ReshapeParamSpec p,
@@ -499,7 +531,7 @@ EE depth2space_mali(GCLHandle_t handle,
 
 EE embedding_infer_output_size_mali(TensorDesc inputDesc,
     EmbedParamSpec p,
-    DataType dt,
+    DataType odt,
     TensorDesc *outputDesc,
     GCLMemDesc_t gclmemInputDesc,
     GCLMemDesc_t gclmemOutputDesc);
@@ -518,11 +550,14 @@ EE normalization_infer_output_size_mali(TensorDesc inputDesc,
     GCLMemDesc_t gclmemInputDesc,
     GCLMemDesc_t gclmemOutputDesc);
 
+EE normalization_infer_forward_tmp_bytes_mali(GCLMemDesc gclmemInputDesc, U32 *bytes);
+
 EE layer_normalization_mali(GCLHandle_t handle,
     TensorDesc inputDesc,
     GCLMem_t input,
     GCLMem_t alpha,
     GCLMem_t beta,
+    GCLMem_t tmpbuf,
     TensorDesc outputDesc,
     GCLMem_t output);
 
@@ -541,6 +576,9 @@ EE matmul_infer_forward_algorithm_mali(GCLHandle_t handle,
     TensorDesc matrixBDesc,
     bool TransposeB,
     TensorDesc matrixCDesc,
+    GCLMemDesc gclmemMatrixADesc,
+    GCLMemDesc gclmemMatrixBDesc,
+    GCLMemDesc gclmemMatrixCDesc,
     ForwardRunInfoMali_t forwardRunInfo);
 
 EE matmul_infer_forward_tmp_bytes_mali(TensorDesc matrixADesc,
@@ -600,16 +638,23 @@ EE slice_infer_output_size_mali(TensorDesc inputDesc,
     GCLMemDesc_t gclmemInputDesc,
     GCLMemDesc_t gclmemOutputDesc);
 
+EE slice_infer_forward_tmp_bytes_mali(TensorDesc inputDesc,
+    GCLMemDesc gclmemInputDesc,
+    SliceParamSpec p,
+    std::vector<TensorDesc> outputDesc,
+    U32 *bytes);
+
 EE slice_mali(GCLHandle_t handle,
     TensorDesc inputDesc,
     GCLMem_t input,
     SliceParamSpec p,
+    GCLMem_t tmpbuf,
     std::vector<TensorDesc> outputDesc,
     std::vector<void *> *output);
 
 EE rnncell_infer_output_size_mali(TensorDesc inputDesc,
     RNNParamSpec rnnParamSpec,
-    TensorDesc *outputDesc,
+    TensorDesc outputDesc,
     GCLMemDesc_t gclmemInputDesc,
     GCLMemDesc_t gclmemStateDesc,
     GCLMemDesc_t gclmemOutputDesc);
@@ -618,10 +663,13 @@ EE rnncell_infer_forward_algorithm_mali(GCLHandle_t handle,
     TensorDesc xDesc,
     TensorDesc filterDesc,
     TensorDesc biasDesc,
-    RNNParamSpec rnncellDesc,
+    RNNParamSpec rnnPara,
     U32 batchStrideX,
     U32 batchStrideH,
     TensorDesc hDesc,
+    GCLMemDesc inputMemDesc,
+    GCLMemDesc stateMemDesc,
+    GCLMemDesc outputMemDesc,
     ForwardRunInfoMali_t forwardRunInfo);
 
 EE rnn_transform_filter_bytes_mali(TensorDesc filterDesc,
@@ -780,6 +828,84 @@ EE channel_resize_mali(GCLHandle_t handle,
     TensorDesc inputDesc,
     GCLMem_t input,
     ChannelResizeParamSpec p,
+    TensorDesc outputDesc,
+    GCLMem_t output);
+
+EE reduction_infer_output_size_mali(TensorDesc inputDesc,
+    TensorDesc maskDesc,
+    ReductionParamSpec p,
+    TensorDesc *outputDesc,
+    GCLMemDesc_t gclmemInputDesc,
+    GCLMemDesc_t gclmemOutputDesc);
+
+EE reduction_infer_forward_tmp_bytes_mali(TensorDesc inputDesc,
+    ReductionParamSpec p,
+    TensorDesc outputDesc,
+    GCLMemDesc gclmemInputDesc,
+    GCLMemDesc gclmemOutputDesc,
+    U32 *bytes);
+
+EE reduction_mali(GCLHandle_t handle,
+    TensorDesc inputDesc,
+    GCLMem_t input,
+    TensorDesc maskDesc,
+    GCLMem_t mask,
+    ReductionParamSpec p,
+    GCLMem_t tmp,
+    TensorDesc outputDesc,
+    GCLMem_t output);
+
+EE topk_infer_output_size_mali(TensorDesc inputDesc,
+    TopKParamSpec p,
+    TensorDesc *outputDesc,
+    TensorDesc *outputDescIndices,
+    GCLMemDesc_t gclmemInputDesc,
+    GCLMemDesc_t gclmemOutputDesc,
+    GCLMemDesc_t gclmemOutputIndicesDesc);
+
+EE topk_infer_forward_tmp_bytes_mali(
+    TensorDesc inputDesc, TopKParamSpec p, TensorDesc outputDesc, U32 *bytes);
+
+EE topk_mali(GCLHandle_t handle,
+    TensorDesc inputDesc,
+    GCLMem_t input,
+    TopKParamSpec p,
+    GCLMem_t tmpbuf,
+    TensorDesc outputDesc,
+    GCLMem_t output,
+    TensorDesc outputIndicesDesc,
+    GCLMem_t outputIndices);
+
+EE tfslice_infer_output_size_mali(TensorDesc inputDesc,
+    TfSliceParamSpec p,
+    TensorDesc *outputDesc,
+    GCLMemDesc_t gclmemInputDesc,
+    GCLMemDesc_t gclmemOutputDesc);
+
+EE tfslice_infer_forward_tmp_bytes_mali(TensorDesc inputDesc,
+    TensorDesc outputDesc,
+    GCLMemDesc gclmemInputDesc,
+    GCLMemDesc gclmemOutputDesc,
+    U32 *bytes);
+
+EE tfslice_mali(GCLHandle_t handle,
+    TensorDesc inputDesc,
+    GCLMem_t input,
+    TfSliceParamSpec p,
+    GCLMem_t tmpbuf,
+    TensorDesc outputDesc,
+    GCLMem_t output);
+
+EE cast_infer_output_size_mali(TensorDesc inputDesc,
+    CastParamSpec p,
+    TensorDesc *outputDesc,
+    GCLMemDesc_t gclmemInputDesc,
+    GCLMemDesc_t gclmemOutputDesc);
+
+EE cast_mali(GCLHandle_t handle,
+    TensorDesc inputDesc,
+    GCLMem_t input,
+    CastParamSpec p,
     TensorDesc outputDesc,
     GCLMem_t output);
 #endif

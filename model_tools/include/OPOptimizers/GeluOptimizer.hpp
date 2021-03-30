@@ -14,7 +14,6 @@
 #ifndef _H_GeluOPTIMIZER
 #define _H_GeluOPTIMIZER
 
-#include "model_tools.h"
 #include "OPOptimizer.hpp"
 
 class GeluOptimizer : public OPOptimizer {
@@ -29,9 +28,9 @@ class GeluOptimizer : public OPOptimizer {
                 int AddIndex = erfIndex + 1;
                 int secMulIndex = erfIndex + 2;
 
-                if (spec->ops[firMulIndex].type == OT_Scale) {
-                    if (spec->ops[divIndex].type == OT_Scale) {
-                        if (spec->ops[AddIndex].type == OT_Scale) {
+                if (spec->ops[firMulIndex].type == OT_Power) {
+                    if (spec->ops[divIndex].type == OT_Power) {
+                        if (spec->ops[AddIndex].type == OT_Power) {
                             if (spec->ops[secMulIndex].type == OT_Eltwise) {
                                 spec->ops[secMulIndex].num_inputs = 1;
                                 free(spec->ops[secMulIndex].input_tensors_name[1]);
@@ -42,24 +41,6 @@ class GeluOptimizer : public OPOptimizer {
                                 setOperatorInvalid(spec, divIndex);
                                 setOperatorInvalid(spec, erfIndex);
                                 setOperatorInvalid(spec, AddIndex);
-
-                                int firMulWeightIndex =
-                                    searchWeightIndex(spec, spec->ops[firMulIndex].name);
-                                spec->ws[firMulWeightIndex].bytes_of_weight = 0;
-                                delete spec->ws[firMulWeightIndex].weight;
-                                spec->ws[firMulWeightIndex].weight = nullptr;
-
-                                int divWeightIndex =
-                                    searchWeightIndex(spec, spec->ops[divIndex].name);
-                                spec->ws[divWeightIndex].bytes_of_weight = 0;
-                                delete spec->ws[divWeightIndex].weight;
-                                spec->ws[divWeightIndex].weight = nullptr;
-
-                                int AddWeightIndex =
-                                    searchWeightIndex(spec, spec->ops[AddIndex].name);
-                                spec->ws[AddWeightIndex].bytes_of_vec = 0;
-                                delete spec->ws[AddWeightIndex].vec;
-                                spec->ws[AddWeightIndex].vec = nullptr;
 
                                 hasOptimized = true;
                             }

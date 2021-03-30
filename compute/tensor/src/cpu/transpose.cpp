@@ -12,13 +12,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "cpu/tensor_computing_cpu.h"
+#include "array_transpose.h"
 
 EE transpose_cpu(
     TensorDesc inputDesc, const void *input, U32 *dim, TensorDesc outputDesc, void *output)
 {
+    if (nullptr == input && tensorNumElements(inputDesc) == 0) {
+        return SUCCESS;
+    }
+
     if (nullptr == input || nullptr == output || nullptr == dim) {
         CHECK_STATUS(NULL_POINTER);
     }
-    return array_transpose(
-        inputDesc.dt, inputDesc.dims, input, outputDesc.dims, output, dim, inputDesc.nDims);
+    array_transpose(bytesOf(inputDesc.dt), inputDesc.dims, input, outputDesc.dims, output, dim,
+        inputDesc.nDims, outputDesc.nDims);
+    return SUCCESS;
 }

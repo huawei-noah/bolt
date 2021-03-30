@@ -42,6 +42,13 @@ typedef enum {
     X86_AVX2 = 7,
 } Arch;
 
+inline const char *const *ArchName()
+{
+    static const char *const names[] = {"UNKNOWN", "SERIAL", "MALI", "ARM_V7", "ARM_V8",
+        "ARM_V8.2_LITTLE", "ARM_V8.2_BIG", "X86_AVX2"};
+    return names;
+}
+
 typedef struct {
     Arch arch;
     void *archPara;

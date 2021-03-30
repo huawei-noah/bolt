@@ -46,8 +46,7 @@ public:
         auto vectorMem = (OclMemory *)modelVectorTensor.get_memory();
         modelWeightTensor.resize(weightDesc);
         modelVectorTensor.resize(biasDesc);
-
-        U32 stride[3] = {this->p.num_outputs, this->numInput, 1};
+        U32 stride[3] = {this->numInput, this->p.num_outputs, 1};
         U32 offset[3] = {0, 0, 0};
         GCLMemType mt = GCL_MEM_BUF;
         MemFlags flags = CL_MEM_READ_WRITE;
@@ -55,7 +54,7 @@ public:
         CHECK_STATUS(gclmem_set_desc_padding(&desc, stride, offset, this->dt, DF_NCHW, mt, flags));
         weightMem->padding(desc);
 
-        stride[0] = (this->p.num_outputs + 3) / 4 * 4;
+        stride[0] = this->p.num_outputs + 8;
         stride[1] = 1;
         stride[2] = 1;
         gclmem_set_desc_padding(&desc, stride, offset, this->dt, DF_NHWC, mt, flags);
@@ -71,7 +70,7 @@ public:
         Tensor inputTensor = this->inputTensors[0];
         Tensor filterTensor = Tensor(OCLMem);
         Tensor outputTensor = this->outputTensors[0];
-        filterTensor.resize(filterDesc4D);
+        filterTensor.resize(filterDesc2D);
         ((MaliPara_t)(this->archInfo.archPara))->forwardRunInfo->algorithm =
             CONVOLUTION_ALGORITHM_NULL;
         I32 algo[4];
@@ -109,19 +108,16 @@ public:
     {
         this->needSetKernelVec = true;
         TensorDesc inputDesc = inTensors[0]->get_desc();
-        U32 ic, ih, iw;
-        if (inputDesc.df == DF_NCHW) {
-            tensorSelectGet(inputDesc, NULL, NULL, NULL, &ic, &ih, &iw);
+        U32 in, ic, ih, iw;
+        tensorSelectGet(inputDesc, NULL, NULL, &in, &ic, &ih, &iw);
+        if (tensorIs4d(inputDesc)) {
+            this->numInput = ic * ih * iw;
+        } else {
+            this->numInput = iw;
         }
-        if (inputDesc.df == DF_MKT) {
-            iw = 1;
-            ih = 1;
-            ic = inputDesc.dims[1];
-        }
-        filterDesc4D = tensor4df(this->dt, DF_NCHW, this->p.num_outputs, ic, ih, iw);
-        this->numInput = ic * ih * iw;
+        filterDesc2D = tensor2df(this->dt, DF_NORMAL, this->p.num_outputs, this->numInput);
         Tensor filterTensor = Tensor(OCLMem);
-        filterTensor.resize(filterDesc4D);
+        filterTensor.resize(filterDesc2D);
         CHECK_STATUS(fully_connected_infer_output_size(
             inTensors[0], filterTensor, outTensors[0], &this->archInfo));
         if (this->p.num_slices > 1) {
@@ -134,7 +130,7 @@ public:
     {
         Tensor inputTensor = this->inputTensors[0];
         Tensor filterTensor = Tensor(OCLMem);
-        filterTensor.resize(filterDesc4D);
+        filterTensor.resize(filterDesc2D);
         U32 bytes = 0;
         CHECK_STATUS(fully_connected_infer_forward_tmp_bytes(
             inputTensor, filterTensor, &bytes, &this->archInfo));
@@ -149,7 +145,7 @@ public:
         U32 bytes = 0;
         ((MaliPara_t)(this->archInfo.archPara))->gclmemFilterDesc = &gclmemWtmDesc;
         Tensor filterTensor = Tensor(OCLMem);
-        filterTensor.resize(filterDesc4D);
+        filterTensor.resize(filterDesc2D);
         CHECK_STATUS(fully_connected_transform_filter_bytes(filterTensor, &bytes, &this->archInfo));
         return gclmemWtmDesc;
     }
@@ -158,7 +154,7 @@ public:
     {
         Tensor inputTensor = this->inputTensors[0];
         Tensor filterTensor = this->weightTensors[0];
-        filterTensor.resize(this->filterDesc4D);
+        filterTensor.resize(this->filterDesc2D);
         auto wtmDesc = this->infer_wtm_memory_size_mali();
         if (this->p.num_slices == 1) {
             this->wtm = std::shared_ptr<Tensor>(new Tensor(OCLMem));
@@ -198,7 +194,7 @@ public:
     REGISTER_OCL_OPERATOR_RUN
 
 private:
-    TensorDesc filterDesc4D;
+    TensorDesc filterDesc2D;
 
 protected:
     ForwardRunInfoMali runInfo;

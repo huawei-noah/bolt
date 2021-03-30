@@ -24,10 +24,7 @@
 #include <google/protobuf/message.h>
 #include "caffe.pb.h"
 
-#include "converter.h"
-#include "model_tools.h"
 #include "model_adaptee.h"
-#include "ut_util.h"
 
 class CaffeAdaptee : public ModelAdaptee {
 public:
@@ -43,7 +40,7 @@ protected:
     {
         std::ifstream fs(path, std::ifstream::in);
         if (!fs.is_open()) {
-            return NOT_FOUND;
+            UNI_ERROR_LOG("can not open caffe model file %s.\n", path);
         }
 
         google::protobuf::io::IstreamInputStream input(&fs);
@@ -57,7 +54,7 @@ protected:
     {
         std::ifstream fs(path, std::ifstream::in | std::ifstream::binary);
         if (!fs.is_open()) {
-            return NOT_FOUND;
+            UNI_ERROR_LOG("can not open caffe prototxt file %s.\n", path);
         }
 
         google::protobuf::io::IstreamInputStream input(&fs);
@@ -156,7 +153,7 @@ protected:
         } else if (inputType == "RelativeShift") {
             return OT_RelativeShift;
         } else if (inputType == "Dropout") {
-            return OT_None;
+            return OT_Dropout;
         } else if (inputType == "Flatten") {
             return OT_Reshape;
         } else if (inputType == "Permute") {
@@ -177,8 +174,17 @@ protected:
             return OT_Tile;
         } else if (inputType == "Pad") {
             return OT_Pad;
+        } else if (inputType == "SoftPlus") {
+            return OT_SoftPlus;
+        } else if (inputType == "Exp") {
+            return OT_Exp;
+        } else if (inputType == "AbsVal") {
+            return OT_Abs;
+        } else if (inputType == "Silence") {
+            return OT_None;
         } else {
-            UNI_ERROR_LOG("encounter unsupported operator %s\n", inputType.c_str());
+            UNI_ERROR_LOG("operator name:%s type:%s not supported.\n", this->layer.name().c_str(),
+                inputType.c_str());
         }
         return OT_None;
     }
@@ -294,13 +300,13 @@ protected:
         // load prototxt
         ret = read_from_prototxt(prototxtPath.c_str(), (google::protobuf::Message *)(&proto));
         if (proto.layer_size() <= 0 || ret != SUCCESS) {
-            UNI_ERROR_LOG("fail to load caffe prototxt file %s\n", prototxtPath.c_str());
+            UNI_ERROR_LOG("can not read caffe prototxt file %s.\n", prototxtPath.c_str());
         }
 
         // load model bin.
         ret = read_from_caffemodel(caffeModelPath.c_str(), (google::protobuf::Message *)(&net));
         if (ret != SUCCESS) {
-            UNI_ERROR_LOG("fail to load caffe model file %s\n", caffeModelPath.c_str());
+            UNI_ERROR_LOG("can not read caffe model file %s.\n", caffeModelPath.c_str());
         }
         return ret;
     }
@@ -332,6 +338,7 @@ protected:
         for (int i = 0; i < proto.layer_size(); i++) {
             const caffe::LayerParameter curLayer = proto.layer(i);
             this->layer = curLayer;
+            UNI_DEBUG_LOG("process operator name:%s parameter.\n", this->layer.name().c_str());
 
             if (layer.type() == "Input") {  // layer,the global variable
                 inputsNumber++;
@@ -349,8 +356,8 @@ protected:
                     layer.bottom(j).length());
                 if (outputCounts.find(layer.bottom(j)) == outputCounts.end()) {
                     if (opsPtr[i].type != OT_Jump) {
-                        UNI_ERROR_LOG("encounter no output as this operator's input %s\n",
-                            layer.bottom(j).c_str());
+                        UNI_ERROR_LOG("no tensor is operator name:%s input %s.\n",
+                            layer.name().c_str(), layer.bottom(j).c_str());
                     }
                 } else {
                     outputCounts[layer.bottom(j)]--;
@@ -379,54 +386,32 @@ protected:
         ms->input_dims = (TensorDesc *)mt_new_storage(sizeof(TensorDesc) * inputsNumber);
         for (int i = 0; i < inputsNumber; i++) {
             ms->input_names[i] = (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
-
             if (proto.input_size() > 0) {
                 str_copy(ms->input_names[i], proto.input(i).c_str(), proto.input(i).length());
-                switch (proto.input_dim_size()) {
-                    case 2:
-                        ms->input_dims[i] =
-                            tensor2df(DT_U32, DF_NORMAL, proto.input_dim(0), proto.input_dim(1));
-                        break;
-                    case 3:
-                        ms->input_dims[i] = tensor3df(DT_F32, DF_MTK, proto.input_dim(0),
-                            proto.input_dim(1), proto.input_dim(2));
-                        break;
-                    case 4:
-                        ms->input_dims[i] = tensor4df(DT_F32, DF_NCHW, proto.input_dim(0),
-                            proto.input_dim(1), proto.input_dim(2), proto.input_dim(3));
-                        break;
-                    default: {
-                        UNI_ERROR_LOG("unsupported input dim\n");
-                    }
+                ms->input_dims[i].nDims = proto.input_dim_size();
+                for (U32 j = 0; j < ms->input_dims[i].nDims; j++) {
+                    ms->input_dims[i].dims[ms->input_dims[i].nDims - 1 - j] = proto.input_dim(j);
                 }
             }
             if (i < proto.input_shape_size()) {
                 str_copy(ms->input_names[i], proto.input(i).c_str(), proto.input(i).length());
-                switch (proto.input_shape(i).dim_size()) {
-                    case 2:
-                        ms->input_dims[i] = tensor2df(DT_U32, DF_NORMAL,
-                            proto.input_shape(i).dim(0), proto.input_shape(i).dim(1));
-                        break;
-                    case 3:
-                        ms->input_dims[i] = tensor3df(DT_F32, DF_NCHW, proto.input_shape(i).dim(0),
-                            proto.input_shape(i).dim(1), proto.input_shape(i).dim(2));
-                        break;
-                    case 4:
-                        ms->input_dims[i] = tensor4df(DT_F32, DF_NCHW, proto.input_shape(i).dim(0),
-                            proto.input_shape(i).dim(1), proto.input_shape(i).dim(2),
-                            proto.input_shape(i).dim(3));
-                        break;
-                    default: {
-                        UNI_ERROR_LOG("unsupported input dim\n");
-                    }
+                ms->input_dims[i].nDims = proto.input_shape(i).dim_size();
+                for (U32 j = 0; j < ms->input_dims[i].nDims; j++) {
+                    ms->input_dims[i].dims[ms->input_dims[i].nDims - 1 - j] =
+                        proto.input_shape(i).dim(j);
                 }
             }
+            ms->input_dims[i].dt = DT_F32;
+            if (ms->input_dims[i].nDims == 2) {
+                ms->input_dims[i].dt = DT_U32;
+            }
+            ms->input_dims[i].df = getTensorDefaultDataFormat(ms->input_dims[i].nDims);
         }
 
         for (int i = 0; i < proto.output_size(); i++) {
             std::string name = proto.output(i);
             if (outputCounts.find(name) == outputCounts.end()) {
-                UNI_ERROR_LOG("can not find output %s in tensors\n", name.c_str());
+                UNI_ERROR_LOG("can not find model output %s in tensors.\n", name.c_str());
             } else {
                 outputCounts[name] = (outputCounts[name] > 0) ? outputCounts[name] : 1;
             }
@@ -447,7 +432,7 @@ protected:
                 outputsNumber++;
             }
         }
-        ms->num_weight_specs = this->weightNumber;  // use the global variable
+        ms->num_weight_specs = this->weightNumber;
         return ret;
     }
 
@@ -464,32 +449,27 @@ protected:
         int weightIndex = 0;
 
         for (int i = 0; i < proto.layer_size(); i++) {
-            const caffe::LayerParameter layer = proto.layer(i);
+            this->layer = proto.layer(i);
             std::string layerName = layer.name();
+            UNI_DEBUG_LOG("process operator name:%s weight.\n", layerName.c_str());
             std::string layerType = layer.type();
 
             if (layerType == "Input") {
-                str_copy(ms->input_names[inNamesIndex], layerName.c_str(), layerName.length());
-                switch (layer.input_param().shape(0).dim_size()) {
-                    case 2:
-                        ms->input_dims[inNamesIndex] = tensor2df(DT_U32, DF_NORMAL,
-                            layer.input_param().shape(0).dim(0),
-                            layer.input_param().shape(0).dim(1));
-                        break;
-                    case 3:
-                        ms->input_dims[inNamesIndex] = tensor3df(DT_F32, DF_MTK,
-                            layer.input_param().shape(0).dim(0), layer.input_param().shape(0).dim(1),
-                            layer.input_param().shape(0).dim(2));
-                        break;
-                    case 4:
-                        ms->input_dims[inNamesIndex] = tensor4df(DT_F32, DF_NCHW,
-                            layer.input_param().shape(0).dim(0),
-                            layer.input_param().shape(0).dim(1), layer.input_param().shape(0).dim(2),
-                            layer.input_param().shape(0).dim(3));
-                        break;
-                    default: {
-                        UNI_ERROR_LOG("unsupported input dim\n");
-                    }
+                std::string dataName = layerName;
+                if (layer.top_size() > 0) {
+                    dataName = layer.top(0);
+                }
+                str_copy(ms->input_names[inNamesIndex], dataName.c_str(), dataName.length());
+                ms->input_dims[inNamesIndex].nDims = layer.input_param().shape(0).dim_size();
+                ms->input_dims[inNamesIndex].dt = DT_F32;
+                if (ms->input_dims[inNamesIndex].nDims == 2) {
+                    ms->input_dims[inNamesIndex].dt = DT_U32;
+                }
+                ms->input_dims[inNamesIndex].df =
+                    getTensorDefaultDataFormat(ms->input_dims[inNamesIndex].nDims);
+                for (U32 j = 0; j < ms->input_dims[inNamesIndex].nDims; j++) {
+                    ms->input_dims[inNamesIndex].dims[ms->input_dims[inNamesIndex].nDims - 1 - j] =
+                        layer.input_param().shape(0).dim(j);
                 }
                 inNamesIndex++;
             } else if (layerType == "Convolution" || layerType == "InnerProduct" ||
@@ -537,9 +517,9 @@ protected:
     ParameterSpec adapt_Resize() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         ResizeParamSpec resizePs;
-        initialization_zero(&resizePs, sizeof(resizePs));
+        memset(&resizePs, 0, sizeof(resizePs));
         auto caffeInterpParam = layer.interp_param();
         resizePs.sizes[0] = caffeInterpParam.height();
         resizePs.sizes[1] = caffeInterpParam.width();
@@ -552,10 +532,10 @@ protected:
     ParameterSpec adapt_Conv() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         weightNumber = weightNumber + 1;
         ConvolutionParamSpec cps;
-        initialization_zero(&cps, sizeof(cps));
+        memset(&cps, 0, sizeof(cps));
         cps.num_outputs = layer.convolution_param().num_output();
         cps.num_outputs_origin = cps.num_outputs;
         cps.kernel_t = 1;
@@ -630,10 +610,10 @@ protected:
     ParameterSpec adapt_Deconvolution() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         weightNumber = weightNumber + 1;
         ConvolutionParamSpec cps;
-        initialization_zero(&cps, sizeof(cps));
+        memset(&cps, 0, sizeof(cps));
         cps.num_outputs = layer.convolution_param().num_output();
         cps.num_outputs_origin = cps.num_outputs;
         cps.kernel_t = 1;
@@ -651,7 +631,8 @@ protected:
 
         cps.group = (layer.convolution_param().has_group()) ? layer.convolution_param().group() : 1;
         if (1 != cps.group) {
-            UNI_ERROR_LOG("Deconvolution group != 1  UNSUPPORTED!");
+            UNI_ERROR_LOG(
+                "can not process operator name:%s group != 1.", this->layer.name().c_str());
         }
         cps.dilatedRate_h = 1;
         cps.dilatedRate_w = 1;
@@ -667,6 +648,7 @@ protected:
                 : 1;  // stride[default=1]
             cps.stride_w = cps.stride_h;
         }
+        cps.rm = CEIL;
         if (layer.convolution_param().has_pad_w() && layer.convolution_param().has_pad_h()) {
             cps.padding_left = layer.convolution_param().pad_w();
             cps.padding_right = cps.padding_left;
@@ -687,9 +669,9 @@ protected:
     ParameterSpec adapt_Pooling() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         PoolingParamSpec pps;
-        initialization_zero(&pps, sizeof(pps));
+        memset(&pps, 0, sizeof(pps));
         pps.kernel_t = 1;
         pps.stride_t = 1;
         pps.padding_before = 0;
@@ -734,7 +716,8 @@ protected:
         } else {
             pps.rm = CEIL;
         }
-        switch (layer.pooling_param().pool()) {
+        auto op = layer.pooling_param().pool();
+        switch (op) {
             case caffe::PoolingParameter_PoolMethod_MAX: {
                 pps.mode = POOLING_MAX;
                 break;
@@ -744,8 +727,10 @@ protected:
                 break;
             }
             default: {
-                UNI_ERROR_LOG("encounter unsupported Pooling method %d\n",
-                    (int)(layer.pooling_param().pool()));
+                const google::protobuf::EnumDescriptor *descriptor =
+                    caffe::PoolingParameter::PoolMethod_descriptor();
+                UNI_ERROR_LOG("can not map operator name:%s %s to Pooling.\n",
+                    this->layer.name().c_str(), descriptor->FindValueByNumber(op)->name().c_str());
             }
         }
         curPs.pooling_spec = pps;
@@ -755,10 +740,10 @@ protected:
     ParameterSpec adapt_Fc() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         weightNumber = weightNumber + 1;
         FullyConnectedParamSpec ips;
-        initialization_zero(&ips, sizeof(ips));
+        memset(&ips, 0, sizeof(ips));
         ips.num_outputs = layer.inner_product_param().num_output();
         ips.num_slices = 1;
         ips.slice_point[0] = ips.num_outputs;
@@ -769,10 +754,10 @@ protected:
     ParameterSpec adapt_BatchNorm() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         weightNumber = weightNumber + 1;
         BatchNormParamSpec bnps;
-        initialization_zero(&bnps, sizeof(bnps));
+        memset(&bnps, 0, sizeof(bnps));
         bnps.axis = layer.batch_norm_param().axis();
         bnps.eps = layer.batch_norm_param().eps();
         bnps.gama = 1;
@@ -784,7 +769,7 @@ protected:
     ParameterSpec adapt_LayerNorm() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         weightNumber = weightNumber + 1;
         return curPs;
     }
@@ -792,11 +777,11 @@ protected:
     ParameterSpec adapt_Eltwise() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         EltwiseParamSpec eps;
-        initialization_zero(&eps, sizeof(eps));
+        memset(&eps, 0, sizeof(eps));
         EltwiseSumSpec ess;
-        initialization_zero(&ess, sizeof(ess));
+        memset(&ess, 0, sizeof(ess));
 
         auto caffeEltwiseParam = layer.eltwise_param();
         auto op = caffeEltwiseParam.operation();
@@ -814,7 +799,10 @@ protected:
                 eps.elt_mode = ELTWISE_DIV;
                 break;
             default: {
-                UNI_ERROR_LOG("unknown eltwise mode\n");
+                const google::protobuf::EnumDescriptor *descriptor =
+                    caffe::EltwiseParameter::EltwiseOp_descriptor();
+                UNI_ERROR_LOG("can not map operator name:%s %s to Eltwise.\n",
+                    this->layer.name().c_str(), descriptor->FindValueByNumber(op)->name().c_str());
             }
         }
         U32 bytes = caffeEltwiseParam.coeff_size() * sizeof(F32);
@@ -832,10 +820,10 @@ protected:
     ParameterSpec adapt_Embedding() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         weightNumber = weightNumber + 1;
         EmbedParamSpec embedPs;
-        initialization_zero(&embedPs, sizeof(embedPs));
+        memset(&embedPs, 0, sizeof(embedPs));
         auto caffeEmbedParam = layer.embed_param();
         embedPs.input_dim = caffeEmbedParam.input_dim();
         embedPs.num_output = caffeEmbedParam.num_output();
@@ -848,9 +836,9 @@ protected:
     ParameterSpec adapt_Power() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         PowerParamSpec powerPs;
-        initialization_zero(&powerPs, sizeof(powerPs));
+        memset(&powerPs, 0, sizeof(powerPs));
         auto caffePowerParam = layer.power_param();
         powerPs.scale = caffePowerParam.scale();
         powerPs.shift = caffePowerParam.shift();
@@ -862,9 +850,9 @@ protected:
     ParameterSpec adapt_Reshape() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         ReshapeParamSpec reshapePs;
-        initialization_zero(&reshapePs, sizeof(reshapePs));
+        memset(&reshapePs, 0, sizeof(reshapePs));
         if (this->op == "Flatten") {
             auto caffeFlattenParam = layer.flatten_param();
             CHECK_REQUIREMENT(
@@ -892,9 +880,9 @@ protected:
     ParameterSpec adapt_Slice() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         SliceParamSpec slicePs;
-        initialization_zero(&slicePs, sizeof(slicePs));
+        memset(&slicePs, 0, sizeof(slicePs));
         auto caffeSliceParam = layer.slice_param();
         for (I32 iter = 0; iter < caffeSliceParam.slice_point().size(); iter++) {
             slicePs.slice_points[iter] = caffeSliceParam.slice_point(iter);
@@ -908,9 +896,9 @@ protected:
     ParameterSpec adapt_Transpose() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         TransposeParamSpec transPs;
-        initialization_zero(&transPs, sizeof(transPs));
+        memset(&transPs, 0, sizeof(transPs));
         auto caffePermuteParam = layer.permute_param();
         for (I32 iter = 0; iter < caffePermuteParam.order().size(); iter++) {
             transPs.trans_dims[iter] = caffePermuteParam.order(iter);
@@ -923,7 +911,7 @@ protected:
     ParameterSpec adapt_Tile() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         TileParamSpec tilePS;
         auto caffeTileParam = layer.tile_param();
         tilePS.repeatsInfo[0] = caffeTileParam.tiles();
@@ -935,7 +923,7 @@ protected:
     ParameterSpec adapt_Pad() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         PadParamSpec padPs;
         auto caffePadParam = layer.padding_param();
         padPs.before = 0;
@@ -953,9 +941,9 @@ protected:
     ParameterSpec adapt_Attention() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         AttentionParamSpec attentionPs;
-        initialization_zero(&attentionPs, sizeof(attentionPs));
+        memset(&attentionPs, 0, sizeof(attentionPs));
         auto caffe_attention_param = layer.attention_param();
         attentionPs.num_heads = caffe_attention_param.num_heads();
         attentionPs.from_sequence_length = caffe_attention_param.from_sequence_length();
@@ -968,9 +956,9 @@ protected:
     {
         weightNumber = weightNumber + 1;
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         RNNParamSpec rnnPs;
-        initialization_zero(&rnnPs, sizeof(rnnPs));
+        memset(&rnnPs, 0, sizeof(rnnPs));
         auto caffeLSTMParam = layer.lstm_param();
         rnnPs.mode = RNN_LSTM;
         rnnPs.numOutput = caffeLSTMParam.num_output();
@@ -993,10 +981,10 @@ protected:
     ParameterSpec adapt_Scale() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         weightNumber = weightNumber + 1;
         ScaleParamSpec scalePs;
-        initialization_zero(&scalePs, sizeof(scalePs));
+        memset(&scalePs, 0, sizeof(scalePs));
         auto caffeScaleParam = layer.scale_param();
         scalePs.axis = caffeScaleParam.axis();
         curPs.scale_spec = scalePs;
@@ -1006,9 +994,9 @@ protected:
     ParameterSpec adapt_Reduction() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         ReductionParamSpec reductionPs;
-        initialization_zero(&reductionPs, sizeof(reductionPs));
+        memset(&reductionPs, 0, sizeof(reductionPs));
         auto caffeReductionParam = layer.reduction_param();
         reductionPs.axes[0] = caffeReductionParam.axis();
         reductionPs.axes_num = 1;
@@ -1021,7 +1009,10 @@ protected:
                 reductionPs.reduction_mode = REDUCTION_MEAN;
                 break;
             default: {
-                UNI_ERROR_LOG("unknown reduction mode\n");
+                const google::protobuf::EnumDescriptor *descriptor =
+                    caffe::ReductionParameter::ReductionOp_descriptor();
+                UNI_ERROR_LOG("can not map operator name:%s %s to Reduction.\n",
+                    this->layer.name().c_str(), descriptor->FindValueByNumber(op)->name().c_str());
             }
         }
         reductionPs.coeff = caffeReductionParam.coeff();
@@ -1033,9 +1024,9 @@ protected:
     ParameterSpec adapt_Squeeze() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         SqueezeParamSpec squeezePs;
-        initialization_zero(&squeezePs, sizeof(squeezePs));
+        memset(&squeezePs, 0, sizeof(squeezePs));
         auto caffeSqueezeParam = layer.squeeze_param();
         squeezePs.axes[0] = caffeSqueezeParam.axis();
         squeezePs.axes_num = 1;
@@ -1046,9 +1037,9 @@ protected:
     ParameterSpec adapt_Unsqueeze() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         UnsqueezeParamSpec unsqueezePs;
-        initialization_zero(&unsqueezePs, sizeof(unsqueezePs));
+        memset(&unsqueezePs, 0, sizeof(unsqueezePs));
         auto caffeUnsqueezeParam = layer.unsqueeze_param();
         unsqueezePs.axes[0] = caffeUnsqueezeParam.axis();
         unsqueezePs.axes_num = 1;
@@ -1059,9 +1050,9 @@ protected:
     ParameterSpec adapt_ArgMax() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         ArgMaxParamSpec argmaxPs;
-        initialization_zero(&argmaxPs, sizeof(argmaxPs));
+        memset(&argmaxPs, 0, sizeof(argmaxPs));
         auto caffeArgMaxParam = layer.argmax_param();
         argmaxPs.axis = caffeArgMaxParam.axis();
         curPs.argmax_spec = argmaxPs;
@@ -1071,9 +1062,9 @@ protected:
     ParameterSpec adapt_Repeat() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         RepeatParamSpec repeatPs;
-        initialization_zero(&repeatPs, sizeof(repeatPs));
+        memset(&repeatPs, 0, sizeof(repeatPs));
         auto caffeRepeatParam = layer.repeat_param();
         repeatPs.loops = caffeRepeatParam.loops();
         repeatPs.axis = caffeRepeatParam.axis();
@@ -1084,9 +1075,9 @@ protected:
     ParameterSpec adapt_Check() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         CheckParamSpec checkPs;
-        initialization_zero(&checkPs, sizeof(checkPs));
+        memset(&checkPs, 0, sizeof(checkPs));
         auto caffeCheckParam = layer.check_param();
         auto op = caffeCheckParam.operation();
         switch (op) {
@@ -1100,7 +1091,10 @@ protected:
                 checkPs.check_mode = CHECK_GREATEQUAL;
                 break;
             default: {
-                UNI_ERROR_LOG("unknown check mode\n");
+                const google::protobuf::EnumDescriptor *descriptor =
+                    caffe::CheckParameter::CheckOp_descriptor();
+                UNI_ERROR_LOG("can not map operator name:%s %s to Check.\n",
+                    this->layer.name().c_str(), descriptor->FindValueByNumber(op)->name().c_str());
             }
         }
         curPs.check_spec = checkPs;
@@ -1110,9 +1104,9 @@ protected:
     ParameterSpec adapt_PreAllocatedMemory() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         PreAllocatedMemoryParamSpec preAllocatedMemoryPs;
-        initialization_zero(&preAllocatedMemoryPs, sizeof(preAllocatedMemoryPs));
+        memset(&preAllocatedMemoryPs, 0, sizeof(preAllocatedMemoryPs));
         auto caffePreAllocatedMemoryParam = layer.preallocated_memory_param();
         preAllocatedMemoryPs.desc.nDims = caffePreAllocatedMemoryParam.shape().dim_size();
         for (I32 iter = 0; iter < caffePreAllocatedMemoryParam.shape().dim_size(); iter++) {
@@ -1132,7 +1126,10 @@ protected:
                 preAllocatedMemoryPs.desc.dt = DT_I32;
                 break;
             default: {
-                UNI_ERROR_LOG("unknown memory data mode\n");
+                const google::protobuf::EnumDescriptor *descriptor =
+                    caffe::PreAllocatedMemoryParameter::DataType_descriptor();
+                UNI_ERROR_LOG("can not process operator name:%s %s type memory.\n",
+                    this->layer.name().c_str(), descriptor->FindValueByNumber(dt)->name().c_str());
             }
         }
         curPs.preallocated_memory_spec = preAllocatedMemoryPs;
@@ -1142,10 +1139,10 @@ protected:
     ParameterSpec adapt_SharedWeight() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         weightNumber = weightNumber + 1;
         SharedWeightParamSpec sharedWeightPs;
-        initialization_zero(&sharedWeightPs, sizeof(sharedWeightPs));
+        memset(&sharedWeightPs, 0, sizeof(sharedWeightPs));
         auto caffeSharedWeightParam = layer.shared_weight_param();
         sharedWeightPs.desc.nDims = caffeSharedWeightParam.shape().dim_size();
         for (I32 iter = 0; iter < caffeSharedWeightParam.shape().dim_size(); iter++) {
@@ -1165,7 +1162,10 @@ protected:
                 sharedWeightPs.desc.dt = DT_I32;
                 break;
             default: {
-                UNI_ERROR_LOG("unknown weight data type\n");
+                const google::protobuf::EnumDescriptor *descriptor =
+                    caffe::SharedWeightParameter::DataType_descriptor();
+                UNI_ERROR_LOG("can not process operator name:%s %s type weight.\n",
+                    this->layer.name().c_str(), descriptor->FindValueByNumber(dt)->name().c_str());
             }
         }
         curPs.shared_weight_spec = sharedWeightPs;
@@ -1175,9 +1175,9 @@ protected:
     ParameterSpec adapt_Copy() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         CopyParamSpec copyPs;
-        initialization_zero(&copyPs, sizeof(copyPs));
+        memset(&copyPs, 0, sizeof(copyPs));
         auto caffeCopyParam = layer.copy_param();
         copyPs.src_dims[0] = caffeCopyParam.src_batch_stride();
         copyPs.src_dims[1] = caffeCopyParam.src_stride();
@@ -1193,9 +1193,9 @@ protected:
     ParameterSpec adapt_MatMul() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         MatMulParamSpec matmulPs;
-        initialization_zero(&matmulPs, sizeof(matmulPs));
+        memset(&matmulPs, 0, sizeof(matmulPs));
         auto caffeMatMulParam = layer.matmul_param();
         matmulPs.transpose_a = caffeMatMulParam.transpose_a();
         matmulPs.transpose_b = caffeMatMulParam.transpose_b();
@@ -1206,9 +1206,9 @@ protected:
     ParameterSpec adapt_AttentionMask() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         AttentionMaskParamSpec attentionMaskPs;
-        initialization_zero(&attentionMaskPs, sizeof(attentionMaskPs));
+        memset(&attentionMaskPs, 0, sizeof(attentionMaskPs));
         auto caffeAttentionMaskParam = layer.attention_mask_param();
         attentionMaskPs.attention_length = caffeAttentionMaskParam.attention_length();
         attentionMaskPs.same_length = caffeAttentionMaskParam.same_length();
@@ -1220,10 +1220,10 @@ protected:
     ParameterSpec adapt_RelativePositionEmbedding() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         weightNumber = weightNumber + 1;
         EmbedParamSpec p;
-        initialization_zero(&p, sizeof(p));
+        memset(&p, 0, sizeof(p));
         auto caffeRelativePositionEmbedParam = layer.relative_position_embed_param();
         p.input_dim = caffeRelativePositionEmbedParam.input_dim();
         p.num_output = caffeRelativePositionEmbedParam.num_output();
@@ -1237,9 +1237,9 @@ protected:
     ParameterSpec adapt_RelativeShift() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         RelativeShiftParamSpec relativeShiftPs;
-        initialization_zero(&relativeShiftPs, sizeof(relativeShiftPs));
+        memset(&relativeShiftPs, 0, sizeof(relativeShiftPs));
         auto caffeRelativeShiftParam = layer.relative_shift_param();
         relativeShiftPs.axis = caffeRelativeShiftParam.axis();
         relativeShiftPs.shift_length = caffeRelativeShiftParam.shift_length();
@@ -1250,9 +1250,9 @@ protected:
     ParameterSpec adapt_Concat() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         ConcatParamSpec concatPs;
-        initialization_zero(&concatPs, sizeof(concatPs));
+        memset(&concatPs, 0, sizeof(concatPs));
         auto caffeConcatParam = layer.concat_param();
         concatPs.axis = caffeConcatParam.axis();
         curPs.concat_spec = concatPs;
@@ -1262,9 +1262,9 @@ protected:
     ParameterSpec adapt_Softmax() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         SoftmaxParamSpec softmaxPs;
-        initialization_zero(&softmaxPs, sizeof(softmaxPs));
+        memset(&softmaxPs, 0, sizeof(softmaxPs));
         auto caffeSoftmaxParam = layer.softmax_param();
         softmaxPs.axis = caffeSoftmaxParam.axis();
         curPs.softmax_spec = softmaxPs;
@@ -1274,9 +1274,9 @@ protected:
     ParameterSpec adapt_PriorBox() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         PriorBoxParamSpec priorboxPs;
-        initialization_zero(&priorboxPs, sizeof(priorboxPs));
+        memset(&priorboxPs, 0, sizeof(priorboxPs));
         auto caffePriorBoxParam = layer.prior_box_param();
         CHECK_REQUIREMENT(
             caffePriorBoxParam.min_size_size() <= 2 && caffePriorBoxParam.max_size_size() <= 2);
@@ -1356,9 +1356,9 @@ protected:
     ParameterSpec adapt_DetectionOutput() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         DetectionOutputParamSpec detectionoutputPs;
-        initialization_zero(&detectionoutputPs, sizeof(detectionoutputPs));
+        memset(&detectionoutputPs, 0, sizeof(detectionoutputPs));
         auto caffeDetectionOutputParam = layer.detection_output_param();
         detectionoutputPs.num_class = caffeDetectionOutputParam.num_classes();
         CHECK_REQUIREMENT((caffeDetectionOutputParam.background_label_id() == 0) &&
@@ -1374,9 +1374,9 @@ protected:
     ParameterSpec adapt_Yolov3DetectionOutput() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         Yolov3DetectionOutputParamSpec yolov3detectionoutputPs;
-        initialization_zero(&yolov3detectionoutputPs, sizeof(yolov3detectionoutputPs));
+        memset(&yolov3detectionoutputPs, 0, sizeof(yolov3detectionoutputPs));
         auto caffeYolov3DetectionOutputParam = layer.yolov3_detection_output_param();
         yolov3detectionoutputPs.num_class = caffeYolov3DetectionOutputParam.num_classes();
         yolov3detectionoutputPs.num_box = caffeYolov3DetectionOutputParam.num_box();
@@ -1410,9 +1410,9 @@ protected:
     ParameterSpec adapt_Clip() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         ClipParamSpec clipParam;
-        initialization_zero(&clipParam, sizeof(clipParam));
+        memset(&clipParam, 0, sizeof(clipParam));
         auto caffeClipParam = layer.clip_param();
         clipParam.min = caffeClipParam.min();
         clipParam.max = caffeClipParam.max();
@@ -1423,9 +1423,9 @@ protected:
     ParameterSpec adapt_Relu() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         ReLUParamSpec reluSpec;
-        initialization_zero(&reluSpec, sizeof(reluSpec));
+        memset(&reluSpec, 0, sizeof(reluSpec));
         reluSpec.neg_slope = 0.0;
         curPs.relu_spec = reluSpec;
         return curPs;
@@ -1434,8 +1434,20 @@ protected:
     ParameterSpec adapt_PRelu() override
     {
         ParameterSpec curPs;
-        initialization_zero(&curPs, sizeof(curPs));
+        memset(&curPs, 0, sizeof(curPs));
         weightNumber = weightNumber + 1;
+        return curPs;
+    }
+
+    ParameterSpec adapt_Exp() override
+    {
+        ParameterSpec curPs;
+        memset(&curPs, 0, sizeof(curPs));
+        auto caffeExpParam = layer.exp_param();
+        if (caffeExpParam.base() != -1 || caffeExpParam.scale() != 1 || caffeExpParam.shift() != 0) {
+            UNI_ERROR_LOG("can not process operator name:%s base!=-1(e), scale!=1, shift!=0.\n",
+                this->layer.name().c_str());
+        }
         return curPs;
     }
 

@@ -21,6 +21,7 @@
 #ifdef _USE_INT8
 #include "cpu/arm/int8/tensor_computing_int8.h"
 #endif
+#include "tensor_transpose.h"
 
 EE depthwise_convolution_transform_filter_arm(TensorDesc filterDesc,
     const void *filter,
@@ -97,6 +98,9 @@ EE depthwise_convolution_infer_forward_tmp_bytes_arm(TensorDesc inputDesc,
 #endif
         default:
             break;
+    }
+    if (idf != DF_NCHWC8) {
+        *bytes += tensorNumBytes(inputDesc);
     }
     *bytes += 32;
     return ret;
