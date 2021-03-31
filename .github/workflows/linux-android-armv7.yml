@@ -1,0 +1,19 @@
+name: linux-android-armv7
+
+on: push
+
+jobs:
+  linux:
+    name: linux-android-armv7
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v2
+      - name: prerequisites installation
+        run: |
+          sudo apt-get install g++-aarch64-linux-gnu
+      - name: compile armv8(cpu) with gnu on linux 
+        run: |
+          chmod -R 777 ../bolt/
+          ./install.sh --target=android-armv7 -t 32
