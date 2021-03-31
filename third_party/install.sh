@@ -330,7 +330,7 @@ if [[ ${cmake_options} =~ USE_TENSORFLOW=ON ]]; then
         cd jsoncpp-master/build
         cmake -G"${CMAKE_GENERATOR}" .. -DCMAKE_INSTALL_PREFIX=${JSONCPP_ROOT} -DJSONCPP_WITH_TESTS=OFF ${CMAKE_OPTIONS} > ${log_file} || exit 1
         ${MAKE} -j ${build_threads} >> ${log_file} || exit 1
-        ${MAKE} install >> ${log_file}
+        ${MAKE} install >> ${log_file} || exit 1
         cd ../../
         rm -rf jsoncpp-master*
     fi
