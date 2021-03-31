@@ -12,7 +12,7 @@ jobs:
         uses: actions/checkout@v2
       - name: macos armv7
         run: |
-          cd /usr/local/opt/gnu-getopt/bin && ls
+          cd /usr/local/Cellar/gnu-getopt/2.36.2 && ls
           echo 'export PATH="/usr/local/opt/gnu-getopt/bin:$PATH"' >> ~/.bash_profile
           echo 'export FLAGS_GETOPT_CMD="$(brew --prefix gnu-getopt)/bin/getopt"' >> ~/.bash_profile
           . ~/.bash_profile         
