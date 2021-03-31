@@ -5,7 +5,7 @@ on: push
 jobs:
   linux:
     name: windows-x86
-    runs-on: windows-2016
+    runs-on: windows-latest
 
     steps:
       - name: checkout code
