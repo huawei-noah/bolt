@@ -338,6 +338,8 @@ if [[ ${cmake_options} =~ USE_TENSORFLOW=ON ]]; then
     fi
     echo "
 export JSONCPP_ROOT=${JSONCPP_ROOT}
+echo "***JSONCPP_ROOT"
+echo $JSONCPP_ROOT
 export LD_LIBRARY_PATH=\${JSONCPP_ROOT}/lib:\$LD_LIBRARY_PATH
 if [[ ! -d \"\${JSONCPP_ROOT}/lib\" ]]; then
     echo \"[ERROR] Jsoncpp not install success\"
