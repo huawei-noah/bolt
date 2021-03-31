@@ -5,7 +5,7 @@ on: push
 jobs:
   linux:
     name: macos-armv8
-    runs-on: ubuntu-latest
+    runs-on: macos-latest
 
     steps:
       - name: checkout code
