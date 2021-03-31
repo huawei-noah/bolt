@@ -12,7 +12,7 @@ jobs:
         uses: actions/checkout@v2
       - name: macos armv7
         run: |
-          brew install gnu-getopt && brew link --force gnu-getopt
+          brew install gnu-getopt
           echo 'export PATH="/usr/local/opt/gnu-getopt/bin:$PATH"' >> ~/.bash_profile
           echo 'export FLAGS_GETOPT_CMD="$(brew --prefix gnu-getopt)/bin/getopt"' >> ~/.bash_profile
           . ~/.bash_profile
