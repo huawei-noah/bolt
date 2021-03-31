@@ -14,6 +14,8 @@ jobs:
         run: |
           echo 'export PATH="/usr/local/opt/gnu-getopt/bin:$PATH"' >> ~/.bash_profile
           echo 'export FLAGS_GETOPT_CMD="$(brew --prefix gnu-getopt)/bin/getopt"' >> ~/.bash_profile
-          . ~/.bash_profile
+          . ~/.bash_profile         
+      - name: test
+        run: |
           getopt --test
           echo "$?"
