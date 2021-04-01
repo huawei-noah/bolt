@@ -8,6 +8,11 @@ jobs:
     name: windows-x86-avx2
     runs-on: windows-latest
     steps:
+      - name: Archive library gnutls
+        uses: actions/upload-artifact@v1
+        with:
+          name: wget-1.21.1-64bit-GnuTLS
+          path: build-wget-webfolder.io/install/wget-gnutls/wget.exe    
       - name: checkout code
         uses: actions/checkout@v2
       - name: windows x86 avx2 compilation
