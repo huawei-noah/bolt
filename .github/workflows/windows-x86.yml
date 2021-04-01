@@ -31,7 +31,7 @@ jobs:
         cmake -version
         mingw32-make -version
         ./install.sh --target=windows-x86_64
-
+        echo "*** compile done"
 
 
 
