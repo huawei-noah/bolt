@@ -22,7 +22,7 @@ jobs:
           cd gnu_getopt && ls
           cd /usr/local/opt/ && mkdir gnu-getopt
           cd /usr/local/opt/gnu-getopt && mkdir bin
-          cp /Users/runner/work/bolt/bolt/software/gnu-getopt/2.36.2/bin/getopt /usr/local/opt/gnu-getopt/bin
+          cp /Users/runner/work/bolt/bolt/software/gnu_getopt/gnu-getopt/2.36.2/bin/getopt /usr/local/opt/gnu-getopt/bin
           export PATH="/usr/local/opt/gnu-getopt/bin:$PATH"' >> /Users/runner/.bash_profile
           source /Users/runner/.bash_profile
           getopt --test
