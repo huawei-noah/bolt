@@ -12,4 +12,7 @@ jobs:
         uses: actions/checkout@v2
       - name: windows x86 avx2 compilation
         run: |
-          wget
+          cd ~ && pwd
+          echo "***enter the shell environment"
+          ls
+          echo "***list all the files"
