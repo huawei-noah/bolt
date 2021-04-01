@@ -7,19 +7,14 @@ jobs:
   windows-vs2019:
     name: windows-x86-avx2
     runs-on: windows-latest
-    steps:
-      - name: Archive library gnutls
-        uses: actions/upload-artifact@v1
-        with:
-          name: wget-1.21.1-64bit-GnuTLS
-          path: build-wget-webfolder.io/install/wget-gnutls/wget.exe    
+    steps:  
       - name: checkout code
         uses: actions/checkout@v2
       - name: windows x86 avx2 compilation
         run: |
+          Invoke-WebRequest -Uri https://github.com/protocolbuffers/protobuf/archive/v3.11.2.zip -OutFile protobuf-3.11.2.zip
           cmake -version
           mingw32-make -version
-          wget
           echo "***enter the shell environment"
           ls
           echo "***list all the files"
