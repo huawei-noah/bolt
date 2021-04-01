@@ -14,9 +14,7 @@ jobs:
         run: |
           pwd
           mkdir software && cd software
-          curl 'https://homebrew.bintray.com/bottles/gnu-getopt-2.36.2.catalina.bottle.tar.gz'
+          curl -o gnu-getopt.tar.gz 'https://homebrew.bintray.com/bottles/gnu-getopt-2.36.2.catalina.bottle.tar.gz'
+          pwd
+          echo "check the file"
           ls
-      - name: test
-        run: |
-          getopt --test
-          echo "$?"
