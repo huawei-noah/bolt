@@ -13,6 +13,10 @@ jobs:
       - name: macos armv7
         run: |
           brew install gnu-getopt  
+          echo 'export PATH="/usr/local/opt/gnu-getopt/bin:$PATH"' >> /Users/runner/.bash_profile
+          source /Users/runner/.bash_profile
+          getopt --test
+          echo $?
       - name: test
         run: |
           getopt --test
