@@ -1,5 +1,8 @@
 name: windows-x86-avx2
 on: push
+defaults:
+  run:
+    shell: bash
 jobs:
   windows-vs2019:
     name: windows-x86-avx2
