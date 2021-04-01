@@ -23,9 +23,15 @@ jobs:
         mkdir software && cd software
         Invoke-WebRequest -Uri https://github.com/JulioGold/wget/archive/refs/heads/master.zip -OutFile wget.zip
         7z x ./wget.zip
-        cd wget-master
+        $Env:path=$Env:Path+";D:\a\bolt\bolt\software\wget-master\wget\bin"
+        cd ..
         echo "***ls the files"
         ls
         echo "***ls done"
         cmake -version
         mingw32-make -version
+        ./install.sh --target=windows-x86_64
+
+
+
+
