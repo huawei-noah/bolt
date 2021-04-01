@@ -1,8 +1,7 @@
-
-name: windows-x64-gpu-vs2019
+name: windows-x64
 on: [push, pull_request]
 jobs:
-  windows-vs2019-gpu:
+  windows-x86:
     runs-on: windows-latest
     steps:
     - name: cancel-previous-runs
