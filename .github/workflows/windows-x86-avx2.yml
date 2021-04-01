@@ -9,7 +9,4 @@ jobs:
         uses: actions/checkout@v2
       - name: windows x86 avx2 compilation
         run: |
-          mkdir software && cd software
-          echo "***mkdir dir"
-          pwd
-          echo "***check the path"
+          wget
