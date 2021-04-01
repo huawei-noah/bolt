@@ -1,17 +1,32 @@
-name: windows-x86
 
-on: push
-
+name: windows-x64-gpu-vs2019
+on: [push, pull_request]
 jobs:
-  linux:
-    name: windows-x86
+  windows-vs2019-gpu:
     runs-on: windows-latest
-
     steps:
-      - name: checkout code
-        uses: actions/checkout@v2
-      - name: windows x86 compilation
-        run: |
-          pwd
-          echo "check path"
-          ./install.sh --target=windows-x86_64 -t 32
+    - name: cancel-previous-runs
+      uses: styfle/cancel-workflow-action@0.7.0
+      with:
+        access_token: ${{ secrets.GITHUB_TOKEN }}
+    - uses: actions/checkout@v2
+      with:
+        submodules: true
+    - name: cache-protobuf
+      id: cache-protobuf
+      uses: actions/cache@v1
+      with:
+        path: "protobuf-install"
+        key: protobuf-windows-install
+    - name: protobuf
+      if: steps.cache-protobuf.outputs.cache-hit != 'true'
+      run: |
+        mkdir software && cd software
+        Invoke-WebRequest -Uri https://github.com/JulioGold/wget/archive/refs/heads/master.zip -OutFile wget.zip
+        7z x ./wget.zip
+        cd wget-master
+        echo "***ls the files"
+        ls
+        echo "***ls done"
+        cmake -version
+        mingw32-make -version
