@@ -1,12 +1,9 @@
 name: windows-x86-avx2
-
 on: push
-
 jobs:
-  linux:
+  windows-vs2019:
     name: windows-x86-avx2
     runs-on: windows-latest
-
     steps:
       - name: checkout code
         uses: actions/checkout@v2
