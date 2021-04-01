@@ -13,6 +13,7 @@ jobs:
       - name: windows x86 avx2 compilation
         run: |
           cmake -version
+          mingw32-make -version
           echo "***enter the shell environment"
           ls
           echo "***list all the files"
