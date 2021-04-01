@@ -6,7 +6,10 @@ jobs:
   linux:
     name: windows-x86
     runs-on: windows-latest
-    shell: bash
+    defaults:
+      run:
+      shell:bash
+    
 
     steps:
       - name: checkout code
