@@ -6,14 +6,12 @@ jobs:
   linux:
     name: windows-x86
     runs-on: windows-latest
-    defaults:
-      run:
-      shell:bash
-    
 
     steps:
       - name: checkout code
         uses: actions/checkout@v2
       - name: windows x86 compilation
         run: |
+          pwd
+          echo "check path"
           ./install.sh --target=windows-x86_64 -t 32
