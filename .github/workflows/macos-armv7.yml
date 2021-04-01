@@ -13,11 +13,11 @@ jobs:
       - name: macos armv7
         run: |
           pwd
-          mkdir software && cd software
+          mkdir software && cd software && mkdir gnu_getopt
           curl -o gnu-getopt.tar.gz 'https://homebrew.bintray.com/bottles/gnu-getopt-2.36.2.catalina.bottle.tar.gz'
           pwd
           echo "check the file"
           ls
-          tar -zxvf gnu-getopt.tar.gz
-          ls
+          tar -zxvf gnu-getopt.tar.gz -C ./gnu_getopt
+          cd gnu_getopt && ls
           
