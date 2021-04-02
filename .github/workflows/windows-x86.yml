@@ -37,6 +37,7 @@ jobs:
         cd /d/a/bolt/bolt/software && ls
         export PATH=$PATH:/d/a/bolt/bolt/software/wget-master/wget/bin
         wget -h
+        ./install.sh --target=windows-x86_64
         echo "*** check wget done"
         echo "*** compile done"
       shell: bash
