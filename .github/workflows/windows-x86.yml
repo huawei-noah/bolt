@@ -20,13 +20,11 @@ jobs:
     - name: wget
       run: |
         mkdir software && cd software
-        Invoke-WebRequest -Uri https://github.com/JulioGold/wget/archive/refs/heads/master.zip -OutFile wget.zip
-        7z x ./wget.zip
-        $Env:path=$Env:Path+";D:\a\bolt\bolt\software\wget-master\wget\bin"
+        mkdir wget && cd wget
+        Invoke-WebRequest -Uri https://eternallybored.org/misc/wget/1.21.1/64/wget.exe -OutFile wget.exe
         cd ..
         cmake -version
         mingw32-make -version
-        ./install.sh --target=windows-x86_64
         echo "*** check wget"
         wget -h
         echo "*** check wget done"
@@ -34,7 +32,7 @@ jobs:
         
     - name: checkout-bash
       run: |        
-        export PATH=$PATH:/d/a/bolt/bolt/software/wget-master/wget/bin
+        export PATH=$PATH:/d/a/bolt/bolt/software/wget
         wget -h
         cd /d/a/bolt/bolt
         ./install.sh --target=windows-x86_64
