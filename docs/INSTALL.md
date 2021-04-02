@@ -55,11 +55,10 @@
 
 - ### Android NDK
 
-    Refer to the [NDK installation example](https://askubuntu.com/questions/837847/how-to-install-android-ndk) to install [android-ndk-r20](https://dl.google.com/android/repository/android-ndk-r20b-linux-x86_64.zip?hl=zh-cn) and set shell environment variable **ANDROID_NDK_ROOT** and **PATH**.
+    Refer to the [NDK installation example](https://askubuntu.com/questions/837847/how-to-install-android-ndk) to install [android-ndk-r20](https://developer.android.google.cn/ndk/downloads) and set shell environment variable **ANDROID_NDK_ROOT**.
 
     ```
     export ANDROID_NDK_ROOT=/data/opt/android-ndk-r20
-    export PATH=${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH
     ```
 
 ## Linux-AArch64 Cross-Compilation Tools(optional)
