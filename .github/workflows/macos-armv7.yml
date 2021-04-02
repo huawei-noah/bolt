@@ -1,34 +1,21 @@
 name: macos-armv7
-
 on: push
-
 jobs:
   linux:
     name: macos-armv7
     runs-on: macos-latest
-
     steps:
       - name: checkout code
         uses: actions/checkout@v2
       - name: macos armv7
         run: |
-          pwd
-          mkdir software && cd software && mkdir gnu_getopt
-          curl -o gnu-getopt.tar.gz 'https://homebrew.bintray.com/bottles/gnu-getopt-2.36.2.catalina.bottle.tar.gz'
-          pwd
-          echo "***check the file"
-          ls
-          tar -zxvf gnu-getopt.tar.gz -C ./gnu_getopt
-          cd gnu_getopt && ls
-          echo "*** mkdir gnu_getopt"
-          cd /usr/local/opt/ && mkdir gnu-getopt
-          cd /usr/local/opt/gnu-getopt && mkdir bin
-          echo "*** mkdir bin"
-          cp /Users/runner/work/bolt/bolt/software/gnu_getopt/gnu-getopt/2.36.2/bin/getopt /usr/local/opt/gnu-getopt/bin
-          echo "*** cp gnu-getopt done"
-          export PATH="/usr/local/opt/gnu-getopt/bin:$PATH" >> /Users/runner/.bash_profile
-          source /Users/runner/.bash_profile
-          getopt --test
-          echo $?
-          echo "***test"
+          mkdir android_ndk && cd android_ndk
+          curl -o android-ndk-r20b-linux-x86_64.zip 'https://dl.google.com/android/repository/android-ndk-r20b-linux-x86_64.zip?hl=zh-cn'
+          unzip -o android-ndk-r20b-linux-x86_64.zip
+          CUR_PATH=$(pwd)
+          export ANDROID_NDK_ROOT=$CUR_PATH/android-ndk-r20b
+          export PATH=${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH
+          cd ..
+          ./install.sh --target=android-armv7
+          
           
