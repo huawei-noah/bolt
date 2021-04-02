@@ -1,9 +1,9 @@
-name: macos-armv7
+name: macos-x86
 on: push
 jobs:
   linux:
-    name: macos-armv7
-    runs-on: macos-x86
+    name: macos-x86
+    runs-on: macos-latest
     steps:
       - name: checkout code
         uses: actions/checkout@v2
