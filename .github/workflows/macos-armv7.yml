@@ -20,6 +20,6 @@ jobs:
           export ANDROID_NDK_ROOT=$CUR_PATH/android-ndk-r20b
           export PATH=${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH
           cd ..          
-          ./install.sh --target=ios-armv7
+          ./install.sh --target=android-armv7
           
           
