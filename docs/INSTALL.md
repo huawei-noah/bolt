@@ -178,7 +178,7 @@ We will install Bolt to *install_[target]* directory. These subdirectories will 
   2. save <https://github.com/protocolbuffers/protobuf/archive/v3.14.0.tar.gz> to *third_party/sources/protobuf-3.14.0.tar.gz*.
   3. save <https://github.com/google/flatbuffers/tree/master/include> to *third_party/sources/flatbuffers/include*.
   4. save <https://github.com/tensorflow/tensorflow/blob/master/tensorflow/lite/schema/schema_generated.h> *third_party/sources/tflite/include/tensorflow/lite/schema/schema_generated.h*.
-  5. save <https://github.com/open-source-parsers/jsoncpp/archive/master.zip> to *third_party/sources/jsoncpp-master.zip*.
+  5. save <https://github.com/open-source-parsers/jsoncpp/archive/refs/tags/1.9.4.zip> to *third_party/sources/jsoncpp-1.9.4.zip*.
   6. optional. save <https://github.com/KhronosGroup/OpenCL-Headers/tree/master/CL> to *third_party/sources/opencl/include/CL** when using ARM MALI GPU.
   7. optional. use *ADB* to pull android phone's </vendor/lib64/libOpenCL.so> and </vendor/lib64/egl/libGLES_mali.so> to *third_party/sources/opencl/lib64* when using ARM MALI GPU.
   8. optional. save <http://www.ijg.org/files/jpegsrc.v9c.tar.gz> to *third_party/sources/jpegsrc.v9c.tar.gz* when using example.
