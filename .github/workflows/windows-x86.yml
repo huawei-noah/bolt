@@ -35,6 +35,8 @@ jobs:
     - name: checkout-bash
       run: |
         cd /d/a/bolt/bolt/software && ls
+        export PATH=$PATH:/d/a/bolt/bolt/software/wget-master/wget/bin
+        wget -h
         echo "*** check wget done"
         echo "*** compile done"
       shell: bash
