@@ -31,6 +31,21 @@ jobs:
         wget -h
         echo "*** check wget done"
         echo "*** compile done"
+        
+    - name: checkout-bash
+      run: |
+        cd /d/a/bolt/bolt
+        ./install.sh --target=macos-x86_64
+        echo "*** check wget done"
+        echo "*** compile done"
+        
+        
+        
+        
+        
+        
+        
+        
 
 
 
