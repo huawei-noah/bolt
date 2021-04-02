@@ -15,13 +15,7 @@ jobs:
           sudo apt-get install g++-aarch64-linux-gnu
           which aarch64-linux-gnu-g++
           eval "aarch64-linux-gnu-g++ --version"
-          echo "aarch64 g++ preparation done..."
       - name: compile armv8(cpu) with gnu on linux 
         run: |
           chmod -R 777 ../bolt/
-          echo "compile armv8 with gnu on linux ..."
           ./install.sh --target=android-aarch64 -t 32
-      - name: compile armv8(cpu) with llvm on linux
-        run: |
-          echo "compile armv8(cpu) with llvm on linux ..."
-          echo "todo..."
