@@ -23,10 +23,17 @@ androidNDKIsValid(){
     checkExe $1
     if [[ $? == 0 ]]; then
         if [[ "${ANDROID_NDK_ROOT}" != "" ]]; then
-            export PATH=${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH
+            INNER_ANDROID_NDK_ROOT=${ANDROID_NDK_ROOT}
         fi
         if [[ "${ANDROID_NDK_HOME}" != "" ]]; then
-            export PATH=${ANDROID_NDK_HOME}/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH
+            INNER_ANDROID_NDK_ROOT=${ANDROID_NDK_HOME}
+        fi
+        if [[ ${host} =~ macos ]]; then
+            export PATH=${INNER_ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/darwin-x86_64/bin:$PATH
+        elif [[ ${host} =~ windows ]]; then
+            export PATH=${INNER_ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/windows-x86_64/bin:$PATH
+        else
+            export PATH=${INNER_ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH
         fi
         checkExe $1
         if [[ $? == 0 ]]; then
