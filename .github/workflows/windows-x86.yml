@@ -26,7 +26,6 @@ jobs:
         cmake -version
         mingw32-make -version
         echo "*** check wget"
-        wget -h
         echo "*** check wget done"
         echo "*** compile done"
         
