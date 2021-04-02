@@ -33,10 +33,10 @@ jobs:
         echo "*** compile done"
         
     - name: checkout-bash
-      run: |
-        cd /d/a/bolt/bolt/software && ls
+      run: |        
         export PATH=$PATH:/d/a/bolt/bolt/software/wget-master/wget/bin
         wget -h
+        cd /d/a/bolt/bolt
         ./install.sh --target=windows-x86_64
         echo "*** check wget done"
         echo "*** compile done"
