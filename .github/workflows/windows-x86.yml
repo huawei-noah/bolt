@@ -34,9 +34,10 @@ jobs:
         
     - name: checkout-bash
       run: |
-        pwd
+        cd /d/a/bolt/bolt
         echo "*** check wget done"
         echo "*** compile done"
+      shell: bash
         
         
         
