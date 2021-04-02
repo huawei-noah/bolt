@@ -34,8 +34,7 @@ jobs:
         
     - name: checkout-bash
       run: |
-        cd /d/a/bolt/bolt
-        ./install.sh --target=macos-x86_64
+        pwd
         echo "*** check wget done"
         echo "*** compile done"
         
