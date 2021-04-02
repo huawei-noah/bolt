@@ -1,7 +1,7 @@
-name: windows-x64_avx2
+name: windows-x64
 on: [push, pull_request]
 jobs:
-  windows-x86:
+  windows-x86_avx2:
     runs-on: windows-latest
     steps:
     - name: cancel-previous-runs
@@ -20,14 +20,13 @@ jobs:
     - name: wget
       run: |
         mkdir software && cd software
-        Invoke-WebRequest -Uri https://github.com/JulioGold/wget/archive/refs/heads/master.zip -OutFile wget.zip
-        7z x ./wget.zip
-        $Env:path=$Env:Path+";D:\a\bolt\bolt\software\wget-master\wget\bin"
-        cd ..
-        cmake -version
-        mingw32-make -version
-        ./install.sh --target=windows-x86_64_avx2
-        echo "*** check wget"
+        mkdir wget && cd wget
+        Invoke-WebRequest -Uri https://eternallybored.org/misc/wget/1.21.1/64/wget.exe -OutFile wget.exe
+       
+    - name: checkout-bash
+      run: |        
+        export PATH=$PATH:/d/a/bolt/bolt/software/wget
         wget -h
-        echo "*** check wget done"
-        echo "*** compile done"
+        cd /d/a/bolt/bolt
+        ./install.sh --target=windows-x86_64_avx2
+      shell: bash
