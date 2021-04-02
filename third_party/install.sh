@@ -319,6 +319,7 @@ if [[ ${cmake_options} =~ USE_TENSORFLOW=ON ]]; then
         if [ ! -d "./jsoncpp-1.9.4" ]; then
             if [ ! -f "${script_dir}/sources/jsoncpp-1.9.4.zip" ]; then
                 wget --no-check-certificate https://github.com/open-source-parsers/jsoncpp/archive/refs/tags/1.9.4.zip || exit 1
+                mv 1.9.4.zip jsoncpp-1.9.4.zip || exit 1
                 cp jsoncpp-1.9.4.zip ${script_dir}/sources/
             else
                 cp ${script_dir}/sources/jsoncpp-1.9.4.zip .
