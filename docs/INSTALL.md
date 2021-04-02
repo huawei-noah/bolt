@@ -17,21 +17,29 @@
 
 - ### CMake
 
-   Download and install Cmake from <https://cmake.org/download/>.
+   Download and install Cmake from <https://cmake.org/download/>. Set shell environment variable **PATH**.
 
 - ### GNU make
 
-   Download and install make from <https://ftp.gnu.org/gnu/make/>.
+   Download and install make from <https://ftp.gnu.org/gnu/make/>. Set shell environment variable **PATH**.
+
+- ### Wget
+
+   Download and install Wget from <https://www.gnu.org/software/wget/>. Set shell environment variable **PATH**.
 
 ## Windows System Compilation Tools
 
 - ### Git Shell
-  
-   Download and install Git Shell from <https://gitforwindows.org/>.
-  
+
+   Download and install Git Shell from <https://gitforwindows.org/>. Set shell environment variable **PATH**.
+
 - ### CMake
 
-   Download and install Cmake from <https://cmake.org/download/>.
+   Download and install Cmake from <https://cmake.org/download/>. Set shell environment variable **PATH**.
+
+- ### Wget
+
+   Download and install Wget from <https://eternallybored.org/misc/wget/>. Set shell environment variable **PATH**.
 
 - ### MinGW toolchains(mingw32-make, gcc, g++)
 
