@@ -25,9 +25,6 @@ jobs:
         cd ..
         cmake -version
         mingw32-make -version
-        echo "*** check wget"
-        echo "*** check wget done"
-        echo "*** compile done"
         
     - name: checkout-bash
       run: |        
@@ -35,8 +32,6 @@ jobs:
         wget -h
         cd /d/a/bolt/bolt
         ./install.sh --target=windows-x86_64
-        echo "*** check wget done"
-        echo "*** compile done"
       shell: bash
         
         
