@@ -213,3 +213,13 @@ We will install Bolt to *install_[target]* directory. These subdirectories will 
 - ### Only want to use partial inference precision.
 
   You can implement it by changing install.sh. for example, there are some cmake options, such as *-DUSE_INT8=ON*.
+
+- ### Can not build success with special compiler(such as MinGW)
+
+  You may encounter various compilation problem, this maybe caused by compiler or others. Here is an example.
+
+  ```
+  mingw64\bin\ar.exe: unable to rename 'CMakeFiles\test_softmax.dir/objects.a'; reason: File exists
+  ```
+
+  You can enter build directory *build_[target]* and continuously run *make install*. This may complete all compilation step by step.
