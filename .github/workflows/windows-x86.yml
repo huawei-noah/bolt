@@ -34,8 +34,7 @@ jobs:
         
     - name: checkout-bash
       run: |
-        cd /d/a/bolt/bolt
-        ./install.sh --target=windows-x86_64
+        cd /d/a/bolt/bolt/software && ls
         echo "*** check wget done"
         echo "*** compile done"
       shell: bash
