@@ -802,19 +802,25 @@
 <h2 id="linux-system-compilation-tools">Linux System Compilation Tools</h2>
 <ul>
 <li><h3 id="cmake">CMake</h3>
-<p> Download and install Cmake from <a href="https://cmake.org/download/" target="_blank">https://cmake.org/download/</a>.</p>
+<p> Download and install Cmake from <a href="https://cmake.org/download/" target="_blank">https://cmake.org/download/</a>. Set shell environment variable <strong>PATH</strong>.</p>
 </li>
 <li><h3 id="gnu-make">GNU make</h3>
-<p> Download and install make from <a href="https://ftp.gnu.org/gnu/make/" target="_blank">https://ftp.gnu.org/gnu/make/</a>.</p>
+<p> Download and install make from <a href="https://ftp.gnu.org/gnu/make/" target="_blank">https://ftp.gnu.org/gnu/make/</a>. Set shell environment variable <strong>PATH</strong>.</p>
+</li>
+<li><h3 id="wget">Wget</h3>
+<p> Download and install Wget from <a href="https://www.gnu.org/software/wget/" target="_blank">https://www.gnu.org/software/wget/</a>. Set shell environment variable <strong>PATH</strong>.</p>
 </li>
 </ul>
 <h2 id="windows-system-compilation-tools">Windows System Compilation Tools</h2>
 <ul>
 <li><h3 id="git-shell">Git Shell</h3>
-<p> Download and install Git Shell from <a href="https://gitforwindows.org/" target="_blank">https://gitforwindows.org/</a>.</p>
+<p> Download and install Git Shell from <a href="https://gitforwindows.org/" target="_blank">https://gitforwindows.org/</a>. Set shell environment variable <strong>PATH</strong>.</p>
 </li>
 <li><h3 id="cmake">CMake</h3>
-<p> Download and install Cmake from <a href="https://cmake.org/download/" target="_blank">https://cmake.org/download/</a>.</p>
+<p> Download and install Cmake from <a href="https://cmake.org/download/" target="_blank">https://cmake.org/download/</a>. Set shell environment variable <strong>PATH</strong>.</p>
+</li>
+<li><h3 id="wget">Wget</h3>
+<p> Download and install Wget from <a href="https://eternallybored.org/misc/wget/" target="_blank">https://eternallybored.org/misc/wget/</a>. Set shell environment variable <strong>PATH</strong>.</p>
 </li>
 <li><h3 id="mingw-toolchainsmingw32-make-gcc-g">MinGW toolchains(mingw32-make, gcc, g++)</h3>
 <p> Download and install Mingw32-w64 from <a href="https://udomain.dl.sourceforge.net/project/mingw-w64/Toolchains%20targetting%20Win64/Personal%20Builds/mingw-builds/6.4.0/threads-posix/seh/x86_64-6.4.0-release-posix-seh-rt_v5-rev0.7z" target="_blank">https://udomain.dl.sourceforge.net/project/mingw-w64/Toolchains%20targetting%20Win64/Personal%20Builds/mingw-builds/6.4.0/threads-posix/seh/x86_64-6.4.0-release-posix-seh-rt_v5-rev0.7z</a>.</p>
@@ -829,9 +835,8 @@
 <h2 id="android-cross-compilation-toolsoptional">Android Cross-Compilation Tools(optional)</h2>
 <ul>
 <li><h3 id="android-ndk">Android NDK</h3>
-<p>  Refer to the <a href="https://askubuntu.com/questions/837847/how-to-install-android-ndk" target="_blank">NDK installation example</a> to install <a href="https://dl.google.com/android/repository/android-ndk-r20b-linux-x86_64.zip?hl=zh-cn" target="_blank">android-ndk-r20</a> and set shell environment variable <strong>ANDROID_NDK_ROOT</strong> and <strong>PATH</strong>.</p>
+<p>  Refer to the <a href="https://askubuntu.com/questions/837847/how-to-install-android-ndk" target="_blank">NDK installation example</a> to install <a href="https://developer.android.google.cn/ndk/downloads" target="_blank">android-ndk-r20</a> and set shell environment variable <strong>ANDROID_NDK_ROOT</strong>.</p>
 <pre><code>  export ANDROID_NDK_ROOT=/data/opt/android-ndk-r20
-  export PATH=${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH
 </code></pre></li>
 </ul>
 <h2 id="linux-aarch64-cross-compilation-toolsoptional">Linux-AArch64 Cross-Compilation Tools(optional)</h2>
@@ -1021,7 +1026,7 @@ These examples will be build when using &quot;--test&quot; install option.</li>
 <li>save <a href="https://github.com/protocolbuffers/protobuf/archive/v3.14.0.tar.gz" target="_blank">https://github.com/protocolbuffers/protobuf/archive/v3.14.0.tar.gz</a> to <em>third_party/sources/protobuf-3.14.0.tar.gz</em>.</li>
 <li>save <a href="https://github.com/google/flatbuffers/tree/master/include" target="_blank">https://github.com/google/flatbuffers/tree/master/include</a> to <em>third_party/sources/flatbuffers/include</em>.</li>
 <li>save <a href="https://github.com/tensorflow/tensorflow/blob/master/tensorflow/lite/schema/schema_generated.h" target="_blank">https://github.com/tensorflow/tensorflow/blob/master/tensorflow/lite/schema/schema_generated.h</a> <em>third_party/sources/tflite/include/tensorflow/lite/schema/schema_generated.h</em>.</li>
-<li>save <a href="https://github.com/open-source-parsers/jsoncpp/archive/master.zip" target="_blank">https://github.com/open-source-parsers/jsoncpp/archive/master.zip</a> to <em>third_party/sources/jsoncpp-master.zip</em>.</li>
+<li>save <a href="https://github.com/open-source-parsers/jsoncpp/archive/refs/tags/1.9.4.zip" target="_blank">https://github.com/open-source-parsers/jsoncpp/archive/refs/tags/1.9.4.zip</a> to <em>third_party/sources/jsoncpp-1.9.4.zip</em>.</li>
 <li>optional. save <a href="https://github.com/KhronosGroup/OpenCL-Headers/tree/master/CL" target="_blank">https://github.com/KhronosGroup/OpenCL-Headers/tree/master/CL</a> to <em>third_party/sources/opencl/include/CL*</em> when using ARM MALI GPU.</li>
 <li>optional. use <em>ADB</em> to pull android phone&apos;s &lt;/vendor/lib64/libOpenCL.so&gt; and &lt;/vendor/lib64/egl/libGLES_mali.so&gt; to <em>third_party/sources/opencl/lib64</em> when using ARM MALI GPU.</li>
 <li>optional. save <a href="http://www.ijg.org/files/jpegsrc.v9c.tar.gz" target="_blank">http://www.ijg.org/files/jpegsrc.v9c.tar.gz</a> to <em>third_party/sources/jpegsrc.v9c.tar.gz</em> when using example.</li>
@@ -1050,6 +1055,11 @@ error: &apos;thread&apos; is not a member of &apos;std&apos;
 </li>
 <li><h3 id="only-want-to-use-partial-inference-precision">Only want to use partial inference precision.</h3>
 <p>You can implement it by changing install.sh. for example, there are some cmake options, such as <em>-DUSE_INT8=ON</em>.</p>
+</li>
+<li><h3 id="can-not-build-success-with-special-compilersuch-as-mingw">Can not build success with special compiler(such as MinGW)</h3>
+<p>You may encounter various compilation problem, this maybe caused by compiler or others. Here is an example.</p>
+<pre><code>mingw64\bin\ar.exe: unable to rename &apos;CMakeFiles\test_softmax.dir/objects.a&apos;; reason: File exists
+</code></pre><p>You can enter build directory <em>build_[target]</em> and continuously run <em>make install</em>. This may complete all compilation step by step.</p>
 </li>
 </ul>
 
