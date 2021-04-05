@@ -316,25 +316,23 @@ if [[ ${cmake_options} =~ USE_TENSORFLOW=ON ]]; then
         rm -rf ${JSONCPP_ROOT}
         mkdir -p ${JSONCPP_ROOT}
         cd ${JSONCPP_ROOT}
-        if [ ! -d "./jsoncpp-master" ]; then
-            if [ ! -f "${script_dir}/sources/jsoncpp-master.zip" ]; then
-                wget --no-check-certificate https://github.com/open-source-parsers/jsoncpp/archive/master.zip || exit 1
-                mv master.zip jsoncpp-master.zip
-                cp jsoncpp-master.zip ${script_dir}/sources/
+        if [ ! -d "./jsoncpp-1.9.4" ]; then
+            if [ ! -f "${script_dir}/sources/jsoncpp-1.9.4.zip" ]; then
+                wget --no-check-certificate https://github.com/open-source-parsers/jsoncpp/archive/refs/tags/1.9.4.zip || exit 1
+                mv 1.9.4.zip jsoncpp-1.9.4.zip || exit 1
+                cp jsoncpp-1.9.4.zip ${script_dir}/sources/
             else
-                cp ${script_dir}/sources/jsoncpp-master.zip .
+                cp ${script_dir}/sources/jsoncpp-1.9.4.zip .
             fi
-            unzip jsoncpp-master.zip > ${log_file} || exit 1
+            unzip jsoncpp-1.9.4.zip > ${log_file} || exit 1
         fi
-        mkdir -p jsoncpp-master/build
-        cd jsoncpp-master/build
+        mkdir -p jsoncpp-1.9.4/build
+        cd jsoncpp-1.9.4/build
         cmake -G"${CMAKE_GENERATOR}" .. -DCMAKE_INSTALL_PREFIX=${JSONCPP_ROOT} -DJSONCPP_WITH_TESTS=OFF ${CMAKE_OPTIONS} > ${log_file} || exit 1
         ${MAKE} -j ${build_threads} >> ${log_file} || exit 1
         ${MAKE} install >> ${log_file} || exit 1
-	echo "***check the log_file..."
-	cat ${log_file}
         cd ../../
-        rm -rf jsoncpp-master*
+        rm -rf jsoncpp-1.9.4*
     fi
     echo "
 export JSONCPP_ROOT=${JSONCPP_ROOT}

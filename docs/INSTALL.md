@@ -17,21 +17,29 @@
 
 - ### CMake
 
-   Download and install Cmake from <https://cmake.org/download/>.
+   Download and install Cmake from <https://cmake.org/download/>. Set shell environment variable **PATH**.
 
 - ### GNU make
 
-   Download and install make from <https://ftp.gnu.org/gnu/make/>.
+   Download and install make from <https://ftp.gnu.org/gnu/make/>. Set shell environment variable **PATH**.
+
+- ### Wget
+
+   Download and install Wget from <https://www.gnu.org/software/wget/>. Set shell environment variable **PATH**.
 
 ## Windows System Compilation Tools
 
 - ### Git Shell
-  
-   Download and install Git Shell from <https://gitforwindows.org/>.
-  
+
+   Download and install Git Shell from <https://gitforwindows.org/>. Set shell environment variable **PATH**.
+
 - ### CMake
 
-   Download and install Cmake from <https://cmake.org/download/>.
+   Download and install Cmake from <https://cmake.org/download/>. Set shell environment variable **PATH**.
+
+- ### Wget
+
+   Download and install Wget from <https://eternallybored.org/misc/wget/>. Set shell environment variable **PATH**.
 
 - ### MinGW toolchains(mingw32-make, gcc, g++)
 
@@ -47,11 +55,10 @@
 
 - ### Android NDK
 
-    Refer to the [NDK installation example](https://askubuntu.com/questions/837847/how-to-install-android-ndk) to install [android-ndk-r20](https://dl.google.com/android/repository/android-ndk-r20b-linux-x86_64.zip?hl=zh-cn) and set shell environment variable **ANDROID_NDK_ROOT** and **PATH**.
+    Refer to the [NDK installation example](https://askubuntu.com/questions/837847/how-to-install-android-ndk) to install [android-ndk-r20](https://developer.android.google.cn/ndk/downloads) and set shell environment variable **ANDROID_NDK_ROOT**.
 
     ```
     export ANDROID_NDK_ROOT=/data/opt/android-ndk-r20
-    export PATH=${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH
     ```
 
 ## Linux-AArch64 Cross-Compilation Tools(optional)
@@ -170,7 +177,7 @@ We will install Bolt to *install_[target]* directory. These subdirectories will 
   2. save <https://github.com/protocolbuffers/protobuf/archive/v3.14.0.tar.gz> to *third_party/sources/protobuf-3.14.0.tar.gz*.
   3. save <https://github.com/google/flatbuffers/tree/master/include> to *third_party/sources/flatbuffers/include*.
   4. save <https://github.com/tensorflow/tensorflow/blob/master/tensorflow/lite/schema/schema_generated.h> *third_party/sources/tflite/include/tensorflow/lite/schema/schema_generated.h*.
-  5. save <https://github.com/open-source-parsers/jsoncpp/archive/master.zip> to *third_party/sources/jsoncpp-master.zip*.
+  5. save <https://github.com/open-source-parsers/jsoncpp/archive/refs/tags/1.9.4.zip> to *third_party/sources/jsoncpp-1.9.4.zip*.
   6. optional. save <https://github.com/KhronosGroup/OpenCL-Headers/tree/master/CL> to *third_party/sources/opencl/include/CL** when using ARM MALI GPU.
   7. optional. use *ADB* to pull android phone's </vendor/lib64/libOpenCL.so> and </vendor/lib64/egl/libGLES_mali.so> to *third_party/sources/opencl/lib64* when using ARM MALI GPU.
   8. optional. save <http://www.ijg.org/files/jpegsrc.v9c.tar.gz> to *third_party/sources/jpegsrc.v9c.tar.gz* when using example.
@@ -205,3 +212,13 @@ We will install Bolt to *install_[target]* directory. These subdirectories will 
 - ### Only want to use partial inference precision.
 
   You can implement it by changing install.sh. for example, there are some cmake options, such as *-DUSE_INT8=ON*.
+
+- ### Can not build success with special compiler(such as MinGW)
+
+  You may encounter various compilation problem, this maybe caused by compiler or others. Here is an example.
+
+  ```
+  mingw64\bin\ar.exe: unable to rename 'CMakeFiles\test_softmax.dir/objects.a'; reason: File exists
+  ```
+
+  You can enter build directory *build_[target]* and continuously run *make install*. This may complete all compilation step by step.
