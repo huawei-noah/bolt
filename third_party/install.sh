@@ -229,41 +229,33 @@ fi
 if [[ ${cmake_options} =~ USE_MALI=ON ]]; then
     OpenCL_ROOT=${work_dir}/opencl
     # download and install OpenCL
-    echo "[INFO] build opencl in ${OpenCL_ROOT}..."
-    mkdir -p ${OpenCL_ROOT}
-    cd ${OpenCL_ROOT}
-    if [ ! -d "${script_dir}/sources/opencl" ]; then
-        wget --no-check-certificate https://github.com/KhronosGroup/OpenCL-Headers/archive/v2020.06.16.zip || exit 1
-        unzip v2020.06.16.zip > ${log_file} || exit 1
-        mkdir -p include
-        cp -r OpenCL-Headers-2020.06.16/CL include/
-        rm -rf v2020.06.16.zip OpenCL-Headers-2020.06.16
-    
-        checkExe adb
-        if [ $? == 1 ] ; then
-            device_array=($(adb devices | sed 's/\r//' | grep ".device$"))
-            device=${device_array[0]}
-            if [ "${device}" != "" ]; then
-                mkdir -p lib64
-                adb -s ${device} pull /vendor/lib64/libOpenCL.so lib64/ || exit 1
-                adb -s ${device} pull /vendor/lib64/egl/libGLES_mali.so lib64/ || exit 1
-            fi
+    if [ ! -d "${OpenCL_ROOT}/lib" ]; then
+        echo "[INFO] build OpenCL in ${OpenCL_ROOT}..."
+        mkdir -p ${OpenCL_ROOT}
+        cd ${OpenCL_ROOT}
+        rm -rf *
+        cp -r ${script_dir}/sources/opencl/* . || exit 1
+        if [ ! -f "./include/CL/cl.h" ]; then
+            wget --no-check-certificate https://github.com/KhronosGroup/OpenCL-Headers/archive/v2020.06.16.zip || exit 1
+            unzip v2020.06.16.zip > ${log_file} || exit 1
+            mkdir -p include
+            cp -r OpenCL-Headers-2020.06.16/CL include/
+            cp -r include ${script_dir}/sources/opencl/
+            rm -rf v2020.06.16.zip OpenCL-Headers-2020.06.16
         fi
-        cp -r ../opencl ${script_dir}/sources/
-    else
-        cp -r ${script_dir}/sources/opencl/* .
+        mkdir -p build
+        cd build
+        cmake -G"${CMAKE_GENERATOR}" ${CMAKE_OPTIONS} .. > ${log_file} || exit 1
+        ${MAKE} -j${build_threads} >> ${log_file} || exit 1
+        cd ..
+        rm -rf build src CMakeLists.txt
     fi
     echo "
 export OpenCL_ROOT=${OpenCL_ROOT}" >> ${env_file}
-    if [[ ! -f "${OpenCL_ROOT}/lib64/libOpenCL.so" || ! -f "${OpenCL_ROOT}/lib64/libGLES_mali.so" ]]; then
+    if [[ ! -f "${OpenCL_ROOT}/lib/libOpenCL.so" ]]; then
         echo "
-if [[ ! -d \"\${OpenCL_ROOT}/include\" || ! -f \"\${OpenCL_ROOT}/lib64/libOpenCL.so\" || ! -f \"\${OpenCL_ROOT}/lib64/libGLES_mali.so\" ]]; then
-    echo \"[ERROR] not successfully pull libOpenCL.so/libGLES_mali.so from android device.
-you can use these commands to pull library.
-    mkdir -p ${OpenCL_ROOT}/lib64
-    adb pull /vendor/lib64/libOpenCL.so ${OpenCL_ROOT}/lib64/
-    adb pull /vendor/lib64/egl/libGLES_mali.so ${OpenCL_ROOT}/lib64/
-\"
+if [[ ! -d \"\${OpenCL_ROOT}/include\" || ! -f \"\${OpenCL_ROOT}/lib/libOpenCL.so\" ]]; then
+    echo \"[ERROR] OpenCL not install success\"
     exit 1
 fi
 cmake_env_options=\"\${cmake_env_options} -DOpenCL_ROOT=\${OpenCL_ROOT}\"
