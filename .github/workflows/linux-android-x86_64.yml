@@ -4,7 +4,7 @@ on: [push, pull_request]
 
 jobs:
   linux:
-    name: linux-android-x86_arm64
+    name: linux-android-x86_64
     runs-on: ubuntu-latest
 
     steps:
