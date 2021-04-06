@@ -12,8 +12,13 @@ jobs:
         uses: actions/checkout@v2
       - name: prerequisites installation
         run: |
-          sudo apt-get install g++-aarch64-linux-gnu
-      - name: compile armv8(cpu) with gnu on linux 
+          mkdir android_ndk && cd android_ndk
+          wget https://dl.google.com/android/repository/android-ndk-r20b-linux-x86_64.zip
+          unzip -o android-ndk-r20b-linux-x86_64.zip
+          CUR_PATH=$(pwd)
+          export ANDROID_NDK_ROOT=$CUR_PATH/android-ndk-r20b
+          export PATH=${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH
+          cd ..
+      - name: compile armv7 with llvm on linux 
         run: |
-          chmod -R 777 ../bolt/
           ./install.sh --target=android-armv7 -t 32
