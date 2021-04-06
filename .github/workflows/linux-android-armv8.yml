@@ -12,9 +12,6 @@ jobs:
         uses: actions/checkout@v2
       - name: prerequisites installation
         run: |
-          sudo apt-get install g++-aarch64-linux-gnu
-          which aarch64-linux-gnu-g++
-          eval "aarch64-linux-gnu-g++ --version"
           mkdir android_ndk && cd android_ndk
           wget https://dl.google.com/android/repository/android-ndk-r20b-linux-x86_64.zip
           unzip -o android-ndk-r20b-linux-x86_64.zip
