@@ -2,12 +2,12 @@ name: macos-android-armv8
 on: [push, pull_request]
 jobs:
   linux:
-    name: macos-armv8
+    name: macos-android-armv8
     runs-on: macos-latest
     steps:
       - name: checkout code
         uses: actions/checkout@v2
-      - name: macos armv8
+      - name: macos android armv8
         run: |
           brew install gnu-getopt
           echo 'export PATH="/usr/local/opt/gnu-getopt/bin:$PATH"' >> /Users/runner/.bash_profile
