@@ -245,8 +245,8 @@ if [[ ${cmake_options} =~ USE_MALI=ON ]]; then
         fi
         mkdir -p build
         cd build
-        cmake -G"${CMAKE_GENERATOR}" ${CMAKE_OPTIONS} .. > ${log_file} || exit 1
-        ${MAKE} -j${build_threads} >> ${log_file} || exit 1
+        cmake -G"${CMAKE_GENERATOR}" ${CMAKE_OPTIONS} .. &> ${log_file} || exit 1
+        ${MAKE} -j${build_threads} &>> ${log_file} || exit 1
         cd ..
         rm -rf build src CMakeLists.txt
     fi
