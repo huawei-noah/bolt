@@ -1,10 +1,10 @@
-name: linux-android-armv8
+name: linux-android-x86_64
 
 on: [push, pull_request]
 
 jobs:
   linux:
-    name: linux-android-armv8
+    name: linux-android-x86_arm64
     runs-on: ubuntu-latest
 
     steps:
@@ -19,6 +19,6 @@ jobs:
           export ANDROID_NDK_ROOT=$CUR_PATH/android-ndk-r20b
           export PATH=${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH
           cd ..
-      - name: compile armv8 with llvm on linux 
+      - name: compile android x86_64 with llvm on linux 
         run: |
           ./install.sh --target=android-x86_64
