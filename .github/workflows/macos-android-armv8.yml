@@ -7,7 +7,7 @@ jobs:
     steps:
       - name: checkout code
         uses: actions/checkout@v2
-      - name: macos android armv8
+      - name: compile android armv8 on macos
         run: |
           brew install gnu-getopt
           echo 'export PATH="/usr/local/opt/gnu-getopt/bin:$PATH"' >> /Users/runner/.bash_profile
