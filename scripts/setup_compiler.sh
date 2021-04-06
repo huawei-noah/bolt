@@ -84,12 +84,14 @@ if [[ ! ${target} =~ blank ]]; then
     CXX=g++
     STRIP=strip
     AR=ar
+    RANLIB=ranlib
 fi
 if [[ "${target}" == "android-aarch64" ]]; then
     CC="clang --target=aarch64-linux-android21"
     CXX="clang++ --target=aarch64-linux-android21"
     STRIP=aarch64-linux-android-strip
     AR=aarch64-linux-android-ar
+    RANLIB=aarch64-linux-android-ranlib
     CONFIGURE_OPTIONS="--host=arm-linux --enable-neon"
     CCFLAGS="${CCFLAGS} --target=aarch64-linux-android21"
     androidNDKIsValid ${AR}
@@ -99,6 +101,7 @@ if [[ "${target}" == "android-armv7" ]]; then
     CXX="clang++ --target=armv7a-linux-androideabi16"
     STRIP=arm-linux-androideabi-strip
     AR=arm-linux-androideabi-ar
+    RANLIB=arm-linux-androideabi-ranlib
     CONFIGURE_OPTIONS="--host=arm-linux "
     CCFLAGS="${CCFLAGS} --target=armv7a-linux-androideabi16"
     androidNDKIsValid ${AR}
@@ -108,6 +111,7 @@ if [[ "${target}" == "android-x86_64" ]]; then
     CXX="clang++ --target=x86_64-linux-android21"
     STRIP=x86_64-linux-android-strip
     AR=x86_64-linux-android-ar
+    RANLIB=x86_64-linux-android-ranlib
     CONFIGURE_OPTIONS="--host=x86-linux"
     CCFLAGS="${CCFLAGS} --target=x86_64-linux-android21"
 fi
@@ -124,6 +128,7 @@ if [[ "${target}" == "ios-aarch64" || "${target}" == "ios-armv7" ]]; then
         CXX=/usr/bin/clang++
         STRIP=/usr/bin/strip
         AR=/usr/bin/ar
+        RANLIB=/usr/bin/ranlib
         if [[ "${target}" == "ios-aarch64" ]]; then
             CCFLAGS="${CCFLAGS} -arch arm64"
         else
@@ -135,6 +140,7 @@ if [[ "${target}" == "ios-aarch64" || "${target}" == "ios-armv7" ]]; then
         CXX=arm-apple-darwin11-clang++
         STRIP=arm-apple-darwin11-strip
         AR=arm-apple-darwin11-ar
+        RANLIB=arm-apple-darwin11-ranlib
     fi
     CONFIGURE_OPTIONS="--host=arm-apple-darwin11"
 fi
@@ -143,6 +149,7 @@ if [[ "${target}" == "linux-aarch64" ]]; then
     CXX=aarch64-linux-gnu-g++
     STRIP=aarch64-linux-gnu-strip
     AR=aarch64-linux-gnu-ar
+    RANLIB=aarch64-linux-gnu-ranlib
     CONFIGURE_OPTIONS="--host=arm-linux"
 fi
 if [[ ${target} =~ linux-arm ]]; then
@@ -153,6 +160,7 @@ if [[ "${target}" == "linux-arm_himix100" ]]; then
     CXX=arm-himix100-linux-g++
     STRIP=arm-himix100-linux-strip
     AR=arm-himix100-linux-ar
+    RANLIB=arm-himix100-linux-ranlib
     CONFIGURE_OPTIONS="--host=arm-linux "
 fi
 if [[ "${target}" == "linux-arm_musleabi" ]]; then
@@ -160,6 +168,7 @@ if [[ "${target}" == "linux-arm_musleabi" ]]; then
     CXX=arm-linux-musleabi-g++
     STRIP=arm-linux-musleabi-strip
     AR=arm-linux-musleabi-ar
+    RANLIB=arm-linux-musleabi-ranlib
     CONFIGURE_OPTIONS="--host=arm-linux "
 fi
 if [[ ${host} =~ linux ]]; then
@@ -168,6 +177,7 @@ if [[ ${host} =~ linux ]]; then
         CXX=x86_64-w64-mingw32-g++-posix
         STRIP=x86_64-w64-mingw32-strip
         AR=x86_64-w64-mingw32-ar
+        RANLIB=x86_64-w64-mingw32-ranlib
         CONFIGURE_OPTIONS="--host=x86_64-windows "
     fi
 fi
@@ -227,6 +237,7 @@ exeIsValid ${CC}
 exeIsValid ${CXX}
 exeIsValid ${STRIP}
 exeIsValid ${AR}
+exeIsValid ${RANLIB}
 exeIsValid cmake
 exeIsValid ${MAKE}
 
@@ -237,6 +248,6 @@ export STRIP="${STRIP}"
 export MAKE="${MAKE}"
 export CONFIGURE_OPTIONS="${CONFIGURE_OPTIONS}"
 export CMAKE_GENERATOR="${CMAKE_GENERATOR}"
-export CMAKE_OPTIONS="${CMAKE_OPTIONS}  -DCMAKE_STRIP=`which ${STRIP}`"
+export CMAKE_OPTIONS="${CMAKE_OPTIONS} -DCMAKE_STRIP=`which ${STRIP}` -DCMAKE_RANLIB=`which ${RANLIB}`"
 export CFLAGS="${CFLAGS} ${CCFLAGS}"
 export CXXFLAGS="${CXXFLAGS} ${CCFLAGS}"
