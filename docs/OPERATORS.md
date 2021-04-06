@@ -7,7 +7,7 @@
 | Matmul                    | matrix multiply |
 | Resize                    | linear, nearest, cubic mode resize, same as onnx Resize, Upsample |
 | BilateralSliceApply       | hrnet BilateralSliceApply function |
-| Pooling                   | max, min pooling |
+| Pooling                   | max, mean pooling |
 | Scale                     | y = alpha * x + beta per channel |
 | Prelu                     | prelu activation |
 | BatchNorm                 | y = (x - mean) / sqrt(variance + eps) per channel |
