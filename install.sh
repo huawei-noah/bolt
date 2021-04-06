@@ -169,8 +169,7 @@ cmake_options="${cmake_options} -DCMAKE_INSTALL_PREFIX=${script_dir}/install_${p
 
 export cmake_options="${cmake_options}"
 
-${script_dir}/third_party/install.sh --target=${target} --threads=${build_threads} || exit 1 
-find ./third_party -name "*"
+${script_dir}/third_party/install.sh --target=${target} --threads=${build_threads} || exit 1
 echo "[INFO] use ${script_dir}/third_party/${platform}.sh to set environment variable..."
 source ${script_dir}/third_party/${platform}.sh || exit 1
 

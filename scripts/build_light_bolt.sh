@@ -2,9 +2,6 @@
 
 script_dir=$(cd `dirname $0` && pwd)
 BOLT_ROOT=${script_dir}/..
-if [[ "${OpenCL_ROOT}" == "" ]]; then
-    OpenCL_ROOT="${script_dir}/../third_party/sources/opencl"
-fi
 
 SYSTEM=${1}
 CXX=${2}
@@ -67,7 +64,6 @@ searchFiles
 sharedLibraryObjs=${objs}
 
 gcl_kernel_source_library="common/gcl/tools/kernel_source_compile/${SHARED_LIBRARY_PREFIX}kernelsource${SHARED_LIBRARY_SUFFIX}"
-OpenCL_library="${OpenCL_ROOT}/lib64/${SHARED_LIBRARY_PREFIX}OpenCL${SHARED_LIBRARY_SUFFIX}"
 if [[ -f "${gcl_kernel_source_library}" && ${CXXFLAGS} =~ -D_USE_MALI ]]; then
     gclLibraryObjs="common/gcl/tools/kernel_source_compile/CMakeFiles/kernelsource.dir/src/cl/gcl_kernel_source.cpp${OBJ_FILE_SUFFIX} \
         common/gcl/tools/kernel_source_compile/CMakeFiles/kernelsource.dir/src/option/gcl_kernel_option.cpp${OBJ_FILE_SUFFIX}"
@@ -80,10 +76,6 @@ BoltModel_shared_library="${SHARED_LIBRARY_PREFIX}BoltModel${SHARED_LIBRARY_SUFF
 BoltModel_static_library="${STATIC_LIBRARY_PREFIX}BoltModel${STATIC_LIBRARY_SUFFIX}"
 bolt_shared_library="${SHARED_LIBRARY_PREFIX}bolt${SHARED_LIBRARY_SUFFIX}"
 bolt_static_library="${STATIC_LIBRARY_PREFIX}bolt${STATIC_LIBRARY_SUFFIX}"
-if [[ -f "${OpenCL_library}" && ${CXXFLAGS} =~ -D_USE_MALI ]]; then
-    cp ${OpenCL_library} ${build_dir}
-    ${STRIP} ${OpenCL_library} || exit 1
-fi
 if [[ -f "${BoltModel_shared_library}" ]]; then
     rm ${BoltModel_shared_library}
 fi
@@ -106,7 +98,11 @@ if [[ ${CXXFLAGS} =~ -D_USE_OPENMP ]]; then
 fi
 if [[ -f "${gcl_kernel_source_library}" && ${CXXFLAGS} =~ -D_USE_MALI ]]; then
     ${STRIP} ${gcl_kernel_source_library} || exit 1
-    LDFLAGS="${LDFLAGS} -L./ -lOpenCL"
+    if [[ "${OpenCL_ROOT}" == "" ]]; then
+        echo "[ERROR] please source third_party/<target>.sh before make."
+        exit 1
+    fi
+    LDFLAGS="${LDFLAGS} -L${OpenCL_ROOT}/lib -lOpenCL"
 fi
 
 if [[ ${apple_toolchain} ]]; then

@@ -46,12 +46,7 @@ if [[ "${Protobuf_ROOT}" != "" && -d "${Protobuf_ROOT}/lib" && -f "${Protobuf_RO
         adb -s ${device} push ${file} ${device_dir} > ${log_file} || exit 1
     done
 fi
-if [[ "${OpenCL_ROOT}" != "" && -d "${OpenCL_ROOT}/lib64" ]]; then
-    for file in `ls ${OpenCL_ROOT}/lib64/*.so*`
-    do
-        adb -s ${device} push ${file} ${device_dir} > ${log_file} || exit 1
-    done
-fi
+adb -s ${device} shell cp /vendor/lib64/libOpenCL.so ${device_dir} > ${log_file} || exit 1
 if [[ "${JPEG_ROOT}" != "" && -d "${JPEG_ROOT}/lib" && -f "${JPEG_ROOT}/lib/libjpeg.so" ]]; then
     for file in `ls ${JPEG_ROOT}/lib/*.so*`
     do
