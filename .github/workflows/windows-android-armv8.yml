@@ -17,7 +17,7 @@ jobs:
       with:
         path: "wget-install"
         key: wget-windows-install
-    - name: wget
+    - name: download wget
       run: |
         mkdir software && cd software
         mkdir wget && cd wget
@@ -25,7 +25,7 @@ jobs:
         cd .. && mkdir android_ndk && cd android_ndk
         Invoke-WebRequest -Uri https://dl.google.com/android/repository/android-ndk-r20b-windows-x86_64.zip -OutFile android-ndk-r20b-windows-x86_64.zip
        
-    - name: checkout-bash
+    - name: compile android-armv8 on windows
       run: |
         cd /d/a/bolt/bolt/software/android_ndk && unzip -o android-ndk-r20b-windows-x86_64.zip
         CUR_PATH=$(pwd)
