@@ -1,4 +1,4 @@
-name: macos-armv8
+name: macos-android-armv8
 on: [push, pull_request]
 jobs:
   linux:
