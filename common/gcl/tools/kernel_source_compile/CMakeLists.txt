@@ -31,5 +31,3 @@ set_target_properties(${PROJECT_NAME}_static PROPERTIES CLEAN_DIRECT_OUTPUT 1)
 install(TARGETS ${PROJECT_NAME} ${PROJECT_NAME}_static
         LIBRARY DESTINATION lib
         ARCHIVE DESTINATION lib)
-install(FILES ${CMAKE_BINARY_DIR}/libOpenCL.so
-        DESTINATION lib)

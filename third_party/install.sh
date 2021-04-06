@@ -75,8 +75,8 @@ work_dir="${script_dir}/${platform}"
 mkdir -p ${work_dir}
 env_file="${work_dir}.sh"
 echo "[INFO] use ${build_threads} threads to parallel build third party library on ${host} for target ${target} in directory ${work_dir}..."
-echo "[INFO] use c language compiler `which ${CC}`"
-echo "[INFO] use c++ language compiler `which ${CXX}`"
+echo "[INFO] use c language compiler `which ${CC% *}`"
+echo "[INFO] use c++ language compiler `which ${CXX% *}`"
 echo "[INFO] generate environment file to ${env_file}..."
 rm -rf ${env_file}
 
@@ -321,15 +321,13 @@ if [[ ${cmake_options} =~ USE_TENSORFLOW=ON ]]; then
         mkdir -p jsoncpp-1.9.4/build
         cd jsoncpp-1.9.4/build
         cmake -G"${CMAKE_GENERATOR}" .. -DCMAKE_INSTALL_PREFIX=${JSONCPP_ROOT} -DJSONCPP_WITH_TESTS=OFF ${CMAKE_OPTIONS} > ${log_file} || exit 1
-        ${MAKE} -j ${build_threads} >> ${log_file} || exit 1
+        ${MAKE} -j ${build_threads} >> ${log_file}
         ${MAKE} install >> ${log_file} || exit 1
         cd ../../
         rm -rf jsoncpp-1.9.4*
     fi
     echo "
 export JSONCPP_ROOT=${JSONCPP_ROOT}
-echo "***JSONCPP_ROOT"
-echo $JSONCPP_ROOT
 export LD_LIBRARY_PATH=\${JSONCPP_ROOT}/lib:\$LD_LIBRARY_PATH
 if [[ ! -d \"\${JSONCPP_ROOT}/lib\" ]]; then
     echo \"[ERROR] Jsoncpp not install success\"
