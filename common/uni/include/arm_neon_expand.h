@@ -34,7 +34,7 @@ inline float vmaxvq_f32(float32x4_t x)
     return vget_lane_f32(max, 0);
 }
 
-#ifndef __ANDROID__
+#ifndef __ARM_FEATURE_FMA
 inline float32x4_t vfmaq_f32(float32x4_t c, float32x4_t a, float32_t b)
 {
     return vmlaq_f32(c, a, vdupq_n_f32(b));
