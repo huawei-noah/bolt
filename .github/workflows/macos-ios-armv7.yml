@@ -7,7 +7,7 @@ jobs:
     steps:
       - name: checkout code
         uses: actions/checkout@v2
-      - name: macos ios armv7
+      - name: compile ios armv7 on macos
         run: |
           export IOS_SDK_ROOT=/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk
           brew install gnu-getopt
