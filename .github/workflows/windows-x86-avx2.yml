@@ -17,13 +17,13 @@ jobs:
       with:
         path: "wget-install"
         key: wget-windows-install
-    - name: wget
+    - name: download wget
       run: |
         mkdir software && cd software
         mkdir wget && cd wget
         Invoke-WebRequest -Uri https://eternallybored.org/misc/wget/1.21.1/64/wget.exe -OutFile wget.exe
        
-    - name: checkout-bash
+    - name: compile x86-avx2 on windows
       run: |        
         export PATH=$PATH:/d/a/bolt/bolt/software/wget
         wget -h
