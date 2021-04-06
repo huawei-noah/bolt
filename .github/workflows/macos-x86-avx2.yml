@@ -1,8 +1,8 @@
-name: macos-x86_avx2
+name: macos-x86-avx2
 on: [push, pull_request]
 jobs:
   linux:
-    name: macos-x86_avx2
+    name: macos-x86-avx2
     runs-on: macos-latest
     steps:
       - name: checkout code
