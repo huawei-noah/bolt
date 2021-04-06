@@ -2,10 +2,6 @@
 
 script_dir=$(cd `dirname $0` && pwd)
 BOLT_ROOT=${script_dir}/..
-if [[ "${OpenCL_ROOT}" == "" ]]; then
-    echo "[ERROR] please source third_party/<target>.sh before make."
-    exit 1
-fi
 
 SYSTEM=${1}
 CXX=${2}
@@ -102,6 +98,10 @@ if [[ ${CXXFLAGS} =~ -D_USE_OPENMP ]]; then
 fi
 if [[ -f "${gcl_kernel_source_library}" && ${CXXFLAGS} =~ -D_USE_MALI ]]; then
     ${STRIP} ${gcl_kernel_source_library} || exit 1
+    if [[ "${OpenCL_ROOT}" == "" ]]; then
+        echo "[ERROR] please source third_party/<target>.sh before make."
+        exit 1
+    fi
     LDFLAGS="${LDFLAGS} -L${OpenCL_ROOT}/lib -lOpenCL"
 fi
 
