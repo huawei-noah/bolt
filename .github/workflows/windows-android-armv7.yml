@@ -1,7 +1,7 @@
 name: windows-android-armv7
 on: [push, pull_request]
 jobs:
-  windows-x86_avx2:
+  windows-android-armv7:
     runs-on: windows-latest
     steps:
     - name: cancel-previous-runs
