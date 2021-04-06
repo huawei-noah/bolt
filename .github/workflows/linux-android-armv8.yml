@@ -18,4 +18,4 @@ jobs:
       - name: compile armv8(cpu) with gnu on linux 
         run: |
           chmod -R 777 ../bolt/
-          ./install.sh --target=android-aarch64 -t 32
+          ./install.sh --target=android-aarch64 --mali
