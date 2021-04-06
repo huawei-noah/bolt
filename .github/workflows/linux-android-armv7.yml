@@ -1,6 +1,6 @@
 name: linux-android-armv7
 
-on: push
+on: [push, pull_request]
 
 jobs:
   linux:
