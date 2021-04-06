@@ -7,7 +7,7 @@ jobs:
     steps:
       - name: checkout code
         uses: actions/checkout@v2
-      - name: macos x86 avx2
+      - name: compile x86-avx2 on macos
         run: |
           BOLT_PATH=$(pwd)
           brew install gnu-getopt
