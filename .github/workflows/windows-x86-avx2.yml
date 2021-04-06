@@ -26,7 +26,6 @@ jobs:
     - name: compile x86-avx2 on windows
       run: |        
         export PATH=$PATH:/d/a/bolt/bolt/software/wget
-        wget -h
         cd /d/a/bolt/bolt
         ./install.sh --target=windows-x86_64_avx2
       shell: bash
