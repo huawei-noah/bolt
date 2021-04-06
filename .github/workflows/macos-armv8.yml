@@ -1,5 +1,5 @@
 name: macos-armv8
-on: push
+on: [push, pull_request]
 jobs:
   linux:
     name: macos-armv8
