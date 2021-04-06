@@ -10,6 +10,6 @@ jobs:
     steps:
       - name: checkout code
         uses: actions/checkout@v2
-      - name: linux x86 compilation
+      - name: compile x86 on linux
         run: |
           ./install.sh --target=linux-x86_64 -t 32
