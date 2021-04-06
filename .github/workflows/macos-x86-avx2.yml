@@ -18,6 +18,8 @@ jobs:
           brew install gcc@9
           cd /usr/local/bin
           ln -s gcc-9 gcc
+          ln -s g++-9 g++
           gcc -v
+          g++ -v
           cd $BOLT_PATH
           ./install.sh --target=macos-x86_64_avx2 -t 32
