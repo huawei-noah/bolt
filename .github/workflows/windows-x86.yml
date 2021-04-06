@@ -17,7 +17,7 @@ jobs:
       with:
         path: "wget-install"
         key: wget-windows-install
-    - name: wget
+    - name: download wget
       run: |
         mkdir software && cd software
         mkdir wget && cd wget
@@ -26,7 +26,7 @@ jobs:
         cmake -version
         mingw32-make -version
         
-    - name: checkout-bash
+    - name: compile x86 on windows
       run: |        
         export PATH=$PATH:/d/a/bolt/bolt/software/wget
         wget -h
