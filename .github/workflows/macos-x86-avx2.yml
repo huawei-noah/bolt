@@ -18,4 +18,5 @@ jobs:
           cd /usr/local/bin
           ln -s gcc-9 gcc
           gcc -v
+          cd /d/a/bolt/bolt
           ./install.sh --target=macos-x86_64_avx2 -t 32
