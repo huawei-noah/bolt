@@ -10,7 +10,7 @@ jobs:
     steps:
       - name: checkout code
         uses: actions/checkout@v2
-      - name: prerequisites installation
+      - name: compile armv8 with llvm on linux 
         run: |
           mkdir android_ndk && cd android_ndk
           wget https://dl.google.com/android/repository/android-ndk-r20b-linux-x86_64.zip
@@ -19,6 +19,4 @@ jobs:
           export ANDROID_NDK_ROOT=$CUR_PATH/android-ndk-r20b
           export PATH=${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH
           cd ..
-      - name: compile armv8 with llvm on linux 
-        run: |
           ./install.sh --target=android-aarch64 --mali
