@@ -21,7 +21,7 @@ jobs:
       run: |
         mkdir software && cd software
         mkdir wget && cd wget
-        Invoke-WebRequest -Uri https://eternallybored.org/misc/wget/1.21.1/64/wget.exe -OutFile wget.exe
+        Invoke-WebRequest -Uri https://eternallybored.org/misc/wget/1.21.1/64/wget.exe -OutFile wget.exe > log.txt
        
     - name: compile x86-avx2 on windows
       run: |        

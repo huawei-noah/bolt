@@ -9,6 +9,8 @@ safe_mkdir() {
     mkdir -p $1 || exit 1
 }
 
+current_dir=${PWD}
+
 cd ${script_dir}
 safe_mkdir src
 safe_mkdir src/cl
@@ -21,4 +23,4 @@ g++ ${FLAGS} cl2char.cpp -o gcl_cl2char || exit 1
 export BOLT_ROOT=${script_dir}/../../../..
 ./gcl_cl2char || exit 1
 rm gcl_cl2char || exit 1
-cd ..
+cd ${current_dir}
