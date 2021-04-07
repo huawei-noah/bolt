@@ -173,8 +173,14 @@ ${script_dir}/third_party/install.sh --target=${target} --threads=${build_thread
 echo "[INFO] use ${script_dir}/third_party/${platform}.sh to set environment variable..."
 source ${script_dir}/third_party/${platform}.sh || exit 1
 
-export cmake_options="${cmake_options} ${cmake_env_options}"
+
 cd ${BOLT_ROOT}
+if [[ ${cmake_options} =~ USE_MALI=ON ]]; then
+    echo "[INFO] generate bolt gcl code in ${BOLT_ROOT}/common/gcl/tools/kernel_source_compile..."
+    ./common/gcl/tools/kernel_source_compile/buildKernelSourceLib.sh || exit 1
+fi
+
+export cmake_options="${cmake_options} ${cmake_env_options}"
 echo "[INFO] use ${build_threads} threads to parallel build bolt on ${host} for target ${target} in directory ${BOLT_ROOT}..."
 rm -rf build_${platform} install_${platform}
 mkdir build_${platform} install_${platform}
