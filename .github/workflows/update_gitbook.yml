@@ -1,0 +1,16 @@
+name: update_gitbook
+
+on: push
+
+jobs:
+  linux:
+    name: update_gitbook 
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v2
+      - name: update_gitbook
+        run: |
+          echo "update gitbook"
+
