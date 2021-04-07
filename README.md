@@ -23,9 +23,9 @@ If you have questions or suggestions, you can submit issue. **QQ群: 833345709**
 
 # Installation
 
-Kinds of choices are provided for the compilation of bolt. Please choose the suitable method depending on your server.
+Kinds of choices are provided for the compilation of bolt. Please choose the suitable choice depending on your environment.
 
-| target platform      | command                                      | Linux | Windows | MacOS |
+| target platform      | build command                                | Linux | Windows | MacOS |
 | -------------------- | -------------------------------------------- | ----- | ------- | ----- |
 | Android(armv7)       | ./install.sh --target=android-armv7          | [![Build Status](images/build-pass.png)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Alinux-android-armv7) | [![Build Status](images/build-pass.png)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Awindows-android-armv7) | [![Build Status](images/build-pass.png)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Amacos-android-armv7) |
 | Android(armv8+mali)  | ./install.sh --target=android-aarch64 --mali | [![Build Status](images/build-pass.png)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Alinux-android-armv8) | [![Build Status](images/build-pass.png)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Awindows-android-armv8) | [![Build Status](images/build-pass.png)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Amacos-android-armv8) |
@@ -38,6 +38,8 @@ Kinds of choices are provided for the compilation of bolt. Please choose the sui
 | Windows(x86_64_avx2) | ./install.sh --target=windows-x86_64_avx2    | / | [![Build Status](images/build-pass.png)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Awindows-x64-avx2) | / |
 | MacOS(X86_64)        | ./install.sh --target=macos-x86_64           | / | / | [![Build Status](images/build-pass.png)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Amacos-x86) |
 | MacOS(x86_64_avx2)   | ./install.sh --target=macos-x86_64_avx2      | / | / | [![Build Status](images/build-pass.png)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Amacos-x86-avx2) |
+
+*NOTE: Bolt defaultly link static library, This may cause some problem on some platforms. You can use --shared option to link shared library.*
 
 # Quick Start
 
