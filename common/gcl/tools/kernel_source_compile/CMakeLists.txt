@@ -14,15 +14,9 @@ project(kernelsource)
 
 set_c_cxx_flags()
 
-#execute_process(
-#    COMMAND ./buildKernelSourceLib.sh
-#    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-#)
-
 file(GLOB source_srcs ${CMAKE_CURRENT_SOURCE_DIR}/src/cl/*.cpp)
 file(GLOB option_srcs ${CMAKE_CURRENT_SOURCE_DIR}/src/option/*.cpp)
 set(kernel_source_list "${source_srcs};${option_srcs}")
-message(STATUS "${kernel_source_list}")
 
 add_library(${PROJECT_NAME} SHARED ${kernel_source_list})
 add_library(${PROJECT_NAME}_static STATIC ${kernel_source_list})
