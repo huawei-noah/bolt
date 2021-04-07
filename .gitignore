@@ -16,3 +16,5 @@ caffe_pb2.py
 *.bolt
 
 docs/API/html
+kit/Android
+kit/iOS

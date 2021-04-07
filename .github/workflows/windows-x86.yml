@@ -21,7 +21,7 @@ jobs:
       run: |
         mkdir software && cd software
         mkdir wget && cd wget
-        Invoke-WebRequest -Uri https://eternallybored.org/misc/wget/1.21.1/64/wget.exe -OutFile wget.exe
+        Invoke-WebRequest -Uri https://eternallybored.org/misc/wget/1.21.1/64/wget.exe -OutFile wget.exe > log.txt
         cd ..
         cmake -version
         mingw32-make -version
@@ -32,14 +32,3 @@ jobs:
         cd /d/a/bolt/bolt
         ./install.sh --target=windows-x86_64
       shell: bash
-        
-        
-        
-        
-        
-        
-        
-        
-
-
-

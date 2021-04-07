@@ -111,7 +111,7 @@ if [[ ${cmake_options} =~ USE_CAFFE=ON || ${cmake_options} =~ USE_ONNX=ON || ${c
         fi
         if [ ! -f "${script_dir}/sources/protoc-${protobuf_version}-${protoc_platform}.zip" ]; then
 	    echo "${script_dir}/sources/protoc-${protobuf_version}-${protoc_platform}.zip"
-            wget --no-check-certificate https://github.com/protocolbuffers/protobuf/releases/download/v${protobuf_version}/protoc-${protobuf_version}-${protoc_platform}.zip || exit 1
+            wget --no-check-certificate https://github.com/protocolbuffers/protobuf/releases/download/v${protobuf_version}/protoc-${protobuf_version}-${protoc_platform}.zip > ${log_file} || exit 1
             cp protoc-${protobuf_version}-${protoc_platform}.zip ${script_dir}/sources/
         else
             cp ${script_dir}/sources/protoc-${protobuf_version}-${protoc_platform}.zip .
@@ -129,7 +129,7 @@ if [[ ${cmake_options} =~ USE_CAFFE=ON || ${cmake_options} =~ USE_ONNX=ON || ${c
         cd ${Protobuf_ROOT}
         if [ ! -d "./protobuf-${protobuf_version}" ]; then
             if [ ! -f "${script_dir}/sources/protobuf-${protobuf_version}.tar.gz" ]; then
-                wget --no-check-certificate https://github.com/protocolbuffers/protobuf/archive/v${protobuf_version}.tar.gz || exit 1
+                wget --no-check-certificate https://github.com/protocolbuffers/protobuf/archive/v${protobuf_version}.tar.gz > ${log_file} || exit 1
                 mv v${protobuf_version}.tar.gz protobuf-${protobuf_version}.tar.gz
                 cp protobuf-${protobuf_version}.tar.gz ${script_dir}/sources/
             else
@@ -179,7 +179,7 @@ if [[ ${cmake_options} =~ USE_TFLITE=ON ]]; then
         mkdir -p ${FlatBuffers_ROOT}
         cd ${FlatBuffers_ROOT}
         if [ ! -d "${script_dir}/sources/flatbuffers" ]; then
-            wget --no-check-certificate https://github.com/google/flatbuffers/archive/v1.12.0.zip || exit 1
+            wget --no-check-certificate https://github.com/google/flatbuffers/archive/v1.12.0.zip > ${log_file} || exit 1
             unzip v1.12.0.zip > ${log_file} || exit 1
             cp -r flatbuffers-1.12.0/include .
             rm -rf v1.12.0.zip flatbuffers-1.12.0 
@@ -205,7 +205,7 @@ cmake_env_options=\"\${cmake_env_options} -DFlatBuffers_ROOT=\${FlatBuffers_ROOT
         mkdir -p ${TFLite_ROOT}
         cd ${TFLite_ROOT}
         if [ ! -d "${script_dir}/sources/tflite" ]; then
-            wget --no-check-certificate https://raw.githubusercontent.com/tensorflow/tensorflow/master/tensorflow/lite/schema/schema_generated.h || exit 1
+            wget --no-check-certificate https://raw.githubusercontent.com/tensorflow/tensorflow/master/tensorflow/lite/schema/schema_generated.h > ${log_file} || exit 1
             mkdir include
             mkdir include/tensorflow
             mkdir include/tensorflow/lite
@@ -236,7 +236,7 @@ if [[ ${cmake_options} =~ USE_MALI=ON ]]; then
         rm -rf *
         cp -r ${script_dir}/sources/opencl/* . || exit 1
         if [ ! -f "./include/CL/cl.h" ]; then
-            wget --no-check-certificate https://github.com/KhronosGroup/OpenCL-Headers/archive/v2020.06.16.zip || exit 1
+            wget --no-check-certificate https://github.com/KhronosGroup/OpenCL-Headers/archive/v2020.06.16.zip > ${log_file} || exit 1
             unzip v2020.06.16.zip > ${log_file} || exit 1
             mkdir -p include
             cp -r OpenCL-Headers-2020.06.16/CL include/
@@ -272,7 +272,7 @@ if [[ ${cmake_options} =~ BUILD_TEST=ON ]]; then
         cd ${JPEG_ROOT}
         if [ ! -d "./jpeg-9c" ]; then
             if [ ! -f "${script_dir}/sources/jpegsrc.v9c.tar.gz" ]; then
-                wget --no-check-certificate http://www.ijg.org/files/jpegsrc.v9c.tar.gz || exit 1
+                wget --no-check-certificate http://www.ijg.org/files/jpegsrc.v9c.tar.gz > ${log_file} || exit 1
                 cp jpegsrc.v9c.tar.gz ${script_dir}/sources/
             else
                 cp ${script_dir}/sources/jpegsrc.v9c.tar.gz .
@@ -310,7 +310,7 @@ if [[ ${cmake_options} =~ USE_TENSORFLOW=ON ]]; then
         cd ${JSONCPP_ROOT}
         if [ ! -d "./jsoncpp-1.9.4" ]; then
             if [ ! -f "${script_dir}/sources/jsoncpp-1.9.4.zip" ]; then
-                wget --no-check-certificate https://github.com/open-source-parsers/jsoncpp/archive/refs/tags/1.9.4.zip || exit 1
+                wget --no-check-certificate https://github.com/open-source-parsers/jsoncpp/archive/refs/tags/1.9.4.zip > ${log_file} || exit 1
                 mv 1.9.4.zip jsoncpp-1.9.4.zip || exit 1
                 cp jsoncpp-1.9.4.zip ${script_dir}/sources/
             else
@@ -346,7 +346,7 @@ if [[ ${cmake_options} =~ USE_FLOW=ON && ${cmake_options} =~ BUILD_TEST=ON ]]; t
         cd ${FFTS_ROOT}
         if [ ! -d "./ffts-master" ]; then
             if [ ! -f "${script_dir}/sources/ffts-master.zip" ]; then
-                wget --no-check-certificate https://codeload.github.com/anthonix/ffts/zip/master || exit 1
+                wget --no-check-certificate https://codeload.github.com/anthonix/ffts/zip/master > ${log_file} || exit 1
                 cp ffts-master.zip ${script_dir}/sources/
             else
                 cp -r ${script_dir}/sources/ffts-master.zip .
