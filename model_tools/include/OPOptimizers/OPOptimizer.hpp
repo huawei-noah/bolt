@@ -16,9 +16,8 @@
 
 #include <vector>
 #include <string>
-#include "types.h"
-#include "op_type.h"
-#include "model_tools.h"
+#include "model_common.h"
+#include "uni.h"
 
 class OPOptimizer {
 public:
@@ -92,9 +91,13 @@ public:
     {
         spec->ws[index].bytes_of_weight = 0;
         spec->ws[index].bytes_of_vec = 0;
-        delete spec->ws[index].weight;
+        if (outOfFileMapRange(spec->ws[index].weight, spec->mfd)) {
+            delete spec->ws[index].weight;
+        }
         spec->ws[index].weight = nullptr;
-        delete spec->ws[index].weight;
+        if (outOfFileMapRange(spec->ws[index].vec, spec->mfd)) {
+            delete spec->ws[index].vec;
+        }
         spec->ws[index].vec = nullptr;
     }
 
@@ -110,10 +113,14 @@ public:
         return result;
     }
 
-    int searchOperatorIndexBackward(
-        ModelSpec *spec, int end, OperatorType *queryOps, int queryNum, bool unskip = true)
+    int searchOperatorIndexBackward(ModelSpec *spec,
+        int end,
+        OperatorType *queryOps,
+        int queryNum,
+        bool unskip = true,
+        int start = 0)
     {
-        for (int i = end; i >= 0; i--) {
+        for (int i = end; i >= start; i--) {
             if (isValidOperator(spec, i)) {
                 for (int j = 0; j < queryNum; j++) {
                     OperatorType opType = queryOps[j];
@@ -134,10 +141,14 @@ public:
         OperatorType *queryOps,
         int queryNum,
         bool unskip = true,
-        std::string str = "")
+        std::string str = "",
+        int end = 0)
     {
         std::string strEmpty = "";
-        for (int i = start; i < spec->num_operator_specs; i++) {
+        if (end == 0) {
+            end = spec->num_operator_specs;
+        }
+        for (int i = start; i < end; i++) {
             if (isValidOperator(spec, i)) {
                 for (int j = 0; j < queryNum; j++) {
                     OperatorType opType = queryOps[j];
@@ -170,9 +181,9 @@ public:
         if (right == 0) {
             right = spec->num_operator_specs;
         }
+        bool hasFind = false;
         for (int i = left; i < right; i++) {
             if (isValidOperator(spec, i)) {
-                bool hasFind = false;
                 for (int j = 0; j < (int)spec->ops[i].num_inputs; j++) {
                     if (spec->ops[i].input_tensors_name[j] == tensorName) {
                         result.push_back(std::make_pair(i, j));
@@ -201,9 +212,9 @@ public:
         if (right == 0) {
             right = spec->num_operator_specs;
         }
+        bool hasFind = false;
         for (int i = right - 1; i >= left; i--) {
             if (isValidOperator(spec, i)) {
-                bool hasFind = false;
                 for (int j = 0; j < (int)spec->ops[i].num_outputs; j++) {
                     if (spec->ops[i].output_tensors_name[j] == tensorName) {
                         result.push_back(std::make_pair(i, j));

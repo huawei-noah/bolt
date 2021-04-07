@@ -85,7 +85,7 @@ __kernel void MANGLE_NAME(gemm_nt_, LM, LN, LK)(const int KA,
     GEMM_SET_C_ZERO(c);
 #else
     GEMM_LOAD_A(a, iy, bias);
-    GEMM_SET_C_BIAS(a, c);
+    GEMM_SET_C_BIAS_A(a, c);
 #endif
 
     int a_off = iy * KA + idz * A_str + A_off;
@@ -98,13 +98,7 @@ __kernel void MANGLE_NAME(gemm_nt_, LM, LN, LK)(const int KA,
         b_off += VN;
     }
     int c_off = iy * ow_str + ix + idz * C_str;
-    int ex = ix + LN - ow;
-    int ey = iy + LM - oh;
-    if (ex > 0) {
-        GEMM_SET_C_EDGE_ZERO_W(c, ex);
-    }
-    if (ey > 0) {
-        GEMM_SET_C_EDGE_ZERO_H(c, ey);
-    }
-    GEMM_STORE_C(c, c_off, ow_str, C);
+    char ex = (ix + LN <= ow) ? LN : (ow % LN);
+    char ey = (iy + LM <= oh) ? LM : (oh % LM);
+    GEMM_STORE_C(c, c_off, ow_str, ex, ey, C);
 }

@@ -53,7 +53,7 @@ public:
         Tensor outputTensor = this->outputTensors[0];
 
         CHECK_STATUS(layer_normalization(
-            inputTensor, weightTensor, biasTensor, outputTensor, &this->archInfo));
+            inputTensor, weightTensor, biasTensor, this->temp, outputTensor, &this->archInfo));
     }
 
     EE infer_output_tensors_size(

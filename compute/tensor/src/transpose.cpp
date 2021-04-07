@@ -38,22 +38,22 @@ EE transpose(Tensor inputTensor,
     if (IS_CPU(arch)) {
         // Keep transDims unchanged so that input resize does not lead to error
         if (DF_NCHWC8 == inputDesc.df) {
-            if (4 == p.trans_size) {
+            if (inputDesc.nDims == p.trans_size) {
                 auto ptr = std::find(tmpDims.begin(), tmpDims.end(), 1);
-                tmpDims.insert(ptr + 1, 4);
+                tmpDims.insert(ptr + 1, inputDesc.nDims);
             }
-            inputDesc.nDims = 5;
-            for (int i = 3; i >= 0; i--) {
-                inputDesc.dims[i + 1] = inputDesc.dims[i];
+            inputDesc.nDims = inputDesc.nDims + 1;
+            for (int i = inputDesc.nDims - 1; i > 0; i--) {
+                inputDesc.dims[i] = inputDesc.dims[i - 1];
             }
-            inputDesc.dims[3] /= 8;
             inputDesc.dims[0] = 8;
+            inputDesc.dims[inputDesc.nDims - 2] /= 8;
 
             TensorDesc desc = outputDesc;
-            desc.nDims = 5;
-            U32 idx = 4;
-            for (int i = 3; i >= 0; i--) {
-                if (1 == tmpDims[3 - i]) {  // C
+            desc.nDims = inputDesc.nDims;
+            U32 idx = inputDesc.nDims - 1;
+            for (int i = inputDesc.nDims - 2; i >= 0; i--) {
+                if (1 == tmpDims[inputDesc.nDims - 2 - i]) {  // C
                     desc.dims[idx] = outputDesc.dims[i] / 8;
                     idx--;
                     desc.dims[idx] = 8;
@@ -99,13 +99,18 @@ inline EE transpose_infer_output_size_cpu(
         (*outputDesc).df = DF_NCHW;
     }
     U32 outputDim = (*outputDesc).nDims;
-    for (U32 i = 0; i < inputDim; i++) {
-        CHECK_REQUIREMENT(dim[i] < inputDim);
+    U32 index = 0;
+    for (U32 i = 0; i < p.trans_size; i++) {
+        // use 5-dim array to transpose a NCHWC8 tensor. skip c8 axis
+        if (dim[i] >= inputDim) {
+            continue;
+        }
         // NOTE: TensorDesc.dims array is in [W H C N] order.
         // so if you want to transpose [N C H W] format data, we use (dims - 1 - *)
         // [5 6 7 8] + [0 3 2 1] = [5 8 7 6]
         // [8 7 6 5] + [0 3 2 1] = [6 7 8 5]
-        (*outputDesc).dims[outputDim - 1 - i] = inputDesc.dims[inputDim - 1 - dim[i]];
+        (*outputDesc).dims[outputDim - 1 - index] = inputDesc.dims[inputDim - 1 - dim[i]];
+        index++;
     }
     if ((*outputDesc).nDims >= 4) {
         (*outputDesc).df = DF_NCHW;

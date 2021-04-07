@@ -28,6 +28,7 @@
 EE layer_normalization(Tensor inputTensor,
     Tensor alphaTensor,
     Tensor betaTensor,
+    Tensor tmpTensor,
     Tensor outputTensor,
     ArchInfo_t archInfo)
 {
@@ -54,8 +55,10 @@ EE layer_normalization(Tensor inputTensor,
 #endif
 #ifdef _USE_MALI
     } else if (IS_MALI_GPU(arch)) {
+        void *tmpbuf = get_ptr_from_tensor(tmpTensor, arch);
         ret = layer_normalization_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc,
-            (GCLMem_t)input, (GCLMem_t)alpha, (GCLMem_t)beta, outputDesc, (GCLMem_t)output);
+            (GCLMem_t)input, (GCLMem_t)alpha, (GCLMem_t)beta, (GCLMem_t)tmpbuf, outputDesc,
+            (GCLMem_t)output);
 #endif
     }
     return ret;
@@ -84,5 +87,21 @@ EE normalization_infer_output_size(Tensor *inputTensor, Tensor *outputTensor, Ar
         outputDesc = inputDesc;
     }
     outputTensor->resize(outputDesc);
+    return SUCCESS;
+}
+
+EE normalization_infer_forward_tmp_bytes(Tensor inputTensor, U32 *bytes, ArchInfo_t archInfo)
+{
+    if (bytes == nullptr) {
+        CHECK_STATUS(NULL_POINTER);
+    }
+    if (IS_MALI_GPU(archInfo->arch)) {
+#ifdef _USE_MALI
+        GCLMemDesc gclmemInputDesc = ocl_get_desc(inputTensor);
+        CHECK_STATUS(normalization_infer_forward_tmp_bytes_mali(gclmemInputDesc, bytes));
+#endif
+    } else {
+        *bytes = 0;
+    }
     return SUCCESS;
 }

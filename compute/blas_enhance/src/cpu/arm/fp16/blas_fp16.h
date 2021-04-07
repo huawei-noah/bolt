@@ -16,7 +16,7 @@
 #define _H_BLAS_FP16
 
 #include "sys.h"
-#include "types.h"
+
 #include "error.h"
 #include "tensor_desc.h"
 

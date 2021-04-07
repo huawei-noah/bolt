@@ -14,8 +14,9 @@
 #ifndef _H_CONVOLUTION_DIRECT
 #define _H_CONVOLUTION_DIRECT
 #include "sys.h"
-#include "types.h"
-#include "error.h"
+#include "uni.h"
+#include "tensor_desc.h"
+#include "parameter_spec.h"
 
 EE convolution_direct(TensorDesc inputDesc,
     F16 *inArray,

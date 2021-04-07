@@ -37,7 +37,8 @@ public:
     inline void run_prepare()
     {
         OCLContext::getInstance().handle.get()->curOpName = this->get_name();
-        CHECK_STATUS(unsqueeze(this->inputTensors[0], this->outputTensors[0], &this->archInfo));
+        CHECK_STATUS(
+            unsqueeze(this->inputTensors[0], this->temp, this->outputTensors[0], &this->archInfo));
     }
 
     EE infer_output_tensors_size(
@@ -47,6 +48,16 @@ public:
         CHECK_STATUS(
             unsqueeze_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo));
         return SUCCESS;
+    }
+
+    U32 infer_tmp_memory_size() override
+    {
+        Tensor inputTensor = this->inputTensors[0];
+        Tensor outputTensor = this->outputTensors[0];
+        U32 bytes = 0;
+        CHECK_STATUS(
+            unsqueeze_infer_forward_tmp_bytes(inputTensor, outputTensor, &bytes, &this->archInfo));
+        return bytes;
     }
     REGISTER_OCL_OPERATOR_RUN
 };

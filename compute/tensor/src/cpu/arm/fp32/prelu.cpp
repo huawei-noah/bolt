@@ -38,17 +38,18 @@ EE prelu_fp32(TensorDesc inputDesc,
     }
 
     CHECK_REQUIREMENT(in == on && ic == oc && ih == oh && iw == ow);
-    ic /= 8;
     float32x4_t slope0, slope1;
     uint32x4_t mask0, mask1;
     float32x4_t in0, in1, out0, out1;
     for (U32 n = 0; n < in; n++) {
-        for (U32 c = 0; c < ic; c++) {
+        for (U32 c = 0; c < ic; c += 8) {
+            if (preluDesc.propagate_down) {
+                slope0 = slope1 = vdupq_n_f32(weight[0]);
+            } else {
+                slope0 = vld1q_f32(weight + c);
+                slope1 = vld1q_f32(weight + c + 4);
+            }
             for (U32 hw = 0; hw < ih * iw; hw++) {
-                slope0 = preluDesc.propagate_down ? vdupq_n_f32(weight[0])
-                                                  : vld1q_f32(weight + c * 8);
-                slope1 = preluDesc.propagate_down ? vdupq_n_f32(weight[0])
-                                                  : vld1q_f32(weight + c * 8 + 4);
                 in0 = vld1q_f32(input);
                 in1 = vld1q_f32(input + 4);
                 mask0 = vcleq_f32(in0, vdupq_n_f32(0.f));

@@ -54,7 +54,7 @@ inline GCLMem_t alloc_desc(Tensor tensor, GCLMemDesc desc)
 int fullyConnectedTest(int argc, char *argv[], DataType dt)
 {
     U32 in, ic, ih, iw;
-    U32 fn, fc, fh, fw;
+    U32 fn, fc;
     U32 on, oc, oh, ow;
     U32 biasNum;
     ArchInfo archInfo;
@@ -66,35 +66,37 @@ int fullyConnectedTest(int argc, char *argv[], DataType dt)
     ic = 4;
     ih = 4;
     iw = 4;
+    fc = 64;
     fn = 4;
 
-    if (argc == 5) {
+    if (argc == 6) {
         ic = atoi(argv[1]);
         ih = atoi(argv[2]);
         iw = atoi(argv[3]);
-        fn = atoi(argv[4]);
+        fc = atoi(argv[4]);
+        fn = atoi(argv[5]);
     }
-    fc = ic;
-    fh = ih;
-    fw = iw;
 
+    if (iw * ih * ic % fc != 0) {
+        CHECK_STATUS(NOT_MATCH);
+    }
+    U32 row = iw * ih * ic / fc;
     on = 1;
-    oc = fn;
-    oh = 1;
-    ow = 1;
+    oc = 1;
+    oh = row;
+    ow = fn;
 
     TensorDesc inputDesc, filterDesc, outputDesc, biasDesc;
     TensorDesc filterDesc_cpu, outputDesc_cpu;
 
-    inputDesc = tensor4df(dt, DF_NCHW, in, ic, ih, iw);
-    filterDesc = tensor4df(dt, DF_NCHW, fn, fc, fh, fw);
-    filterDesc_cpu = tensor2df(dt, DF_NORMAL, fn, fc * fh * fw);
-    outputDesc_cpu = tensor2df(dt, DF_NORMAL, 1, fn);
-    biasDesc = tensor1d(dt, oc);
+    inputDesc = tensor2df(dt, DF_NORMAL, row, fc);
+    filterDesc = tensor2df(dt, DF_NORMAL, fn, fc);
+    outputDesc_cpu = tensor2df(dt, DF_NORMAL, oh, ow);
+    biasDesc = tensor1d(dt, fn);
 
     U8 *input_cpu = ut_input_v(in * ic * ih * iw, dt, UT_INIT_RANDOM);
-    U8 *filter_cpu = ut_input_v(fn * fc * fh * fw, dt, UT_INIT_RANDOM);
-    U8 *bias_cpu = ut_input_v(oc, dt, UT_INIT_RANDOM);
+    U8 *filter_cpu = ut_input_v(fn * fc, dt, UT_INIT_RANDOM);
+    U8 *bias_cpu = ut_input_v(fn, dt, UT_INIT_RANDOM);
     U8 *output_gpu = NULL;
 
     std::shared_ptr<GCLHandle> handleSharedPtr = OCLContext::getInstance().handle;
@@ -119,9 +121,6 @@ int fullyConnectedTest(int argc, char *argv[], DataType dt)
     runInfo.best_c[0] = 1;
     runInfo.best_k[0] = 1;
     maliPara.handle = handle;
-    maliPara.gclmemInputDesc = NULL;
-    maliPara.gclmemOutputDesc = NULL;
-    maliPara.gclmemFilterDesc = NULL;
     maliPara.forwardRunInfo = &runInfo;
     archInfo.archPara = &maliPara;
 
@@ -139,16 +138,21 @@ int fullyConnectedTest(int argc, char *argv[], DataType dt)
     U32 ftmBytes;
     U32 str[3] = {0, 0, 0};
     U32 off[3] = {0, 0, 0};
-    GCLMemDesc filterMemDesc = gcl_mem_desc(str, off, DT_U8, DF_NCWHC4);
+    GCLMemDesc filterMemDesc = gcl_mem_desc(str, off, DT_U8, DF_NCHW);
     maliPara.gclmemFilterDesc = &filterMemDesc;
     CHECK_STATUS(fully_connected_transform_filter_bytes(filterTensor, &ftmBytes, &archInfo));
-
     GCLMem_t output = alloc_map(outputTensor);
     GCLMem_t input = alloc(inputTensor);
     CHECK_STATUS(gcl_fill_memory_zero(handle, input));
 
+    U32 item_m = runInfo.best_w[0];
     GCLMemDesc desc = gclmem_build_desc();
-    biasNum = oc;
+    biasNum = (fn + item_m - 1) / item_m * item_m;
+    U8 *bias_val = bias_cpu;
+    if (biasNum > fn) {
+        bias_val = ut_input_v(biasNum, dt, UT_INIT_ZERO);
+        memcpy(bias_val, bias_cpu, fn * bytesOf(dt));
+    }
     desc.memType = GCL_MEM_BUF;
     desc.byteSize = biasNum * bytesOf(dt);
     desc.stride[0] = biasNum;
@@ -160,20 +164,23 @@ int fullyConnectedTest(int argc, char *argv[], DataType dt)
     desc.num = biasNum;
     desc.memFormat = DF_NHWC;
     desc.flags = CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR;
-    desc.host_ptr = bias_cpu;
+    desc.host_ptr = bias_val;
     GCLMem_t bias = alloc_desc(biasTensor, desc);
+    if (biasNum > fn) {
+        free(bias_val);
+    }
 
     desc = filterMemDesc;
     GCLMem_t filter = alloc_desc(filterTensor, desc);
 
-    desc.stride[0] = fw * fh * fc;
+    desc.stride[0] = fc;
     desc.stride[1] = fn;
     desc.stride[2] = 1;
     desc.offset[0] = 0;
     desc.offset[1] = 0;
     desc.offset[2] = 0;
-    desc.byteSize = fw * fh * fc * fn * bytesOf(dt);
-    desc.num = fw * fh * fc * fn;
+    desc.byteSize = fc * fn * bytesOf(dt);
+    desc.num = fc * fn;
     desc.memType = GCL_MEM_BUF;
     desc.memFormat = DF_NCHW;
     desc.flags = CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR;
@@ -199,7 +206,7 @@ int fullyConnectedTest(int argc, char *argv[], DataType dt)
     CHECK_STATUS(
         fully_connected(inputTensor, filterTensor, biasTensor, tmpTensor, outputTensor, &archInfo));
     /*warp up*/
-    UNI_INFO_LOG("Warp up gpu:\n")
+    UNI_INFO_LOG("warm up gpu:\n")
     for (U32 i = 0; i < 2; i++) {
         CHECK_STATUS(gcl_run_kernelVec(handle));
     }
@@ -216,23 +223,24 @@ int fullyConnectedTest(int argc, char *argv[], DataType dt)
 
     char buffer[150];
     char params[120];
-    sprintf(params, "(%u %u %u %u)+(%u %u %u %u)=(%u %u %u %u)", in, ic, ih, iw, fn, fc, fh, fw, on,
-        oc, oh, ow);
+    sprintf(params, "(%u %u %u %u)+(%u %u)=(%u %u %u %u)", in, ic, ih, iw, fn, fc, on, oc, oh, ow);
     sprintf(buffer, "%20s, %80s", "InnerProdect", params);
 #ifdef _DEBUG
-    double ops = 2.0 * fn * fc * fh * fw + 1.0 * fn;
+    double ops = 2.0 * ow * oh * fc + 1.0 * ow * oh;
     ut_log(dt, buffer, ops, time);
 #endif
+    if (row > 1) {
+        filterDesc = tensor2df(dt, DF_TRANSPOSE, fn, fc);
+    }
     Tensor inputTensorCpu;
     inputTensorCpu.resize(inputDesc);
     inputTensorCpu.alloc();
     memcpy(get_ptr_from_tensor(inputTensorCpu, UT_ARCH), input_cpu, tensorNumBytes(inputDesc));
 
     Tensor filterTensorCpu;
-    filterTensorCpu.resize(filterDesc_cpu);
+    filterTensorCpu.resize(filterDesc);
     filterTensorCpu.alloc();
-    memcpy(
-        get_ptr_from_tensor(filterTensorCpu, UT_ARCH), filter_cpu, tensorNumBytes(filterDesc_cpu));
+    memcpy(get_ptr_from_tensor(filterTensorCpu, UT_ARCH), filter_cpu, tensorNumBytes(filterDesc));
 
     Tensor biasTensorCpu;
     biasTensorCpu.resize(biasDesc);

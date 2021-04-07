@@ -14,9 +14,7 @@
 #ifndef _H_LayerNormOPTIMIZER
 #define _H_LayerNormOPTIMIZER
 
-#include <string>
 #include <map>
-#include "model_tools.h"
 #include "OPOptimizer.hpp"
 
 class LayerNormOptimizer : public OPOptimizer {
@@ -76,14 +74,14 @@ class LayerNormOptimizer : public OPOptimizer {
                         tmp_str = "ReduceMean";
                     } else if (spec->ops[k].type == OT_Eltwise) {
                         tmp_str = "Sub";
-                    } else if (spec->ops[k].type == OT_Scale) {
-                        tmp_str = "Scale";
                     } else if (spec->ops[k].type == OT_Power &&
                         spec->ops[k].ps.power_spec.power == 2) {
                         tmp_str = "Pow";
                     } else if (spec->ops[k].type == OT_Power &&
                         spec->ops[k].ps.power_spec.power == 0.5) {
                         tmp_str = "Sqrt";
+                    } else if (spec->ops[k].type == OT_Power) {
+                        tmp_str = "Scale";
                     } else {
                         tag = false;
                         break;
@@ -100,8 +98,8 @@ class LayerNormOptimizer : public OPOptimizer {
                     continue;
                 }
 
-                if (info_map["ReduceMean"] == 2 && info_map["Sub"] == 2 && info_map["Scale"] == 1 &&
-                    info_map["Pow"] == 1 && info_map["Sqrt"] == 1 &&
+                if (info_map["ReduceMean"] == 2 && (info_map["Sub"] == 2 || info_map["Sub"] == 1) &&
+                    info_map["Scale"] == 1 && info_map["Pow"] == 1 && info_map["Sqrt"] == 1 &&
                     spec->ops[forDivIndex + 1].type == OT_Scale &&
                     spec->ops[forDivIndex + 2].type == OT_Scale) {
                     hasOptimized = true;
@@ -126,30 +124,30 @@ class LayerNormOptimizer : public OPOptimizer {
 
                 if (spec->ws[tailAddWeightIndex].weight != nullptr) {
                     spec->ws[tailAddWeightIndex].bytes_of_weight = 0;
-                    delete spec->ws[tailAddWeightIndex].weight;
+                    if (outOfFileMapRange(spec->ws[tailAddWeightIndex].weight, spec->mfd)) {
+                        delete spec->ws[tailAddWeightIndex].weight;
+                    }
                     spec->ws[tailAddWeightIndex].weight = nullptr;
                 }
 
                 if (spec->ws[tailAddWeightIndex].vec != nullptr) {
                     spec->ws[tailAddWeightIndex].bytes_of_vec = 0;
-                    delete spec->ws[tailAddWeightIndex].vec;
+                    if (outOfFileMapRange(spec->ws[tailAddWeightIndex].vec, spec->mfd)) {
+                        delete spec->ws[tailAddWeightIndex].vec;
+                    }
                     spec->ws[tailAddWeightIndex].vec = nullptr;
                 }
 
                 memcpy(spec->ops[tailMulIndex].output_tensors_name[0],
                     spec->ops[tailAddIndex].output_tensors_name[0], NAME_LEN);
-                memcpy(spec->ops[backAddIndex].output_tensors_name[0],
-                    spec->ops[tailMulIndex].input_tensors_name[0], NAME_LEN);
+                memcpy(spec->ops[tailMulIndex].input_tensors_name[0],
+                    spec->ops[backAddIndex].output_tensors_name[0], NAME_LEN);
 
                 for (int k = backAddIndex + 1; k <= forDivIndex; k++) {
                     setOperatorInvalid(spec, k);
                 }
                 setOperatorInvalid(spec, tailAddIndex);
-
-                int AddScaleWeightIndex = searchWeightIndex(spec, spec->ops[forDivIndex - 2].name);
-                spec->ws[AddScaleWeightIndex].bytes_of_vec = 0;
-                delete spec->ws[AddScaleWeightIndex].vec;
-                spec->ws[AddScaleWeightIndex].vec = nullptr;
+                setOperatorInvalid(spec, forDivIndex - 2, true);
             }
         }
         return hasOptimized;

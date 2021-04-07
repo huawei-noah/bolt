@@ -5,7 +5,7 @@ script_dir=$(cd `dirname $0` && pwd)
 bolt_root=${script_dir}/../../..
 
 device=""
-arch="arm_gnu"
+arch="linux-aarch64"
 device_dir=/data/local/tmp/CI/test
 model_zoo_dir=/data/local/tmp/CI/model_zoo
 
@@ -17,7 +17,7 @@ Run Flow dlaWOdcn Example.
 Mandatory arguments to long options are mandatory for short options too.
   -h, --help                 display this help and exit.
   -d, --device               which device to run example.
-  -a, --arch <arm_llvm|arm_gnu|arm_himix100|arm_ndkv7|x86_gnu>  use to set device architecture(default: arm_gnu).
+  -a, --arch <android-aarch64|linux-aarch64>  use to set device architecture(default: linux-aarch64).
   -p, --path                 device test directory.
 EOF
     exit 1;

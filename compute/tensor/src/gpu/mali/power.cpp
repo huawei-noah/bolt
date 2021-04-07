@@ -19,50 +19,24 @@ EE power_infer_output_size_mali(TensorDesc inputDesc,
     GCLMemDesc_t gclmemInputDesc,
     GCLMemDesc_t gclmemOutputDesc)
 {
-    if (outputDesc) {
-        *outputDesc = inputDesc;
+    if (outputDesc == nullptr || gclmemInputDesc == nullptr || gclmemOutputDesc == nullptr) {
+        CHECK_STATUS(NOT_SUPPORTED);
     }
+    *outputDesc = inputDesc;
     DataType idt;
-    DataFormat idf = inputDesc.df;
     U32 iw, ih, ic, in;
-    if (idf == DF_NCHW || idf == DF_NORMAL) {
-        if (gclmemInputDesc) {
-            tensorSelectGet(inputDesc, &idt, NULL, &in, &ic, &ih, &iw);
-            if (gclmemInputDesc->memFormat == DF_NCHW) {
-                CHECK_STATUS(infer_gclmem_desc_nchw(
-                    iw, ih, ic, 0, 0, iw, ih, ic, idt, idt, gclmemInputDesc, gclmemOutputDesc));
-                if (gclmemInputDesc && gclmemOutputDesc) {
-                    *gclmemOutputDesc = *gclmemInputDesc;
-                }
-            } else if (gclmemInputDesc->memFormat == DF_NCWHC4) {
-                CHECK_STATUS(infer_gclmem_desc_ncwhc4(
-                    iw, ih, ic, 0, 0, iw, ih, ic, idt, idt, gclmemInputDesc, gclmemOutputDesc));
-                if (gclmemInputDesc && gclmemOutputDesc) {
-                    *gclmemOutputDesc = *gclmemInputDesc;
-                }
-            } else {
-                return NOT_SUPPORTED;
-            }
-        }
-        return SUCCESS;
+    tensorSelectGet(inputDesc, &idt, NULL, &in, &ic, &ih, &iw);
+    if (gclmemInputDesc->memFormat == DF_NCHW || gclmemInputDesc->byteSize == 0) {
+        CHECK_STATUS(infer_gclmem_desc_nchw(
+            iw, ih, ic, 0, 0, iw, ih, ic, idt, idt, gclmemInputDesc, gclmemOutputDesc));
+    } else if (gclmemInputDesc->memFormat == DF_NCWHC4) {
+        CHECK_STATUS(infer_gclmem_desc_ncwhc4(
+            iw, ih, ic, 0, 0, iw, ih, ic, idt, idt, gclmemInputDesc, gclmemOutputDesc));
+    } else {
+        return NOT_SUPPORTED;
     }
-    if (idf == DF_MKT) {
-        if (gclmemInputDesc) {
-            if (gclmemInputDesc->memFormat == DF_NCWHC4) {
-                get_nlp_mkt_val(inputDesc, &idt, &in, &ic, &ih);
-                iw = 1;
-                CHECK_STATUS(infer_gclmem_desc_ncwhc4(
-                    iw, ih, ic, 0, 0, iw, ih, ic, idt, idt, gclmemInputDesc, gclmemOutputDesc));
-                if (gclmemInputDesc && gclmemOutputDesc) {
-                    *gclmemOutputDesc = *gclmemInputDesc;
-                }
-            } else {
-                return NOT_SUPPORTED;
-            }
-        }
-        return SUCCESS;
-    }
-    return NOT_SUPPORTED;
+    *gclmemOutputDesc = *gclmemInputDesc;
+    return SUCCESS;
 }
 
 inline EE power_checkpara_mali(
@@ -76,9 +50,6 @@ inline EE power_checkpara_mali(
         ret = NOT_SUPPORTED;
     }
     if (input->desc.memFormat != output->desc.memFormat) {
-        ret = NOT_SUPPORTED;
-    }
-    if (inputDesc.df != DF_NCHW && inputDesc.df != DF_MKT && inputDesc.df != DF_NORMAL) {
         ret = NOT_SUPPORTED;
     }
     if (input->desc.memFormat != DF_NCHW && input->desc.memFormat != DF_NCWHC4) {

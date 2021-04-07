@@ -17,6 +17,8 @@ __kernel void padding_input_gclmem(const int iw,
     const int ph,
     const int ow,
     const int oh,
+    const int in_offset,
+    const int out_offset,
     const __global const T *in,
     __global T *out)
 {
@@ -32,8 +34,8 @@ __kernel void padding_input_gclmem(const int iw,
     int en_x = be_x + 4;
     T4 val = 0;
     if (in_y >= 0 && in_y < ih) {
-        int in_off = (idz * ih + in_y) * iw;
-        if (be_x >= 0 && en_x < iw) {
+        int in_off = (idz * ih + in_y) * iw + in_offset;
+        if (be_x >= 0 && en_x <= iw) {
             val = vload4(0, in + in_off + be_x);
         } else {
             if (be_x >= 0 && be_x < iw) {
@@ -51,7 +53,7 @@ __kernel void padding_input_gclmem(const int iw,
         }
     }
 
-    int out_off = (idz * oh + idy) * ow + idx;
+    int out_off = (idz * oh + idy) * ow + idx + out_offset;
     if (idx + 3 >= ow) {
         out[out_off] = val.x;
         if (idx + 1 < ow) {

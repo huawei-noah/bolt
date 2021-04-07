@@ -13,10 +13,8 @@
 
 #ifndef _MULTIHEAD_ATTENTION_MALI_FP16
 #define _MULTIHEAD_ATTENTION_MALI_FP16
-#include "sys.h"
-#include "error.h"
-#include "types.h"
-#include "tensor_computing_type.h"
+
+#include "gpu/mali/fp16/tensor_computing_fp16.h"
 
 EE multihead_attention_transform_filter_bytes_mali_fp16(std::vector<TensorDesc> filterDesc,
     GCLMemDesc_t gclmemFilterDesc,

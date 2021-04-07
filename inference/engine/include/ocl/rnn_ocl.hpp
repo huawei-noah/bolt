@@ -53,7 +53,7 @@ public:
         U32 iB, inT, iX;
         CHECK_STATUS(tensor3dGet(inDim, &dt, &df, &iB, &inT, &iX));
         this->xDim = iX;
-        CHECK_STATUS(rnn_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo));
+        CHECK_STATUS(rnn_infer_output_size(inTensors, this->p, outTensors, &this->archInfo));
         return SUCCESS;
     }
 

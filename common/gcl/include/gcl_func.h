@@ -29,7 +29,6 @@
 #include "gcl_kernel_source.h"
 #include "libkernelsource.h"
 #include "algorithm_map.h"
-#include "types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -39,7 +38,10 @@ inline EE gcl_regist_binMap(GCLHandle_t handle)
     std::string deviceName = handle->deviceName;
     std::string libKernelBinName = "lib" + deviceName + "_map.so";
     char *err;
-    void *dvm_handle = dlopen(libKernelBinName.c_str(), RTLD_LAZY);
+    void *dvm_handle = handle->kernel_binmap_handle;
+    if (!dvm_handle) {
+        dvm_handle = dlopen(libKernelBinName.c_str(), RTLD_LAZY);
+    }
     if (dvm_handle) {
         std::string func = "create_" + deviceName + "_kernelbin_map";
         gcl_kernel_binmap *(*create_kernelbin_map)();
@@ -60,6 +62,34 @@ inline EE gcl_regist_binMap(GCLHandle_t handle)
             libKernelBinName.c_str(), dlerror());
     }
     return SUCCESS;
+}
+
+inline CI8 *gcl_get_algorithm_info(GCLHandle_t handle, std::string algoName)
+{
+    std::string deviceName = handle->deviceName;
+    std::string libKernelBinName = "lib" + deviceName + "_map.so";
+    I8 *err;
+    void *dvm_handle = handle->kernel_binmap_handle;
+    CI8 *algoInfo = nullptr;
+    if (!dvm_handle) {
+        dvm_handle = dlopen(libKernelBinName.c_str(), RTLD_LAZY);
+    }
+    if (dvm_handle) {
+        std::string func = "get_" + deviceName + "_algorithm_info";
+        CI8 *(*get_algorithm_info)(std::string);
+        dlerror();
+        get_algorithm_info = (CI8 * (*)(std::string)) dlsym(dvm_handle, func.c_str());
+        if ((err = dlerror()) != NULL) {
+            UNI_ERROR_LOG(
+                "Get %s in %s failed, error %s\n", func.c_str(), libKernelBinName.c_str(), err);
+            dlclose(dvm_handle);
+        }
+        algoInfo = (*get_algorithm_info)(algoName);
+    } else {
+        UNI_DEBUG_LOG("try to dlopen %s failed, %s, get algoInfo from algoFile\n",
+            libKernelBinName.c_str(), dlerror());
+    }
+    return algoInfo;
 }
 
 inline EE gcl_regist_sourceMap(GCLHandle_t handle)
@@ -91,32 +121,77 @@ inline EE gcl_get_device_name(GCLHandle_t handle)
     U32 len;
     I8 *data;
     CHECK_STATUS(get_device_info(device, CL_DEVICE_NAME, (void **)&data, &len));
-    I8 devName[64];
+    std::string devName = std::string(data);
     for (U32 i = 0; i < len - 1; i++) {
-        if (data[i] == '-') {
-            data[i] = '_';
+        if (devName[i] == '-') {
+            devName[i] = '_';
         }
-        if (data[i] == ' ') {
-            data[i] = '_';
+        if (devName[i] == ' ') {
+            devName[i] = '_';
         }
-        devName[i] = data[i];
+        if (devName[i] == '(') {
+            devName[i] = '_';
+        }
+        if (devName[i] == ')') {
+            devName[i] = '_';
+        }
     }
+
     U32 version_len;
     free(data);
     CHECK_STATUS(get_device_info(device, CL_DEVICE_VERSION, (void **)&data, &version_len));
     std::string deviceV = std::string(data);
+    if (devName.find("QUALCOMM") != std::string::npos) {
+        U32 be = deviceV.find("Adreno");
+        std::string subDevName = deviceV.substr(be);
+        if (subDevName.find("(TM)") != std::string::npos) {
+            subDevName.erase(subDevName.find("(TM)"), 4);
+        }
+        devName = "QUALCOMM_";
+        devName += subDevName;
+        for (U32 i = 0; i < devName.length(); i++) {
+            if (devName[i] == '-') {
+                devName[i] = '_';
+            }
+            if (devName[i] == ' ') {
+                devName[i] = '_';
+            }
+            if (devName[i] == '(') {
+                devName[i] = '_';
+            }
+            if (devName[i] == ')') {
+                devName[i] = '_';
+            }
+        }
+    }
+
     U32 be = deviceV.find("r");
     U32 end = deviceV.find("p", be + 1);
     std::string numV = deviceV.substr(be + 1, end - be - 1);
     U32 i = atoi(numV.c_str());
     if (i >= 14) {
-        devName[len - 1] = 'p';
-        devName[len] = '\0';
-    } else {
-        devName[len - 1] = '\0';
+        devName += "p";
     }
     free(data);
     handle->deviceName = devName;
+    return SUCCESS;
+}
+
+inline EE gcl_get_device_max_ls_size(GCLHandle_t handle, U32 *size)
+{
+    CHECK_STATUS(get_device_max_work_item_sizes(handle->devices[handle->deviceId], size));
+    return SUCCESS;
+}
+
+inline EE gcl_get_device_max_cu(GCLHandle_t handle, U32 *size)
+{
+    CHECK_STATUS(get_device_max_compute_units(handle->devices[handle->deviceId], size));
+    return SUCCESS;
+}
+
+inline EE gcl_get_device_max_work_group(GCLHandle_t handle, U32 *size)
+{
+    CHECK_STATUS(get_device_max_work_group_size(handle->devices[handle->deviceId], size));
     return SUCCESS;
 }
 
@@ -163,6 +238,9 @@ inline EE gcl_create_handle(GCLHandle_t *handlePtr)
     if (!handle->useBinMap) {
         CHECK_STATUS(gcl_regist_sourceMap(handle));
     }
+    CHECK_STATUS(gcl_get_device_max_ls_size(handle, handle->device_max_ls_size));
+    CHECK_STATUS(gcl_get_device_max_cu(handle, &handle->device_max_cu));
+    CHECK_STATUS(gcl_get_device_max_work_group(handle, &handle->device_max_work_group));
     *handlePtr = handle;
     return SUCCESS;
 }
@@ -398,7 +476,8 @@ inline EE gcl_create_kernel_binary(GCLHandle_t handle, CI8 *kernelName, Kernel *
     return SUCCESS;
 }
 
-inline EE gcl_create_kernel_with_source_map(GCLHandle_t handle, CI8 *kernelName, Kernel *kernel)
+inline EE gcl_create_kernel_with_source_map(
+    GCLHandle_t handle, CI8 *kernelName, Kernel *kernel, KernelOpt *opt = NULL)
 {
     Program program;
     auto it = handle->programMap.find(kernelName);
@@ -411,16 +490,35 @@ inline EE gcl_create_kernel_with_source_map(GCLHandle_t handle, CI8 *kernelName,
         std::string optionName = kernelName;
         bool use_common_opt;
         if (!kernel_source->get_option(optionName, &option_ptr)) {
-            sourceName = kernelName;
-            option = "";
-            use_common_opt = true;
+            if (opt) {
+                sourceName = opt->sourceName;
+                option = (const char *)opt->option;
+                use_common_opt = (opt->kernelDataType == DT_F16) ? true : false;
+                if (opt->kernelDataType == DT_F32) {
+                    std::string common_opt = "-cl-std=CL2.0 -D T=float -D T2=float2 -D T3=float3 "
+                                             "-D T4=float4 -D T8=float8 -D T16=float16";
+                    option = common_opt + " " + option;
+                } else if (opt->kernelDataType == DT_I32) {
+                    std::string common_opt = "-cl-std=CL2.0 -D T=int -D T2=int2 -D T3=int3 -D "
+                                             "T4=int4 -D T8=int8 -D T16=int16";
+                    option = common_opt + " " + option;
+                } else if (opt->kernelDataType == DT_U32) {
+                    std::string common_opt = "-cl-std=CL2.0 -D T=uint -D T2=uint2 -D T3=uint3 -D "
+                                             "T4=uint4 -D T8=uint8 -D T16=uint16";
+                    option = common_opt + " " + option;
+                }
+            } else {
+                sourceName = kernelName;
+                option = "";
+                use_common_opt = true;
+            }
         } else {
             use_common_opt = option_ptr->use_common_opt;
             sourceName = option_ptr->sourceName;
             option = option_ptr->option;
         }
         if (use_common_opt) {
-            option = handle->common_source_opt + option;
+            option = handle->common_source_opt + " " + option;
         }
         if (!kernel_source->get_source(sourceName, &source_ptr)) {
             UNI_ERROR_LOG("the %s doesn't exist in sourceMap\n", sourceName);
@@ -448,12 +546,13 @@ inline EE gcl_create_kernel_with_source_map(GCLHandle_t handle, CI8 *kernelName,
     return SUCCESS;
 }
 
-inline EE gcl_create_kernel(GCLHandle_t handle, CI8 *kernelName, Kernel *kernel)
+inline EE gcl_create_kernel(
+    GCLHandle_t handle, CI8 *kernelName, Kernel *kernel, KernelOpt *opt = NULL)
 {
     if (handle->useBinMap) {
         CHECK_STATUS(gcl_create_kernel_binary(handle, kernelName, kernel));
     } else {
-        CHECK_STATUS(gcl_create_kernel_with_source_map(handle, kernelName, kernel));
+        CHECK_STATUS(gcl_create_kernel_with_source_map(handle, kernelName, kernel, opt));
     }
     return SUCCESS;
 }
@@ -471,6 +570,41 @@ inline EE gcl_get_kernel_from_map(GCLHandle_t handle, CI8 *kernelName, Kernel *k
     return SUCCESS;
 }
 
+inline EE gcl_infer_best_ls_with_device_info(GCLHandle_t handle, U32 dim, U32 *gs, U32 *ls)
+{
+    U32 *max_ls_size = handle->device_max_ls_size;
+    U32 max_cu = handle->device_max_cu;
+    U32 max_work_group = handle->device_max_work_group;
+    U32 current_total_size = 1;
+    for (U32 i = 0; i < dim; i++) {
+        U32 gs_size = gs[i];
+        U32 ls_size = gs_size / max_cu;
+        U32 ls_rest = gs_size % max_cu;
+        U32 ls_up_size = max_work_group / current_total_size;
+        if (ls_up_size > max_ls_size[i]) {
+            ls_up_size = max_ls_size[i];
+        }
+        if (ls_size > ls_up_size) {
+            ls_size = ls_up_size;
+        }
+        if (ls_rest != 0 || i == 2) {
+            while (ls_size) {
+                ls_size = ls_size - 1;
+                ls_rest = gs_size % ls_size;
+                if (ls_rest == 0 || (ls_size <= max_work_group && i != 2)) {
+                    break;
+                }
+            }
+        }
+        if (ls_size < 1) {
+            ls_size = 1;
+        }
+        current_total_size *= ls_size;
+        gs[i] = (gs_size + ls_size - 1) / ls_size * ls_size;
+        ls[i] = ls_size;
+    }
+    return SUCCESS;
+}
 inline EE gcl_set_kernelVec(GCLHandle_t handle,
     Kernel kernel,
     U32 work_dim,
@@ -534,6 +668,12 @@ inline EE gcl_run_kernelVec(GCLHandle_t handle, U32 *index = NULL)
     }
     for (U32 i = runBe; i < runEnd; ++i) {
         auto kernelInfo = (*handle->kernelVec)[i];
+        for (U32 j = 0; j < kernelInfo.dim; j++) {
+            if (kernelInfo.ls[j] != 0) {
+                kernelInfo.gs[j] = (kernelInfo.gs[j] + kernelInfo.ls[j] - 1) 
+                    / kernelInfo.ls[j] * kernelInfo.ls[j];
+            }
+        }
         CHECK_STATUS(enqueue_ndrange_kernel(queue, kernelInfo.kernel, kernelInfo.dim, NULL,
             kernelInfo.gs, kernelInfo.ls, numWaitEvents, waitEvents, eventPtr));
 #ifdef _DEBUG
@@ -541,8 +681,9 @@ inline EE gcl_run_kernelVec(GCLHandle_t handle, U32 *index = NULL)
         CHECK_STATUS(event_counting_time(eventPtr, NULL, NULL, NULL, NULL, &executeTime));
         CHECK_STATUS(release_event(*eventPtr));
         handle->t_execute = executeTime;
-        UNI_DEBUG_LOG(
-            "KERNEL>>> %s runInfo: executeTime = %f us\n", kernelInfo.name.c_str(), executeTime);
+        UNI_DEBUG_LOG("KERNEL>>> %s runInfo: ls <%d %d %d> executeTime = %f us\n",
+            kernelInfo.name.c_str(), kernelInfo.ls[0], kernelInfo.ls[1], kernelInfo.ls[2],
+            executeTime);
         CHECK_STATUS(gcl_finish(handle));
 #endif
     }
@@ -562,17 +703,82 @@ inline EE gcl_run_kernelVec_timing(
         Event *waitEvents = handle->waitEvents;
         Event *eventPtr = handle->eventPtr;
         for (U32 i = be; i < end; ++i) {
+            double minTime = DBL_MAX;
             auto kernelInfo = (*handle->kernelVec)[i];
-            for (U32 j = 0; j < 3; j++) {
+            U32 gs[3] = {1, 1, 1};
+            U32 ls[3] = {0, 0, 0};
+            U32 dim = kernelInfo.dim;
+            bool noNeedInferLS = true;
+            for (U32 j = 0; j < dim; j++) {
+                gs[j] = kernelInfo.gs[j];
+                ls[j] = kernelInfo.ls[j];
+                bool k = false;
+                if (ls[j] > 0) {
+                    k = true;
+                }
+                noNeedInferLS = noNeedInferLS & k;
+            }
+            if (noNeedInferLS) {
+                for (U32 j = 0; j < dim; j++) {
+                    kernelInfo.gs[j] = (gs[j] + ls[j] - 1) / ls[j] * ls[j];
+                }
                 CHECK_STATUS(enqueue_ndrange_kernel(queue, kernelInfo.kernel, kernelInfo.dim, NULL,
                     kernelInfo.gs, kernelInfo.ls, numWaitEvents, waitEvents, eventPtr));
                 CHECK_STATUS(
                     event_counting_time(handle->eventPtr, NULL, NULL, NULL, NULL, &executeTime));
                 CHECK_STATUS(release_event(handle->eventObj));
+                CHECK_STATUS(gcl_finish(handle));
+            } else {
+                for (U32 j = 0; j < 2; j++) {
+                    CHECK_STATUS(enqueue_ndrange_kernel(queue, kernelInfo.kernel, kernelInfo.dim,
+                        NULL, kernelInfo.gs, kernelInfo.ls, 0, NULL, NULL));
+                }
+                gcl_finish(handle);
+                std::vector<U32> test_gs;
+                std::vector<U32> test_ls;
+                for (U32 j = 0; j < 3; j++) {
+                    test_gs.push_back(gs[j]);
+                    test_ls.push_back(ls[j]);
+                }
+                for (U32 j = 2; j <= 256; j *= 2) {
+                    test_gs.push_back((gs[0] + j - 1) / j * j);
+                    test_gs.push_back(gs[1]);
+                    test_gs.push_back(gs[2]);
+                    test_ls.push_back(j);
+                    test_ls.push_back(1);
+                    test_ls.push_back(1);
+                }
+                int timeUpCount = 0;
+                for (U32 j = 0; j < test_gs.size(); j += 3) {
+                    for (U32 k = 0; k < 3; k++) {
+                        gs[k] = test_gs[j + k];
+                        ls[k] = test_ls[j + k];
+                    }
+                    CHECK_STATUS(enqueue_ndrange_kernel(queue, kernelInfo.kernel, dim, NULL, gs, ls,
+                        numWaitEvents, waitEvents, eventPtr));
+                    CHECK_STATUS(
+                        event_counting_time(handle->eventPtr, NULL, NULL, NULL, NULL, &executeTime));
+                    CHECK_STATUS(release_event(handle->eventObj));
+                    gcl_finish(handle);
+                    if (minTime > executeTime) {
+                        minTime = executeTime;
+                        for (U32 k = 0; k < 3; k++) {
+                            kernelInfo.ls[k] = ls[k];
+                        }
+                        timeUpCount = 0;
+                    } else {
+                        timeUpCount++;
+                    }
+                    if (timeUpCount >= 3) {
+                        break;
+                    }
+                }
+                executeTime = minTime;
             }
-            UNI_DEBUG_LOG("KERNEL>>> %s runInfo: executeTime = %f us\n", kernelInfo.name.c_str(),
+
+            UNI_DEBUG_LOG("KERNEL>>> %s runInfo: ls <%d %d %d> executeTime = %f us\n",
+                kernelInfo.name.c_str(), kernelInfo.ls[0], kernelInfo.ls[1], kernelInfo.ls[2],
                 executeTime);
-            CHECK_STATUS(gcl_finish(handle));
             totalTime += executeTime;
             if (kernelArrayTime) {
                 (*kernelArrayTime).push_back(executeTime);
@@ -586,17 +792,34 @@ inline EE gcl_run_kernelVec_timing(
 
 inline EE gcl_clean_kernelVec(GCLHandle_t handle)
 {
-    for (U32 i = 0; i < handle->kernelVec->size(); i++) {
-        auto k = (*handle->kernelVec)[i];
-        CHECK_STATUS(release_kernel(k.kernel));
+    U32 num = handle->kernelVec->size();
+    if (num) {
+        for (U32 i = 0; i < num; i++) {
+            auto k = (*handle->kernelVec)[i];
+            CHECK_STATUS(release_kernel(k.kernel));
+        }
+        handle->kernelVec->clear();
     }
-    handle->kernelVec->clear();
+    return SUCCESS;
+}
+
+inline EE gcl_clean_programMap(GCLHandle_t handle)
+{
+    for (auto k : handle->programMap) {
+        CHECK_STATUS(release_program(k.second));
+    }
+    handle->programMap.clear();
     return SUCCESS;
 }
 
 inline EE gcl_run_kernel(
     GCLHandle_t handle, Kernel kernel, U32 work_dim, U32 *gs, U32 *ls, CI8 *kernelName = NULL)
 {
+    for (U32 i = 0; i < work_dim; i++) {
+        if (ls[i] != 0) {
+            gs[i] = (gs[i] + ls[i] - 1) / ls[i] * ls[i];
+        }
+    }
     CHECK_STATUS(enqueue_ndrange_kernel(handle->queue, kernel, work_dim, NULL, gs, ls,
         handle->numWaitEvents, handle->waitEvents, handle->eventPtr));
 #ifdef _DEBUG
@@ -620,6 +843,7 @@ inline U32 get_next_ls_size(U32 ls_size)
 {
     return (ls_size << 1);
 }
+
 inline EE gcl_run_kernel_select_ls(GCLHandle_t handle, GCLKernelInfo *kernelInfo)
 {
     auto kernel = kernelInfo->kernel;
@@ -728,15 +952,34 @@ inline EE gcl_infer_best_kernelVec_ls_with_map(
         U32 ls[3];
         bool findKernelThreadInfo = false;
         findKernelThreadInfo = algoMap->getKernelThreadInfoFromMap(kernelInfo.name, gs, ls);
+        U32 dim = (*handle->kernelVec)[i].dim;
         if (findKernelThreadInfo) {
-            (*handle->kernelVec)[i].gs[0] = gs[0];
-            (*handle->kernelVec)[i].gs[1] = gs[1];
-            (*handle->kernelVec)[i].gs[2] = gs[2];
-            (*handle->kernelVec)[i].ls[0] = ls[0];
-            (*handle->kernelVec)[i].ls[1] = ls[1];
-            (*handle->kernelVec)[i].ls[2] = ls[2];
+            U32 cur_gs[3];
+            for (U32 j = 0; j < dim; j++) {
+                cur_gs[j] = (*handle->kernelVec)[i].gs[j];
+                if (ls[j] != 0) {
+                    cur_gs[j] = (cur_gs[j] + ls[j] - 1) / ls[j] * ls[j];
+                }
+                (*handle->kernelVec)[i].gs[j] = cur_gs[j];
+                (*handle->kernelVec)[i].ls[j] = ls[j];
+            }
         } else {
-            kernelIndex.push_back(i);
+            bool noNeedInferLS = true;
+            for (U32 j = 0; j < dim; j++) {
+                gs[j] = (*handle->kernelVec)[i].gs[j];
+                ls[j] = (*handle->kernelVec)[i].ls[j];
+                if (ls[j] == 0) {
+                    noNeedInferLS = false;
+                }
+            }
+            if (noNeedInferLS) {
+                for (U32 j = 0; j < dim; j++) {
+                    (*handle->kernelVec)[i].gs[j] = (gs[j] + ls[j] - 1) / ls[j] * ls[j];
+                }
+            }
+            if (!noNeedInferLS) {
+                kernelIndex.push_back(i);
+            }
         }
     }
     CHECK_STATUS(gcl_run_kernelVec_select_ls(handle, kernelIndex));
@@ -1198,32 +1441,47 @@ inline std::string gcl_check_data(GCLHandle_t handle,
      */
     DataFormat tdf;
     DataType tdt;
-    U32 tn, tc, th, tw;
+    U32 tn, tc, th, tw, tt;
     U32 dims;
     tn = 1;
     tc = 1;
     th = 1;
     tw = 1;
+    tt = 1;
     dims = memDesc.nDims;
     tdt = memDesc.dt;
     tdf = memDesc.df;
     tw = memDesc.dims[0];
-    if (dims > 1) {
+    if (dims == 5) {
         th = memDesc.dims[1];
+        tt = memDesc.dims[2];
+        tc = memDesc.dims[3];
+        tn = memDesc.dims[4];
+    } else {
+        if (dims > 1) {
+            th = memDesc.dims[1];
+        }
+        if (dims > 2) {
+            tc = memDesc.dims[2];
+        }
+        if (dims > 3) {
+            tn = memDesc.dims[3];
+        }
+        if (dims > 4) {
+            CHECK_STATUS(NOT_SUPPORTED);
+        }
     }
-    if (dims > 2) {
-        tc = memDesc.dims[2];
+
+    std::string line = "GPU result nchw: ";
+    U32 num = tn * tc * th * tw * tt;
+    if (num == 0) {
+        line += "tensor number element is 0\n";
+        return line;
     }
-    if (dims > 3) {
-        tn = memDesc.dims[3];
-    }
-    if (dims > 4) {
-        CHECK_STATUS(NOT_SUPPORTED);
-    }
-    U32 num = tn * tc * th * tw;
     F32 *hostPtrTran = new F32[num];
-    if (!dataName) {
-        dataName = "unknow";
+    std::string name = handle->curOpName;
+    if (dataName) {
+        name = dataName;
     }
 
     if (ptrType == 0) {
@@ -1257,14 +1515,19 @@ inline std::string gcl_check_data(GCLHandle_t handle,
                     hostPtrTran[i] =
                         (float)(val[((ic / 4) * s1 + iw + off1) * s0 * 4 + (ih + off0) * 4 + (ic & 3)]);
                 }
-            }
-            if (tdf == DF_MKT) {
+            } else if (tdf == DF_MKT || tdf == DF_MTK) {
                 for (U32 i = 0; i < num; i++) {
                     U32 ih = i % tw;
                     U32 ic = i / tw;
                     U32 in_off = ((ic / 4) * s1 + off1) * s0 * 4 + (ih + off0) * 4 + (ic & 3);
                     hostPtrTran[i] = (float)val[in_off];
                 }
+            } else if (tdf == DF_NORMAL && s0 == 1 && s1 == 1) {
+                for (U32 i = 0; i < num; i++) {
+                    hostPtrTran[i] = (float)val[i];
+                }
+            } else {
+                UNI_DEBUG_LOG("Not supported data format in check data\n");
             }
         } else if (df == DF_NCHW || df == DF_NHWC) {
             for (U32 i = 0; i < num; i++) {
@@ -1278,8 +1541,8 @@ inline std::string gcl_check_data(GCLHandle_t handle,
                 hostPtrTran[i] = (float)val[i];
             }
         } else {
-            UNI_DEBUG_LOG(
-                "warning write GPU memory %s to bin, format not support: %d\n", dataName, (int)df);
+            UNI_DEBUG_LOG("warning write GPU memory %s to bin, format not support: %d\n",
+                name.c_str(), (int)df);
             delete[] hostPtrTran;
             delete[] hostPtr;
         }
@@ -1307,14 +1570,14 @@ inline std::string gcl_check_data(GCLHandle_t handle,
                 hostPtrTran[i] = (float)(val[in_off]);  //write as MKT, for compare with gpu
             }
         } else {
-            UNI_DEBUG_LOG(
-                "warning write GPU memory %s to bin, format not support: %d\n", dataName, (int)tdf);
+            UNI_DEBUG_LOG("warning write GPU memory %s to bin, format not support: %d\n",
+                name.c_str(), (int)tdf);
             delete[] hostPtrTran;
         }
     }
     if (write2bin) {
         FILE *outfile;
-        std::string fileName = dataName;
+        std::string fileName = name;
         replace(fileName.begin(), fileName.end(), '/', '_');
         replace(fileName.begin(), fileName.end(), '.', '_');
         replace(fileName.begin(), fileName.end(), ' ', '_');
@@ -1334,7 +1597,6 @@ inline std::string gcl_check_data(GCLHandle_t handle,
         fwrite(hostPtrTran, sizeof(float), num, outfile);
         fclose(outfile);
     }
-    std::string line = "GPU result nchw: ";
     if (len > num) {
         len = num;
     }

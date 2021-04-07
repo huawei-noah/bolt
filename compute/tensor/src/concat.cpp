@@ -92,11 +92,12 @@ inline EE concat_infer_output_size_cpu(
         }
     }
 
-    if ((outputDesc->dims[3] % 8 == 0) && hasC8) {
+    int channel = outputDesc->nDims - 2;
+    if ((outputDesc->dims[channel] % 8 == 0) && hasC8) {
         outputDesc->df = DF_NCHWC8;
     }
 
-    if ((outputDesc->df == DF_NCHWC8) && (outputDesc->dims[2] % 8 != 0)) {
+    if ((outputDesc->df == DF_NCHWC8) && (outputDesc->dims[channel] % 8 != 0)) {
         outputDesc->df = DF_NCHW;
     }
 
@@ -114,16 +115,11 @@ EE concat_infer_output_size(
     EE ret = NOT_SUPPORTED;
     if (IS_MALI_GPU(archInfo->arch)) {
 #ifdef _USE_MALI
-        std::vector<GCLMemDesc> gclmemInputDescs;
-        for (auto p : inputTensor) {
-            gclmemInputDescs.push_back(ocl_get_desc(*p));
-        }
+        std::vector<GCLMemDesc> gclmemInputDescs = ocl_get_descs_ptr(inputTensor);
         GCLMemDesc gclmemOutputDesc = ocl_get_desc(*outputTensor);
         ret = concat_infer_output_size_mali(
             inputDesc, p, &outputDesc, gclmemInputDescs.data(), &gclmemOutputDesc);
-        for (U32 i = 0; i < inputTensor.size(); i++) {
-            ocl_set_desc(inputTensor[i], gclmemInputDescs[i]);
-        }
+        ocl_set_descs(inputTensor, gclmemInputDescs);
         ocl_set_desc(outputTensor, gclmemOutputDesc);
 #endif
     } else {
@@ -140,7 +136,8 @@ EE concat_infer_forward_tmp_bytes(std::vector<Tensor> inputTensor, U32 *bytes, A
     EE ret = NOT_SUPPORTED;
     if (IS_MALI_GPU(archInfo->arch)) {
 #ifdef _USE_MALI
-        ret = concat_infer_forward_tmp_bytes_mali(inputDesc, bytes);
+        std::vector<GCLMemDesc> gclmemInputDescs = ocl_get_descs(inputTensor);
+        ret = concat_infer_forward_tmp_bytes_mali(inputDesc, gclmemInputDescs, bytes);
 #endif
     } else {
         *bytes = 0;

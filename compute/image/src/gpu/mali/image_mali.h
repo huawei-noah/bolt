@@ -17,7 +17,7 @@
 #include "image.h"
 
 EE resize_infer_output_size_mali(TensorDesc inputDesc,
-    ResizeDesc resizeDesc,
+    DataType paramDT,
     void *params,
     TensorDesc *outputDesc,
     U32 *outputBytes,

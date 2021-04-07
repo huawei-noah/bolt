@@ -1,27 +1,12 @@
 cmake_minimum_required(VERSION 3.2)
 
-file(GLOB BOLT_CONFIGURE_FILE $ENV{BOLT_ROOT}/common/cmakes/bolt.cmake ${BOLT_ROOT}/common/cmakes/bolt.cmake)
-if (BOLT_CONFIGURE_FILE)
-    include(${BOLT_CONFIGURE_FILE})
-else (BOLT_CONFIGURE_FILE)
-    message(FATAL_ERROR "
-FATAL: can not find bolt.cmake in <BOLT_ROOT>/common/cmakes directory,
-       please set shell or cmake environment variable BOLT_ROOT.
-    ")
-endif (BOLT_CONFIGURE_FILE)
-
-if (USE_IOS_CLANG)
-    set(CMAKE_SYSTEM_NAME Darwin)
-    set(CMAKE_SYSTEM_VERSION 1)
-    set(UNIX True)
-    set(APPLE True)
-    set(IOS True)
-endif (USE_IOS_CLANG)
+include(common/cmakes/bolt.cmake)
 
 project(cheetah C CXX)
 
 set_policy()
-SET(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${BOLT_ROOT}/common/cmakes")
+set(BOLT_ROOT ${CMAKE_CURRENT_SOURCE_DIR})
+set(CMAKE_MODULE_PATH ${CMAKE_MODULE_PATH} "${BOLT_ROOT}/common/cmakes")
 if (USE_CAFFE OR USE_ONNX OR USE_FLOW)
     find_package(Protobuf)
 endif()
@@ -34,51 +19,67 @@ endif (USE_TENSORFLOW)
 if (USE_MALI)
     find_package(Gcl)
 endif(USE_MALI)
-if (NOT USE_IOS_CLANG)
-    if (USE_LLVM_CLANG)
+if (NOT "$ENV{JNI_ROOT}" STREQUAL "")
+    find_package(JNI)
+    if (JNI_FOUND)
         set(USE_JNI ON)
-    else()
-        find_package(JNI)
-        if (JNI_FOUND)
-            set(USE_JNI ON)
-        endif()
-    endif()
-endif()
+    endif(JNI_FOUND)
+endif ()
+if (BUILD_TEST)
+    find_package(jpeg)
+endif (BUILD_TEST)
 
 add_subdirectory(common)
-add_subdirectory(model_tools)
+if (USE_CAFFE OR USE_ONNX OR USE_TFLITE OR USE_TENSORFLOW)
+    add_subdirectory(model_tools)
+endif()
 add_subdirectory(compute)
 add_subdirectory(inference)
+set_c_cxx_flags()
+set_test_c_cxx_flags()
+message(STATUS "CFLAGS: ${CMAKE_C_FLAGS}")
+message(STATUS "CXXFLAGS: ${CMAKE_CXX_FLAGS}")
 add_custom_target(bolt_library ALL
-    COMMAND ./scripts/build_light_bolt.sh ${CMAKE_CXX_COMPILER} ${CMAKE_AR} ${CMAKE_STRIP} ${CMAKE_BINARY_DIR} ${USE_MALI} ${USE_DEBUG} ${USE_LLVM_CLANG} ${USE_ANDROID_LOG} ${USE_IOS_CLANG} ${USE_OPENMP}
-    WORKING_DIRECTORY $ENV{BOLT_ROOT})
-add_dependencies(bolt_library engine model_tools tensor image blas_enhance uni)
-add_dependencies(bolt_library engine_static model_tools_static tensor_static image_static blas_enhance_static uni_static)
+    COMMAND bash ./scripts/build_light_bolt.sh ${CMAKE_SYSTEM_NAME} ${CMAKE_CXX_COMPILER} ${CMAKE_AR} ${CMAKE_STRIP} ${CMAKE_CXX_FLAGS} ${CMAKE_CXX_OUTPUT_EXTENSION} ${CMAKE_SHARED_LIBRARY_PREFIX} ${CMAKE_SHARED_LIBRARY_SUFFIX} ${CMAKE_STATIC_LIBRARY_PREFIX} ${CMAKE_STATIC_LIBRARY_SUFFIX} ${CMAKE_BINARY_DIR}
+    WORKING_DIRECTORY ${BOLT_ROOT})
+add_dependencies(bolt_library engine model_spec tensor image blas_enhance uni)
+add_dependencies(bolt_library engine_static model_spec_static tensor_static image_static blas_enhance_static uni_static)
 
 # install section
-install(FILES ${CMAKE_BINARY_DIR}/libbolt.a
+install(FILES ${CMAKE_BINARY_DIR}/${CMAKE_SHARED_LIBRARY_PREFIX}bolt${CMAKE_SHARED_LIBRARY_SUFFIX}
+    ${CMAKE_BINARY_DIR}/${CMAKE_STATIC_LIBRARY_PREFIX}bolt${CMAKE_STATIC_LIBRARY_SUFFIX}
+    ${CMAKE_BINARY_DIR}/${CMAKE_SHARED_LIBRARY_PREFIX}BoltModel${CMAKE_SHARED_LIBRARY_SUFFIX}
+    DESTINATION lib)
+# generate *.lib library for Microsoft VS
+if (${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
+    install(FILES ${CMAKE_BINARY_DIR}/BoltModel.lib ${CMAKE_BINARY_DIR}/bolt.lib
         DESTINATION lib)
-if (USE_IOS_CLANG)
-    install(FILES ${CMAKE_BINARY_DIR}/libbolt.dylib
-        DESTINATION lib)
-else (USE_IOS_CLANG)
-    install(FILES ${CMAKE_BINARY_DIR}/libbolt.so
-        DESTINATION lib)
-    install(FILES ${CMAKE_BINARY_DIR}/libBoltModel.so
-        DESTINATION lib)
-endif (USE_IOS_CLANG)
+endif ()
 
-execute_process(COMMAND doxygen .Doxyfile WORKING_DIRECTORY $ENV{BOLT_ROOT})
+#find_program (DOXYGEN_PROGRAM doxygen)
+#if (DOXYGEN_PROGRAM)
+#    execute_process(COMMAND doxygen .Doxyfile WORKING_DIRECTORY ${BOLT_ROOT})
+#else ()
+#    message(WARNING "Can not find doxygen tools to generate code documents in docs/API/html/index.html!\
+#    If you dont't want to use these documents, you can skip this warning message.")
+#endif ()
 
 enable_testing()
 find_program (BASH_PROGRAM bash)
 if (BASH_PROGRAM AND USE_GENERAL)
-    set(parameters -t ${CMAKE_INSTALL_PREFIX} -p /data/local/tmp/uldra)
+    set(parameters --host_dir=${CMAKE_INSTALL_PREFIX})
+    if (ANDROID)
+        set(parameters ${parameters} -d android --device_dir=/data/local/tmp/uldra)
+    elseif("${CMAKE_HOST_SYSTEM_PROCESSOR}" STREQUAL "${CMAKE_SYSTEM_PROCESSOR}" AND "${CMAKE_HOST_SYSTEM}" MATCHES "${CMAKE_SYSTEM_NAME}*")
+        set(parameters ${parameters} -d host)
+    else()
+        set(parameters ${parameters} -d unknown)
+    endif()
     if (USE_MALI)
         set(parameters ${parameters} -g)
     endif(USE_MALI)
     if (USE_DYNAMIC_LIBRARY)
-        set(parameters ${parameters} -l ${CMAKE_INSTALL_PREFIX}/lib)
+        set(parameters ${parameters} --shared)
     endif(USE_DYNAMIC_LIBRARY)
-    add_test (NAME quick_benchmark COMMAND $ENV{BOLT_ROOT}/scripts/quick_benchmark.sh ${parameters})
+    add_test (NAME quick_benchmark COMMAND bash ${BOLT_ROOT}/scripts/quick_benchmark.sh ${parameters})
 endif (BASH_PROGRAM AND USE_GENERAL)

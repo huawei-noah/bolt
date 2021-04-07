@@ -16,7 +16,7 @@
 
 #ifdef _USE_INT8
 #include "sys.h"
-#include "types.h"
+#include "cpu/arm/int8/arm_functions_int8.h"
 
 template <typename OT>
 EE convolution_winograd_A55(TensorDesc inputDesc,

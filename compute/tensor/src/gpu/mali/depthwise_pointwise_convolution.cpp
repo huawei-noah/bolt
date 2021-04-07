@@ -12,11 +12,13 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "sys.h"
-#include "types.h"
+
 #include "error.h"
 #include "gpu/mali/tensor_computing_mali.h"
 #include "gpu/mali/fp16/depthwise_pointwise_convolution_mali_fp16.h"
-inline void depthwise_pointwise_convolution_produce_algos_paras(U32 pointwiseFilterNum,
+inline void depthwise_pointwise_convolution_produce_algos_paras(U32 oh,
+    U32 pointwiseFilterNum,
+    U32 dw,
     std::vector<DepthwiseConvolutionForwardAlgorithm> *depthwisePointwiseConvAlgorithms,
     std::vector<U32> *algoNumIndexD,
     std::vector<U32> *vecWD,
@@ -37,7 +39,8 @@ inline void depthwise_pointwise_convolution_produce_algos_paras(U32 pointwiseFil
     U32 configNumP = 0;
     U32 configInfo[3][128];
     for (U32 ii = 0; ii < algoNum; ii++) {
-        for (U32 i = 0; i < 8; i++) {
+        U32 j = (dw == 2) ? 2 : 0;
+        for (U32 i = j; i < 3; i++) {
             if (vecWD) {
                 (*vecWD).push_back(i + 1);
             }
@@ -66,6 +69,38 @@ inline void depthwise_pointwise_convolution_produce_algos_paras(U32 pointwiseFil
             }
             if (algo[ii] == DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_DIRECT) {
                 nj = 4;
+            }
+        }
+        if (algo[ii] == DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_DIRECT) {
+            if (pointwiseFilterNum % 16 == 0) {
+                for (U32 i = 0; i < 3; i++) {
+                    configInfo[0][configNumP] = i + 1;
+                    configInfo[1][configNumP] = 4;
+                    configInfo[2][configNumP] = 16;
+                    configNumP++;
+                }
+            }
+            U32 k = 4;
+            U32 nj = 2;
+            for (U32 i = 0; i < 3; i++) {
+                U32 w = 2;
+                if (i == 2) {
+                    nj = 1;
+                }
+                for (U32 j = 0; j < nj; j++) {
+                    if (oh % w != 0) {
+                        continue;
+                    }
+                    configInfo[0][configNumP] = w << 8;
+                    configInfo[1][configNumP] = 4;
+                    configInfo[2][configNumP] = k;
+                    configNumP++;
+                    w = w << 1;
+                }
+                k = k << 1;
+                if (pointwiseFilterNum % k != 0) {
+                    break;
+                }
             }
         }
         configNumsP[ii] = configNumP;
@@ -106,12 +141,12 @@ EE depthwise_pointwise_convolution_infer_output_size_mali(TensorDesc inputDesc,
     DataType idt;
     DataFormat idf;
     U32 iw, ih, ic, in;
-    U32 dfw, dfh;
+    U32 fw, fh;
     U32 pfn;
-    U32 ow, oh;
+    int ow, oh;
     U32 sw, sh, pl, pt, dw, dh, pr, pb;
     tensorSelectGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw);
-    tensorSelectGet(dwFilterDesc, NULL, NULL, NULL, NULL, &dfh, &dfw);
+    tensorSelectGet(dwFilterDesc, NULL, NULL, NULL, NULL, &fh, &fw);
     tensorSelectGet(pwFilterDesc, NULL, NULL, &pfn, NULL, NULL, NULL);
     pl = convParamSpec.padding_left;
     pr = convParamSpec.padding_right;
@@ -121,20 +156,19 @@ EE depthwise_pointwise_convolution_infer_output_size_mali(TensorDesc inputDesc,
     sh = convParamSpec.stride_h;
     dw = convParamSpec.dilatedRate_w;
     dh = convParamSpec.dilatedRate_h;
-    if (dfw < 1 || dfh < 1) {
-        return NOT_SUPPORTED;
-    }
-    if (dw != 1 || dh != 1) {
-        return NOT_SUPPORTED;
-    }
-    if (sw != sh) {
+    if (fw < 1 || fh < 1) {
         return NOT_SUPPORTED;
     }
     if ((pfn & 3) != 0) {
         return NOT_SUPPORTED;
     }
-    ow = (iw + pl + pr - dfw) / sw + 1;
-    oh = (ih + pt + pb - dfh) / sh + 1;
+    U32 fwd = (fw - 1) * dw + 1;
+    U32 fhd = (fh - 1) * dh + 1;
+    ow = (iw + pl + pr - fwd) / sw + 1;
+    oh = (ih + pt + pb - fhd) / sh + 1;
+    if (ow <= 0 || oh <= 0) {
+        CHECK_STATUS(NOT_MATCH);
+    }
     if (outputDesc) {
         *outputDesc = tensor4df(idt, idf, in, pfn, oh, ow);
     }
@@ -142,13 +176,13 @@ EE depthwise_pointwise_convolution_infer_output_size_mali(TensorDesc inputDesc,
 
     std::vector<U32> vecW;
     depthwise_pointwise_convolution_produce_algos_paras(
-        pfn, NULL, NULL, &vecW, NULL, NULL, NULL, NULL, NULL, NULL);
+        oh, pfn, dw, NULL, NULL, &vecW, NULL, NULL, NULL, NULL, NULL, NULL);
     U32 iw_align = ow;
     for (auto item_w : vecW) {
         U32 i = ALIGN(ow, item_w);
         iw_align = (iw_align < i) ? i : iw_align;
     }
-    U32 ext_w = (dfw / 2 < pl) ? pl : dfw / 2;
+    U32 ext_w = (fwd / 2 < pl) ? pl : fwd / 2;
     iw_align = iw_align * sw;
     if (pl < ext_w) {
         iw_align = iw_align + 2 * (ext_w - pl);
@@ -200,10 +234,14 @@ EE depthwise_pointwise_convolution_infer_forward_algorithm_mali(GCLHandle_t hand
     std::vector<U32> vecCP;
     std::vector<U32> vecKP;
     DataType dt;
-    U32 pfn;
+    U32 ic, oh, pfn, dw;
+    tensorSelectGet(inputDesc, NULL, NULL, NULL, &ic, NULL, NULL);
+    tensorSelectGet(outputDesc, NULL, NULL, NULL, NULL, &oh, NULL);
     tensorSelectGet(pwFilterDesc, &dt, NULL, &pfn, NULL, NULL, NULL);
-    depthwise_pointwise_convolution_produce_algos_paras(pfn, &depthwisePointwiseConvAlgorithms,
-        &algoNumIndexD, &vecWD, &vecCD, &vecKD, &algoNumIndexP, &vecWP, &vecCP, &vecKP);
+    dw = convParamSpec.dilatedRate_w;
+    depthwise_pointwise_convolution_produce_algos_paras(oh, pfn, dw,
+        &depthwisePointwiseConvAlgorithms, &algoNumIndexD, &vecWD, &vecCD, &vecKD, &algoNumIndexP,
+        &vecWP, &vecCP, &vecKP);
 
     if (policy == CONVOLUTION_TUNNING) {
         CHECK_STATUS(gcl_clean_kernelVec(handle));
@@ -229,9 +267,6 @@ EE depthwise_pointwise_convolution_infer_forward_algorithm_mali(GCLHandle_t hand
             pwFilterDesc, convParamSpec, NULL, &inputMemDesc, &outputMemDesc));
         std::vector<GCLMemDesc> dwFilterMemDescs;
         std::vector<GCLMemDesc> pwFilterMemDescs;
-        U32 ic, pfn;
-        tensorSelectGet(inputDesc, NULL, NULL, NULL, &ic, NULL, NULL);
-        tensorSelectGet(pwFilterDesc, NULL, NULL, &pfn, NULL, NULL, NULL);
         if (algoNumIndexD.size() != algoNumIndexP.size()) {
             CHECK_STATUS(NOT_MATCH);
         }
@@ -398,6 +433,7 @@ EE depthwise_pointwise_convolution_infer_forward_algorithm_mali(GCLHandle_t hand
         dwFilterMemDescs.clear();
         pwFilterMemDescs.clear();
         CHECK_STATUS(gcl_clean_kernelVec(handle));
+        CHECK_STATUS(gcl_clean_programMap(handle));
         CHECK_STATUS(gcl_off_queue_profiling(handle));
         return SUCCESS;
     }

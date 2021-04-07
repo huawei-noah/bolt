@@ -18,6 +18,9 @@
 #ifdef _USE_NEON
 #include "cpu/arm/tensor_computing_arm.h"
 #endif
+#ifdef _USE_X86
+#include "cpu/x86/tensor_computing_x86.h"
+#endif
 
 EE attention(Tensor inputTensor, Tensor outputTensor, ArchInfo_t archInfo)
 {
@@ -34,8 +37,7 @@ EE attention(Tensor inputTensor, Tensor outputTensor, ArchInfo_t archInfo)
 #endif
 #ifdef _USE_X86
     } else if (IS_X86_AVX2(arch)) {
-        UNI_WARNING_LOG("The x86 attention operator is not optimized now.\n");
-        ret = attention_general(inputDesc, input, outputDesc, output);
+        ret = attention_x86(inputDesc, input, outputDesc, output);
 #endif
 #ifdef _USE_NEON
     } else if (IS_ARM(arch)) {

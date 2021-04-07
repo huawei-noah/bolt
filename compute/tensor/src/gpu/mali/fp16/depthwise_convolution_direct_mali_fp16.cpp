@@ -11,10 +11,8 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "sys.h"
-#include "error.h"
-#include "types.h"
 #include "gpu/mali/fp16/depthwise_convolution_direct_mali_fp16.h"
+#include "gpu/mali/cl/kernel_option/conv_depthwise_opt.h"
 
 inline EE depthwise_core_mali_fp16(GCLHandle_t handle,
     TensorDesc inputDesc,
@@ -41,12 +39,16 @@ inline EE depthwise_core_mali_fp16(GCLHandle_t handle,
     fltbuf = filter->mem;
     biasimg = bias->mem;
     outbuf = output->mem;
-    U32 fw, sw, pw, ph;
+    U32 fw, fh, sw, sh, pw, ph, dw, dh;
     U32 ow, oh, oc, on;
     sw = convParamSpec.stride_w;
-    ph = convParamSpec.padding_top;
+    sh = convParamSpec.stride_h;
     pw = convParamSpec.padding_left;
-    tensorSelectGet(filterDesc, NULL, NULL, NULL, NULL, NULL, &fw);
+    ph = convParamSpec.padding_top;
+    dw = convParamSpec.dilatedRate_w;
+    dh = convParamSpec.dilatedRate_h;
+
+    tensorSelectGet(filterDesc, NULL, NULL, NULL, NULL, &fh, &fw);
     tensorSelectGet(outputDesc, NULL, NULL, &on, &oc, &oh, &ow);
 
     U32 iw_str, ih_str, ihw_str, ic_str, ih_off, iw_off;
@@ -63,22 +65,23 @@ inline EE depthwise_core_mali_fp16(GCLHandle_t handle,
     U32 gs[3] = {oh, (ow + item_w - 1) / item_w, (oc + 3) / 4 * on};
     U32 ls[3] = {0, 0, 0};
     U32 dim = 3;
-    char kernelname[128];
     Kernel kernel;
-    if (depthwiseActivationMode == ACTIVATION_NULL) {
-        sprintf(kernelname, "conv_depthwise_s%d_%d%d", sw, fw, item_w);
-    } else if (depthwiseActivationMode == ACTIVATION_RELU) {
-        sprintf(kernelname, "conv_depthwise_s%d_relu_%d%d", sw, fw, item_w);
-    } else if (depthwiseActivationMode == ACTIVATION_RELU6) {
-        sprintf(kernelname, "conv_depthwise_s%d_relu6_%d%d", sw, fw, item_w);
+    char kernelname[128];
+    KernelOpt kernelOpt;
+    if (dw > 1 || dh > 1) {
+        CHECK_STATUS(set_conv_depthwise_dila_opt_mali(fw, fh, sw, dw, item_w,
+            depthwiseActivationMode, false, DT_F16, kernelname, &kernelOpt));
+        CHECK_STATUS(gcl_create_kernel(handle, kernelname, &kernel, &kernelOpt));
+        CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, ihw_str, ic_str, ih_off, iw_off, oh_str,
+            ow_str, ohw_str, oh_off, ow_off, ow, sh, dw, dh, gs[0], gs[1], inbuf, fltbuf, biasimg,
+            outbuf));
     } else {
-        UNI_ERROR_LOG("xxx %d \n", (int)depthwiseActivationMode);
-        CHECK_STATUS(NOT_SUPPORTED);
-        return NOT_SUPPORTED;
+        CHECK_STATUS(set_conv_depthwise_opt_mali(
+            fw, fh, sw, item_w, depthwiseActivationMode, false, DT_F16, kernelname, &kernelOpt));
+        CHECK_STATUS(gcl_create_kernel(handle, kernelname, &kernel, &kernelOpt));
+        CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, ihw_str, ic_str, ih_off, iw_off, oh_str,
+            ow_str, ohw_str, oh_off, ow_off, ow, sh, gs[0], gs[1], inbuf, fltbuf, biasimg, outbuf));
     }
-    CHECK_STATUS(gcl_create_kernel(handle, kernelname, &kernel));
-    CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, ihw_str, ic_str, ih_off, iw_off, oh_str, ow_str,
-        ohw_str, oh_off, ow_off, ow, gs[0], gs[1], inbuf, fltbuf, biasimg, outbuf));
     gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelname);
 
 #ifdef _DEBUG

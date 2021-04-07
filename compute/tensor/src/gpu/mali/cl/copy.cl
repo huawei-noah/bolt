@@ -11,32 +11,28 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define MANGLE_NAME_IMPL(base, DT) base##DT
-#define MANGLE_NAME(base, DT) MANGLE_NAME_IMPL(base, DT)
+#define MANGLE_NAME_IMPL(base, BIND, DT) base##BIND##DT
+#define MANGLE_NAME(base, BIND, DT) MANGLE_NAME_IMPL(base, BIND, DT)
 
+#define BIND
 #if defined(USE_BLOCK_INDEX)
-__kernel void MANGLE_NAME(copy_with_block_index_, DT)(const int s_len,
+#define BIND with_block_index_
+#endif
+
+__kernel void MANGLE_NAME(copy_, BIND, DT)(const int s_len,
     const int d_len,
-    const int s_off,
-    const int d_off,
+    int s_off,
+    int d_off,
+    const int bx,
+#if defined(USE_BLOCK_INDEX)
     const int s_str,
     const int d_str,
-    const int bx,
     __global const int *srcBlockIndex,
     __global const int *dstBlockIndex,
-    __global const T *src,
-    __global T *dst)
-{
-#else
-__kernel void MANGLE_NAME(copy_, DT)(const int s_len,
-    const int d_len,
-    const int s_off,
-    const int d_off,
-    const int bx,
-    __global const T *src,
-    __global T *dst)
-{
 #endif
+    __global const T *src,
+    __global T *dst)
+{
     int idx = get_global_id(0);
     if (idx >= bx) {
         return;

@@ -13,7 +13,6 @@
 
 #include "cpu/x86/fp32/blas_fp32.h"
 #include "error.h"
-#include "types.h"
 
 #define UNROLL_K 4
 
@@ -494,7 +493,6 @@ void mvm_col_avx2_1_32(U32 N, F32 *matrix, F32 *vector, F32 *result)
                          "vbroadcastss (%2), %%ymm15                        \n\t"
                          "vfmadd231ps %%ymm15, %%ymm12, %%ymm0              \n\t"
 
-                         "vaddps (%3), %%ymm0, %%ymm0                       \n\t"
                          "vmovups %%ymm0,  (%3)                             \n\t"
 
                          "add $0x20, %1                                     \n\t"
@@ -510,7 +508,6 @@ void mvm_col_avx2_1_32(U32 N, F32 *matrix, F32 *vector, F32 *result)
                          "vbroadcastss (%2), %%xmm15                        \n\t"
                          "vfmadd231ps %%xmm15, %%xmm12, %%xmm0              \n\t"
 
-                         "vaddps (%3), %%xmm0, %%xmm0                       \n\t"
                          "vmovups %%xmm0,  (%3)                             \n\t"
 
                          "add $0x10, %1                                     \n\t"
@@ -526,7 +523,6 @@ void mvm_col_avx2_1_32(U32 N, F32 *matrix, F32 *vector, F32 *result)
                          "vbroadcastss (%2), %%xmm15                        \n\t"
                          "vfmadd231ps %%xmm15, %%xmm12, %%xmm0              \n\t"
 
-                         "vaddps (%3), %%xmm0, %%xmm0                       \n\t"
                          "vmovsd %%xmm0,  (%3)                              \n\t"
 
                          "add $0x8, %1                                      \n\t"

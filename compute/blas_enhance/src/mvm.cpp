@@ -21,6 +21,7 @@
 #ifdef _USE_X86
 #include "cpu/x86/blas_x86.h"
 #endif
+#include "uni.h"
 
 EE matrix_vector_multiply_tmp_bytes(
     TensorDesc matrixDesc, TensorDesc vectorDesc, U32 *bytes, Arch arch)
@@ -59,6 +60,11 @@ EE matrix_vector_multiply_transform_weight(
         memcpy(dst, src, tensorNumBytes(desc));
         (*descTran) = desc;
         ret = SUCCESS;
+    }
+#endif
+#ifdef _USE_X86
+    if (IS_X86_AVX2(arch)) {
+        ret = matrix_vector_multiply_transform_weight_x86(desc, src, descTran, dst);
     }
 #endif
     return ret;
@@ -113,7 +119,8 @@ EE matrix_vector_multiply(TensorDesc matrixDesc,
 #endif
 #ifdef _USE_X86
     } else if (IS_X86_AVX2(arch)) {
-        ret = mvm_x86(matrixRow, matrixColumn, matrixDataType, transpose, matrix, vector, result);
+        ret = mvm_x86(
+            matrixRow, matrixColumn, matrixDataType, matrixDataFormat, matrix, vector, result);
 #endif
 #ifdef _USE_NEON
     } else {

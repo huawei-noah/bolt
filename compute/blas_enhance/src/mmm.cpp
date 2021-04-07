@@ -91,9 +91,14 @@ EE matrix_matrix_multiply(TensorDesc matrixADesc,
 {
     if (bytes != 0 && tmp == nullptr) {
         CHECK_STATUS(NULL_POINTER);
+        return NULL_POINTER;
     }
     if (nullptr == matrixAData || nullptr == matrixBData || nullptr == matrixCData) {
         CHECK_STATUS(NULL_POINTER);
+        return NULL_POINTER;
+    }
+    if (tensorNumElements(matrixCDesc) == 0) {
+        return SUCCESS;
     }
 
     DataType matrixADataType, matrixBDataType, matrixCDataType;
@@ -116,7 +121,7 @@ EE matrix_matrix_multiply(TensorDesc matrixADesc,
     }
 
     bool transposeA = false, transposeB = false;
-    if (matrixADataFormat == DF_TRANSPOSE) {
+    if (matrixADataFormat == DF_TRANSPOSE || matrixADataFormat == DF_NKN8) {
         std::swap(matrixA_M, matrixA_K);
         transposeA = true;
     }
@@ -143,8 +148,8 @@ EE matrix_matrix_multiply(TensorDesc matrixADesc,
             ret = matrix_matrix_multiply_transform_rhs_x86(
                 matrixBDesc, matrixBData, &tranDescB, dataB);
         }
-        ret = mmm_x86(matrixC_N, matrixC_M, matrixA_K, matrixADataType, transposeA, matrixAData,
-            dataB, tmp, matrixCData);
+        ret = mmm_x86(matrixC_N, matrixC_M, matrixA_K, matrixADataType, matrixADataFormat,
+            matrixAData, dataB, tmp, matrixCData);
 #endif
 #ifdef _USE_NEON
     } else {

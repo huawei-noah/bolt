@@ -11,17 +11,8 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "sys.h"
-#include "error.h"
-#include "types.h"
 #include "gpu/mali/fp16/rnncell_mali_fp16.h"
-#define get_xDim(xDesc, xDim)                       \
-    {                                               \
-        if (xDesc.nDims == 2 || xDesc.df == DF_MTK) \
-            xDim = xDesc.dims[0];                   \
-        if (xDesc.df == DF_MKT)                     \
-            xDim = xDesc.dims[1];                   \
-    }
+#include "gpu/mali/cl/kernel_option/conv_direct_opt.h"
 
 inline EE rnncell_checkpara_mali_fp16(
     TensorDesc xDesc, TensorDesc filterDesc, TensorDesc biasDesc, TensorDesc hDesc)
@@ -50,11 +41,6 @@ inline EE rnncell_core_mali_fp16(GCLHandle_t handle,
     GCLMem_t output,
     ForwardRunInfoMali_t forwardRunInfo)
 {
-    UNUSED(biasDesc);
-    UNUSED(tmpBytes);
-    UNUSED(batchStrideX);
-    UNUSED(batchStrideH);
-    UNUSED(hDesc);
     U32 item_c = forwardRunInfo->best_c[0];
     U32 hDim = rnncellDesc.numOutput;
     U32 col = (rnncellDesc.numProjection > 0) ? rnncellDesc.numProjection : hDim;
@@ -62,10 +48,8 @@ inline EE rnncell_core_mali_fp16(GCLHandle_t handle,
     float fbias = rnncellDesc.forgetBias;
     float zonecell = rnncellDesc.zoneoutCell;
     float zoneout = rnncellDesc.zoneoutOutput;
-
     DataType dt = xDesc.dt;
-    U32 xDim;
-    get_xDim(xDesc, xDim);
+    U32 xDim = xDesc.dims[0];
     Mem xMem = currentX->mem;
     Mem sMem = state->mem;
     Mem xhMem;
@@ -83,6 +67,13 @@ inline EE rnncell_core_mali_fp16(GCLHandle_t handle,
     interSize = interNum * bytesOf(dt);
     CHECK_STATUS(gcl_create_sub_buffer(interSize, &offset, tmpBuf, &interMem));
 
+    U32 xw_str, xh_str, xh_off, xw_off;
+    U32 hw_str, hh_str, hh_off, hw_off;
+    CHECK_STATUS(gclmem_get_desc_padding(currentX->desc, &xw_str, &xh_str, NULL, &xw_off, &xh_off));
+    CHECK_STATUS(gclmem_get_desc_padding(output->desc, &hw_str, &hh_str, NULL, &hw_off, &hh_off));
+    U32 x_off = xh_off * xw_str + xw_off;
+    U32 h_off = hh_off * hw_str + hw_off;
+
     Mem tmpOut;
     Mem outbuf = output->mem;
     if (project) {
@@ -91,76 +82,58 @@ inline EE rnncell_core_mali_fp16(GCLHandle_t handle,
         U32 tmpOutSize = tmpOutNum * bytesOf(dt);
         CHECK_STATUS(gcl_create_sub_buffer(tmpOutSize, &offset, tmpBuf, &tmpOut));
         outbuf = tmpOut;
+        h_off = 0;
     }
 
-    U32 xh_str, xw_str, xh_off, xw_off;
-    get_gclmem_dim(currentX->desc, &xw_str, &xh_str, NULL, &xw_off, &xh_off);
-    if (xw_str != 1 || xh_str != 1 || xw_off != 0 || xh_off != 0) {
-        CHECK_STATUS(NOT_SUPPORTED);
-    }
-    U32 gs1 = xhNum;
-    U32 ls1 = 0;
+    U32 gs[3] = {xhNum, 1, 1};
+    U32 ls[3] = {0, 0, 0};
+    U32 ls_update[3] = {16, 1, 1};
     U32 dim = 1;
     Kernel kernel;
     CHECK_STATUS(gcl_create_kernel(handle, "rnncell_build_xh", &kernel));
-    CHECK_STATUS(gcl_set_kernelArgs(kernel, xDim, xDim + hDim, col, gs1, xMem, sMem, xhMem));
-    gcl_set_kernelVec(handle, kernel, dim, &gs1, &ls1, "rnncell_build_xh");
-#ifdef _DEBUG
-    CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, &gs1, &ls1, "rnncell_build_xh"));
-    handle->t_total += handle->t_execute;
-#endif
+    CHECK_STATUS(
+        gcl_set_kernelArgs(kernel, xDim, xDim + hDim, x_off, col, gs[0], xMem, sMem, xhMem));
+    gcl_set_kernelVec(handle, kernel, dim, gs, ls, "rnncell_build_xh");
 
     Mem fltbuf = filter[0].mem;
-    Mem biasMem = bias->mem;
-    char kernelname[128];
+    Mem biasMem = bias[0].mem;
+    char kernelName[128];
+    KernelOpt kernelOpt;
+    CHECK_STATUS(set_conv_direct_spe_fwhs1_opt_mali(
+        1, 1, 1, 1, item_c, false, true, ACTIVATION_NULL, DT_F16, kernelName, &kernelOpt));
+    CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
+
+    gs[0] = filterRow;
     U32 ic_str = filter[0].desc.stride[1];
-    sprintf(kernelname, "conv_direct_spe_fwhs1_%d", item_c);
-    gs1 = filterRow;
-    CHECK_STATUS(gcl_create_kernel(handle, kernelname, &kernel));
-    CHECK_STATUS(gcl_set_kernelArgs(kernel, 1, 1, ic_str, 0, 0, 1, 1, 0, 0, filterRow, 0, 0, gs1, 1,
-        xhMem, fltbuf, biasMem, interMem));
-    gcl_set_kernelVec(handle, kernel, dim, &gs1, &ls1, kernelname);
-#ifdef _DEBUG
-    CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, &gs1, &ls1, kernelname));
-    handle->t_total += handle->t_execute;
-#endif
+    CHECK_STATUS(gcl_set_kernelArgs(kernel, 1, 1, ic_str, 0, 0, 1, filterRow, 0, 0, filterRow, 0, 0,
+        gs[0], 1, xhMem, fltbuf, biasMem, interMem));
+    gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
 
     U8 noproject = (project) ? 0 : 1;
-    gs1 = (col + 3) / 4;
+    gs[0] = (col + 3) / 4;
     CHECK_STATUS(gcl_create_kernel(handle, "rnncell_update_res", &kernel));
     CHECK_STATUS(gcl_set_kernelArgs(
-        kernel, col, noproject, gs1, fbias, zonecell, zoneout, sMem, interMem, outbuf));
-    gcl_set_kernelVec(handle, kernel, dim, &gs1, &ls1, "rnncell_update_res");
-#ifdef _DEBUG
-    CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, &gs1, &ls1, "rnncell_update_res"));
-    handle->t_total += handle->t_execute;
-#endif
+        kernel, col, noproject, h_off, gs[0], fbias, zonecell, zoneout, sMem, interMem, outbuf));
+    gcl_set_kernelVec(handle, kernel, dim, gs, ls_update, "rnncell_update_res");
 
     if (project) {
         item_c = forwardRunInfo->best_c[1];
         filterRow = rnncellDesc.numOutput;
         ic_str = filter[1].desc.stride[1];
-        Mem fltbuf = filter[1].mem;
-        sprintf(kernelname, "conv_direct_spe_fwhs1_nobias_%d", item_c);
-        gs1 = filterRow;
-        CHECK_STATUS(gcl_create_kernel(handle, kernelname, &kernel));
-        CHECK_STATUS(gcl_set_kernelArgs(kernel, 1, 1, ic_str, 0, 0, 1, 1, 0, 0, filterRow, 0, 0,
-            gs1, 1, outbuf, fltbuf, biasMem, output->mem));
-        gcl_set_kernelVec(handle, kernel, dim, &gs1, &ls1, kernelname);
-#ifdef _DEBUG
-        CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, &gs1, &ls1, kernelname));
-        handle->t_total += handle->t_execute;
-#endif
-
-        gs1 = (hDim + 3) / 4;
+        fltbuf = filter[1].mem;
+        biasMem = bias[1].mem;
+        CHECK_STATUS(set_conv_direct_spe_fwhs1_opt_mali(
+            1, 1, 1, 1, item_c, true, true, ACTIVATION_NULL, DT_F16, kernelName, &kernelOpt));
+        gs[0] = filterRow;
+        CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
+        CHECK_STATUS(gcl_set_kernelArgs(kernel, 1, 1, ic_str, 0, 0, hh_str, hw_str, hh_off, hw_off,
+            filterRow, 0, 0, gs[0], 1, outbuf, fltbuf, biasMem, output->mem));
+        gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
+        gs[0] = (hDim + 3) / 4;
         CHECK_STATUS(gcl_create_kernel(handle, "rnncell_update_project_state", &kernel));
-        CHECK_STATUS(gcl_set_kernelArgs(kernel, hDim, col, gs1, zoneout, output->mem, sMem));
-        gcl_set_kernelVec(handle, kernel, dim, &gs1, &ls1, "rnncell_update_project_state");
-#ifdef _DEBUG
         CHECK_STATUS(
-            gcl_run_kernel(handle, kernel, dim, &gs1, &ls1, "rnncell_update_project_state"));
-        handle->t_total += handle->t_execute;
-#endif
+            gcl_set_kernelArgs(kernel, hDim, col, h_off, gs[0], zoneout, output->mem, sMem));
+        gcl_set_kernelVec(handle, kernel, dim, gs, ls_update, "rnncell_update_project_state");
     }
     return SUCCESS;
 }
@@ -175,8 +148,7 @@ EE rnncell_infer_forward_tmp_bytes_mali_fp16(TensorDesc inputDesc,
     UNUSED(outputDesc);
     U32 item_c = forwardRunInfo->best_c[0];
     DataType dt = inputDesc.dt;
-    U32 xDim;
-    get_xDim(inputDesc, xDim);
+    U32 xDim = inputDesc.dims[0];
     U32 hDim = rnncellDesc.numOutput;
     U32 xhNum = (xDim + hDim + item_c - 1) / item_c * item_c;
     U32 xhSize = (xhNum * bytesOf(dt) + 1023) / 1024 * 1024;

@@ -14,10 +14,7 @@
 #ifndef _H_MEMORYREUSEOPTIMIZER
 #define _H_MEMORYREUSEOPTIMIZER
 
-#include <vector>
-#include <string>
 #include <map>
-#include "model_tools.h"
 #include "OPOptimizer.hpp"
 
 class MemoryReuseOptimizer : public OPOptimizer {
@@ -153,7 +150,7 @@ class MemoryReuseOptimizer : public OPOptimizer {
                     spec->ops[i].tensor_positions[tensorID] = allocate(tensorName, deathTime, i);
                 }
 
-#ifdef _DEBUG
+#if 0  //def _DEBUG
                 for (U32 j = 0; j < spec->ops[i].num_inputs; j++) {
                     std::string inputName = spec->ops[i].input_tensors_name[j];
                     UNI_DEBUG_LOG("Input Tensor %s at %d\n", inputName.c_str(),

@@ -14,13 +14,15 @@
 #ifndef _H_THREAD_AFFINITY
 #define _H_THREAD_AFFINITY
 
+#ifndef _WIN32
 #include <sys/syscall.h>
+#include <sched.h>
+#endif
 #include <unistd.h>
 #include <string.h>
-#include <sched.h>
 #include "sys.h"
 #include "error.h"
-#include "tensor_desc.h"
+#include "data_type.h"
 
 #ifdef _USE_X86
 #define __cpuid(data, eaxIn, ecxIn)                                                   \
@@ -29,7 +31,7 @@
                          : "0"(eaxIn), "2"(ecxIn))
 #endif
 
-const int CPU_MAX_NUMBER = 64;
+const int CPU_MAX_NUMBER = 128;
 #ifdef _USE_OPENMP
 const int OMP_NUM_THREADS = 2;
 #else
@@ -76,50 +78,36 @@ inline const AffinityPolicy *AffinityPolicies()
 
 inline int get_cpus_num()
 {
-#ifdef _USE_IOS
-    return 6;
-#else
-    const int bufferSize = 1024;
-    char buffer[bufferSize];
-    FILE *fp = fopen("/proc/cpuinfo", "rb");
-    if (!fp) {
-        return 1;
-    }
-
     int cpuNum = 0;
-    while (!feof(fp)) {
-        char *status = fgets(buffer, bufferSize, fp);
-        if (!status) {
-            break;
-        }
-
-        if (memcmp(buffer, "processor", 9) == 0) {
-            cpuNum++;
-        }
+#if defined(__APPLE__)
+    cpuNum = 6;
+#elif defined(_WIN32)
+    cpuNum = atoi(getenv("NUMBER_OF_PROCESSORS"));
+#else
+    cpuNum = sysconf(_SC_NPROCESSORS_ONLN);
+#endif
+    if (cpuNum == 0) {
+        UNI_ERROR_LOG("can not get cpu processor number.\n");
     }
-    fclose(fp);
     if (cpuNum > CPU_MAX_NUMBER) {
         cpuNum = CPU_MAX_NUMBER;
     }
     return cpuNum;
-#endif
 }
 
 inline void get_cpus_arch(Arch *archs, int cpuNum)
 {
-#ifdef _USE_IOS
+#ifdef __APPLE__
     for (int cpuid = 0; cpuid < cpuNum; cpuid++) {
         archs[cpuid] = ARM_A76;
     }
     return;
 #endif
-    FILE *fp = fopen("/proc/cpuinfo", "rb");
     *archs = CPU_GENERAL;
-    if (!fp) {
-        return;
-    }
 
 #if defined(_USE_FP32) && defined(_USE_X86)
+    //_MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
+    _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
     U32 data[4] = {};
     const U32 &ebx = data[1];
     const U32 &ecx = data[2];
@@ -147,12 +135,16 @@ inline void get_cpus_arch(Arch *archs, int cpuNum)
     if (cpuArch & avx2) {
         archs[0] = X86_AVX2;
     } else {
-        UNI_WARNING_LOG("AVX2 is not available, use general implementation.");
+        UNI_WARNING_LOG("AVX2 is not available, use general implementation.\n");
     }
 #endif
 
     int cpuid = 0;
 #ifdef _USE_NEON
+    FILE *fp = fopen("/proc/cpuinfo", "rb");
+    if (!fp) {
+        return;
+    }
     const int bufferSize = 1024;
     char buffer[bufferSize];
     while (!feof(fp)) {
@@ -177,6 +169,9 @@ inline void get_cpus_arch(Arch *archs, int cpuNum)
                     break;
                 case 0xd03:
                     arch = ARM_V8;
+                    break;
+                case 0xd04:
+                    arch = ARM_V7;
                     break;
                 case 0xd05:
                     arch = ARM_A55;
@@ -236,11 +231,11 @@ inline void get_cpus_arch(Arch *archs, int cpuNum)
             archs[cpuid++] = arch;
         }
     }
+    fclose(fp);
 #endif
     for (; cpuid < cpuNum; cpuid++) {
         archs[cpuid] = archs[0];
     }
-    fclose(fp);
 }
 
 inline long get_cpu_freq(int cpuid)
@@ -371,12 +366,8 @@ inline void sort_cpus_by_arch_freq_occupy(
 
 inline int set_thread_affinity(int threadid, const int *cpuids, int num)
 {
-#ifndef _USE_IOS
-#ifdef __GLIBC__
-    pid_t tid = syscall(SYS_gettid);
-#else
-    pid_t tid = gettid();
-#endif
+#if !(defined(__APPLE__) || defined(_WIN32))
+    UNI_THREADID;
     cpu_set_t mask;
     CPU_ZERO(&mask);
     for (int i = 0; i < num; i++) {

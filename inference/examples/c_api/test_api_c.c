@@ -17,15 +17,18 @@
 #include <stdlib.h>
 #include "../api/c/bolt.h"
 #include <sys/time.h>
-#include <sys/mman.h>
-#include <sys/stat.h>
-#include <fcntl.h>
 #include <stdbool.h>
 #include <unistd.h>
 #ifdef _USE_FP16
 #include <arm_neon.h>
 typedef __fp16 F16;
 #endif
+char *modelPath = (char *)"";
+AFFINITY_TYPE affinity = CPU_HIGH_PERFORMANCE;
+char *algorithmMapPath = (char *)"./";
+int loopTime = 1;
+bool useFileStream = false;
+char *algorithmMapName = (char *)"";
 
 double ut_time_ms()
 {
@@ -35,17 +38,97 @@ double ut_time_ms()
     return time;
 }
 
-void print_help(char *argv[])
+void print_help()
 {
-    printf("usage: %s modelPath \n", argv[0]);
+    printf("-m <boltModelPath>:      the file path for .bolt model\n");
+    printf("-a <affinityPolicyName>: the arch used to run model, default to be "
+           "CPU_HIGH_PERFORMANCE\n");
+    printf("                         this value can be {CPU_HIGH_PERFORMANCE, CPU_LOW_POWER, "
+           "GPU}\n");
+    printf("-p <algorithmMapPath>:   the file path to store algoirthmFileName, default to be "
+           "program run path \n");
+    printf("-l <loopTime>:           the loopTime to run set_input + run + get_output, default to "
+           "be 1\n");
+    printf("-f <useFileStream>:      use file stream c api to read .bolt and algo file content, "
+           "default to be 0\n");
+    printf("                         this value can be {0, 1}\n");
+    printf("-n <algorithmMapName>:   the algorithm map name\n");
+    printf("                         you can get this file name from algorithmMapPath after run "
+           "this program once\n");
+}
+
+void parse_options(int argc, char *argv[])
+{
+    if (argc < 2) {
+        print_help();
+        exit(-1);
+    }
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--h") == 0 ||
+            strcmp(argv[i], "-help") == 0 || strcmp(argv[i], "--help") == 0) {
+            print_help();
+            exit(-1);
+        }
+    }
+    int option;
+    const char *optionstring = "m:a:p:l:f:n:";
+    while ((option = getopt(argc, argv, optionstring)) != -1) {
+        switch (option) {
+            case 'm':
+                printf("option is -m <boltModelPath>, value is: %s\n", optarg);
+                modelPath = optarg;
+                break;
+            case 'a':
+                printf("option is -a [affinityPolicyName], value is: %s\n", optarg);
+                if (strcmp(optarg, "CPU_HIGH_PERFORMANCE") == 0) {
+                    affinity = CPU_HIGH_PERFORMANCE;
+                } else if (strcmp(optarg, "CPU_LOW_POWER") == 0) {
+                    affinity = CPU_LOW_POWER;
+                } else if (strcmp(optarg, "GPU") == 0) {
+                    affinity = GPU;
+                } else {
+                    print_help();
+                    exit(-1);
+                }
+                break;
+            case 'p':
+                printf("option is -p [algorithmMapPath], value is: %s\n", optarg);
+                algorithmMapPath = optarg;
+                break;
+            case 'l':
+                printf("option is -l [loopTime], value is: %s\n", optarg);
+                loopTime = atoi(optarg);
+                break;
+            case 'f':
+                printf("option is -f [useFileStream], value is: %s\n", optarg);
+                useFileStream = atoi(optarg);
+                break;
+            case 'n':
+                printf("option is -n [algorithmMapName], value is: %s\n", optarg);
+                algorithmMapName = optarg;
+                break;
+            default:
+                print_help();
+                exit(-1);
+        }
+    }
+    fflush(stdout);
 }
 
 void classification(const char *modelPath,
     AFFINITY_TYPE affinity,
     DATA_TYPE dt,
     const char *algoPath,
+    int loopTime,
     bool useFileStream)
 {
+#ifdef _USE_FP16
+    if (affinity == GPU) {
+        char deviceName[128];
+        GetGpuDeviceName(deviceName);
+        printf("Current GPU DeviceName %s\n", deviceName);
+    }
+#endif
     DATA_TYPE precisionMode = dt;
     ModelHandle model_address;
     if (useFileStream) {
@@ -99,7 +182,7 @@ void classification(const char *modelPath,
         }
     }
 
-    PrepareModel(model_address, num_input, name, n, c, h, w, dt_input, df_input);
+    PrepareModel(model_address, num_input, (const char **)name, n, c, h, w, dt_input, df_input);
 
     ResultHandle model_result = AllocAllResultHandle(model_address);
     int model_result_num = GetNumOutputsFromResultHandle(model_result);
@@ -148,16 +231,15 @@ void classification(const char *modelPath,
     double totalTime = 0;
     double max_time = -DBL_MAX;
     double min_time = DBL_MAX;
-    int loop = 1;
 
     /*warm up*/
     for (int i = 0; i < 1; i++) {
-        RunModel(model_address, model_result, 1, name, (void **)input_ptr);
+        RunModel(model_address, model_result, num_input, (const char **)name, (void **)input_ptr);
     }
 
-    for (int i = 0; i < loop; i++) {
+    for (int i = 0; i < loopTime; i++) {
         double timeBegin = ut_time_ms();
-        RunModel(model_address, model_result, 1, name, (void **)input_ptr);
+        RunModel(model_address, model_result, num_input, (const char **)name, (void **)input_ptr);
         double timeEnd = ut_time_ms();
         double t = timeEnd - timeBegin;
         totalTime += t;
@@ -171,20 +253,31 @@ void classification(const char *modelPath,
 
     unsigned char **bolt_out_ptr =
         (unsigned char **)malloc(sizeof(unsigned char *) * model_result_num);
-    GetPtrFromResultHandle(model_result, model_result_num, outputNames, (void **)bolt_out_ptr,
-        output_n, output_c, output_h, output_w, dt_output, df_output);
+    GetOutputDataFromResultHandle(model_result, model_result_num, (void **)bolt_out_ptr);
     for (int i = 0; i < model_result_num; i++) {
         int length = output_n[i] * output_c[i] * output_h[i] * output_w[i];
+        printf("First 8 results of output %d:", i);
+        int j = (length > 8) ? 8 : length;
         switch (precisionMode) {
 #ifdef _USE_FP32
             case FP_32: {
-                memcpy(user_out_ptr[i], bolt_out_ptr, sizeof(float) * length);
+                memcpy(user_out_ptr[i], bolt_out_ptr[i], sizeof(float) * length);
+                float *val = (float *)user_out_ptr[i];
+                for (int k = 0; k < j; k++) {
+                    printf("%f ", val[k]);
+                }
+                printf("\n");
                 break;
             }
 #endif
 #ifdef _USE_FP16
             case FP_16: {
-                memcpy(user_out_ptr[i], bolt_out_ptr, sizeof(F16) * length);
+                memcpy(user_out_ptr[i], bolt_out_ptr[i], sizeof(F16) * length);
+                F16 *val = (F16 *)user_out_ptr[i];
+                for (int k = 0; k < j; k++) {
+                    printf("%f ", val[k]);
+                }
+                printf("\n");
                 break;
             }
 #endif
@@ -227,7 +320,7 @@ void classification(const char *modelPath,
     } else {
         printf("DeviceType = CPU, Model = %s\n", modelName);
     }
-    printf("avg_time: %lf ms\n", 1.0 * totalTime / loop);
+    printf("avg_time: %lf ms\n", 1.0 * totalTime / loopTime);
     printf("max_time: %lf ms\n", 1.0 * max_time);
     printf("min_time: %lf ms\n", 1.0 * min_time);
     fflush(stdout);
@@ -235,48 +328,49 @@ void classification(const char *modelPath,
 
 char *buildFileStream(const char *fileName)
 {
-    int fd;
-    int length;
-    struct stat ss;
-    fd = open(fileName, O_RDONLY);
-    if (-1 == fd) {
-        printf("Open file %s failed\n", fileName);
-        exit(-1);
+    FILE *file = fopen(fileName, "rb");
+    if (file == NULL) {
+        printf("Cannot open model file %s\n", fileName);
+        return NULL;
     }
-    if (-1 == fstat(fd, &ss)) {
-        printf("Can not get size from file %s\n", fileName);
-        exit(-1);
+
+    fseek(file, 0, SEEK_END);
+    size_t fileLength = ftell(file);
+    rewind(file);
+
+    char *bytes = (char *)malloc(sizeof(char) * fileLength);
+    if (bytes == NULL) {
+        printf("Memory allocate error.\n");
+        return NULL;
     }
-    length = ss.st_size;
-    char *bytes = (char *)mmap(NULL, length, PROT_READ, MAP_SHARED, fd, 0);
-    if (MAP_FAILED == bytes) {
-        printf("Map file %s failed\n", fileName);
-        exit(-1);
+
+    size_t result = fread(bytes, 1, fileLength, file);
+    if (result != fileLength) {
+        printf("Read model file %s error.\n", fileName);
+        return NULL;
     }
-    char *res = malloc(length);
-    memcpy(res, bytes, length);
-    munmap(bytes, length);
-    if (-1 != fd) {
-        close(fd);
-    }
-    return res;
+    fclose(file);
+    return bytes;
 }
 
-int main()
+int main(int argc, char *argv[])
 {
-    const char *mobilenet_v1_fp16_modelPath = "/data/local/tmp/xyf/model/mobilenet_v1_f16.bolt";
-    const char *algoPath = "./";
-    bool useFileStream = false;
-    classification(
-        mobilenet_v1_fp16_modelPath, CPU_HIGH_PERFORMANCE, FP_16, algoPath, useFileStream);
-    classification(mobilenet_v1_fp16_modelPath, GPU, FP_16, algoPath, useFileStream);
-
-    /*Test use filestream to read algoFile*/
-    useFileStream = true;
-    const char *modelFileStream = buildFileStream(mobilenet_v1_fp16_modelPath);
-    const char *algoFileStream = buildFileStream("./algorithmInfo_Mali_G52p_MOBILENET_2_4");
-    classification(modelFileStream, GPU, FP_16, algoFileStream, useFileStream);
-    free((void *)modelFileStream);
-    free((void *)algoFileStream);
+    parse_options(argc, argv);
+    if (!useFileStream) {
+        classification(modelPath, affinity, FP_16, algorithmMapPath, loopTime, useFileStream);
+    } else {
+        const char *modelFileStream = buildFileStream(modelPath);
+        char *algoInfo = malloc(strlen(algorithmMapPath) + strlen(algorithmMapName) + 1);
+        const char *algoFileStream = NULL;
+        if (strcmp(algorithmMapName, "") != 0) {
+            strcpy(algoInfo, algorithmMapPath);
+            strcpy(algoInfo, algorithmMapName);
+            algoFileStream = buildFileStream(algoInfo);
+        }
+        classification(modelFileStream, affinity, FP_16, algoFileStream, loopTime, useFileStream);
+        free((void *)algoInfo);
+        free((void *)modelFileStream);
+        free((void *)algoFileStream);
+    }
     return 0;
 }

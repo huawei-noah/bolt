@@ -12,7 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "sys.h"
-#include "types.h"
+
 #include "tensor_desc.h"
 #include "error.h"
 #include "gpu/mali/tensor_computing_mali.h"
@@ -45,15 +45,14 @@ EE transpose_infer_output_size_mali(TensorDesc inputDesc,
     tensorSelectGet(inputDesc, &idt, NULL, &in, &ic, &ih, &iw, &it);
     tensorSelectGet(*outputDesc, &odt, NULL, &on, &oc, &oh, &ow, &ot);
     if (gclmemInputDesc->byteSize == 0 || gclmemInputDesc->memFormat == DF_NCHW) {
-        CHECK_STATUS(
-            infer_gclmem_desc_nchw(iw, ih, ic * it, 0, 0, 0, 0, 0, idt, odt, gclmemInputDesc, NULL));
+        CHECK_STATUS(infer_gclmem_desc_nchw_3d(
+            iw, ih, ic, it, in, 0, 0, 0, 0, 0, 0, 0, idt, odt, gclmemInputDesc, NULL));
     } else {
-        ic = ALIGN(ic, 4);
-        CHECK_STATUS(infer_gclmem_desc_ncwhc4(
-            iw, ih, ic * it, 0, 0, 0, 0, 0, idt, odt, gclmemInputDesc, NULL));
+        CHECK_STATUS(infer_gclmem_desc_ncwhc4_3d(
+            iw, ih, ic, it, in, 0, 0, 0, 0, 0, 0, 0, idt, odt, gclmemInputDesc, NULL));
     }
-    CHECK_STATUS(
-        infer_gclmem_desc_nchw(0, 0, 0, 0, 0, ow, oh, oc * ot, idt, odt, NULL, gclmemOutputDesc));
+    CHECK_STATUS(infer_gclmem_desc_nchw_3d(
+        0, 0, 0, 0, 0, 0, 0, ow, oh, oc, ot, on, idt, odt, NULL, gclmemOutputDesc));
     return SUCCESS;
 }
 

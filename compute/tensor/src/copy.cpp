@@ -23,14 +23,9 @@ EE copy_infer_output_size(std::vector<Tensor *> inputTensor, ArchInfo_t archInfo
     EE ret = NOT_SUPPORTED;
     if (IS_MALI_GPU(arch)) {
 #ifdef _USE_MALI
-        std::vector<GCLMemDesc> gclmemInputDescs;
-        for (auto p : inputTensor) {
-            gclmemInputDescs.push_back(ocl_get_desc(*p));
-        }
+        std::vector<GCLMemDesc> gclmemInputDescs = ocl_get_descs_ptr(inputTensor);
         ret = copy_infer_output_size_mali(inputDesc, gclmemInputDescs.data());
-        for (U32 i = 0; i < inputTensor.size(); i++) {
-            ocl_set_desc(inputTensor[i], gclmemInputDescs[i]);
-        }
+        ocl_set_descs(inputTensor, gclmemInputDescs);
 #endif
     }
     return ret;

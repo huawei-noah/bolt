@@ -49,7 +49,7 @@ int reductionTest(int argc, char **argv, DataType dt)
     maskTensor.resize(maskDesc);
     Tensor outputTensor;
     Tensor outputTensorRef;
-    CHECK_STATUS(reduction_infer_output_size(&inputTensor, maskTensor, p, &outputTensor));
+    CHECK_STATUS(reduction_infer_output_size(&inputTensor, maskTensor, p, &outputTensor, &archInfo));
     outputTensor.alloc();
     outputTensorRef.resize(outputTensor.get_desc());
     outputTensorRef.alloc();

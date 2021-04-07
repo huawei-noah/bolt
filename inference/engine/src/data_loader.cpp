@@ -11,59 +11,18 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifdef _BUILD_TEST
-
 #include <algorithm>
 #include <string>
 #include <dirent.h>
-#include <cstddef>
-#include <jpeglib.h>
-#include <jerror.h>
+#include <sys/stat.h>
+#include <stddef.h>
 #include <stdlib.h>
-
-#include "image_processing.hpp"
 #include "data_loader.hpp"
 
-template <typename T>
-void init_one(U8 *memory, U32 len)
-{
-    T *data = (T *)memory;
-    for (U32 i = 0; i < len; i++) {
-        data[i] = 1;
-    }
-}
-
-template <typename T>
-void init_rand(U8 *memory, U32 len)
-{
-    T *data = (T *)memory;
-    for (U32 i = 0; i < len; i++) {
-        data[i] = (rand() % 1024) / (T)1024.0 - (T)0.5;
-    }
-}
-
-void get_files(std::string directoryName, std::vector<std::string> &files)
-{
-    if (directoryName.empty()) {
-        UNI_ERROR_LOG("null data\n");
-    }
-    DIR *directory = opendir(directoryName.c_str());
-    if (NULL == directory) {
-        UNI_ERROR_LOG("permission denied to access %s\n", directoryName.c_str());
-    }
-    struct dirent *file;
-    while ((file = readdir(directory)) != NULL) {
-        if (strcmp(file->d_name, ".") == 0 || strcmp(file->d_name, "..") == 0) {
-            continue;
-        }
-        if (file->d_type == DT_DIR) {
-            continue;
-        } else {
-            files.push_back(directoryName + "/" + file->d_name);
-        }
-    }
-    closedir(directory);
-}
+#ifdef _BUILD_TEST
+#include <jpeglib.h>
+#include <jerror.h>
+#include "image_processing.hpp"
 
 std::vector<Tensor> load_jpeg(
     std::string dataPath, std::vector<TensorDesc> imageDesc, ImageFormat ImageFormat, F32 scaleValue)
@@ -127,38 +86,62 @@ std::vector<Tensor> load_jpeg(
     return result;
 }
 
-std::vector<Tensor> load_fake_data(std::vector<TensorDesc> dataDesc)
+std::vector<std::string> load_image_with_scale(std::string directoryPath,
+    std::vector<TensorDesc> dataDesc,
+    std::vector<std::vector<Tensor>> *datas,
+    ImageFormat ImageFormat,
+    F32 scaleValue)
 {
-    std::vector<Tensor> result;
-    for (U32 index = 0; index < dataDesc.size(); index++) {
-        Tensor tensor = Tensor::alloc_sized<CPUMem>(dataDesc[index]);
-        U8 *ptr = (U8 *)((CpuMemory *)(tensor.get_memory()))->get_ptr();
-        switch (dataDesc[index].dt) {
-            case DT_F32: {
-                init_one<F32>(ptr, tensorNumElements(dataDesc[index]));
-                break;
-            }
-#ifdef __aarch64__
-            case DT_F16: {
-                init_one<F16>(ptr, tensorNumElements(dataDesc[index]));
-                break;
-            }
-#endif
-            case DT_U32: {
-                init_one<U32>(ptr, tensorNumElements(dataDesc[index]));
-                break;
-            }
-            case DT_I32: {
-                init_one<I32>(ptr, tensorNumElements(dataDesc[index]));
-                break;
-            }
-            default:
-                CHECK_STATUS(NOT_SUPPORTED);
-                break;
-        }
-        result.push_back(tensor);
+    std::vector<std::string> dataPaths;
+    if (directoryPath == "") {
+        std::vector<Tensor> data = load_fake_data(dataDesc);
+        (*datas).push_back(data);
+        dataPaths.push_back("fake data");
+        return dataPaths;
     }
-    return result;
+
+    std::vector<std::string> paths;
+    get_files(directoryPath, paths);
+    std::vector<Tensor> data;
+    for (U32 i = 0; i < paths.size(); i++) {
+        std::string dataPath = paths[i];
+        if (string_end_with(dataPath, ".jpg") || string_end_with(dataPath, ".jpeg")) {
+            data = load_jpeg(dataPath, dataDesc, ImageFormat, scaleValue);
+        } else if (string_end_with(dataPath, ".txt")) {
+            data = load_txt(dataPath, dataDesc);
+        } else {
+            UNI_ERROR_LOG("can not load jpeg data %s\n", dataPath.c_str());
+        }
+        (*datas).push_back(data);
+        dataPaths.push_back(dataPath);
+    }
+    return dataPaths;
+}
+#endif
+
+void get_files(std::string directoryName, std::vector<std::string> &files)
+{
+    if (directoryName.empty()) {
+        UNI_ERROR_LOG("null data\n");
+    }
+    DIR *directory = opendir(directoryName.c_str());
+    if (NULL == directory) {
+        UNI_ERROR_LOG("permission denied to access %s\n", directoryName.c_str());
+    }
+    struct dirent *file;
+    while ((file = readdir(directory)) != NULL) {
+        if (strcmp(file->d_name, ".") == 0 || strcmp(file->d_name, "..") == 0) {
+            continue;
+        }
+        struct stat st;
+        stat(file->d_name, &st);
+        if (S_ISDIR(st.st_mode)) {
+            continue;
+        } else {
+            files.push_back(directoryName + "/" + file->d_name);
+        }
+    }
+    closedir(directory);
 }
 
 Tensor fscanfReadData(FILE *f, TensorDesc desc)
@@ -207,6 +190,18 @@ Tensor fscanfReadData(FILE *f, TensorDesc desc)
     return tensor;
 }
 
+std::vector<Tensor> load_fake_data(std::vector<TensorDesc> dataDesc)
+{
+    std::vector<Tensor> result;
+    for (U32 index = 0; index < dataDesc.size(); index++) {
+        Tensor tensor = Tensor::alloc_sized<CPUMem>(dataDesc[index]);
+        U8 *ptr = (U8 *)((CpuMemory *)(tensor.get_memory()))->get_ptr();
+        UNI_INIT(tensorNumElements(dataDesc[index]), dataDesc[index].dt, 1, ptr);
+        result.push_back(tensor);
+    }
+    return result;
+}
+
 std::vector<Tensor> load_txt(std::string dataPath, std::vector<TensorDesc> dataDesc)
 {
     std::vector<Tensor> result;
@@ -232,7 +227,6 @@ std::vector<Tensor> load_seq(std::string dataPath, std::vector<TensorDesc> dataD
         for (U32 j = 1; j < sequenceDesc.nDims; j++) {
             sequenceDesc.dims[j] = 1;
         }
-
         result.push_back(fscanfReadData(f, sequenceDesc));
     }
     fclose(f);
@@ -315,63 +309,3 @@ std::vector<std::string> load_data(std::string directoryPath,
     }
     return dataPaths;
 }
-
-std::vector<std::string> load_image_with_scale(std::string directoryPath,
-    std::vector<TensorDesc> dataDesc,
-    std::vector<std::vector<Tensor>> *datas,
-    ImageFormat ImageFormat,
-    F32 scaleValue)
-{
-    std::vector<std::string> dataPaths;
-    if (directoryPath == "") {
-        std::vector<Tensor> data = load_fake_data(dataDesc);
-        (*datas).push_back(data);
-        dataPaths.push_back("fake data");
-        return dataPaths;
-    }
-
-    std::vector<std::string> paths;
-    get_files(directoryPath, paths);
-    std::vector<Tensor> data;
-    for (U32 i = 0; i < paths.size(); i++) {
-        std::string dataPath = paths[i];
-        if (string_end_with(dataPath, ".jpg") || string_end_with(dataPath, ".jpeg")) {
-            data = load_jpeg(dataPath, dataDesc, ImageFormat, scaleValue);
-        } else if (string_end_with(dataPath, ".txt")) {
-            data = load_txt(dataPath, dataDesc);
-        } else {
-            UNI_ERROR_LOG("can not load jpeg data %s\n", dataPath.c_str());
-        }
-        (*datas).push_back(data);
-        dataPaths.push_back(dataPath);
-    }
-    return dataPaths;
-}
-
-std::vector<std::string> load_bin_with_type(std::string directoryPath,
-    std::vector<TensorDesc> dataDesc,
-    std::vector<std::vector<Tensor>> *datas,
-    std::vector<DataType> sourceDataType)
-{
-    std::vector<std::string> dataPaths;
-    if (directoryPath == "") {
-        std::vector<Tensor> data = load_fake_data(dataDesc);
-        (*datas).push_back(data);
-        dataPaths.push_back("fake data");
-        return dataPaths;
-    }
-
-    std::vector<std::string> paths;
-    get_files(directoryPath, paths);
-    std::vector<Tensor> data;
-    for (U32 i = 0; i < paths.size(); i++) {
-        std::string dataPath = paths[i];
-        if (string_end_with(dataPath, ".bin")) {
-            data = load_bin(dataPath, sourceDataType, dataDesc);
-            (*datas).push_back(data);
-            dataPaths.push_back(dataPath);
-        }
-    }
-    return dataPaths;
-}
-#endif

@@ -11,8 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string.h>
-#include <float.h>
 #include "cpu/arm/tensor_computing_arm.h"
 #ifdef _USE_FP32
 #include "cpu/arm/fp32/tensor_computing_fp32.h"
@@ -26,12 +24,13 @@
 #ifdef _USE_FP16
 #include "cpu/arm/bnn/tensor_computing_bnn.h"
 #endif
+#include "tensor_transpose.h"
 #include "ut_util.h"
 
 EE convolution_infer_forward_algorithm_arm(TensorDesc inputDesc,
     TensorDesc filterDesc,
     TensorDesc outputDesc,
-    ConvolutionParamSpec convParamSpec,
+    ConvolutionParamSpec p,
     ConvolutionPolicy policy,
     ConvolutionForwardAlgorithm *algorithm,
     DataType targetDataType)
@@ -48,28 +47,30 @@ EE convolution_infer_forward_algorithm_arm(TensorDesc inputDesc,
     if (policy == CONVOLUTION_FASTEST) {
         DataType idt, fdt;
         DataFormat idf, fdf;
-        U32 in, ic, ih, iw;
-        U32 fn, fc, fh, fw;
-        CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-        CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-        U32 group = convParamSpec.group;
-        U32 strideH = convParamSpec.stride_h;
-        U32 strideW = convParamSpec.stride_w;
-        U32 paddingT = convParamSpec.padding_top;
-        U32 paddingB = convParamSpec.padding_bottom;
-        U32 paddingL = convParamSpec.padding_left;
-        U32 paddingR = convParamSpec.padding_right;
-        U32 dilateH = convParamSpec.dilatedRate_h;
-        U32 dilateW = convParamSpec.dilatedRate_w;
-        if (dilateH > 1 || dilateW > 1) {
+        U32 in, ic, it, ih, iw;
+        U32 fn, fc, ft, fh, fw;
+        if (tensorIs4d(inputDesc)) {
+            CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+            CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
+            it = ft = 1;
+            p.dilatedRate_t = p.stride_t = 1;
+            p.padding_before = p.padding_after = 0;
+        } else if (tensorIs5d(inputDesc)) {
+            CHECK_STATUS(tensor5dGet(inputDesc, &idt, &idf, &in, &ic, &it, &ih, &iw));
+            CHECK_STATUS(tensor5dGet(filterDesc, &fdt, &fdf, &fn, &fc, &ft, &fh, &fw));
+        } else {
+            return NOT_SUPPORTED;
+        }
+        if (p.dilatedRate_t > 1 || p.dilatedRate_h > 1 || p.dilatedRate_w > 1) {
             *algorithm = CONVOLUTION_ALGORITHM_GEMM;
             return SUCCESS;
         }
 
-        if ((idf != DF_NCHWC8 || ic / group % 8 != 0) && DT_I8 != idt) {
+        if ((idf != DF_NCHWC8 || ic / p.group % 8 != 0) && DT_I8 != idt) {
             *algorithm = CONVOLUTION_ALGORITHM_GEMM_ICNCHW;
-        } else if (fh == 3 && fw == 3 && strideH == 1 && strideW == 1 && paddingT == 1 &&
-            paddingB == 1 && paddingL == 1 && paddingR == 1) {
+        } else if (ft == 1 && fh == 3 && fw == 3 && p.stride_t == 1 && p.stride_h == 1 &&
+            p.stride_w == 1 && p.padding_before == 0 && p.padding_after == 0 && p.padding_top == 1 &&
+            p.padding_bottom == 1 && p.padding_left == 1 && p.padding_right == 1) {
             *algorithm = CONVOLUTION_ALGORITHM_WINOGRAD;
         } else {
             *algorithm = CONVOLUTION_ALGORITHM_GEMM;
@@ -107,10 +108,10 @@ EE convolution_infer_forward_algorithm_arm(TensorDesc inputDesc,
         for (U32 i = 0; i < convolutionAlgorithms.size(); i++) {
             U32 bytes = 0;
             CHECK_STATUS(convolution_transform_filter_bytes_arm(
-                filterDesc, convParamSpec, convolutionAlgorithms[i], &bytes));
+                filterDesc, p, convolutionAlgorithms[i], &bytes));
             filterBytes = (bytes > filterBytes) ? bytes : filterBytes;
-            CHECK_STATUS(convolution_infer_forward_tmp_bytes_arm(inputDesc, filterDesc, outputDesc,
-                convParamSpec, convolutionAlgorithms[i], &bytes));
+            CHECK_STATUS(convolution_infer_forward_tmp_bytes_arm(
+                inputDesc, filterDesc, outputDesc, p, convolutionAlgorithms[i], &bytes));
             tmpBytes = (bytes > tmpBytes) ? bytes : tmpBytes;
         }
         TensorDesc biasDesc = tensor1d(filterDesc.dt, outputDesc.dims[3]);
@@ -129,16 +130,16 @@ EE convolution_infer_forward_algorithm_arm(TensorDesc inputDesc,
         activationDesc.value[0] = 0;
         for (U32 i = 0; i < convolutionAlgorithms.size(); i++) {
             TensorDesc ftmDesc;
-            CHECK_STATUS(convolution_transform_filter_arm(filterDesc, filter, convParamSpec,
-                convolutionAlgorithms[i], &ftmDesc, filterTransformed));
+            CHECK_STATUS(convolution_transform_filter_arm(
+                filterDesc, filter, p, convolutionAlgorithms[i], &ftmDesc, filterTransformed));
 
             memset(tmp, 0, tmpBytes);
             double timeStart = ut_time_ms();
-            CHECK_STATUS(convolution_arm(inputDesc, input, ftmDesc, filterTransformed,
-                convParamSpec, convolutionAlgorithms[i], scaleDesc, scale, biasDesc, bias, tmpBytes,
-                tmp, outputDesc, output, activationDesc, ARM_A76));
+            CHECK_STATUS(convolution_arm(inputDesc, input, ftmDesc, filterTransformed, p,
+                convolutionAlgorithms[i], scaleDesc, scale, biasDesc, bias, tmpBytes, tmp,
+                outputDesc, output, activationDesc, ARM_A76));
             double timeEnd = ut_time_ms();
-            double timeMin = FLT_MAX;
+            double timeMin = INT_MAX;
             if (timeMin > timeEnd - timeStart) {
                 timeMin = timeEnd - timeStart;
                 algorithmIndex = i;
@@ -167,12 +168,17 @@ EE convolution_transform_filter_bytes_arm(TensorDesc filterDesc,
     if (nullptr == bytes) {
         CHECK_STATUS(NULL_POINTER);
     }
-    EE ret = SUCCESS;
-
     DataType fdt;
     DataFormat fdf;
-    U32 fn, fc, fh, fw;
-    CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
+    U32 fn, fc, ft, fh, fw;
+    if (tensorIs4d(filterDesc)) {
+        CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
+        ft = 1;
+    } else if (tensorIs5d(filterDesc)) {
+        CHECK_STATUS(tensor5dGet(filterDesc, &fdt, &fdf, &fn, &fc, &ft, &fh, &fw));
+    } else {
+        return NOT_SUPPORTED;
+    }
     U32 fnAlignSize = 8;
     if (filterDesc.dt == DT_F16) {
         fnAlignSize = 16;
@@ -180,24 +186,26 @@ EE convolution_transform_filter_bytes_arm(TensorDesc filterDesc,
     U32 fnGroupSize = fn / convParamSpec.group;
     U32 fnPadding = (fnGroupSize / fnAlignSize + ((fnGroupSize % fnAlignSize) == 0 ? 0 : 1)) *
         fnAlignSize * convParamSpec.group;
+    EE ret = SUCCESS;
     switch (algorithm) {
         case CONVOLUTION_ALGORITHM_WINOGRAD:
             *bytes = fnPadding * fc * 6 * 6;
             break;
         case CONVOLUTION_ALGORITHM_DIRECT:
-            *bytes = fnPadding * fc * fh * fw;
+            *bytes = fnPadding * fc * ft * fh * fw;
             break;
         case CONVOLUTION_ALGORITHM_GEMM:
-            *bytes = fnPadding * fc * fh * fw;
+            *bytes = fnPadding * fc * ft * fh * fw;
             break;
         case CONVOLUTION_ALGORITHM_GEMM_ICNCHW:
-            *bytes = fnPadding * fc * fh * fw;
+            *bytes = fnPadding * fc * ft * fh * fw;
             break;
         case CONVOLUTION_ALGORITHM_BNN:
-            *bytes = fnPadding * fc * fh * fw;
+            *bytes = fnPadding * fc * ft * fh * fw;
             break;
         default:
-            return NOT_SUPPORTED;
+            ret = NOT_SUPPORTED;
+            break;
     }
     *bytes *= bytesOf(fdt);
 
@@ -274,28 +282,36 @@ EE convolution_transform_filter_arm(TensorDesc filterDesc,
 EE convolution_infer_forward_tmp_bytes_arm(TensorDesc inputDesc,
     TensorDesc filterDesc,
     TensorDesc outputDesc,
-    ConvolutionParamSpec convParamSpec,
+    ConvolutionParamSpec p,
     ConvolutionForwardAlgorithm algorithm,
     U32 *bytes)
 {
     if (nullptr == bytes) {
         CHECK_STATUS(NULL_POINTER);
     }
+    EE ret = SUCCESS;
     DataType idt, fdt, odt;
     DataFormat idf, fdf, odf;
-    U32 in, ic, ih, iw;
-    U32 fn, fc, fh, fw;
-    U32 on, oc, oh, ow;
-    CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-    CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
-    U32 paddingT = convParamSpec.padding_top;
-    U32 paddingB = convParamSpec.padding_bottom;
-    U32 paddingL = convParamSpec.padding_left;
-    U32 paddingR = convParamSpec.padding_right;
-
-    U32 ih_pad = ih + paddingT + paddingB;
-    U32 iw_pad = iw + paddingL + paddingR;
+    U32 in, ic, it, ih, iw;
+    U32 fn, fc, ft, fh, fw;
+    U32 on, oc, ot, oh, ow;
+    if (tensorIs4d(inputDesc)) {
+        CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+        CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
+        CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
+        it = ft = ot = 1;
+        p.dilatedRate_t = p.stride_t = 1;
+        p.padding_before = p.padding_after = 0;
+    } else if (tensorIs5d(inputDesc)) {
+        CHECK_STATUS(tensor5dGet(inputDesc, &idt, &idf, &in, &ic, &it, &ih, &iw));
+        CHECK_STATUS(tensor5dGet(filterDesc, &fdt, &fdf, &fn, &fc, &ft, &fh, &fw));
+        CHECK_STATUS(tensor5dGet(outputDesc, &odt, &odf, &on, &oc, &ot, &oh, &ow));
+    } else {
+        return NOT_SUPPORTED;
+    }
+    U32 it_pad = it + p.padding_before + p.padding_after;
+    U32 ih_pad = ih + p.padding_top + p.padding_bottom;
+    U32 iw_pad = iw + p.padding_left + p.padding_right;
     U32 tile_size = 0;
     switch (fdt) {
         case DT_F32:
@@ -318,38 +334,38 @@ EE convolution_infer_forward_tmp_bytes_arm(TensorDesc inputDesc,
             tile_size = 0;
             break;
         default:
-            return NOT_SUPPORTED;
+            ret = NOT_SUPPORTED;
+            break;
     }
-    EE ret = SUCCESS;
     U32 element_size = bytesOf(idt);
-    *bytes = (ic * ih_pad * iw_pad) * element_size;
+    *bytes = (ic * it_pad * ih_pad * iw_pad) * element_size;
     switch (algorithm) {
         case CONVOLUTION_ALGORITHM_DIRECT:
             break;
         case CONVOLUTION_ALGORITHM_GEMM:
-            *bytes += tile_size * fh * fw * ic * OMP_NUM_THREADS * element_size;
+            *bytes += tile_size * ft * fh * fw * ic * OMP_NUM_THREADS * element_size;
             if (fdt == DT_I8) {
-                *bytes += ic * ih * iw;
+                *bytes += ic * it * ih * iw;
             }
             if (odt == DT_I8) {
                 // scaled bias + results before quantization
-                *bytes += (oc + on * oc * oh * ow) * bytesOf(DT_I32);
+                *bytes += (oc + on * oc * ot * oh * ow) * bytesOf(DT_I32);
             }
             break;
         case CONVOLUTION_ALGORITHM_WINOGRAD: {
             U32 tile_h = (oh + 3) / 4;
             U32 tile_w = (ow + 3) / 4;
-            U32 pad_left = paddingL;
-            U32 pad_right = paddingR + (tile_w * 4 - ow);
-            U32 pad_top = paddingT;
-            U32 pad_bottom = paddingB + (tile_h * 4 - oh);
+            U32 pad_left = p.padding_left;
+            U32 pad_right = p.padding_right + (tile_w * 4 - ow);
+            U32 pad_top = p.padding_top;
+            U32 pad_bottom = p.padding_bottom + (tile_h * 4 - oh);
             ih_pad = ih + pad_top + pad_bottom;
             iw_pad = iw + pad_left + pad_right;
             *bytes = ic * ih_pad * iw_pad * element_size;
             if (fdt == DT_F32) {
-                *bytes += (ic + 8) * 6 * 6 * 12 * element_size;
+                *bytes += (ic + 8) * 6 * 6 * 12 * element_size * OMP_NUM_THREADS;
             } else if (fdt == DT_F16) {
-                *bytes += (ic + oc) * 6 * 6 * 8 * element_size;
+                *bytes += (ic + oc) * 6 * 6 * 8 * element_size * OMP_NUM_THREADS;
             } else if (fdt == DT_I8) {
                 // itm (int16 for int8 inputs) and otm (otm just contains o8 each time)
                 *bytes += (ic + 8) * 6 * 6 * 12 * bytesOf(DT_F16);
@@ -365,10 +381,10 @@ EE convolution_infer_forward_tmp_bytes_arm(TensorDesc inputDesc,
             break;
         }
         case CONVOLUTION_ALGORITHM_GEMM_ICNCHW:
-            *bytes += tile_size * fh * fw * ic * element_size;
+            *bytes += tile_size * ft * fh * fw * ic * OMP_NUM_THREADS * element_size;
             break;
         case CONVOLUTION_ALGORITHM_BNN:
-            *bytes += (8 * fh * fw * ic + ic * ih * iw) * element_size;
+            *bytes += (8 * ft * fh * fw * ic + ic * it * ih * iw) * element_size;
             *bytes /= 8;
             break;
         default:
@@ -382,7 +398,7 @@ EE convolution_infer_forward_tmp_bytes_arm(TensorDesc inputDesc,
     *bytes += 32;
 
     // pre data processing space for not complete NCHWC8 group convolution input
-    U32 icGroupSize = ic / convParamSpec.group;
+    U32 icGroupSize = ic / p.group;
     if (idf == DF_NCHWC8 && icGroupSize % 8 != 0) {
         *bytes += tensorNumBytes(inputDesc);
     }
@@ -393,7 +409,7 @@ EE convolution_arm(TensorDesc inputDesc,
     void *input,
     TensorDesc filterDesc,
     const void *filter,
-    ConvolutionParamSpec convParamSpec,
+    ConvolutionParamSpec p,
     ConvolutionForwardAlgorithm algorithm,
     TensorDesc scaleDesc,
     const void *scale,
@@ -408,12 +424,14 @@ EE convolution_arm(TensorDesc inputDesc,
 {
     UNUSED(scaleDesc);
     UNUSED(scale);
-    U32 group = convParamSpec.group;
+    U32 group = p.group;
     U32 batchAxis = inputDesc.nDims - 1;
     U32 dataChannelAxis = inputDesc.nDims - 2;
     U32 filterChannelAxis = filterDesc.nDims - 1;
     U32 biasChannelAxis = 0;
-    CHECK_REQUIREMENT(inputDesc.dims[batchAxis] == 1);
+    if (group > 1) {
+        CHECK_REQUIREMENT(inputDesc.dims[batchAxis] == 1);
+    }
     U32 icGroupSize = inputDesc.dims[dataChannelAxis] / group;
     // pre data processing space for not complete NCHWC8 group convolution input
     void *inputTransform;
@@ -446,40 +464,38 @@ EE convolution_arm(TensorDesc inputDesc,
 #ifdef _USE_FP32
             case DT_F32: {
                 ret = convolution_fp32(tmpInputDesc, (F32 *)tmpInput, tmpFilterDesc,
-                    (F32 *)tmpFilter, convParamSpec, algorithm, tmpBiasDesc, (F32 *)tmpBias,
-                    tmpBytes, tmp, tmpOutputDesc, (F32 *)tmpOutput, activationDesc, arch);
+                    (F32 *)tmpFilter, p, algorithm, tmpBiasDesc, (F32 *)tmpBias, tmpBytes, tmp,
+                    tmpOutputDesc, (F32 *)tmpOutput, activationDesc, arch);
                 break;
             }
 #endif
 #ifdef _USE_FP16
             case DT_F16: {
                 ret = convolution_fp16(tmpInputDesc, (F16 *)tmpInput, tmpFilterDesc,
-                    (F16 *)tmpFilter, convParamSpec, algorithm, tmpBiasDesc, (F16 *)tmpBias,
-                    tmpBytes, tmp, tmpOutputDesc, (F16 *)tmpOutput, activationDesc, arch);
+                    (F16 *)tmpFilter, p, algorithm, tmpBiasDesc, (F16 *)tmpBias, tmpBytes, tmp,
+                    tmpOutputDesc, (F16 *)tmpOutput, activationDesc, arch);
                 break;
             }
 #endif
 #ifdef _USE_INT8
             case DT_I8: {
                 ret = convolution_int8(tmpInputDesc, (INT8 *)tmpInput, tmpFilterDesc,
-                    (INT8 *)tmpFilter, (F16 *)scale, convParamSpec, algorithm, tmpBiasDesc,
-                    (F16 *)tmpBias, tmpBytes, tmp, tmpOutputDesc, tmpOutput, activationDesc, arch);
+                    (INT8 *)tmpFilter, (F16 *)scale, p, algorithm, tmpBiasDesc, (F16 *)tmpBias,
+                    tmpBytes, tmp, tmpOutputDesc, tmpOutput, activationDesc, arch);
                 break;
             }
 #endif
 #ifdef _USE_FP16
             case DT_BIN01: {
                 ret = convolution_bnn(tmpInputDesc, (F16 *)tmpInput, tmpFilterDesc,
-                    (BIN8 *)tmpFilter, convParamSpec, scaleDesc, (F16 *)scale, tmpBiasDesc,
-                    (F16 *)tmpBias, tmpBytes, tmp, tmpOutputDesc, (F16 *)tmpOutput, activationDesc,
-                    arch);
+                    (BIN8 *)tmpFilter, p, scaleDesc, (F16 *)scale, tmpBiasDesc, (F16 *)tmpBias,
+                    tmpBytes, tmp, tmpOutputDesc, (F16 *)tmpOutput, activationDesc, arch);
                 break;
             }
             case DT_BIN11: {
                 ret = convolution_bnn(tmpInputDesc, (F16 *)tmpInput, tmpFilterDesc,
-                    (BIN8 *)tmpFilter, convParamSpec, scaleDesc, (F16 *)scale, tmpBiasDesc,
-                    (F16 *)tmpBias, tmpBytes, tmp, tmpOutputDesc, (F16 *)tmpOutput, activationDesc,
-                    arch);
+                    (BIN8 *)tmpFilter, p, scaleDesc, (F16 *)scale, tmpBiasDesc, (F16 *)tmpBias,
+                    tmpBytes, tmp, tmpOutputDesc, (F16 *)tmpOutput, activationDesc, arch);
                 break;
             }
 #endif

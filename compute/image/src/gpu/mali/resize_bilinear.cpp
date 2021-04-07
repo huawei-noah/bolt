@@ -15,7 +15,7 @@
 #include "gpu/mali/fp16/resize_bilinear_mali_fp16.h"
 
 EE resize_infer_output_size_mali(TensorDesc inputDesc,
-    ResizeDesc resizeDesc,
+    DataType paramDT,
     void *params,
     TensorDesc *outputDesc,
     U32 *outputBytes,
@@ -33,7 +33,7 @@ EE resize_infer_output_size_mali(TensorDesc inputDesc,
     U32 in, ic, ih, iw;
     U32 oh, ow;
     CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    switch (resizeDesc.paramDT) {
+    switch (paramDT) {
         case DT_F32: {
             F32 *scales = (F32 *)params;
             oh = ih * scales[0];
@@ -66,7 +66,10 @@ inline EE resize_checkpara_mali(
     GCLHandle_t handle, TensorDesc inputDesc, GCLMem_t input, TensorDesc outputDesc, GCLMem_t output)
 {
     if (handle == nullptr || nullptr == input || nullptr == output) {
-        return NULL_POINTER;
+        CHECK_STATUS(NULL_POINTER);
+    }
+    if (input->desc.memFormat != output->desc.memFormat) {
+        CHECK_STATUS(NOT_SUPPORTED);
     }
     return SUCCESS;
 }

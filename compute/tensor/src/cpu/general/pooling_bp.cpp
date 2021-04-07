@@ -13,7 +13,7 @@
 
 #include <float.h>
 #include "error.h"
-#include "types.h"
+
 #include "cpu/general/tensor_computing_general.h"
 
 template <typename T>

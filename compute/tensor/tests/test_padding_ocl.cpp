@@ -52,11 +52,11 @@ int paddingTest(int argc, char **argv, DataType dt)
     U32 iw = atoi(argv[4]);
 
     // padding info
-    U32 h_fir = atoi(argv[7]);
-    U32 w_fir = atoi(argv[8]);
-    U32 h_sec = atoi(argv[11]);
-    U32 w_sec = atoi(argv[12]);
-    U32 mode = atoi(argv[13]);
+    U32 h_top = atoi(argv[5]);
+    U32 h_bot = atoi(argv[7]);
+    U32 w_lef = atoi(argv[6]);
+    U32 w_rig = atoi(argv[8]);
+    U32 mode = atoi(argv[9]);
 
     ArchInfo archInfo;
     archInfo.arch = MALI;
@@ -64,10 +64,10 @@ int paddingTest(int argc, char **argv, DataType dt)
     archInfo_org.arch = CPU_GENERAL;
     PadParamSpec padParamSpec;
 
-    padParamSpec.top = h_fir;
-    padParamSpec.bottom = h_sec;
-    padParamSpec.left = w_fir;
-    padParamSpec.right = w_sec;
+    padParamSpec.top = h_top;
+    padParamSpec.bottom = h_bot;
+    padParamSpec.left = w_lef;
+    padParamSpec.right = w_rig;
     padParamSpec.constant_value = 0.0;
     switch (mode) {
         case 0: {
@@ -100,6 +100,9 @@ int paddingTest(int argc, char **argv, DataType dt)
     U32 input_len = tensorNumElements(inputDescCPU);
     U8 *inputCPU = ut_input_v(input_len, dt, UT_INIT_RANDOM);
     U8 *outputGPU = NULL;
+    F16 *val = (F16 *)inputCPU;
+    for (U32 i = 0; i < input_len; i++)
+        val[i] = i;
 
     std::shared_ptr<GCLHandle> handleSharedPtr = OCLContext::getInstance().handle;
     GCLHandle_t handle = handleSharedPtr.get();
@@ -109,6 +112,10 @@ int paddingTest(int argc, char **argv, DataType dt)
     Tensor outputTensor = Tensor(OCLMem);
     Tensor tmpTensor = Tensor(OCLMem);
     inputTensor.resize(inputDescGPU);
+    U32 str[3] = {1, 1, 1};
+    U32 off[3] = {0, 0, 0};
+    GCLMemDesc inputMemDesc = gcl_mem_desc(str, off, DT_U8, DF_NCWHC4);
+    ocl_set_desc(&inputTensor, inputMemDesc);
 
     MaliPara maliPara;
     maliPara.handle = handle;
@@ -129,7 +136,7 @@ int paddingTest(int argc, char **argv, DataType dt)
     CHECK_STATUS(ocl_set_input(handle, input, inputDescGPU, inputCPU, tmpbuf, true));
     CHECK_STATUS(padding(inputTensor, padParamSpec, outputTensor, &archInfo));
     /*warp up*/
-    UNI_INFO_LOG("Warp up gpu:\n")
+    UNI_INFO_LOG("warm up gpu:\n")
     for (U32 i = 0; i < 2; i++) {
         CHECK_STATUS(gcl_run_kernelVec(handle));
     }

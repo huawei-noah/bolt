@@ -33,7 +33,7 @@ static void mvm_nkn32_template(U32 fn, U32 fk, const T *filterArray, T *input, T
 }
 
 template <typename T>
-static EE rnncell(TensorDesc xDesc,
+static EE lstmcell(TensorDesc xDesc,
     const void *currentX,
     const TensorDesc *filterDesc,
     const void **filter,
@@ -50,8 +50,8 @@ static EE rnncell(TensorDesc xDesc,
 {
     UNUSED(biasDesc);
     UNUSED(tmpBytes);
-    if (nullptr == currentX || nullptr == filter || nullptr == bias || nullptr == state ||
-        nullptr == tmp || nullptr == output) {
+    if (nullptr == filter || nullptr == bias || nullptr == state || nullptr == tmp ||
+        nullptr == output) {
         CHECK_STATUS(NULL_POINTER);
     }
 
@@ -97,8 +97,13 @@ static EE rnncell(TensorDesc xDesc,
     U32 currentHStride = column + hDim;
     for (U32 m = 0; m < batch; m++) {
         T *lastBatchH = lastHArray + m * lastHStride;
-        memcpy(xhArray, currentXArray + m * batchStrideX, xDim * sizeof(T));
-        memcpy(xhArray + xDim, lastBatchH, hDim * sizeof(T));
+        if (xDim > 0) {
+            memcpy(xhArray, currentXArray + m * batchStrideX, xDim * sizeof(T));
+            memcpy(xhArray + xDim, lastBatchH, hDim * sizeof(T));
+        } else {
+            intermediateH = tmpArray;
+            xhArray = lastBatchH;
+        }
 
         // MVM
         memcpy(intermediateH, bias[0], column * 4 * sizeof(T));
@@ -163,6 +168,159 @@ static EE rnncell(TensorDesc xDesc,
         }
     }
     return SUCCESS;
+}
+
+template <typename T>
+static EE grucell(TensorDesc xDesc,
+    const void *currentX,
+    const TensorDesc *filterDesc,
+    const void **filter,
+    const TensorDesc *biasDesc,
+    const void **bias,
+    void *state,
+    U32 tmpBytes,
+    void *tmp,
+    RNNParamSpec rnnParamSpec,
+    U32 batchStrideX,
+    U32 batchStrideH,
+    TensorDesc hDesc,
+    void *output)
+{
+    UNUSED(biasDesc);
+    UNUSED(tmpBytes);
+    if (nullptr == filter || nullptr == bias || nullptr == state || nullptr == tmp ||
+        nullptr == output) {
+        CHECK_STATUS(NULL_POINTER);
+    }
+
+    DataType idt, fdt, odt;
+    DataFormat idf, fdf, odf;
+    U32 in, ix;
+    U32 on, oh;
+    U32 fk, fn;
+    CHECK_STATUS(tensor2dGet(xDesc, &idt, &idf, &in, &ix));
+    CHECK_STATUS(tensor2dGet(filterDesc[0], &fdt, &fdf, &fn, &fk));
+    CHECK_STATUS(tensor2dGet(hDesc, &odt, &odf, &on, &oh));
+    if (fdf != DF_NKN32) {
+        CHECK_STATUS(NOT_MATCH);
+    }
+
+    U32 batch = in;
+    U32 xDim = ix;
+    U32 hDim = rnnParamSpec.numOutput;
+    I32 column = hDim;
+    ActivationMode activationMode = rnnParamSpec.activationMode;
+    if (activationMode != ACTIVATION_TANH) {
+        CHECK_STATUS(NOT_SUPPORTED);
+    }
+
+    if (!(idt == fdt && idt == odt)) {
+        CHECK_STATUS(NOT_MATCH);
+    }
+
+    const T *currentXArray = (const T *)currentX;
+    T *lastHArray = (T *)state;
+    T *tmpArray = (T *)tmp;
+    T *currentHArray = (T *)state;
+    T *outputArray = (T *)output;
+    T *xhArray = tmpArray;
+    T *intermediateH = xhArray + (xDim + hDim);
+    U32 lastHStride = hDim;
+    U32 currentHStride = hDim;
+    for (U32 m = 0; m < batch; m++) {
+        T *lastBatchH = lastHArray + m * lastHStride;
+        T *currentBatchH = currentHArray + m * currentHStride;
+        T *currentOutput = outputArray + m * batchStrideH;
+        if (xDim > 0) {
+            memcpy(xhArray, currentXArray + m * batchStrideX, xDim * sizeof(T));
+            memcpy(xhArray + xDim, lastBatchH, hDim * sizeof(T));
+        } else {
+            intermediateH = tmpArray;
+            xhArray = lastBatchH;
+            memcpy(currentOutput, lastBatchH, hDim * sizeof(T));
+        }
+
+        memcpy(intermediateH, bias[0], column * 2 * sizeof(T));
+        mvm_nkn32_template<T>(column * 2 / 32, fk, (const T *)filter[0], xhArray, intermediateH);
+        T *out_z = intermediateH;
+        T *out_r = out_z + column;
+        T *out_h = out_r + column;
+
+        for (I32 h = 0; h < column; h++) {
+            out_r[h] = 1.0 / (1.0 + exp(-out_r[h]));
+        }
+
+        if (rnnParamSpec.mode == RNN_GRU_LBR) {
+            T *h_x_b = (T *)bias[0] + column * 2;
+            T *h_h_b = (T *)bias[1];
+            memcpy(out_h, h_h_b, column * sizeof(T));
+            mvm_nkn32_template<T>(column / 32, hDim,
+                (const T *)filter[0] + column * 2 * fk + column * xDim, xhArray + xDim, out_h);
+            array_mul_template<T>(out_r, out_h, out_h, hDim);
+            if (xDim > 0) {
+                memcpy(out_r, h_x_b, column * sizeof(T));
+                mvm_nkn32_template<T>(
+                    column / 32, xDim, (const T *)filter[0] + column * 2 * fk, xhArray, out_r);
+                h_x_b = out_r;
+            }
+            array_add_template<T>(h_x_b, out_h, out_h, hDim);
+        } else {
+            array_mul_template<T>(out_r, xhArray + xDim, xhArray + xDim, hDim);
+            memcpy(out_h, (const T *)bias[0] + column * 2, column * sizeof(T));
+            mvm_nkn32_template<T>(
+                column / 32, fk, (const T *)filter[0] + column * 2 * fk, xhArray, out_h);
+        }
+        for (I32 h = 0; h < column; h++) {
+            out_z[h] = 1.0 / (1.0 + exp(-out_z[h]));
+            out_h[h] = tanh(out_h[h]);
+        }
+        if (xDim > 0) {
+            array_mul_template<T>(out_z, lastBatchH, out_r, column);
+        } else {
+            array_mul_template<T>(out_z, currentOutput, out_r, column);
+        }
+        array_scale_template<T>(out_z, out_z, column, -1, 1);
+        array_mul_template<T>(out_z, out_h, out_h, column);
+        array_add_template<T>(out_r, out_h, currentOutput, column);
+        memcpy(currentBatchH, currentOutput, sizeof(T) * hDim);
+    }
+    return SUCCESS;
+}
+
+template <typename T>
+static EE rnncell(TensorDesc xDesc,
+    const void *currentX,
+    const TensorDesc *filterDesc,
+    const void **filter,
+    const TensorDesc *biasDesc,
+    const void **bias,
+    void *state,
+    U32 tmpBytes,
+    void *tmp,
+    RNNParamSpec rnnParamSpec,
+    U32 batchStrideX,
+    U32 batchStrideH,
+    TensorDesc hDesc,
+    void *output)
+{
+    EE ret = SUCCESS;
+    switch (rnnParamSpec.mode) {
+        case RNN_GRU_LBR:
+        case RNN_GRU: {
+            ret = grucell<T>(xDesc, currentX, filterDesc, filter, biasDesc, bias, state, tmpBytes,
+                tmp, rnnParamSpec, batchStrideX, batchStrideH, hDesc, output);
+            break;
+        }
+        case RNN_LSTM: {
+            ret = lstmcell<T>(xDesc, currentX, filterDesc, filter, biasDesc, bias, state, tmpBytes,
+                tmp, rnnParamSpec, batchStrideX, batchStrideH, hDesc, output);
+            break;
+        }
+        default:
+            ret = NOT_SUPPORTED;
+            break;
+    }
+    return ret;
 }
 
 EE rnncell_general(TensorDesc xDesc,

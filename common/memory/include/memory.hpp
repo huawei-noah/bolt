@@ -16,6 +16,7 @@
 
 #include <string>
 #include "tensor_desc.h"
+#include "uni.h"
 
 typedef enum { OCLMem = 0, CPUMem = 1 } MemoryType;
 

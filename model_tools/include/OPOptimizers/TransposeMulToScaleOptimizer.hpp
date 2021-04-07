@@ -23,19 +23,27 @@ class TransposeMulToScaleOptimizer : public OPOptimizer {
         OperatorType queryOps[queryNum] = {OT_Transpose, OT_Reshape};
         bool hasOptimized = false;
         for (int i = 1; i < spec->num_operator_specs; i++) {
-            if (spec->ops[i].type == OT_Eltwise &&
+            if (spec->ops[i].type == OT_Eltwise && spec->ops[i].num_inputs == 2 &&
                 spec->ops[i].ps.eltwise_spec.elt_mode == ELTWISE_PROD) {
                 int mulOpIndex = i;
-                int transposeOpIndex00 =
-                    searchOperatorIndexBackward(spec, mulOpIndex - 1, queryOps, queryNum, false);
-                if (transposeOpIndex00 == -1) {
+                std::vector<std::pair<int, int>> prevOpIndexes = searchOperatorIndexByOutput(
+                    spec, spec->ops[mulOpIndex].input_tensors_name[0], 0, mulOpIndex);
+                if (prevOpIndexes.size() != 1 ||
+                    (OT_Transpose != spec->ops[prevOpIndexes[0].first].type &&
+                        OT_Reshape != spec->ops[prevOpIndexes[0].first].type)) {
                     continue;
                 }
-                int transposeOpIndex01 = searchOperatorIndexBackward(
-                    spec, transposeOpIndex00 - 1, queryOps, queryNum, false);
-                if (transposeOpIndex01 == -1) {
+                int transposeOpIndex00 = prevOpIndexes[0].first;
+
+                prevOpIndexes = searchOperatorIndexByOutput(
+                    spec, spec->ops[mulOpIndex].input_tensors_name[1], 0, mulOpIndex);
+                if (prevOpIndexes.size() != 1 ||
+                    (OT_Transpose != spec->ops[prevOpIndexes[0].first].type &&
+                        OT_Reshape != spec->ops[prevOpIndexes[0].first].type)) {
                     continue;
                 }
+                int transposeOpIndex01 = prevOpIndexes[0].first;
+
                 int transposeOpIndex10 =
                     searchOperatorIndexForward(spec, mulOpIndex + 1, queryOps, queryNum, false);
                 if (transposeOpIndex10 == -1) {

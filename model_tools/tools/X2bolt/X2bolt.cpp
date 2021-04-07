@@ -14,8 +14,7 @@
 #include <iostream>
 #include <getopt.h>
 #include "online_conversion.h"
-#include "model_tools.h"
-#include "model_serialize_deserialize.hpp"
+#include "model_print.h"
 
 void print_X2bolt_usage()
 {
@@ -23,12 +22,13 @@ void print_X2bolt_usage()
               << ") "
                  "converter usage: (<> must be filled in with exact value; [] is "
                  "optional)\n"
-                 "./X2bolt -d <modelDirectory> -m <modelName> -i <inferencePrecision> -v -s -h "
+                 "./X2bolt -d <modelDirectory> -m <modelFileName> -i <inferencePrecision> -v -s -h "
                  "-r [removeOperatorNum]\n"
                  "Parameter description:\n"
                  "1. -d <modelDirectory>: The directory where your model is stored.\n"
-                 "2. -m <modelName>: The name of your model. "
-                 "Tips: If your model trained from caffe, please ensure the names of prototxt and "
+                 "2. -m <modelFileName>: The name of your model file without file suffix.\n"
+                 "Tips: If your model trained from caffe, please ensure the model file prefix of "
+                 "prototxt and "
                  "caffemodel are the same, otherwise error occurs.\n"
                  "3. -i <inferencePrecision>: The inference precision. Currently, you can only "
                  "choose one of "
@@ -63,69 +63,69 @@ int main(int argc, char *argv[])
             return -1;
         }
     }
-    CHECK_REQUIREMENT(argc >= 4);
-    char *storagePath = (char *)" ";
-    char *modelName = (char *)" ";
-    char *inferPrecision = (char *)" ";
+    const char *storagePath = "./";
+    const char *modelFileName = nullptr;
+    const char *inferPrecision = "FP32";
     I32 removeProcessOpsNum = 0;
-    bool show_model_info = false;
+    bool printModel = false;
 
     int option;
     const char *optionstring = "d:m:i:r:s";
     while ((option = getopt(argc, argv, optionstring)) != -1) {
         switch (option) {
             case 'd':
-                std::cout << "option is -d <modelDirectory>, value is: " << optarg << std::endl;
                 storagePath = optarg;
+                std::cout << "option is -d <modelDirectory>, value is: " << storagePath << std::endl;
                 break;
             case 'm':
-                std::cout << "option is -m <modelName>, value is: " << optarg << std::endl;
-                modelName = optarg;
+                modelFileName = optarg;
+                std::cout << "option is -m <modelFileName>, value is: " << modelFileName
+                          << std::endl;
                 break;
             case 'i':
-                std::cout << "option is -i <inferencePrecision>, value is: " << optarg << std::endl;
                 inferPrecision = optarg;
+                std::cout << "option is -i <inferencePrecision>, value is: " << inferPrecision
+                          << std::endl;
                 break;
             case 'r':
-                std::cout << "option is -r [removeOperatorNum], value is: " << optarg << std::endl;
                 removeProcessOpsNum = atoi(optarg);
+                std::cout << "option is -r [removeOperatorNum], value is: " << removeProcessOpsNum
+                          << std::endl;
                 break;
             case 's':
-                show_model_info = true;
+                printModel = true;
                 break;
             default:
-                std::cerr << "Input option gets error. Please check the params meticulously."
+                std::cerr << "Input option gets error. Please check the params meticulously.\n"
                           << std::endl;
                 print_X2bolt_usage();
-                return -1;
+                exit(1);
         }
+    }
+    if (modelFileName == nullptr) {
+        UNI_ERROR_LOG("Please use -m <modelFileName> option to give an valid model file name "
+                      "without file suffix.\n");
     }
 
     void *onlineModel =
-        OnlineModelConversion(storagePath, modelName, inferPrecision, removeProcessOpsNum);
+        OnlineModelConversion(storagePath, modelFileName, inferPrecision, removeProcessOpsNum);
     ModelSpec *ms = (ModelSpec *)onlineModel;
 
-    std::string modelStorePath = std::string(storagePath) + "/" + std::string(modelName);
-    if (0) {
-#if _USE_FP32
-    } else if (std::string(inferPrecision).compare(std::string("PTQ")) == 0) {
+    std::string modelStorePath = std::string(storagePath) + "/" + std::string(modelFileName);
+    if (std::string(inferPrecision).compare(std::string("PTQ")) == 0) {
         modelStorePath += std::string("_ptq_input.bolt");
-#endif
-#if _USE_FP16
     } else if (std::string(inferPrecision).compare(std::string("FP16")) == 0) {
         modelStorePath += std::string("_f16.bolt");
-#endif
-#if _USE_FP32
     } else if (std::string(inferPrecision).compare(std::string("FP32")) == 0) {
         modelStorePath += std::string("_f32.bolt");
-#endif
     } else {
-        std::cerr << "NOT SUPPORT THIS PRECISION " << inferPrecision << std::endl;
-        return -1;
+        UNI_ERROR_LOG("Unknown converter data precision: %s.\n", inferPrecision);
+        exit(1);
     }
+    UNI_INFO_LOG("Write bolt model to %s.\n", modelStorePath.c_str());
     CHECK_STATUS(serialize_model_to_file(ms, modelStorePath.c_str()));
     OnlineModelReclaim(onlineModel);
-    if (show_model_info) {
+    if (printModel) {
         ModelSpec resultMs;
         CHECK_STATUS(deserialize_model_from_file(modelStorePath.c_str(), &resultMs));
         print_header(resultMs);

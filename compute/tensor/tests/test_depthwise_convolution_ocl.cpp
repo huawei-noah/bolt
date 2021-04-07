@@ -54,8 +54,8 @@ inline GCLMem_t alloc_desc(Tensor tensor, GCLMemDesc desc)
 int depthwiseConvolutionTest(int argc, char *argv[], DataFormat filterDataFormat, DataType dt)
 {
     U32 in, ic, ih, iw;
-    U32 fn, fc, fh, fw;
-    U32 group, stride, padding;
+    U32 fn, fc, fh, fw, fhd, fwd;
+    U32 group, stride, padding, dila;
     U32 on, oc, oh, ow;
     U32 biasNum;
     ArchInfo archInfo;
@@ -74,8 +74,9 @@ int depthwiseConvolutionTest(int argc, char *argv[], DataFormat filterDataFormat
     group = 1;
     stride = 1;
     padding = 1;
+    dila = 1;
 
-    if (argc == 9) {
+    if (argc == 9 || argc == 10) {
         ic = atoi(argv[1]);
         ih = atoi(argv[2]);
         iw = atoi(argv[3]);
@@ -84,16 +85,22 @@ int depthwiseConvolutionTest(int argc, char *argv[], DataFormat filterDataFormat
         fw = atoi(argv[6]);
         stride = atoi(argv[7]);
         padding = atoi(argv[8]);
+        if (argc == 10) {
+            dila = atoi(argv[9]);
+        }
     }
 
+    fhd = (fh - 1) * dila + 1;
+    fwd = (fw - 1) * dila + 1;
     on = 1;
     oc = fc;
-    oh = (ih + padding * 2 - fh) / stride + 1;
-    ow = (iw + padding * 2 - fw) / stride + 1;
+    oh = (ih + padding * 2 - fhd) / stride + 1;
+    ow = (iw + padding * 2 - fwd) / stride + 1;
     ActivationParamSpec dwActivationParamSpec;
     dwActivationParamSpec.mode = ACTIVATION_NULL;
     ConvolutionParamSpec convParamSpec = createConvolutionParamSpec(group, 1, fh, fw, 1, stride,
-        stride, 0, 0, padding, padding, padding, padding, 1, 1, 1, fn, Convolution_Depthwise);
+        stride, 0, 0, padding, padding, padding, padding, dila, dila, dila, fn,
+        Convolution_Depthwise);
 
     U32 filterLen = fn * fc * fh * fw;
     U32 biasLen = oc;
@@ -197,7 +204,7 @@ int depthwiseConvolutionTest(int argc, char *argv[], DataFormat filterDataFormat
         tmpTensor, outputTensor, dwActivationParamSpec, &archInfo));
 
     /*warp up*/
-    UNI_INFO_LOG("Warp up gpu:\n")
+    UNI_INFO_LOG("warm up gpu:\n")
     for (U32 i = 0; i < 2; i++) {
         CHECK_STATUS(gcl_run_kernelVec(handle));
     }

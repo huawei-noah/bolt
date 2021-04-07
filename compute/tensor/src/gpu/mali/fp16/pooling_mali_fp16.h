@@ -13,10 +13,8 @@
 
 #ifndef _H_POOLING_MALI_FP16
 #define _H_POOLING_MALI_FP16
-#include "sys.h"
-#include "error.h"
-#include "types.h"
-#include "tensor_computing_type.h"
+
+#include "gpu/mali/fp16/tensor_computing_fp16.h"
 
 EE pooling_mali_fp16(GCLHandle_t handle,
     TensorDesc inputDesc,

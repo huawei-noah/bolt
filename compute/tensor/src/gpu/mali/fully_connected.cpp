@@ -12,80 +12,52 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "sys.h"
-#include "types.h"
+
 #include "tensor_desc.h"
 #include "error.h"
 #include "gpu/mali/tensor_computing_mali.h"
 #include "gpu/mali/fp16/fully_connected_mali_fp16.h"
-inline void fully_connected_produce_algos_paras(TensorDesc inputDesc,
-    TensorDesc filterDesc,
-    std::vector<TensorDesc> outputDescs,
+
+inline void fully_connected_produce_algos_paras(U32 row,
+    U32 fc,
     std::vector<ConvolutionForwardAlgorithm> *fcAlgorithms,
     std::vector<U32> *algoNumIndex,
     std::vector<U32> *vecW,
     std::vector<U32> *vecC,
     std::vector<U32> *vecK)
 {
-    DataType dt;
-    U32 iw, ih, ic, fw, fh, fn;
-    tensorSelectGet(filterDesc, &dt, NULL, &fn, NULL, &fh, &fw);
-    tensorSelectGet(inputDesc, NULL, NULL, NULL, &ic, &ih, &iw);
     U32 configInfo[3][128];
-    U32 configNums[2];
-    ConvolutionForwardAlgorithm algo[2];
+    U32 configNums[1];
+    ConvolutionForwardAlgorithm algo[1];
     U32 algoNum = 1;
     algo[0] = CONVOLUTION_ALGORITHM_DIRECT;
-    if (inputDesc.df == DF_NCHW || inputDesc.df == DF_NORMAL) {
-        if (ih != 1 || iw != 1 || fh != 1 || fw != 1) {
-            U32 item_w = (64 + ih - 1) / ih;
-            item_w = (item_w > iw) ? iw : item_w;
-            configInfo[0][0] = item_w;
-            configInfo[1][0] = 4;
-            configInfo[2][0] = 4;
-            configNums[0] = 1;
-        } else {
-            U32 configNum = 0;
-            U32 j = 8;
-            for (U32 i = 0; i < 3; i++) {
-                configInfo[0][configNum] = 1;
-                configInfo[1][configNum] = 1 << (2 + i);
-                configInfo[2][configNum] = 0;
-                configNum++;
-                if (ic % j != 0) {
-                    break;
-                }
-                j = j << 1;
-            }
-            configNums[0] = configNum;
-        }
-    } else if (inputDesc.df == DF_MKT) {
-        U32 configNum = 0;
-        U32 align8 = true;
-        U32 nj = 8;
-        U32 k = 4;
-        for (U32 i = 0; i < outputDescs.size(); i++) {
-            if (outputDescs[i].dims[1] % 8 != 0) {
-                align8 = false;
-            }
-        }
-        for (U32 i = 0; i < 2; i++) {
-            for (U32 j = 0; j < nj; j++) {
-                configInfo[0][configNum] = j + 1;
-                configInfo[1][configNum] = 4;
-                configInfo[2][configNum] = k;
-                configNum++;
-            }
-            if (!align8) {
+    U32 configNum = 0;
+    if (row == 1) {
+        U32 j = 8;
+        for (U32 i = 0; i < 3; i++) {
+            configInfo[0][configNum] = 1;
+            configInfo[1][configNum] = 1 << (2 + i);
+            configInfo[2][configNum] = 0;
+            configNum++;
+            if (fc % j != 0) {
                 break;
             }
-            nj = 4;
-            k = 8;
+            j = j << 1;
         }
-        configNums[0] = configNum;
     } else {
-        CHECK_STATUS(NOT_SUPPORTED);
+        for (U32 i = 1; i <= 8; i++) {
+            for (U32 j = 1; j <= 8; j++) {
+                if (i * j < 3) {
+                    continue;
+                }
+                configInfo[0][configNum] = i;
+                configInfo[1][configNum] = 1;
+                configInfo[2][configNum] = j;
+                configNum++;
+            }
+        }
     }
-
+    configNums[0] = configNum;
     for (U32 i = 0; i < algoNum; i++) {
         (*fcAlgorithms).push_back(algo[i]);
         (*algoNumIndex).push_back(configNums[i]);
@@ -108,136 +80,83 @@ inline EE fully_connected_checkpara_mali(GCLHandle_t handle,
     TensorDesc inputDesc,
     const GCLMem_t input,
     TensorDesc filterDesc,
-    std::vector<GCLMem_t> *filter,
-    std::vector<GCLMem_t> *bias,
+    GCLMem_t filter,
+    GCLMem_t bias,
     TensorDesc outputDesc,
-    std::vector<GCLMem_t> *output)
+    GCLMem_t output)
 {
     if (nullptr == handle || nullptr == input || nullptr == filter || nullptr == output ||
         nullptr == bias) {
         return NULL_POINTER;
     }
-    if (filter->size() != output->size() || filter->size() != bias->size() || bias->size() == 0) {
-        return NOT_MATCH;
+    if (!tensorIs2d(filterDesc)) {
+        CHECK_STATUS(NOT_SUPPORTED);
     }
-    for (U32 i = 0; i < filter->size(); ++i) {
-        if (nullptr == (*filter)[i] || nullptr == (*output)[i] || nullptr == (*bias)[i]) {
-            return NULL_POINTER;
-        }
+    U32 fn, fc;
+    U32 in, ic, ih, iw;
+    CHECK_STATUS(tensorSelectGet(inputDesc, NULL, NULL, &in, &ic, &ih, &iw));
+    fc = filterDesc.dims[0];
+    fn = filterDesc.dims[1];
+    if (tensorNumElements(inputDesc) % fc != 0) {
+        CHECK_STATUS(NOT_MATCH);
     }
-    if (inputDesc.df == DF_NCHW || inputDesc.df == DF_NORMAL) {
-        U32 in, ic, ih, iw;
-        U32 fn, fc, fh, fw;
-        U32 oc;
-        CHECK_STATUS(tensorSelectGet(inputDesc, NULL, NULL, &in, &ic, &ih, &iw));
-        CHECK_STATUS(tensorSelectGet(filterDesc, NULL, NULL, &fn, &fc, &fh, &fw));
-        CHECK_STATUS(tensorSelectGet(outputDesc, NULL, NULL, NULL, &oc, NULL, NULL));
-        if (filterDesc.df != DF_NCHW) {
-            return NOT_SUPPORTED;
+    U32 row = tensorNumElements(inputDesc) / fc;
+    if (row > 1) {
+        if (iw != fc) {
+            CHECK_STATUS(NOT_MATCH);
         }
-        if (input->desc.memFormat != DF_NCWHC4) {
-            return NOT_SUPPORTED;
-        }
-        if ((*filter)[0]->desc.memFormat != DF_NCWHN4C4) {
-            return NOT_SUPPORTED;
-        }
-        if ((*output)[0]->desc.memFormat != DF_NCWHC4) {
-            return NOT_SUPPORTED;
-        }
-        if (in > 1) {
-            return NOT_SUPPORTED;
-        }
-        if (filter->size() > 1) {
-            return NOT_SUPPORTED;
-        }
-        if (fw != iw) {
-            return NOT_MATCH;
-        }
-        if (fh != ih) {
-            return NOT_MATCH;
-        }
-        if (fc != ic) {
-            return NOT_MATCH;
-        }
-        if (fn != oc) {
-            return NOT_MATCH;
-        }
-    }
-    if (inputDesc.df == DF_MKT) {
-        U32 k;
-        U32 fw, fh, fc, fn;
-        k = inputDesc.dims[1];
-        CHECK_STATUS(tensorSelectGet(filterDesc, NULL, NULL, &fn, &fc, &fh, &fw));
-        if (fh != 1 || fw != 1) {
-            return NOT_MATCH;
-        }
-        if (k != fc) {
-            return NOT_MATCH;
+        if (in * ic > 1) {
+            CHECK_STATUS(NOT_SUPPORTED);
         }
     }
     return SUCCESS;
 }
+
 EE fully_connected_infer_output_size_mali(TensorDesc inputDesc,
     TensorDesc filterDesc,
     TensorDesc *outputDesc,
     GCLMemDesc_t gclmemInputDesc,
     GCLMemDesc_t gclmemOutputDesc)
 {
-    U32 fn;
-    tensorSelectGet(filterDesc, NULL, NULL, &fn, NULL, NULL, NULL);
-    if (inputDesc.df == DF_NCHW || inputDesc.df == DF_NORMAL) {
-        DataType idt;
-        DataFormat idf;
-        U32 iw, ih, ic, in;
-        tensorSelectGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw);
-        if (outputDesc) {
-            *outputDesc = tensor4df(idt, idf, in, fn, 1, 1);
-        }
-        CHECK_STATUS(infer_gclmem_desc_ncwhc4(
-            iw, ih, ic, 0, 0, 1, 1, fn, idt, idt, gclmemInputDesc, gclmemOutputDesc));
-        return SUCCESS;
-    } else if (inputDesc.df == DF_MKT) {
-        bool need_pad = false;
-        DataType dt;
-        U32 m, k, t;
-        get_nlp_mkt_val(inputDesc, &dt, &m, &k, &t);
-        if (outputDesc) {
-            *outputDesc = inputDesc;
-            (*outputDesc).dims[1] = fn;
-        }
-        std::vector<ConvolutionForwardAlgorithm> fcAlgorithms;
-        std::vector<U32> algoNumIndex;
-        std::vector<U32> vecW;
-        std::vector<TensorDesc> outputDescs;
-        outputDescs.push_back(*outputDesc);
-        fully_connected_produce_algos_paras(
-            inputDesc, filterDesc, outputDescs, &fcAlgorithms, &algoNumIndex, &vecW, NULL, NULL);
-        U32 igw, igh, igc;
-        U32 ogw, ogh, ogc;
-        U32 t_align = t;
-        for (U32 i = 0; i < algoNumIndex[0]; i++) {
-            U32 j = ALIGN(t, vecW[i]);
-            t_align = (t_align < j) ? j : t_align;
-        }
-        if (t_align != t) {
-            need_pad = true;
-        }
-        map_nlp_mkt_to_ncwhc4(m, k, t_align, &igw, &igh, &igc);
-        map_nlp_mkt_to_ncwhc4(m, fn, t, &ogw, &ogh, &ogc);
-        igc = igc * 4;
-        ogc = ogc * 4;
-        CHECK_STATUS(infer_gclmem_desc_ncwhc4(igw, igh, igc, 0, 0, ogw, ogh, ogc, dt, dt,
-            gclmemInputDesc, gclmemOutputDesc, need_pad));
-        return SUCCESS;
+    if (outputDesc == nullptr || gclmemInputDesc == nullptr || gclmemOutputDesc == nullptr) {
+        CHECK_STATUS(NULL_POINTER);
     }
-    CHECK_STATUS(NOT_SUPPORTED);
-    return NOT_SUPPORTED;
+    U32 fn, fc;
+    fc = filterDesc.dims[0];
+    fn = filterDesc.dims[1];
+    DataType dt;
+    DataFormat idf;
+    U32 iw, ih, ic, in;
+    U32 ow, oh, oc, on;
+    tensorSelectGet(inputDesc, &dt, &idf, &in, &ic, &ih, &iw);
+    U32 row = tensorNumElements(inputDesc) / fc;
+    *outputDesc = inputDesc;
+    outputDesc->dims[0] = fn;
+    outputDesc->dims[1] = row;
+    for (U32 i = 2; i < inputDesc.nDims; i++) {
+        outputDesc->dims[i] = 1;
+    }
+
+    DataFormat imf = gclmemInputDesc->memFormat;
+    if (imf == DF_NCHW || gclmemInputDesc->byteSize == 0) {
+        CHECK_STATUS(
+            infer_gclmem_desc_nchw(iw, ih, ic, 0, 0, 0, 0, 0, dt, dt, gclmemInputDesc, NULL));
+    } else if (imf == DF_NCWHC4 && row == 1) {
+        CHECK_STATUS(
+            infer_gclmem_desc_ncwhc4(iw, ih, ic, 0, 0, 0, 0, 0, dt, dt, gclmemInputDesc, NULL));
+    } else {
+        CHECK_STATUS(NOT_SUPPORTED);
+    }
+    CHECK_STATUS(infer_gclmem_desc_nchw(0, 0, 0, 0, 0, fn, row, 1, dt, dt, NULL, gclmemOutputDesc));
+    return SUCCESS;
 }
 
 EE fully_connected_infer_forward_algorithm_mali(GCLHandle_t handle,
     TensorDesc inputDesc,
     TensorDesc filterDesc,
-    std::vector<TensorDesc> outputDescs,
+    TensorDesc outputDesc,
+    GCLMemDesc inputMemDesc,
+    GCLMemDesc outputMemDesc,
     ForwardRunInfoMali_t forwardRunInfo)
 {
     if (forwardRunInfo == nullptr) {
@@ -247,16 +166,16 @@ EE fully_connected_infer_forward_algorithm_mali(GCLHandle_t handle,
     if (algorithm != CONVOLUTION_ALGORITHM_NULL) {
         return SUCCESS;
     }
-    DataType dt;
-    U32 fn;
-    tensorSelectGet(filterDesc, &dt, NULL, &fn, NULL, NULL, NULL);
+    DataType dt = inputDesc.dt;
+    U32 fc = filterDesc.dims[0];
+    U32 fn = filterDesc.dims[1];
+    U32 row = tensorNumElements(inputDesc) / filterDesc.dims[0];
     std::vector<ConvolutionForwardAlgorithm> fcAlgorithms;
     std::vector<U32> algoNumIndex;
     std::vector<U32> vecW;
     std::vector<U32> vecC;
     std::vector<U32> vecK;
-    fully_connected_produce_algos_paras(
-        inputDesc, filterDesc, outputDescs, &fcAlgorithms, &algoNumIndex, &vecW, &vecC, &vecK);
+    fully_connected_produce_algos_paras(row, fc, &fcAlgorithms, &algoNumIndex, &vecW, &vecC, &vecK);
     if (vecW.size() == 1) {
         forwardRunInfo->best_w[0] = vecW[0];
         forwardRunInfo->best_k[0] = vecK[0];
@@ -267,28 +186,13 @@ EE fully_connected_infer_forward_algorithm_mali(GCLHandle_t handle,
 
     CHECK_STATUS(gcl_clean_kernelVec(handle));
     CHECK_STATUS(gcl_enable_queue_profiling(handle));
-    U32 sliceNum = outputDescs.size();
     GCLMem_t input = gcl_create_gclmem();
     GCLMem_t tmpbuf = gcl_create_gclmem();
-    std::vector<GCLMem_t> filter;
-    std::vector<GCLMem_t> bias;
-    std::vector<GCLMem_t> output;
-    for (U32 i = 0; i < sliceNum; ++i) {
-        GCLMem_t filterTmp = gcl_create_gclmem();
-        GCLMem_t biasTmp = gcl_create_gclmem();
-        GCLMem_t outTmp = gcl_create_gclmem();
-        filter.push_back(filterTmp);
-        bias.push_back(biasTmp);
-        output.push_back(outTmp);
-    }
+    GCLMem_t filter = gcl_create_gclmem();
+    GCLMem_t bias = gcl_create_gclmem();
+    GCLMem_t output = gcl_create_gclmem();
 
     std::vector<ForwardRunInfoMali> runInfos;
-    U32 stride[3] = {0, 0, 0};
-    U32 offset[3] = {0, 0, 0};
-    GCLMemDesc inputMemDesc = gcl_mem_desc(stride, offset, DT_U8, DF_NCWHC4);
-    GCLMemDesc outputMemDesc = gcl_mem_desc(stride, offset, DT_U8, DF_NCWHC4);
-    CHECK_STATUS(fully_connected_infer_output_size_mali(
-        inputDesc, filterDesc, NULL, &inputMemDesc, &outputMemDesc));
     std::vector<GCLMemDesc> filterMemDescs;
     U32 maxBytes = 0;
     U32 maxFilterSize = 0;
@@ -299,7 +203,7 @@ EE fully_connected_infer_forward_algorithm_mali(GCLHandle_t handle,
         U32 be = (i == 0) ? 0 : algoNumIndex[i - 1];
         U32 end = algoNumIndex[i];
         for (U32 j = be; j < end; j++) {
-            GCLMemDesc filterMemDesc = gcl_mem_desc(stride, offset, DT_U8, DF_NCWHC4);
+            GCLMemDesc filterMemDesc = gclmem_build_desc();
             runInfo.best_w[0] = vecW[j];
             runInfo.best_c[0] = vecC[j];
             runInfo.best_k[0] = vecK[j];
@@ -321,17 +225,17 @@ EE fully_connected_infer_forward_algorithm_mali(GCLHandle_t handle,
     }
 
     MemFlags flags = CL_MEM_READ_WRITE;
-    if (inputDesc.df == DF_MKT) {
-        U32 stride[3] = {(fn + 3) / 4, 1, 1};
-        U32 offset[3] = {0, 0, 0};
-        CHECK_STATUS(gclmem_set_desc_padding(
-            &bias[0]->desc, stride, offset, dt, DF_NHWC, GCL_MEM_IMG_1D, flags));
-    } else {
-        U32 stride[3] = {fn, 1, 1};
-        U32 offset[3] = {0, 0, 0};
-        CHECK_STATUS(gclmem_set_desc_padding(
-            &bias[0]->desc, stride, offset, dt, DF_NHWC, GCL_MEM_BUF, flags));
+    U32 fn_align = fn;
+    for (U32 i = 0; i < vecW.size(); ++i) {
+        U32 j = ALIGN(fn, vecW[i]);
+        if (fn_align < j) {
+            fn_align = j;
+        }
     }
+    U32 stride[3] = {fn_align, 1, 1};
+    U32 offset[3] = {0, 0, 0};
+    CHECK_STATUS(
+        gclmem_set_desc_padding(&bias->desc, stride, offset, dt, DF_NHWC, GCL_MEM_BUF, flags));
 
     U32 algosNum = runInfos.size();
     if (algosNum == 0) {
@@ -339,19 +243,15 @@ EE fully_connected_infer_forward_algorithm_mali(GCLHandle_t handle,
     }
     TensorDesc biasDesc = tensor1d(dt, fn);
     filterMemDescs[0].byteSize = maxFilterSize;
+    outputMemDesc.need_pad = false;
     input->desc = inputMemDesc;
-    output[0]->desc = outputMemDesc;
-    filter[0]->desc = filterMemDescs[0];
+    output->desc = outputMemDesc;
+    filter->desc = filterMemDescs[0];
     tmpbuf->desc.byteSize = maxBytes;
     gcl_create_memory(handle, input);
-    for (U32 i = 0; i < sliceNum; ++i) {
-        filter[i]->desc = filter[0]->desc;
-        bias[i]->desc = bias[0]->desc;
-        output[i]->desc = output[0]->desc;
-        gcl_create_memory(handle, filter[i]);
-        gcl_create_memory(handle, bias[i]);
-        gcl_create_memory(handle, output[i]);
-    }
+    gcl_create_memory(handle, filter);
+    gcl_create_memory(handle, bias);
+    gcl_create_memory(handle, output);
     if (maxBytes) {
         gcl_create_memory(handle, tmpbuf);
     }
@@ -361,19 +261,13 @@ EE fully_connected_infer_forward_algorithm_mali(GCLHandle_t handle,
     double minTime = DBL_MAX;
     ForwardRunInfoMali bestRunInfo;
     for (U32 i = 0; i < algosNum; i++) {
-        filter[0]->desc = filterMemDescs[i];
-        if (sliceNum > 1) {
-            U32 item_k = runInfos[i].best_k[0];
-            for (U32 j = 0; j < sliceNum; j++) {
-                U32 fn = outputDescs[j].dims[1];
-                output[j]->desc.stride[2] = (fn + 3) / 4;
-                filter[j]->desc.stride[2] = (fn + item_k - 1) / item_k;
-                bias[j]->desc.stride[0] = (inputDesc.df == DF_MKT) ? (fn + 3) / 4 : fn;
-            }
-        }
-        if (fully_connected_mali(handle, inputDesc, input, filterDesc, &filter, biasDesc, &bias,
-                maxBytes, tmpbuf, outputDescs[0], &output, &runInfos[i]) == SUCCESS) {
+        filter->desc = filterMemDescs[i];
+        if (fully_connected_mali(handle, inputDesc, input, filterDesc, filter, biasDesc, bias,
+                maxBytes, tmpbuf, outputDesc, output, &runInfos[i]) == SUCCESS) {
             runKernelEnd = handle->kernelVec->size();
+            if (runKernelEnd == runKernelBe + 2) {
+                runKernelBe += 1;
+            }
             gcl_run_kernelVec_timing(handle, runKernelBe, runKernelEnd);
             runKernelBe = runKernelEnd;
             if (minTime > handle->t_execute) {
@@ -389,21 +283,17 @@ EE fully_connected_infer_forward_algorithm_mali(GCLHandle_t handle,
     CHECK_STATUS(gcl_finish(handle));
     gcl_destroy_gclmem(input);
     gcl_destroy_gclmem(tmpbuf);
-    for (auto p : filter) {
-        gcl_destroy_gclmem(p);
-    }
-    for (auto p : output) {
-        gcl_destroy_gclmem(p);
-    }
-    for (auto p : bias) {
-        gcl_destroy_gclmem(p);
-    }
+    gcl_destroy_gclmem(filter);
+    gcl_destroy_gclmem(output);
+    gcl_destroy_gclmem(bias);
     runInfos.clear();
     filterMemDescs.clear();
     CHECK_STATUS(gcl_clean_kernelVec(handle));
+    CHECK_STATUS(gcl_clean_programMap(handle));
     CHECK_STATUS(gcl_off_queue_profiling(handle));
     return SUCCESS;
 }
+
 EE fully_connected_transform_filter_bytes_mali(TensorDesc filterDesc,
     GCLMemDesc_t gclmemFilterDesc,
     U32 *bytes,
@@ -431,7 +321,7 @@ EE fully_connected_transform_filter_mali(GCLHandle_t handle,
     TensorDesc filterDesc,
     GCLMem_t filter,
     TensorDesc *fltmemDesc,
-    std::vector<GCLMem_t> fltmem,
+    GCLMem_t fltmem,
     ForwardRunInfoMali_t forwardRunInfo)
 {
     EE ret = SUCCESS;
@@ -477,13 +367,13 @@ EE fully_connected_mali(GCLHandle_t handle,
     TensorDesc inputDesc,
     const GCLMem_t input,
     TensorDesc filterDesc,
-    std::vector<GCLMem_t> *filter,
+    GCLMem_t filter,
     TensorDesc biasDesc,
-    std::vector<GCLMem_t> *bias,
+    GCLMem_t bias,
     U32 tmpBytes,
     GCLMem_t tmpBuf,
     TensorDesc outputDesc,
-    std::vector<GCLMem_t> *output,
+    GCLMem_t output,
     ForwardRunInfoMali_t forwardRunInfo)
 {
     EE ret = SUCCESS;
@@ -491,8 +381,8 @@ EE fully_connected_mali(GCLHandle_t handle,
         handle, inputDesc, input, filterDesc, filter, bias, outputDesc, output);
     switch (inputDesc.dt) {
         case DT_F16: {
-            ret = fully_connected_mali_fp16(handle, inputDesc, input, filterDesc, *filter, biasDesc,
-                *bias, tmpBytes, tmpBuf, outputDesc, *output, forwardRunInfo);
+            ret = fully_connected_mali_fp16(handle, inputDesc, input, filterDesc, filter, biasDesc,
+                bias, tmpBytes, tmpBuf, outputDesc, output, forwardRunInfo);
             break;
         }
         case DT_I8: {

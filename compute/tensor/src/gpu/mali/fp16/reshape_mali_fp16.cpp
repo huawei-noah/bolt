@@ -11,10 +11,8 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "sys.h"
-#include "error.h"
-#include "types.h"
 #include "gpu/mali/fp16/reshape_mali_fp16.h"
+#include "gpu/mali/cl/kernel_option/copy_opt.h"
 
 inline EE reshape_checkpara_mali_fp16(TensorDesc inputDesc, TensorDesc outputDesc)
 {
@@ -37,8 +35,10 @@ inline EE reshape_core_mali_fp16(GCLHandle_t handle,
     DataFormat idf, odf;
     U32 iw, ih, ic, in, it;
     U32 ow, oh, oc, on, ot;
+    U32 inDims;
     tensorSelectGet(inputDesc, NULL, &idf, &in, &ic, &ih, &iw, &it);
     tensorSelectGet(outputDesc, NULL, &odf, &on, &oc, &oh, &ow, &ot);
+    inDims = inputDesc.nDims;
     U32 iw_str, ih_str, ic_str, iw_off, ih_off;
     U32 ow_str, oh_str, oc_str, ow_off, oh_off;
     get_gclmem_dim(input->desc, &iw_str, &ih_str, &ic_str, &iw_off, &ih_off);
@@ -183,10 +183,13 @@ DATACOPY:
         U32 gs = (copy_len_out + 3) / 4;
         U32 ls = 0;
         U32 dim = 1;
+        char kernelName[128];
         Kernel kernel;
-        CHECK_STATUS(gcl_create_kernel(handle, "copy_f16", &kernel));
+        KernelOpt kernelOpt;
+        set_copy_opt_mali(false, DT_F16, kernelName, &kernelOpt);
+        CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
         CHECK_STATUS(gcl_set_kernelArgs(kernel, copy_len_in, copy_len_out, 0, 0, gs, inbuf, outbuf));
-        gcl_set_kernelVec(handle, kernel, dim, &gs, &ls, "copy_f16");
+        gcl_set_kernelVec(handle, kernel, dim, &gs, &ls, kernelName);
         inbuf = tmp;
 #ifdef _DEBUG
         CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, &gs, &ls, "copy_f16"));
@@ -225,7 +228,7 @@ DATACOPY:
         U32 dim = 3;
         Kernel kernel;
         char kernelName[128];
-        if (idf == DF_NCTHW) {
+        if (inDims == 5) {
             sprintf(kernelName, "mem_trans_3d_ncwhc4_to_nchw");
             CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel));
             CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, iw_off, ih_off, iw, ih, 0, 0,

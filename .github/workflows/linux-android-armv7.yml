@@ -1,0 +1,21 @@
+name: linux-android-armv7
+
+on: [push, pull_request]
+
+jobs:
+  linux:
+    name: linux-android-armv7
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v2
+      - name: compile armv7 with llvm on linux 
+        run: |
+          mkdir android_ndk && cd android_ndk
+          wget https://dl.google.com/android/repository/android-ndk-r20b-linux-x86_64.zip > /dev/null
+          unzip -o android-ndk-r20b-linux-x86_64.zip > /dev/null
+          export ANDROID_NDK_ROOT=${PWD}/android-ndk-r20b
+          export PATH=${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH
+          cd ..
+          ./install.sh --target=android-armv7 -t 32

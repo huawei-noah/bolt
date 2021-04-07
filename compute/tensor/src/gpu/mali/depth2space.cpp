@@ -12,7 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "sys.h"
-#include "types.h"
+
 #include "tensor_desc.h"
 #include "error.h"
 #include "gpu/mali/tensor_computing_mali.h"
@@ -58,17 +58,19 @@ EE depth2space_infer_output_size_mali(TensorDesc inputDesc,
     if (gclmemInputDesc->byteSize == 0) {
         CHECK_STATUS(infer_gclmem_desc_nchw(
             iw, ih, ic, 0, 0, 0, 0, 0, DT_F16, DT_F16, gclmemInputDesc, NULL));
+    } else {
         CHECK_STATUS(infer_gclmem_desc_ncwhc4(
-            0, 0, 0, 0, 0, ow, oh, oc, DT_F16, DT_F16, NULL, gclmemOutputDesc));
-        return SUCCESS;
+            iw, ih, ic, 0, 0, 0, 0, 0, DT_F16, DT_F16, gclmemInputDesc, NULL));
     }
 
-    if (idf == DF_NCHW) {
+    if (p.blockSize == 2 && oc < 4) {
+        CHECK_STATUS(infer_gclmem_desc_nchw(
+            0, 0, 0, 0, 0, ow, oh, oc, DT_F16, DT_F16, NULL, gclmemOutputDesc));
+    } else {
         CHECK_STATUS(infer_gclmem_desc_ncwhc4(
-            iw, ih, ic, 0, 0, ow, oh, oc, DT_F16, DT_F16, gclmemInputDesc, gclmemOutputDesc));
-        return SUCCESS;
+            0, 0, 0, 0, 0, ow, oh, oc, DT_F16, DT_F16, NULL, gclmemOutputDesc));
     }
-    return NOT_SUPPORTED;
+    return SUCCESS;
 }
 
 EE depth2space_infer_tmpBuf_size_mali(

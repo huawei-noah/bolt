@@ -17,7 +17,7 @@
 #endif
 #include <string.h>
 
-EE unsqueeze(Tensor inputTensor, Tensor outputTensor, ArchInfo_t archInfo)
+EE unsqueeze(Tensor inputTensor, Tensor tmpTensor, Tensor outputTensor, ArchInfo_t archInfo)
 {
     auto arch = archInfo->arch;
     TensorDesc inputDesc = inputTensor.get_desc();
@@ -27,9 +27,10 @@ EE unsqueeze(Tensor inputTensor, Tensor outputTensor, ArchInfo_t archInfo)
     EE ret = NOT_SUPPORTED;
     if (IS_MALI_GPU(arch)) {
 #ifdef _USE_MALI
+        void *tmpbuf = get_ptr_from_tensor(tmpTensor, arch);
         TensorDesc outputDesc = outputTensor.get_desc();
         ret = unsqueeze_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc, (GCLMem_t)input,
-            outputDesc, (GCLMem_t)output);
+            (GCLMem_t)tmpbuf, outputDesc, (GCLMem_t)output);
 #endif
 #ifdef _USE_CPU
     } else {
@@ -42,7 +43,6 @@ EE unsqueeze(Tensor inputTensor, Tensor outputTensor, ArchInfo_t archInfo)
     return ret;
 }
 
-#ifdef _USE_CPU
 EE unsqueeze_infer_output_size_cpu(
     TensorDesc inputDesc, int *axes, int axesNum, TensorDesc *outputDesc)
 {
@@ -68,7 +68,6 @@ EE unsqueeze_infer_output_size_cpu(
     CHECK_REQUIREMENT(index == inputDesc.nDims);
     return SUCCESS;
 }
-#endif
 
 EE unsqueeze_infer_output_size(
     Tensor *inputTensor, UnsqueezeParamSpec p, Tensor *outputTensor, ArchInfo_t archInfo)
@@ -81,22 +80,36 @@ EE unsqueeze_infer_output_size(
     }
     TensorDesc inputDesc = inputTensor->get_desc();
     TensorDesc outputDesc = outputTensor->get_desc();
-
     EE ret = NOT_SUPPORTED;
+    ret = unsqueeze_infer_output_size_cpu(inputDesc, p.axes, p.axes_num, &outputDesc);
     if (IS_MALI_GPU(archInfo->arch)) {
 #ifdef _USE_MALI
         GCLMemDesc gclmemInputDesc = ocl_get_desc(*inputTensor);
         GCLMemDesc gclmemOutputDesc = ocl_get_desc(*outputTensor);
         ret = unsqueeze_infer_output_size_mali(
-            inputDesc, &outputDesc, &gclmemInputDesc, &gclmemOutputDesc);
+            inputDesc, outputDesc, &gclmemInputDesc, &gclmemOutputDesc);
         ocl_set_desc(inputTensor, gclmemInputDesc);
         ocl_set_desc(outputTensor, gclmemOutputDesc);
 #endif
-#ifdef _USE_CPU
-    } else {
-        ret = unsqueeze_infer_output_size_cpu(inputDesc, p.axes, p.axes_num, &outputDesc);
-#endif
     }
     outputTensor->resize(outputDesc);
+    return ret;
+}
+
+EE unsqueeze_infer_forward_tmp_bytes(
+    Tensor inputTensor, Tensor outputTensor, U32 *bytes, ArchInfo_t archInfo)
+{
+    EE ret = SUCCESS;
+    *bytes = 0;
+    if (IS_MALI_GPU(archInfo->arch)) {
+#ifdef _USE_MALI
+        TensorDesc inputDesc = inputTensor.get_desc();
+        TensorDesc outputDesc = outputTensor.get_desc();
+        GCLMemDesc gclmemInputDesc = ocl_get_desc(inputTensor);
+        GCLMemDesc gclmemOutputDesc = ocl_get_desc(outputTensor);
+        ret = unsqueeze_infer_forward_tmp_bytes_mali(
+            inputDesc, gclmemInputDesc, outputDesc, gclmemOutputDesc, bytes);
+#endif
+    }
     return ret;
 }

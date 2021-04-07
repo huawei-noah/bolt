@@ -12,7 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "sys.h"
-#include "types.h"
+
 #include "tensor_desc.h"
 #include "error.h"
 #include "gpu/mali/tensor_computing_mali.h"
@@ -47,16 +47,8 @@ EE reshape_infer_output_size_mali(TensorDesc inputDesc,
         }
     }
     *outputDesc = inputDesc;
-    if (shapeSize == 2) {
-        (*outputDesc).df = DF_NORMAL;
-    } else if (shapeSize == 3) {
-        (*outputDesc).df = DF_MKT;
-    } else if (shapeSize == 4) {
-        (*outputDesc).df = DF_NCHW;
-    } else {
-        CHECK_STATUS(NOT_SUPPORTED);
-    }
     (*outputDesc).nDims = shapeSize;
+    (*outputDesc).df = getTensorDefaultDataFormat((*outputDesc).nDims);
 
     U32 factor = 1;
     U32 count = 0;
@@ -89,20 +81,19 @@ EE reshape_infer_output_size_mali(TensorDesc inputDesc,
     }
 
     DataType idt, odt;
-    U32 ic, ih, iw, it;
-    U32 oc, oh, ow, ot;
-    tensorSelectGet(inputDesc, &idt, NULL, NULL, &ic, &ih, &iw, &it);
-    tensorSelectGet((*outputDesc), &odt, NULL, NULL, &oc, &oh, &ow, &ot);
+    U32 in, ic, ih, iw, it;
+    U32 on, oc, oh, ow, ot;
+    tensorSelectGet(inputDesc, &idt, NULL, &in, &ic, &ih, &iw, &it);
+    tensorSelectGet((*outputDesc), &odt, NULL, &on, &oc, &oh, &ow, &ot);
     if (gclmemInputDesc->memFormat == DF_NCHW || gclmemInputDesc->byteSize == 0) {
-        CHECK_STATUS(
-            infer_gclmem_desc_nchw(iw, ih, ic * it, 0, 0, 0, 0, 0, idt, odt, gclmemInputDesc, NULL));
+        CHECK_STATUS(infer_gclmem_desc_nchw_3d(
+            iw, ih, ic, it, in, 0, 0, 0, 0, 0, 0, 0, idt, odt, gclmemInputDesc, NULL));
     } else {
-        ic = ALIGN(ic, 4);
-        CHECK_STATUS(infer_gclmem_desc_ncwhc4(
-            iw, ih, ic * it, 0, 0, 0, 0, 0, idt, odt, gclmemInputDesc, NULL));
+        CHECK_STATUS(infer_gclmem_desc_ncwhc4_3d(
+            iw, ih, ic, it, in, 0, 0, 0, 0, 0, 0, 0, idt, odt, gclmemInputDesc, NULL));
     }
-    CHECK_STATUS(
-        infer_gclmem_desc_nchw(0, 0, 0, 0, 0, ow, oh, oc * ot, idt, odt, NULL, gclmemOutputDesc));
+    CHECK_STATUS(infer_gclmem_desc_nchw_3d(
+        0, 0, 0, 0, 0, 0, 0, ow, oh, oc, ot, on, idt, odt, NULL, gclmemOutputDesc));
     return SUCCESS;
 }
 

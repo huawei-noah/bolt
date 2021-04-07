@@ -68,8 +68,7 @@ public:
             }
             this->biasTensors[i].resize(desc);
         }
-        std::shared_ptr<U8> weight_ptr(curOpWs.weight);
-        std::shared_ptr<U8> bias_ptr(curOpWs.vec);
+        std::shared_ptr<U8> weight_ptr = std::shared_ptr<U8>(curOpWs.weight, [](U8 *) {});
         U32 weight_offset = 0;
         U32 bias_offset = 0;
         for (U32 j = 0; j < this->weightTensors.size(); j++) {
@@ -92,11 +91,12 @@ public:
                 ((CpuMemory *)(this->weightTensors[j].get_memory()))
                     ->set_shared_ptr(
                         std::shared_ptr<U8>(weight_ptr, weight_ptr.get() + weight_offset));
+
                 weight_offset += weight_bytes;
                 if (this->hasBias) {
-                    ((CpuMemory *)(this->biasTensors[j].get_memory()))
-                        ->set_shared_ptr(
-                            std::shared_ptr<U8>(bias_ptr, bias_ptr.get() + bias_offset));
+                    this->biasTensors[j].alloc();
+                    memcpy(((CpuMemory *)(this->biasTensors[j].get_memory()))->get_ptr(),
+                        curOpWs.vec + bias_offset, bias_bytes);
                     bias_offset += bias_bytes;
                 }
             }
@@ -105,7 +105,7 @@ public:
                 if (isBNN == 1) {
 #ifdef _USE_FP16
                     U8 *ptr = (U8 *)((CpuMemory *)(this->biasTensors[j].get_memory()))->get_ptr();
-                    UNI_init(p.num_outputs, DT_F16, 1.0, ptr);
+                    UNI_INIT(p.num_outputs, DT_F16, 1.0, ptr);
                     ptr += bias_bytes / 2;
                     memset(ptr, 0, bias_bytes / 2);  // second half is bias
 #endif
@@ -148,9 +148,9 @@ public:
                     }
 #endif
                 }
-                CHECK_STATUS(
-                    convolution(inputTensor, filterTensor, p, this->pwAlg, scalePtr, biasTensor,
-                        this->temp, outputTensor, this->pwActivationParamSpec, &this->archInfo));
+                CHECK_STATUS(convolution(this->inputTensors, filterTensor, p, this->pwAlg, scalePtr,
+                    biasTensor, this->temp, outputTensor, this->pwActivationParamSpec,
+                    &this->archInfo));
 #ifdef _USE_INT8
                 auto outputDesc = outputTensor.get_desc();
                 if (DT_I8 == outputDesc.dt) {
@@ -174,9 +174,9 @@ public:
                 break;
             }
             case Convolution_Dilation: {
-                CHECK_STATUS(
-                    convolution(inputTensor, filterTensor, p, this->pwAlg, scalePtr, biasTensor,
-                        this->temp, outputTensor, this->pwActivationParamSpec, &this->archInfo));
+                CHECK_STATUS(convolution(this->inputTensors, filterTensor, p, this->pwAlg, scalePtr,
+                    biasTensor, this->temp, outputTensor, this->pwActivationParamSpec,
+                    &this->archInfo));
                 break;
             }
             default: {

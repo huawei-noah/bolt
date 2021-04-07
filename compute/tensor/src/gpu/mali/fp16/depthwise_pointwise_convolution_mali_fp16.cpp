@@ -11,9 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "sys.h"
-#include "error.h"
-#include "types.h"
 #include "gpu/mali/fp16/depthwise_pointwise_convolution_mali_fp16.h"
 #include "gpu/mali/fp16/depthwise_pointwise_convolution_direct_mali_fp16.h"
 #include "gpu/mali/fp16/depthwise_pointwise_convolution_gemm_mali_fp16.h"
@@ -33,11 +30,11 @@ inline EE depthwise_pointwise_convolution_checkpara_mali_fp16(GCLHandle_t handle
 {
     if (nullptr == handle || nullptr == input || nullptr == dwFilter || nullptr == pwFilter ||
         nullptr == output || nullptr == dwBias || nullptr == pwBias || nullptr == tmpBuf) {
-        return NULL_POINTER;
+        CHECK_STATUS(NULL_POINTER);
     }
     if (inputDesc.dt != outputDesc.dt || inputDesc.dt != dwFilterDesc.dt ||
         inputDesc.dt != pwFilterDesc.dt || inputDesc.dt != DT_F16) {
-        return NOT_MATCH;
+        CHECK_STATUS(NOT_MATCH);
     }
 
     U32 ic, fn, fh, fw, oc;
@@ -46,14 +43,11 @@ inline EE depthwise_pointwise_convolution_checkpara_mali_fp16(GCLHandle_t handle
     CHECK_STATUS(tensorSelectGet(dwFilterDesc, NULL, NULL, NULL, &dfc, &fh, &fw));
     CHECK_STATUS(tensorSelectGet(pwFilterDesc, NULL, NULL, &fn, &pfc, NULL, NULL));
     CHECK_STATUS(tensorSelectGet(outputDesc, NULL, NULL, NULL, &oc, NULL, NULL));
-    if (fw != 3 && fw != 5 && fw != 7) {
-        return NOT_MATCH;
-    }
     if (ic != dfc || ic != pfc) {
-        return NOT_MATCH;
+        CHECK_STATUS(NOT_MATCH);
     }
     if (fn != oc) {
-        return NOT_MATCH;
+        CHECK_STATUS(NOT_MATCH);
     }
     return SUCCESS;
 }

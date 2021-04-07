@@ -12,7 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "sys.h"
-#include "types.h"
+
 #include "tensor_desc.h"
 #include "error.h"
 #include "gpu/mali/tensor_computing_mali.h"
@@ -26,8 +26,8 @@ EE concat_infer_output_size_mali(std::vector<TensorDesc> inputDesc,
 {
     /*tensorDesc record cpu org data format info*/
     /*gclmemDesc record gpu trans data format info*/
-    if (outputDesc) {
-        *outputDesc = inputDesc[0];
+    if (outputDesc == nullptr || gclmemInputDesc == nullptr || gclmemOutputDesc == nullptr) {
+        CHECK_STATUS(NULL_POINTER);
     }
     U32 sumDimSize = 0;
     I32 dim = inputDesc[0].nDims;
@@ -39,55 +39,44 @@ EE concat_infer_output_size_mali(std::vector<TensorDesc> inputDesc,
             CHECK_STATUS(NOT_SUPPORTED);
         }
     }
-    if (inputDesc[0].df == DF_MKT) {
-        concatDim = 1 - concatDim;
-    }
     for (U32 i = 0; i < inputDesc.size(); i++) {
         sumDimSize += inputDesc[i].dims[concatDim];
     }
 
-    if (outputDesc) {
-        *outputDesc = inputDesc[0];
-        (*outputDesc).dims[concatDim] = sumDimSize;
+    *outputDesc = inputDesc[0];
+    (*outputDesc).dims[concatDim] = sumDimSize;
+
+    bool use_nchw = true;
+    for (U32 i = 0; i < inputDesc.size(); i++) {
+        if (gclmemInputDesc[i].memFormat == DF_NCWHC4) {
+            use_nchw = false;
+            break;
+        }
     }
 
-    if (gclmemInputDesc && gclmemOutputDesc) {
-        DataType idt;
-        DataFormat idf;
-        U32 iw, ih, ic, in;
-        for (U32 i = 0; i < inputDesc.size(); i++) {
-            tensorSelectGet(inputDesc[i], &idt, &idf, &in, &ic, &ih, &iw);
+    DataType idt;
+    DataFormat idf;
+    U32 iw, ih, ic, in;
+    for (U32 i = 0; i < inputDesc.size(); i++) {
+        tensorSelectGet(inputDesc[i], &idt, &idf, &in, &ic, &ih, &iw);
+        if (use_nchw || (gclmemInputDesc[i].memFormat == DF_NCHW 
+            && gclmemInputDesc[i].byteSize >= 0)) {
+            CHECK_STATUS(infer_gclmem_desc_nchw(
+                (iw + 3) / 4 * 4, ih, ic, 0, 0, 0, 0, 0, idt, idt, &gclmemInputDesc[i], NULL));
+        } else {
             CHECK_STATUS(infer_gclmem_desc_ncwhc4(
-                iw, ih, ic, 0, 0, iw, ih, ic, idt, idt, &gclmemInputDesc[i], gclmemOutputDesc));
+                iw, ih, ic, 0, 0, 0, 0, 0, idt, idt, &gclmemInputDesc[i], NULL));
         }
-        U32 s0 = gclmemOutputDesc->stride[0];
-        U32 s1 = gclmemOutputDesc->stride[1];
-        U32 s2 = gclmemOutputDesc->stride[2];
-        if (inputDesc[0].df == DF_NCHW) {
-            if (concatDim == 0) {
-                s1 = sumDimSize;
-            } else if (concatDim == 1) {
-                s0 = sumDimSize;
-            } else if (concatDim == 2) {
-                s2 = (sumDimSize + 3) / 4;
-            } else {
-                CHECK_STATUS(NOT_SUPPORTED);
-            }
-        }
-        if (inputDesc[0].df == DF_MKT || inputDesc[0].df == DF_MTK) {
-            if (concatDim == 0) {
-                s2 = (sumDimSize + 3) / 4;
-            } else if (concatDim == 1) {
-                s0 = sumDimSize;
-            } else {
-                CHECK_STATUS(NOT_SUPPORTED);
-            }
-        }
-        gclmemOutputDesc->stride[0] = s0;
-        gclmemOutputDesc->stride[1] = s1;
-        gclmemOutputDesc->stride[2] = s2;
-        gclmemOutputDesc->num = s0 * s1 * s2 * 4;
-        gclmemOutputDesc->byteSize = s0 * s1 * s2 * 4 * bytesOf(idt);
+    }
+
+    U32 ow, oh, oc;
+    tensorSelectGet((*outputDesc), NULL, NULL, NULL, &oc, &oh, &ow);
+    if (use_nchw) {
+        CHECK_STATUS(
+            infer_gclmem_desc_nchw(0, 0, 0, 0, 0, ow, oh, oc, idt, idt, NULL, gclmemOutputDesc));
+    } else {
+        CHECK_STATUS(
+            infer_gclmem_desc_ncwhc4(0, 0, 0, 0, 0, ow, oh, oc, idt, idt, NULL, gclmemOutputDesc));
     }
     return SUCCESS;
 }
@@ -100,37 +89,32 @@ inline EE concat_checkpara_mali(GCLHandle_t handle,
     GCLMem_t output)
 {
     if (handle == nullptr || nullptr == output) {
-        return NULL_POINTER;
+        CHECK_STATUS(NULL_POINTER);
     }
     if (input.size() < 1) {
-        return NOT_MATCH;
+        CHECK_STATUS(NOT_MATCH);
     }
     for (auto it : inputDesc) {
         if (it.df != outputDesc.df) {
-            return NOT_MATCH;
+            CHECK_STATUS(NOT_MATCH);
         }
-    }
-    if (outputDesc.df != DF_NCHW && outputDesc.df != DF_MKT && outputDesc.df != DF_MTK) {
-        return NOT_SUPPORTED;
     }
     for (auto it : input) {
-        GCLMem_t ptr = (GCLMem_t)it;
-        if (ptr == nullptr) {
-            return NULL_POINTER;
-        }
-        if (ptr->desc.memFormat != output->desc.memFormat) {
-            return NOT_SUPPORTED;
+        if (it == nullptr) {
+            CHECK_STATUS(NULL_POINTER);
         }
     }
     return SUCCESS;
 }
 
-EE concat_infer_forward_tmp_bytes_mali(std::vector<TensorDesc> inputDesc, U32 *bytes)
+EE concat_infer_forward_tmp_bytes_mali(std::vector<TensorDesc> inputDesc, 
+    std::vector<GCLMemDesc> gclmemInputDesc,
+    U32 *bytes)
 {
     EE ret = SUCCESS;
     switch (inputDesc[0].dt) {
         case DT_F16: {
-            ret = concat_infer_forward_tmp_bytes_mali_fp16(inputDesc, bytes);
+            ret = concat_infer_forward_tmp_bytes_mali_fp16(inputDesc, gclmemInputDesc, bytes);
             break;
         }
         default:

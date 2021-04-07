@@ -44,6 +44,11 @@ public:
     void run() override
     {}
 
+    EE transform_filter() override
+    {
+        return SUCCESS;
+    }
+
     EE init_weight_bias_from_model(std::shared_ptr<U8> *modelPtrShared) override
     {
         U8 *modelPtr = nullptr;
@@ -54,15 +59,15 @@ public:
         Tensor modelWeightTensor;
         modelWeightTensor.resize(weightDesc);
         U32 weightBytes = modelWeightTensor.bytes();
+        modelWeightTensor.alloc();
         if (modelPtr != nullptr) {
-            modelWeightTensor.alloc();
             memcpy(
                 ((CpuMemory *)(modelWeightTensor.get_memory()))->get_ptr(), modelPtr, weightBytes);
             *modelPtrShared = std::shared_ptr<U8>(*modelPtrShared, modelPtr + weightBytes);
         } else {
             auto curOpWs = this->get_weightspec();
-            ((CpuMemory *)(modelWeightTensor.get_memory()))
-                ->set_shared_ptr(std::shared_ptr<U8>(curOpWs.weight));
+            memcpy(((CpuMemory *)(modelWeightTensor.get_memory()))->get_ptr(), curOpWs.weight,
+                weightBytes);
         }
         this->weightTensors.push_back(modelWeightTensor);
         (*this->tensorMapPtr)[this->outputTensorName]->reuse(&(this->weightTensors[0]));

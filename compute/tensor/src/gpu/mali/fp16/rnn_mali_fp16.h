@@ -13,10 +13,8 @@
 
 #ifndef _RNN_MALI_FP16
 #define _RNN_MALI_FP16
-#include "sys.h"
-#include "error.h"
-#include "types.h"
-#include "tensor_computing_type.h"
+
+#include "gpu/mali/fp16/tensor_computing_fp16.h"
 
 EE rnn_transform_filter_bytes_mali_fp16(TensorDesc filterDesc,
     RNNParamSpec rnnParamSpec,

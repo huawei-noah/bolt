@@ -16,7 +16,7 @@
 #include "cpu/arm/fp16/convolution_winograd_transform.h"
 
 #include <string.h>
-#include "types.h"
+
 #include "tensor_desc.h"
 #include "error.h"
 #include "tensor_computing.h"

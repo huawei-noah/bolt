@@ -16,7 +16,7 @@
 #ifdef _USE_FP32
 #include "cpu/x86/fp32/tensor_computing_fp32.h"
 #endif
-#include "ut_util.h"
+#include "tensor_transpose.h"
 
 EE convolution_infer_forward_algorithm_x86(TensorDesc inputDesc,
     TensorDesc filterDesc,
@@ -154,6 +154,7 @@ EE convolution_infer_forward_tmp_bytes_x86(TensorDesc inputDesc,
 
 EE convolution_x86(TensorDesc inputDesc,
     void *input,
+    void *eltwiseInput,
     TensorDesc filterDesc,
     const void *filter,
     ConvolutionParamSpec convParamSpec,
@@ -176,7 +177,9 @@ EE convolution_x86(TensorDesc inputDesc,
     U32 dataChannelAxis = inputDesc.nDims - 2;
     U32 filterChannelAxis = filterDesc.nDims - 1;
     U32 biasChannelAxis = 0;
-    CHECK_REQUIREMENT(inputDesc.dims[batchAxis] == 1);
+    if (group > 1) {
+        CHECK_REQUIREMENT(inputDesc.dims[batchAxis] == 1);
+    }
     U32 icGroupSize = inputDesc.dims[dataChannelAxis] / group;
 
     void *inputTransform;
@@ -213,9 +216,10 @@ EE convolution_x86(TensorDesc inputDesc,
         switch (filterDesc.dt) {
 #ifdef _USE_FP32
             case DT_F32: {
-                ret = convolution_fp32(tmpInputDesc, (F32 *)tmpInput, tmpFilterDesc,
-                    (F32 *)tmpFilter, convParamSpec, algorithm, tmpBiasDesc, (F32 *)tmpBias,
-                    tmpBytes, tmp, tmpOutputDesc, (F32 *)tmpOutput, activationDesc, arch);
+                ret = convolution_fp32(tmpInputDesc, (F32 *)tmpInput, (F32 *)eltwiseInput,
+                    tmpFilterDesc, (F32 *)tmpFilter, convParamSpec, algorithm, tmpBiasDesc,
+                    (F32 *)tmpBias, tmpBytes, tmp, tmpOutputDesc, (F32 *)tmpOutput, activationDesc,
+                    arch);
                 break;
             }
 #endif

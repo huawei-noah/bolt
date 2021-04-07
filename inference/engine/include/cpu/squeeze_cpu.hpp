@@ -33,7 +33,7 @@ public:
     {
         Tensor inputTensor = this->inputTensors[0];
         Tensor outputTensor = this->outputTensors[0];
-        squeeze(inputTensor, outputTensor, &this->archInfo);
+        squeeze(inputTensor, this->temp, outputTensor, &this->archInfo);
     }
 
     EE infer_output_tensors_size(

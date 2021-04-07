@@ -12,20 +12,20 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #ifdef _USE_JNI
-#include <jni.h>
-#include "cnn.h"
 #include "BoltModel.h"
+#include "cnn.h"
 #include "../api/c/bolt.h"
 
 struct ModelHandleInfo {
+    void *ms;
     void *cnn;
     DEVICE_TYPE deviceType;
     void *algoPath;
     bool useFileStream;
 };
 
-typedef struct {
-    U32 dims[4] = {0};
+typedef struct DataDesc {
+    U32 dims[6] = {0};
     char name[NAME_LEN] = {0};
     DataType dt;
     DataFormat df;
@@ -41,9 +41,9 @@ typedef struct {
 AFFINITY_TYPE str2AFFINITY_TYPE(std::string affinity_str)
 {
     AFFINITY_TYPE ret = CPU_HIGH_PERFORMANCE;
-    if (affinity_str == "CPU_AFFINITY_HIGH_PERFORMANCE") {
+    if (affinity_str == "CPU_HIGH_PERFORMANCE") {
         ret = CPU_HIGH_PERFORMANCE;
-    } else if (affinity_str == "CPU_AFFINITY_LOW_POWER") {
+    } else if (affinity_str == "CPU_LOW_POWER") {
         ret = CPU_LOW_POWER;
     } else if (affinity_str == "GPU") {
         ret = GPU;
@@ -137,33 +137,6 @@ std::string DataFormat2str(DataFormat data_format)
     return ret;
 }
 
-extern "C" JNIEXPORT jlong JNICALL BOLT_JNI_PREFIX(BoltModel_createModel)(
-    JNIEnv *env, jobject, jstring modelPath, jstring affinity)
-{
-    const char *modelPathPtr = env->GetStringUTFChars(modelPath, JNI_FALSE);
-    const char *affinityPtr = env->GetStringUTFChars(affinity, JNI_FALSE);
-    std::string affinity_str = (std::string)affinityPtr;
-    AFFINITY_TYPE affinity_cur = str2AFFINITY_TYPE(affinity_str);
-    long modelAddr = (long)CreateModel(modelPathPtr, affinity_cur, NULL);
-    ModelHandleInfo *ihInfo = (ModelHandleInfo *)modelAddr;
-    if (nullptr == ihInfo->cnn) {
-        UNI_ERROR_LOG("Bolt instance not created\n");
-        modelAddr = 0;
-    }
-    env->ReleaseStringUTFChars(modelPath, modelPathPtr);
-    env->ReleaseStringUTFChars(affinity, affinityPtr);
-    return modelAddr;
-}
-
-extern "C" JNIEXPORT jlong JNICALL BOLT_JNI_PREFIX(BoltModel_cloneModel)(
-    JNIEnv *env, jobject, jlong modelAddr)
-{
-    ModelHandle handle = (ModelHandle)modelAddr;
-    ModelHandle cloneHandle = CloneModel(handle);
-    long ret = (long)cloneHandle;
-    return ret;
-}
-
 void getInputParameters(JNIEnv *env,
     jint num,
     jobjectArray input_names,
@@ -230,7 +203,7 @@ void getInputParameters(JNIEnv *env,
         const char *cur_str_ptr = env->GetStringUTFChars(cur_str, 0);
         int length = strlen(cur_str_ptr);
         data_name[i] = (char *)malloc(sizeof(char) * (length + 1));
-        UNI_memcpy(data_name[i], cur_str_ptr, length);
+        UNI_MEMCPY(data_name[i], cur_str_ptr, length);
         data_name[i][length] = '\0';
 
         jstring tmp_str_dt = (jstring)(env->GetObjectArrayElement(dt_input, i));
@@ -263,6 +236,50 @@ void getInputParameters(JNIEnv *env,
     *data_df_ptr = data_df;
 }
 
+int calculateLength(int *array, int num)
+{
+    int length = 0;
+    for (int j = 0; j < num; j++) {
+        if (array[j] == 0) {
+            break;
+        } else {
+            if (length == 0) {
+                length = array[j];
+            } else {
+                length *= array[j];
+            }
+        }
+    }
+    return length;
+}
+
+extern "C" JNIEXPORT jlong JNICALL BOLT_JNI_PREFIX(BoltModel_createModel)(
+    JNIEnv *env, jobject, jstring modelPath, jstring affinity)
+{
+    const char *modelPathPtr = env->GetStringUTFChars(modelPath, JNI_FALSE);
+    const char *affinityPtr = env->GetStringUTFChars(affinity, JNI_FALSE);
+    std::string affinity_str = (std::string)affinityPtr;
+    AFFINITY_TYPE affinity_cur = str2AFFINITY_TYPE(affinity_str);
+    long modelAddr = (long)CreateModel(modelPathPtr, affinity_cur, NULL);
+    ModelHandleInfo *ihInfo = (ModelHandleInfo *)modelAddr;
+    if (nullptr == ihInfo->cnn) {
+        UNI_ERROR_LOG("Bolt instance not created\n");
+        modelAddr = 0;
+    }
+    env->ReleaseStringUTFChars(modelPath, modelPathPtr);
+    env->ReleaseStringUTFChars(affinity, affinityPtr);
+    return modelAddr;
+}
+
+extern "C" JNIEXPORT jlong JNICALL BOLT_JNI_PREFIX(BoltModel_cloneModel)(
+    JNIEnv *env, jobject, jlong modelAddr)
+{
+    ModelHandle handle = (ModelHandle)modelAddr;
+    ModelHandle cloneHandle = CloneModel(handle);
+    long ret = (long)cloneHandle;
+    return ret;
+}
+
 extern "C" JNIEXPORT void JNICALL BOLT_JNI_PREFIX(BoltModel_prepareModel)(JNIEnv *env,
     jobject,
     jlong modelAddr,
@@ -286,7 +303,8 @@ extern "C" JNIEXPORT void JNICALL BOLT_JNI_PREFIX(BoltModel_prepareModel)(JNIEnv
     getInputParameters(env, num_input, input_names, &data_name, n, &data_n, c, &data_c, h, &data_h,
         w, &data_w, dt_input, &data_dt, df_input, &data_df);
 
-    PrepareModel(ih, num_input, data_name, data_n, data_c, data_h, data_w, data_dt, data_df);
+    PrepareModel(
+        ih, num_input, (const char **)data_name, data_n, data_c, data_h, data_w, data_dt, data_df);
 
     free(data_n);
     free(data_c);
@@ -323,7 +341,8 @@ extern "C" JNIEXPORT void JNICALL BOLT_JNI_PREFIX(BoltModel_resizeModelInput)(JN
     getInputParameters(env, num_input, input_names, &data_name, n, &data_n, c, &data_c, h, &data_h,
         w, &data_w, dt_input, &data_dt, df_input, &data_df);
 
-    ResizeModelInput(ih, num_input, data_name, data_n, data_c, data_h, data_w, data_dt, data_df);
+    ResizeModelInput(
+        ih, num_input, (const char **)data_name, data_n, data_c, data_h, data_w, data_dt, data_df);
 
     free(data_n);
     free(data_c);
@@ -359,13 +378,13 @@ extern "C" JNIEXPORT jlong JNICALL BOLT_JNI_PREFIX(BoltModel_allocSpecificResult
         const char *cur_str_ptr = env->GetStringUTFChars(cur_str, 0);
         int length = strlen(cur_str_ptr);
         output_names_ptr[i] = (char *)malloc(sizeof(char) * (length + 1));
-        UNI_memcpy(output_names_ptr[i], cur_str_ptr, length);
+        UNI_MEMCPY(output_names_ptr[i], cur_str_ptr, length);
         output_names_ptr[i][length] = '\0';
 
         env->ReleaseStringUTFChars(cur_str, cur_str_ptr);
         env->DeleteLocalRef(cur_str);
     }
-    ResultHandle ir = AllocSpecificResultHandle(ih, num_outputs, output_names_ptr);
+    ResultHandle ir = AllocSpecificResultHandle(ih, num_outputs, (const char **)output_names_ptr);
 
     for (int i = 0; i < num_outputs; i++) {
         free(output_names_ptr[i]);
@@ -413,7 +432,7 @@ extern "C" JNIEXPORT void JNICALL BOLT_JNI_PREFIX(BoltModel_runModel)(JNIEnv *en
 
     ModelHandleInfo *ihInfo = (ModelHandleInfo *)ih;
     CNN *cnn = (CNN *)ihInfo->cnn;
-    std::map<std::string, std::shared_ptr<Tensor>> inMap = cnn->get_inputs();
+    std::map<std::string, std::shared_ptr<Tensor>> inMap = cnn->get_input();
 
     char **input_names_ptr = (char **)malloc(sizeof(char *) * num_input);
     void **mem_ptr = (void **)malloc(sizeof(void *) * num_input);
@@ -422,7 +441,7 @@ extern "C" JNIEXPORT void JNICALL BOLT_JNI_PREFIX(BoltModel_runModel)(JNIEnv *en
         const char *cur_str_ptr = env->GetStringUTFChars(cur_str, 0);
         int length = strlen(cur_str_ptr);
         input_names_ptr[i] = (char *)malloc(sizeof(char) * (length + 1));
-        UNI_memcpy(input_names_ptr[i], cur_str_ptr, length);
+        UNI_MEMCPY(input_names_ptr[i], cur_str_ptr, length);
         input_names_ptr[i][length] = '\0';
         env->ReleaseStringUTFChars(cur_str, cur_str_ptr);
         env->DeleteLocalRef(cur_str);
@@ -439,7 +458,7 @@ extern "C" JNIEXPORT void JNICALL BOLT_JNI_PREFIX(BoltModel_runModel)(JNIEnv *en
         env->DeleteLocalRef(curArray);
     }
 
-    RunModel(ih, ir, num_input, input_names_ptr, mem_ptr);
+    RunModel(ih, ir, num_input, (const char **)input_names_ptr, mem_ptr);
     for (int i = 0; i < num_input; i++) {
         free(input_names_ptr[i]);
     }
@@ -447,27 +466,19 @@ extern "C" JNIEXPORT void JNICALL BOLT_JNI_PREFIX(BoltModel_runModel)(JNIEnv *en
     free(mem_ptr);
 }
 
-int calculateLength(int *array, int num)
+std::string getString(JNIEnv *env, jstring jstring1)
 {
-    int length = 0;
-    for (int j = 0; j < num; j++) {
-        if (array[j] == 0) {
-            break;
-        } else {
-            if (length == 0) {
-                length = array[j];
-            } else {
-                length *= array[j];
-            }
-        }
-    }
-    return length;
+    const char *path = NULL;
+    path = env->GetStringUTFChars(jstring1, 0);
+    std::string spFn(path);
+    env->ReleaseStringUTFChars(jstring1, path);
+    return spFn;
 }
 
 extern "C" JNIEXPORT jobject JNICALL BOLT_JNI_PREFIX(BoltModel_getOutput)(
-    JNIEnv *env, jobject, jlong ResultHandleAddr)
+    JNIEnv *env, jobject, jlong ResultHandleAddr, jstring boltResultPath)
 {
-    std::string boltResultClassPath = std::string(BOLT_JNI_PATH_PREFIX) + "BoltResult";
+    std::string boltResultClassPath = getString(env, boltResultPath);
     jclass stucls = env->FindClass(boltResultClassPath.c_str());
 
     jmethodID constrocMID =

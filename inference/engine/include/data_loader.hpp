@@ -12,13 +12,17 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #ifndef _H_DATA_LOADER
+#define _H_DATA_LOADER
 
 #include <string>
-#include "tensor_desc.h"
+#include "parameter_spec.h"
 #include "tensor.hpp"
 
-#ifdef _BUILD_TEST
 int string_end_with(std::string s, std::string sub);
+
+void get_files(std::string directoryName, std::vector<std::string> &files);
+
+std::vector<Tensor> load_fake_data(std::vector<TensorDesc> dataDesc);
 
 std::vector<Tensor> load_txt(std::string dataPath, std::vector<TensorDesc> dataDesc);
 
@@ -29,15 +33,11 @@ std::vector<std::string> load_data(std::string directoryPath,
     std::vector<TensorDesc> dataDesc,
     std::vector<std::vector<Tensor>> *datas);
 
+#ifdef _BUILD_TEST
 std::vector<std::string> load_image_with_scale(std::string directoryPath,
     std::vector<TensorDesc> dataDesc,
     std::vector<std::vector<Tensor>> *datas,
     ImageFormat ImageFormat,
     F32 scaleValue);
-
-std::vector<std::string> load_bin_with_type(std::string directoryPath,
-    std::vector<TensorDesc> dataDesc,
-    std::vector<std::vector<Tensor>> *datas,
-    std::vector<DataType> sourceDataType);
 #endif
 #endif

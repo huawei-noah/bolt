@@ -48,6 +48,10 @@
 #include "ocl/rnncell_ocl.hpp"
 #include "ocl/padding_ocl.hpp"
 #include "ocl/prelu_ocl.hpp"
+#include "ocl/reduction_ocl.hpp"
+#include "ocl/topk_ocl.hpp"
+#include "ocl/tfslice_ocl.hpp"
+#include "ocl/cast_ocl.hpp"
 
 class FactoryOCL : public Factory {
 public:
@@ -206,7 +210,7 @@ public:
 
     std::shared_ptr<Operator> createReduction(DataType dt, ReductionParamSpec p) override
     {
-        OP_UNSUP(2, dt, p);
+        auto cep = new ReductionOCL(dt, p);
         return std::shared_ptr<Operator>(cep);
     }
 
@@ -338,7 +342,7 @@ public:
 
     std::shared_ptr<Operator> createTfSlice(DataType dt, TfSliceParamSpec p) override
     {
-        OP_UNSUP(2, dt, p);
+        auto cep = (TopK *)new TfSliceOCL(dt, p);
         return std::shared_ptr<Operator>(cep);
     }
 
@@ -351,6 +355,42 @@ public:
     std::shared_ptr<Operator> createShape() override
     {
         OP_UNSUP(0);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createWhere(DataType dt) override
+    {
+        OP_UNSUP(1, dt);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createTdnn(DataType dt, TdnnParamSpec p) override
+    {
+        OP_UNSUP(2, dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createBatchNorm(DataType dt, BatchNormParamSpec p) override
+    {
+        OP_UNSUP(2, dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createTopK(DataType dt, TopKParamSpec p) override
+    {
+        auto cep = (TopK *)new TopKOCL(dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createCast(DataType dt, CastParamSpec p) override
+    {
+        auto cep = (Cast *)new CastOCL(dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createEqual(DataType dt) override
+    {
+        OP_UNSUP(1, dt);
         return std::shared_ptr<Operator>(cep);
     }
 };

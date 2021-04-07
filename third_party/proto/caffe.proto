@@ -494,6 +494,7 @@ message LayerParameter {
   optional DetectionOutputParameter detection_output_param = 173;
   optional Yolov3DetectionOutputParameter yolov3_detection_output_param = 174;
   optional MishParameter mish_param = 175;
+  optional SoftPlusParameter softplus_param = 176;
   // <=== modified by Huawei Technologies Co., Ltd. in 2019 
 }
 
@@ -1824,3 +1825,7 @@ message MishParameter {
   }
   optional Engine engine = 2 [default = DEFAULT];
 }
+
+message SoftPlusParameter {
+}
+

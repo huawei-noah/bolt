@@ -32,19 +32,25 @@ inline void array_add_x86(DataType dt, const void *inputA, const void *inputB, v
     }
 }
 
-inline void array_square_and_add_x86(
-    DataType dt, const void *inputA, const void *inputB, void *output, I32 len)
+inline void array_mul_x86(DataType dt, const void *inputA, const void *inputB, void *output, I32 len)
 {
     switch (dt) {
 #ifdef _USE_FP32
         case DT_F32:
-            array_square_and_add_f32((const F32 *)inputA, (const F32 *)inputB, (F32 *)output, len);
+            array_mul_f32((const F32 *)inputA, (const F32 *)inputB, (F32 *)output, len);
             break;
 #endif
         default:
             CHECK_STATUS(NOT_SUPPORTED);
             break;
     }
+}
+
+inline void array_square_and_add_x86(
+    DataType dt, const void *inputA, const void *inputB, void *output, I32 len)
+{
+    array_mul_x86(dt, inputB, inputB, output, len);
+    array_add_x86(dt, inputA, output, output, len);
 }
 
 // array mean

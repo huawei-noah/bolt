@@ -13,10 +13,8 @@
 
 #ifndef _PRELU_MALI_FP16
 #define _PRELU_MALI_FP16
-#include "sys.h"
-#include "error.h"
-#include "types.h"
-#include "tensor_computing_type.h"
+
+#include "gpu/mali/fp16/tensor_computing_fp16.h"
 
 EE prelu_mali_fp16(GCLHandle_t handle,
     TensorDesc inputDesc,

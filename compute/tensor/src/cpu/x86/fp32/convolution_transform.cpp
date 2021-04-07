@@ -94,9 +94,14 @@ EE convolution_transform_filter_fp32(TensorDesc filterDesc,
     DataFormat fdf;
     U32 fn, fc, fh, fw;
     CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
+    fn = (fn + 7) / 8 * 8 / convParamSpec.group;
     switch (algorithm) {
         case CONVOLUTION_ALGORITHM_DIRECT: {
-            ftmDataFormat = DF_NCHWCxN32;
+            if ((fn % 24 == 0) && (fn % 32 != 0)) {
+                ftmDataFormat = DF_NCHWCxN24;
+            } else {
+                ftmDataFormat = DF_NCHWCxN32;
+            }
             cx = 8;
             break;
         }
@@ -110,27 +115,16 @@ EE convolution_transform_filter_fp32(TensorDesc filterDesc,
             break;
         }
         case CONVOLUTION_ALGORITHM_GEMM_ICNCHW: {
-            fn = (fn + 7) / 8 * 8 / convParamSpec.group;
-            if ((fn % 24 == 0) && (fn % 32 != 0)) {
-                ftmDataFormat = DF_NCHWCxN24;
-            } else {
+            if ((fn % 24 != 0) && (fn % 32 == 0)) {
                 ftmDataFormat = DF_NCHWCxN32;
+            } else {
+                ftmDataFormat = DF_NCHWCxN24;
             }
             cx = 1;
             break;
         }
         default:
             return NOT_MATCH;
-    }
-
-    // align to 32 byte
-    filterTransformed = (F32 *)(((uintptr_t)filterTransformed + 32 - 1) / 32 * 32);
-
-    if (algorithm == CONVOLUTION_ALGORITHM_POINTWISE) {
-        EE ret = convolution_transform_filter_kernel_fp32(
-            filterDesc, filter, ftmDesc, filterTransformed, ftmDataFormat, cx);
-        CHECK_STATUS(ret);
-        return ret;
     }
 
     U32 channelAxis = filterDesc.nDims - 1;

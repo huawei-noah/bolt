@@ -13,10 +13,8 @@
 
 #ifndef _DEPTHWISE_CONVOLUTION_MALI_FP16
 #define _DEPTHWISE_CONVOLUTION_MALI_FP16
-#include "sys.h"
-#include "error.h"
-#include "types.h"
-#include "tensor_computing_type.h"
+
+#include "gpu/mali/fp16/tensor_computing_fp16.h"
 
 EE depthwise_convolution_transform_filter_bytes_mali_fp16(TensorDesc filterDesc,
     ForwardRunInfoMali_t forwardRunInfo,

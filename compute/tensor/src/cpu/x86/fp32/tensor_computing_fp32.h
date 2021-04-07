@@ -17,9 +17,16 @@
 #include <vector>
 #include "sys.h"
 #include "error.h"
-#include "types.h"
+
 #include "thread_affinity.h"
 #include "x86_functions_fp32.h"
+
+EE attention_fp32(U32 batch,
+    U32 numHeads,
+    I32 fromSequenceLength,
+    I32 toSequenceLength,
+    const F32 *input,
+    F32 *output);
 
 EE attention_mask_fp32(TensorDesc inputDesc,
     const F32 *input,
@@ -43,6 +50,7 @@ EE convolution_infer_forward_tmp_bytes_fp32(TensorDesc inputDesc,
 
 EE convolution_fp32(TensorDesc inputDesc,
     F32 *input,
+    F32 *eltwiseInput,
     TensorDesc filterDesc,
     const F32 *filter,
     ConvolutionParamSpec convParamSpec,
@@ -58,6 +66,7 @@ EE convolution_fp32(TensorDesc inputDesc,
 
 EE convolution_direct(TensorDesc inputDesc,
     F32 *inArray,
+    F32 *eltwiseInput,
     TensorDesc filterDesc,
     const F32 *filterArray,
     ConvolutionParamSpec convParamSpec,
@@ -71,22 +80,10 @@ EE convolution_direct(TensorDesc inputDesc,
 
 EE convolution_1x1_direct(TensorDesc inputDesc,
     F32 *inArray,
+    F32 *eltwiseInput,
     TensorDesc filterDesc,
     const F32 *filterArray,
     ConvolutionParamSpec convParamSpec,
-    const F32 *biasArray,
-    U32 tmpBytes,
-    void *tmp,
-    TensorDesc outputDesc,
-    F32 *outArray,
-    ActivationParamSpec activationDesc);
-
-EE convolution_2x2_direct(TensorDesc inputDesc,
-    F32 *inArray,
-    TensorDesc filterDesc,
-    const F32 *filterArray,
-    ConvolutionParamSpec convParamSpec,
-    TensorDesc biasDesc,
     const F32 *biasArray,
     U32 tmpBytes,
     void *tmp,
@@ -231,11 +228,46 @@ EE rnncell_fp32(TensorDesc xDesc,
     void *output,
     Arch arch);
 
+EE lstmcell_fp32(TensorDesc xDesc,
+    const void *currentX,
+    const TensorDesc *filterDesc,
+    const void **filter,
+    const TensorDesc *biasDesc,
+    const void **bias,
+    void *state,
+    U32 tmpBytes,
+    void *tmp,
+    RNNParamSpec rnnParamSpec,
+    U32 batchStrideX,
+    U32 batchStrideH,
+    TensorDesc hDesc,
+    void *output,
+    Arch arch);
+
+EE grucell_fp32(TensorDesc xDesc,
+    const void *currentX,
+    const TensorDesc *filterDesc,
+    const void **filter,
+    const TensorDesc *biasDesc,
+    const void **bias,
+    void *state,
+    U32 tmpBytes,
+    void *tmp,
+    RNNParamSpec rnnParamSpec,
+    U32 batchStrideX,
+    U32 batchStrideH,
+    TensorDesc hDesc,
+    void *output,
+    Arch arch);
+
 EE pooling_fp32(TensorDesc inputDesc,
     const F32 *input,
     PoolingParamSpec poolingParamSpec,
     TensorDesc outputDesc,
     F32 *output);
+
+EE pooling_bp_fp32(
+    TensorDesc inputDesc, const F32 *input, PoolingParamSpec p, TensorDesc outputDesc, F32 *output);
 
 EE scale_fp32(F32 *input,
     I32 axis,
@@ -255,5 +287,12 @@ EE deconvolution_transform_filter_fp32(TensorDesc filterDesc,
     ConvolutionForwardAlgorithm algorithm,
     TensorDesc *ftmDesc,
     F32 *filterTransformed);
+
+EE prelu_fp32(TensorDesc inputDesc,
+    F32 *input,
+    F32 *weight,
+    PReLUParamSpec preluDesc,
+    TensorDesc outputDesc,
+    F32 *output);
 
 #endif  //CHEETAH_TENSOR_COMPUTING_FP32_H

@@ -16,8 +16,8 @@
 #include <vector>
 
 #include "sys.h"
-#include "error.h"
-#include "types.h"
+#include "tensor_desc.h"
+#include "parameter_spec.h"
 #include "cpu/arm/fp16/arm_functions_fp16.h"
 
 EE convolution_transform_filter_fp16(TensorDesc filterDesc,
@@ -48,17 +48,19 @@ EE deconvolution_transform_filter_fp16(TensorDesc filterDesc,
     TensorDesc *ftmDesc,
     F16 *filterTransformed);
 
-EE pooling_c8_fp16(const F16 *input,
-    U32 stride,
-    int hstart,
-    int hend,
-    int wstart,
-    int wend,
-    F16 *output,
-    PoolingParamSpec poolingParamSpec);
-
-EE pooling_c8_big_fp16(
-    const F16 *input, U32 stride, int hstart, int hend, int wstart, int wend, F16 *output, int poolSize);
+EE pooling_c8_fp16(I32 tstart,
+    I32 tend,
+    I32 hstart,
+    I32 hend,
+    I32 wstart,
+    I32 wend,
+    I32 poolSize,
+    const F16 *input,
+    I32 it,
+    I32 ih,
+    I32 iw,
+    PoolingParamSpec p,
+    F16 *output);
 
 EE softmax_fp16(
     TensorDesc inputDesc, const F16 *input, int axis, TensorDesc outputDesc, F16 *output);
@@ -108,6 +110,38 @@ EE eltwise_fp16(std::vector<void *> input,
     EltwiseMode eltwiseMode);
 
 EE rnncell_fp16(TensorDesc xDesc,
+    const void *currentX,
+    const TensorDesc *filterDesc,
+    const void **filter,
+    const TensorDesc *biasDesc,
+    const void **bias,
+    void *state,
+    U32 tmpBytes,
+    void *tmp,
+    RNNParamSpec rnnParamSpec,
+    U32 batchStrideX,
+    U32 batchStrideH,
+    TensorDesc hDesc,
+    void *output,
+    Arch arch);
+
+EE lstmcell_fp16(TensorDesc xDesc,
+    const void *currentX,
+    const TensorDesc *filterDesc,
+    const void **filter,
+    const TensorDesc *biasDesc,
+    const void **bias,
+    void *state,
+    U32 tmpBytes,
+    void *tmp,
+    RNNParamSpec rnnParamSpec,
+    U32 batchStrideX,
+    U32 batchStrideH,
+    TensorDesc hDesc,
+    void *output,
+    Arch arch);
+
+EE grucell_fp16(TensorDesc xDesc,
     const void *currentX,
     const TensorDesc *filterDesc,
     const void **filter,

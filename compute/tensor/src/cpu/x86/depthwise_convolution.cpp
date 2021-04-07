@@ -75,6 +75,9 @@ EE depthwise_convolution_infer_forward_tmp_bytes_x86(TensorDesc inputDesc,
         }
     }
     *bytes *= bytesOf(idt);
+    if (idf != DF_NCHWC8) {
+        *bytes += tensorNumBytes(inputDesc);
+    }
     *bytes += 32;
     return ret;
 }

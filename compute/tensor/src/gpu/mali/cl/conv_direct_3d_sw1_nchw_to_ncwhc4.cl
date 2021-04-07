@@ -12,22 +12,128 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "kernel_def.h"
-#define MANGLE_NAME_IMPL(base, FWH, FT, ON) base##FWH##FT##ON
-#define MANGLE_NAME(base, FWH, FT, ON) MANGLE_NAME_IMPL(base, FWH, FT, ON)
+#define MANGLE_NAME_IMPL(base, AM, FW, FH, FT, ON) base##AM##FW##FH##FT##ON
+#define MANGLE_NAME(base, AM, FW, FH, FT, ON) MANGLE_NAME_IMPL(base, AM, FW, FH, FT, ON)
 
-#if (FWH == 1)
-#define calCore(A, B, C)  \
-    {                     \
-        C[0] += A.s0 * B; \
-        C[1] += A.s1 * B; \
-        C[2] += A.s2 * B; \
-        C[3] += A.s3 * B; \
-        C[4] += A.s4 * B; \
-        C[5] += A.s5 * B; \
-        C[6] += A.s6 * B; \
-        C[7] += A.s7 * B; \
+#if (IN <= 8)
+#define LOAD_INPUT(off, buf)           \
+    {                                  \
+        in_val = vload8(0, off + buf); \
     }
-#elif (FWH == 3)
+#elif (IN <= 16)
+#define LOAD_INPUT(off, buf)            \
+    {                                   \
+        in_val = vload16(0, off + buf); \
+    }
+#endif
+
+#if (ON == 2)
+#define calCore(a0, a1, B, C) \
+    {                         \
+        C[0] += a0 * B;       \
+        C[1] += a1 * B;       \
+    }
+#define calCore0(B, C) calCore(in_val.s0, in_val.s1, B, C)
+#if (FW > 1)
+#define calCore1(B, C) calCore(in_val.s1, in_val.s2, B, C)
+#endif
+#if (FW > 2)
+#define calCore2(B, C) calCore(in_val.s2, in_val.s3, B, C)
+#endif
+#if (FW > 3)
+#define calCore3(B, C) calCore(in_val.s3, in_val.s4, B, C)
+#endif
+#if (FW > 4)
+#define calCore4(B, C) calCore(in_val.s4, in_val.s5, B, C)
+#endif
+#if (FW > 5)
+#define calCore5(B, C) calCore(in_val.s5, in_val.s6, B, C)
+#endif
+#if (FW > 6)
+#define calCore6(B, C) calCore(in_val.s6, in_val.s7, B, C)
+#endif
+#elif (ON == 3)
+#define calCore(a0, a1, a2, B, C) \
+    {                             \
+        C[0] += a0 * B;           \
+        C[1] += a1 * B;           \
+        C[2] += a2 * B;           \
+    }
+#define calCore0(B, C) calCore(in_val.s0, in_val.s1, in_val.s2, B, C)
+#if (FW > 1)
+#define calCore1(B, C) calCore(in_val.s1, in_val.s2, in_val.s3, B, C)
+#endif
+#if (FW > 2)
+#define calCore2(B, C) calCore(in_val.s2, in_val.s3, in_val.s4, B, C)
+#endif
+#if (FW > 3)
+#define calCore3(B, C) calCore(in_val.s3, in_val.s4, in_val.s5, B, C)
+#endif
+#if (FW > 4)
+#define calCore4(B, C) calCore(in_val.s4, in_val.s5, in_val.s6, B, C)
+#endif
+#if (FW > 5)
+#define calCore5(B, C) calCore(in_val.s5, in_val.s6, in_val.s7, B, C)
+#endif
+#if (FW > 6)
+#define calCore6(B, C) calCore(in_val.s6, in_val.s7, in_val.s8, B, C)
+#endif
+#elif (ON == 4)
+#define calCore(a0, a1, a2, a3, B, C) \
+    {                                 \
+        C[0] += a0 * B;               \
+        C[1] += a1 * B;               \
+        C[2] += a2 * B;               \
+        C[3] += a3 * B;               \
+    }
+#define calCore0(B, C) calCore(in_val.s0, in_val.s1, in_val.s2, in_val.s3, B, C)
+#if (FW > 1)
+#define calCore1(B, C) calCore(in_val.s1, in_val.s2, in_val.s3, in_val.s4, B, C)
+#endif
+#if (FW > 2)
+#define calCore2(B, C) calCore(in_val.s2, in_val.s3, in_val.s4, in_val.s5, B, C)
+#endif
+#if (FW > 3)
+#define calCore3(B, C) calCore(in_val.s3, in_val.s4, in_val.s5, in_val.s6, B, C)
+#endif
+#if (FW > 4)
+#define calCore4(B, C) calCore(in_val.s4, in_val.s5, in_val.s6, in_val.s7, B, C)
+#endif
+#if (FW > 5)
+#define calCore5(B, C) calCore(in_val.s5, in_val.s6, in_val.s7, in_val.s8, B, C)
+#endif
+#if (FW > 6)
+#define calCore6(B, C) calCore(in_val.s6, in_val.s7, in_val.s8, in_val.s9, B, C)
+#endif
+#elif (ON == 5)
+#define calCore(a0, a1, a2, a3, a4, B, C) \
+    {                                     \
+        C[0] += a0 * B;                   \
+        C[1] += a1 * B;                   \
+        C[2] += a2 * B;                   \
+        C[3] += a3 * B;                   \
+        C[4] += a4 * B;                   \
+    }
+#define calCore0(B, C) calCore(in_val.s0, in_val.s1, in_val.s2, in_val.s3, in_val.s4, B, C)
+#if (FW > 1)
+#define calCore1(B, C) calCore(in_val.s1, in_val.s2, in_val.s3, in_val.s4, in_val.s5, B, C)
+#endif
+#if (FW > 2)
+#define calCore2(B, C) calCore(in_val.s2, in_val.s3, in_val.s4, in_val.s5, in_val.s6, B, C)
+#endif
+#if (FW > 3)
+#define calCore3(B, C) calCore(in_val.s3, in_val.s4, in_val.s5, in_val.s6, in_val.s7, B, C)
+#endif
+#if (FW > 4)
+#define calCore4(B, C) calCore(in_val.s4, in_val.s5, in_val.s6, in_val.s7, in_val.s8, B, C)
+#endif
+#if (FW > 5)
+#define calCore5(B, C) calCore(in_val.s5, in_val.s6, in_val.s7, in_val.s8, in_val.s9, B, C)
+#endif
+#if (FW > 6)
+#define calCore6(B, C) calCore(in_val.s6, in_val.s7, in_val.s8, in_val.s9, in_val.sa, B, C)
+#endif
+#elif (ON == 6)
 #define calCore(a0, a1, a2, a3, a4, a5, B, C) \
     {                                         \
         C[0] += a0 * B;                       \
@@ -37,65 +143,137 @@
         C[4] += a4 * B;                       \
         C[5] += a5 * B;                       \
     }
-#define calCore0(A, B, C) calCore(A.s0, A.s1, A.s2, A.s3, A.s4, A.s5, B, C)
-#define calCore1(A, B, C) calCore(A.s1, A.s2, A.s3, A.s4, A.s5, A.s6, B, C)
-#define calCore2(A, B, C) calCore(A.s2, A.s3, A.s4, A.s5, A.s6, A.s7, B, C)
-#elif (FWH == 5)
-#define calCore(a0, a1, a2, a3, B, C) \
-    {                                 \
-        C[0] += a0 * B;               \
-        C[1] += a1 * B;               \
-        C[2] += a2 * B;               \
-        C[3] += a3 * B;               \
+#define calCore0(B, C) \
+    calCore(in_val.s0, in_val.s1, in_val.s2, in_val.s3, in_val.s4, in_val.s5, B, C)
+#if (FW > 1)
+#define calCore1(B, C) \
+    calCore(in_val.s1, in_val.s2, in_val.s3, in_val.s4, in_val.s5, in_val.s6, B, C)
+#endif
+#if (FW > 2)
+#define calCore2(B, C) \
+    calCore(in_val.s2, in_val.s3, in_val.s4, in_val.s5, in_val.s6, in_val.s7, B, C)
+#endif
+#if (FW > 3)
+#define calCore3(B, C) \
+    calCore(in_val.s3, in_val.s4, in_val.s5, in_val.s6, in_val.s7, in_val.s8, B, C)
+#endif
+#if (FW > 4)
+#define calCore4(B, C) \
+    calCore(in_val.s4, in_val.s5, in_val.s6, in_val.s7, in_val.s8, in_val.s9, B, C)
+#endif
+#if (FW > 5)
+#define calCore5(B, C) \
+    calCore(in_val.s5, in_val.s6, in_val.s7, in_val.s8, in_val.s9, in_val.sa, B, C)
+#endif
+#if (FW > 6)
+#define calCore6(B, C) \
+    calCore(in_val.s6, in_val.s7, in_val.s8, in_val.s9, in_val.sa, in_val.sb, B, C)
+#endif
+#elif (ON == 7)
+#define calCore(a0, a1, a2, a3, a4, a5, a6, B, C) \
+    {                                             \
+        C[0] += a0 * B;                           \
+        C[1] += a1 * B;                           \
+        C[2] += a2 * B;                           \
+        C[3] += a3 * B;                           \
+        C[4] += a4 * B;                           \
+        C[5] += a5 * B;                           \
+        C[6] += a6 * B;                           \
     }
-#define calCore0(A, B, C) calCore(A.s0, A.s1, A.s2, A.s3, B, C)
-#define calCore1(A, B, C) calCore(A.s1, A.s2, A.s3, A.s4, B, C)
-#define calCore2(A, B, C) calCore(A.s2, A.s3, A.s4, A.s5, B, C)
-#define calCore3(A, B, C) calCore(A.s3, A.s4, A.s5, A.s6, B, C)
-#define calCore4(A, B, C) calCore(A.s4, A.s5, A.s6, A.s7, B, C)
-#elif (FWH == 7)
-#define calCore(a0, a1, B, C) \
-    {                         \
-        C[0] += a0 * B;       \
-        C[1] += a1 * B;       \
+#define calCore0(B, C) \
+    calCore(in_val.s0, in_val.s1, in_val.s2, in_val.s3, in_val.s4, in_val.s5, in_val.s6, B, C)
+#if (FW > 1)
+#define calCore1(B, C) \
+    calCore(in_val.s1, in_val.s2, in_val.s3, in_val.s4, in_val.s5, in_val.s6, in_val.s7, B, C)
+#endif
+#if (FW > 2)
+#define calCore2(B, C) \
+    calCore(in_val.s2, in_val.s3, in_val.s4, in_val.s5, in_val.s6, in_val.s7, in_val.s8, B, C)
+#endif
+#if (FW > 3)
+#define calCore3(B, C) \
+    calCore(in_val.s3, in_val.s4, in_val.s5, in_val.s6, in_val.s7, in_val.s8, in_val.s9, B, C)
+#endif
+#if (FW > 4)
+#define calCore4(B, C) \
+    calCore(in_val.s4, in_val.s5, in_val.s6, in_val.s7, in_val.s8, in_val.s9, in_val.sa, B, C)
+#endif
+#if (FW > 5)
+#define calCore5(B, C) \
+    calCore(in_val.s5, in_val.s6, in_val.s7, in_val.s8, in_val.s9, in_val.sa, in_val.sb, B, C)
+#endif
+#if (FW > 6)
+#define calCore6(B, C) \
+    calCore(in_val.s6, in_val.s7, in_val.s8, in_val.s9, in_val.sa, in_val.sb, in_val.sc, B, C)
+#endif
+#elif (ON == 8)
+#define calCore(a0, a1, a2, a3, a4, a5, a6, a7, B, C) \
+    {                                                 \
+        C[0] += a0 * B;                               \
+        C[1] += a1 * B;                               \
+        C[2] += a2 * B;                               \
+        C[3] += a3 * B;                               \
+        C[4] += a4 * B;                               \
+        C[5] += a5 * B;                               \
+        C[6] += a6 * B;                               \
+        C[7] += a7 * B;                               \
     }
-#define calCore0(A, B, C) calCore(A.s0, A.s1, B, C)
-#define calCore1(A, B, C) calCore(A.s1, A.s2, B, C)
-#define calCore2(A, B, C) calCore(A.s2, A.s3, B, C)
-#define calCore3(A, B, C) calCore(A.s3, A.s4, B, C)
-#define calCore4(A, B, C) calCore(A.s4, A.s5, B, C)
-#define calCore5(A, B, C) calCore(A.s5, A.s6, B, C)
-#define calCore6(A, B, C) calCore(A.s6, A.s7, B, C)
+#define calCore0(B, C)                                                                   \
+    calCore(in_val.s0, in_val.s1, in_val.s2, in_val.s3, in_val.s4, in_val.s5, in_val.s6, \
+        in_val.s7, B, C)
+#if (FW > 1)
+#define calCore1(B, C)                                                                   \
+    calCore(in_val.s1, in_val.s2, in_val.s3, in_val.s4, in_val.s5, in_val.s6, in_val.s7, \
+        in_val.s8, B, C)
+#endif
+#if (FW > 2)
+#define calCore2(B, C)                                                                   \
+    calCore(in_val.s2, in_val.s3, in_val.s4, in_val.s5, in_val.s6, in_val.s7, in_val.s8, \
+        in_val.s9, B, C)
+#endif
+#if (FW > 3)
+#define calCore3(B, C)                                                                   \
+    calCore(in_val.s3, in_val.s4, in_val.s5, in_val.s6, in_val.s7, in_val.s8, in_val.s9, \
+        in_val.sa, B, C)
+#endif
+#if (FW > 4)
+#define calCore4(B, C)                                                                   \
+    calCore(in_val.s4, in_val.s5, in_val.s6, in_val.s7, in_val.s8, in_val.s9, in_val.sa, \
+        in_val.sb, B, C)
+#endif
+#if (FW > 5)
+#define calCore5(B, C)                                                                   \
+    calCore(in_val.s5, in_val.s6, in_val.s7, in_val.s8, in_val.s9, in_val.sa, in_val.sb, \
+        in_val.sc, B, C)
+#endif
+#if (FW > 6)
+#define calCore6(B, C)                                                                   \
+    calCore(in_val.s6, in_val.s7, in_val.s8, in_val.s9, in_val.sa, in_val.sb, in_val.sc, \
+        in_val.sd, B, C)
+#endif
 #endif
 
-#if defined(USE_RELU)
-__kernel void MANGLE_NAME(conv_direct_3d_sw1_nchw_to_ncwhc4_relu_, FWH, FT, ON)
-#elif defined(USE_RELU6)
-__kernel void MANGLE_NAME(conv_direct_3d_sw1_nchw_to_ncwhc4_relu6_, FWH, FT, ON)
-#else
-__kernel void MANGLE_NAME(conv_direct_3d_sw1_nchw_to_ncwhc4_, FWH, FT, ON)
-#endif
-    (const int iw_str,
-        const int iwh_str,
-        const int ic_str,
-        const int iw_off,
-        const int ih_off,
-        const int oh_str,
-        const int ow_str,
-        const int oh_off,
-        const int ow_off,
-        const int ow,
-        const int ot,
-        const int it,
-        const int pt,
-        const int sh,
-        const int st,
-        const int bx,
-        const int by,
-        __global const T *in,
-        __global const T *flt,
-        __read_only image1d_t bias,
-        __global T *out)
+__kernel void MANGLE_NAME(conv_direct_3d_sw1_nchw_to_ncwhc4_, AM, FW, FH, FT, ON)(const int iw_str,
+    const int iwh_str,
+    const int ic_str,
+    const int iw_off,
+    const int ih_off,
+    const int oh_str,
+    const int ow_str,
+    const int oh_off,
+    const int ow_off,
+    const int ow,
+    const int ot,
+    const int it,
+    const int pt,
+    const int sh,
+    const int st,
+    const int bx,
+    const int by,
+    __global const T *in,
+    __global const T *flt,
+    __read_only image1d_t bias,
+    __global T *out)
 {
     const int idx = get_global_id(0);
     const int idy = get_global_id(1);
@@ -107,7 +285,11 @@ __kernel void MANGLE_NAME(conv_direct_3d_sw1_nchw_to_ncwhc4_, FWH, FT, ON)
         return;
     }
 
+#if (IN <= 8)
     T8 in_val;
+#elif (IN > 8)
+    T16 in_val;
+#endif
     T4 flt_val;
     T4 out_val[ON];
 
@@ -117,51 +299,56 @@ __kernel void MANGLE_NAME(conv_direct_3d_sw1_nchw_to_ncwhc4_, FWH, FT, ON)
 
     int t_be = idt * st - pt;
     int t_end = t_be + FT;
+    int flt_be = 0;
+    int flt_end = 0;
     if (t_be < 0) {
+        flt_be -= t_be * FW * FH;
         t_be = 0;
-        flt_off += pt * FWH * FWH;
     }
     if (t_end > it) {
+        flt_end = (t_end - it) * FW * FH;
         t_end = it;
     }
 
     for (int i = 0; i < ic_str; ++i) {
+        flt_off += flt_be;
         for (int tt = t_be; tt < t_end; ++tt) {
-#if (FWH == 1)
+#if (FW == 1 && FH == 1)
             flt_val = vload4(flt_off, flt);
-            in_val = vload8(0, in + in_off + tt * iwh_str);
-            calCore(in_val, flt_val, out_val);
+            LOAD_INPUT(in_off + tt * iwh_str, in);
+            calCore0(flt_val, out_val);
             flt_off++;
 #else
-            for (uchar j = 0; j < FWH; ++j) {
-                in_val = vload8(0, in + in_off + tt * iwh_str + j * iw_str);
-                for (uchar k = 0; k < FWH; ++k) {
+            for (uchar j = 0; j < FH; ++j) {
+                LOAD_INPUT(in_off + tt * iwh_str + j * iw_str, in);
+                for (uchar k = 0; k < FW; ++k) {
                     flt_val = vload4(flt_off + k, flt);
                     if (k == 0) {
-                        calCore0(in_val, flt_val, out_val);
+                        calCore0(flt_val, out_val);
                     } else if (k == 1) {
-                        calCore1(in_val, flt_val, out_val);
+                        calCore1(flt_val, out_val);
                     } else if (k == 2) {
-                        calCore2(in_val, flt_val, out_val);
-#if (FWH >= 5)
+                        calCore2(flt_val, out_val);
+#if (FW > 3)
                     } else if (k == 3) {
-                        calCore3(in_val, flt_val, out_val);
+                        calCore3(flt_val, out_val);
                     } else if (k == 4) {
-                        calCore4(in_val, flt_val, out_val);
+                        calCore4(flt_val, out_val);
 #endif
-#if (FWH == 7)
+#if (FW > 5)
                     } else if (k == 5) {
-                        calCore5(in_val, flt_val, out_val);
+                        calCore5(flt_val, out_val);
                     } else if (k == 6) {
-                        calCore6(in_val, flt_val, out_val);
+                        calCore6(flt_val, out_val);
 #endif
                     }
                 }
-                flt_off += FWH;
+                flt_off += FW;
             }
 #endif
         }
         in_off += iwh_str * it;
+        flt_off += flt_end;
     }
 
     int xn = idx * ON;

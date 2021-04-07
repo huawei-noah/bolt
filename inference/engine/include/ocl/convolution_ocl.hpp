@@ -49,6 +49,13 @@ public:
         DataType dtNoQ = (this->dt == DT_F16_8Q) ? DT_F16 : this->dt;
         switch (this->p.convolution_type) {
             case Convolution_Pointwise: {
+                if (this->p.num_outputs_origin == 1) {
+                    if (tensorIs5d(wDesc[0])) {
+                        wDesc[0].dims[4] = this->p.num_outputs;
+                    } else {
+                        wDesc[0].dims[3] = this->p.num_outputs;
+                    }
+                }
                 vDesc[0] = tensor1d(dtNoQ,
                     this->p.num_outputs);  // bias data type should be the same as input and output
                 ((MaliPara_t)(this->archInfo.archPara))->forwardRunInfo->algorithm =
@@ -88,11 +95,11 @@ public:
             modelWeightTensor.resize(wDesc[i]);
             modelVectorTensor.resize(vDesc[i]);
 
-            U32 ww, wh, wc, wn;
+            U32 ww, wh, wc, wn, wt;
             DataFormat df;
             DataType dt;
-            tensorSelectGet(wDesc[i], &dt, &df, &wn, &wc, &wh, &ww);
-            U32 stride[3] = {ww * wh, wc, wn};
+            tensorSelectGet(wDesc[i], &dt, &df, &wn, &wc, &wh, &ww, &wt);
+            U32 stride[3] = {ww * wh * wt, wc, wn};
             U32 offset[3] = {0, 0, 0};
             GCLMemType mt = GCL_MEM_BUF;
             MemFlags flags = CL_MEM_READ_WRITE;
@@ -108,11 +115,16 @@ public:
                 U32 iw, ih;
                 TensorDesc inputDesc = this->inputTensors[0].get_desc();
                 tensorSelectGet(inputDesc, NULL, NULL, NULL, NULL, &ih, &iw);
-                if ((wn == 1 && this->p.convolution_type == Convolution_Pointwise) ||
-                    (ww == 1 && wh == 1 && iw == 1 && ih == 1)) {
-                    mt = GCL_MEM_BUF;
-                    vecAlign = 8;
-                    stride[0] = (vecLen + vecAlign - 1) / vecAlign * vecAlign;
+                if (this->p.convolution_type == Convolution_Pointwise) {
+                    U32 sw = this->p.stride_w;
+                    U32 wn_org = this->p.num_outputs_origin;
+                    if ((wn_org * sw * wt == 1 && (ww == wh) &&
+                            (ww == 1 || ww == 3 || ww == 5 || ww == 7)) ||
+                        (ww * wh * wt * iw * ih == 1)) {
+                        mt = GCL_MEM_BUF;
+                        vecAlign = 8;
+                        stride[0] = (vecLen + vecAlign - 1) / vecAlign * vecAlign;
+                    }
                 }
             }
             stride[1] = 1;
@@ -129,35 +141,6 @@ public:
     {
         OCLContext::getInstance().handle.get()->curOpName = this->get_name();
         Tensor inputTensor = this->inputTensors[0];
-        if (this->needTransInput) {
-            auto inputMem = (OclMemory *)inputTensor.get_memory();
-            GCLMemDesc inputDesc = inputMem->get_desc();
-            void *inputPtr = inputMem->get_ptr();
-            TensorDesc inputDescCpu = inputTensor.get_desc();
-            DataType dt;
-            DataFormat df;
-            U32 iw, ih, ic;
-            U32 iw_str, ih_str, ic_str, iw_off, ih_off;
-            tensorSelectGet(inputDescCpu, &dt, &df, NULL, &ic, &ih, &iw);
-            get_gclmem_dim(inputDesc, &iw_str, &ih_str, &ic_str, &iw_off, &ih_off);
-            if (inputDesc.memFormat == df && iw_str == iw && ih_str == ih && ic_str == ic &&
-                iw_off == 0 && ih_off == 0) {
-                this->needTransInput = false;
-            } else {
-                auto tmpMem = (OclMemory *)this->temp.get_memory();
-                void *tmpPtr = tmpMem->get_ptr();
-                U32 stride[3] = {iw, ih, ic};
-                U32 offset[3] = {0, 0, 0};
-                GCLMemType mt = GCL_MEM_BUF;
-                MemFlags flags = CL_MEM_READ_WRITE;
-                GCLMemDesc initDesc = gclmem_build_desc();
-                CHECK_STATUS(gclmem_set_desc_padding(&initDesc, stride, offset, dt, df, mt, flags));
-                CHECK_STATUS(ocl_trans_mem(OCLContext::getInstance().handle.get(),
-                    (GCLMem_t)inputPtr, initDesc, (GCLMem_t)tmpPtr, initDesc));
-                CHECK_STATUS(ocl_trans_mem(OCLContext::getInstance().handle.get(), (GCLMem_t)tmpPtr,
-                    initDesc, (GCLMem_t)inputPtr, inputDesc));
-            }
-        }
         Tensor filterTensor = this->weightTensors[0];
         filterTensor.resize(this->filterDesc);
         U8 *scalePtr = nullptr;
@@ -165,9 +148,9 @@ public:
         Tensor outputTensor = this->outputTensors[0];
         switch (this->p.convolution_type) {
             case Convolution_Pointwise: {
-                CHECK_STATUS(
-                    convolution(inputTensor, filterTensor, p, this->pwAlg, scalePtr, biasTensor,
-                        this->temp, outputTensor, this->pwActivationParamSpec, &this->archInfo));
+                CHECK_STATUS(convolution(this->inputTensors, filterTensor, p, this->pwAlg, scalePtr,
+                    biasTensor, this->temp, outputTensor, this->pwActivationParamSpec,
+                    &this->archInfo));
                 break;
             }
             case Convolution_Depthwise: {
@@ -299,12 +282,13 @@ public:
         TensorDesc inDim = inputTensor->get_desc();
         DataType idt;
         DataFormat idf;
-        U32 in, ic, ih, iw;
-        CHECK_STATUS(tensor4dGet(inDim, &idt, &idf, &in, &ic, &ih, &iw));
+        U32 in, ic, ih, iw, it;
+        U32 nDims;
+        CHECK_STATUS(tensorSelectGet(inDim, &idt, &idf, &in, &ic, &ih, &iw, &it));
         this->numChannels = ic;
         U32 numFiltersOcl = this->p.num_outputs;
         GCLMemDesc inputGclDesc = ocl_get_desc(*inputTensor);
-        if (this->p.num_outputs_origin == 1 && inputGclDesc.byteSize == 0) {
+        if (this->p.num_outputs_origin == 1 && inputGclDesc.byteSize > 0) {
             numFiltersOcl = this->p.num_outputs_origin;
         }
         DataType targetType = DT_F16;  // Default DT_F16
@@ -312,10 +296,18 @@ public:
         auto inputMem = (OclMemory *)inputTensor->get_memory();
         GCLMemDesc gclDesc = inputMem->get_desc();
         this->needTransInput = (gclDesc.byteSize == 0) ? true : false;
+        if (this->p.convolution_type == Convolution_Dilation) {
+            this->p.convolution_type = Convolution_Pointwise;
+        }
         switch (this->p.convolution_type) {
             case Convolution_Pointwise: {
-                this->filterDesc = tensor4df(this->dt, DF_NCHW, numFiltersOcl, this->numChannels,
-                    this->p.kernel_h, this->p.kernel_w);
+                if (tensorIs5d(inDim)) {
+                    this->filterDesc = tensor5df(this->dt, DF_NCHW, numFiltersOcl,
+                        this->numChannels, this->p.kernel_t, this->p.kernel_h, this->p.kernel_w);
+                } else {
+                    this->filterDesc = tensor4df(this->dt, DF_NCHW, numFiltersOcl,
+                        this->numChannels, this->p.kernel_h, this->p.kernel_w);
+                }
                 filterTensor.resize(this->filterDesc);
                 CHECK_STATUS(convolution_infer_output_size(
                     inputTensor, filterTensor, p, outTensors[0], targetType, &this->archInfo));
@@ -383,8 +375,8 @@ public:
                 CHECK_STATUS(NOT_SUPPORTED);
         }
         if (this->needTransInput) {
-            TensorDesc desc = inputTensor.get_desc();
-            U32 size = tensorNumBytes(desc);
+            auto mem = (OclMemory *)inputTensor.get_memory();
+            U32 size = mem->get_desc().byteSize;
             if (bytes < size) {
                 bytes = size;
             }
@@ -410,11 +402,6 @@ public:
             case Convolution_Pointwise: {
                 CHECK_STATUS(convolution_transform_filter_bytes(
                     filterTensor, this->p, this->pwAlg, &bytes, &this->archInfo));
-                U32 best_c = this->runInfo.best_c[0];
-                U32 best_k = this->runInfo.best_k[0];
-                if (best_c == 4 && best_k == 1) {
-                    needTransBiasImgToBuf = true;
-                }
                 break;
             }
             case Convolution_Depthwise: {
@@ -453,8 +440,7 @@ public:
                 descImg.dims[1], descImg.dims[0]);
             biasTensorBuf.resize(desc);
             GCLMemDesc descBuf = gclmem_build_desc();
-            U32 stride[3] = {
-                (descImg.stride[0] * 4 + 7) / 8 * 8, descImg.stride[1], descImg.stride[2]};
+            U32 stride[3] = {descImg.stride[0] * 4 + 8, descImg.stride[1], descImg.stride[2]};
             U32 offset[3] = {0, 0, 0};
             GCLMemType mt = GCL_MEM_BUF;
             MemFlags flags = CL_MEM_READ_WRITE;

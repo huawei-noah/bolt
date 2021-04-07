@@ -13,10 +13,8 @@
 
 #ifndef _FC_MALI_FP16
 #define _FC_MALI_FP16
-#include "sys.h"
-#include "error.h"
-#include "types.h"
-#include "tensor_computing_type.h"
+
+#include "gpu/mali/fp16/tensor_computing_fp16.h"
 
 EE fully_connected_transform_filter_bytes_mali_fp16(TensorDesc filterDesc,
     GCLMemDesc_t gclmemFilterDesc,
@@ -27,7 +25,7 @@ EE fully_connected_transform_filter_mali_fp16(GCLHandle_t handle,
     TensorDesc filterDesc,
     GCLMem_t filter,
     TensorDesc *fltmemDesc,
-    std::vector<GCLMem_t> fltmem,
+    GCLMem_t fltmem,
     ForwardRunInfoMali_t forwardRunInfo);
 
 EE fully_connected_infer_forward_tmp_bytes_mali_fp16(
@@ -37,12 +35,12 @@ EE fully_connected_mali_fp16(GCLHandle_t handle,
     TensorDesc inputDesc,
     const GCLMem_t input,
     TensorDesc filterDesc,
-    std::vector<GCLMem_t> filter,
+    GCLMem_t filter,
     TensorDesc biasDesc,
-    std::vector<GCLMem_t> bias,
+    GCLMem_t bias,
     U32 tmpBytes,
     GCLMem_t tmpBuf,
     TensorDesc outputDesc,
-    std::vector<GCLMem_t> output,
+    GCLMem_t output,
     ForwardRunInfoMali_t forwardRunInfo);
 #endif

@@ -11,10 +11,8 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string>
-#include "converter.h"
-#include "model_tools.h"
 #include "onnx_adaptee.h"
+#include "model_converter.h"
 
 EE onnx_converter(std::string dir, std::string mfn, int removePreprocessOpNum, ModelSpec *ms)
 {

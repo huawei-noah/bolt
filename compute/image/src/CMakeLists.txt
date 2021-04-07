@@ -6,13 +6,17 @@ if (USE_NEON)
     file(GLOB arm_srcs ${CMAKE_CURRENT_SOURCE_DIR}/cpu/arm/*.cpp)
 endif (USE_NEON)
 
+if (USE_X86)
+    file(GLOB x86_srcs ${CMAKE_CURRENT_SOURCE_DIR}/cpu/x86/*.cpp)
+endif (USE_X86)
+
 if (USE_MALI)
     file(GLOB mali_srcs ${CMAKE_CURRENT_SOURCE_DIR}/gpu/mali/*.cpp)
     file(GLOB mali_fp16_srcs ${CMAKE_CURRENT_SOURCE_DIR}/gpu/mali/fp16/*.cpp)
 endif (USE_MALI)
 
 file(GLOB srcs ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
-set(srcs "${srcs};${general_srcs};${arm_srcs};${mali_srcs};${mali_fp16_srcs}")
+set(srcs "${srcs};${general_srcs};${arm_srcs};${x86_srcs};${mali_srcs};${mali_fp16_srcs}")
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 

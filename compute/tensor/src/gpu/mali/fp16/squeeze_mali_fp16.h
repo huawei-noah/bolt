@@ -13,11 +13,18 @@
 
 #ifndef _SQUEEZE_MALI_FP16
 #define _SQUEEZE_MALI_FP16
-#include "sys.h"
-#include "types.h"
-#include "error.h"
-#include "tensor_computing_type.h"
 
-EE squeeze_mali_fp16(
-    GCLHandle_t handle, TensorDesc inputDesc, GCLMem_t input, TensorDesc outputDesc, GCLMem_t output);
+#include "gpu/mali/fp16/tensor_computing_fp16.h"
+
+EE squeeze_infer_forward_tmp_bytes_mali_fp16(TensorDesc inputDesc,
+    GCLMemDesc gclmemInputDesc,
+    TensorDesc outputDesc,
+    GCLMemDesc gclmemOutputDesc,
+    U32 *bytes);
+EE squeeze_mali_fp16(GCLHandle_t handle,
+    TensorDesc inputDesc,
+    GCLMem_t input,
+    GCLMem_t tmpbuf,
+    TensorDesc outputDesc,
+    GCLMem_t output);
 #endif

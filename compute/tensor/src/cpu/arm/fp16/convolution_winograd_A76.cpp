@@ -13,6 +13,10 @@
 
 #include "cpu/arm/fp16/convolution_winograd_transform.h"
 #include "cpu/arm/fp16/convolution_winograd.h"
+#include "thread_affinity.h"
+#ifdef _USE_OPENMP
+#include <omp.h>
+#endif
 
 EE convolution_winograd_A76(TensorDesc inputDesc,
     F16 *inArray,
@@ -71,8 +75,9 @@ EE convolution_winograd_A76(TensorDesc inputDesc,
     // otm: oc*6*6*8*8
     F16 *inArray_pad = (F16 *)tmp;
     F16 *itmArray = inArray_pad + ic * ih_pad * iw_pad * 8;
-    F16 *otmArray = itmArray + 6 * 6 * ic * 8 * 8;
+    F16 *otmArray = itmArray + 6 * 6 * ic * 8 * 8 * OMP_NUM_THREADS;
 
+    int oc_1 = oc - 1;
     EE ret = SUCCESS;
     // copy input into a input with padding
     for (U32 n = 0; n < in; n++) {
@@ -95,14 +100,23 @@ EE convolution_winograd_A76(TensorDesc inputDesc,
         }
 
         // tiles / 8
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
         for (I32 hw = 0; hw < tiles - 7; hw += 8) {
+#ifdef _USE_OPENMP
+            F16 *thread_itmArray = itmArray + ic * 6 * 6 * 8 * 8 * omp_get_thread_num();
+            F16 *thread_otmArray = otmArray + oc * 6 * 6 * 8 * 8 * omp_get_thread_num();
+#else
+            F16 *thread_itmArray = itmArray;
+            F16 *thread_otmArray = otmArray;
+#endif
             const F16 *ftm_0 = filterArray;
-            F16 *otm_0 = otmArray;
+            F16 *otm_0 = thread_otmArray;
             // in trans
             // NCHWc8 => (6*6)*C*c8*hw8
             for (U32 c = 0; c < ic; c++) {
                 F16 *inArray_pad_mov = inArray_pad + c * ih_pad * iw_pad * 8;
-                F16 *itmArray_mov = itmArray + c * 8 * 8;
                 F16 *Iw_ptr[36];
                 F16 Iw[8][36][8];
                 F16 *I[8][36];
@@ -127,7 +141,7 @@ EE convolution_winograd_A76(TensorDesc inputDesc,
                     trans_I_4x4_3x3(Iw_ptr, I[index]);
                 }
                 for (U32 i = 0; i < 36; i++) {
-                    F16 *itm = itmArray_mov + i * ic * 8 * 8;
+                    F16 *itm = thread_itmArray + (i * ic + c) * 8 * 8;
                     float16x8_t v0 = vld1q_f16(Iw[0][i]);
                     float16x8_t v1 = vld1q_f16(Iw[1][i]);
                     float16x8_t v2 = vld1q_f16(Iw[2][i]);
@@ -162,10 +176,10 @@ EE convolution_winograd_A76(TensorDesc inputDesc,
                             vzip2q_f16(vzip2q_f16(v1, v5), vzip2q_f16(v3, v7))));
                 }
             }
-            for (I32 o = 0; o < I32(oc - 1); o += 2) {
+            for (I32 o = 0; o < oc_1; o += 2) {
                 const F16 *b_0 = biasArray + o * 8;
                 const F16 *b_1 = b_0 + 8;
-                F16 *itm_0 = itmArray;
+                F16 *itm_0 = thread_itmArray;
                 // dot prod
                 // (6*6)*C*c8*hw8 times O*(6*6)*C*c8*o16 = O*(6*6)*hw8*o16
                 for (U32 idx = 0; idx < 36; idx++) {
@@ -259,8 +273,8 @@ EE convolution_winograd_A76(TensorDesc inputDesc,
                     F16 *O_0[16];
                     F16 *O_1[16];
                     for (U32 idx = 0; idx < 36; idx++) {
-                        Ow_0[idx] = otmArray + otm_off_0 + idx * 8 * 16;
-                        Ow_1[idx] = otmArray + otm_off_1 + idx * 8 * 16;
+                        Ow_0[idx] = thread_otmArray + otm_off_0 + idx * 8 * 16;
+                        Ow_1[idx] = thread_otmArray + otm_off_1 + idx * 8 * 16;
                     }
                     for (U32 i = 0; i < 4; ++i) {
                         for (U32 j = 0; j < 4; ++j) {
@@ -275,10 +289,10 @@ EE convolution_winograd_A76(TensorDesc inputDesc,
                 }
             }
             if (oc & 1) {
-                F16 *itm_0 = itmArray;
-                const F16 *ftm_0 = filterArray + (oc - 1) * 36 * ic * 8 * 8;
-                F16 *otm_0 = otmArray + (oc - 1) * 36 * 8 * 8;
-                const F16 *b_0 = biasArray + (oc - 1) * 8;
+                F16 *itm_0 = thread_itmArray;
+                const F16 *ftm_0 = filterArray + oc_1 * 36 * ic * 8 * 8;
+                F16 *otm_0 = thread_otmArray + oc_1 * 36 * 8 * 8;
+                const F16 *b_0 = biasArray + oc_1 * 8;
                 // dot prod
                 // (6*6)*C*c8*hw8 times O*(6*6)*C*c8*o8 = O*(6*6)*hw8*o8
                 for (U32 idx = 0; idx < 36; idx++) {
@@ -331,14 +345,14 @@ EE convolution_winograd_A76(TensorDesc inputDesc,
                 for (U32 hw8 = 0; hw8 < 8; hw8++) {
                     U32 h = (hw + hw8) / tile_w;
                     U32 w = (hw + hw8) % tile_w;
-                    F16 *out_0 = outArray + n * oc * oh * ow * 8 + (oc - 1) * oh * ow * 8 +
+                    F16 *out_0 = outArray + n * oc * oh * ow * 8 + oc_1 * oh * ow * 8 +
                         h * 4 * ow * 8 + w * 4 * 8;
-                    U32 otm_off_0 = (oc - 1) * 8 * 36 * 8 + hw8 * 8;
+                    U32 otm_off_0 = oc_1 * 8 * 36 * 8 + hw8 * 8;
 
                     F16 *Ow_0[36];
                     F16 *O_0[16];
                     for (U32 idx = 0; idx < 36; idx++) {
-                        Ow_0[idx] = otmArray + otm_off_0 + idx * 8 * 8;
+                        Ow_0[idx] = thread_otmArray + otm_off_0 + idx * 8 * 8;
                     }
                     for (U32 i = 0; i < 4; ++i) {
                         for (U32 j = 0; j < 4; ++j) {
@@ -423,7 +437,7 @@ EE convolution_winograd_A76(TensorDesc inputDesc,
                                          : "memory", "cc", "v0", "v1", "v2", "v3");
                 }
             }
-            for (I32 o = 0; o < I32(oc - 1); o += 2) {
+            for (I32 o = 0; o < oc_1; o += 2) {
                 const F16 *b_0 = biasArray + o * 8;
                 const F16 *b_1 = b_0 + 8;
                 F16 *itm_0 = itmArray;
@@ -510,9 +524,9 @@ EE convolution_winograd_A76(TensorDesc inputDesc,
             }
             if (oc & 1) {
                 F16 *itm_0 = itmArray;
-                const F16 *ftm_0 = filterArray + (oc - 1) * 8 * 36 * ic * 8;
-                F16 *otm_0 = otmArray + (oc - 1) * 8 * 36 * 4;
-                const F16 *b_0 = biasArray + (oc - 1) * 8;
+                const F16 *ftm_0 = filterArray + oc_1 * 8 * 36 * ic * 8;
+                F16 *otm_0 = otmArray + oc_1 * 8 * 36 * 4;
+                const F16 *b_0 = biasArray + oc_1 * 8;
                 // dot prod
                 // (6*6)*C*c8*hw4 times O*(6*6)*C*c8*o8 = O*(6*6)*hw4*o8
                 for (U32 idx = 0; idx < 36; idx++) {
@@ -552,9 +566,9 @@ EE convolution_winograd_A76(TensorDesc inputDesc,
                 for (U32 hw4 = 0; hw4 < 4; hw4++) {
                     U32 h = (hw + hw4) / tile_w;
                     U32 w = (hw + hw4) % tile_w;
-                    F16 *out_0 = outArray + n * oc * oh * ow * 8 + (oc - 1) * oh * ow * 8 +
+                    F16 *out_0 = outArray + n * oc * oh * ow * 8 + oc_1 * oh * ow * 8 +
                         h * 4 * ow * 8 + w * 4 * 8;
-                    U32 otm_off_0 = (oc - 1) * 8 * 36 * 4 + hw4 * 8;
+                    U32 otm_off_0 = oc_1 * 8 * 36 * 4 + hw4 * 8;
 
                     F16 *Ow_0[36];
                     F16 *O_0[16];
@@ -605,7 +619,7 @@ EE convolution_winograd_A76(TensorDesc inputDesc,
                     memcpy(itm, Iw0[i], 8 * bytesOf(idt));
                 }
             }
-            for (I32 o = 0; o < I32(oc - 1); o += 2) {
+            for (I32 o = 0; o < oc_1; o += 2) {
                 const F16 *b_0 = biasArray + o * 8;
                 const F16 *b_1 = b_0 + 8;
                 F16 *itm_0 = itmArray;
@@ -671,9 +685,9 @@ EE convolution_winograd_A76(TensorDesc inputDesc,
             }
             if (oc & 1) {
                 F16 *itm_0 = itmArray;
-                const F16 *ftm_0 = filterArray + (oc - 1) * 8 * 36 * ic * 8;
-                F16 *otm_0 = otmArray + (oc - 1) * 8 * 36;
-                const F16 *b_0 = biasArray + (oc - 1) * 8;
+                const F16 *ftm_0 = filterArray + oc_1 * 8 * 36 * ic * 8;
+                F16 *otm_0 = otmArray + oc_1 * 8 * 36;
+                const F16 *b_0 = biasArray + oc_1 * 8;
                 // dot prod
                 // (6*6)*C*c8*hw1 times O*(6*6)*C*c8*o8 = O*(6*6)*hw1*o8
                 for (U32 idx = 0; idx < 36; idx++) {
@@ -702,9 +716,9 @@ EE convolution_winograd_A76(TensorDesc inputDesc,
                 // O*(6*6)*hw1*o8 => NOWHo8
                 U32 h = hw / tile_w;
                 U32 w = hw % tile_w;
-                F16 *out_0 = outArray + n * oc * oh * ow * 8 + (oc - 1) * oh * ow * 8 +
-                    h * 4 * ow * 8 + w * 4 * 8;
-                U32 otm_off_0 = (oc - 1) * 8 * 36;
+                F16 *out_0 = outArray + n * oc * oh * ow * 8 + oc_1 * oh * ow * 8 + h * 4 * ow * 8 +
+                    w * 4 * 8;
+                U32 otm_off_0 = oc_1 * 8 * 36;
 
                 F16 *Ow_0[36];
                 F16 *O_0[16];

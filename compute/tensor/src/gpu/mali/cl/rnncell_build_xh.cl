@@ -13,6 +13,7 @@
 
 __kernel void rnncell_build_xh(const int xDim,
     const int xhDim,
+    const int x_off,
     const int s_off,
     const int bx,
     __global const T *xmem,
@@ -25,7 +26,7 @@ __kernel void rnncell_build_xh(const int xDim,
     }
     T val = 0;
     if (idx < xDim) {
-        val = xmem[idx];
+        val = xmem[idx + x_off];
     } else if (idx < xhDim) {
         val = smem[idx + s_off - xDim];
     }

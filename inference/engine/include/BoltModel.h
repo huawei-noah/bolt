@@ -11,19 +11,14 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <jni.h>
-
 #ifndef _Included_BoltModel
 #define _Included_BoltModel
 #ifdef __cplusplus
 extern "C" {
 #endif
-// there is no need to add '/' before com
-// #define BOLT_JNI_PATH_PREFIX "com/huawei/noah/"
-// #define BOLT_JNI_PREFIX_(X) Java_com_huawei_noah_##X
-#define BOLT_JNI_PATH_PREFIX ""
-#define BOLT_JNI_PREFIX_(X) Java_##X
-#define BOLT_JNI_PREFIX(X) BOLT_JNI_PREFIX_(X)
+
+#include "jni_header.h"
+
 /*
  * Class:     BoltModel
  * Method:    createModel
@@ -92,7 +87,7 @@ JNIEXPORT jlong JNICALL BOLT_JNI_PREFIX(BoltModel_allocSpecificResultHandle)(
  * Method:    cloneResult
  * Signature: (J)J
  */
-JNIEXPORT jlong JNICALL BOLT_JNI_PREFIX(BoltModel_cloneResult)(JNIEnv *, jobject, jlong);
+JNIEXPORT jlong JNICALL BOLT_JNI_PREFIX(BoltModel_cloneResultHandle)(JNIEnv *, jobject, jlong);
 
 /*
  * Class:     BoltModel
@@ -123,7 +118,7 @@ JNIEXPORT void JNICALL BOLT_JNI_PREFIX(BoltModel_runModel)(
  * Method:    getOutput
  * Signature: (J)LBoltResult;
  */
-JNIEXPORT jobject JNICALL BOLT_JNI_PREFIX(BoltModel_getOutput)(JNIEnv *, jobject, jlong);
+JNIEXPORT jobject JNICALL BOLT_JNI_PREFIX(BoltModel_getOutput)(JNIEnv *, jobject, jlong, jstring);
 
 /*
  * Class:     BoltModel

@@ -75,32 +75,47 @@ class BNScaleOptimizer : public OPOptimizer {
                 // free BN memory
                 if (spec->ws[bnWeightIndex].weight != nullptr) {
                     spec->ws[bnWeightIndex].bytes_of_weight = 0;
-                    delete spec->ws[bnWeightIndex].weight;
+                    if (outOfFileMapRange(spec->ws[bnWeightIndex].weight, spec->mfd)) {
+                        delete spec->ws[bnWeightIndex].weight;
+                    }
                     spec->ws[bnWeightIndex].weight = nullptr;
                 }
                 if (spec->ws[bnWeightIndex].vec != nullptr) {
                     spec->ws[bnWeightIndex].bytes_of_vec = 0;
-                    delete spec->ws[bnWeightIndex].vec;
+                    if (outOfFileMapRange(spec->ws[bnWeightIndex].vec, spec->mfd)) {
+                        delete spec->ws[bnWeightIndex].vec;
+                    }
                     spec->ws[bnWeightIndex].vec = nullptr;
                 }
                 setOperatorInvalid(spec, bnOpIndex, true);
                 hasOptimized = true;
+                i--;
 
                 // If the previous OP is Concat, we need to take care of the possible padded channels before Concat.
-                const int queryNum = 1;
-                OperatorType queryOps[queryNum] = {OT_Concat};
-
-                int concatOpIndex = searchOperatorIndexBackward(spec, i - 1, queryOps, queryNum);
-                if (concatOpIndex != -1) {
-                    spec->ops[scaleOpIndex].ps.scale_spec.num_concat =
-                        spec->ops[concatOpIndex].num_inputs;
-                    // Rename concat output and scale input to avoid desc differences for inplace tensor
-                    std::string oldName = spec->ops[concatOpIndex].output_tensors_name[0];
-                    std::string breakName = "break_" + oldName;
-                    str_copy(spec->ops[concatOpIndex].output_tensors_name[0], breakName.c_str(),
-                        NAME_LEN);
-                    str_copy(
-                        spec->ops[scaleOpIndex].input_tensors_name[0], breakName.c_str(), NAME_LEN);
+                std::vector<std::pair<int, int>> prevOpIndexes = searchOperatorIndexByOutput(
+                    spec, spec->ops[scaleOpIndex].input_tensors_name[0], 0, scaleOpIndex);
+                if (prevOpIndexes.size() != 1 ||
+                    OT_Concat != spec->ops[prevOpIndexes[0].first].type) {
+                    continue;
+                }
+                int concatOpIndex = prevOpIndexes[0].first;
+                spec->ops[scaleOpIndex].ps.scale_spec.num_concat =
+                    spec->ops[concatOpIndex].num_inputs;
+                // Rename concat output and scale input to avoid desc differences for inplace tensor
+                std::string oldName = spec->ops[concatOpIndex].output_tensors_name[0];
+                std::vector<std::pair<int, int>> concatNextOpIndexes = searchOperatorIndexByInput(
+                    spec, oldName, concatOpIndex + 1, spec->num_operator_specs);
+                std::string breakName = "break_" + oldName;
+                str_copy(
+                    spec->ops[concatOpIndex].output_tensors_name[0], breakName.c_str(), NAME_LEN);
+                for (auto iter : concatNextOpIndexes) {
+                    str_copy(spec->ops[iter.first].input_tensors_name[iter.second],
+                        breakName.c_str(), NAME_LEN);
+                }
+                for (int j = 0; j < spec->num_outputs; j++) {
+                    if (oldName == spec->output_names[j]) {
+                        str_copy(spec->output_names[j], breakName.c_str(), NAME_LEN);
+                    }
                 }
             }
         }

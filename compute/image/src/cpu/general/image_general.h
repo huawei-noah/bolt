@@ -15,11 +15,11 @@
 #define _H_IMAGE_GENERAL
 
 #include "error.h"
-#include "sys.h"
 #include "tensor_desc.h"
-#include "image.h"
 
 EE resize_bilinear_general(TensorDesc inputDesc, void *input, TensorDesc outputDesc, void *output);
+
+EE resize_nearest_general(TensorDesc inputDesc, void *input, TensorDesc outputDesc, void *output);
 
 template <typename T>
 inline EE from_nchwc8_to_nchw(TensorDesc *desc, T *data)

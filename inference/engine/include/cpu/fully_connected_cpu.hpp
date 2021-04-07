@@ -42,32 +42,36 @@ public:
         return SUCCESS;
     }
 
-    TensorDesc desc_process(TensorDesc inDim)
+    TensorDesc desc_process(TensorDesc inDim, U32 *k = nullptr)
     {
         TensorDesc inputDesc;
         DataType dt;
         DataFormat df;
         U32 in, ic, ih, iw;
+        U32 num = 0;
         switch (inDim.nDims) {
             case 2: {
-                CHECK_STATUS(tensor2dGet(inDim, &dt, &df, &in, &(this->numInput)));
+                CHECK_STATUS(tensor2dGet(inDim, &dt, &df, &in, &num));
                 inputDesc = inDim;
                 break;
             }
             case 3: {
                 CHECK_STATUS(tensor3dGet(inDim, &dt, &df, &in, &ih, &iw));
-                this->numInput = iw;
+                num = iw;
                 inputDesc = tensor2df(dt, DF_NORMAL, in * ih, iw);
                 break;
             }
             case 4: {
                 CHECK_STATUS(tensor4dGet(inDim, &dt, &df, &in, &ic, &ih, &iw));
-                this->numInput = ic * ih * iw;
+                num = ic * ih * iw;
                 inputDesc = inDim;
                 break;
             }
             default:
                 break;
+        }
+        if (k != nullptr) {
+            *k = num;
         }
         return inputDesc;
     }
@@ -101,14 +105,13 @@ public:
     void run() override
     {
         Tensor inputTensor = this->inputTensors[0];
-        TensorDesc inputDesc = desc_process(inputTensor.get_desc());
-        inputTensor.resize(inputDesc);
+        TensorDesc inputDesc = inputTensor.get_desc();
+        inputTensor.resize(desc_process(inputDesc));
 
         Tensor outputTensor = this->outputTensors[0];
         TensorDesc outputDesc = outputTensor.get_desc();
         outputDesc.dims[0] = this->p.num_outputs;
-        outputDesc = desc_process(outputDesc);
-        outputTensor.resize(outputDesc);
+        outputTensor.resize(desc_process(outputDesc));
 
         if (featureScale.size() > 1 && featureScale[0][0] > 0 && DT_I8 != inputDesc.dt) {
             inputTensor.set_scale(featureScale[0][0]);
@@ -116,13 +119,15 @@ public:
 
         CHECK_STATUS(fully_connected(inputTensor, weightTensors[0], biasTensors[0], this->temp,
             outputTensor, &this->archInfo));
+        inputTensor.resize(inputDesc);
+        outputTensor.resize(outputDesc);
     }
 
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
         this->mvm = false;
-        TensorDesc inputDesc = desc_process(inTensors[0]->get_desc());
+        TensorDesc inputDesc = desc_process(inTensors[0]->get_desc(), &(this->numInput));
         TensorDesc weightDesc =
             tensor2df(inputDesc.dt, DF_TRANSPOSE, this->p.num_outputs, this->numInput);
         TensorDesc outputDesc;
@@ -141,7 +146,7 @@ public:
             this->mvm = true;
         }
 
-        Tensor tmpInput = *inTensors[0];
+        Tensor tmpInput;
         tmpInput.resize(inputDesc);
         Tensor tmpFilter;
         tmpFilter.resize(weightDesc);
@@ -198,7 +203,12 @@ public:
 
     EE transform_filter() override
     {
-        TensorDesc inputDesc = desc_process(this->inputTensors[0].get_desc());
+        return transform_filter(this->inputTensors[0].get_desc());
+    }
+
+    virtual EE transform_filter(const TensorDesc &originalInputDesc)
+    {
+        TensorDesc inputDesc = desc_process(originalInputDesc);
         Tensor weightTensor = this->weightTensors[0];
         TensorDesc weightDesc = weightTensor.get_desc();
         TensorDesc wtmDesc;
@@ -209,7 +219,11 @@ public:
 
         Tensor tmpInput;
         tmpInput.resize(inputDesc);
-        if (inputDesc.df == DF_NCHWC8) {
+        int hw = 1;
+        for (int i = 0; i < (int)inputDesc.nDims - 2; i++) {
+            hw *= inputDesc.dims[i];
+        }
+        if (inputDesc.df == DF_NCHWC8 && hw > 1) {
             tmpFilter.resize(tensor1d(DT_U8, wtm_bytes));
             tmpFilter.alloc();
             CHECK_STATUS(fully_connected_transform_filter(
@@ -242,14 +256,10 @@ public:
         wtm->alloc();
         wtm->set_scale(tmpFilter.get_scale());
         if (this->mvm) {
-            if (X86_AVX2 != this->archInfo.arch) {
-                CHECK_STATUS(matrix_vector_multiply_transform_weight(tmpFilter.get_desc(),
-                    ((CpuMemory *)(tmpFilter.get_memory()))->get_ptr(), &wtmDesc,
-                    ((CpuMemory *)(wtm->get_memory()))->get_ptr(), this->archInfo.arch));
-                wtm->resize(wtmDesc);
-            } else {
-                *wtm.get() = tmpFilter;
-            }
+            CHECK_STATUS(matrix_vector_multiply_transform_weight(tmpFilter.get_desc(),
+                ((CpuMemory *)(tmpFilter.get_memory()))->get_ptr(), &wtmDesc,
+                ((CpuMemory *)(wtm->get_memory()))->get_ptr(), this->archInfo.arch));
+            wtm->resize(wtmDesc);
         } else {
             CHECK_STATUS(matrix_matrix_multiply_transform_rhs(tmpFilter.get_desc(),
                 ((CpuMemory *)(tmpFilter.get_memory()))->get_ptr(), &wtmDesc,

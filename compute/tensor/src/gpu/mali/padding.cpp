@@ -12,7 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "sys.h"
-#include "types.h"
+
 #include "tensor_desc.h"
 #include "error.h"
 #include "gpu/mali/tensor_computing_mali.h"
@@ -24,8 +24,9 @@ EE padding_infer_output_size_mali(TensorDesc inputDesc,
     GCLMemDesc_t gclmemInputDesc,
     GCLMemDesc_t gclmemOutputDesc)
 {
-    /*tensorDesc record cpu org data format info*/
-    /*gclmemDesc record gpu trans data format info*/
+    if (outputDesc == nullptr || gclmemInputDesc == nullptr || gclmemOutputDesc == nullptr) {
+        CHECK_STATUS(NULL_POINTER);
+    }
     DataType idt;
     DataFormat idf;
     U32 iw, ih, ic, in;
@@ -36,13 +37,16 @@ EE padding_infer_output_size_mali(TensorDesc inputDesc,
     pr = padParamSpec.right;
     ph = padParamSpec.top;
     pb = padParamSpec.bottom;
-    // if (pw!=pr || ph != pb) CHECK_STATUS(NOT_SUPPORTED);
     ow = iw + pw + pr;
     oh = ih + ph + pb;
-    CHECK_STATUS(infer_gclmem_desc_ncwhc4(
-        iw, ih, ic, 0, 0, ow, oh, ic, idt, idt, gclmemInputDesc, gclmemOutputDesc));
-    if (outputDesc) {
-        *outputDesc = tensor4df(idt, idf, in, ic, oh, ow);
+    *outputDesc = tensor4df(idt, idf, in, ic, oh, ow);
+
+    if (gclmemInputDesc->byteSize == 0 || gclmemInputDesc->memFormat == DF_NCHW) {
+        CHECK_STATUS(infer_gclmem_desc_nchw(
+            iw, ih, ic, 0, 0, ow, oh, ic, idt, idt, gclmemInputDesc, gclmemOutputDesc));
+    } else {
+        CHECK_STATUS(infer_gclmem_desc_ncwhc4(
+            iw, ih, ic, 0, 0, ow, oh, ic, idt, idt, gclmemInputDesc, gclmemOutputDesc));
     }
     return SUCCESS;
 }

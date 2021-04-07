@@ -16,9 +16,8 @@
 
 #include <map>
 #include <set>
-#include "thread_affinity.h"
-#include "op_type.h"
-#include "types.h"
+#include "sys.h"
+#include "operator_type.h"
 
 class AlgorithmMap {
 public:
@@ -85,6 +84,10 @@ public:
 
     void loadAlgorithmMapFromFileStream(const char *algoFileStream)
     {
+        if (algoFileStream == nullptr) {
+            UNI_DEBUG_LOG("algoFileStream is nullptr, algos selection will be running \n");
+            return;
+        }
         U32 be = 0;
         be = readFileStreamForMap(algoFileStream, be, &this->algorithmMap);
 #ifdef _USE_MALI
@@ -99,25 +102,25 @@ public:
         }
     }
 
-    void loadAlgorithmMapFromText(std::string algorithmMapPath)
+    void loadAlgorithmMapFromFile(std::string algorithmMapPath)
     {
         if (algorithmMapPath == std::string("")) {
-            UNI_DEBUG_LOG("load algorithm file failed, path is not set \n");
+            UNI_DEBUG_LOG("Not read algorithm map file, because path is not set.\n");
             return;
         }
         CI8 lastFlag = algorithmMapPath[algorithmMapPath.length() - 1];
         if (strcmp(&lastFlag, "/") != 0) {
             algorithmMapPath += "/";
         }
-        this->hasAlgorithmFile = readTextForMap(algorithmFileName, algorithmMapPath, &algorithmMap);
+        this->hasAlgorithmFile = readFileForMap(algorithmFileName, algorithmMapPath, &algorithmMap);
         this->hasCommonAlgoFile =
-            readTextForMap(commonAlgoFileName, algorithmMapPath, &commonAlgoMap);
+            readFileForMap(commonAlgoFileName, algorithmMapPath, &commonAlgoMap);
     }
 
-    void saveAlgorithmMapToText(std::string algorithmMapPath)
+    void saveAlgorithmMapToFile(std::string algorithmMapPath)
     {
         if (algorithmMapPath == std::string("")) {
-            UNI_DEBUG_LOG("save algorithm file failed, path is not set \n");
+            UNI_DEBUG_LOG("Not write algorithm map file, because path is not set.\n");
             return;
         }
         if (this->hasAlgorithmFile) {
@@ -127,9 +130,9 @@ public:
         if (strcmp(&lastFlag, "/") != 0) {
             algorithmMapPath += "/";
         }
-        saveMapToText(
+        saveMapToFile(
             this->algorithmFileName, algorithmMapPath, this->algorithmMap, this->hasAlgorithmFile);
-        saveMapToText(this->commonAlgoFileName, algorithmMapPath, this->commonAlgoMap,
+        saveMapToFile(this->commonAlgoFileName, algorithmMapPath, this->commonAlgoMap,
             this->hasCommonAlgoFile);
     }
 
@@ -249,6 +252,7 @@ public:
     bool getKernelThreadInfoFromMap(std::string name, U32 *gs, U32 *ls)
     {
         bool findKernelInfo = kernelThreadMap.count(name);
+
         if (!findKernelInfo) {
             return findKernelInfo;
         }
@@ -269,49 +273,54 @@ public:
     }
 #endif
 
+    std::string getAlgorithmFileName()
+    {
+        return this->algorithmFileName;
+    }
+
 private:
     U32 readFileStreamForMap(
         const char *algoFileStream, U32 be, std::map<std::string, std::string> *targetMap)
     {
-        int num;
-        std::string content(algoFileStream);
-        std::string numString = "";
+        if (algoFileStream == nullptr || targetMap == nullptr) {
+            CHECK_STATUS(NULL_POINTER);
+        }
         std::string nameString = "";
         std::string infoString = "";
-        while (content[be] == '\n' || content[be] == '\r' || content[be] == '\t' ||
-            content[be] == ' ') {
-            be++;
+        char name[128];
+        char info[128];
+        U32 pos = be;
+        U32 len = 0;
+        U32 *ptr = (U32 *)(algoFileStream + pos);
+        U32 num = ptr[0];
+        if (num == 0) {
+            return pos;
         }
-        if (be >= content.size()) {
-            return content.size();
-        }
-        if (content[be] == '\0') {
-            return be;
-        }
-        while (content[be] != '\n') {
-            numString += content[be];
-            be++;
-        }
-        num = (numString.size()) ? std::stoi(numString) : 0;
-        for (int i = 0; i < num; i++) {
-            be++;
-            while (content[be] != ' ') {
-                nameString += content[be];
-                be++;
+        pos += sizeof(U32);
+        for (U32 i = 0; i < num; i++) {
+            ptr = (U32 *)(algoFileStream + pos);
+            len = ptr[0];
+            pos += sizeof(U32);
+            for (U32 j = 0; j < len; j++) {
+                name[j] = algoFileStream[j + pos];
             }
-            be++;
-            while (content[be] != '\n') {
-                infoString += content[be];
-                be++;
+            name[len] = '\0';
+            pos += len;
+
+            ptr = (U32 *)(algoFileStream + pos);
+            len = ptr[0];
+            pos += sizeof(U32);
+            for (U32 j = 0; j < len; j++) {
+                info[j] = algoFileStream[j + pos];
             }
-            (*targetMap)[nameString] = infoString;
-            nameString = "";
-            infoString = "";
+            info[len] = '\0';
+            pos += len;
+            (*targetMap)[name] = info;
         }
-        return be++;
+        return pos;
     }
 
-    bool readTextForMap(
+    bool readFileForMap(
         std::string fileName, std::string path, std::map<std::string, std::string> *targetMap)
     {
         std::string fullyFileName = path + fileName;
@@ -319,22 +328,36 @@ private:
         if (!file || feof(file)) {
             return false;
         }
-        UNI_INFO_LOG("load algorithmFile %s\n", fullyFileName.c_str());
-        int num = 0;
-        fscanf(file, "%d", &num);
-        char operatorName[100];
-        char algorithm[100];
-        for (int i = 0; i < num; i++) {
-            fscanf(file, "%s %s", operatorName, algorithm);
+        UNI_INFO_LOG("Read algorithm map file from %s...\n", fullyFileName.c_str());
+        U32 num = 0;
+        fread(&num, sizeof(U32), 1, file);
+        I8 operatorName[128];
+        I8 algorithm[128];
+        U32 operatorLen;
+        U32 algorithmLen;
+        for (U32 i = 0; i < num; i++) {
+            fread(&operatorLen, sizeof(U32), 1, file);
+            fread(operatorName, sizeof(I8), operatorLen, file);
+            fread(&algorithmLen, sizeof(U32), 1, file);
+            fread(algorithm, sizeof(I8), algorithmLen, file);
+            operatorName[operatorLen] = '\0';
+            algorithm[algorithmLen] = '\0';
             (*targetMap)[operatorName] = algorithm;
         }
 #ifdef _USE_MALI
         if (this->arch == MALI && fileName == this->algorithmFileName) {
-            fscanf(file, "%d", &num);
-            char kernelName[100];
-            char kernelThreadInfo[100];
-            for (int i = 0; i < num; i++) {
-                fscanf(file, "%s %s", kernelName, kernelThreadInfo);
+            fread(&num, sizeof(U32), 1, file);
+            I8 kernelName[100];
+            I8 kernelThreadInfo[100];
+            U32 kernelNameLen;
+            U32 kernelThreadInfoLen;
+            for (U32 i = 0; i < num; i++) {
+                fread(&kernelNameLen, sizeof(U32), 1, file);
+                fread(kernelName, sizeof(I8), kernelNameLen, file);
+                fread(&kernelThreadInfoLen, sizeof(U32), 1, file);
+                fread(kernelThreadInfo, sizeof(I8), kernelThreadInfoLen, file);
+                kernelName[kernelNameLen] = '\0';
+                kernelThreadInfo[kernelThreadInfoLen] = '\0';
                 kernelThreadMap[kernelName] = kernelThreadInfo;
             }
         }
@@ -343,7 +366,7 @@ private:
         return true;
     }
 
-    void saveMapToText(std::string fileName,
+    void saveMapToFile(std::string fileName,
         std::string path,
         std::map<std::string, std::string> targetMap,
         bool noNeedSave)
@@ -353,20 +376,34 @@ private:
         }
         if (targetMap.size() > 0) {
             std::string fullyFileName = path + fileName;
-            UNI_DEBUG_LOG("save algorithmFile %s\n", fullyFileName.c_str());
+            UNI_DEBUG_LOG("Write algorithm map file to %s...\n", fullyFileName.c_str());
             FILE *file = fopen(fullyFileName.c_str(), "w");
-            fprintf(file, "%ld\n", (I64)targetMap.size());
+            U32 mapSize = targetMap.size();
+            fwrite(&mapSize, sizeof(U32), 1, file);
             for (auto iter : targetMap) {
-                fprintf(file, "%s %s\n", iter.first.c_str(), iter.second.c_str());
+                U32 firstLen = iter.first.length();
+                U32 secondLen = iter.second.length();
+                fwrite(&firstLen, sizeof(U32), 1, file);
+                fwrite(iter.first.c_str(), firstLen, 1, file);
+                fwrite(&secondLen, sizeof(U32), 1, file);
+                fwrite(iter.second.c_str(), secondLen, 1, file);
             }
 #ifdef _USE_MALI
             if (this->arch == MALI && fileName == this->algorithmFileName) {
-                fprintf(file, "%ld\n", (I64)kernelThreadMap.size());
+                U32 mapSize = kernelThreadMap.size();
+                fwrite(&mapSize, sizeof(U32), 1, file);
                 for (auto iter : kernelThreadMap) {
-                    fprintf(file, "%s %s\n", iter.first.c_str(), iter.second.c_str());
+                    U32 firstLen = iter.first.length();
+                    U32 secondLen = iter.second.length();
+                    fwrite(&firstLen, sizeof(U32), 1, file);
+                    fwrite(iter.first.c_str(), firstLen, 1, file);
+                    fwrite(&secondLen, sizeof(U32), 1, file);
+                    fwrite(iter.second.c_str(), secondLen, 1, file);
                 }
             }
 #endif
+            U32 endFlag = 0;
+            fwrite(&endFlag, sizeof(U32), 1, file);
             fclose(file);
         }
     }

@@ -14,6 +14,7 @@
 #include "ut_util.h"
 #include "tensor_computing.h"
 #include "algorithm_map.h"
+#include "thread_affinity.h"
 #include "parse_command.h"
 
 int convolutionCPUFloatAlgorithmSearch(Arch arch, DataType dt, std::string path)
@@ -78,7 +79,7 @@ int convolutionCPUFloatAlgorithmSearch(Arch arch, DataType dt, std::string path)
             }
         }
     }
-    algoMap->saveAlgorithmMapToText(path);
+    algoMap->saveAlgorithmMapToFile(path);
     delete algoMap;
     return 0;
 }
@@ -100,7 +101,7 @@ int main(int argc, char *argv[])
     if (affinityPolicyName == "CPU_AFFINITY_HIGH_PERFORMANCE" ||
         affinityPolicyName == "CPU_AFFINITY_LOW_POWER") {
         Arch arch;
-#ifndef _USE_IOS
+#ifndef __APPLE__
         DeviceInfo deviceInfo = get_cpu_info(affinityPolicy);
         set_cpu_dynamic(&deviceInfo, 0);
         arch = deviceInfo.schedule;

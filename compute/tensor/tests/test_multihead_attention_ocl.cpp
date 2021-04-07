@@ -348,7 +348,7 @@ int multiheadAttentionTest(int argc, char *argv[], DataType dt)
         lnBetaTensor, &multiplyAlpha, &multiplyBeta, firstFCSliceNum, matmulSliceLen,
         eltwiseWithLayerNormIn, activation, tmpTensor, outputTensor, &archInfo));
     /*warp up*/
-    UNI_INFO_LOG("Warp up gpu:\n")
+    UNI_INFO_LOG("warm up gpu:\n")
     for (U32 i = 0; i < 2; i++) {
         CHECK_STATUS(gcl_run_kernelVec(handle));
     }

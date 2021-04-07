@@ -100,10 +100,10 @@ int detectionoutputTest(int argc, char **argv, DataType dt)
             if (i >= 1 && output_f16[idx] == 0) {
                 break;
             }
-            std::cout << " 1 : " << output_f16[idx] << " 2 : " << output_f16[idx + 1]
-                      << " 3 : " << output_f16[idx + 2] << " 4 : " << output_f16[idx + 3]
-                      << " 5 : " << output_f16[idx + 4] << " 6 : " << output_f16[idx + 5]
-                      << std::endl;
+            for (int j = 0; j < 6; j++) {
+                printf("%d:%f ", j + 1, output_f16[idx + j]);
+            }
+            printf("\n");
             idx = idx + 6;
         }
     }
@@ -115,10 +115,10 @@ int detectionoutputTest(int argc, char **argv, DataType dt)
             if (i >= 1 && output_f32[idx] == 0) {
                 break;
             }
-            std::cout << " 1 : " << output_f32[idx] << " 2 : " << output_f32[idx + 1]
-                      << " 3 : " << output_f32[idx + 2] << " 4 : " << output_f32[idx + 3]
-                      << " 5 : " << output_f32[idx + 4] << " 6 : " << output_f32[idx + 5]
-                      << std::endl;
+            for (int j = 0; j < 6; j++) {
+                printf("%d:%f ", j + 1, output_f32[idx + j]);
+            }
+            printf("\n");
             idx = idx + 6;
         }
     }
@@ -132,14 +132,14 @@ int detectionoutputTest(int argc, char **argv, DataType dt)
 int main(int argc, char **argv)
 {
 #ifdef _USE_FP16
-    std::cout << "----- Testing FP16 Detectionoutput -----" << std::endl;
+    printf("----- Testing FP16 Detectionoutput -----\n");
     detectionoutputTest(argc, argv, DT_F16);
-    std::cout << "----- Finished FP16 Detectionoutput -----" << std::endl;
+    printf("----- Finished FP16 Detectionoutput -----\n");
 #endif
 #ifdef _USE_FP32
-    std::cout << "----- Testing FP32 Detectionoutput -----" << std::endl;
+    printf("----- Testing FP32 Detectionoutput -----\n");
     detectionoutputTest(argc, argv, DT_F32);
-    std::cout << "----- Finished FP32 Detectionoutput -----" << std::endl;
+    printf("----- Finished FP32 Detectionoutput -----\n");
 #endif
     return 0;
 }

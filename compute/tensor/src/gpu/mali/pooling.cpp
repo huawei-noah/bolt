@@ -12,7 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "sys.h"
-#include "types.h"
+
 #include "tensor_desc.h"
 #include "error.h"
 #include "gpu/mali/tensor_computing_mali.h"
@@ -31,7 +31,9 @@ EE pooling_infer_output_size_mali(TensorDesc inputDesc,
     U32 iw, ih, ic, in, it;
     U32 ow, oh, ot;
     U32 kw, kh, kt, sw, sh, st, pl, pt, pr, pb, pt_b, pt_a;
+    U32 inDims;
     tensorSelectGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw, &it);
+    inDims = inputDesc.nDims;
     pl = poolingParamSpec.padding_left;
     pr = poolingParamSpec.padding_right;
     pt = poolingParamSpec.padding_top;
@@ -60,8 +62,20 @@ EE pooling_infer_output_size_mali(TensorDesc inputDesc,
             ot = (U32)(floor((double(it + pt_b + pt_a - kt) / st))) + 1;
             break;
         }
+        case TF_SAME: {
+            ow = (U32)(ceil((double(iw) / sw)));
+            oh = (U32)(ceil((double(ih) / sh)));
+            ot = (U32)(ceil((double(it) / st)));
+            break;
+        }
+        case TF_VALID: {
+            ow = (U32)(ceil((double(iw - kw + 1) / sw)));
+            oh = (U32)(ceil((double(ih - kh + 1) / sh)));
+            ot = (U32)(ceil((double(it - kt + 1) / st)));
+            break;
+        }
         default: {
-            CHECK_STATUS(NOT_SUPPORTED);
+            return NOT_SUPPORTED;
         }
     }
     U32 iw_align, ih_align;
@@ -70,7 +84,7 @@ EE pooling_infer_output_size_mali(TensorDesc inputDesc,
     iw_align = iw + pl + pr;
     iw_align = iw_align - pl * 2;
 
-    if (inputDesc.df == DF_NCTHW) {
+    if (inDims == 5) {
         *outputDesc = tensor5df(idt, idf, in, ic, ot, oh, ow);
     } else {
         *outputDesc = tensor4df(idt, idf, in, ic, oh, ow);

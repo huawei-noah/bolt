@@ -13,7 +13,6 @@
 
 #include "sys.h"
 #include "error.h"
-#include "types.h"
 
 #include "cpu/x86/fp32/tensor_computing_fp32.h"
 
@@ -75,6 +74,7 @@ EE convolution_infer_forward_tmp_bytes_fp32(TensorDesc inputDesc,
 
 EE convolution_fp32(TensorDesc inputDesc,
     F32 *input,
+    F32 *eltwiseInput,
     TensorDesc filterDesc,
     const F32 *filter,
     ConvolutionParamSpec convParamSpec,
@@ -115,12 +115,12 @@ EE convolution_fp32(TensorDesc inputDesc,
     EE ret = SUCCESS;
     switch (algorithm) {
         case CONVOLUTION_ALGORITHM_DIRECT:
-            ret = convolution_direct(inputDesc, input, filterDesc, filter, convParamSpec, biasDesc,
-                bias, tmpBytes, tmp, outputDesc, output, activationDesc);
+            ret = convolution_direct(inputDesc, input, eltwiseInput, filterDesc, filter,
+                convParamSpec, biasDesc, bias, tmpBytes, tmp, outputDesc, output, activationDesc);
             break;
         case CONVOLUTION_ALGORITHM_POINTWISE:
-            ret = convolution_1x1_direct(inputDesc, input, filterDesc, filter, convParamSpec, bias,
-                tmpBytes, tmp, outputDesc, output, activationDesc);
+            ret = convolution_1x1_direct(inputDesc, input, eltwiseInput, filterDesc, filter,
+                convParamSpec, bias, tmpBytes, tmp, outputDesc, output, activationDesc);
             break;
         case CONVOLUTION_ALGORITHM_GEMM_ICNCHW:
             ret = convolution_direct_nchw(inputDesc, input, filterDesc, filter, convParamSpec,

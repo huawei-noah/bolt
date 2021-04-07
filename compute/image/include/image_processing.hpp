@@ -15,12 +15,8 @@
 #define _H_IMAGEPROCESSING
 
 #include <memory>
-#include <string>
-#include "tensor_desc.h"
 #include "tensor.hpp"
-#include "error.h"
-
-std::shared_ptr<U8> load_fake_image(TensorDesc inputDesc);
+#include "parameter_spec.h"
 
 std::shared_ptr<Tensor> load_resize_image(
     Tensor rgbTensor, TensorDesc imageDesc, ImageFormat targetImageFormat, float scaleValue);

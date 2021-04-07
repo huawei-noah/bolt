@@ -18,10 +18,13 @@
 
 #include "error.h"
 #include "sys.h"
-#include "types.h"
+#include "uni.h"
+#include "tensor_desc.h"
+#include "parameter_spec.h"
 
 EE convolution_general(TensorDesc inputDesc,
     void *input,
+    void *eltwiseInput,
     TensorDesc filterDesc,
     const void *filter,
     ConvolutionParamSpec convParamSpec,

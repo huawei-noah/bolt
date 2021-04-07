@@ -14,7 +14,6 @@
 #ifndef _H_STDDEVIATIONOPTIMIZER
 #define _H_STDDEVIATIONOPTIMIZER
 
-#include "model_tools.h"
 #include "OPOptimizer.hpp"
 
 class StdDeviationOptimizer : public OPOptimizer {

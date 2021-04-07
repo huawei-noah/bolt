@@ -11,9 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "sys.h"
-#include "error.h"
-#include "types.h"
 #include "gpu/mali/fp16/depthwise_convolution_mali_fp16.h"
 #include "gpu/mali/fp16/depthwise_convolution_direct_mali_fp16.h"
 
@@ -28,10 +25,10 @@ inline EE depthwise_convolution_checkpara_mali_fp16(GCLHandle_t handle,
 {
     if (nullptr == handle || nullptr == input || nullptr == filter || nullptr == output ||
         nullptr == bias) {
-        return NULL_POINTER;
+        CHECK_STATUS(NULL_POINTER);
     }
     if (inputDesc.dt != outputDesc.dt || inputDesc.dt != filterDesc.dt || inputDesc.dt != DT_F16) {
-        return NOT_MATCH;
+        CHECK_STATUS(NOT_MATCH);
     }
 
     DataFormat fdf;
@@ -41,20 +38,17 @@ inline EE depthwise_convolution_checkpara_mali_fp16(GCLHandle_t handle,
     CHECK_STATUS(tensorSelectGet(outputDesc, NULL, NULL, NULL, &oc, NULL, NULL));
     if (input->desc.memFormat == DF_NCWHC4) {
         if (filter->desc.memFormat != DF_NHWCN4) {
-            return NOT_MATCH;
+            CHECK_STATUS(NOT_MATCH);
         }
         if (output->desc.memFormat != DF_NCWHC4) {
-            return NOT_MATCH;
+            CHECK_STATUS(NOT_MATCH);
         }
     }
-    if (fw != 3 && fw != 5 && fw != 7) {
-        return NOT_MATCH;
-    }
     if (fdf == DF_NCHW && ic != fc) {
-        return NOT_MATCH;
+        CHECK_STATUS(NOT_MATCH);
     }
     if (fc != oc) {
-        return NOT_MATCH;
+        CHECK_STATUS(NOT_MATCH);
     }
     return SUCCESS;
 }

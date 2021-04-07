@@ -11,10 +11,8 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "sys.h"
-#include "error.h"
-#include "types.h"
 #include "gpu/mali/fp16/argmax_mali_fp16.h"
+
 #define get_thread_num(len, maxThreadNum, threadNum)                               \
     {                                                                              \
         threadNum = ((len + 7) / 8 < maxThreadNum) ? (len + 7) / 8 : maxThreadNum; \

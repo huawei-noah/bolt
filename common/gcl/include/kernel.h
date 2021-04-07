@@ -13,7 +13,6 @@
 
 #ifndef KERNEL_H_
 #define KERNEL_H_
-#include "types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -47,6 +46,12 @@ inline EE get_kernel_info(Kernel kernel, cl_kernel_info info, void **value, size
         }
     }
 
+    map_cl_error_2_ee(ret);
+}
+
+inline EE get_program_info_from_kernel(Kernel kernel, Program *program)
+{
+    cl_int ret = clGetKernelInfo(kernel, CL_KERNEL_PROGRAM, sizeof(Program), program, NULL);
     map_cl_error_2_ee(ret);
 }
 

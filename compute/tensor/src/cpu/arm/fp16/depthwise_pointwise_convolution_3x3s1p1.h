@@ -15,8 +15,9 @@
 #define _H_DEPTHWISE_POINTWISE_CONVOLUTION_3X3S1P1
 
 #include "sys.h"
-#include "types.h"
-#include "error.h"
+#include "uni.h"
+#include "tensor_desc.h"
+#include "parameter_spec.h"
 
 EE depthwise_pointwise_convolution_3x3s1p1_A55(TensorDesc inputDesc,
     F16 *inArray,

@@ -16,7 +16,6 @@
 
 #include "factory.hpp"
 #include "attention.hpp"
-#include "reduction.hpp"
 #include "jump.hpp"
 #include "cpu/resize_cpu.hpp"
 #include "cpu/pooling_cpu.hpp"
@@ -60,6 +59,13 @@
 #include "cpu/tfslice_cpu.hpp"
 #include "cpu/splice_cpu.hpp"
 #include "cpu/shape_cpu.hpp"
+#include "cpu/reduction_cpu.hpp"
+#include "cpu/where_cpu.hpp"
+#include "cpu/tdnn_convolution_cpu.hpp"
+#include "cpu/tdnn_fully_connected_cpu.hpp"
+#include "cpu/batch_norm_cpu.hpp"
+#include "cpu/cast_cpu.hpp"
+#include "cpu/equal_cpu.hpp"
 
 class FactoryCPU : public Factory {
 public:
@@ -209,7 +215,7 @@ public:
 
     std::shared_ptr<Operator> createReduction(DataType dt, ReductionParamSpec p) override
     {
-        auto cep = new Reduction(dt, p);
+        auto cep = new ReductionCPU(dt, p);
         return std::shared_ptr<Operator>(cep);
     }
 
@@ -360,6 +366,44 @@ public:
     std::shared_ptr<Operator> createShape() override
     {
         auto cep = new ShapeCPU();
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createWhere(DataType dt) override
+    {
+        auto cep = new WhereCPU(dt);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createTdnn(DataType dt, TdnnParamSpec p) override
+    {
+        //auto cep = new TdnnConvolutionCPU(dt, p);
+        auto cep = new TdnnFullyConnectedCPU(dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createBatchNorm(DataType dt, BatchNormParamSpec p) override
+    {
+        auto cep = new BatchNormCPU(dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createTopK(DataType dt, TopKParamSpec p) override
+    {
+        OP_UNSUP(2, dt, p);
+        //auto cep = new TopKCPU(dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createCast(DataType dt, CastParamSpec p) override
+    {
+        auto cep = new CastCPU(dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createEqual(DataType dt) override
+    {
+        auto cep = new EqualCPU(dt);
         return std::shared_ptr<Operator>(cep);
     }
 };

@@ -1,0 +1,24 @@
+name: macos-android-armv7
+on: [push, pull_request]
+jobs:
+  linux:
+    name: macos-android-armv7
+    runs-on: macos-latest
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v2
+      - name: compile android armv7 on macos
+        run: |
+          brew install gnu-getopt > /dev/null
+          echo 'export PATH="/usr/local/opt/gnu-getopt/bin:$PATH"' >> /Users/runner/.bash_profile
+          echo 'export FLAGS_GETOPT_CMD="$(brew --prefix gnu-getopt)/bin/getopt"' >> /Users/runner/.bash_profile
+          source /Users/runner/.bash_profile        
+          mkdir android_ndk && cd android_ndk
+          curl -o android-ndk-r20b-darwin-x86_64.zip 'https://dl.google.com/android/repository/android-ndk-r20b-darwin-x86_64.zip?hl=zh_cn' > /dev/null
+          unzip -o android-ndk-r20b-darwin-x86_64.zip > /dev/null
+          export ANDROID_NDK_ROOT=${PWD}/android-ndk-r20b
+          export PATH=${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/darwin-x86_64/bin:$PATH
+          cd ..
+          ./install.sh --target=android-armv7 
+          
+          

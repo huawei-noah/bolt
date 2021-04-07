@@ -86,16 +86,11 @@ EE slice_infer_output_size(
     if (IS_MALI_GPU(archInfo->arch)) {
 #ifdef _USE_MALI
         GCLMemDesc gclmemInputDesc = ocl_get_desc(*inputTensor);
-        std::vector<GCLMemDesc> gclmemOutputDescs;
-        for (auto p : outputTensor) {
-            gclmemOutputDescs.push_back(ocl_get_desc(*p));
-        }
+        std::vector<GCLMemDesc> gclmemOutputDescs = ocl_get_descs_ptr(outputTensor);
         CHECK_STATUS(slice_infer_output_size_mali(
             inputDesc, p, &outputDesc, &gclmemInputDesc, gclmemOutputDescs.data()));
         ocl_set_desc(inputTensor, gclmemInputDesc);
-        for (U32 i = 0; i < outputTensor.size(); i++) {
-            ocl_set_desc(outputTensor[i], gclmemOutputDescs[i]);
-        }
+        ocl_set_descs(outputTensor, gclmemOutputDescs);
 #endif
     } else {
         CHECK_STATUS(slice_infer_output_size_cpu(inputDesc, p, &outputDesc));
@@ -106,7 +101,36 @@ EE slice_infer_output_size(
     return SUCCESS;
 }
 
-EE slice(Tensor inputTensor, SliceParamSpec p, std::vector<Tensor> outputTensor, ArchInfo_t archInfo)
+EE slice_infer_forward_tmp_bytes(Tensor inputTensor,
+    SliceParamSpec p,
+    std::vector<Tensor> outputTensor,
+    U32 *bytes,
+    ArchInfo_t archInfo)
+{
+    auto arch = archInfo->arch;
+    if (bytes == nullptr) {
+        CHECK_STATUS(NULL_POINTER);
+    }
+    EE ret = NOT_SUPPORTED;
+    if (IS_CPU(arch)) {
+        *bytes = 0;
+        ret = SUCCESS;
+#ifdef _USE_MALI
+    } else if (IS_MALI_GPU(arch)) {
+        TensorDesc inputDesc = inputTensor.get_desc();
+        std::vector<TensorDesc> outputDesc = get_desc_from_tensors(outputTensor);
+        GCLMemDesc gclmemInputDesc = ocl_get_desc(inputTensor);
+        ret = slice_infer_forward_tmp_bytes_mali(inputDesc, gclmemInputDesc, p, outputDesc, bytes);
+#endif
+    }
+    return ret;
+}
+
+EE slice(Tensor inputTensor,
+    SliceParamSpec p,
+    Tensor tmpTensor,
+    std::vector<Tensor> outputTensor,
+    ArchInfo_t archInfo)
 {
     auto arch = archInfo->arch;
     TensorDesc inputDesc = inputTensor.get_desc();
@@ -120,8 +144,9 @@ EE slice(Tensor inputTensor, SliceParamSpec p, std::vector<Tensor> outputTensor,
 #endif
 #ifdef _USE_MALI
     } else if (IS_MALI_GPU(arch)) {
+        void *tmpbuf = get_ptr_from_tensor(tmpTensor, arch);
         ret = slice_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc, (GCLMem_t)input, p,
-            outputDesc, &output);
+            (GCLMem_t)tmpbuf, outputDesc, &output);
 #endif
     }
     return ret;

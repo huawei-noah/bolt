@@ -49,6 +49,7 @@ public:
     {
         OCLContext::getInstance().handle.get()->kernelVec = &this->opKernelVec;
         Tensor xTensor = this->inputTensors[0];
+        Tensor stateTensor = this->inputTensors[1];
         Tensor filterTensor = this->weightTensors[0];
         Tensor biasTensor = this->biasTensors[0];
         Tensor hTensor = this->outputTensors[0];
@@ -67,8 +68,8 @@ public:
                 this->runInfo.best_k[0] = algo[6];
             }
         } else {
-            CHECK_STATUS(rnncell_infer_forward_algorithm(xTensor, filterTensor, biasTensor, this->p,
-                this->xDim, this->p.numOutput, hTensor, &this->archInfo));
+            CHECK_STATUS(rnncell_infer_forward_algorithm(xTensor, filterTensor, biasTensor,
+                stateTensor, this->p, this->xDim, this->p.numOutput, hTensor, &this->archInfo));
             algo[0] = this->runInfo.algorithm;
             algo[1] = this->runInfo.best_w[0];
             algo[2] = this->runInfo.best_c[0];
@@ -91,30 +92,7 @@ public:
         DataType dt;
         DataFormat df;
         U32 iB, iX;
-        if (inDim.nDims == 2) {
-            CHECK_STATUS(tensor2dGet(inDim, &dt, &df, &iB, &iX));
-        } else if (inDim.nDims == 3) {
-            dt = inDim.dt;
-            U32 m, k, t;
-            if (inDim.df == DF_MTK) {
-                m = inDim.dims[2];
-                t = inDim.dims[1];
-                k = inDim.dims[0];
-            } else if (inDim.df == DF_MKT) {
-                m = inDim.dims[2];
-                t = inDim.dims[0];
-                k = inDim.dims[1];
-            } else {
-                return NOT_SUPPORTED;
-            }
-            if (t != 1) {
-                CHECK_STATUS(NOT_SUPPORTED);
-            }
-            iB = m;
-            iX = k;
-        } else {
-            return NOT_SUPPORTED;
-        }
+        CHECK_STATUS(tensor2dGet(inDim, &dt, &df, &iB, &iX));
         this->xDim = iX;
         CHECK_STATUS(rnncell_infer_output_size(inTensors, this->p, outTensors[0], &this->archInfo));
         return SUCCESS;
@@ -174,25 +152,23 @@ public:
 
     EE infer_weight_desc() override
     {
-        U32 row = this->xDim + this->p.numOutput;
         U32 column = (this->p.numProjection > 0) ? this->p.numProjection : this->p.numOutput;
         U32 filterRow = 4 * column;
         U32 filterCol = this->p.numOutput + this->xDim;
         TensorDesc weightDesc[2];
+        TensorDesc biasDesc[2];
         weightDesc[0] = tensor2df(this->dt, DF_NK, filterRow, filterCol);
-        TensorDesc biasDesc = tensor1d(this->dt, column * 4);
-        U32 weightNum = 1;
-        if (this->p.numProjection > 0) {
-            weightDesc[1] = tensor2df(this->dt, DF_NK, this->p.numOutput, this->p.numProjection);
-            weightNum = 2;
-        }
+        weightDesc[1] = tensor2df(this->dt, DF_NK, this->p.numOutput, this->p.numProjection);
+        biasDesc[0] = tensor1d(this->dt, filterRow);
+        biasDesc[1] = tensor1d(this->dt, this->p.numOutput);
+        U32 weightNum = (this->p.numProjection > 0) ? 2 : 1;
 
         for (U32 i = 0; i < weightNum; i++) {
             Tensor modelWeightTensor = Tensor(OCLMem);
             modelWeightTensor.resize(weightDesc[i]);
             auto weightMem = (OclMemory *)modelWeightTensor.get_memory();
-            U32 s0 = (i == 0) ? row : this->p.numProjection;
-            U32 s1 = (i == 0) ? column * 4 : this->p.numOutput;
+            U32 s0 = weightDesc[i].dims[0];
+            U32 s1 = weightDesc[i].dims[1];
             U32 stride[3] = {s0, s1, 1};
             U32 offset[3] = {0, 0, 0};
             GCLMemType mt = GCL_MEM_BUF;
@@ -205,8 +181,8 @@ public:
             if (i == 0) {
                 Tensor modelBiasTensor = Tensor(OCLMem);
                 auto vectorMem = (OclMemory *)modelBiasTensor.get_memory();
-                modelBiasTensor.resize(biasDesc);
-                stride[0] = column * 4;
+                modelBiasTensor.resize(biasDesc[i]);
+                stride[0] = biasDesc[i].dims[0];
                 stride[1] = 1;
                 CHECK_STATUS(gclmem_set_desc_padding(&desc, stride, offset, dt, DF_NCHW, mt, flags));
                 vectorMem->padding(desc);

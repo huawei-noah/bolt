@@ -39,3 +39,25 @@ EE pooling_x86(TensorDesc inputDesc,
     }
     return ret;
 }
+
+EE pooling_bp_x86(TensorDesc inputDesc,
+    const void *input,
+    PoolingParamSpec poolingParamSpec,
+    TensorDesc outputDesc,
+    void *output)
+{
+    EE ret = SUCCESS;
+    switch (inputDesc.dt) {
+#ifdef _USE_FP32
+        case DT_F32: {
+            ret = pooling_bp_fp32(
+                inputDesc, (const F32 *)input, poolingParamSpec, outputDesc, (F32 *)output);
+            break;
+        }
+#endif
+        default:
+            ret = NOT_SUPPORTED;
+            break;
+    }
+    return ret;
+}

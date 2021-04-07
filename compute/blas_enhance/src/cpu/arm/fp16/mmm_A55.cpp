@@ -15,7 +15,6 @@
 #include <arm_neon.h>
 #include <math.h>
 
-#include "types.h"
 #include "error.h"
 #include "cpu/arm/fp16/mmm_common.h"
 #include "cpu/arm/fp16/mmm.h"
@@ -40,6 +39,7 @@ inline void mmm_4x24_A55(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
         "ld1 {v14.8h, v15.8h, v16.8h}, [x26]\n"
 
         "mov x20, %3\n"
+        "cbz x20, 2f\n"
 
         "0:\n"
         // w- > v4, in0- > v2/v3/v1, out0=v5~v28
@@ -93,6 +93,7 @@ inline void mmm_4x24_A55(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
         "subs x20, x20, #0x2\n"
         "bne 0b\n"
 
+        "2:\n"
         "cbz %5, 1f\n"
         "fmla v5.8h, v1.8h, v0.h[0]\n"
         "ld1 {v2.4h}, [%1], #8\n"
@@ -188,6 +189,7 @@ inline void mmm_8x4_A55(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
                  "ldr x24, [%2], #8\n"
                  "ins v1.d[1], x24\n"
                  "ld1 {v2.4h}, [%1], #8\n"
+                 "cbz x20, 2f\n"
 
                  "0:\n"
                  "fmla v5.8h, v1.8h, v2.h[0]\n"
@@ -211,6 +213,7 @@ inline void mmm_8x4_A55(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
                  "subs x20, x20, 0x2\n"
                  "bne 0b\n"
 
+                 "2:\n"
                  "cbz %5, 1f\n"
                  "fmla v5.8h, v1.8h, v2.h[0]\n"
                  "fmla v6.8h, v1.8h, v2.h[1]\n"
@@ -291,6 +294,7 @@ inline void mmm_4x8_A55(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
                  "ldr x24, [%1], #8\n"
                  "ins v1.d[1], x24\n"
                  "ld1 {v2.4h}, [%2], #8\n"
+                 "cbz x20, 2f\n"
 
                  "0:\n"
                  "fmla v5.8h, v1.8h, v2.h[0]\n"
@@ -313,6 +317,7 @@ inline void mmm_4x8_A55(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
                  "subs x20, x20, 0x2\n"
                  "bne 0b\n"
 
+                 "2:\n"
                  "cbz %5, 1f\n"
                  "fmla v5.8h, v1.8h, v2.h[0]\n"
                  "fmla v6.8h, v1.8h, v2.h[1]\n"
@@ -351,6 +356,7 @@ inline void mmm_4x4_A55(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
 
                  "ld1 {v1.4h}, [%1], #8\n"
                  "ld1 {v2.4h}, [%2], #8\n"
+                 "cbz x20, 2f\n"
 
                  "0:\n"
                  "fmla v5.4h, v1.4h, v2.h[0]\n"
@@ -369,6 +375,7 @@ inline void mmm_4x4_A55(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
                  "subs x20, x20, 0x2\n"
                  "bne 0b\n"
 
+                 "2:\n"
                  "cbz %5, 1f\n"
                  "fmla v5.4h, v1.4h, v2.h[0]\n"
                  "fmla v6.4h, v1.4h, v2.h[1]\n"
@@ -418,6 +425,7 @@ inline void mmm_8x8_A55(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
                  "ld1 {v2.4h}, [%2], #8\n"
                  "ldr x22, [%2], #8\n"
                  "ins v2.d[1], x22\n"
+                 "cbz x20, 2f\n"
 
                  "0:\n"
                  "fmla v5.8h, v1.8h, v2.h[0]\n"
@@ -453,6 +461,7 @@ inline void mmm_8x8_A55(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
                  "subs x20, x20, 0x2\n"
                  "bne 0b\n"
 
+                 "2:\n"
                  "cbz %5, 1f\n"
                  "fmla v5.8h, v1.8h, v2.h[0]\n"
                  "fmla v6.8h, v1.8h, v2.h[1]\n"
@@ -517,6 +526,7 @@ inline void mmm_8x24_A55(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
         "ld1 {v26.8h, v27.8h, v28.8h}, [x26]\n"
 
         "mov x20, %3\n"
+        "cbz x20, 2f\n"
 
         "0:\n"
         // w- > v4, in0- > v2/v3/v1, out0=v5~v28
@@ -602,6 +612,7 @@ inline void mmm_8x24_A55(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
 
         "bne 0b\n"
 
+        "2:\n"
         "cbz %5, 1f\n"
         "ld1 {v2.4h}, [%1], #8\n"
         "fmla v5.8h, v1.8h, v0.h[0]\n"

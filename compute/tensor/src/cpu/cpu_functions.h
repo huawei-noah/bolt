@@ -26,6 +26,8 @@
 
 typedef void (*ArrayScaleFunction)(
     DataType dt, const void *input, void *output, I32 len, F32 alpha, F32 beta);
+typedef void (*ArrayMulFunction)(
+    DataType dt, const void *inputA, const void *inputB, void *output, I32 len);
 typedef void (*ArrayAddFunction)(
     DataType dt, const void *inputA, const void *inputB, void *output, I32 len);
 typedef F32 (*ArraySumFunction)(DataType dt, const void *data, I32 len);
@@ -42,241 +44,221 @@ typedef void (*ArrayMaxFunction)(
 
 inline ArrayScaleFunction get_array_scale_function(Arch arch)
 {
-    ArrayScaleFunction func;
-    bool find = false;
+    ArrayScaleFunction func = nullptr;
     if (IS_GENERAL(arch)) {
 #ifdef _USE_GENERAL
         func = array_scale_general;
-        find = true;
 #endif
 #ifdef _USE_NEON
     } else if (IS_ARM(arch)) {
         func = array_scale_arm;
-        find = true;
 #endif
 #ifdef _USE_X86
     } else if (IS_X86_AVX2(arch)) {
         func = array_scale_x86;
-        find = true;
 #endif
     }
-    CHECK_REQUIREMENT(find);
+    CHECK_REQUIREMENT(func != nullptr);
+    return func;
+}
+
+inline ArrayMulFunction get_array_mul_function(Arch arch)
+{
+    ArrayMulFunction func = nullptr;
+    if (IS_GENERAL(arch)) {
+#ifdef _USE_GENERAL
+        func = array_mul_general;
+#endif
+#ifdef _USE_NEON
+    } else if (IS_ARM(arch)) {
+        func = array_mul_arm;
+#endif
+#ifdef _USE_X86
+    } else if (IS_X86_AVX2(arch)) {
+        func = array_mul_x86;
+#endif
+    }
+    CHECK_REQUIREMENT(func != nullptr);
     return func;
 }
 
 inline ArrayAddFunction get_array_add_function(Arch arch)
 {
-    ArrayAddFunction func;
-    bool find = false;
+    ArrayAddFunction func = nullptr;
     if (IS_GENERAL(arch)) {
 #ifdef _USE_GENERAL
         func = array_add_general;
-        find = true;
 #endif
 #ifdef _USE_NEON
     } else if (IS_ARM(arch)) {
         func = array_add_arm;
-        find = true;
 #endif
 #ifdef _USE_X86
     } else if (IS_X86_AVX2(arch)) {
         func = array_add_x86;
-        find = true;
 #endif
     }
-    CHECK_REQUIREMENT(find);
+    CHECK_REQUIREMENT(func != nullptr);
     return func;
 }
 
 inline ArrayMeanFunction get_array_mean_function(Arch arch)
 {
-    ArrayMeanFunction func;
-    bool find = false;
+    ArrayMeanFunction func = nullptr;
     if (IS_GENERAL(arch)) {
 #ifdef _USE_GENERAL
         func = array_mean_general;
-        find = true;
 #endif
 #ifdef _USE_NEON
     } else if (IS_ARM(arch)) {
         func = array_mean_arm;
-        find = true;
 #endif
 #ifdef _USE_X86
     } else if (IS_X86_AVX2(arch)) {
         func = array_mean_x86;
-        find = true;
 #endif
     }
-    CHECK_REQUIREMENT(find);
+    CHECK_REQUIREMENT(func != nullptr);
     return func;
 }
 
 inline ArrayVarFunction get_array_var_function(Arch arch)
 {
-    ArrayVarFunction func;
-    bool find = false;
+    ArrayVarFunction func = nullptr;
     if (IS_GENERAL(arch)) {
 #ifdef _USE_GENERAL
         func = array_var_general;
-        find = true;
 #endif
 #ifdef _USE_NEON
     } else if (IS_ARM(arch)) {
         func = array_var_arm;
-        find = true;
 #endif
 #ifdef _USE_X86
     } else if (IS_X86_AVX2(arch)) {
         func = array_var_x86;
-        find = true;
 #endif
     }
-    CHECK_REQUIREMENT(find);
+    CHECK_REQUIREMENT(func != nullptr);
     return func;
 }
 
 inline ArrayPowerFunction get_array_power_function(Arch arch)
 {
-    ArrayPowerFunction func;
-    bool find = false;
+    ArrayPowerFunction func = nullptr;
     if (IS_GENERAL(arch)) {
 #ifdef _USE_GENERAL
         func = array_power_general;
-        find = true;
 #endif
 #ifdef _USE_NEON
     } else if (IS_ARM(arch)) {
         func = array_power_arm;
-        find = true;
 #endif
 #ifdef _USE_X86
     } else if (IS_X86_AVX2(arch)) {
         func = array_power_x86;
-        find = true;
 #endif
     }
-    CHECK_REQUIREMENT(find);
+    CHECK_REQUIREMENT(func != nullptr);
     return func;
 }
 
 inline ArraySumFunction get_array_sum_function(Arch arch)
 {
-    ArraySumFunction func;
-    bool find = false;
+    ArraySumFunction func = nullptr;
     if (IS_GENERAL(arch)) {
 #ifdef _USE_GENERAL
         func = array_sum_general;
-        find = true;
 #endif
 #ifdef _USE_NEON
     } else if (IS_ARM(arch)) {
         func = array_sum_arm;
-        find = true;
 #endif
 #ifdef _USE_X86
     } else if (IS_X86_AVX2(arch)) {
         func = array_sum_x86;
-        find = true;
 #endif
     }
-    CHECK_REQUIREMENT(find);
+    CHECK_REQUIREMENT(func != nullptr);
     return func;
 }
 
 inline ArraySquareAndAddFunction get_array_square_and_add_function(Arch arch)
 {
-    ArraySquareAndAddFunction func;
-    bool find = false;
+    ArraySquareAndAddFunction func = nullptr;
     if (IS_GENERAL(arch)) {
 #ifdef _USE_GENERAL
         func = array_square_and_add_general;
-        find = true;
 #endif
 #ifdef _USE_NEON
     } else if (IS_ARM(arch)) {
         func = array_square_and_add_arm;
-        find = true;
 #endif
 #ifdef _USE_X86
     } else if (IS_X86_AVX2(arch)) {
         func = array_square_and_add_x86;
-        find = true;
 #endif
     }
-    CHECK_REQUIREMENT(find);
+    CHECK_REQUIREMENT(func != nullptr);
     return func;
 }
 
 inline ArrayActivationFunction get_array_activation_function(Arch arch)
 {
-    ArrayActivationFunction func;
-    bool find = false;
+    ArrayActivationFunction func = nullptr;
     if (IS_GENERAL(arch)) {
 #ifdef _USE_GENERAL
         func = array_activation_general;
-        find = true;
 #endif
 #ifdef _USE_NEON
     } else if (IS_ARM(arch)) {
         func = array_activation_arm;
-        find = true;
 #endif
 #ifdef _USE_X86
     } else if (IS_X86_AVX2(arch)) {
         func = array_activation_x86;
-        find = true;
 #endif
     }
-    CHECK_REQUIREMENT(find);
+    CHECK_REQUIREMENT(func != nullptr);
     return func;
 }
 
 inline ArrayMaxValueFunction get_array_max_value_function(Arch arch)
 {
-    ArrayMaxValueFunction func;
-    bool find = false;
+    ArrayMaxValueFunction func = nullptr;
     if (IS_GENERAL(arch)) {
 #ifdef _USE_GENERAL
         func = array_max_value_general;
-        find = true;
 #endif
 #ifdef _USE_NEON
     } else if (IS_ARM(arch)) {
         func = array_max_value_arm;
-        find = true;
 #endif
 #ifdef _USE_X86
     } else if (IS_X86_AVX2(arch)) {
         func = array_max_value_x86;
-        find = true;
 #endif
     }
-    CHECK_REQUIREMENT(find);
+    CHECK_REQUIREMENT(func != nullptr);
     return func;
 }
 
 inline ArrayMaxFunction get_array_max_function(Arch arch)
 {
-    ArrayMaxFunction func;
-    bool find = false;
+    ArrayMaxFunction func = nullptr;
     if (IS_GENERAL(arch)) {
 #ifdef _USE_GENERAL
         func = array_max_general;
-        find = true;
 #endif
 #ifdef _USE_NEON
     } else if (IS_ARM(arch)) {
         func = array_max_arm;
-        find = true;
 #endif
 #ifdef _USE_X86
     } else if (IS_X86_AVX2(arch)) {
         func = array_max_x86;
-        find = true;
 #endif
     }
-    CHECK_REQUIREMENT(find);
+    CHECK_REQUIREMENT(func != nullptr);
     return func;
 }
 #endif

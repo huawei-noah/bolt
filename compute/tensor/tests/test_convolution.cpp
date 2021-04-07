@@ -119,13 +119,14 @@ int convolutionTest(int argc, char *argv[], DataType dt)
     ftmTensor.alloc();
     CHECK_STATUS(
         convolution_transform_filter(filterTensor, p, alg, tmpTensor, &ftmTensor, &archInfo));
-
+    std::vector<Tensor> inputTensors(1, inputTensor);
+    std::vector<Tensor> inputTensorsRef(1, inputTensorRef);
     if (UT_CHECK) {
-        CHECK_STATUS(convolution(inputTensor, ftmTensor, p, alg, nullptr, biasTensor, tmpTensor,
+        CHECK_STATUS(convolution(inputTensors, ftmTensor, p, alg, nullptr, biasTensor, tmpTensor,
             outputTensor, activationDesc, &archInfo));
 
         // naive implement
-        CHECK_STATUS(convolution(inputTensorRef, filterTensorRef, p, alg, nullptr, biasTensor,
+        CHECK_STATUS(convolution(inputTensorsRef, filterTensorRef, p, alg, nullptr, biasTensor,
             tmpTensor, outputTensorRef, activationDesc, &archInfo_org));
 
         // check
@@ -137,7 +138,7 @@ int convolutionTest(int argc, char *argv[], DataType dt)
     // benchmark
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        CHECK_STATUS(convolution(inputTensor, ftmTensor, p, alg, nullptr, biasTensor, tmpTensor,
+        CHECK_STATUS(convolution(inputTensors, ftmTensor, p, alg, nullptr, biasTensor, tmpTensor,
             outputTensor, activationDesc, &archInfo));
     }
     double time_end = ut_time_ms();

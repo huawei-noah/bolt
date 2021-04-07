@@ -14,9 +14,6 @@
 #ifndef _H_NOQUANTLABELOPTIMIZER
 #define _H_NOQUANTLABELOPTIMIZER
 
-#include <vector>
-#include <string>
-#include "model_tools.h"
 #include "OPOptimizer.hpp"
 
 class NoQuantLabelOptimizer : public OPOptimizer {
@@ -77,7 +74,9 @@ public:
             if (spec->ops[i].type == OT_Relu6 || spec->ops[i].type == OT_HSwish ||
                 spec->ops[i].type == OT_HSigmoid || spec->ops[i].type == OT_Sigmoid ||
                 spec->ops[i].type == OT_Clip || spec->ops[i].type == OT_Gelu ||
-                spec->ops[i].type == OT_TanH || spec->ops[i].type == OT_Resize) {
+                spec->ops[i].type == OT_TanH || spec->ops[i].type == OT_Resize ||
+                spec->ops[i].type == OT_LayerNorm || spec->ops[i].type == OT_HSwishNoDiv ||
+                (spec->ops[i].type == OT_Relu && spec->ops[i].ps.relu_spec.neg_slope != 0)) {
                 std::string curIn = spec->ops[i].input_tensors_name[0];
                 this->label_fp_outputs(spec, curIn);
                 hasOptimized = true;
@@ -94,25 +93,6 @@ public:
                         this->label_fp_outputs(spec, outName);
                         break;
                     }
-                }
-            }
-
-            if (spec->ops[i].type == OT_FC || spec->ops[i].type == OT_Conv ||
-                spec->ops[i].type == OT_MatMul) {
-                std::string output = spec->ops[i].output_tensors_name[0];
-                bool isModelOutput = false;
-
-                for (int j = 0; j < spec->num_outputs; j++) {
-                    std::string name = spec->output_names[j];
-                    if (name == output) {
-                        isModelOutput = true;
-                        break;
-                    }
-                }
-
-                if (isModelOutput) {
-                    this->label_fp_outputs(spec, output);
-                    hasOptimized = true;
                 }
             }
 
@@ -156,6 +136,11 @@ public:
                 }
             }
         }
+        // Make sure model outputs are floating-point
+        for (int i = 0; i < spec->num_outputs; i++) {
+            std::string modelOutput = spec->output_names[i];
+            this->label_fp_outputs(spec, modelOutput);
+        }
         return hasOptimized;
     }
 
@@ -197,6 +182,7 @@ public:
             ptr->feature_scale[0].scale = (F32 *)mt_new_storage(sizeof(F32));
             ptr->feature_scale[0].scale[0] = -2;
         } else if (-2 == ptr->feature_scale[0].scale[0] || 0 == ptr->feature_scale[0].scale[0]) {
+            ptr->feature_scale[0].scale[0] = -2;
             return;  // Already processed the upstream
         }
 

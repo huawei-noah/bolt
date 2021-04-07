@@ -11,13 +11,8 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <math.h>
-#include <string.h>
-#include "types.h"
-#include "tensor_desc.h"
-#include "error.h"
-#include "image.h"
 #include "cpu/arm/image_arm.h"
+#include "arm_neon_expand.h"
 
 #ifdef _USE_FP16
 EE resize_bilinear_fp16(TensorDesc inputDesc, F16 *inArray, TensorDesc outputDesc, F16 *outArray)

@@ -53,8 +53,9 @@ int sliceTest(int argc, char **argv, DataType dt)
         outputTensors[i].alloc();
     }
 
+    Tensor tmpTensor;
     if (UT_CHECK) {
-        CHECK_STATUS(slice(inputTensor, p, outputTensors, &archInfo));
+        CHECK_STATUS(slice(inputTensor, p, tmpTensor, outputTensors, &archInfo));
 
         U32 tmp = 0;
         for (I32 i = 0; i < num; i++) {
@@ -65,7 +66,7 @@ int sliceTest(int argc, char **argv, DataType dt)
 
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        CHECK_STATUS(slice(inputTensor, p, outputTensors, &archInfo));
+        CHECK_STATUS(slice(inputTensor, p, tmpTensor, outputTensors, &archInfo));
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;

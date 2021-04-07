@@ -14,10 +14,7 @@
 #ifndef _H_INPLACEOPTIMIZER
 #define _H_INPLACEOPTIMIZER
 
-#include <vector>
-#include <string>
 #include <algorithm>
-#include "model_tools.h"
 #include "OPOptimizer.hpp"
 
 class InPlaceOptimizer : public OPOptimizer {

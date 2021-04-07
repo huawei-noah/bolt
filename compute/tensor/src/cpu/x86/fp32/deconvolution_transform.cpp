@@ -128,7 +128,6 @@ inline EE deconvolution_transform_filter_kernel_fp32(TensorDesc filterDesc,
     DataFormat fdf;
     U32 fn, fc, fh, fw;
     CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-    ftmArray = (F32 *)(((uintptr_t)ftmArray + 32 - 1) / 32 * 32);
     if (fdf == ftmDataFormat) {
         *ftmDesc = filterDesc;
         memcpy(ftmArray, filterArray, fn * fc * fh * fw * bytesOf(fdt));
@@ -139,14 +138,6 @@ inline EE deconvolution_transform_filter_kernel_fp32(TensorDesc filterDesc,
     }
     EE ret = SUCCESS;
     switch (ftmDataFormat) {
-        case DF_NCHWCxN32: {
-            U32 fnAlignSize = 8;
-            U32 fnPadding = (fn + fnAlignSize - 1) / fnAlignSize * fnAlignSize;
-            *ftmDesc = tensor4df(fdt, ftmDataFormat, fnPadding, fc, fh, fw);
-            transformCNHW2NCHWCxNx<8, 32>(filterDesc, filterArray, *ftmDesc, ftmArray);
-            *ftmDesc = tensor4df(fdt, ftmDataFormat, fn, fc, fh, fw);
-            break;
-        }
         case DF_NCHWC24: {
             filterDesc = tensor4df(fdt, fdf, 1, fc, fh, fw);
             *ftmDesc = tensor4df(fdt, ftmDataFormat, 1, fc, fh, fw);
@@ -169,9 +160,6 @@ EE deconvolution_transform_filter_fp32(TensorDesc filterDesc,
 {
     DataFormat ftmDataFormat;
     switch (algorithm) {
-        case CONVOLUTION_ALGORITHM_DIRECT:
-            ftmDataFormat = DF_NCHWCxN32;
-            break;
         case CONVOLUTION_ALGORITHM_GROUP_DECONV:
             ftmDataFormat = DF_NCHWC24;
             break;

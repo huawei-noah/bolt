@@ -1,0 +1,24 @@
+name: "imageClassification_flow"
+input: "input"
+output: "output"
+node {
+  name: "input"
+  type: "Input"
+  output: "input"
+  input_type: "UINT8"
+  input_format: "NCHW"
+  input_dim: 1
+  input_dim: 3
+  input_dim: 32
+  input_dim: 32
+}
+node {
+  name: "imageClassification_inference"
+  type: "Inference"
+  input: "input"
+  output: "output"
+  preprocess_parameter: "pixelProcess"
+  postprocess_parameter: "postProcess"
+  inference_parameter: "/data/user/0/com.example.cameraenlarge/cache/esr_1_f32.bolt"
+  inference_parameter:""
+}

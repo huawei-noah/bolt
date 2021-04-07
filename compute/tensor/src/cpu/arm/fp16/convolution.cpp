@@ -36,28 +36,20 @@ EE convolution_fp16(TensorDesc inputDesc,
         nullptr == tmp) {
         CHECK_STATUS(NULL_POINTER);
     }
-    DataType idt, fdt, odt;
-    DataFormat idf, fdf, odf;
-    U32 in, ic, ih, iw;
-    U32 fn, fc, fh, fw;
-    U32 on, oc, oh, ow;
-    CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-    CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
-
-    if (!(idt == DT_F16 && fdt == DT_F16 && odt == DT_F16)) {
+    if (!(inputDesc.dt == DT_F16 && filterDesc.dt == DT_F16 && outputDesc.dt == DT_F16)) {
         CHECK_STATUS(NOT_MATCH);
     }
-    if (!(odf == DF_NCHWC8)) {
+    if (outputDesc.df != DF_NCHWC8) {
         CHECK_STATUS(NOT_MATCH);
     }
-    if (!(ic == fc && oc == fn)) {
+    if (inputDesc.dims[inputDesc.nDims - 2] != filterDesc.dims[filterDesc.nDims - 2] ||
+        outputDesc.dims[outputDesc.nDims - 2] != filterDesc.dims[filterDesc.nDims - 1]) {
         CHECK_STATUS(NOT_MATCH);
     }
 
     // In some cases when we adjust the model input, the input tensor of conv can change from NCHW to NCHWc8
     // In this case we can simply change the algo, because they both require the same filter transform
-    if (CONVOLUTION_ALGORITHM_GEMM_ICNCHW == algorithm && DF_NCHWC8 == idf) {
+    if (CONVOLUTION_ALGORITHM_GEMM_ICNCHW == algorithm && DF_NCHWC8 == inputDesc.df) {
         algorithm = CONVOLUTION_ALGORITHM_GEMM;
     }
 

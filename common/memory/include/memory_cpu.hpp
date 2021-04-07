@@ -13,8 +13,23 @@
 
 #ifndef _MEMORY_CPU_H
 #define _MEMORY_CPU_H
-#include <string.h>
+
 #include "memory.hpp"
+
+inline void *CPUMemoryAlignedAlloc(size_t alignment, size_t bytes)
+{
+    void *ptr = (void **)operator new(bytes + sizeof(void *) + alignment - 1);
+    CHECK_REQUIREMENT(ptr != NULL);
+    void **aligned_ptr =
+        (void **)(((uintptr_t)(ptr) + sizeof(void *) + alignment - 1) & ~(alignment - 1));
+    aligned_ptr[-1] = ptr;
+    return aligned_ptr;
+}
+
+inline void CPUMemoryAlignedfree(void *aligned_ptr)
+{
+    operator delete(((void **)aligned_ptr)[-1]);
+}
 
 class CpuMemory : public Memory {
 public:
@@ -54,7 +69,16 @@ public:
         auto size = this->bytes();
         if (!this->allocated && size > this->capacity()) {
             this->capacitySize = size;
-            this->val = std::shared_ptr<U8>((U8 *)operator new(size));
+            try {
+#ifndef _USE_X86
+                this->val = std::shared_ptr<U8>((U8 *)operator new(size));
+#else
+                this->val = std::shared_ptr<U8>(
+                    (U8 *)CPUMemoryAlignedAlloc(64, size), CPUMemoryAlignedfree);
+#endif
+            } catch (const std::bad_alloc &e) {
+                UNI_ERROR_LOG("CPU memory alloc %d bytes failed\n", (int)size);
+            }
         }
         this->allocated = true;
     }
@@ -125,6 +149,7 @@ public:
         if (!this->allocated) {
             this->alloc();
         }
+        EE ret = SUCCESS;
         if (CPUMem == other->get_mem_type()) {
             auto *src = ((CpuMemory *)other)->val.get();
             auto *dst = this->val.get();
@@ -135,18 +160,19 @@ public:
             if (min_size <= 0) {
                 min_size = max_size;
             }
-            UNI_memcpy(dst, src, min_size);
+            UNI_MEMCPY(dst, src, min_size);
         } else {
             //todo
+            ret = NOT_SUPPORTED;
         }
-        return SUCCESS;
+        return ret;
     }
 
     std::string string(U32 num, F32 factor) override
     {
         std::string line = "desc: " + tensorDesc2Str(this->desc) + " data:";
-        for (U32 i = 0; i < num; i++) {
-            line = line + std::to_string(this->element(i) * factor) + " ";
+        for (U32 i = 0; i < num && i < this->capacitySize; i++) {
+            line = line + std::to_string(this->element(i) / factor) + " ";
         }
         return line;
     }

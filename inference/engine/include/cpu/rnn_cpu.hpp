@@ -32,9 +32,45 @@ public:
     {
         Tensor inputTensor = this->inputTensors[0];
         Tensor outputTensor = this->outputTensors[0];
+
+        if (this->inputTensors.size() == 1) {
+            I32 column = this->p.numProjection > 0 ? this->p.numProjection : this->p.numOutput;
+            // bi-direction rnn has forward-states and backward-states
+            I32 num = p.biDirection ? 2 : 1;
+            memset(get_ptr_from_tensor(this->temp, this->archInfo.arch), 0,
+                num * (this->p.numOutput + column) * bytesOf(this->inputTensors[0].get_desc().dt));
+        } else if (this->inputTensors.size() == 2) {
+            // do not support bi-direction
+            memcpy(get_ptr_from_tensor(this->temp, this->archInfo.arch),
+                get_ptr_from_tensor(this->inputTensors[1], this->archInfo.arch),
+                tensorNumBytes(this->inputTensors[1].get_desc()));
+        } else if (this->inputTensors.size() == 3) {
+            // do not support bi-direction
+            U8 *state = (U8 *)get_ptr_from_tensor(this->temp, this->archInfo.arch);
+            U32 cStateBytes = tensorNumBytes(this->inputTensors[1].get_desc());
+            memcpy(state, get_ptr_from_tensor(this->inputTensors[1], this->archInfo.arch),
+                cStateBytes);
+            memcpy(state + cStateBytes,
+                get_ptr_from_tensor(this->inputTensors[2], this->archInfo.arch),
+                tensorNumBytes(this->inputTensors[2].get_desc()));
+        }
+
         // NOTE: no clean tmp and output
         CHECK_STATUS(rnn(inputTensor, this->weightTensors, this->biasTensors, this->p, this->temp,
             outputTensor, &this->archInfo));
+
+        if (this->outputTensors.size() == 2) {
+            memcpy(get_ptr_from_tensor(this->outputTensors[1], this->archInfo.arch),
+                get_ptr_from_tensor(this->temp, this->archInfo.arch),
+                tensorNumBytes(this->outputTensors[1].get_desc()));
+        } else if (this->outputTensors.size() == 3) {
+            U8 *state = (U8 *)get_ptr_from_tensor(this->temp, this->archInfo.arch);
+            U32 cStateBytes = tensorNumBytes(this->outputTensors[1].get_desc());
+            memcpy(get_ptr_from_tensor(this->outputTensors[1], this->archInfo.arch), state,
+                cStateBytes);
+            memcpy(get_ptr_from_tensor(this->outputTensors[2], this->archInfo.arch),
+                state + cStateBytes, tensorNumBytes(this->outputTensors[2].get_desc()));
+        }
     }
 
     EE infer_output_tensors_size(
@@ -46,7 +82,7 @@ public:
         U32 iB, inT, iX;
         CHECK_STATUS(tensor3dGet(inDim, &dt, &df, &iB, &inT, &iX));
         this->xDim = iX;
-        CHECK_STATUS(rnn_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo));
+        CHECK_STATUS(rnn_infer_output_size(inTensors, this->p, outTensors, &this->archInfo));
         return SUCCESS;
     }
 

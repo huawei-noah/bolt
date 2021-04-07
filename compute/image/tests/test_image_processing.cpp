@@ -12,16 +12,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "ut_util.h"
-#include "tensor_desc.h"
 #include "image_processing.hpp"
+#include "tensor_auxiliary.h"
 
 int main()
 {
     TensorDesc rgbDesc = tensor4df(DT_U8, DF_RGB, 1, 3, 1280, 960);
     U8 *rgb = ut_input_v(tensorNumElements(rgbDesc), DT_U8, UT_INIT_POS);
+    Tensor rgbTensor = Tensor::alloc_sized<CPUMem>(rgbDesc);
+    memcpy(get_ptr_from_tensor(rgbTensor, ARM_A76), rgb, tensorNumBytes(rgbDesc));
 
     TensorDesc imageDesc = tensor4df(DT_F32, DF_NCHW, 1, 3, 224, 224);
-    load_resize_image(rgbDesc, rgb, imageDesc, RGB, 0.017);
+    load_resize_image(rgbTensor, imageDesc, RGB, 0.017);
     free(rgb);
     return 0;
 }

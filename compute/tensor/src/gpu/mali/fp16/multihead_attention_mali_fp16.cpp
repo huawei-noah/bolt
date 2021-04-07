@@ -11,9 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "sys.h"
-#include "error.h"
-#include "types.h"
 #include "gpu/mali/fp16/multihead_attention_mali_fp16.h"
 
 #define set_best_wkc(fc_bw, fc_bk, tn_bw, tn_bk, nt_bw, nt_bk, nt_bc, runInfo) \
@@ -195,7 +192,8 @@ inline void inner_product_c1(GCLHandle_t handle,
     char kernelName[128];
     sprintf(kernelName, "gemm_tn_%d%d", item_k, item_w);
     CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel));
-    CHECK_STATUS(gcl_set_kernelArgs(kernel, M, N, K, ow_str, ow, oh, gs[0], gs[1], A, B, bias, C));
+    CHECK_STATUS(
+        gcl_set_kernelArgs(kernel, M, N, K, ow_str, oh, 0, 0, ow, oh, gs[0], gs[1], A, B, bias, C));
     gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
 #ifdef _DEBUG
     CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));

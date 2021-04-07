@@ -36,6 +36,8 @@ public:
             inputDesc.push_back(p.get_desc());
         }
         if (this->eltwiseDesc.elt_mode == ELTWISE_PROD && inputDesc.size() == 2 &&
+            inputDesc[0].nDims > 1 && inputDesc[1].nDims > 1 &&
+            inputDesc[0].dims[inputDesc[0].nDims - 2] == inputDesc[1].dims[inputDesc[1].nDims - 2] &&
             (inputDesc[1].nDims == 2 || (inputDesc[1].nDims == 3 && inputDesc[1].dims[0] == 1) ||
                 (inputDesc[1].nDims == 4 && inputDesc[1].dims[0] == 1 && inputDesc[1].dims[1] == 1)) &&
             tensorNumElements(inputDesc[0]) != tensorNumElements(inputDesc[1])) {
@@ -67,14 +69,6 @@ public:
             CHECK_STATUS(eltwise_infer_output_size(inTensors, outTensors[0], &this->archInfo));
         }
         return SUCCESS;
-    }
-
-    U32 infer_tmp_memory_size() override
-    {
-        U32 bytes = 0;
-        CHECK_STATUS(eltwise_infer_forward_tmp_bytes(
-            this->inputTensors, this->outputTensors[0], &bytes, &this->archInfo));
-        return UNI_MAX(bytes, this->lenOfTemp);
     }
 };
 

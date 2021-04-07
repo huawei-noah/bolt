@@ -33,7 +33,7 @@ public:
     {
         Tensor inputTensor = this->inputTensors[0];
         Tensor outputTensor = this->outputTensors[0];
-        CHECK_STATUS(tfslice(inputTensor, this->p, outputTensor, &this->archInfo));
+        CHECK_STATUS(tfslice(inputTensor, this->p, this->temp, outputTensor, &this->archInfo));
     }
 
     EE infer_output_tensors_size(

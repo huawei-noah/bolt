@@ -5,7 +5,7 @@ if (BOLT_CONFIGURE_FILE)
     include(${BOLT_CONFIGURE_FILE})
 else (BOLT_CONFIGURE_FILE)
     message(FATAL_ERROR "
-FATAL: can not find bolt.cmake in <BOLT_ROOT> directory,
+FATAL: can not find bolt.cmake in <BOLT_ROOT>/common/cmakes directory,
        please set shell or cmake environment variable BOLT_ROOT.
     ")
 endif (BOLT_CONFIGURE_FILE)
@@ -14,14 +14,15 @@ project(kernelsource)
 
 set_c_cxx_flags()
 
-execute_process(
-    COMMAND bash buildKernelSourceLib.sh
-    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
-)
+#execute_process(
+#    COMMAND ./buildKernelSourceLib.sh
+#    WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
+#)
 
-file(GLOB source_srcs "src/cl/*.cpp")
-file(GLOB option_srcs "src/option/*.cpp")
+file(GLOB source_srcs ${CMAKE_CURRENT_SOURCE_DIR}/src/cl/*.cpp)
+file(GLOB option_srcs ${CMAKE_CURRENT_SOURCE_DIR}/src/option/*.cpp)
 set(kernel_source_list "${source_srcs};${option_srcs}")
+message(STATUS "${kernel_source_list}")
 
 add_library(${PROJECT_NAME} SHARED ${kernel_source_list})
 add_library(${PROJECT_NAME}_static STATIC ${kernel_source_list})
@@ -31,5 +32,3 @@ set_target_properties(${PROJECT_NAME}_static PROPERTIES CLEAN_DIRECT_OUTPUT 1)
 install(TARGETS ${PROJECT_NAME} ${PROJECT_NAME}_static
         LIBRARY DESTINATION lib
         ARCHIVE DESTINATION lib)
-install(FILES ${CMAKE_BINARY_DIR}/libOpenCL.so
-        DESTINATION lib)

@@ -14,8 +14,6 @@
 #ifndef _H_MMM
 #define _H_MMM
 
-#include "types.h"
-
 void mmm_A55(
     int M, int N, int K, bool transposeA, INT8 *matrix1, INT8 *matrix2, INT8 *tmp, I32 *result);
 

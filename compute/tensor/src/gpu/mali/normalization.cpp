@@ -12,7 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "sys.h"
-#include "types.h"
+
 #include "tensor_desc.h"
 #include "error.h"
 #include "gpu/mali/tensor_computing_mali.h"
@@ -23,21 +23,24 @@ EE normalization_infer_output_size_mali(TensorDesc inputDesc,
     GCLMemDesc_t gclmemInputDesc,
     GCLMemDesc_t gclmemOutputDesc)
 {
-    if (outputDesc) {
-        *outputDesc = inputDesc;
+    if (outputDesc == nullptr || gclmemInputDesc == nullptr || gclmemOutputDesc == nullptr) {
+        CHECK_STATUS(NULL_POINTER);
     }
-    if (inputDesc.df == DF_MKT) {
-        DataType dt;
-        U32 m, k, t;
-        U32 w, h, c;
-        get_nlp_mkt_val(inputDesc, &dt, &m, &k, &t);
-        map_nlp_mkt_to_ncwhc4(m, k, t, &w, &h, &c);
-        c = c * 4;
+    *outputDesc = inputDesc;
+
+    DataType idt;
+    DataFormat idf;
+    U32 iw, ih, ic, in;
+    tensorSelectGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw);
+
+    if (gclmemInputDesc->byteSize == 0 || gclmemInputDesc->memFormat == DF_NCHW) {
+        CHECK_STATUS(infer_gclmem_desc_nchw(
+            iw, ih, ic, 0, 0, iw, ih, ic, idt, idt, gclmemInputDesc, gclmemOutputDesc));
+    } else {
         CHECK_STATUS(infer_gclmem_desc_ncwhc4(
-            w, h, c, 0, 0, w, h, c, dt, dt, gclmemInputDesc, gclmemOutputDesc));
-        return SUCCESS;
+            iw, ih, ic, 0, 0, iw, ih, ic, idt, idt, gclmemInputDesc, gclmemOutputDesc));
     }
-    return NOT_SUPPORTED;
+    return SUCCESS;
 }
 
 inline EE normalization_checkpara_mali(GCLHandle_t handle,
@@ -50,15 +53,30 @@ inline EE normalization_checkpara_mali(GCLHandle_t handle,
 {
     if (nullptr == handle || nullptr == alpha || nullptr == beta || nullptr == input ||
         nullptr == output) {
-        return NULL_POINTER;
+        CHECK_STATUS(NULL_POINTER);
     }
-    if (inputDesc.df != outputDesc.df || inputDesc.df != DF_MKT) {
-        return NOT_SUPPORTED;
+    if (inputDesc.df != outputDesc.df) {
+        CHECK_STATUS(NOT_MATCH);
     }
-    if (input->desc.memFormat != output->desc.memFormat || input->desc.memFormat != DF_NCWHC4) {
-        return NOT_SUPPORTED;
+    if (input->desc.memFormat != output->desc.memFormat) {
+        CHECK_STATUS(NOT_SUPPORTED);
     }
     return SUCCESS;
+}
+
+EE normalization_infer_forward_tmp_bytes_mali(GCLMemDesc gclmemInputDesc, U32 *bytes)
+{
+    EE ret = SUCCESS;
+    switch (gclmemInputDesc.dt) {
+        case DT_F16: {
+            ret = normalization_infer_forward_tmp_bytes_mali_fp16(gclmemInputDesc, bytes);
+            break;
+        }
+        default:
+            ret = NOT_SUPPORTED;
+            break;
+    }
+    return ret;
 }
 
 EE layer_normalization_mali(GCLHandle_t handle,
@@ -66,6 +84,7 @@ EE layer_normalization_mali(GCLHandle_t handle,
     GCLMem_t input,
     GCLMem_t alpha,
     GCLMem_t beta,
+    GCLMem_t tmpbuf,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
@@ -74,7 +93,8 @@ EE layer_normalization_mali(GCLHandle_t handle,
         normalization_checkpara_mali(handle, alpha, beta, inputDesc, input, outputDesc, output));
     switch (inputDesc.dt) {
         case DT_F16: {
-            ret = normalization_mali_fp16(handle, alpha, beta, inputDesc, input, outputDesc, output);
+            ret = normalization_mali_fp16(
+                handle, inputDesc, input, alpha, beta, tmpbuf, outputDesc, output);
             break;
         }
         default:

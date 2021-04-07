@@ -1,0 +1,24 @@
+name: macos-x86-avx2
+on: [push, pull_request]
+jobs:
+  linux:
+    name: macos-x86-avx2
+    runs-on: macos-latest
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v2
+      - name: compile x86-avx2 on macos
+        run: |
+          brew install gnu-getopt > /dev/null
+          echo 'export PATH="/usr/local/opt/gnu-getopt/bin:$PATH"' >> /Users/runner/.bash_profile
+          echo 'export FLAGS_GETOPT_CMD="$(brew --prefix gnu-getopt)/bin/getopt"' >> /Users/runner/.bash_profile
+          source /Users/runner/.bash_profile
+          brew install gcc@9 > /dev/null
+          BOLT_PATH=$(PWD)
+          cd /usr/local/bin
+          ln -s gcc-9 gcc
+          ln -s g++-9 g++
+          gcc -v
+          g++ -v
+          cd $BOLT_PATH
+          ./install.sh --target=macos-x86_64_avx2 -t 32

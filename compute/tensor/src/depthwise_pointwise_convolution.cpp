@@ -120,11 +120,12 @@ EE depthwise_pointwise_convolution_infer_forward_algorithm(Tensor inputTensor,
     ActivationParamSpec pointwiseActivationParamSpec,
     ArchInfo_t archInfo)
 {
+#if defined(_USE_NEON) || defined(_USE_MALI)
     TensorDesc inputDesc = inputTensor.get_desc();
     TensorDesc outputDesc = outputTensor.get_desc();
     TensorDesc dwFilterDesc = dwFilterTensor.get_desc();
     TensorDesc pwFilterDesc = pwFilterTensor.get_desc();
-
+#endif
     EE ret = NOT_SUPPORTED;
     auto arch = archInfo->arch;
     if (IS_GENERAL(arch)) {
@@ -218,9 +219,9 @@ EE depthwise_pointwise_convolution_transform_filter(Tensor dwFilterTensor,
     EE ret = NOT_SUPPORTED;
     if (IS_GENERAL(arch)) {
 #ifdef _USE_GENERAL
-        UNI_memcpy(dwFilterTransformed, dwFilter, tensorNumBytes(dwFilterDesc));
+        UNI_MEMCPY(dwFilterTransformed, dwFilter, tensorNumBytes(dwFilterDesc));
         dwFtmDesc = dwFilterDesc;
-        UNI_memcpy(pwFilterTransformed, pwFilter, tensorNumBytes(pwFilterDesc));
+        UNI_MEMCPY(pwFilterTransformed, pwFilter, tensorNumBytes(pwFilterDesc));
         pwFtmDesc = pwFilterDesc;
         ret = SUCCESS;
 #endif

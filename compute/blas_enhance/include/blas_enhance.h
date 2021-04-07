@@ -16,7 +16,6 @@
 
 #include "sys.h"
 #include "tensor_desc.h"
-#include "types.h"
 
 #ifdef __cplusplus
 extern "C" {

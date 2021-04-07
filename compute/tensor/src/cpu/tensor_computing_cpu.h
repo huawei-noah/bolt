@@ -14,14 +14,17 @@
 #ifndef _H_TENSOR_COMPUTING_CPU
 #define _H_TENSOR_COMPUTING_CPU
 
+#include "uni.h"
 #include "sys.h"
-#include "types.h"
+#include "tensor_desc.h"
+#include "parameter_spec.h"
 
 EE rnn_transform_filter_cpu(const TensorDesc *filterDescs,
     const void **filterArray,
     RNNParamSpec rnnParamSpec,
     TensorDesc *ftmDesc,
-    void **ftmArray);
+    void **ftmArray,
+    Arch arch);
 
 EE rnn_transform_filter_bytes_cpu(
     const TensorDesc *filterDesc, RNNParamSpec rnnParamSpec, U32 *bytes);

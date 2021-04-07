@@ -16,7 +16,8 @@
 
 #include <vector>
 #include "sys.h"
-#include "types.h"
+#include "tensor_desc.h"
+#include "parameter_spec.h"
 
 EE attention_arm(TensorDesc inputDesc, const void *input, TensorDesc outputDesc, void *output);
 
@@ -71,6 +72,12 @@ EE deconvolution_transform_filter_arm(TensorDesc filterDesc,
     ConvolutionForwardAlgorithm algorithm,
     TensorDesc *ftmDesc,
     void *filterTransformed);
+
+EE deconvolution_overlap_crop_arm(void *input,
+    void *output,
+    TensorDesc inputDesc,
+    TensorDesc outputDesc,
+    ConvolutionParamSpec convParamSpec);
 
 EE depthwise_pointwise_convolution_infer_forward_algorithm_arm(TensorDesc inputDesc,
     TensorDesc dwFilterDesc,

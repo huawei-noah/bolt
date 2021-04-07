@@ -52,10 +52,23 @@ public:
     {
         auto inDim = inTensors[0]->get_desc();
         auto curOpWs = this->get_weightspec();
+
         if (curOpWs.bytes_of_weight == bytesOf(curOpWs.mdt) ||
             curOpWs.bytes_of_vec == bytesOf(curOpWs.mdt)) {
             this->p.axis = 0;
         }
+
+        if (!(curOpWs.bytes_of_weight == 0 && curOpWs.bytes_of_vec == 0)) {
+            int maxBytes = curOpWs.bytes_of_weight > curOpWs.bytes_of_vec ? curOpWs.bytes_of_weight
+                                                                          : curOpWs.bytes_of_vec;
+            for (int i = 0; i < (int)(inDim.nDims); i++) {
+                if (inDim.dims[inDim.nDims - 1 - i] == (maxBytes / bytesOf(curOpWs.mdt))) {
+                    this->p.axis = i;
+                    break;
+                }
+            }
+        }
+
         I32 tmpAxis = (this->p.axis + inDim.nDims) % inDim.nDims;
         tmpAxis = inDim.nDims - 1 - tmpAxis;
         CHECK_REQUIREMENT(tmpAxis < (I32)inDim.nDims);
@@ -66,6 +79,12 @@ public:
         } else if (0 != curOpWs.bytes_of_vec) {
             this->numChannels = curOpWs.bytes_of_vec / UNI_MAX(1, bytesOf(curOpWs.mdt));
         } else {
+            this->numChannels = 0;
+        }
+
+        if (curOpWs.bytes_of_weight == 0 && curOpWs.bytes_of_vec == tensorNumBytes(inDim)) {
+            this->numChannels = 0;
+        } else if (curOpWs.bytes_of_vec == 0 && curOpWs.bytes_of_weight == tensorNumBytes(inDim)) {
             this->numChannels = 0;
         }
 
@@ -91,17 +110,12 @@ public:
     EE infer_weight_desc() override
     {
         auto curOpWs = this->get_weightspec();
-        if (0 != curOpWs.bytes_of_weight) {
-            this->numChannels = curOpWs.bytes_of_weight / UNI_MAX(1, bytesOf(curOpWs.mdt));
-        } else if (0 != curOpWs.bytes_of_vec) {
-            this->numChannels = curOpWs.bytes_of_vec / UNI_MAX(1, bytesOf(curOpWs.mdt));
-        } else {
-            this->numChannels = 0;
-        }
         this->weightTensors = std::vector<Tensor>(1);
-        this->weightTensors[0].resize(tensor1d(this->dt, numChannels));
+        this->weightTensors[0].resize(
+            tensor1d(this->dt, curOpWs.bytes_of_weight / UNI_MAX(1, bytesOf(curOpWs.mdt))));
         this->biasTensors = std::vector<Tensor>(1);
-        this->biasTensors[0].resize(tensor1d(this->dt, numChannels));
+        this->biasTensors[0].resize(
+            tensor1d(this->dt, curOpWs.bytes_of_vec / UNI_MAX(1, bytesOf(curOpWs.mdt))));
         return SUCCESS;
     }
 };

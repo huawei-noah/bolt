@@ -16,7 +16,7 @@
 #include "tensor_computing.h"
 #include "ut_util.h"
 
-int rnnTest(int argc, char **argv, DataType dt)
+int rnnTest(int argc, char **argv, DataType dt, RNNMode mode)
 {
     CHECK_REQUIREMENT(argc == 5);
     U32 batch = atoi(argv[1]);
@@ -29,22 +29,48 @@ int rnnTest(int argc, char **argv, DataType dt)
     archInfo_org.arch = CPU_GENERAL;
 
     RNNParamSpec rnnParamSpec;
-    rnnParamSpec.mode = RNN_LSTM;
+    rnnParamSpec.mode = mode;
+    rnnParamSpec.steps = step;
     rnnParamSpec.biDirection = false;
     rnnParamSpec.numOutput = hDim;
-    rnnParamSpec.numProjection = 1024;
+    rnnParamSpec.numProjection = 0;
     rnnParamSpec.forgetBias = 1.0;
     rnnParamSpec.activationMode = ACTIVATION_TANH;
     rnnParamSpec.zoneoutCell = 0;
     rnnParamSpec.zoneoutOutput = 0;
+
+    U32 weightNum = 1;
+    U32 biasNum = 1;
+    int factor = 0;
+    switch (mode) {
+        case RNN_LSTM:
+            rnnParamSpec.numProjection = 1024;
+            factor = 4;
+            break;
+        case RNN_GRU:
+            factor = 3;
+            break;
+        case RNN_GRU_LBR:
+            factor = 3;
+            biasNum++;
+            break;
+        default:
+            return 1;
+    }
     F32 threshold = 10;
     if (rnnParamSpec.numProjection > 0) {
+        weightNum++;
+        biasNum++;
         threshold = 40;
+    }
+
+    if (rnnParamSpec.mode != RNN_LSTM) {
+        rnnParamSpec.numProjection = 0;
+        rnnParamSpec.forgetBias = 0;
     }
 
     U32 column = (rnnParamSpec.numProjection > 0) ? rnnParamSpec.numProjection
                                                   : rnnParamSpec.numOutput;
-    U32 num2 = (rnnParamSpec.numProjection > 0) ? 2 : 1;
     TensorDesc inputDesc = tensor3df(dt, DF_MTK, batch, step, xDim);
     Tensor inputTensor;
     inputTensor.resize(inputDesc);
@@ -55,18 +81,20 @@ int rnnTest(int argc, char **argv, DataType dt)
 
     U32 tmpBytes;
     std::vector<TensorDesc> filterDesc(2), biasDesc(2);
-    filterDesc[0] = tensor2df(dt, DF_NK, 4 * column, xDim + hDim);
+    filterDesc[0] = tensor2df(dt, DF_NK, factor * column, xDim + hDim);
     filterDesc[1] = tensor2df(dt, DF_NK, rnnParamSpec.numOutput, rnnParamSpec.numProjection);
-    biasDesc[0] = tensor1d(dt, column * 4);
+    biasDesc[0] = tensor1d(dt, column * factor);
     biasDesc[1] = tensor1d(dt, rnnParamSpec.numOutput);
-    std::vector<Tensor> filterTensor(num2), biasTensor(num2);
-    for (U32 i = 0; i < num2; i++) {
+    std::vector<Tensor> filterTensor(weightNum), biasTensor(biasNum);
+    for (U32 i = 0; i < weightNum; i++) {
         filterTensor[i].resize(filterDesc[i]);
         filterTensor[i].alloc();
         U8 *filter = ut_input_v(tensorNumBytes(filterDesc[i]) / bytesOf(dt), dt, UT_INIT_RANDOM);
         memcpy(get_ptr_from_tensor(filterTensor[i], UT_ARCH), filter, tensorNumBytes(filterDesc[i]));
         free(filter);
+    }
 
+    for (U32 i = 0; i < biasNum; i++) {
         biasTensor[i].resize(biasDesc[i]);
         biasTensor[i].alloc();
         U8 *bias = ut_input_v(tensorNumBytes(biasDesc[i]) / bytesOf(dt), dt, UT_INIT_RANDOM);
@@ -76,7 +104,9 @@ int rnnTest(int argc, char **argv, DataType dt)
 
     // set output
     Tensor outputTensor, outputTensorRef;
-    CHECK_STATUS(rnn_infer_output_size(&inputTensor, rnnParamSpec, &outputTensor, &archInfo));
+    std::vector<Tensor *> inputTensors(1, &inputTensor);
+    std::vector<Tensor *> outputTensors(1, &outputTensor);
+    CHECK_STATUS(rnn_infer_output_size(inputTensors, rnnParamSpec, outputTensors, &archInfo));
     outputTensor.alloc();
     U32 outputLength = outputTensor.length();
 
@@ -86,14 +116,18 @@ int rnnTest(int argc, char **argv, DataType dt)
 
     CHECK_STATUS(rnn_infer_forward_tmp_bytes(
         inputTensor, filterTensor[0], outputTensor, rnnParamSpec, &tmpBytes, &archInfo));
-    std::vector<U32> ftmBytes(num2);
+    std::vector<U32> ftmBytes(weightNum);
     CHECK_STATUS(rnn_transform_filter_bytes(filterTensor, rnnParamSpec, ftmBytes.data(), &archInfo));
-    std::vector<Tensor> ftmTensor(num2);
-    std::vector<Tensor *> ftmTensorPtr(num2);
-    for (U32 i = 0; i < num2; i++) {
+    std::vector<Tensor> ftmTensor(weightNum), ftmTensorRef(weightNum);
+    std::vector<Tensor *> ftmTensorPtr(weightNum), ftmTensorPtrRef(weightNum);
+    for (U32 i = 0; i < weightNum; i++) {
         ftmTensor[i].resize(tensor1d(DT_U8, ftmBytes[i]));
         ftmTensor[i].alloc();
         ftmTensorPtr[i] = &ftmTensor[i];
+
+        ftmTensorRef[i].resize(tensor1d(DT_U8, ftmBytes[i]));
+        ftmTensorRef[i].alloc();
+        ftmTensorPtrRef[i] = &ftmTensorRef[i];
     }
 
     Tensor tmpTensor;
@@ -101,13 +135,16 @@ int rnnTest(int argc, char **argv, DataType dt)
     tmpTensor.alloc();
 
     CHECK_STATUS(rnn_transform_filter(filterTensor, rnnParamSpec, ftmTensorPtr, &archInfo));
+    CHECK_STATUS(rnn_transform_filter(filterTensor, rnnParamSpec, ftmTensorPtrRef, &archInfo_org));
 
     if (UT_CHECK) {
+        memset(get_ptr_from_tensor(tmpTensor, archInfo.arch), 0, tmpBytes);
         CHECK_STATUS(rnn(
             inputTensor, ftmTensor, biasTensor, rnnParamSpec, tmpTensor, outputTensor, &archInfo));
 
         // naive implement
-        CHECK_STATUS(rnn(inputTensor, ftmTensor, biasTensor, rnnParamSpec, tmpTensor,
+        memset(get_ptr_from_tensor(tmpTensor, archInfo.arch), 0, tmpBytes);
+        CHECK_STATUS(rnn(inputTensor, ftmTensorRef, biasTensor, rnnParamSpec, tmpTensor,
             outputTensorRef, &archInfo_org));
 
         // check
@@ -132,7 +169,8 @@ int rnnTest(int argc, char **argv, DataType dt)
     sprintf(buffer, "%20s, %80s", "RNN", params);
     double hxDim = hDim + xDim;
     double ops = 1.0 * batch * step *
-        (2.0 * hxDim * column * 4 + column * 4 + rnnParamSpec.numProjection * rnnParamSpec.numOutput);
+        (2.0 * hxDim * column * factor + column * factor +
+            rnnParamSpec.numProjection * rnnParamSpec.numOutput);
     ut_log(dt, buffer, ops, time);
 
     free(input);
@@ -142,10 +180,14 @@ int rnnTest(int argc, char **argv, DataType dt)
 int main(int argc, char **argv)
 {
 #ifdef _USE_FP16
-    rnnTest(argc, argv, DT_F16);
+    rnnTest(argc, argv, DT_F16, RNN_LSTM);
+    rnnTest(argc, argv, DT_F16, RNN_GRU);
+    rnnTest(argc, argv, DT_F16, RNN_GRU_LBR);
 #endif
 #ifdef _USE_FP32
-    rnnTest(argc, argv, DT_F32);
+    rnnTest(argc, argv, DT_F32, RNN_LSTM);
+    rnnTest(argc, argv, DT_F32, RNN_GRU);
+    rnnTest(argc, argv, DT_F32, RNN_GRU_LBR);
 #endif
     return 0;
 }
