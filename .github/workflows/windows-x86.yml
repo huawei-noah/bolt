@@ -1,4 +1,4 @@
-name: windows-x64
+name: windows-x86
 on: [push, pull_request]
 jobs:
   windows-x86:
