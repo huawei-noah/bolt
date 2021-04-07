@@ -21,6 +21,24 @@ If you have questions or suggestions, you can submit issue. **QQ群: 833345709**
 
 [See more excellent features and details here](https://zhuanlan.zhihu.com/p/317111024)
 
+# Installation
+
+Kinds of choices are provided for the compilation of bolt. Please choose the suitable method depending on your server.
+
+| target platform      | command                                      | Linux | Windows | MacOS |
+| -------------------- | -------------------------------------------- | ----- | ------- | ----- |
+| Android(armv7)       | ./install.sh --target=android-armv7          | [![Build Status](images/build-pass.png)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Alinux-android-armv7) | [![Build Status](images/build-pass.png)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Awindows-android-armv7) | [![Build Status](images/build-pass.png)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Amacos-android-armv7) |
+| Android(armv8+mali)  | ./install.sh --target=android-aarch64 --mali | [![Build Status](images/build-pass.png)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Alinux-android-armv8) | [![Build Status](images/build-pass.png)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Awindows-android-armv8) | [![Build Status](images/build-pass.png)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Amacos-android-armv8) |
+| Android(x86_64)      | ./install.sh --target=android-x86_64         | [![Build Status](images/build-pass.png)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Alinux-android-x86_64) | [![Build Status](images/build-pass.png)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Awindows-android-x86_64) | [![Build Status](images/build-pass.png)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Amacos-android-x86_64) |
+| iOS(armv7)           | ./install.sh --target=ios-armv7              | / | / | [![Build Status](images/build-pass.png)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Amacos-ios-armv7) |
+| iOS(armv8)           | ./install.sh --target=ios-aarch64            | / | / | [![Build Status](images/build-pass.png)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Amacos-ios-armv8) |
+| Linux(X86_64)        | ./install.sh --target=linux-x86_64           | [![Build Status](images/build-pass.png)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Alinux-x86) | / | / |
+| Linux(x86_64_avx2)   | ./install.sh --target=linux-x86_64_avx2      | [![Build Status](images/build-pass.png)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Alinux-x86-avx2) | / | / |
+| Windows(X86_64)      | ./install.sh --target=windows-x86_64         | / | [![Build Status](images/build-pass.png)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Awindows-x64) | / |
+| Windows(x86_64_avx2) | ./install.sh --target=windows-x86_64_avx2    | / | [![Build Status](images/build-pass.png)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Awindows-x64-avx2) | / |
+| MacOS(X86_64)        | ./install.sh --target=macos-x86_64           | / | / | [![Build Status](images/build-pass.png)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Amacos-x86) |
+| MacOS(x86_64_avx2)   | ./install.sh --target=macos-x86_64_avx2      | / | / | [![Build Status](images/build-pass.png)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Amacos-x86-avx2) |
+
 # Quick Start
 
 <div align=center><img src="docs/images/QuickStart.jpg" width = 80% height = 80% /></div>
