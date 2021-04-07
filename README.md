@@ -21,7 +21,7 @@ If you have questions or suggestions, you can submit issue. **QQ群: 833345709**
 
 [See more excellent features and details here](https://zhuanlan.zhihu.com/p/317111024)
 
-# Installation
+# Building Status
 
 Kinds of choices are provided for the compilation of bolt. Please choose the suitable choice depending on your environment.
 
