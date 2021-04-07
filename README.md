@@ -23,7 +23,7 @@ If you have questions or suggestions, you can submit issue. **QQ群: 833345709**
 
 # Building Status
 
-Kinds of choices are provided for the compilation of bolt. Please choose the suitable choice depending on your environment.
+Kinds of choices are provided for the compilation of bolt. Please make a suitable choice depending on your environment.
 
 | target platform      | build command                                | Linux | Windows | MacOS |
 | -------------------- | -------------------------------------------- | ----- | ------- | ----- |
