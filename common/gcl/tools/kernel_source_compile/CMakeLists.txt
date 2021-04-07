@@ -15,7 +15,7 @@ project(kernelsource)
 set_c_cxx_flags()
 
 execute_process(
-    COMMAND bash buildKernelSourceLib.sh
+    COMMAND ./buildKernelSourceLib.sh
     WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
 )
 
