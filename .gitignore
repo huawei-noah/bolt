@@ -14,5 +14,3 @@ caffe_pb2.py
 *.a
 *.so
 *.bolt
-
-docs/API/html
