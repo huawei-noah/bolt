@@ -56,14 +56,6 @@ if (${CMAKE_SYSTEM_NAME} STREQUAL "Windows")
         DESTINATION lib)
 endif ()
 
-#find_program (DOXYGEN_PROGRAM doxygen)
-#if (DOXYGEN_PROGRAM)
-#    execute_process(COMMAND doxygen .Doxyfile WORKING_DIRECTORY ${BOLT_ROOT})
-#else ()
-#    message(WARNING "Can not find doxygen tools to generate code documents in docs/API/html/index.html!\
-#    If you dont't want to use these documents, you can skip this warning message.")
-#endif ()
-
 enable_testing()
 find_program (BASH_PROGRAM bash)
 if (BASH_PROGRAM AND USE_GENERAL)
