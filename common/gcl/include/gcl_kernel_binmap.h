@@ -14,9 +14,13 @@
 #ifndef GCL_KERNELBIN_MAP
 #define GCL_KERNELBIN_MAP
 
-#include "gcl_kernel_type.h"
 #include <unordered_map>
 #include <mutex>
+struct GCLKernelBin {
+    const unsigned char *data;
+    const unsigned int len;
+};
+
 typedef GCLKernelBin KernelBin;
 
 class gcl_kernel_binmap {
