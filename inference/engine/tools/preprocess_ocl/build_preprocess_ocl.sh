@@ -104,10 +104,6 @@ if [[ -d ${host_cpp}/cpp ]]; then
     rm -rf ${host_cpp}/cpp
 fi
 
-cp ${BOLT_ROOT}/common/uni/include/error.h ${host_extern}
-cp ${BOLT_ROOT}/common/uni/include/tensor_desc.h ${host_extern}
-cp ${BOLT_ROOT}/common/uni/include/uni.h ${host_extern}
-cp ${BOLT_ROOT}/common/gcl/include/gcl_kernel_type.h ${host_extern}
 cp ${BOLT_ROOT}/common/gcl/include/gcl_kernel_binmap.h ${host_extern}
 
 lib_name=libkernelbin
