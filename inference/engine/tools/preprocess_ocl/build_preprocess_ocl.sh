@@ -124,7 +124,7 @@ do
     sharedSrcs="${sharedSrcs} ${file}"
 done
 ${CXX} ${CXXFLAGS} -shared -o ${host_lib}/lib${lib_name}.so ${sharedSrcs} \
-    -L${BOLT_ROOT}/third_party/android-aarch64/opencl/lib64 -lOpenCL -Wl,-soname,lib${lib_name}.so || exit 1
+    -L${BOLT_ROOT}/third_party/android-aarch64/opencl/lib -lOpenCL -Wl,-soname,lib${lib_name}.so || exit 1
 ${STRIP} ${host_lib}/lib${lib_name}.so || exit 1
 
 adb -s ${device} shell "rm -rf ${device_work_local}"
