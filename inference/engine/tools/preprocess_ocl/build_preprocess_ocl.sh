@@ -104,10 +104,6 @@ if [[ -d ${host_cpp}/cpp ]]; then
     rm -rf ${host_cpp}/cpp
 fi
 
-cp ${BOLT_ROOT}/common/uni/include/error.h ${host_extern}
-cp ${BOLT_ROOT}/common/uni/include/tensor_desc.h ${host_extern}
-cp ${BOLT_ROOT}/common/uni/include/uni.h ${host_extern}
-cp ${BOLT_ROOT}/common/gcl/include/gcl_kernel_type.h ${host_extern}
 cp ${BOLT_ROOT}/common/gcl/include/gcl_kernel_binmap.h ${host_extern}
 
 lib_name=libkernelbin
@@ -128,7 +124,7 @@ do
     sharedSrcs="${sharedSrcs} ${file}"
 done
 ${CXX} ${CXXFLAGS} -shared -o ${host_lib}/lib${lib_name}.so ${sharedSrcs} \
-    -L${BOLT_ROOT}/third_party/android-aarch64/opencl/lib64 -lOpenCL -Wl,-soname,lib${lib_name}.so || exit 1
+    -L${BOLT_ROOT}/third_party/android-aarch64/opencl/lib -lOpenCL -Wl,-soname,lib${lib_name}.so || exit 1
 ${STRIP} ${host_lib}/lib${lib_name}.so || exit 1
 
 adb -s ${device} shell "rm -rf ${device_work_local}"

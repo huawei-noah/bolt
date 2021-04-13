@@ -512,10 +512,7 @@ void PrepareModel5D(ModelHandle ih,
 
     std::map<std::string, TensorDesc> modelInputDims =
         getInputDataFormatFromUser(ih, num_input, name, n, c, t, h, w, dt, df);
-    if (ihInfo->algoPath) {
-        const char *algoPath = (const char *)ihInfo->algoPath;
-        cnn->loadAlgorithmMap(algoPath, ihInfo->useFileStream);
-    }
+    cnn->loadAlgorithmMap((const char *)ihInfo->algoPath, ihInfo->useFileStream);
     cnn->ready(modelInputDims);
     cnn->mark_input_output();
 
