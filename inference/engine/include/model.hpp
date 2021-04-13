@@ -158,7 +158,7 @@ public:
         }
         if (algoInfo) {
             this->algorithmMap->loadAlgorithmMapFromFileStream(algoInfo);
-        } else {
+        } else if (path) {
             this->algorithmMap->loadAlgorithmMapFromFile(path);
         }
     }
