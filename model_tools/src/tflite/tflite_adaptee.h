@@ -933,7 +933,7 @@ protected:
                 convPs.padding_top = (convPs.kernel_h - 1) / 2;
                 convPs.padding_bottom = (convPs.kernel_h - 1) / 2;
                 if (convPs.kernel_h % 2 == 0) {
-                    convPs.padding_top += 1;
+                    convPs.padding_bottom += 1;
                 }
                 if (convPs.padding_top != 0 && inputShape[1] % 2 == 0 &&
                     tfliteConvOption->stride_h % 2 == 0) {
@@ -942,7 +942,7 @@ protected:
                 convPs.padding_left = (convPs.kernel_w - 1) / 2;
                 convPs.padding_right = (convPs.kernel_w - 1) / 2;
                 if (convPs.kernel_w % 2 == 0) {
-                    convPs.padding_left += 1;
+                    convPs.padding_right += 1;
                 }
                 if (convPs.padding_left != 0 && inputShape[2] % 2 == 0 &&
                     tfliteConvOption->stride_w % 2 == 0) {
