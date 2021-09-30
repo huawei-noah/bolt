@@ -16,6 +16,8 @@
 #include "inference.hpp"
 #include "tensor.hpp"
 
+const int DataDescMaxDims = 8;
+
 struct ModelHandleInfo {
     void *ms;
     void *cnn;
@@ -29,8 +31,8 @@ struct DLLiteInfo {
     bool isReady;
 };
 
-typedef struct {
-    U32 dims[4] = {0};
+typedef struct DataDesc {
+    U32 dims[DataDescMaxDims] = {0};
     char name[NAME_LEN] = {0};
     DataType dt;
     DataFormat df;
@@ -410,8 +412,8 @@ bolt::ReturnStatus bolt::RunModel(bolt::ModelHandle modelHandle,
     for (U32 curIndex = 0; curIndex < ir_inner->num_outputs; curIndex++) {
         Tensor output_tensor = cnn->get_tensor_by_name(outputArrPtr[curIndex].name);
         UpdateDataDesc(output_tensor.get_desc(), &(outputArrPtr[curIndex]));
-        if (device == GPU_MALI) {
-#ifdef _USE_MALI
+        if (device == GPU_MALI || device == GPU_QUALCOMM) {
+#ifdef _USE_GPU
             auto mem = (OclMemory *)output_tensor.get_memory();
             outputArrPtr[curIndex].dataPtr = mem->get_mapped_ptr();
 #else

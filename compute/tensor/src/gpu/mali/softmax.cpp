@@ -18,40 +18,25 @@
 #include "gpu/mali/tensor_computing_mali.h"
 #include "gpu/mali/fp16/softmax_mali_fp16.h"
 
-EE softmax_infer_output_size_mali(TensorDesc inputDesc,
-    TensorDesc *outputDesc,
-    GCLMemDesc_t gclmemInputDesc,
-    GCLMemDesc_t gclmemOutputDesc)
+EE softmax_padding_input_mali(
+    TensorDesc inputDesc, TensorDesc *outputDesc, OclMemory *inputMem, OclMemory *outputMem)
 {
-    /*tensorDesc record cpu org data format info*/
-    /*gclmemDesc record gpu trans data format info*/
-    if (outputDesc) {
-        *outputDesc = inputDesc;
+    if (inputMem == nullptr || outputMem == nullptr || outputDesc == nullptr) {
+        CHECK_STATUS(NULL_POINTER);
     }
-
-    DataType idt;
-    DataFormat idf;
-    U32 iw, ih, ic, in;
-    tensorSelectGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw);
-    if (gclmemInputDesc) {
-        if (gclmemInputDesc->memFormat == DF_NCHW) {
-            U32 iw_align = (iw + 3) / 4 * 4;
-            if ((iw == 1 && ic == 1) || (iw == 1 && ih == 1)) {
-                iw_align = 1;
-            }
-            bool need_pad = false;
-            if (iw_align != iw) {
-                need_pad = true;
-            }
-            CHECK_STATUS(infer_gclmem_desc_nchw(iw_align, ih, ic, 0, 0, iw_align, ih, ic, idt, idt,
-                gclmemInputDesc, gclmemOutputDesc, need_pad));
-        } else if (gclmemInputDesc->memFormat == DF_NCWHC4) {
-            CHECK_STATUS(infer_gclmem_desc_ncwhc4(
-                iw, ih, ic, 0, 0, iw, ih, ic, idt, idt, gclmemInputDesc, gclmemOutputDesc));
-        } else {
-            CHECK_STATUS(NOT_SUPPORTED);
+    U32 pr = 0;
+    if (inputDesc.df != DF_NCHWC4) {
+        U32 iw, ih, ic, in;
+        tensorSelectGet(inputDesc, NULL, NULL, &in, &ic, &ih, &iw);
+        U32 iw_align = (iw + 3) / 4 * 4;
+        if ((iw == 1 && ic == 1) || (iw == 1 && ih == 1)) {
+            iw_align = 1;
         }
+        pr = iw_align - iw;
     }
+    inputMem->padding(0, pr, 0, 0);
+    outputMem->resize(*outputDesc);
+    outputMem->padding(0, pr, 0, 0);  //padding must after resize
     return SUCCESS;
 }
 
@@ -83,12 +68,6 @@ inline EE softmax_checkpara_mali(GCLHandle_t handle,
     if (inputDesc.dims[3] != outputDesc.dims[3]) {
         return NOT_SUPPORTED;
     }
-    if (output->desc.memFormat != DF_NCWHC4 && output->desc.memFormat != DF_NCHW) {
-        return NOT_SUPPORTED;
-    }
-    if (p.axis != 1 && p.axis != 3 && p.axis != -1) {
-        return NOT_SUPPORTED;
-    }
     return SUCCESS;
 }
 
@@ -115,12 +94,13 @@ EE softmax_mali(GCLHandle_t handle,
 }
 
 EE softmax_infer_forward_tmp_bytes_mali(
-    TensorDesc inputDesc, U32 *bytes, ForwardRunInfoMali_t forwardRunInfo)
+    TensorDesc inputDesc, GCLMemDesc gclmemInputDesc, SoftmaxParamSpec p, U32 *bytes)
 {
     EE ret = SUCCESS;
     switch (inputDesc.dt) {
         case DT_F16: {
-            ret = softmax_infer_forward_tmp_bytes_mali_fp16(inputDesc, bytes, forwardRunInfo);
+            ret = softmax_infer_forward_tmp_bytes_mali_fp16(
+                inputDesc, gclmemInputDesc, p.axis, bytes);
             break;
         }
         default:

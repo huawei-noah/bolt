@@ -14,6 +14,7 @@
 #define MANGLE_NAME_IMPL(base, C, K) base##C##K
 #define MANGLE_NAME(base, C, K) MANGLE_NAME_IMPL(base, C, K)
 __kernel void MANGLE_NAME(deconv_gemm_trans_fltbuf_, C, K)(const int fw,
+    const int fh,
     const int fwh,
     const int fwhc,
     const int fc,
@@ -84,9 +85,6 @@ __kernel void MANGLE_NAME(deconv_gemm_trans_fltbuf_, C, K)(const int fw,
     }
 
     /*C = 1 C = 2 C = 4*/
-    const int idx_w = idx_wh % fw;
-    const int idx_h = idx_wh / fw;
-    const int idx_tran = idx_c * fwh + idx_w * fw + idx_h;
-    int out_off = (idx_tran / C) * ((fn + 3) >> 2) * C + idy * C + (idx_tran % C);
+    int out_off = (idx / C) * ((fn + 3) >> 2) * C + idy * C + (idx % C);
     vstore16(val, out_off, fltbuf);
 }

@@ -11,7 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string.h>
 #include "blas_enhance.h"
 #include "ut_util.h"
 
@@ -40,12 +39,12 @@ int mmmTestKernel(U32 m, U32 k, U32 n, DataType dt)
 
     matrix_matrix_multiply_transform_rhs(B_desc, B, &tranDescB, B_tran, UT_ARCH);
     if (UT_CHECK) {
-        CHECK_STATUS(
-            matrix_matrix_multiply(A_desc, A, tranDescB, B_tran, bytes, tmp, C_desc, C, UT_ARCH));
+        CHECK_STATUS(matrix_matrix_multiply(
+            A_desc, A, tranDescB, B_tran, bytes, tmp, C_desc, C, nullptr, UT_ARCH));
 
         // naive implement
-        CHECK_STATUS(
-            matrix_matrix_multiply(A_desc, A, B_desc, B, bytes, tmp, C_desc, C_ref, CPU_GENERAL));
+        CHECK_STATUS(matrix_matrix_multiply(
+            A_desc, A, B_desc, B, bytes, tmp, C_desc, C_ref, nullptr, CPU_GENERAL));
 
         // check
         ut_check_v(C, C_ref, m * n, dt, threshold, __FILE__, __LINE__);
@@ -54,7 +53,8 @@ int mmmTestKernel(U32 m, U32 k, U32 n, DataType dt)
     // benchmark
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        matrix_matrix_multiply(A_desc, A, tranDescB, B_tran, bytes, tmp, C_desc, C, UT_ARCH);
+        matrix_matrix_multiply(
+            A_desc, A, tranDescB, B_tran, bytes, tmp, C_desc, C, nullptr, UT_ARCH);
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;

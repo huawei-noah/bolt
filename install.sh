@@ -7,6 +7,8 @@ BOLT_ROOT=${script_dir}
 target=""
 build_threads="8"
 converter="on"
+use_serial="on"
+use_fp32="on"
 use_fp16="on"
 use_int8="on"
 clean="off"
@@ -33,9 +35,11 @@ EOF
   --debug                    set to use debug(default: OFF).
   --profile                  set to print performance profiling information(default: OFF).
   --shared                   set to use shared library(default: OFF).
-  --mali                     set to use arm mali gpu(default: OFF).
+  --gpu                      set to use arm mali/qualcomm gpu(default: OFF).
   --openmp                   set to use OpenMP multi-threads parallel operator(default: OFF).
   --flow                     set to use flow to process pipeline data(default: OFF).
+  --serial=<ON|OFF>          set to use serial calculation(default: ON).
+  --fp32=<ON|OFF>            set to use float32 calculation(default: ON).
   --fp16=<ON|OFF>            set to use float16 calculation on arm aarch64(default: ON on aarch64, OFF on others).
   --int8=<ON|OFF>            set to use int8 calculation on arm aarch64(default: ON on aarch64, OFF on others).
   -t, --threads=8            use parallel build(default: 8).
@@ -44,8 +48,12 @@ EOF
     exit 1;
 }
 
-cmake_options="-DUSE_GENERAL=ON -DUSE_FP32=ON"
-TEMP=`getopt -o "ht:c:" -al target:,threads:,help,converter:,example,debug,profile,shared,mali,openmp,flow,fp16:,int8:,clean -- "$@"`
+cmake_options=""
+TEMP=`getopt -o "ht:c:" -al target:,threads:,help,converter:,example,debug,profile,shared,gpu,openmp,flow,serial:,fp32:,fp16:,int8:,clean -- "$@"`
+if [[ $? != 0 ]]; then
+    echo "[ERROR] ${script_name} terminating..." >&2
+    exit 1
+fi
 if [[ ${TEMP} != *-- ]]; then
     echo "[ERROR] ${script_name} can not recognize ${TEMP##*-- }"
     echo "maybe it contains invalid character(such as Chinese)."
@@ -79,8 +87,8 @@ while true ; do
         --shared)
             cmake_options="${cmake_options} -DUSE_DYNAMIC_LIBRARY=ON"
             shift ;;
-        --mali)
-            cmake_options="${cmake_options} -DUSE_MALI=ON"
+        --gpu)
+            cmake_options="${cmake_options} -DUSE_GPU=ON"
             shift ;;
         --openmp)
             cmake_options="${cmake_options} -DUSE_OPENMP=ON"
@@ -88,6 +96,12 @@ while true ; do
         --flow)
             cmake_options="${cmake_options} -DUSE_FLOW=ON -DUSE_THREAD_SAFE=ON"
             shift ;;
+        --serial)
+            use_serial=$2
+            shift 2 ;;
+        --fp32)
+            use_fp32=$2
+            shift 2 ;;
         --fp16)
             use_fp16=$2
             shift 2 ;;
@@ -102,6 +116,12 @@ while true ; do
         *) echo "[ERROR] ${script_name} can not recognize $1" ; exit 1 ;;
     esac
 done
+
+if [[ "${target}" == "" ]]; then
+    echo "[ERROR] please set target option to specify the target deployment platform."
+    print_help
+    exit 1
+fi
 
 target=$(map_target ${target})
 check_target ${target}
@@ -136,9 +156,19 @@ if [[ ${CC} =~ gcc ]]; then
     aarch64_int8_cflags="-march=armv8.2-a+fp16+dotprod"
 fi
 
+if [[ "${use_serial}" == "ON" || "${use_serial}" == "on" ]]; then
+    cmake_options="${cmake_options} -DUSE_GENERAL=ON"
+else
+    cmake_options="${cmake_options} -DUSE_GENERAL=OFF"
+fi
+if [[ "${use_fp32}" == "ON" || "${use_fp32}" == "on" ]]; then
+    cmake_options="${cmake_options} -DUSE_FP32=ON"
+else
+    cmake_options="${cmake_options} -DUSE_FP32=OFF"
+fi
 if [[ ${target} =~ aarch64 ]]; then
     cmake_options="${cmake_options} -DUSE_NEON=ON"
-    if [[ ${cmake_options} =~ USE_MALI=ON ]]; then
+    if [[ ${cmake_options} =~ USE_GPU=ON ]]; then
         use_fp16="on"
     fi
     if [[ "${use_fp16}" == "ON" || "${use_fp16}" == "on" ]]; then
@@ -154,12 +184,26 @@ if [[ ${target} =~ aarch64 ]]; then
         fi
         rm -rf test.log main
     fi
+elif [[ ${target} =~ avx ]]; then
+    cmake_options="${cmake_options} -DUSE_X86=ON"
+    if [[ ${target} =~ avx512 ]]; then
+        if [[ "${use_int8}" == "ON" || "${use_int8}" == "on" ]]; then
+            cmake_options="${cmake_options} -DUSE_INT8=ON"
+        fi
+        if [[ ${target} =~ vnni ]]; then
+            cmake_options="${cmake_options} -DUSE_AVX512_VNNI=ON"
+        fi
+    fi
+else
+    if [[ "${use_int8}" == "ON" || "${use_int8}" == "on" ]]; then
+        cmake_options="${cmake_options} -DUSE_INT8=ON"
+    fi
 fi
 if [[ "${target}" == "linux-arm_himix100" || ${target} =~ armv7 || "${target}" == "linux-arm_musleabi" ]]; then
     cmake_options="${cmake_options} -DUSE_NEON=ON"
-fi
-if [[ ${target} =~ avx2 ]]; then
-    cmake_options="${cmake_options} -DUSE_X86=ON"
+    if [[ "${use_int8}" == "ON" || "${use_int8}" == "on" ]]; then
+        cmake_options="${cmake_options} -DUSE_INT8=ON"
+    fi
 fi
 if [[ ${target} =~ android ]]; then
     cmake_options="${cmake_options} -DUSE_JNI=ON"
@@ -173,10 +217,8 @@ ${script_dir}/third_party/install.sh --target=${target} --threads=${build_thread
 echo "[INFO] use ${script_dir}/third_party/${platform}.sh to set environment variable..."
 source ${script_dir}/third_party/${platform}.sh || exit 1
 
-
 cd ${BOLT_ROOT}
-if [[ ${cmake_options} =~ USE_MALI=ON ]]; then
-    echo "[INFO] generate bolt gcl code in ${BOLT_ROOT}/common/gcl/tools/kernel_source_compile..."
+if [[ ${cmake_options} =~ USE_GPU=ON ]]; then
     ./common/gcl/tools/kernel_source_compile/buildKernelSourceLib.sh || exit 1
 fi
 

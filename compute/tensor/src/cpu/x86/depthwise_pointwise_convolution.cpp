@@ -46,6 +46,7 @@ EE depthwise_pointwise_convolution_transform_filter_x86(TensorDesc dwFilterDesc,
 
 EE depthwise_pointwise_convolution_x86(TensorDesc inputDesc,
     void *input,
+    void *eltwiseInput,
     TensorDesc dwFilterDesc,
     const void *dwFilter,
     TensorDesc pwFilterDesc,
@@ -77,11 +78,11 @@ EE depthwise_pointwise_convolution_x86(TensorDesc inputDesc,
     switch (dwFilterDesc.dt) {
 #ifdef _USE_FP32
         case DT_F32: {
-            ret = depthwise_pointwise_convolution_fp32(newInputDesc, (F32 *)newInput, dwFilterDesc,
-                (const F32 *)dwFilter, pwFilterDesc, (const F32 *)pwFilter, convParamSpec,
-                algorithm, dwBiasDesc, (const F32 *)dwBias, pwBiasDesc, (const F32 *)pwBias,
-                tmpBytes, tmp, outputDesc, (F32 *)output, depthwiseActivationParamSpec,
-                pointwiseActivationParamSpec, arch);
+            ret = depthwise_pointwise_convolution_fp32(newInputDesc, (F32 *)newInput,
+                (F32 *)eltwiseInput, dwFilterDesc, (const F32 *)dwFilter, pwFilterDesc,
+                (const F32 *)pwFilter, convParamSpec, algorithm, dwBiasDesc, (const F32 *)dwBias,
+                pwBiasDesc, (const F32 *)pwBias, tmpBytes, tmp, outputDesc, (F32 *)output,
+                depthwiseActivationParamSpec, pointwiseActivationParamSpec, arch);
             break;
         }
 #endif

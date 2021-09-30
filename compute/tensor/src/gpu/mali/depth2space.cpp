@@ -31,16 +31,18 @@ inline EE depth2space_checkpara_mali(GCLHandle_t handle,
     return SUCCESS;
 }
 
-EE depth2space_infer_output_size_mali(TensorDesc inputDesc,
+EE depth2space_padding_input_mali(TensorDesc inputDesc,
     Depth2SpaceParamSpec p,
     TensorDesc *outputDesc,
-    GCLMemDesc_t gclmemInputDesc,
-    GCLMemDesc_t gclmemOutputDesc)
+    OclMemory *inputMem,
+    OclMemory *outputMem)
 {
-    if (outputDesc == nullptr || gclmemInputDesc == nullptr || gclmemOutputDesc == nullptr) {
+    if (outputDesc == nullptr || inputMem == nullptr || outputMem == nullptr) {
         CHECK_STATUS(NULL_POINTER);
     }
-
+    if (inputDesc.nDims != 4) {
+        CHECK_STATUS(NOT_SUPPORTED);
+    }
     DataType idt;
     DataFormat idf;
     U32 iw, ih, ic, in;
@@ -53,23 +55,11 @@ EE depth2space_infer_output_size_mali(TensorDesc inputDesc,
     if (ic % (p.blockSize * p.blockSize) != 0) {
         return NOT_MATCH;
     }
-
-    *outputDesc = tensor4df(idt, idf, on, oc, oh, ow);
-    if (gclmemInputDesc->byteSize == 0) {
-        CHECK_STATUS(infer_gclmem_desc_nchw(
-            iw, ih, ic, 0, 0, 0, 0, 0, DT_F16, DT_F16, gclmemInputDesc, NULL));
-    } else {
-        CHECK_STATUS(infer_gclmem_desc_ncwhc4(
-            iw, ih, ic, 0, 0, 0, 0, 0, DT_F16, DT_F16, gclmemInputDesc, NULL));
-    }
-
+    DataFormat odf = idf;
     if (p.blockSize == 2 && oc < 4) {
-        CHECK_STATUS(infer_gclmem_desc_nchw(
-            0, 0, 0, 0, 0, ow, oh, oc, DT_F16, DT_F16, NULL, gclmemOutputDesc));
-    } else {
-        CHECK_STATUS(infer_gclmem_desc_ncwhc4(
-            0, 0, 0, 0, 0, ow, oh, oc, DT_F16, DT_F16, NULL, gclmemOutputDesc));
+        odf = DF_NCHW;
     }
+    *outputDesc = tensor4df(idt, idf, on, oc, oh, ow);
     return SUCCESS;
 }
 

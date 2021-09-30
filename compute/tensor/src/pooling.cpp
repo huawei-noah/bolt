@@ -18,7 +18,7 @@
 #ifdef _USE_NEON
 #include "cpu/arm/tensor_computing_arm.h"
 #endif
-#ifdef _USE_MALI
+#ifdef _USE_GPU
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
 #ifdef _USE_X86
@@ -34,9 +34,12 @@ inline EE pooling_infer_output_size_cpu(
     DataType idt;
     DataFormat idf;
     U32 in, ic, it, ih, iw;
-    if (tensorIs4d(inputDesc)) {
+    if (tensorIs3d(inputDesc)) {
+        CHECK_STATUS(tensor3dGet(inputDesc, &idt, &idf, &in, &ic, &ih));
+        it = iw = 1;
+    } else if (tensorIs4d(inputDesc)) {
         CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-        it = 0;
+        it = 1;
     } else if (tensorIs5d(inputDesc)) {
         CHECK_STATUS(tensor5dGet(inputDesc, &idt, &idf, &in, &ic, &it, &ih, &iw));
     } else {
@@ -88,7 +91,9 @@ inline EE pooling_infer_output_size_cpu(
             break;
         }
     }
-    if (tensorIs4d(inputDesc)) {
+    if (tensorIs3d(inputDesc)) {
+        *outputDesc = tensor3df(idt, idf, in, ic, oh);
+    } else if (tensorIs4d(inputDesc)) {
         *outputDesc = tensor4df(idt, idf, in, ic, oh, ow);
     } else if (tensorIs5d(inputDesc)) {
         *outputDesc = tensor5df(idt, idf, in, ic, ot, oh, ow);
@@ -103,31 +108,28 @@ EE pooling_infer_output_size(
         CHECK_STATUS(NULL_POINTER);
     }
     TensorDesc inputDesc = inputTensor->get_desc();
+    TensorDesc newInputDesc = transformDescTo4d(inputDesc);
     TensorDesc outputDesc = outputTensor->get_desc();
     if (0 == poolingParamSpec.kernel_w) {
-        poolingParamSpec.kernel_w = inputDesc.dims[0];
+        poolingParamSpec.kernel_w = newInputDesc.dims[0];
     }
     if (0 == poolingParamSpec.kernel_h) {
-        poolingParamSpec.kernel_h = inputDesc.dims[1];
+        poolingParamSpec.kernel_h = newInputDesc.dims[1];
     }
     if (0 == poolingParamSpec.kernel_t) {
-        poolingParamSpec.kernel_t = inputDesc.dims[2];
+        poolingParamSpec.kernel_t = newInputDesc.dims[2];
     }
-    EE ret = NOT_SUPPORTED;
-    if (IS_MALI_GPU(archInfo->arch)) {
-#ifdef _USE_MALI
-        GCLMemDesc gclmemInputDesc = ocl_get_desc(*inputTensor);
-        GCLMemDesc gclmemOutputDesc = ocl_get_desc(*outputTensor);
-        ret = pooling_infer_output_size_mali(
-            inputDesc, poolingParamSpec, &outputDesc, &gclmemInputDesc, &gclmemOutputDesc);
-        ocl_set_desc(inputTensor, gclmemInputDesc);
-        ocl_set_desc(outputTensor, gclmemOutputDesc);
+    CHECK_STATUS(pooling_infer_output_size_cpu(inputDesc, poolingParamSpec, &outputDesc));
+    if (IS_GPU(archInfo->arch)) {
+#ifdef _USE_GPU
+        OclMemory *inputMem = (OclMemory *)inputTensor->get_memory();
+        OclMemory *outputMem = (OclMemory *)outputTensor->get_memory();
+        CHECK_STATUS(pooling_padding_input_mali(
+            inputDesc, poolingParamSpec, &outputDesc, inputMem, outputMem));
 #endif
-    } else {
-        ret = pooling_infer_output_size_cpu(inputDesc, poolingParamSpec, &outputDesc);
     }
     outputTensor->resize(outputDesc);
-    return ret;
+    return SUCCESS;
 }
 
 EE pooling(Tensor inputTensor,
@@ -137,9 +139,9 @@ EE pooling(Tensor inputTensor,
     ArchInfo_t archInfo)
 {
     auto arch = archInfo->arch;
-    TensorDesc inputDesc = inputTensor.get_desc();
+    TensorDesc inputDesc = transformDescTo4d(inputTensor.get_desc());
     void *input = get_ptr_from_tensor(inputTensor, arch);
-    TensorDesc outputDesc = outputTensor.get_desc();
+    TensorDesc outputDesc = transformDescTo4d(outputTensor.get_desc());
     void *output = get_ptr_from_tensor(outputTensor, arch);
     F32 scale[2] = {inputTensor.get_scale(), -1};
     void *tmp = get_ptr_from_tensor(tmpTensor, arch);
@@ -157,7 +159,7 @@ EE pooling(Tensor inputTensor,
     U8 *inputCPU = (U8 *)input;
     TensorDesc outDescCPU = outputDesc;
     U8 *outputCPU = (U8 *)output;
-    if (DF_NCHWC8 != inputDesc.df && IS_CPU(arch)) {
+    if (DF_NCHWC16 != inputDesc.df && DF_NCHWC8 != inputDesc.df && IS_CPU(arch)) {
         int channelAxis = inputDesc.nDims - 2;
         U32 paddedC = (inputDesc.dims[channelAxis] + 7) / 8 * 8;
         inDescCPU.dims[channelAxis] = paddedC;
@@ -174,21 +176,21 @@ EE pooling(Tensor inputTensor,
         ret = pooling_general(inDescCPU, inputCPU, poolingParamSpec, outDescCPU, outputCPU);
 #endif
 #ifdef _USE_X86
-    } else if (IS_X86_AVX2(arch)) {
+    } else if (IS_X86(arch)) {
         ret = pooling_x86(inDescCPU, inputCPU, poolingParamSpec, scale, outDescCPU, outputCPU);
 #endif
 #ifdef _USE_NEON
     } else if (IS_ARM(arch)) {
         ret = pooling_arm(inDescCPU, inputCPU, poolingParamSpec, scale, outDescCPU, outputCPU);
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
         ret = pooling_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc,
             (const GCLMem_t)input, poolingParamSpec, scale, (GCLMem_t)tmp, outputDesc,
             (GCLMem_t)output);
 #endif
     }
-    if (DF_NCHWC8 != outputDesc.df && IS_CPU(arch)) {
+    if (DF_NCHWC16 != inputDesc.df && DF_NCHWC8 != outputDesc.df && IS_CPU(arch)) {
         transformToNCHW(outDescCPU, outputCPU, outputDesc, output);
     }
     outputTensor.set_scale(scale[1]);
@@ -201,10 +203,10 @@ EE pooling_infer_forward_tmp_bytes(
     if (bytes == nullptr) {
         CHECK_STATUS(NULL_POINTER);
     }
-    TensorDesc inputDesc = inputTensor.get_desc();
+    TensorDesc inputDesc = transformDescTo4d(inputTensor.get_desc());
     EE ret = NOT_SUPPORTED;
-    if (IS_MALI_GPU(archInfo->arch)) {
-#ifdef _USE_MALI
+    if (IS_GPU(archInfo->arch)) {
+#ifdef _USE_GPU
         ret = pooling_infer_forward_tmp_bytes_mali(
             inputDesc, bytes, ((MaliPara_t)(archInfo->archPara))->forwardRunInfo);
 #endif
@@ -212,14 +214,7 @@ EE pooling_infer_forward_tmp_bytes(
         *bytes = 0;
         ret = SUCCESS;
         if (DF_NCHW == inputDesc.df) {
-            int channelAxis = 0;
-            if (tensorIs4d(inputDesc)) {
-                channelAxis = 2;
-            } else if (tensorIs5d(inputDesc)) {
-                channelAxis = 3;
-            } else {
-                ret = NOT_SUPPORTED;
-            }
+            int channelAxis = inputDesc.nDims - 2;
             U32 paddedC = (inputDesc.dims[channelAxis] + 7) / 8 * 8;
             TensorDesc outputDesc = outputTensor.get_desc();
             inputDesc.dims[channelAxis] = paddedC;

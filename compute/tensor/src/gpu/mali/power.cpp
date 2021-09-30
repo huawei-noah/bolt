@@ -14,31 +14,6 @@
 #include "gpu/mali/tensor_computing_mali.h"
 #include "gpu/mali/fp16/power_mali_fp16.h"
 
-EE power_infer_output_size_mali(TensorDesc inputDesc,
-    TensorDesc *outputDesc,
-    GCLMemDesc_t gclmemInputDesc,
-    GCLMemDesc_t gclmemOutputDesc)
-{
-    if (outputDesc == nullptr || gclmemInputDesc == nullptr || gclmemOutputDesc == nullptr) {
-        CHECK_STATUS(NOT_SUPPORTED);
-    }
-    *outputDesc = inputDesc;
-    DataType idt;
-    U32 iw, ih, ic, in;
-    tensorSelectGet(inputDesc, &idt, NULL, &in, &ic, &ih, &iw);
-    if (gclmemInputDesc->memFormat == DF_NCHW || gclmemInputDesc->byteSize == 0) {
-        CHECK_STATUS(infer_gclmem_desc_nchw(
-            iw, ih, ic, 0, 0, iw, ih, ic, idt, idt, gclmemInputDesc, gclmemOutputDesc));
-    } else if (gclmemInputDesc->memFormat == DF_NCWHC4) {
-        CHECK_STATUS(infer_gclmem_desc_ncwhc4(
-            iw, ih, ic, 0, 0, iw, ih, ic, idt, idt, gclmemInputDesc, gclmemOutputDesc));
-    } else {
-        return NOT_SUPPORTED;
-    }
-    *gclmemOutputDesc = *gclmemInputDesc;
-    return SUCCESS;
-}
-
 inline EE power_checkpara_mali(
     GCLHandle_t handle, TensorDesc inputDesc, GCLMem_t input, TensorDesc outputDesc, GCLMem_t output)
 {
@@ -50,9 +25,6 @@ inline EE power_checkpara_mali(
         ret = NOT_SUPPORTED;
     }
     if (input->desc.memFormat != output->desc.memFormat) {
-        ret = NOT_SUPPORTED;
-    }
-    if (input->desc.memFormat != DF_NCHW && input->desc.memFormat != DF_NCWHC4) {
         ret = NOT_SUPPORTED;
     }
     return ret;

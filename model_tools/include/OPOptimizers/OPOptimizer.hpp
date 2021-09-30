@@ -15,6 +15,7 @@
 #define _H_OPOPTIMIZER
 
 #include <vector>
+#include <set>
 #include <string>
 #include "model_common.h"
 #include "uni.h"
@@ -26,7 +27,40 @@ public:
 
     virtual bool optimize(ModelSpec *spec) = 0;
 
-    int searchWeightIndex(ModelSpec *spec, char *op_name)
+    template <int bufferSize>
+    std::string copyBuffer(void *ptr, int size)
+    {
+        size = UNI_MIN(size, bufferSize);
+        char buffer[bufferSize];
+        memcpy(buffer, ptr, size);
+        if (size < bufferSize)
+            buffer[size] = '\0';
+        else
+            buffer[bufferSize - 1] = '\0';
+        for (int j = 0; j < size - 1; j++) {
+            if (buffer[j] == '\0')
+                buffer[j] = '-';
+        }
+        return buffer;
+    }
+
+    bool isModelOutput(ModelSpec *spec, int opIndex)
+    {
+        std::set<std::string> modelOutput;
+        for (int i = 0; i < spec->num_outputs; i++) {
+            modelOutput.insert(spec->output_names[i]);
+        }
+        bool ret = false;
+        for (unsigned int i = 0; i < spec->ops[opIndex].num_outputs; i++) {
+            if (modelOutput.find(spec->ops[opIndex].output_tensors_name[i]) != modelOutput.end()) {
+                ret = true;
+                break;
+            }
+        }
+        return ret;
+    }
+
+    static int searchWeightIndex(ModelSpec *spec, char *op_name)
     {
         if (spec->num_weight_specs <= 0) {
             return -1;
@@ -57,10 +91,15 @@ public:
 
     void setOperatorInvalid(ModelSpec *spec, int index, bool removeEdge = false)
     {
+        UNI_DEBUG_LOG("remove operator(%d) and edges(%d).\n", index, removeEdge);
         if (index >= spec->num_operator_specs || index < 0) {
             return;
         }
         spec->ops[index].type = OT_None;
+        int weightId = searchWeightIndex(spec, spec->ops[index].name);
+        if (weightId >= 0) {
+            setWeightOperatorInvalid(spec, weightId);
+        }
         if (removeEdge) {
             if (spec->ops[index].num_inputs == 1 && spec->ops[index].num_outputs == 1 &&
                 std::string(spec->ops[index].input_tensors_name[0]) ==
@@ -242,6 +281,16 @@ public:
             }
         }
         return result;
+    }
+
+    int skipInvalidOperator(ModelSpec *spec, int k)
+    {
+        for (; k < spec->num_operator_specs; k++) {
+            if (isValidOperator(spec, k)) {
+                break;
+            }
+        }
+        return k;
     }
 };
 #endif

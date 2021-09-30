@@ -35,17 +35,21 @@ inline EE depthwise_convolution_transform_filter_kernel_fp32(TensorDesc filterDe
     if (fdf != DF_NCHW) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
+    filterDesc = tensor4df(fdt, fdf, fc, 1, fh, fw);
+    *ftmDesc = tensor4df(fdt, ftmDataFormat, fc, 1, fh, fw);
     switch (ftmDataFormat) {
         case DF_NCHWC24: {
-            filterDesc = tensor4df(fdt, fdf, fc, 1, fh, fw);
-            *ftmDesc = tensor4df(fdt, ftmDataFormat, fc, 1, fh, fw);
             transformNCHWToNCHWCxNx<1, 24>(filterDesc, filterArray, *ftmDesc, ftmArray);
-            *ftmDesc = tensor4df(fdt, ftmDataFormat, fn, fc, fh, fw);
+            break;
+        }
+        case DF_NCHWC8: {
+            transformNCHWToNCHWCxNx<1, 8>(filterDesc, filterArray, *ftmDesc, ftmArray);
             break;
         }
         default:
             return NOT_SUPPORTED;
     }
+    *ftmDesc = tensor4df(fdt, ftmDataFormat, fn, fc, fh, fw);
     return SUCCESS;
 }
 

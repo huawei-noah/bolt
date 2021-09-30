@@ -27,28 +27,28 @@ EE scale_arm(TensorDesc inputDesc,
     TensorDesc outputDesc,
     void *output)
 {
-    UNUSED(outputDesc);
-    U32 length = tensorNumElements(inputDesc);
-    int axis = (p.axis + inputDesc.nDims) % inputDesc.nDims;
-    I32 in = inputDesc.dims[inputDesc.nDims - 1];
+    U32 length = tensorNumElements(outputDesc);
+    int axis = (p.axis + outputDesc.nDims) % outputDesc.nDims;
+    I32 on = outputDesc.dims[outputDesc.nDims - 1];
+    I32 oc = outputDesc.dims[outputDesc.nDims - 1 - axis];
+    I32 elements_per_channel = length / (on * oc);
     I32 ic = inputDesc.dims[inputDesc.nDims - 1 - axis];
-    I32 elements_per_channel = length / (in * ic);
-    if (inputDesc.df == DF_NCHWC8) {
-        axis = inputDesc.nDims;
+    if (outputDesc.df == DF_NCHWC8) {
+        axis = outputDesc.nDims;
     }
     EE ret = SUCCESS;
-    switch (inputDesc.dt) {
+    switch (outputDesc.dt) {
 #ifdef _USE_FP32
         case DT_F32: {
-            ret = scale_fp32((F32 *)input, axis, inputDesc.nDims, (F32 *)alpha, (F32 *)beta, in, ic,
-                elements_per_channel, (F32 *)output);
+            ret = scale_fp32((F32 *)input, axis, outputDesc.nDims, (F32 *)alpha, (F32 *)beta, on,
+                oc, elements_per_channel, ic, (F32 *)output);
             break;
         }
 #endif
 #ifdef _USE_FP16
         case DT_F16: {
-            ret = scale_fp16((F16 *)input, axis, inputDesc.nDims, (F16 *)alpha, (F16 *)beta, in, ic,
-                elements_per_channel, (F16 *)output);
+            ret = scale_fp16((F16 *)input, axis, outputDesc.nDims, (F16 *)alpha, (F16 *)beta, on,
+                oc, elements_per_channel, ic, (F16 *)output);
             break;
         }
 #endif

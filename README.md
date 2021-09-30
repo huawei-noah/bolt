@@ -1,5 +1,5 @@
 # Introduction
-
+---
 [![License: MIT](docs/images/license-mit.png)](https://opensource.org/licenses/MIT)
 
 [Bolt](https://huawei-noah.github.io/bolt/) is a light-weight library for deep learning. Bolt, as a universal deployment tool for all kinds of neural networks, aims to minimize the inference runtime as much as possible.
@@ -7,11 +7,11 @@ Bolt has been widely deployed and used in many departments of HUAWEI company, su
 If you have questions or suggestions, you can submit issue. **QQ群: 833345709**
 
 # Why Bolt is what you need?
-
+---
 - **High Performance:** **15%+** faster than existing open source acceleration libraries.
 - **Rich Model Conversion:** support Caffe, ONNX, TFLite, Tensorflow.
 - **Various Inference Precision:** support FP32, FP16, INT8, 1-BIT.
-- **Multiple platforms:** ARM CPU(v7, v8, v8.2), Mali GPU, X86(AVX2)
+- **Multiple platforms:** ARM CPU(v7, v8, v8.2), Mali GPU, Qualcomm GPU, X86 CPU(AVX2, AVX512)
 - **Bolt is the first to support NLP and also supports common CV applications.**
 - **Minimize ROM/RAM**
 - Rich Graph Optimization
@@ -22,13 +22,13 @@ If you have questions or suggestions, you can submit issue. **QQ群: 833345709**
 [See more excellent features and details here](https://zhuanlan.zhihu.com/p/317111024)
 
 # Building Status
-
+---
 Kinds of choices are provided for the compilation of bolt. Please make a suitable choice depending on your environment.
 
 | target platform      | build command                                | Linux | Windows | MacOS |
 | -------------------- | -------------------------------------------- | ----- | ------- | ----- |
 | Android(armv7)       | ./install.sh --target=android-armv7          | [![Build Status](https://img.shields.io/github/workflow/status/huawei-noah/bolt/linux-android-armv7)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Alinux-android-armv7) | [![Build Status](https://img.shields.io/github/workflow/status/huawei-noah/bolt/windows-android-armv7)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Awindows-android-armv7) | [![Build Status](https://img.shields.io/github/workflow/status/huawei-noah/bolt/macos-android-armv7)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Amacos-android-armv7) |
-| Android(armv8+mali)  | ./install.sh --target=android-aarch64 --mali | [![Build Status](https://img.shields.io/github/workflow/status/huawei-noah/bolt/linux-android-armv8)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Alinux-android-armv8) | [![Build Status](https://img.shields.io/github/workflow/status/huawei-noah/bolt/windows-android-armv7)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Awindows-android-armv8) | [![Build Status](https://img.shields.io/github/workflow/status/huawei-noah/bolt/macos-android-armv8)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Amacos-android-armv8) |
+| Android(armv8+gpu)  | ./install.sh --target=android-aarch64 --gpu | [![Build Status](https://img.shields.io/github/workflow/status/huawei-noah/bolt/linux-android-armv8)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Alinux-android-armv8) | [![Build Status](https://img.shields.io/github/workflow/status/huawei-noah/bolt/windows-android-armv7)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Awindows-android-armv8) | [![Build Status](https://img.shields.io/github/workflow/status/huawei-noah/bolt/macos-android-armv8)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Amacos-android-armv8) |
 | Android(x86_64)      | ./install.sh --target=android-x86_64         | [![Build Status](https://img.shields.io/github/workflow/status/huawei-noah/bolt/linux-android-x86_64)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Alinux-android-x86_64) | [![Build Status](https://img.shields.io/github/workflow/status/huawei-noah/bolt/windows-android-x86_64)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Awindows-android-x86_64) | [![Build Status](https://img.shields.io/github/workflow/status/huawei-noah/bolt/macos-android-x86_64)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Amacos-android-x86_64) |
 | iOS(armv7)           | ./install.sh --target=ios-armv7              | / | / | [![Build Status](https://img.shields.io/github/workflow/status/huawei-noah/bolt/macos-ios-armv7)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Amacos-ios-armv7) |
 | iOS(armv8)           | ./install.sh --target=ios-aarch64            | / | / | [![Build Status](https://img.shields.io/github/workflow/status/huawei-noah/bolt/macos-ios-armv8)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Amacos-ios-armv8) |
@@ -42,19 +42,25 @@ Kinds of choices are provided for the compilation of bolt. Please make a suitabl
 *NOTE: Bolt defaultly link static library, This may cause some problem on some platforms. You can use --shared option to link shared library.*
 
 # Quick Start
-
-<div align=center><img src="docs/images/QuickStart.jpg" width = 80% height = 80% /></div>
-
+---
+<div align=center><img src="docs/images/QuickStart.jpg" width = 100% height = 100%  style="border: 1px solid rgba(151,151,151,0.50)" /></div>
 Two steps to get started with bolt.
 
-1. Conversion: use **[X2bolt](/model_tools/tools/X2bolt/X2bolt.cpp)** to convert your model from caffe,onnx,tflite or tensorflow to .bolt;
+1. Conversion: use **[X2bolt](model_tools/tools/X2bolt/X2bolt.cpp)** to convert your model from caffe,onnx,tflite or tensorflow to .bolt;
 
-2. Inference: run **[benchmark](/inference/examples/benchmark/benchmark.cpp)** with .bolt and data to get the inference result.
+2. Inference: run **[benchmark](inference/examples/benchmark/benchmark.cpp)** with .bolt and data to get the inference result.
 
    For more details about the usage of [**X2bolt**](model_tools/tools/X2bolt/X2bolt.cpp) and [**benchmark**](inference/examples/benchmark/benchmark.cpp) tools,  see [docs/USER_HANDBOOK.md](docs/USER_HANDBOOK.md). 
 
-# Verified Networks
+# DL Applications in Bolt
 
+  Here we show some interesting and useful applications in bolt.
+
+| Face Detection | ASR | Semantics Analysis | Image Classification
+| :------: | :------: | :------: |:------: 
+| [![face_detection](docs/images/20_bolt_face_detection.gif)](inference/examples/ultra_face) demo_link: [face detection](inference/examples/ultra_face) | [![asr](docs/images/ChineseSpeechRecognition.gif)]()  demo_link: [asr](inference/examples/automatic_speech_recognition) | [![semantics analysis](docs/images/SemanticsAnalysis.gif)]()  demo_link: [semantics analysis](kit/Android/Semantics) | [![image_classification](docs/images/ImageClassification.gif)]() demo_link: [image classification](inference/examples/image_classification) 
+# Verified Networks
+---
   Bolt has shown its high performance in the inference of common CV and NLP neural networks. Some of the representative networks that we have verified are listed below. You can find detailed benchmark information in [docs/BENCHMARK.md](docs/BENCHMARK.md).
 
   <table border="1"  bordercolor="#00CCCC"  width="300">
@@ -75,7 +81,7 @@ Two steps to get started with bolt.
         <a href="https://github.com/liuzechun/Bi-Real-net">BiRealNet</a>,
         <a href="https://github.com/liuzechun/ReActNet">ReActNet</a>,
         <a href="https://github.com/huawei-noah/ghostnet">Ghostnet</a>,
-        SSD, Yolov3, Pointnet ...
+        SSD, Yolov3, Pointnet, ViT, TNT ...
       </td>
     </tr>
     <tr>
@@ -85,6 +91,14 @@ Two steps to get started with bolt.
       <td> Bert,
         Albert, Neural Machine Translation, Text To Speech, Automatic Speech Recognition,
         <a href="docs/USER_HANDBOOK.md#voice-wake-up">Tdnn</a> ...
+      </td>
+    </tr>
+    <tr>
+      <td>
+        Recommendation
+      </td>
+      <td>
+        MLP
       </td>
     </tr>
     <tr>
@@ -100,7 +114,7 @@ Two steps to get started with bolt.
   More models than these mentioned above are supported,  users are encouraged to further explore.
 
 # Documentations
-
+---
 Everything you want to know about bolt is recorded in the detailed documentations stored in [docs](docs).
 
 - [How to install bolt with different compilers](docs/INSTALL.md).
@@ -112,7 +126,7 @@ Everything you want to know about bolt is recorded in the detailed documentation
 - [Frequently Asked Questions(FAQ)](docs/FAQ.md)
 
 # Articles
-
+---
 - [深度学习加速库Bolt领跑端侧AI](https://zhuanlan.zhihu.com/p/317111024)
 - [为什么 Bolt 这么快：矩阵向量乘的实现](https://zhuanlan.zhihu.com/p/97928435)
 - [深入硬件特性加速TinyBert，首次实现手机上Bert 6ms推理](https://zhuanlan.zhihu.com/p/158620259)
@@ -121,13 +135,17 @@ Everything you want to know about bolt is recorded in the detailed documentation
 - [ARM CPU 1-bit推理，走向极致的道路](https://zhuanlan.zhihu.com/p/158161592)
 
 # 教程
-
+---
 - 图像分类: [Android Demo](https://zhuanlan.zhihu.com/p/359264809), [iOS Demo](https://zhuanlan.zhihu.com/p/359259766)
+- 图像增强: [Android Deme](), [iOS Demo]()
+- 情感分类: [Android Demo](https://zhuanlan.zhihu.com/p/414971037)
+- 中文语音识别: [Android Demo](https://zhuanlan.zhihu.com/p/414978782), [iOS Demo](https://zhuanlan.zhihu.com/p/414981121)
+- 人脸检测: [Android Demo](https://zhuanlan.zhihu.com/p/414975102), [iOS Demo](https://zhuanlan.zhihu.com/p/414971375)
 
 # Acknowledgement
-
+---
 Bolt refers to the following projects: [caffe](https://github.com/BVLC/caffe), [onnx](https://github.com/onnx/onnx), [tensorflow](https://github.com/tensorflow/tensorflow), [ncnn](https://github.com/Tencent/ncnn), [mnn](https://github.com/alibaba/MNN), [dabnn](https://github.com/JDAI-CV/dabnn).
 
 # License
-
+---
 The MIT License(MIT)

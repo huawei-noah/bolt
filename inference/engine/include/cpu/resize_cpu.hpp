@@ -62,7 +62,7 @@ public:
     {
         U32 size = 0;
         TensorDesc inputDesc = inputTensors[0].get_desc();
-        if (DF_NCHW == inputDesc.df && (IS_ARM(archInfo.arch) || IS_X86_AVX2(archInfo.arch))) {
+        if (DF_NCHW == inputDesc.df && (IS_ARM(archInfo.arch) || IS_X86(archInfo.arch))) {
             U32 paddedC = (inputDesc.dims[2] + 7) / 8 * 8;
             TensorDesc outputDesc = outputTensors[0].get_desc();
             inputDesc.dims[2] = paddedC;

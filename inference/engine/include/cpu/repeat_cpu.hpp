@@ -69,11 +69,11 @@ public:
             if (inTensors.size() > 2) {
                 axisIndex = 2;
             } else {
-                UNI_ERROR_LOG("[ERROR] set to use axis feature of Repeat must meet input tensors "
-                              ">= 3 requirement\n");
+                UNI_ERROR_LOG("set to use axis feature of Repeat must meet input tensors >= 3 "
+                              "requirement.\n");
             }
             TensorDesc desc = inTensors[axisIndex]->get_desc();
-            this->p.loops = desc.dims[desc.nDims - 1 - this->p.axis];
+            this->p.loops = desc.dims[desc.nDims - 1 - this->p.axis] - 1;
         }
         TensorDesc outDesc = outTensors[0]->get_desc();
         outDesc.dt = this->dt;

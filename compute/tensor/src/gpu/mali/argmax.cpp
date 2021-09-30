@@ -18,52 +18,33 @@
 #include "gpu/mali/tensor_computing_mali.h"
 #include "gpu/mali/fp16/argmax_mali_fp16.h"
 
-EE argmax_infer_output_size_mali(TensorDesc inputDesc,
+EE argmax_padding_input_mali(TensorDesc inputDesc,
     ArgMaxParamSpec p,
     TensorDesc *outputDesc,
-    GCLMemDesc_t gclmemInputDesc,
-    GCLMemDesc_t gclmemOutputDesc)
+    OclMemory *inputMem,
+    OclMemory *outputMem)
 {
-    /*tensorDesc record cpu org data format info*/
-    /*gclmemDesc record gpu trans data format info*/
+    if (outputDesc == nullptr || inputMem == nullptr || outputMem == nullptr) {
+        CHECK_STATUS(NULL_POINTER);
+    }
+    if (inputDesc.df == DF_NCHWC4) {
+        CHECK_STATUS(NOT_SUPPORTED);
+    }
     int axis = p.axis;
-    TensorDesc desc = inputDesc;
     if (axis < 0) {
         axis += inputDesc.nDims;
     }
-    axis = inputDesc.nDims - 1 - axis;
-    for (int i = axis; i < (I32)(inputDesc.nDims) - 1; i++) {
-        desc.dims[i] = desc.dims[i + 1];
-    }
-    desc.nDims = inputDesc.nDims - 1;
-    desc.dt = DT_U32;
-    if (outputDesc) {
-        *outputDesc = desc;
-    }
-
-    if (gclmemInputDesc || gclmemOutputDesc) {
-        U32 iw, ih, ic;
-        U32 ow, oh, oc;
-        U32 inDims = inputDesc.nDims;
-        U32 onDims = desc.nDims;
-        DataType idt = inputDesc.dt;
-        DataType odt = desc.dt;
-        iw = inputDesc.dims[0];
-        ih = (inDims > 1) ? inputDesc.dims[1] : 1;
-        ic = (inDims > 2) ? inputDesc.dims[2] : 1;
-        ow = desc.dims[0];
-        oh = (onDims > 1) ? desc.dims[1] : 1;
-        oc = (onDims > 2) ? desc.dims[2] : 1;
-        U32 iw_align = (axis == 0) ? (iw + 7) / 8 * 8 : iw;
-        U32 ih_align = (axis == 1) ? (iw + 7) / 8 * 8 : ih;
-        U32 ic_align = (axis == 2) ? (iw + 7) / 8 * 8 : ic;
-        bool need_pad = false;
-        if (iw_align != iw || ih_align != ih || ic_align != ic) {
-            need_pad = true;
-        }
-        CHECK_STATUS(infer_gclmem_desc_nchw(iw_align, ih_align, ic_align, 0, 0, ow, oh, oc, idt,
-            odt, gclmemInputDesc, gclmemOutputDesc, need_pad));
-    }
+    U32 inDims = inputDesc.nDims;
+    U32 iw = inputDesc.dims[0];
+    U32 ih = (inDims > 1) ? inputDesc.dims[1] : 1;
+    U32 ic = (inDims > 2) ? inputDesc.dims[2] : 1;
+    U32 iw_align = (axis == 0) ? (iw + 7) / 8 * 8 : iw;
+    U32 ih_align = (axis == 1) ? (ih + 7) / 8 * 8 : ih;
+    U32 ic_align = (axis == 2) ? (ic + 7) / 8 * 8 : ic;
+    U32 pr = iw_align - iw;
+    U32 pb = ih_align - ih;
+    U32 pa = ic_align - ic;
+    inputMem->padding(0, pr, 0, pb, 0, pa);
     return SUCCESS;
 }
 

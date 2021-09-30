@@ -21,8 +21,7 @@ class ResizeOCL : public Resize {
 public:
     ResizeOCL(DataType paramDT, ResizeParamSpec p) : Resize(paramDT, p)
     {
-        setMALIArchInfo(
-            &(this->archInfo), nullptr, &this->needSetKernelVec, &this->needSelectKernelLS);
+        INIT_GPU_INFO(nullptr)
     }
 
     ~ResizeOCL(){DESTROY_OCL_KERNEL}
@@ -47,6 +46,7 @@ public:
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
         this->needSetKernelVec = true;
+        TensorDesc desc = inTensors[0]->get_desc();
         U32 bytes;
         switch (paramDT) {
             case DT_F32: {
@@ -64,7 +64,20 @@ public:
                 CHECK_STATUS(NOT_SUPPORTED);
             }
         }
+        if (desc.df == DF_NCHWC4 && check_tensors_image(inTensors)) {
+            CHECK_STATUS(set_tensors_image(outTensors, inTensors.size()));
+        }
         return SUCCESS;
+    }
+
+    U32 infer_tmp_memory_size() override
+    {
+        U32 size = 0;
+        TensorDesc inputDesc = inputTensors[0].get_desc();
+        if (inputDesc.df == DF_NCHW && inputTensors[0].get_mem_type() != OCLMem) {
+            size = tensorNumBytes(inputDesc);
+        }
+        return size;
     }
 
     REGISTER_OCL_OPERATOR_RUN

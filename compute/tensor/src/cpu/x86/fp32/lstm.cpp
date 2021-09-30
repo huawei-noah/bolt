@@ -57,6 +57,8 @@ EE lstmcell_fp32(TensorDesc xDesc,
     I32 hDim = rnnParamSpec.numOutput;
     I32 column = (rnnParamSpec.numProjection > 0) ? rnnParamSpec.numProjection
                                                   : rnnParamSpec.numOutput;
+    int num1 = rnnParamSpec.biDirection ? 2 : 1;
+    U32 steps = batchStrideH / hDim / num1;
     if (!(idt == DT_F32 && fdt == DT_F32 && odt == DT_F32)) {
         CHECK_STATUS(NOT_MATCH);
     }
@@ -92,8 +94,8 @@ EE lstmcell_fp32(TensorDesc xDesc,
             intermediateH = tmpArray;
             xhArray = lastBatchH;
         }
-        mvm_nkn32_with_bias(
-            fn, fk, (const F32 *)filter[0], xhArray, intermediateH, (const F32 *)bias[0]);
+        const F32 *mBias = (const F32 *)bias[0] + m * steps * column * 4;
+        mvm_nkn32_with_bias(fn, fk, (const F32 *)filter[0], xhArray, intermediateH, mBias);
 
         F32 *out_i = intermediateH;
         F32 *out_g = out_i + column;

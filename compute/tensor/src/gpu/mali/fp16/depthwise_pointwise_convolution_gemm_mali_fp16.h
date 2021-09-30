@@ -19,9 +19,8 @@
 EE depthwise_pointwise_convolution_gemm_transform_filter_bytes_mali_fp16(TensorDesc dwFilterDesc,
     TensorDesc pwFilterDesc,
     ForwardRunInfoMali_t forwardRunInfo,
-    GCLMemDesc_t gclmemDwFilterDesc,
-    GCLMemDesc_t gclmemPwFilterDesc,
-    U32 *bytes);
+    TensorDesc *dwFtmDesc,
+    TensorDesc *pwFtmDesc);
 
 EE depthwise_pointwise_convolution_gemm_transform_filter_mali_fp16(GCLHandle_t handle,
     TensorDesc dwFilterDesc,

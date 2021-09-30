@@ -13,9 +13,8 @@
 
 #include "cpu/arm/fp32/convolution_winograd_transform.h"
 #include "cpu/arm/fp32/tensor_computing_fp32.h"
-#ifdef _USE_OPENMP
-#include <omp.h>
-#endif
+#include "cpu/arm/transform_functions.h"
+#include "thread_affinity.h"
 
 EE convolution_winograd_V8(TensorDesc inputDesc,
     F32 *inArray,
@@ -72,45 +71,40 @@ EE convolution_winograd_V8(TensorDesc inputDesc,
     // in_pad: ic*ih_pad*iw_pad*8
     // itm: 6*6*ic*12*8
     // otm: 6*6*12*8
-    F32 *inArray_pad = (F32 *)tmp;
-    F32 *itmArray = inArray_pad + ic * ih_pad * iw_pad * 8;
+    F32 *itmArray = (F32 *)tmp + ic * ih_pad * iw_pad * 8;
     F32 *otmArray = itmArray + 6 * 6 * ic * 12 * 8 * OMP_NUM_THREADS;
 
+    bool hw_parallel = (tiles >= 12 * OMP_NUM_THREADS) ? true : false;
     EE ret = SUCCESS;
     // copy input into a input with padding
     for (U32 n = 0; n < in; n++) {
-        F32 *inArray_pad_mov = inArray_pad;
-        F32 *inArray_mov = inArray + n * ic * ih * iw * 8;
-        for (U32 c = 0; c < ic; c++) {
-            memset(inArray_pad_mov, 0, pad_top * iw_pad * 8 * bytesOf(idt));
-            inArray_pad_mov += pad_top * iw_pad * 8;
-            for (U32 h = pad_top; h < ih_pad - pad_bottom; h++) {
-                memset(inArray_pad_mov, 0, pad_left * 8 * bytesOf(idt));
-                inArray_pad_mov += pad_left * 8;
-                memcpy(inArray_pad_mov, inArray_mov, iw * 8 * bytesOf(idt));
-                inArray_pad_mov += iw * 8;
-                inArray_mov += iw * 8;
-                memset(inArray_pad_mov, 0, pad_right * 8 * bytesOf(idt));
-                inArray_pad_mov += pad_right * 8;
-            }
-            memset(inArray_pad_mov, 0, pad_bottom * iw_pad * 8 * bytesOf(idt));
-            inArray_pad_mov += pad_bottom * iw_pad * 8;
-        }
+        convParamSpec.padding_bottom = pad_bottom;
+        convParamSpec.padding_right = pad_right;
+        F32 *inArray_pad = convolution_input_padding_per_channel<F32, 8>(
+            n, ic, 1, ih, iw, convParamSpec, inArray, (F32 *)tmp);
 
         // tiles / 12
 #ifdef _USE_OPENMP
-#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) if (hw_parallel)
 #endif
         for (I32 hw = 0; hw < tiles - 11; hw += 12) {
+            F32 *thread_itmArray;
 #ifdef _USE_OPENMP
-            F32 *thread_itmArray = itmArray + ic * 6 * 6 * 12 * 8 * omp_get_thread_num();
-            F32 *thread_otmArray = otmArray + 8 * 6 * 6 * 12 * omp_get_thread_num();
+            if (hw_parallel) {
+                thread_itmArray = itmArray + ic * 6 * 6 * 12 * 8 * omp_get_thread_num();
+            } else {
+                thread_itmArray = itmArray;
+            }
+            F32 *thread_otmArray_c = otmArray + 8 * 6 * 6 * 12 * omp_get_thread_num();
 #else
-            F32 *thread_itmArray = itmArray;
+            thread_itmArray = itmArray;
             F32 *thread_otmArray = otmArray;
 #endif
             // in trans
             // NCHWc8 => (6*6)*C*c8*hw12
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) if (!hw_parallel)
+#endif
             for (U32 c = 0; c < ic; c++) {
                 F32 *inArray_pad_mov = inArray_pad + c * ih_pad * iw_pad * 8;
                 F32 *Iw_ptr0[36];
@@ -249,7 +243,18 @@ EE convolution_winograd_V8(TensorDesc inputDesc,
                         "v20", "v21", "v22", "v23", "v24", "v25", "v26", "v27");
                 }
             }
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) if (!hw_parallel)
+#endif
             for (I32 o = 0; o < I32(oc); o++) {
+#ifdef _USE_OPENMP
+                F32 *thread_otmArray;
+                if (hw_parallel) {
+                    thread_otmArray = thread_otmArray_c;
+                } else {
+                    thread_otmArray = otmArray + 8 * 6 * 6 * 12 * omp_get_thread_num();
+                }
+#endif
                 const F32 *b_0 = biasArray + o * 8;
                 const F32 *b_1 = b_0 + 4;
                 // dot prod

@@ -21,21 +21,30 @@
 #ifdef _USE_NEON
 #include "cpu/arm/tensor_computing_arm.h"
 #endif
-#ifdef _USE_MALI
+#ifdef _USE_GPU
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
 
-inline EE scale_infer_output_size_cpu(TensorDesc inputDesc, TensorDesc *outputDesc)
+inline EE scale_infer_output_size_cpu(
+    TensorDesc inputDesc, ScaleParamSpec p, U32 axisLen, TensorDesc *outputDesc)
 {
     if (nullptr == outputDesc) {
         CHECK_STATUS(NULL_POINTER);
     }
-
+    I32 axis = p.axis;
+    U32 nDims = inputDesc.nDims;
+    axis = (axis + nDims) % nDims;
+    axis = nDims - 1 - axis;
+    if (inputDesc.dims[axis] != 1 && inputDesc.dims[axis] != axisLen) {
+        CHECK_STATUS(NOT_MATCH);
+    }
     *outputDesc = inputDesc;
+    (*outputDesc).dims[axis] = axisLen;
     return SUCCESS;
 }
 
-EE scale_infer_output_size(Tensor *inputTensor, Tensor *outputTensor, ArchInfo_t archInfo)
+EE scale_infer_output_size(
+    Tensor *inputTensor, ScaleParamSpec p, U32 axisLen, Tensor *outputTensor, ArchInfo_t archInfo)
 {
     if (inputTensor == nullptr) {
         CHECK_STATUS(NULL_POINTER);
@@ -45,18 +54,16 @@ EE scale_infer_output_size(Tensor *inputTensor, Tensor *outputTensor, ArchInfo_t
     }
     TensorDesc inputDesc = inputTensor->get_desc();
     TensorDesc outputDesc = outputTensor->get_desc();
-    EE ret = NOT_SUPPORTED;
-    if (IS_MALI_GPU(archInfo->arch)) {
-#ifdef _USE_MALI
-        GCLMemDesc gclmemInputDesc = ocl_get_desc(*inputTensor);
-        GCLMemDesc gclmemOutputDesc = ocl_get_desc(*outputTensor);
-        ret = scale_infer_output_size_mali(
-            inputDesc, &outputDesc, &gclmemInputDesc, &gclmemOutputDesc);
-        ocl_set_desc(inputTensor, gclmemInputDesc);
-        ocl_set_desc(outputTensor, gclmemOutputDesc);
+    EE ret = scale_infer_output_size_cpu(inputDesc, p, axisLen, &outputDesc);
+    if (IS_GPU(archInfo->arch)) {
+#ifdef _USE_GPU
+        if (inputDesc.df != DF_NCHWC4) {
+            U32 iw = inputDesc.dims[0];
+            U32 pr = (iw + 3) / 4 * 4 - iw;
+            OclMemory *inputMem = (OclMemory *)inputTensor->get_memory();
+            inputMem->padding(0, pr, 0, 0);
+        }
 #endif
-    } else {
-        ret = scale_infer_output_size_cpu(inputDesc, &outputDesc);
     }
     outputTensor->resize(outputDesc);
     return ret;
@@ -81,17 +88,17 @@ EE scale(Tensor inputTensor,
         ret = scale_general(inputDesc, input, alpha, beta, p, outputDesc, output);
 #endif
 #ifdef _USE_X86
-    } else if (IS_X86_AVX2(arch)) {
+    } else if (IS_X86(arch)) {
         ret = scale_x86(inputDesc, input, alpha, beta, p, outputDesc, output);
 #endif
 #ifdef _USE_NEON
     } else if (IS_ARM(arch)) {
         ret = scale_arm(inputDesc, input, alpha, beta, p, outputDesc, output);
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
         ret = scale_mali(((MaliPara_t)(archInfo->archPara))->handle, (GCLMem_t)alpha,
-            (GCLMem_t)beta, inputDesc, (GCLMem_t)input, outputDesc, (GCLMem_t)output);
+            (GCLMem_t)beta, p, inputDesc, (GCLMem_t)input, outputDesc, (GCLMem_t)output);
 #endif
     }
     return ret;

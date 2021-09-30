@@ -16,6 +16,72 @@
 #include "cpu/arm/int8/tensor_computing_int8.h"
 #endif
 #include "tensor_transpose.h"
+#include "thread_affinity.h"
+
+inline static void concat_v1(const std::vector<TensorDesc> &inputDesc,
+    const std::vector<void *> &input,
+    int axis,
+    const TensorDesc &outputDesc,
+    void *output,
+    U32 loops,
+    U32 num,
+    U32 tileSize,
+    const std::vector<bool> &jumpMemcpy)
+{
+    U32 stride = 0;
+    for (U32 j = 0; j < num; j++) {
+        stride += inputDesc[j].dims[axis] * tileSize;
+    }
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
+    for (U32 i = 0; i < loops; i++) {
+        U8 *dstPtr = (U8 *)output + i * stride;
+        for (U32 j = 0; j < num; j++) {
+            U32 blockSize = inputDesc[j].dims[axis] * tileSize;
+            if (!jumpMemcpy[j]) {
+                U8 *srcPtr = ((U8 *)input[j]) + i * blockSize;
+                memcpy(dstPtr, srcPtr, blockSize);
+            }
+            dstPtr += blockSize;
+        }
+    }
+}
+
+inline static void concat_v2(const std::vector<TensorDesc> &inputDesc,
+    const std::vector<void *> &input,
+    int axis,
+    const TensorDesc &outputDesc,
+    void *output,
+    U32 loops,
+    U32 num,
+    U32 tileSize,
+    const std::vector<bool> &jumpMemcpy)
+{
+    U8 *dstPtr = (U8 *)output;
+    for (U32 i = 0; i < loops; i++) {
+        for (U32 j = 0; j < num; j++) {
+            U32 blockSize = inputDesc[j].dims[axis] * tileSize;
+            if (!jumpMemcpy[j]) {
+                U8 *srcPtr = ((U8 *)input[j]) + i * blockSize;
+#ifdef _USE_OPENMP
+                U32 bblockNum = OMP_NUM_THREADS;
+                U32 bblockSize = (blockSize + bblockNum - 1) / bblockNum;
+
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+                for (U32 k = 0; k < bblockNum; ++k) {
+                    U32 copyDst = k * bblockSize;
+                    memcpy(dstPtr + copyDst, srcPtr + copyDst,
+                        UNI_MIN(bblockSize, blockSize - copyDst));
+                }
+#else
+                memcpy(dstPtr, srcPtr, blockSize);
+#endif
+            }
+            dstPtr += blockSize;
+        }
+    }
+}
 
 static EE concat(std::vector<TensorDesc> inputDesc,
     std::vector<void *> input,
@@ -54,7 +120,7 @@ static EE concat(std::vector<TensorDesc> inputDesc,
     for (I32 i = 0; i < axis; i++) {
         tileSize *= outputDesc.dims[i];
     }
-    U32 loops = 1;
+    I32 loops = 1;
     for (I32 i = axis + 1; i < dim; i++) {
         loops *= outputDesc.dims[i];
     }
@@ -73,7 +139,7 @@ static EE concat(std::vector<TensorDesc> inputDesc,
     U32 outputOff = 0;
     for (U32 j = 0; j < num; j++) {
         if ((4 != inputDesc[j].nDims) || (1 != inputDesc[j].dims[1]) || (1 != inputDesc[j].dims[0])) {
-            if (isC8 && (DF_NCHW == inputDesc[j].df)) {
+            if (isC8 && (DF_NCHWC8 != inputDesc[j].df)) {
                 TensorDesc tmpDesc = inputDesc[j];
                 tmpDesc.df = DF_NCHWC8;
                 transformNCHWToNCHWC8(inputDesc[j], input[j], tmpDesc, tmpPtr);
@@ -95,17 +161,10 @@ static EE concat(std::vector<TensorDesc> inputDesc,
         outputOff += inputDesc[j].dims[axis];
     }
 
-    // concat input
-    U8 *dstPtr = (U8 *)output;
-    for (U32 i = 0; i < loops; i++) {
-        for (U32 j = 0; j < num; j++) {
-            U32 blockSize = inputDesc[j].dims[axis] * tileSize;
-            if (!jumpMemcpy[j]) {
-                U8 *srcPtr = ((U8 *)input[j]) + i * blockSize;
-                memcpy(dstPtr, srcPtr, blockSize);
-            }
-            dstPtr += blockSize;
-        }
+    if (loops > OMP_NUM_THREADS) {
+        concat_v1(inputDesc, input, axis, outputDesc, output, loops, num, tileSize, jumpMemcpy);
+    } else {
+        concat_v2(inputDesc, input, axis, outputDesc, output, loops, num, tileSize, jumpMemcpy);
     }
     return SUCCESS;
 }

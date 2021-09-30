@@ -20,8 +20,7 @@ class TransposeOCL : public Transpose {
 public:
     TransposeOCL(DataType dt, TransposeParamSpec p) : Transpose(dt, p)
     {
-        setMALIArchInfo(
-            &(this->archInfo), nullptr, &this->needSetKernelVec, &this->needSelectKernelLS);
+        INIT_GPU_INFO(nullptr)
     }
 
     ~TransposeOCL(){DESTROY_OCL_KERNEL}

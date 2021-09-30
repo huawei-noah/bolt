@@ -8,7 +8,7 @@ host_dir=""
 device=""
 device_dir=""
 use_static_library=true
-cpu_mask="40"
+cpu_mask="10"
 gpu=false
 
 getopt --test
@@ -135,19 +135,19 @@ run_command() {
 }
 
 # mmm
-echo " " ; echo "--- Matrix Matrix Multiplication"
+echo " " ; echo "--- CPU Matrix Matrix Multiplication"
 upload ${host_dir}/tests/test_mmm_int8 ${device_dir} || exit 1
 upload ${host_dir}/tests/test_mmm ${device_dir} || exit 1
 run_command test_mmm_int8 384 768 768
 run_command test_mmm 384 768 768
 
 # conv_ic=3
-echo " " ; echo "--- Conv IC=3"
+echo " " ; echo "--- CPU Conv IC=3"
 upload ${host_dir}/tests/test_convolution ${device_dir} || exit 1
 run_command test_convolution 1 3 227 227 96 3 11 11 1 4 0 1 96 55 55
 
 # conv_5x5
-echo " " ; echo "--- Conv 5x5"
+echo " " ; echo "--- CPU Conv 5x5"
 upload ${host_dir}/tests/test_convolution_bnn ${device_dir} || exit 1
 upload ${host_dir}/tests/test_convolution_int8 ${device_dir} || exit 1
 run_command test_convolution_bnn 1 96 27 27 256 96 5 5 1 2 0 1 256 13 13
@@ -155,24 +155,27 @@ run_command test_convolution_int8 1 96 27 27 256 96 5 5 1 2 0 1 256 13 13
 run_command test_convolution 1 96 27 27 256 96 5 5 1 2 0 1 256 13 13
 
 # conv_3x3
-echo " " ; echo "--- Conv 3x3"
+echo " " ; echo "--- CPU Conv 3x3"
 run_command test_convolution_bnn 1 128 28 28 256 128 3 3 1 1 1 1 256 28 28
 run_command test_convolution_int8 1 128 28 28 256 128 3 3 1 1 1 1 256 28 28
 run_command test_convolution 1 128 28 28 256 128 3 3 1 1 1 1 256 28 28
 
 # depthwise-pointwise convolution
-echo " " ; echo "--- Depthwise-Pointwise Conv"
+echo " " ; echo "--- CPU Depthwise-Pointwise Conv"
 upload ${host_dir}/tests/test_depthwise_convolution ${device_dir} || exit 1
 run_command test_depthwise_convolution 1 256 28 28 256 256 3 3 1 1 1 1 256 28 28
 
 # OCL
 if [[ ${gpu}  == true ]] ; then
+    echo " " ; echo "--- GPU Conv"
     upload ${host_dir}/tests/test_convolution_ocl ${device_dir} || exit 1
     upload ${host_dir}/tests/test_depthwise_convolution_ocl ${device_dir} || exit 1
     upload ${host_dir}/tests/test_fully_connected_ocl ${device_dir} || exit 1
     run_command test_convolution_ocl 64 112 112 64 5 5 1 2
     run_command test_convolution_ocl 64 112 112 64 3 3 1 1
+    echo " " ; echo "--- GPU Depthwise Conv"
     run_command test_depthwise_convolution_ocl 64 112 112 64 3 3 1 1
+    echo " " ; echo "--- GPU Fc"
     run_command test_fully_connected_ocl 24 1 1 96 
 fi
 

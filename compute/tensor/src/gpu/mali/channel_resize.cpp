@@ -18,13 +18,13 @@
 #include "gpu/mali/tensor_computing_mali.h"
 #include "gpu/mali/fp16/channel_resize_mali_fp16.h"
 
-EE channel_resize_infer_output_size_mali(TensorDesc inputDesc,
+EE channel_resize_padding_input_mali(TensorDesc inputDesc,
     ChannelResizeParamSpec p,
     TensorDesc *outputDesc,
-    GCLMemDesc_t gclmemInputDesc,
-    GCLMemDesc_t gclmemOutputDesc)
+    OclMemory *inputMem,
+    OclMemory *outputMem)
 {
-    if (outputDesc == nullptr || gclmemInputDesc == nullptr || gclmemOutputDesc == nullptr) {
+    if (outputDesc == nullptr || inputMem == nullptr || outputMem == nullptr) {
         CHECK_STATUS(NULL_POINTER);
     }
     DataType idt;
@@ -35,17 +35,7 @@ EE channel_resize_infer_output_size_mali(TensorDesc inputDesc,
     if (p.group != 1) {
         return NOT_SUPPORTED;
     }
-
     *outputDesc = tensor4df(idt, idf, in, p.channel_after, ih, iw);
-    if (gclmemInputDesc->memFormat == DF_NCHW || gclmemInputDesc->byteSize == 0) {
-        CHECK_STATUS(
-            infer_gclmem_desc_nchw(iw, ih, ic, 0, 0, 0, 0, 0, idt, idt, gclmemInputDesc, NULL));
-    } else {
-        CHECK_STATUS(
-            infer_gclmem_desc_ncwhc4(iw, ih, ic, 0, 0, 0, 0, 0, idt, idt, gclmemInputDesc, NULL));
-    }
-    CHECK_STATUS(infer_gclmem_desc_nchw(
-        0, 0, 0, 0, 0, iw, ih, p.channel_after, idt, idt, NULL, gclmemOutputDesc));
     return SUCCESS;
 }
 

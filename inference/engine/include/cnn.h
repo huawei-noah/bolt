@@ -18,6 +18,9 @@
 #include "model.hpp"
 #include "memory_tracker.hpp"
 #include "model_spec.h"
+#ifdef _USE_GPU
+#include "image_container.hpp"
+#endif
 
 class CNN : public Model {
 public:
@@ -62,8 +65,16 @@ public:
 
 private:
     std::shared_ptr<Tensor> allocate_tensor(U32 size = 0);
+#ifdef _USE_GPU
+    std::shared_ptr<Tensor> allocate_tensor(U32 *size);
+#endif
 
     void add(std::shared_ptr<Operator> op,
+        std::vector<std::string> &inputTensorsName,
+        std::vector<std::string> &outputTensorsName);
+
+    void set_op_tensors_positions(std::shared_ptr<Operator> op,
+        I32 *tensor_positions,
         std::vector<std::string> &inputTensorsName,
         std::vector<std::string> &outputTensorsName);
 
@@ -76,6 +87,8 @@ private:
     void infer_tmp_memory_size() override;
 
     void assign_tmp_tensor() override;
+
+    Tensor *get_reuse_memory(U32 slot, Tensor *tensor);
 
     void check_memory_reuse_ratio();
 
@@ -95,9 +108,13 @@ private:
     std::map<std::string, std::shared_ptr<Tensor>> outputTensors;
     std::vector<std::shared_ptr<Tensor>> storageMemory;
     Tensor tmpTensor;
+    std::map<I32, std::vector<std::shared_ptr<Tensor>>> storageImage;
 
     std::vector<std::string> sortedOps;
 
     MemoryTracker memoryTracker;
+#ifdef _USE_GPU
+    ImageContainer tmpImages;
+#endif
 };
 #endif

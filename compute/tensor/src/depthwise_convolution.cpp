@@ -19,7 +19,7 @@
 #ifdef _USE_NEON
 #include "cpu/arm/tensor_computing_arm.h"
 #endif
-#ifdef _USE_MALI
+#ifdef _USE_GPU
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
 #ifdef _USE_X86
@@ -58,12 +58,10 @@ inline EE depthwise_convolution_infer_output_size_cpu(TensorDesc inputDesc,
     U32 fhDilated = (fh - 1) * dilateH + 1;
     U32 fwDilated = (fw - 1) * dilateW + 1;
 
-    CHECK_REQUIREMENT(fdf == DF_NCHW || fdf == DF_NCHWC8);
     oh = (ih + paddingT + paddingB - fhDilated) / strideH + 1;
     ow = (iw + paddingL + paddingR - fwDilated) / strideW + 1;
-
-    if (ic % 8 != 0) {
-        CHECK_STATUS(NOT_SUPPORTED);
+    if (ow <= 0 || oh <= 0) {
+        CHECK_STATUS(NOT_MATCH);
     }
 
     *outputDesc = tensor4df(targetDataType, DF_NCHWC8, in, ic, oh, ow);
@@ -86,22 +84,25 @@ EE depthwise_convolution_infer_output_size(Tensor *inputTensor,
     TensorDesc inputDesc = inputTensor->get_desc();
     TensorDesc filterDesc = filterTensor.get_desc();
     TensorDesc outputDesc = outputTensor->get_desc();
-    EE ret = NOT_SUPPORTED;
-    if (IS_MALI_GPU(archInfo->arch)) {
-#ifdef _USE_MALI
-        GCLMemDesc gclmemInputDesc = ocl_get_desc(*inputTensor);
-        GCLMemDesc gclmemOutputDesc = ocl_get_desc(*outputTensor);
-        ret = depthwise_convolution_infer_output_size_mali(
-            inputDesc, filterDesc, convParamSpec, &outputDesc, &gclmemInputDesc, &gclmemOutputDesc);
-        ocl_set_desc(inputTensor, gclmemInputDesc);
-        ocl_set_desc(outputTensor, gclmemOutputDesc);
+    CHECK_STATUS(depthwise_convolution_infer_output_size_cpu(
+        inputDesc, filterDesc, convParamSpec, &outputDesc, targetDataType));
+    if (IS_GPU(archInfo->arch)) {
+#ifdef _USE_GPU
+        OclMemory *inputMem = (OclMemory *)inputTensor->get_memory();
+        OclMemory *outputMem = (OclMemory *)outputTensor->get_memory();
+        CHECK_STATUS(depthwise_convolution_padding_input_mali(
+            inputDesc, filterDesc, convParamSpec, &outputDesc, inputMem, outputMem));
 #endif
     } else {
-        ret = depthwise_convolution_infer_output_size_cpu(
-            inputDesc, filterDesc, convParamSpec, &outputDesc, targetDataType);
+        DataFormat fdf = filterDesc.df;
+        U32 ic = inputDesc.dims[inputDesc.nDims - 2];
+        CHECK_REQUIREMENT(fdf == DF_NCHW || fdf == DF_NCHWC8);
+        if (ic % 8 != 0) {
+            CHECK_STATUS(NOT_SUPPORTED);
+        }
     }
     outputTensor->resize(outputDesc);
-    return ret;
+    return SUCCESS;
 }
 
 EE depthwise_convolution_infer_forward_algorithm(Tensor inputTensor,
@@ -121,7 +122,7 @@ EE depthwise_convolution_infer_forward_algorithm(Tensor inputTensor,
         ret = SUCCESS;
 #endif
 #ifdef _USE_X86
-    } else if (IS_X86_AVX2(arch)) {
+    } else if (IS_X86(arch)) {
         *algorithm = DEPTHWISE_CONVOLUTION_ALGORITHM_DIRECT;
         ret = SUCCESS;
 #endif
@@ -130,15 +131,17 @@ EE depthwise_convolution_infer_forward_algorithm(Tensor inputTensor,
         *algorithm = DEPTHWISE_CONVOLUTION_ALGORITHM_DIRECT;
         ret = SUCCESS;
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
         TensorDesc inputDesc = inputTensor.get_desc();
         TensorDesc filterDesc = filterTensor.get_desc();
         TensorDesc outputDesc = outputTensor.get_desc();
+        GCLMemDesc gclmemInputDesc = ocl_get_desc(inputTensor);
+        GCLMemDesc gclmemOutputDesc = ocl_get_desc(outputTensor);
         ret = depthwise_convolution_infer_forward_algorithm_mali(
             ((MaliPara_t)(archInfo->archPara))->handle, inputDesc, filterDesc, outputDesc,
-            convParamSpec, policy, depthwiseActivationParamSpec.mode,
-            ((MaliPara_t)(archInfo->archPara))->forwardRunInfo);
+            gclmemInputDesc, gclmemOutputDesc, convParamSpec, policy,
+            depthwiseActivationParamSpec.mode, ((MaliPara_t)(archInfo->archPara))->forwardRunInfo);
 #endif
     }
     return ret;
@@ -147,7 +150,7 @@ EE depthwise_convolution_infer_forward_algorithm(Tensor inputTensor,
 EE depthwise_convolution_transform_filter_bytes(Tensor filterTensor,
     ConvolutionParamSpec convParamSpec,
     DepthwiseConvolutionForwardAlgorithm algorithm,
-    U32 *bytes,
+    void *bytes,
     ArchInfo_t archInfo)
 {
     TensorDesc filterDesc = filterTensor.get_desc();
@@ -157,18 +160,18 @@ EE depthwise_convolution_transform_filter_bytes(Tensor filterTensor,
     auto arch = archInfo->arch;
     if (IS_GENERAL(arch)) {
 #ifdef _USE_GENERAL
-        *bytes = tensorNumBytes(filterDesc);
+        U32 *size = (U32 *)bytes;
+        *size = tensorNumBytes(filterDesc);
         ret = SUCCESS;
 #endif
 #if defined(_USE_X86) || defined(_USE_NEON)
     } else if (IS_CPU(arch)) {
-        ret = depthwise_convolution_transform_filter_bytes_cpu(filterDesc, algorithm, bytes);
+        ret = depthwise_convolution_transform_filter_bytes_cpu(filterDesc, algorithm, (U32 *)bytes);
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
-        ret = depthwise_convolution_transform_filter_bytes_mali(filterDesc,
-            ((MaliPara_t)(archInfo->archPara))->forwardRunInfo,
-            ((MaliPara_t)(archInfo->archPara))->gclmemFilterDesc, bytes);
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
+        ret = depthwise_convolution_transform_filter_bytes_mali(
+            filterDesc, ((MaliPara_t)(archInfo->archPara))->forwardRunInfo, (TensorDesc *)bytes);
 #endif
     }
     return ret;
@@ -195,7 +198,7 @@ EE depthwise_convolution_transform_filter(Tensor filterTensor,
         ret = SUCCESS;
 #endif
 #ifdef _USE_X86
-    } else if (IS_X86_AVX2(arch)) {
+    } else if (IS_X86(arch)) {
         ret = depthwise_convolution_transform_filter_x86(
             filterDesc, filter, algorithm, &ftmDesc, filterTransformed);
 #endif
@@ -204,8 +207,8 @@ EE depthwise_convolution_transform_filter(Tensor filterTensor,
         ret = depthwise_convolution_transform_filter_arm(
             filterDesc, filter, algorithm, &ftmDesc, filterTransformed);
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
         ret = depthwise_convolution_transform_filter_mali(((MaliPara_t)(archInfo->archPara))->handle,
             filterDesc, (GCLMem_t)filter, ((MaliPara_t)(archInfo->archPara))->forwardRunInfo,
             &ftmDesc, (GCLMem_t)filterTransformed);
@@ -224,7 +227,9 @@ EE depthwise_convolution_infer_forward_tmp_bytes(Tensor inputTensor,
     ArchInfo_t archInfo)
 {
     TensorDesc inputDesc = inputTensor.get_desc();
+#if defined(_USE_NEON) || defined(_USE_GPU)
     TensorDesc filterDesc = filterTensor.get_desc();
+#endif
     TensorDesc outputDesc = outputTensor.get_desc();
 
     EE ret = NOT_SUPPORTED;
@@ -235,7 +240,7 @@ EE depthwise_convolution_infer_forward_tmp_bytes(Tensor inputTensor,
         ret = SUCCESS;
 #endif
 #ifdef _USE_X86
-    } else if (IS_X86_AVX2(arch)) {
+    } else if (IS_X86(arch)) {
         ret = depthwise_convolution_infer_forward_tmp_bytes_x86(
             inputDesc, outputDesc, convParamSpec, algorithm, bytes);
 #endif
@@ -244,8 +249,8 @@ EE depthwise_convolution_infer_forward_tmp_bytes(Tensor inputTensor,
         ret = depthwise_convolution_infer_forward_tmp_bytes_arm(
             inputDesc, filterDesc, outputDesc, convParamSpec, algorithm, bytes);
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
         ret = depthwise_convolution_infer_forward_tmp_bytes_mali(inputDesc, filterDesc, outputDesc,
             convParamSpec, ((MaliPara_t)(archInfo->archPara))->forwardRunInfo, bytes);
         ret = SUCCESS;
@@ -283,7 +288,7 @@ EE depthwise_convolution(Tensor inputTensor,
             biasDesc, bias, tmpBytes, tmp, outputDesc, output, depthwiseActivationParamSpec);
 #endif
 #ifdef _USE_X86
-    } else if (IS_X86_AVX2(arch)) {
+    } else if (IS_X86(arch)) {
         ret = depthwise_convolution_x86(inputDesc, input, filterDesc, filter, convParamSpec,
             algorithm, biasDesc, bias, tmpBytes, tmp, outputDesc, output,
             depthwiseActivationParamSpec, archInfo->arch);
@@ -294,8 +299,8 @@ EE depthwise_convolution(Tensor inputTensor,
             algorithm, biasDesc, bias, tmpBytes, tmp, outputDesc, output,
             depthwiseActivationParamSpec, archInfo->arch);
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
         ret = depthwise_convolution_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc,
             (GCLMem_t)input, filterDesc, (GCLMem_t)filter, convParamSpec,
             ((MaliPara_t)(archInfo->archPara))->forwardRunInfo, biasDesc, (GCLMem_t)bias, tmpBytes,

@@ -23,6 +23,7 @@
 #include "cpu/deconvolution_cpu.hpp"
 #include "cpu/eltwise_cpu.hpp"
 #include "cpu/softmax_cpu.hpp"
+#include "cpu/logsoftmax_cpu.hpp"
 #include "cpu/activation_cpu.hpp"
 #include "cpu/fully_connected_cpu.hpp"
 #include "cpu/scale_cpu.hpp"
@@ -66,6 +67,13 @@
 #include "cpu/batch_norm_cpu.hpp"
 #include "cpu/cast_cpu.hpp"
 #include "cpu/equal_cpu.hpp"
+#include "cpu/instance_norm_cpu.hpp"
+#include "cpu/expand_cpu.hpp"
+#include "cpu/scatter_cpu.hpp"
+#include "cpu/gather_cpu.hpp"
+#include "cpu/select_cpu.hpp"
+#include "cpu/topk_cpu.hpp"
+#include "cpu/gat_cpu.hpp"
 
 class FactoryCPU : public Factory {
 public:
@@ -102,6 +110,12 @@ public:
     std::shared_ptr<Operator> createSoftmax(DataType dt, SoftmaxParamSpec p) override
     {
         auto cep = new SoftmaxCPU(dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createLogSoftmax(DataType dt, SoftmaxParamSpec p) override
+    {
+        auto cep = new LogSoftmaxCPU(dt, p);
         return std::shared_ptr<Operator>(cep);
     }
 
@@ -272,9 +286,9 @@ public:
         return std::shared_ptr<Operator>(cep);
     }
 
-    std::shared_ptr<Operator> createSpace2Depth(DataType dt) override
+    std::shared_ptr<Operator> createSpace2Depth(DataType dt, Space2DepthParamSpec p) override
     {
-        OP_UNSUP(1, dt);
+        OP_UNSUP(2, dt, p);
         return std::shared_ptr<Operator>(cep);
     }
 
@@ -390,8 +404,7 @@ public:
 
     std::shared_ptr<Operator> createTopK(DataType dt, TopKParamSpec p) override
     {
-        OP_UNSUP(2, dt, p);
-        //auto cep = new TopKCPU(dt, p);
+        auto cep = new TopKCPU(dt, p);
         return std::shared_ptr<Operator>(cep);
     }
 
@@ -401,9 +414,58 @@ public:
         return std::shared_ptr<Operator>(cep);
     }
 
-    std::shared_ptr<Operator> createEqual(DataType dt) override
+    std::shared_ptr<Operator> createEqual(DataType dt, EqualParamSpec p) override
     {
-        auto cep = new EqualCPU(dt);
+        auto cep = new EqualCPU(dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createInstanceNorm(DataType dt, InstanceNormParamSpec p) override
+    {
+        auto cep = new InstanceNormCPU(dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createExpand(DataType dt, ExpandParamSpec p) override
+    {
+        auto cep = new ExpandCPU(dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createScatter(DataType dt, ScatterParamSpec p) override
+    {
+        auto cep = new ScatterCPU(dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createGather(DataType dt, GatherParamSpec p) override
+    {
+        auto cep = new GatherCPU(dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createSelect(DataType dt) override
+    {
+        auto cep = new SelectCPU(dt);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createRoIAlign(RoIAlignParamSpec p) override
+    {
+        OP_UNSUP(1, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createGenerateProposals(
+        DataType dt, GenerateProposalsParamSpec p) override
+    {
+        OP_UNSUP(2, dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createGAT(DataType dt, GATParamSpec p) override
+    {
+        auto cep = new GATCPU(dt, p);
         return std::shared_ptr<Operator>(cep);
     }
 };

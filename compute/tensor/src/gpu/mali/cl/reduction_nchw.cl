@@ -24,7 +24,7 @@
 
 #define VAR(mean, v, res)          \
     {                              \
-        T4 tmp;                    \
+        float4 tmp;                \
         tmp.s0 = v.s0 - mean.x;    \
         tmp.s1 = v.s1 - mean.y;    \
         tmp.s2 = v.s2 - mean.z;    \
@@ -35,19 +35,16 @@
         res.s3 += tmp.s3 * tmp.s3; \
     }
 
-__kernel void MANGLE_NAME(reduction_nchw_, TP, AXIS)(const int ih_str,
-    const int iw_str,
-    const int ih_off,
-    const int iw_off,
-    const int oh_str,
+__kernel void MANGLE_NAME(reduction_nchw_, TP, AXIS)(const int iw_str,
+    const int ih_str,
     const int ow_str,
-    const int oh_off,
-    const int ow_off,
-    const int ih,
+    const int oh_str,
+    const int i_off,
+    const int o_off,
     const int iw,
+    const int ih,
     const int ic,
     const int ow,
-    const int oh,
     const int keep_dim,
     const int od,
     const int bx,
@@ -62,7 +59,7 @@ __kernel void MANGLE_NAME(reduction_nchw_, TP, AXIS)(const int ih_str,
         return;
     }
 
-    int in_off = (idz * ih_str + idy + ih_off) * iw_str + (idx << 2) + iw_off;
+    int in_off = (idz * ih_str + idy) * iw_str + (idx << 2) + i_off;
 #if (AXIS == 0)
     int in_str = 4;
     int loop = (iw + 3) >> 2;
@@ -85,22 +82,24 @@ __kernel void MANGLE_NAME(reduction_nchw_, TP, AXIS)(const int ih_str,
 #endif
     }
 
-    int avgNum = loop;
+    float para;
 #if (AXIS == 0)
     res.x = res.x + res.y + res.z + res.w;
-    avgNum = iw;
+    para = 1.0 / iw;
+#else
+    para = 1.0 / loop;
 #endif
 
-#if defined(USE_MEAN) || defined(USE_STD_DEVIATION)
-    res.x = res.x / avgNum;
+#if defined(USE_MEAN) || defined(USE_STD_DEVIATION) || defined(USE_SCALAR_PRODUCT)
+    res.x = res.x * para;
 #if (AXIS == 0)
     res.y = res.x;
     res.z = res.x;
     res.w = res.x;
 #else
-    res.y = res.y / avgNum;
-    res.z = res.z / avgNum;
-    res.w = res.w / avgNum;
+    res.y = res.y * para;
+    res.z = res.z * para;
+    res.w = res.w * para;
 #endif
 #endif
 
@@ -108,54 +107,52 @@ __kernel void MANGLE_NAME(reduction_nchw_, TP, AXIS)(const int ih_str,
     mean = res;
     res = 0;
     for (int i = 0; i < loop; ++i) {
-        val = vload4(in, in_off + in_str * i);
+        val = vload4(0, in + in_off + in_str * i);
         VAR(mean, val, res);
     }
 #if (AXIS == 0)
     res.x = res.x + res.y + res.z + res.w;
-    res.x = sqrt(res.x);
+    res.x = sqrt(res.x * para);
 #else
-    res.x = sqrt(res.x);
-    res.y = sqrt(res.y);
-    res.z = sqrt(res.z);
-    res.w = sqrt(res.w);
+    res.x = sqrt(res.x * para);
+    res.y = sqrt(res.y * para);
+    res.z = sqrt(res.z * para);
+    res.w = sqrt(res.w * para);
 #endif
 #endif
 
     int out_off;
 #if (AXIS == 0)
     if (keep_dim) {
-        if (od == 4) {
-            out_off = (idz * oh_str + idy + oh_off) * ow_str + ow_off;
-        } else if (od == 3) {
-            out_off = (idy + oh_off) * ow_str + ow_off;
+        if (od > 2) {
+            out_off = (idz * oh_str + idy) * ow_str + o_off;
         } else {
-            out_off = idy + ow_off;
+            out_off = idy + o_off;
         }
     } else {
-        if (od == 3) {
-            out_off = (idz + oh_off) * ow_str + idy + ow_off;
+        if (od > 1) {
+            out_off = idz * ow_str + idy + o_off;
         } else {
-            out_off = idy + ow_off;
+            out_off = idy + o_off;
         }
     }
     out[out_off] = (T)res.x;
 #elif (AXIS == 1)
     if (keep_dim) {
-        if (od == 4) {
-            out_off = (idz * oh_str + oh_off) * ow_str + (idx << 2) + ow_off;
+        if (od > 2) {
+            out_off = idz * oh_str * ow_str + (idx << 2) + o_off;
         } else {
-            out_off = (idx << 2) + ow_off;
+            out_off = (idx << 2) + o_off;
         }
     } else {
-        if (od == 3) {
-            out_off = (idz + oh_off) * ow_str + (idx << 2) + ow_off;
+        if (od > 1) {
+            out_off = idz * ow_str + (idx << 2) + o_off;
         } else {
-            out_off = (idx << 2) + ow_off;
+            out_off = (idx << 2) + o_off;
         }
     }
 #elif (AXIS == 2)
-    out_off = (idy + oh_off) * ow_str + (idx << 2) + ow_off;
+    out_off = idy * ow_str + (idx << 2) + o_off;
 #endif
 
 #if (AXIS != 0)

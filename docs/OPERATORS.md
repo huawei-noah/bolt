@@ -30,7 +30,7 @@
 | TanH                      | y = tanh(x) |
 | Mish                      | y = x * tanh(log(1 + e ^ x)) |
 | Erf                       | erf(x) = 2/sqrt(pi) * integral from 0 to x of exp(-t^2) dt|
-| Gather                    | onnx gather, same as embedding |
+| Gather                    | onnx gather, gather_elements, gatherND, also same as embedding |
 | Embedding                 | Caffe embedding |
 | Pad                       | constant(0), reflect, edge, symmetric padding |
 | Eltwise                   | sum, min, max, mul(prod), sub, div elementwise operation |
@@ -73,10 +73,19 @@
 | Split                     | y = x |
 | Tdnn                      | Kaldi tdnn operator(Splice + Linear) |
 | Dropout                   | dropout function |
-| TopK                      | onnx topk|
+| TopK                      | same as onnx topk |
 | SpaceToBatchNd            | tensorflow space_to_batch function |
 | BatchToSpaceNd            | tensorflow batch_to_space function |
 | Abs                       | y = (x > 0) ? x : -x |
-| Equal                     | elementwise tensor compare, same as onnx equal |
+| Equal                     | elementwise tensor compare, same as onnx equal, this also support tflite NOT_EQUAL |
 | Sign                      | y = sign(x) |
 | HSwishNoDiv               | y = x * relu6(x + 3) |
+| InstanceNorm              | Instance Normalization |
+| Expand                    | onnx expand |
+| Scatter                   | onnx scatter, scatter_elements, scatterND |
+| Log                       | y = log(x) |
+| Select                    | y = choice ? a : b, same as tflite select |
+| Not                       | y = ! (x), same as onnx not |
+| RoIAlign                  | same as onnx RoIAlign |
+| GenerateProposals         | same as tf tf.image.generate_bounding_box_proposals |
+| Reciprocal                | same as onnx reciprocal |

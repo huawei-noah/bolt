@@ -23,6 +23,7 @@
 #include "cpu/arm/tensor_computing_arm.h"
 #endif
 #include "blas_enhance.h"
+#include "tensor_transpose.h"
 
 template <typename T>
 void transformNK2NKN32(const T *src, U32 stride, T *dst, U32 N, U32 K)
@@ -230,10 +231,14 @@ EE rnn_infer_forward_tmp_bytes_cpu(TensorDesc inputDesc,
     if (nullptr == bytes) {
         CHECK_STATUS(NULL_POINTER);
     }
-    DataType idt;
-    DataFormat idf;
-    U32 batch, step, xDim;
-    CHECK_STATUS(tensor3dGet(inputDesc, &idt, &idf, &batch, &step, &xDim));
+    DataType idt = inputDesc.dt;
+    DataFormat idf = inputDesc.df;
+    U32 batch = inputDesc.dims[inputDesc.nDims - 1];
+    U32 step = inputDesc.dims[inputDesc.nDims - 2];
+    U32 xDim = inputDesc.dims[inputDesc.nDims - 3];
+    for (U32 i = 0; i < inputDesc.nDims - 3; ++i) {
+        xDim *= inputDesc.dims[i];
+    }
     U32 hDim = rnnParamSpec.numOutput;
     TensorDesc xDesc = tensor2df(idt, DF_NORMAL, batch, xDim);
     CHECK_STATUS(rnncell_infer_forward_tmp_bytes_cpu(
@@ -259,9 +264,12 @@ EE rnn_infer_forward_tmp_bytes_cpu(TensorDesc inputDesc,
 
     int num1 = rnnParamSpec.biDirection ? 2 : 1;
     *bytes += batch * ((column + hDim) * num1 + column * factor) * bytesOf(idt);
-    if (rnnParamSpec.steps >= 0) {                                     //RNN
-        *bytes += step * column * factor * bytesOf(idt);               // Intermediate gate result
-        *bytes += UNI_MAX(step * xDim, xDim * column) * bytesOf(idt);  // mmm tmp buffer
+    if (idf == DF_NCHWC8) {
+        *bytes += tensorNumBytes(inputDesc);
+    }
+    if (rnnParamSpec.steps >= 0) {                                //RNN
+        *bytes += batch * step * column * factor * bytesOf(idt);  // Intermediate gate result
+        *bytes += UNI_MAX(batch * step * xDim, xDim * column) * bytesOf(idt);  // mmm tmp buffer
         *bytes += 32;
     }
     return ret;
@@ -290,7 +298,7 @@ EE rnncell_cpu(TensorDesc xDesc,
             tmp, rnnParamSpec, batchStrideX, batchStrideH, hDesc, currentH);
 #endif
 #ifdef _USE_X86
-    } else if (IS_X86_AVX2(arch)) {
+    } else if (IS_X86(arch)) {
         ret = rnncell_x86(xDesc, currentX, filterDesc, filter, biasDesc, bias, state, tmpBytes, tmp,
             rnnParamSpec, batchStrideX, batchStrideH, hDesc, currentH, arch);
 #endif
@@ -323,15 +331,30 @@ EE rnn_cpu(TensorDesc inputDesc,
         CHECK_STATUS(NULL_POINTER);
     }
 
-    DataType idt, fdt;
-    DataFormat idf, fdf;
-    U32 batch, step, xDim;
+    DataType fdt;
+    DataFormat fdf;
     U32 fk, fn;
     int num1 = rnnParamSpec.biDirection ? 2 : 1;
     CHECK_STATUS(tensor2dGet(filterDesc[0], &fdt, &fdf, &fn, &fk));
-    CHECK_STATUS(tensor3dGet(inputDesc, &idt, &idf, &batch, &step, &xDim));
     if (fdf != DF_NKNx_NKN32) {
         CHECK_STATUS(NOT_MATCH);
+    }
+    DataType idt = inputDesc.dt;
+    DataFormat idf = inputDesc.df;
+    U32 batch = inputDesc.dims[inputDesc.nDims - 1];
+    U32 step = inputDesc.dims[inputDesc.nDims - 2];
+    U32 xDim = inputDesc.dims[inputDesc.nDims - 3];
+    for (U32 i = 0; i < inputDesc.nDims - 3; ++i) {
+        xDim *= inputDesc.dims[i];
+    }
+
+    const void *inputTmp = input;
+    if (idf == DF_NCHWC8) {
+        TensorDesc tmpDesc = inputDesc;
+        tmpDesc.df = DF_NCHW;
+        transformToNCHW(inputDesc, input, tmpDesc, tmp);
+        inputTmp = tmp;
+        tmp = (U8 *)tmp + tensorNumBytes(tmpDesc);
     }
 
     U32 hDim = rnnParamSpec.numOutput;
@@ -345,27 +368,29 @@ EE rnn_cpu(TensorDesc inputDesc,
 
     U8 *cellState = (U8 *)tmp;
     U8 *tmpArray = cellState + batch * num1 * (column + hDim) * bytesOfIdt;
-    U8 *intermediateH = tmpArray + step * xDim * bytesOfIdt;
+    U8 *intermediateH = tmpArray + batch * step * xDim * bytesOfIdt;
     U8 *InterGate = intermediateH + fn * bytesOfIdt;
 
     const U8 *mmmFilter;
     mmmFilter = (const U8 *)filter[0];
 
-    for (U32 t = 0; t < step; ++t) {
-        memcpy(InterGate + t * fn * bytesOfIdt, bias[0], fn * bytesOfIdt);
+    U32 tileSize = fn * bytesOfIdt;
+    for (U32 m = 0; m < batch; m++) {
+        for (U32 t = 0; t < step; ++t) {
+            memcpy(InterGate + (m * step + t) * tileSize, bias[0], tileSize);
+        }
     }
 
-    TensorDesc inDesc = tensor2df(idt, DF_NORMAL, step, xDim);
+    TensorDesc inDesc = tensor2df(idt, DF_NORMAL, batch * step, xDim);
     TensorDesc mmmFilterDesc;
+    TensorDesc outDesc = tensor2df(idt, DF_NORMAL, batch * step, fn);
     if (IS_GENERAL(arch)) {
         mmmFilterDesc = tensor2df(fdt, DF_TRANSPOSE, fn, xDim);
     } else {
         mmmFilterDesc = tensor2df(fdt, targetFormat4MatrixB(fdt), xDim, fn);
     }
-    TensorDesc outDesc = tensor2df(idt, DF_NORMAL, step, fn);
-
-    CHECK_STATUS(matrix_matrix_multiply(inDesc, input, mmmFilterDesc, mmmFilter,
-        step * xDim * bytesOfIdt, tmpArray, outDesc, InterGate, arch));
+    CHECK_STATUS(matrix_matrix_multiply(inDesc, inputTmp, mmmFilterDesc, mmmFilter,
+        batch * step * xDim * bytesOfIdt, tmpArray, outDesc, InterGate, nullptr, arch));
 
     const void *useFilter[2] = {(const void *)(mmmFilter + fn * xDim * bytesOfIdt), nullptr};
     const void *useBias[2] = {nullptr, nullptr};
@@ -385,19 +410,22 @@ EE rnn_cpu(TensorDesc inputDesc,
     }
 
     if (rnnParamSpec.biDirection) {
-        int num2 = (rnnParamSpec.numProjection > 0) ? 2 : 1;
-        mmmFilter = (const U8 *)filter[num2];
-        for (U32 t = 0; t < step; ++t) {
-            memcpy(InterGate + t * fn * bytesOfIdt, bias[num2], fn * bytesOfIdt);
+        int fCount = (rnnParamSpec.numProjection > 0) ? 2 : 1;
+        int bCount = (rnnParamSpec.mode == RNN_GRU_LBR) ? 2 : 1;
+        mmmFilter = (const U8 *)filter[fCount];
+        for (U32 m = 0; m < batch; m++) {
+            for (U32 t = 0; t < step; ++t) {
+                memcpy(InterGate + (m * step + t) * tileSize, bias[bCount], tileSize);
+            }
         }
-        CHECK_STATUS(matrix_matrix_multiply(inDesc, input, mmmFilterDesc, mmmFilter,
-            step * xDim * bytesOfIdt, tmpArray, outDesc, InterGate, arch));
+        CHECK_STATUS(matrix_matrix_multiply(inDesc, inputTmp, mmmFilterDesc, mmmFilter,
+            step * xDim * bytesOfIdt, tmpArray, outDesc, InterGate, nullptr, arch));
         useFilter[0] = mmmFilter + fn * xDim * bytesOfIdt;
         if (rnnParamSpec.numProjection > 0) {
-            useFilter[1] = filter[num2 + 1];
+            useFilter[1] = filter[fCount + 1];
         }
         if (rnnParamSpec.mode == RNN_GRU_LBR) {
-            useBias[1] = bias[num2 + 1];
+            useBias[1] = bias[bCount + 1];
         }
         cellState += (column + hDim) * bytesOfIdt;
         for (I32 t = step - 1; t >= 0; t--) {

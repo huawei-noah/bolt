@@ -14,9 +14,6 @@
 #include "cpu/arm/fp16/convolution_gemm_icnchw.h"
 #include "cpu/arm/transform_functions.h"
 #include "thread_affinity.h"
-#ifdef _USE_OPENMP
-#include <omp.h>
-#endif
 
 EE convolution_gemm_icnchw_A76(TensorDesc inputDesc,
     F16 *inArray,
@@ -67,6 +64,13 @@ EE convolution_gemm_icnchw_A76(TensorDesc inputDesc,
     int oc_1 = oc - 1;
     F16 *in_pack = ((F16 *)tmp) + ic * it_pad * ih_pad * iw_pad;
     EE ret = SUCCESS;
+#ifdef _USE_CACHE
+    std::string key = tensorDesc2Str(inputDesc) + tensorDesc2Str(filterDesc) +
+        tensorDesc2Str(outputDesc) + std::to_string(ih_pad) + std::to_string(iw_pad) +
+        std::to_string(p.stride_h) + std::to_string(p.stride_w);
+    U32 *padding_input_offsets =
+        get_convolution_padding_input_offset<8, 1>(key, ih_pad, iw_pad, p, oh, ow, ohow);
+#endif
     for (U32 n = 0; n < in; n++) {
         F16 *inArray_pad = convolution_input_padding_per_channel<F16, 1>(
             n, ic, it, ih, iw, p, inArray, (F16 *)tmp);
@@ -83,8 +87,13 @@ EE convolution_gemm_icnchw_A76(TensorDesc inputDesc,
             const F16 *f_o0c0 = filterArray;
             // pack input
             // NCHW => NHWChw8 + im2col
+#ifdef _USE_CACHE
+            convolution_input_pack<F16, 8, 1>(ic, it_pad, ih_pad, iw_pad, p, ft, fh, fw,
+                inArray_pad, padding_input_offsets + hw, thread_in_pack);
+#else
             convolution_nchw_input_pack<F16, 8>(ic, it_pad, ih_pad, iw_pad, p, ft, fh, fw, ot, oh,
                 ow, inArray_pad, hw, thread_in_pack);
+#endif
 
             // compute
             for (I32 o = 0; o < oc_1; o += 2) {

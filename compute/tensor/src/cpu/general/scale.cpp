@@ -33,17 +33,20 @@ static EE scale_nchw(
     return SUCCESS;
 }
 
-template <typename T>
+template <typename T, bool icoc_equal>
 static EE scale_nhwc(
     T *input, T *alpha, T *beta, U32 in, U32 ic, U32 elements_per_channel, T *output)
 {
-    for (U32 n = 0; n < in; n++) {
-        for (U32 i = 0; i < elements_per_channel; i++) {
-            for (U32 c = 0; c < ic; c++) {
+    for (U32 n = 0, src = 0, dst = 0; n < in; n++) {
+        for (U32 i = 0; i < elements_per_channel; i++, src++) {
+            for (U32 c = 0; c < ic; c++, dst++) {
                 T alphaValue = (nullptr == alpha) ? 1 : alpha[c];
                 T betaValue = (nullptr == beta) ? 0 : beta[c];
-                U32 index = ((n * elements_per_channel) + i) * ic + c;
-                output[index] = alphaValue * input[index] + betaValue;
+                if (icoc_equal) {
+                    output[dst] = alphaValue * input[dst] + betaValue;
+                } else {
+                    output[dst] = alphaValue * input[src] + betaValue;
+                }
             }
         }
     }
@@ -56,17 +59,22 @@ static EE scale(T *input,
     I32 nDims,
     T *alpha,
     T *beta,
-    U32 in,
-    U32 ic,
+    U32 on,
+    U32 oc,
     U32 elements_per_channel,
     U32 align_size,
+    U32 ic,
     T *output)
 {
     EE ret = SUCCESS;
-    if (axis == 1 || axis == 0 || ic == 1) {
-        ret = scale_nchw<T>(input, alpha, beta, in, ic, elements_per_channel, align_size, output);
+    if (axis == 1 || axis == 0 || oc == 1) {
+        ret = scale_nchw<T>(input, alpha, beta, on, oc, elements_per_channel, align_size, output);
     } else if (axis == nDims - 1) {
-        ret = scale_nhwc<T>(input, alpha, beta, in, ic, elements_per_channel, output);
+        if (ic == oc) {
+            ret = scale_nhwc<T, true>(input, alpha, beta, on, oc, elements_per_channel, output);
+        } else {
+            ret = scale_nhwc<T, false>(input, alpha, beta, on, oc, elements_per_channel, output);
+        }
     } else {
         ret = NOT_SUPPORTED;
     }
@@ -81,33 +89,33 @@ EE scale_general(TensorDesc inputDesc,
     TensorDesc outputDesc,
     void *output)
 {
-    UNUSED(outputDesc);
     if (nullptr == input || nullptr == output) {
         CHECK_STATUS(NULL_POINTER);
     }
 
-    U32 length = tensorNumElements(inputDesc);
-    int axis = (p.axis + inputDesc.nDims) % inputDesc.nDims;
-    I32 in = inputDesc.dims[inputDesc.nDims - 1];
+    U32 length = tensorNumElements(outputDesc);
+    int axis = (p.axis + outputDesc.nDims) % outputDesc.nDims;
+    I32 on = outputDesc.dims[outputDesc.nDims - 1];
+    I32 oc = outputDesc.dims[outputDesc.nDims - 1 - axis];
     I32 ic = inputDesc.dims[inputDesc.nDims - 1 - axis];
-    I32 elements_per_channel = length / (in * ic);
+    I32 elements_per_channel = length / (on * oc);
     I32 align_size = 1;
-    if (inputDesc.df == DF_NCHWC8) {
+    if (outputDesc.df == DF_NCHWC8) {
         align_size = 8;
     }
     EE ret = SUCCESS;
-    switch (inputDesc.dt) {
+    switch (outputDesc.dt) {
 #ifdef _USE_FP32
         case DT_F32: {
-            ret = scale<F32>((F32 *)input, axis, inputDesc.nDims, (F32 *)alpha, (F32 *)beta, in, ic,
-                elements_per_channel, align_size, (F32 *)output);
+            ret = scale<F32>((F32 *)input, axis, outputDesc.nDims, (F32 *)alpha, (F32 *)beta, on,
+                oc, elements_per_channel, align_size, ic, (F32 *)output);
             break;
         }
 #endif
 #ifdef _USE_FP16
         case DT_F16: {
-            ret = scale<F16>((F16 *)input, axis, inputDesc.nDims, (F16 *)alpha, (F16 *)beta, in, ic,
-                elements_per_channel, align_size, (F16 *)output);
+            ret = scale<F16>((F16 *)input, axis, outputDesc.nDims, (F16 *)alpha, (F16 *)beta, on,
+                oc, elements_per_channel, align_size, ic, (F16 *)output);
             break;
         }
 #endif

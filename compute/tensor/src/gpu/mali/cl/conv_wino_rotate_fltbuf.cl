@@ -11,11 +11,15 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define MANGLE_NAME_IMPL(base, F) base##F
-#define MANGLE_NAME(base, F) MANGLE_NAME_IMPL(base, F)
+#define MANGLE_NAME_IMPL(base, FWH) base##FWH
+#define MANGLE_NAME(base, FWH) MANGLE_NAME_IMPL(base, FWH)
 
-__kernel void MANGLE_NAME(conv_wino_rotate_fltbuf_, F)(
-    const int fwhc, const int fnc, const int fn, __global const T *fltdata, __global T *fltbuf)
+__kernel void MANGLE_NAME(conv_wino_rotate_fltbuf_, FWH)(const int fwhc,
+    const int fnc,
+    const int fn_align,
+    const int fn,
+    __global const T *fltdata,
+    __global T *fltbuf)
 {
     const int idx = get_global_id(0);
     const int idy = get_global_id(1);
@@ -27,8 +31,8 @@ __kernel void MANGLE_NAME(conv_wino_rotate_fltbuf_, F)(
     }
 
     const int ox = idy;
-    const int oy = idx / Fsq;
-    const int oz = idx % Fsq;
-    const int out_off = oz * fnc + oy * fn + ox;
+    const int oy = idx / FWH;
+    const int oz = idx % FWH;
+    const int out_off = oz * fnc + oy * fn_align + ox;
     fltbuf[out_off] = val;
 }

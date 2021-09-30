@@ -16,10 +16,8 @@
 
 #include "gpu/mali/fp16/tensor_computing_fp16.h"
 
-EE deconvolution_gemm_transform_filter_bytes_mali_fp16(TensorDesc filterDesc,
-    ForwardRunInfoMali_t forwardRunInfo,
-    GCLMemDesc_t gclmemFilterDesc,
-    U32 *bytes);
+EE deconvolution_gemm_transform_filter_bytes_mali_fp16(
+    TensorDesc filterDesc, ForwardRunInfoMali_t forwardRunInfo, TensorDesc *ftmDesc);
 
 EE deconvolution_gemm_transform_filter_mali_fp16(GCLHandle_t handle,
     TensorDesc filterDesc,

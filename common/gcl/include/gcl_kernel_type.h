@@ -1,7 +1,6 @@
 #ifndef H_GCL_KERNEL_TYPE_H
 #define H_GCL_KERNEL_TYPE_H
 #include "tensor_desc.h"
-
 struct GCLKernelSource {
     const char *data;
     const unsigned int len;

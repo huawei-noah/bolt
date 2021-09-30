@@ -18,20 +18,20 @@
 
 class EqualCPU : public Equal {
 public:
-    EqualCPU(DataType dt) : Equal(dt)
+    EqualCPU(DataType dt, EqualParamSpec p) : Equal(dt, p)
     {}
 
     std::shared_ptr<Operator> clone() override
     {
-        std::shared_ptr<EqualCPU> mem = std::shared_ptr<EqualCPU>(new EqualCPU(this->dt));
+        std::shared_ptr<EqualCPU> mem = std::shared_ptr<EqualCPU>(new EqualCPU(this->dt, this->p));
         *mem = *this;
         return mem;
     }
 
     void run() override
     {
-        CHECK_STATUS(equal(this->inputTensors[0], this->weightTensors[0], this->outputTensors[0],
-            &this->archInfo));
+        CHECK_STATUS(equal(this->inputTensors[0], this->weightTensors[0], this->p,
+            this->outputTensors[0], &this->archInfo));
     }
 
     EE infer_output_tensors_size(

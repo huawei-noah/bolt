@@ -26,8 +26,6 @@
 EE matrix_vector_multiply_tmp_bytes(
     TensorDesc matrixDesc, TensorDesc vectorDesc, U32 *bytes, Arch arch)
 {
-    UNUSED(vectorDesc);
-
     bool transpose = (matrixDesc.df == DF_TRANSPOSE);
     EE ret = NOT_SUPPORTED;
     if (IS_GENERAL(arch)) {
@@ -35,8 +33,8 @@ EE matrix_vector_multiply_tmp_bytes(
         ret = SUCCESS;
 #endif
 #ifdef _USE_X86
-    } else if (IS_X86_AVX2(arch)) {
-        ret = matrix_vector_multiply_tmp_bytes_x86(transpose, matrixDesc.dt, bytes);
+    } else if (IS_X86(arch)) {
+        ret = matrix_vector_multiply_tmp_bytes_x86(transpose, matrixDesc, bytes);
 #endif
 #ifdef _USE_NEON
     } else if (IS_ARM(arch)) {
@@ -63,8 +61,8 @@ EE matrix_vector_multiply_transform_weight(
     }
 #endif
 #ifdef _USE_X86
-    if (IS_X86_AVX2(arch)) {
-        ret = matrix_vector_multiply_transform_weight_x86(desc, src, descTran, dst);
+    if (IS_X86(arch)) {
+        ret = matrix_vector_multiply_transform_weight_x86(desc, src, descTran, dst, nullptr);
     }
 #endif
     return ret;
@@ -78,6 +76,7 @@ EE matrix_vector_multiply(TensorDesc matrixDesc,
     void *tmp,
     TensorDesc resultDesc,
     void *result,
+    const F32 *scale,
     Arch arch)
 {
     if (bytes != 0 && tmp == nullptr) {
@@ -89,19 +88,20 @@ EE matrix_vector_multiply(TensorDesc matrixDesc,
     DataType matrixDataType, vectorDataType, resultDataType;
     DataFormat matrixDataFormat, vectorDataFormat, resultDataFormat;
     U32 matrixRow, matrixColumn, vectorColumn, resultColumn;
+
     CHECK_STATUS(
         tensor2dGet(matrixDesc, &matrixDataType, &matrixDataFormat, &matrixRow, &matrixColumn));
     CHECK_STATUS(tensor1dGet(vectorDesc, &vectorDataType, &vectorDataFormat, &vectorColumn));
     CHECK_STATUS(tensor1dGet(resultDesc, &resultDataType, &resultDataFormat, &resultColumn));
 
-    if (matrixDataType != vectorDataType) {
-        CHECK_STATUS(NOT_MATCH);
-    }
-    if (matrixDataType != resultDataType) {
-        if (matrixDataType != DT_I8 || resultDataType != DT_I32) {
-            CHECK_STATUS(NOT_MATCH);
-        }
-    }
+    // if (matrixDataType != vectorDataType) {
+    //     CHECK_STATUS(NOT_MATCH);
+    // }
+    // if (matrixDataType != resultDataType) {
+    //     if (matrixDataType != DT_I8 || resultDataType != DT_I32) {
+    //         CHECK_STATUS(NOT_MATCH);
+    //     }
+    // }
 
     bool transpose = (matrixDataFormat == DF_TRANSPOSE);
     if (transpose) {
@@ -118,9 +118,26 @@ EE matrix_vector_multiply(TensorDesc matrixDesc,
             mvm_general(matrixRow, matrixColumn, matrixDataType, transpose, matrix, vector, result);
 #endif
 #ifdef _USE_X86
-    } else if (IS_X86_AVX2(arch)) {
-        ret = mvm_x86(
-            matrixRow, matrixColumn, matrixDataType, matrixDataFormat, matrix, vector, result);
+    } else if (IS_X86(arch)) {
+        U8 *dataB = (U8 *)matrix;
+        U8 *offsetCBias = nullptr;
+#ifdef _USE_INT8
+        if (matrixDataType == DT_I8) {
+            TensorDesc tranDescB;
+            if (matrixDataFormat != targetFormat4mvmMatrix(matrixDataType)) {
+                dataB = ((U8 *)tmp);
+                if (vectorDataType == DT_U8_Q && matrixDataType == DT_I8) {
+                    offsetCBias = (U8 *)tmp;
+                    // dataB += resultColumn * bytesOf(DT_I32);
+                }
+                // dataB += tensorNumBytes(vectorDesc);
+                ret = matrix_vector_multiply_transform_weight_x86(matrixDesc, matrix, &tranDescB,
+                    dataB + resultColumn * bytesOf(DT_I32), offsetCBias);
+            }
+        }
+#endif
+        ret = mvm_x86(matrixRow, matrixColumn, matrixDataType, matrixDataFormat, dataB, vector,
+            result, tmp, scale);
 #endif
 #ifdef _USE_NEON
     } else {

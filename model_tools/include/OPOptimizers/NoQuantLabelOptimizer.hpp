@@ -14,6 +14,10 @@
 #ifndef _H_NOQUANTLABELOPTIMIZER
 #define _H_NOQUANTLABELOPTIMIZER
 
+// ptr->feature_scale[0].scale[0] 0: no quant
+// ptr->feature_scale[0].scale[0] -1: quant, output int8
+// ptr->feature_scale[0].scale[0] -2: quant, output float32/float16
+
 #include "OPOptimizer.hpp"
 
 class NoQuantLabelOptimizer : public OPOptimizer {
@@ -49,7 +53,8 @@ public:
                         F32 clipMax = 127.0 / uniScale;
                         F32 clipMin = -1 * clipMax;
                         U32 len = spec->ws[weightIdx].bytes_of_weight / bytesOf(DT_F32);
-                        F32 *w = (F32 *)spec->ws[weightIdx].weight;
+                        F32 *w = (F32 *)mt_new_storage(spec->ws[weightIdx].bytes_of_weight);
+                        memcpy(w, spec->ws[weightIdx].weight, spec->ws[weightIdx].bytes_of_weight);
                         for (U32 j = 0; j < len; j++) {
                             if (w[j] > clipMax) {
                                 w[j] = clipMax;
@@ -57,6 +62,13 @@ public:
                                 w[j] = clipMin;
                             }
                         }
+                        if (spec->ws[weightIdx].weight != nullptr) {
+                            if (outOfFileMapRange(spec->ws[weightIdx].weight, spec->mfd)) {
+                                delete spec->ws[weightIdx].weight;
+                            }
+                            spec->ws[weightIdx].weight = nullptr;
+                        }
+                        spec->ws[weightIdx].weight = (U8 *)w;
                     }
                 }
                 continue;
@@ -75,7 +87,8 @@ public:
                 spec->ops[i].type == OT_HSigmoid || spec->ops[i].type == OT_Sigmoid ||
                 spec->ops[i].type == OT_Clip || spec->ops[i].type == OT_Gelu ||
                 spec->ops[i].type == OT_TanH || spec->ops[i].type == OT_Resize ||
-                spec->ops[i].type == OT_LayerNorm || spec->ops[i].type == OT_HSwishNoDiv ||
+                spec->ops[i].type == OT_LayerNorm || spec->ops[i].type == OT_Deconvolution ||
+                spec->ops[i].type == OT_HSwishNoDiv ||
                 (spec->ops[i].type == OT_Relu && spec->ops[i].ps.relu_spec.neg_slope != 0)) {
                 std::string curIn = spec->ops[i].input_tensors_name[0];
                 this->label_fp_outputs(spec, curIn);
@@ -118,10 +131,10 @@ public:
                     UNI_INFO_LOG("Softmax receives model input directly\n");
                     continue;
                 }
-                this->label_OP_as_no_quant(spec->ops + prevKeyIndex);
+                // this->label_OP_as_no_quant(spec->ops + prevKeyIndex);
 
-                for (U32 j = 0; j < spec->ops[prevKeyIndex].num_inputs; j++) {
-                    std::string prevIn = spec->ops[prevKeyIndex].input_tensors_name[j];
+                for (U32 j = 0; j < spec->ops[i].num_inputs; j++) {
+                    std::string prevIn = spec->ops[i].input_tensors_name[j];
                     this->label_fp_outputs(spec, prevIn);
                 }
                 hasOptimized = true;
@@ -132,6 +145,14 @@ public:
                 for (U32 j = 0; j < spec->ops[i].num_inputs; j++) {
                     std::string curIn = spec->ops[i].input_tensors_name[j];
                     this->label_fp_outputs(spec, curIn);
+                    hasOptimized = true;
+                }
+            }
+
+            if (spec->ops[i].type == OT_MatMul || spec->ops[i].type == OT_FC) {
+                for (U32 j = 0; j < spec->ops[i].num_inputs; j++) {
+                    std::string curIn = spec->ops[i].input_tensors_name[j];
+                    this->label_quant_outputs(spec, curIn);
                     hasOptimized = true;
                 }
             }
@@ -180,12 +201,14 @@ public:
             ptr->feature_scale = (QuantSpec *)mt_new_storage(sizeof(QuantSpec));
             ptr->feature_scale[0].num_scale = 1;
             ptr->feature_scale[0].scale = (F32 *)mt_new_storage(sizeof(F32));
-            ptr->feature_scale[0].scale[0] = -2;
-        } else if (-2 == ptr->feature_scale[0].scale[0] || 0 == ptr->feature_scale[0].scale[0]) {
-            ptr->feature_scale[0].scale[0] = -2;
-            return;  // Already processed the upstream
+        } else {
+            if (-1 != ptr->feature_scale[0].scale[0]) {
+                ptr->feature_scale[0].scale[0] = -2;
+                return;  // Already processed the upstream
+            }
         }
 
+        ptr->feature_scale[0].scale[0] = -2;
         OperatorType ot = ms->ops[prevIndex].type;
         if (OT_Conv != ot && OT_FC != ot && OT_MatMul != ot && OT_PriorBox != ot) {
             for (U32 i = 0; i < ms->ops[prevIndex].num_inputs; i++) {
@@ -198,6 +221,37 @@ public:
                 std::string name = ms->ops[prevIndex].input_tensors_name[i];
                 label_fp_outputs(ms, name);
             }
+        }
+    }
+
+    void label_quant_outputs(ModelSpec *ms, std::string tensorName)
+    {
+        std::vector<std::pair<int, int>> prevIndices =
+            searchOperatorIndexByOutput(ms, tensorName, 0, ms->num_operator_specs, false);
+        if (prevIndices.size() == 0) {
+            return;
+        }
+        int prevIndex = prevIndices[prevIndices.size() - 1].first;
+        OperatorSpec *ptr = ms->ops + prevIndex;
+        OperatorType ot = ms->ops[prevIndex].type;
+
+        if (0 == ptr->num_quant_feature) {
+            ptr->num_quant_feature = 1;
+            ptr->feature_scale = (QuantSpec *)mt_new_storage(sizeof(QuantSpec));
+            ptr->feature_scale[0].num_scale = 1;
+            ptr->feature_scale[0].scale = (F32 *)mt_new_storage(sizeof(F32));
+            ptr->feature_scale[0].scale[0] = -1;
+        } else {
+            return;
+        }
+
+        if (ot == OT_Embedding || ot == OT_LayerNorm) {  // only support the two ops now
+            return;
+        }
+
+        for (U32 i = 0; i < ms->ops[prevIndex].num_inputs; i++) {
+            std::string name = ms->ops[prevIndex].input_tensors_name[i];
+            label_quant_outputs(ms, name);
         }
     }
 

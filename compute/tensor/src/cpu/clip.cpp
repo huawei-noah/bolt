@@ -31,7 +31,7 @@ EE clip_cpu(
         ret = clip_general(inputDesc, input, p, outputDesc, output);
 #endif
 #ifdef _USE_X86
-    } else if (IS_X86_AVX2(arch)) {
+    } else if (IS_X86(arch)) {
         ret = clip_x86(inputDesc, input, p, outputDesc, output);
 #endif
 #ifdef _USE_NEON

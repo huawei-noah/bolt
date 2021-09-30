@@ -1,4 +1,5 @@
 # Contents
+---
 &nbsp;&nbsp;&nbsp;&nbsp;[Overview](#overview)  
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[iOS Overview](#ios-overview)  
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Android Overview](#android-overview)  
@@ -6,28 +7,29 @@
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Image Classification](#image-classification)  
 
 # Overview
-
+---
 Kit is an experimental feature based on [Flow](DEVELOPER.md), which aims to simplify the integration of bolt into applications.
 At this stage we are still rapidly exploring different designs. In the long run we want to provide symmetrical APIs for different platforms including iOS, Android, etc.
 In the [kit](../kit) directory, you can find the available demo project. In order to use the demo, bolt should be compiled first and some headers and libraries need to be installed into the project, which is also taken care of in [install.sh](../install.sh).
 
-- ## iOS Overview
+- ### iOS Overview
 
   iOS demo is using the Objective-C Language and the C++ API of Flow. Mainbody of the codes is in [ViewController.mm](../kit/iOS/ImageClassification/ImageClassification/ViewController.mm). There are some notes regarding iOS kits:
 
   - Compilation flags. The C++ API of Flow requires quite a few headers, and some compilation flags need to be set. For convenience, you can include [kit_flags.h](../kit/iOS/image_classification/ImageClassificationDemo/libbolt/headers/kit_flags.h) before including flow.h.
   - Model path in flow prototxt. Flow reads the model paths in prototxt in order to locate the models. On iOS, however, the exact storage path for model files is dynamically determined. ViewController.mm demonstrates how to update prototxt with the new model path.
 
-- ## Android Overview
+- ### Android Overview
 
-  Android demo is using the C++ API of Flow via simple JNI. Mainbody of the codes is in [native-lib.cpp](../kit/Android/ImageClassification/app/src/main/cpp/native-lib.cpp).
+  Android demo is using the C++ API of Flow via simple JNI. Mainbody of the codes is in [native-lib.cpp](../kit/Android/ImageClassification/app/src/main/cpp/native-lib.cpp) or [MainActivity.java](../kit/Android/ImageClassification/app/src/main/java/com/example/imageclassificationapp/MainActivity.java).
   
   - Compilation flags. Similar to iOS, some compilation flags are also set in [kit_flags.h](../kit/Android/ImageClassification/app/src/main/cpp/libbolt/headers/kit_flags.h).
   - GPU usage. The current project demonstrates CPU inference. We are still in the middle of refactoring the memory API, and when it completes the GPU usage will be symmetrical to CPU. To prevent careless mistakes, the project will only be set up when GPU compilation is off.
 
 # Examples
+---
 
-- ## Image Classification
+- ### Image Classification
 
   <div align=center><img src="images/ImageClassification.PNG" width = 30% height = 30% /></div>
 
@@ -69,7 +71,7 @@ In the [kit](../kit) directory, you can find the available demo project. In orde
 
         *NOTE: Android can also follow the above steps and make similar modifications.*
 
-- ## Camera Enlarge
+- ### Camera Enlarge
 
   <div align=center><img src="images/CameraEnlarge.PNG" width = 30% height = 30% /></div>
 
@@ -80,6 +82,7 @@ In the [kit](../kit) directory, you can find the available demo project. In orde
   0. Similar with Image Classification
 
   1. Similar with Image Classification
+  
   2. Adjust the pixelProcess function, which is registered as the preprocessing function for the Inference node. For FP16 inference, actual input to the model should be in FP16:
 
      ```
@@ -113,4 +116,126 @@ In the [kit](../kit) directory, you can find the available demo project. In orde
              rArr[i-2*(imgHeight*2)*(imgWidth*2)]=rgbData[i];
          }
      }
-     ``` 
+     ```
+
+- ### Semantics
+
+  <div align=center><img src="images/Semantics.PNG" width = 30% height = 30% /></div>
+
+  The demo tokenize input words, and use [tinybert](https://github.com/huawei-noah/Pretrained-Language-Model/tree/master/TinyBERT) model to do senmantic analysis.
+   
+  You can easily switch to other models trained on other datasets, following the steps below. As a tutorial, we will show how to change the model to the FP32 Tinybert that is also included in the project.
+   
+  0. Copy the path of the model file to the cache path so that the Jni method in the dynamic library can be called.
+
+     ```
+     copyAssetResource2File(MODEL, modelPath);
+     ```
+  
+  1. set the input and output names and other input parameters according to your model to initialize BoltModel.
+  
+     ```
+     int inputNum = 3;
+     int outputNum = 1;
+     String[] inputName = {"input_ids","position_ids","token_type_ids"};
+     String[] outputName = {"logit"};
+     int[] inputN = {1,1,1};
+     int[] inputCMax = {64,64,64};
+     int[] inputH = {1,1,1};
+     int[] inputW = {1,1,1};
+     DataType[] intputDataType = {DataType.INT32,DataType.INT32,DataType.INT32};
+     DataFormat[] intputDataFormat = {DataFormat.NORMAL,DataFormat.NORMAL,DataFormat.NORMAL};
+     BoltModel boltModel = new BoltModel(modelPath, AffinityType.CPU_HIGH_PERFORMANCE, inputNum, inputName, inputN,
+             inputCMax, inputH, inputW, intputDataType, intputDataFormat, outputNum, outputName);
+     ```
+  
+  2. Call the run method of the BoltModel class to obtain the output result. Tokenizers are the processed input data, and inputCActual is the actual length of the input data. Call getResultData of BoltResult class to get the analysis result, get the result array, two float data.
+  
+     ```
+     float[][] tokenizers = appTokenizer.runTokenizer(sentence);
+     int[] inputCActual = {tokenizers[0].length, tokenizers[1].length, tokenizers[2].length};
+
+     BoltResult boltResult = boltModel.run(inputNum, inputName, inputN, inputCActual, inputH,
+             inputW, intputDataType, intputDataFormat, tokenizers);
+     float[][] result = boltResult.getResultData();
+     ```
+  
+  3. Obtain the analysis result by comparing the size of the two probabilities in the result array
+  
+     ```
+     if (result[0][0]>result[0][1]) {
+        tvIntent.setText("negative");
+     } else {
+       tvIntent.setText("positive");
+     }
+     ```
+  
+- ### ChineseSpeechRecognition
+
+  <div align=center><img src="images/ChineseSpeechRecognition.PNG" width = 30% height = 30% /></div>
+
+  The demo recognizes the input Chinese speech, and uses the [ASR](https://github.com/huawei-noah/xxx) model to convert Chinese text.
+    
+  You can easily switch to other models trained on other datasets, following the steps below. As a tutorial, we will show how to change the model to the FP32 ASR that is also included in the project.
+    
+  0. Call the copyAssetAndWrite method to copy the path, and then change the path of the bin file and bolt model in the prototxt file to the copied path
+    
+  1. Import flow_asr.h in native-lib, flow_asr defines the pre- and post-processing methods and the initialization of flow and the acquisition of results,add init method and get result method in native-lib.cpp
+
+     ```
+     extern "C"
+     JNIEXPORT void JNICALL
+     Java_com_huawei_noah_MainActivity_initFlow(JNIEnv *env, jobject thiz, jstring encoder_path,
+                                                jstring predic_path, jstring joint_path,
+                                                jstring pinyin_path,jstring label_path) {
+         encoderGraphPath = env->GetStringUTFChars(encoder_path, nullptr);
+         predictionGraphPath = env->GetStringUTFChars(predic_path, nullptr);
+         jointGraphPath = env->GetStringUTFChars(joint_path, nullptr);
+         pinyin2hanziGraphPath = env->GetStringUTFChars(pinyin_path, nullptr);
+         labelFilePath = env->GetStringUTFChars(label_path, nullptr);
+
+         initASRFlow();
+     }
+
+     extern "C"
+     JNIEXPORT jstring JNICALL
+     Java_com_huawei_noah_MainActivity_runFlow(JNIEnv *env, jobject thiz, jstring wav_file_path) {
+         std::string wavFilePath = env->GetStringUTFChars(wav_file_path, nullptr);
+         std::string hanzi = runASRFlow(wavFilePath);
+         return env->NewStringUTF(hanzi.c_str());
+     }
+     ```
+    
+  2. Call Jni method  initFlow
+  
+     ```
+     initFlow(getCacheDir()+"/encoder_flow.prototxt",getCacheDir()+"/prediction_flow.prototxt",
+                    getCacheDir()+"/joint_flow.prototxt",getCacheDir()+"/pinyin2hanzi_flow.prototxt",getCacheDir()+"/asr_labels.txt");
+     
+     ```
+    
+  3. Call Jni method  runFlow Incoming audio files in wav format get result
+  
+     ```
+     runFlow(wavFileName)
+     ```
+  
+- ### FaceDetection
+
+  <div align=center><img src="images/FaceDetection.PNG" width = 30% height = 30% /></div>
+    
+  The demo detects the input picture, and outputs A photo framed a human face.
+    
+  0. bolt path get Similar with Semantics
+    
+  1. Call the getDetectionImgPath method Bitmap and model path to go directly to the detection result picture path
+  
+     ```
+     resultImgPath=boltResult.getDetectionImgPath(bitmap,boltPath);
+     ```
+    
+  2. The parameters in the prior_boxes_generator method in the jni method initBolt are fixed input parameters of the model and cannot be changed
+
+     ```
+     prior_boxes_generator(320,240,0.7,0.3);
+     ```

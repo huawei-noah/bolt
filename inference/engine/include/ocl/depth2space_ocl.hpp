@@ -20,8 +20,7 @@ class Depth2SpaceOCL : public Depth2Space {
 public:
     Depth2SpaceOCL(DataType dt, Depth2SpaceParamSpec p) : Depth2Space(dt, p)
     {
-        setMALIArchInfo(
-            &(this->archInfo), nullptr, &this->needSetKernelVec, &this->needSelectKernelLS);
+        INIT_GPU_INFO(nullptr)
     }
 
     ~Depth2SpaceOCL(){DESTROY_OCL_KERNEL}

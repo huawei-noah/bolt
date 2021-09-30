@@ -26,8 +26,8 @@
 inline void *get_ptr_from_tensor(Tensor tensor, Arch arch)
 {
     void *ptr = nullptr;
-    if (arch == MALI) {
-#ifdef _USE_MALI
+    if (IS_GPU(arch)) {
+#ifdef _USE_GPU
         ptr = ((OclMemory *)(tensor.get_memory()))->get_ptr();
 #endif
     } else {

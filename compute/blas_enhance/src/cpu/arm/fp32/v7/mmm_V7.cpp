@@ -11,9 +11,8 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <cstring>
 #include "cpu/arm/fp32/blas_fp32.h"
-#include "error.h"
+#include "thread_affinity.h"
 
 void matrix_matrix_multiply_tmp_bytes_fp32(
     U32 row1, U32 col1, U32 row2, U32 col2, DataType dt, U32 *bytes)
@@ -393,98 +392,128 @@ EE mmm_fp32_V7(
 {
     int blockK = K;
     int blockM = 96;
-    F32 *matrix1Trans = tmp;
-    F32 *resultCurrent = result;
-    int KInner, MInner, m, n;
     for (int k = 0; k < K; k += blockK) {
-        KInner = UNI_MIN(blockK, K - k);
+        int KInner = UNI_MIN(blockK, K - k);
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
+        for (int n = 0; n <= N - 6; n += 6) {
+            F32 *matrix1Trans = tmp + n * KInner;
+            if (transposeA) {
+                matrix2_trans(6, KInner, N, matrix1 + n, matrix1Trans);
+            } else {
+                matrix1_trans(6, KInner, K, matrix1 + n * K + k, matrix1Trans);
+            }
+        }
+        int n = N / 6 * 6;
+        for (; n <= N - 4; n += 4) {
+            F32 *matrix1Trans = tmp + n * KInner;
+            if (transposeA) {
+                matrix2_trans(4, KInner, N, matrix1 + n, matrix1Trans);
+            } else {
+                matrix1_trans(4, KInner, K, matrix1 + n * K + k, matrix1Trans);
+            }
+        }
+        if (N - n > 0) {
+            F32 *matrix1Trans = tmp + n * KInner;
+            if (transposeA) {
+                matrix2_trans(N - n, KInner, N, matrix1 + n, matrix1Trans);
+            } else {
+                matrix1_trans(N - n, KInner, K, matrix1 + n * K + k, matrix1Trans);
+            }
+        }
+
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
         for (int i = 0; i < M; i += blockM) {
-            MInner = UNI_MIN(blockM, M - i);
+            int MInner = UNI_MIN(blockM, M - i);
+            F32 *resultCurrent;
+            int m, n;
             for (n = 0; n <= N - 6; n += 6) {
-                if (i == 0) {
-                    if (transposeA) {
-                        matrix2_trans(6, KInner, N, matrix1 + n, matrix1Trans + n * KInner);
-                    } else {
-                        matrix1_trans(6, KInner, K, matrix1 + n * K + k, matrix1Trans + n * KInner);
-                    }
-                }
+                F32 *matrix1Trans = tmp + n * KInner;
+                //if (i == 0) {
+                //    if (transposeA) {
+                //        matrix2_trans(6, KInner, N, matrix1 + n, matrix1Trans + n * KInner);
+                //    } else {
+                //        matrix1_trans(6, KInner, K, matrix1 + n * K + k, matrix1Trans + n * KInner);
+                //    }
+                //}
                 for (m = 0; m <= (MInner - 8); m += 8) {
                     resultCurrent = result + n * M + m + i;
-                    mmm_6x8(M * 4, KInner, matrix1Trans + n * KInner, matrix2 + (i + m) * KInner,
-                        resultCurrent);
+                    mmm_6x8(M * 4, KInner, matrix1Trans, matrix2 + (i + m) * KInner, resultCurrent);
                 }
 
                 if ((MInner - m) >= 4) {
                     resultCurrent = result + n * M + m + i;
-                    mmm_6x4(M * 4, KInner, matrix1Trans + n * KInner, matrix2 + (i + m) * KInner,
-                        resultCurrent);
+                    mmm_6x4(M * 4, KInner, matrix1Trans, matrix2 + (i + m) * KInner, resultCurrent);
                     m += 4;
                 }
 
                 if (MInner - m) {
                     resultCurrent = result + n * M + m + i;
-                    mmm_N6_MTail(MInner - m, M, KInner, matrix1Trans + n * KInner,
-                        matrix2 + (i + m) * KInner, resultCurrent);
+                    mmm_N6_MTail(MInner - m, M, KInner, matrix1Trans, matrix2 + (i + m) * KInner,
+                        resultCurrent);
                 }
             }
 
             if ((N - n) >= 4) {
-                if (i == 0) {
-                    if (transposeA) {
-                        matrix2_trans(4, KInner, N, matrix1 + n, matrix1Trans + n * KInner);
-                    } else {
-                        matrix1_trans(4, KInner, K, matrix1 + n * K + k, matrix1Trans + n * KInner);
-                    }
-                }
+                F32 *matrix1Trans = tmp + n * KInner;
+                //if (i == 0) {
+                //    if (transposeA) {
+                //        matrix2_trans(4, KInner, N, matrix1 + n, matrix1Trans + n * KInner);
+                //    } else {
+                //        matrix1_trans(4, KInner, K, matrix1 + n * K + k, matrix1Trans + n * KInner);
+                //    }
+                //}
 
                 for (m = 0; m <= (MInner - 8); m += 8) {
                     resultCurrent = result + n * M + m + i;
-                    mmm_4x8(M * 4, KInner, matrix1Trans + n * KInner, matrix2 + (i + m) * KInner,
-                        resultCurrent);
+                    mmm_4x8(M * 4, KInner, matrix1Trans, matrix2 + (i + m) * KInner, resultCurrent);
                 }
 
                 if ((MInner - m) >= 4) {
                     resultCurrent = result + n * M + m + i;
-                    mmm_4x4(M * 4, KInner, matrix1Trans + n * KInner, matrix2 + (i + m) * KInner,
-                        resultCurrent);
+                    mmm_4x4(M * 4, KInner, matrix1Trans, matrix2 + (i + m) * KInner, resultCurrent);
                     m += 4;
                 }
 
                 if (MInner - m) {
                     resultCurrent = result + n * M + m + i;
-                    mmm_N4_MTail(MInner - m, M, KInner, matrix1Trans + n * KInner,
-                        matrix2 + (i + m) * KInner, resultCurrent);
+                    mmm_N4_MTail(MInner - m, M, KInner, matrix1Trans, matrix2 + (i + m) * KInner,
+                        resultCurrent);
                 }
 
                 n += 4;
             }
 
             if (N - n) {
-                if (i == 0) {
-                    if (transposeA) {
-                        matrix2_trans(N - n, KInner, N, matrix1 + n, matrix1Trans + n * KInner);
-                    } else {
-                        matrix1_trans(
-                            N - n, KInner, K, matrix1 + n * K + k, matrix1Trans + n * KInner);
-                    }
-                }
+                F32 *matrix1Trans = tmp + n * KInner;
+                //if (i == 0) {
+                //    if (transposeA) {
+                //        matrix2_trans(N - n, KInner, N, matrix1 + n, matrix1Trans + n * KInner);
+                //    } else {
+                //        matrix1_trans(
+                //            N - n, KInner, K, matrix1 + n * K + k, matrix1Trans + n * KInner);
+                //    }
+                //}
 
                 for (m = 0; m <= (MInner - 8); m += 8) {
                     resultCurrent = result + n * M + m + i;
-                    mmm_NTail_M8(M, N - n, KInner, matrix1Trans + n * KInner,
-                        matrix2 + (i + m) * KInner, resultCurrent);
+                    mmm_NTail_M8(
+                        M, N - n, KInner, matrix1Trans, matrix2 + (i + m) * KInner, resultCurrent);
                 }
 
                 if ((MInner - m) >= 4) {
                     resultCurrent = result + n * M + m + i;
-                    mmm_NTail_M4(M, N - n, KInner, matrix1Trans + n * KInner,
-                        matrix2 + (i + m) * KInner, resultCurrent);
+                    mmm_NTail_M4(
+                        M, N - n, KInner, matrix1Trans, matrix2 + (i + m) * KInner, resultCurrent);
                     m += 4;
                 }
 
                 if (MInner - m) {
                     resultCurrent = result + n * M + m + i;
-                    mmm_NTail_M(MInner - m, M, N - n, KInner, matrix1Trans + n * KInner,
+                    mmm_NTail_M(MInner - m, M, N - n, KInner, matrix1Trans,
                         matrix2 + (i + m) * KInner, resultCurrent);
                 }
             }

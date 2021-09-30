@@ -23,7 +23,7 @@ int main()
     handle->kernelVec = &kernelVec;
     U32 iw, ih, it, ic, in;
     U32 fw, fh, ft, fc, fn;
-    U32 pl, pr, pt, pb, pf, pd;
+    U32 pl, pr, pt, pb, pf, pa;
     U32 sw, sh, st;
     U32 ow, oh, ot, oc, on;
 
@@ -44,7 +44,7 @@ int main()
     pt = 1;
     pb = 1;
     pf = 0;
-    pd = 0;
+    pa = 0;
 
     sw = 1;
     sh = 1;
@@ -52,17 +52,17 @@ int main()
 
     ow = (iw + pl + pr - fw) / sw + 1;
     oh = (ih + pt + pb - fh) / sh + 1;
-    ot = (it + pf + pd - ft) / st + 1;
+    ot = (it + pf + pa - ft) / st + 1;
     oc = fn;
     on = in;
 
-    TensorDesc inputDesc = tensor5df(DT_F16, DF_NCHW, in, ic, it, ih, iw);
+    TensorDesc inputDesc = tensor5df(DT_F16, DF_NCHWC4, in, ic, it, ih, iw);
     TensorDesc filterDesc = tensor5df(DT_F16, DF_NCHW, fn, fc, ft, fh, fw);
     TensorDesc biasDesc = tensor1d(DT_F16, fn);
-    TensorDesc outputDesc = tensor5df(DT_F16, DF_NCHW, on, oc, ot, oh, ow);
+    TensorDesc outputDesc = tensor5df(DT_F16, DF_NCHWC4, on, oc, ot, oh, ow);
     Tensor inputTensor = Tensor(OCLMem);
     Tensor filterTensor = Tensor(OCLMem);
-    Tensor biasTensor = Tensor(OCLMem);
+    Tensor biasTensor = Tensor(OCLMemImg1D);
     Tensor outputTensor = Tensor(OCLMem);
 
     inputTensor.resize(inputDesc);
@@ -74,75 +74,46 @@ int main()
     U32 offset[3] = {0, 0, 0};
 
     /*input*/
-    GCLMemDesc inputGclDesc = gclmem_build_desc();
     U32 iw_align = ow;
+    U32 in_align = (in + 3) / 4 * 4;
     for (U32 i = 0; i < 8; i++) {
         U32 j = (ow + i - 1) / i * i;
         if (j > iw_align)
             iw_align = j;
     }
     iw_align = iw_align * sw;
-    stride[0] = iw_align + pl + pr;
-    stride[1] = ih + pt + pb;
-    stride[2] = (ic + 3) / 4 * it * ((in + 3) / 4 * 4);
-    offset[0] = pl;
-    offset[1] = pt;
-    offset[2] = 0;
-    gclmem_set_desc_padding(
-        &inputGclDesc, stride, offset, DT_F16, DF_NCWHC4, GCL_MEM_BUF, CL_MEM_READ_WRITE);
+    pr = iw_align + fw / 2 - pl - iw;
+    pa = (in_align - in) * ((ic + 3) / 4) * it;
     auto gclmem = (OclMemory *)inputTensor.get_memory();
-    gclmem->padding(inputGclDesc);
+    gclmem->padding(pl, pr, pt, pb, pf, pa);
     gclmem->alloc();
 
     /*filter*/
-    GCLMemDesc filterGclDesc = gclmem_build_desc();
-    stride[0] = fw * fh * ft;
-    stride[1] = fc;
-    stride[2] = (fn + 3) / 4;
-    offset[0] = 0;
-    offset[1] = 0;
-    offset[2] = 0;
-    gclmem_set_desc_padding(
-        &filterGclDesc, stride, offset, DT_F16, DF_NCWHC4, GCL_MEM_BUF, CL_MEM_READ_WRITE);
+    pa = ((fn + 3) / 4 * 4 - fn) * fc * ft;
     gclmem = (OclMemory *)filterTensor.get_memory();
-    gclmem->padding(filterGclDesc);
+    gclmem->padding(0, 0, 0, 0, 0, pa);
     gclmem->alloc();
 
     /*bias*/
-    GCLMemDesc biasGclDesc = gclmem_build_desc();
-    stride[0] = (fn + 3) / 4;
-    stride[1] = 1;
-    stride[2] = 1;
-    offset[0] = 0;
-    offset[1] = 0;
-    offset[2] = 0;
-    gclmem_set_desc_padding(
-        &biasGclDesc, stride, offset, DT_F16, DF_NHWC, GCL_MEM_IMG_1D, CL_MEM_READ_WRITE);
     gclmem = (OclMemory *)biasTensor.get_memory();
-    gclmem->padding(biasGclDesc);
     gclmem->alloc();
-
-    GCLMemDesc outputGclDesc = gclmem_build_desc();
-    stride[0] = oh;
-    stride[1] = ow;
-    stride[2] = (oc + 3) / 4 * ot * on;
-    offset[0] = 0;
-    offset[1] = 0;
-    offset[2] = 0;
-    gclmem_set_desc_padding(
-        &outputGclDesc, stride, offset, DT_F16, DF_NCWHC4, GCL_MEM_BUF, CL_MEM_READ_WRITE);
     gclmem = (OclMemory *)outputTensor.get_memory();
-    gclmem->padding(outputGclDesc);
     gclmem->alloc();
 
     gclmem = (OclMemory *)inputTensor.get_memory();
+    GCLMemDesc inputGclDesc = gclmem->get_desc();
     GCLMem_t input = (GCLMem_t)gclmem->get_ptr();
+
     gclmem = (OclMemory *)filterTensor.get_memory();
     GCLMem_t flt = (GCLMem_t)gclmem->get_ptr();
+
     gclmem = (OclMemory *)biasTensor.get_memory();
     GCLMem_t bias = (GCLMem_t)gclmem->get_ptr();
+
     gclmem = (OclMemory *)outputTensor.get_memory();
+    GCLMemDesc outputGclDesc = gclmem->get_desc();
     GCLMem_t output = (GCLMem_t)gclmem->get_ptr();
+
     U32 iw_str, ih_str, iw_off, ih_off, iwh_str, ic_str;
     U32 ow_str, oh_str, oh_off, ow_off, owh_str, oc_str;
     U32 in_str, on_str;

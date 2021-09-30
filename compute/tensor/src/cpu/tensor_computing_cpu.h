@@ -18,6 +18,7 @@
 #include "sys.h"
 #include "tensor_desc.h"
 #include "parameter_spec.h"
+#include "tensor_transpose.h"
 
 EE rnn_transform_filter_cpu(const TensorDesc *filterDescs,
     const void **filterArray,
@@ -76,6 +77,7 @@ EE embedding_cpu(TensorDesc inputDesc,
     void *input,
     void *weight,
     EmbedParamSpec p,
+    TensorDesc weightDesc,
     TensorDesc outputDesc,
     void *output);
 
@@ -111,7 +113,7 @@ EE eltwise_cpu(std::vector<TensorDesc> inputDesc,
 
 EE roialign_cpu(std::vector<TensorDesc> inputDesc,
     std::vector<void *> input,
-    RoiAlignParamSpec roiAlignParamSpec,
+    RoIAlignParamSpec roiAlignParamSpec,
     TensorDesc outputDesc,
     void *output);
 
@@ -239,7 +241,7 @@ EE convolution_cpu(TensorDesc inputDesc,
     ConvolutionParamSpec convParamSpec,
     ConvolutionForwardAlgorithm algorithm,
     TensorDesc scaleDesc,
-    const void *scale,
+    void *scale,
     TensorDesc biasDesc,
     const void *bias,
     U32 tmpBytes,
@@ -286,4 +288,66 @@ EE yolov3detectionoutput_cpu(std::vector<TensorDesc> inputDesc,
 EE argmax_cpu(
     TensorDesc inputDesc, const void *input, ArgMaxParamSpec p, TensorDesc outputDesc, void *output);
 
+EE quantize_cpu(
+    TensorDesc dDesc, const void *data, TensorDesc *qDesc, void *qData, F32 *scale, Arch arch);
+
+EE scatter_cpu(TensorDesc dataDesc,
+    const void *data,
+    TensorDesc indexDesc,
+    const void *index,
+    TensorDesc updateDesc,
+    const void *update,
+    ScatterParamSpec p,
+    void *tmp,
+    TensorDesc outputDesc,
+    void *output);
+
+EE gather_cpu(TensorDesc dataDesc,
+    const void *data,
+    TensorDesc indexDesc,
+    const void *index,
+    GatherParamSpec p,
+    void *tmp,
+    TensorDesc outputDesc,
+    void *output);
+
+EE instance_norm_infer_forward_tmp_bytes_cpu(
+    TensorDesc inputDesc, InstanceNormParamSpec p, U32 *bytes);
+
+EE instance_norm_cpu(TensorDesc inputDesc,
+    void *input,
+    void *tmp,
+    void *scale,
+    void *bias,
+    InstanceNormParamSpec p,
+    void *output,
+    Arch arch);
+
+EE topk_cpu(TensorDesc inputDesc,
+    void *input,
+    TopKParamSpec p,
+    void *tmp,
+    TensorDesc outputDesc,
+    void *output,
+    TensorDesc indexDesc,
+    void *index);
+
+EE gat_infer_output_size_cpu(TensorDesc node_feature_desc, GATParamSpec p, TensorDesc *outputDesc);
+
+EE gat_infer_forward_tmp_bytes_cpu(
+    TensorDesc node_feature_desc, TensorDesc edge_feature_desc, GATParamSpec p, U32 *bytes);
+
+EE gat_cpu(TensorDesc node_feature_desc,
+    TensorDesc node_desc,
+    TensorDesc edge_feature_desc,
+    void *node_features0,
+    void *nodes0,
+    void *node_features1,
+    void *nodes1,
+    void *edge_feature,
+    GATParamSpec p,
+    void *tmp,
+    TensorDesc outputDesc,
+    void *output,
+    Arch arch);
 #endif

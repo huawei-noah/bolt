@@ -110,7 +110,7 @@ std::vector<std::string> load_image_with_scale(std::string directoryPath,
         } else if (string_end_with(dataPath, ".txt")) {
             data = load_txt(dataPath, dataDesc);
         } else {
-            UNI_ERROR_LOG("can not load jpeg data %s\n", dataPath.c_str());
+            UNI_ERROR_LOG("can not load image data %s.\n", dataPath.c_str());
         }
         (*datas).push_back(data);
         dataPaths.push_back(dataPath);
@@ -122,11 +122,11 @@ std::vector<std::string> load_image_with_scale(std::string directoryPath,
 void get_files(std::string directoryName, std::vector<std::string> &files)
 {
     if (directoryName.empty()) {
-        UNI_ERROR_LOG("null data\n");
+        UNI_ERROR_LOG("directory name is null.\n");
     }
     DIR *directory = opendir(directoryName.c_str());
     if (NULL == directory) {
-        UNI_ERROR_LOG("permission denied to access %s\n", directoryName.c_str());
+        UNI_ERROR_LOG("permission denied to access directory %s\n", directoryName.c_str());
     }
     struct dirent *file;
     while ((file = readdir(directory)) != NULL) {
@@ -136,6 +136,8 @@ void get_files(std::string directoryName, std::vector<std::string> &files)
         struct stat st;
         stat(file->d_name, &st);
         if (S_ISDIR(st.st_mode)) {
+            UNI_INFO_LOG(
+                "search skip subdirectory %s in %s.\n", file->d_name, directoryName.c_str());
             continue;
         } else {
             files.push_back(directoryName + "/" + file->d_name);
@@ -170,16 +172,20 @@ Tensor fscanfReadData(FILE *f, TensorDesc desc)
         }
 #endif
         case DT_U32: {
+            F32 value = 0;
             U32 *dataPtr = (U32 *)ptr;
             for (U32 i = 0; i < size; i++) {
-                fscanf(f, "%u", dataPtr + i);
+                fscanf(f, "%f", &value);
+                dataPtr[i] = value;
             }
             break;
         }
         case DT_I32: {
+            F32 value = 0;
             I32 *dataPtr = (I32 *)ptr;
             for (U32 i = 0; i < size; i++) {
-                fscanf(f, "%d", dataPtr + i);
+                fscanf(f, "%f", &value);
+                dataPtr[i] = value;
             }
             break;
         }
@@ -302,7 +308,7 @@ std::vector<std::string> load_data(std::string directoryPath,
         } else if (string_end_with(dataPath, ".seq")) {
             data = load_seq(dataPath, dataDesc);
         } else {
-            UNI_ERROR_LOG("can not load data %s\n", dataPath.c_str());
+            UNI_ERROR_LOG("can not load data %s.\n", dataPath.c_str());
         }
         (*datas).push_back(data);
         dataPaths.push_back(dataPath);

@@ -15,6 +15,9 @@
 #define _MEMORY_TRACKER_H
 
 #include "tensor_desc.h"
+#ifdef _USE_GPU
+#include "image_manager.hpp"
+#endif
 
 class MemoryTracker {
 public:
@@ -33,32 +36,22 @@ public:
         size_t numInput = inputTensors.size();
         size_t numOutput = outputTensors.size();
         for (size_t i = 0; i < numInput; i++) {
-            U32 size = inputTensors[i].bytes();
             I32 slot = pos[i];
             this->tensorStoragePosition[tensorNames[i]] = slot;
-            if (-1 == slot) {
-                if (!memoryNeedAssign) {
-                    if (size > inputTensors[i].capacity()) {
-                        this->memoryNeedAssign = true;
-                    }
-                }
+            if (slot < 0) {
+                this->trackSingleTensor(inputTensors[i]);
                 continue;
             }
-            this->trackSlotSize(slot, size);
+            this->trackSlotSize(slot, inputTensors[i]);
         }
         for (size_t i = 0; i < numOutput; i++) {
-            U32 size = outputTensors[i].bytes();
             I32 slot = pos[numInput + i];
             this->tensorStoragePosition[tensorNames[numInput + i]] = slot;
-            if (-1 == slot) {
-                if (!memoryNeedAssign) {
-                    if (size > outputTensors[i].capacity()) {
-                        this->memoryNeedAssign = true;
-                    }
-                }
+            if (slot < 0) {
+                this->trackSingleTensor(outputTensors[i]);
                 continue;
             }
-            this->trackSlotSize(slot, size);
+            this->trackSlotSize(slot, outputTensors[i]);
         }
     }
 
@@ -69,7 +62,11 @@ public:
 
     U32 getNumSlots()
     {
-        return this->storageSize.size();
+        U32 size = storageSize.size();
+#ifdef _USE_MALI
+        size += imageManager.getNumImageVecs();
+#endif
+        return size;
     }
 
     U32 getSizeSum()
@@ -78,6 +75,9 @@ public:
         for (U32 size : this->storageSize) {
             sum += size;
         }
+#ifdef _USE_GPU
+        sum += imageManager.getImageVecsSizeSum();
+#endif
         return sum;
     }
 
@@ -85,6 +85,22 @@ public:
     {
         return this->storageSize;
     }
+
+#ifdef _USE_GPU
+    std::map<I32, std::vector<std::vector<U32>>> getOclImageSize()
+    {
+        return imageManager.getImageVecs();
+    }
+
+    I32 getOclImageSubSlotId(U32 slot, U32 *str)
+    {
+        I32 subSlot = imageManager.getImageVecsId(slot, str[0], str[1], str[2]);
+        if (subSlot < 0) {
+            CHECK_STATUS(NOT_MATCH);
+        }
+        return subSlot;
+    }
+#endif
 
     void setMemoryAssigned()
     {
@@ -97,7 +113,47 @@ public:
     }
 
 protected:
-    void trackSlotSize(I32 slot, U32 size)
+    void trackSingleTensor(Tensor tensor)
+    {
+        if (!memoryNeedAssign) {
+            Memory *mem = tensor.get_memory();
+            if (mem->get_mem_type() == OCLMem || mem->get_mem_type() == CPUMem) {
+                checkSingleMem(mem);
+            } else {
+#ifdef _USE_GPU
+                checkSingleImg((OclMemoryImg *)mem);
+#endif
+            }
+        }
+    }
+
+    void trackSlotSize(I32 slot, Tensor tensor)
+    {
+        Memory *mem = tensor.get_memory();
+        if (mem->get_mem_type() == OCLMem || mem->get_mem_type() == CPUMem) {
+            U32 size = mem->bytes();
+            buildStorageSize(slot, size);
+        } else {
+#ifdef _USE_GPU
+            U32 str[3];
+            OclMemoryImg *img = (OclMemoryImg *)mem;
+            img->stride(str);
+            buildOclImageSize(slot, str);
+#endif
+        }
+    }
+
+    void checkSingleMem(Memory *mem)
+    {
+        U32 size = mem->bytes();
+        U32 capacity;
+        mem->capacity(&capacity);
+        if (size > capacity) {
+            this->memoryNeedAssign = true;
+        }
+    }
+
+    void buildStorageSize(I32 slot, U32 size)
     {
         if (slot >= (I32)this->storageSize.size()) {
             this->storageSize.resize(slot + 1, 0);
@@ -108,8 +164,32 @@ protected:
         }
     }
 
+#ifdef _USE_GPU
+    void checkSingleImg(OclMemoryImg *img)
+    {
+        U32 str[3];
+        U32 capacity[3];
+        img->stride(str);
+        img->capacity(capacity);
+        if (str[0] > capacity[0] || str[1] > capacity[1] || str[2] > capacity[2]) {
+            this->memoryNeedAssign = true;
+        }
+    }
+
+    void buildOclImageSize(I32 slot, U32 *size)
+    {
+        bool needExpand = imageManager.buildImageVecs(slot, size[0], size[1], size[2]);
+        if (!this->memoryNeedAssign) {
+            this->memoryNeedAssign = needExpand;
+        }
+    }
+#endif
+
     std::vector<U32> storageSize;
     std::map<std::string, I32> tensorStoragePosition;
     bool memoryNeedAssign;
+#ifdef _USE_GPU
+    ImageManager imageManager;
+#endif
 };
 #endif

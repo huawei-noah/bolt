@@ -13,7 +13,6 @@
 
 #include "tensor_computing.h"
 #include "ut_util.h"
-#include <typeinfo>
 
 int priorboxTest(int argc, char **argv, DataType dt)
 {
@@ -54,10 +53,6 @@ int priorboxTest(int argc, char **argv, DataType dt)
         min_size1 = (F32)atof(argv[18]);
         max_size1 = (F32)atof(argv[19]);
     }
-    ArchInfo archInfo;
-    archInfo.arch = UT_ARCH;
-    ArchInfo archInfo_org;
-    archInfo_org.arch = CPU_GENERAL;
 
     CHECK_REQUIREMENT(in0 == 1 && in1 == 1 && on == 1 && oc == 2);
 
@@ -110,7 +105,7 @@ int priorboxTest(int argc, char **argv, DataType dt)
     // set output
     Tensor outputTensor, outputTensorRef;
     CHECK_STATUS(
-        priorbox_infer_output_size(inputTensorPtrs, priorbox_desc, &outputTensor, &archInfo));
+        priorbox_infer_output_size(inputTensorPtrs, priorbox_desc, &outputTensor, &UT_CPU_ARCHINFO));
     outputTensor.alloc();
     TensorDesc outputDesc_ref = outputTensor.get_desc();
     outputTensorRef.resize(outputDesc_ref);
@@ -120,18 +115,19 @@ int priorboxTest(int argc, char **argv, DataType dt)
         input_len_data == in1 * ic1 * ih1 * iw1 && output_len == on * oc * olens);
 
     if (UT_CHECK) {
-        CHECK_STATUS(priorbox(inputTensors, priorbox_desc, outputTensor, &archInfo));
+        CHECK_STATUS(priorbox(inputTensors, priorbox_desc, outputTensor, &UT_CPU_ARCHINFO));
 
-        CHECK_STATUS(priorbox(inputTensors, priorbox_desc, outputTensorRef, &archInfo_org));
+        CHECK_STATUS(priorbox(inputTensors, priorbox_desc, outputTensorRef, &UT_SERIAL_ARCHINFO));
         // check
-        ut_check_v(get_ptr_from_tensor(outputTensor, UT_ARCH),
-            get_ptr_from_tensor(outputTensorRef, UT_ARCH), output_len, dt, 0.05, __FILE__, __LINE__);
+        ut_check_v(get_ptr_from_tensor(outputTensor, CPU_GENERAL),
+            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), output_len, dt, 0.05, __FILE__,
+            __LINE__);
     }
 
     // benchmark
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        CHECK_STATUS(priorbox(inputTensors, priorbox_desc, outputTensor, &archInfo));
+        CHECK_STATUS(priorbox(inputTensors, priorbox_desc, outputTensor, &UT_CPU_ARCHINFO));
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;

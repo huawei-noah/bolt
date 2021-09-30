@@ -22,7 +22,8 @@ EE caffe_converter(std::string dir, std::string mfn, ModelSpec *ms);
 #endif
 
 #ifdef _USE_ONNX
-EE onnx_converter(std::string dir, std::string mfn, int removePreprocessOpNum, ModelSpec *ms);
+EE onnx_converter(
+    std::string dir, std::string mfn, int removePreprocessOpNum, bool useBNN, ModelSpec *ms);
 #endif
 
 #ifdef _USE_TFLITE

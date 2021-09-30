@@ -13,7 +13,6 @@
 
 #ifndef _H_CAFFEADAPTEE
 #define _H_CAFFEADAPTEE
-
 #include <string>
 #include <fstream>
 #include <map>
@@ -332,8 +331,14 @@ protected:
         int inputsNumber = 0;
         weightNumber = 0;  // set global variable initial value
         std::map<std::string, int> outputCounts;
+        std::set<std::string> sharedWeightCounts;
         for (int i = 0; i < proto.input_size(); i++) {
             outputCounts[proto.input(i).c_str()] = 1;
+        }
+        for (int i = 0; i < proto.layer_size(); i++) {
+            if (proto.layer(i).type() == "SharedWeight") {
+                sharedWeightCounts.insert(proto.layer(i).top(0));
+            }
         }
         for (int i = 0; i < proto.layer_size(); i++) {
             const caffe::LayerParameter curLayer = proto.layer(i);
@@ -378,6 +383,9 @@ protected:
             }
 
             CHECK_STATUS(adapt_operator(opsPtr[i].type, &(ms->ops[i].ps)));
+            if (opsPtr[i].type == OT_MatMul && sharedWeightCounts.count(layer.bottom(1))) {
+                weightNumber += 1;
+            }
         }
 
         inputsNumber = (inputsNumber > proto.input_size()) ? inputsNumber : proto.input_size();
@@ -386,6 +394,7 @@ protected:
         ms->input_dims = (TensorDesc *)mt_new_storage(sizeof(TensorDesc) * inputsNumber);
         for (int i = 0; i < inputsNumber; i++) {
             ms->input_names[i] = (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
+            ms->input_dims[i] = tensor0d();
             if (proto.input_size() > 0) {
                 str_copy(ms->input_names[i], proto.input(i).c_str(), proto.input(i).length());
                 ms->input_dims[i].nDims = proto.input_dim_size();
@@ -402,9 +411,6 @@ protected:
                 }
             }
             ms->input_dims[i].dt = DT_F32;
-            if (ms->input_dims[i].nDims == 2) {
-                ms->input_dims[i].dt = DT_U32;
-            }
             ms->input_dims[i].df = getTensorDefaultDataFormat(ms->input_dims[i].nDims);
         }
 
@@ -448,6 +454,13 @@ protected:
         int inNamesIndex = 0;
         int weightIndex = 0;
 
+        std::set<std::string> sharedWeightCounts;
+        for (int i = 0; i < proto.layer_size(); i++) {
+            if (proto.layer(i).type() == "SharedWeight") {
+                sharedWeightCounts.insert(proto.layer(i).top(0));
+            }
+        }
+
         for (int i = 0; i < proto.layer_size(); i++) {
             this->layer = proto.layer(i);
             std::string layerName = layer.name();
@@ -462,9 +475,6 @@ protected:
                 str_copy(ms->input_names[inNamesIndex], dataName.c_str(), dataName.length());
                 ms->input_dims[inNamesIndex].nDims = layer.input_param().shape(0).dim_size();
                 ms->input_dims[inNamesIndex].dt = DT_F32;
-                if (ms->input_dims[inNamesIndex].nDims == 2) {
-                    ms->input_dims[inNamesIndex].dt = DT_U32;
-                }
                 ms->input_dims[inNamesIndex].df =
                     getTensorDefaultDataFormat(ms->input_dims[inNamesIndex].nDims);
                 for (U32 j = 0; j < ms->input_dims[inNamesIndex].nDims; j++) {
@@ -503,6 +513,12 @@ protected:
                 }
                 net_copy_blob(
                     wsPtr, weightIndex, net, netLayerId, blobNum, convert_caffe_type(layerType));
+                weightIndex++;
+            } else if (layerType == "MatMul" && sharedWeightCounts.count(layer.bottom(1))) {
+                int netLayerId = net_search_layerId(net, layerName);
+                CHECK_REQUIREMENT(netLayerId >= 0);
+                str_copy(wsPtr[weightIndex].op_name, layerName.c_str(), layerName.length());
+                net_copy_blob(wsPtr, weightIndex, net, netLayerId, 0, convert_caffe_type(layerType));
                 weightIndex++;
             }
         }
@@ -914,8 +930,12 @@ protected:
         memset(&curPs, 0, sizeof(curPs));
         TileParamSpec tilePS;
         auto caffeTileParam = layer.tile_param();
-        tilePS.repeatsInfo[0] = caffeTileParam.tiles();
+        for (int i = 0; i < 8; ++i) {
+            tilePS.repeatsInfo[i] = 1;
+        }
+        tilePS.dimsSize = 1;
         tilePS.axis = caffeTileParam.axis();
+        tilePS.repeatsInfo[0] = caffeTileParam.tiles();
         curPs.tile_spec = tilePS;
         return curPs;
     }
@@ -1426,7 +1446,7 @@ protected:
         memset(&curPs, 0, sizeof(curPs));
         ReLUParamSpec reluSpec;
         memset(&reluSpec, 0, sizeof(reluSpec));
-        reluSpec.neg_slope = 0.0;
+        reluSpec.neg_slope = layer.relu_param().negative_slope();
         curPs.relu_spec = reluSpec;
         return curPs;
     }

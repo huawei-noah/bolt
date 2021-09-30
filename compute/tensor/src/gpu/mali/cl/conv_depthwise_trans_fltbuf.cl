@@ -62,12 +62,16 @@
     }
 #endif
 
-__kernel void MANGLE_NAME(conv_depthwise_trans_fltbuf_, K)(
-    const fwh, const fn, __global const T *fltdata, __global T *fltbuf)
+__kernel void MANGLE_NAME(conv_depthwise_trans_fltbuf_, K)(const int fw,
+    const int fh,
+    const int fwh,
+    const int fn,
+    __global const T *fltdata,
+    __global T *fltbuf)
 {
-    const int idx = get_global_id(0);
-    const int idy = get_global_id(1);
-    const int flt_off = idy * K * fwh + idx;
+    int idx = get_global_id(0);
+    int idy = get_global_id(1);
+    int flt_off = idy * K * fwh + idx;
     int ek = ((idy + 1) * K <= fn) ? K : (fn % K);
 #if (K == 4)
     T4 val = 0;
@@ -79,6 +83,9 @@ __kernel void MANGLE_NAME(conv_depthwise_trans_fltbuf_, K)(
     } else {
         loadFltvalEdge(flt_off, fwh, fltdata, val, ek);
     }
+    char idx_w = idx % fw;
+    char idx_h = idx / fw;
+    idx = idx_w * fh + idx_h;
     const int out_off = idy * fwh + idx;
 #if (K == 4)
     vstore4(val, out_off, fltbuf);

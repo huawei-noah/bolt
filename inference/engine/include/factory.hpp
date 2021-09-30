@@ -79,6 +79,8 @@ public:
 
     virtual std::shared_ptr<Operator> createSoftmax(DataType dt, SoftmaxParamSpec p) = 0;
 
+    virtual std::shared_ptr<Operator> createLogSoftmax(DataType dt, SoftmaxParamSpec p) = 0;
+
     virtual std::shared_ptr<Operator> createConcat(ConcatParamSpec p) = 0;
 
     virtual std::shared_ptr<Operator> createActivation(ActivationParamSpec activationDesc) = 0;
@@ -139,7 +141,7 @@ public:
     virtual std::shared_ptr<Operator> createJump(
         DataType dt, I32 jumpOperatorIndex, I32 currentOperatorIndex) = 0;
 
-    virtual std::shared_ptr<Operator> createSpace2Depth(DataType dt) = 0;
+    virtual std::shared_ptr<Operator> createSpace2Depth(DataType dt, Space2DepthParamSpec p) = 0;
 
     virtual std::shared_ptr<Operator> createDepth2Space(DataType dt, Depth2SpaceParamSpec p) = 0;
 
@@ -184,7 +186,35 @@ public:
 
     virtual std::shared_ptr<Operator> createCast(DataType dt, CastParamSpec p) = 0;
 
-    virtual std::shared_ptr<Operator> createEqual(DataType dt) = 0;
+    virtual std::shared_ptr<Operator> createEqual(DataType dt, EqualParamSpec p) = 0;
+
+    virtual std::shared_ptr<Operator> createExpand(DataType dt, ExpandParamSpec p) = 0;
+
+    virtual std::shared_ptr<Operator> createScatter(DataType dt, ScatterParamSpec p) = 0;
+
+    virtual std::shared_ptr<Operator> createGather(DataType dt, GatherParamSpec p) = 0;
+
+    virtual std::shared_ptr<Operator> createSelect(DataType dt) = 0;
+
+    virtual std::shared_ptr<Operator> createInstanceNorm(DataType dt, InstanceNormParamSpec p) = 0;
+
+    virtual std::shared_ptr<Operator> createRoIAlign(RoIAlignParamSpec p) = 0;
+
+    virtual std::shared_ptr<Operator> createGenerateProposals(
+        DataType dt, GenerateProposalsParamSpec p) = 0;
+
+    virtual std::shared_ptr<Operator> createGAT(DataType dt, GATParamSpec p) = 0;
+
+    DataType get_float_precision(DataType dt)
+    {
+        DataType ret = dt;
+        if (dt == DT_F16_8Q) {
+            ret = DT_F16;
+        } else if (dt == DT_F32_8Q) {
+            ret = DT_F32;
+        }
+        return ret;
+    }
 
     std::shared_ptr<Operator> createOperators(OperatorSpec curOps,
         DataType dt,
@@ -194,8 +224,26 @@ public:
         std::vector<std::string> &outputTensorsName,
         std::set<std::string> *weightOpOutputNames)
     {
+        if (dt == DT_F32 || dt == DT_F32_8Q) {
+#ifndef _USE_FP32
+            UNI_ERROR_LOG("this library not support to inference float32/int8+float32, please "
+                          "recompile with --fp32=on.\n");
+#endif
+        }
+        if (dt == DT_F16 || dt == DT_F16_8Q) {
+#ifndef _USE_FP16
+            UNI_ERROR_LOG("this library not support to inference float16/int8+float16, please "
+                          "recompile with --fp16=on. Only Armv8.2+ cpu and gpu support.\n");
+#endif
+        }
+        if (dt == DT_F32_8Q || dt == DT_F16_8Q) {
+#ifndef _USE_INT8
+            UNI_ERROR_LOG("this library not support to inference int8, please recompile with "
+                          "--int8=on. Only Armv7+ and x86 AVX512-VNNI cpu support.\n");
+#endif
+        }
         OperatorType opType = curOps.type;
-        DataType dtNoQ = (dt == DT_F16_8Q) ? DT_F16 : dt;
+        DataType dtNoQ = get_float_precision(dt);
         std::string opName = curOps.name;
         std::shared_ptr<Operator> op;
         auto curPs = curOps.ps;
@@ -227,6 +275,10 @@ public:
             }
             case OT_Softmax: {
                 op = createSoftmax(dtNoQ, curPs.softmax_spec);
+                break;
+            }
+            case OT_LogSoftmax: {
+                op = createLogSoftmax(dtNoQ, curPs.softmax_spec);
                 break;
             }
             case OT_Relu: {
@@ -408,7 +460,7 @@ public:
                 break;
             }
             case OT_Space2Depth: {
-                op = createSpace2Depth(dt);
+                op = createSpace2Depth(dt, curPs.space2depth_spec);
                 break;
             }
             case OT_Depth2Space: {
@@ -510,13 +562,63 @@ public:
                 break;
             }
             case OT_Equal: {
-                op = createEqual(dt);
+                op = createEqual(dt, curPs.equal_spec);
                 break;
             }
             case OT_Sign: {
                 ActivationParamSpec activationDesc;
                 activationDesc.mode = ACTIVATION_SIGN;
                 op = createActivation(activationDesc);
+                break;
+            }
+            case OT_InstanceNorm: {
+                op = createInstanceNorm(dt, curPs.in_spec);
+                break;
+            }
+            case OT_Expand: {
+                op = createExpand(dt, curPs.expand_spec);
+                break;
+            }
+            case OT_Scatter: {
+                op = createScatter(dt, curPs.scatter_spec);
+                break;
+            }
+            case OT_Gather: {
+                op = createGather(dt, curPs.gather_spec);
+                break;
+            }
+            case OT_Select: {
+                op = createSelect(dt);
+                break;
+            }
+            case OT_Not: {
+                ActivationParamSpec activationDesc;
+                activationDesc.mode = ACTIVATION_NOT;
+                op = createActivation(activationDesc);
+                break;
+            }
+            case OT_Log: {
+                ActivationParamSpec activationDesc;
+                activationDesc.mode = ACTIVATION_LOG;
+                op = createActivation(activationDesc);
+                break;
+            }
+            case OT_Neg: {
+                ActivationParamSpec activationDesc;
+                activationDesc.mode = ACTIVATION_NEG;
+                op = createActivation(activationDesc);
+                break;
+            }
+            case OT_GAT: {
+                op = createGAT(dt, curPs.gat_spec);
+                break;
+            }
+            case OT_RoIAlign: {
+                op = createRoIAlign(curPs.roialign_spec);
+                break;
+            }
+            case OT_GenerateProposals: {
+                op = createGenerateProposals(dt, curPs.generate_proposals_spec);
                 break;
             }
             default: {

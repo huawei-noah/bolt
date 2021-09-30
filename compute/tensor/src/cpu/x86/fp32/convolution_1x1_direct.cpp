@@ -15,32 +15,29 @@
 #include "error.h"
 
 #include "cpu/x86/fp32/tensor_computing_fp32.h"
+#include "cpu/x86/fp32/convolution_functions.h"
 
-#define UNROLL_HW 4
-#define SIMDW 8
-#define UNROLL_OC 24
-#define UNROLL_IC_BLOCK_DIM 8
 #define BLOCK_IC_DIM 128
-#define BLOCK_OC_DIM 96
+#define BLOCK_OC_DIM 128
 #define BLOCK_HW_DIM 768
 
-typedef void (*kernel_func)(F32 *curI,
+typedef void (*kernelFunc)(F32 *curI,
     const F32 *curW,
     F32 *curO,
     const F32 *curB,
     F32 *curE,
     U32 oStep,
-    U32 store,
+    U32 flags,
     U32 ic,
     U32 fStep);
 
-inline void avx2_pointwise_kernel_3x32(F32 *curI,
+inline void Avx2PointwiseKernel3x32(F32 *curI,
     const F32 *curW,
     F32 *curO,
     const F32 *curB,
     F32 *curE,
     U32 oStep,
-    U32 store,
+    U32 flags,
     U32 ic,
     U32 fStep)
 {
@@ -321,20 +318,20 @@ inline void avx2_pointwise_kernel_3x32(F32 *curI,
                          "vmovups %%ymm10, 0x20(%2)                  \n\t"
                          "vmovups %%ymm11, 0x40(%2)                  \n\t"
                          :
-                         : "r"(curW), "r"(curI), "r"(curO), "r"(curB), "r"(I64(oStep)), "r"(store),
+                         : "r"(curW), "r"(curI), "r"(curO), "r"(curB), "r"(I64(oStep)), "r"(flags),
                          "c"(ic), "r"(I64(fStep)), "r"(curE)
                          : "%eax", "%rax", "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm4", "%ymm5",
                          "%ymm6", "%ymm7", "%ymm8", "%ymm9", "%ymm10", "%ymm11", "%ymm12", "%ymm13",
                          "%ymm14", "%ymm15", "memory", "cc");
 }
 
-inline void avx2_pointwise_kernel_4x24(F32 *curI,
+inline void Avx2PointwiseKernel4x24(F32 *curI,
     const F32 *curW,
     F32 *curO,
     const F32 *curB,
     F32 *curE,
     U32 oStep,
-    U32 store,
+    U32 flags,
     U32 ic,
     U32 fStep)
 {
@@ -604,20 +601,20 @@ inline void avx2_pointwise_kernel_4x24(F32 *curI,
                          "vmovups %%ymm10, 0x40(%2, %4, 2)                  \n\t"
                          "vmovups %%ymm11, 0x60(%2, %4, 2)                  \n\t"
                          :
-                         : "r"(curW), "r"(curI), "r"(curO), "r"(curB), "r"(I64(oStep)), "r"(store),
+                         : "r"(curW), "r"(curI), "r"(curO), "r"(curB), "r"(I64(oStep)), "r"(flags),
                          "c"(ic), "r"(I64(fStep)), "r"(curE)
                          : "%eax", "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm4", "%ymm5", "%ymm6",
                          "%ymm7", "%ymm8", "%ymm9", "%ymm10", "%ymm11", "%ymm12", "%ymm13",
                          "%ymm14", "%ymm15", "memory", "cc");
 }
 
-inline void avx2_pointwise_kernel_6x16(F32 *curI,
+inline void Avx2PointwiseKernel6x16(F32 *curI,
     const F32 *curW,
     F32 *curO,
     const F32 *curB,
     F32 *curE,
     U32 oStep,
-    U32 store,
+    U32 flags,
     U32 ic,
     U32 fStep)
 {
@@ -895,20 +892,20 @@ inline void avx2_pointwise_kernel_6x16(F32 *curI,
                          "vmovups %%ymm10, 0x80(%2, %4)                      \n\t"
                          "vmovups %%ymm11, 0xA0(%2, %4)                      \n\t"
                          :
-                         : "r"(curW), "r"(curI), "r"(curO), "r"(curB), "r"(I64(oStep)), "r"(store),
+                         : "r"(curW), "r"(curI), "r"(curO), "r"(curB), "r"(I64(oStep)), "r"(flags),
                          "c"(ic), "r"(I64(fStep)), "r"(curE)
                          : "%eax", "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm4", "%ymm5", "%ymm6",
                          "%ymm7", "%ymm8", "%ymm9", "%ymm10", "%ymm11", "%ymm12", "%ymm13",
                          "%ymm14", "%ymm15", "memory", "cc");
 }
 
-inline void avx2_pointwise_kernel_12x8(F32 *curI,
+inline void Avx2PointwiseKernel12x8(F32 *curI,
     const F32 *curW,
     F32 *curO,
     const F32 *curB,
     F32 *curE,
     U32 oStep,
-    U32 store,
+    U32 flags,
     U32 ic,
     U32 fStep)
 {
@@ -1226,20 +1223,20 @@ inline void avx2_pointwise_kernel_12x8(F32 *curI,
                          "vmovups %%ymm10, 0x140(%2)                      \n\t"
                          "vmovups %%ymm11, 0x160(%2)                      \n\t"
                          :
-                         : "r"(curW), "r"(curI), "r"(curO), "r"(curB), "r"(store), "c"(ic),
+                         : "r"(curW), "r"(curI), "r"(curO), "r"(curB), "r"(flags), "c"(ic),
                          "r"(I64(fStep)), "r"(curE)
                          : "%eax", "%rax", "%ebx", "%r9", "%r10", "%ymm0", "%ymm1", "%ymm2",
                          "%ymm3", "%ymm4", "%ymm5", "%ymm6", "%ymm7", "%ymm8", "%ymm9", "%ymm10",
                          "%ymm11", "%ymm12", "%ymm13", "%ymm14", "%ymm15", "memory", "cc");
 }
 
-inline void avx2_pointwise_kernel_1x32(F32 *curI,
+inline void Avx2PointwiseKernel1x32(F32 *curI,
     const F32 *curW,
     F32 *curO,
     const F32 *curB,
     F32 *curE,
     U32 oStep,
-    U32 store,
+    U32 flags,
     U32 ic,
     U32 fStep)
 {
@@ -1392,20 +1389,20 @@ inline void avx2_pointwise_kernel_1x32(F32 *curI,
                          "add %4, %2                                  \n\t"
                          "vmovups %%ymm9, (%2)                   \n\t"
                          :
-                         : "r"(curW), "r"(curI), "r"(curO), "r"(curB), "r"(I64(oStep)), "r"(store),
+                         : "r"(curW), "r"(curI), "r"(curO), "r"(curB), "r"(I64(oStep)), "r"(flags),
                          "c"(ic), "r"(I64(fStep)), "r"(curE)
                          : "%eax", "%rax", "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm4", "%ymm5",
                          "%ymm6", "%ymm7", "%ymm8", "%ymm9", "%ymm10", "%ymm11", "%ymm12", "%ymm13",
                          "%ymm14", "%ymm15", "memory", "cc");
 }
 
-inline void avx2_pointwise_kernel_1x24(F32 *curI,
+inline void Avx2PointwiseKernel1x24(F32 *curI,
     const F32 *curW,
     F32 *curO,
     const F32 *curB,
     F32 *curE,
     U32 oStep,
-    U32 store,
+    U32 flags,
     U32 ic,
     U32 fStep)
 {
@@ -1525,20 +1522,20 @@ inline void avx2_pointwise_kernel_1x24(F32 *curI,
                          "vmovups %%ymm4, (%2, %4)                          \n\t"
                          "vmovups %%ymm8, (%2, %4, 2)                       \n\t"
                          :
-                         : "r"(curW), "r"(curI), "r"(curO), "r"(curB), "r"(I64(oStep)), "r"(store),
+                         : "r"(curW), "r"(curI), "r"(curO), "r"(curB), "r"(I64(oStep)), "r"(flags),
                          "c"(ic), "r"(I64(fStep)), "r"(curE)
                          : "%eax", "%rax", "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm4", "%ymm5",
                          "%ymm6", "%ymm7", "%ymm8", "%ymm9", "%ymm10", "%ymm11", "%ymm12", "%ymm13",
                          "%ymm14", "%ymm15", "memory", "cc");
 }
 
-inline void avx2_pointwise_kernel_1x16(F32 *curI,
+inline void Avx2PointwiseKernel1x16(F32 *curI,
     const F32 *curW,
     F32 *curO,
     const F32 *curB,
     F32 *curE,
     U32 oStep,
-    U32 store,
+    U32 flags,
     U32 ic,
     U32 fStep)
 {
@@ -1636,20 +1633,20 @@ inline void avx2_pointwise_kernel_1x16(F32 *curI,
                          "vmovups %%ymm0, (%2)                          \n\t"
                          "vmovups %%ymm4, (%2, %4)                          \n\t"
                          :
-                         : "r"(curW), "r"(curI), "r"(curO), "r"(curB), "r"(I64(oStep)), "r"(store),
+                         : "r"(curW), "r"(curI), "r"(curO), "r"(curB), "r"(I64(oStep)), "r"(flags),
                          "c"(ic), "r"(I64(fStep)), "r"(curE)
                          : "%eax", "%rax", "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm4", "%ymm5",
                          "%ymm6", "%ymm7", "%ymm8", "%ymm9", "%ymm10", "%ymm11", "%ymm12", "%ymm13",
                          "%ymm14", "%ymm15", "memory", "cc");
 }
 
-inline void avx2_pointwise_kernel_1x8(F32 *curI,
+inline void Avx2PointwiseKernel1x8(F32 *curI,
     const F32 *curW,
     F32 *curO,
     const F32 *curB,
     F32 *curE,
     U32 oStep,
-    U32 store,
+    U32 flags,
     U32 ic,
     U32 fStep)
 {
@@ -1725,7 +1722,7 @@ inline void avx2_pointwise_kernel_1x8(F32 *curI,
                          "2:                                                \n\t"
                          "vmovups %%ymm0, (%2)                          \n\t"
                          :
-                         : "r"(curW), "r"(curI), "r"(curO), "r"(curB), "r"(store), "c"(ic),
+                         : "r"(curW), "r"(curI), "r"(curO), "r"(curB), "r"(flags), "c"(ic),
                          "r"(I64(fStep)), "r"(curE)
                          : "%eax", "%rax", "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm4", "%ymm5",
                          "%ymm6", "%ymm7", "%ymm8", "%ymm9", "%ymm10", "%ymm11", "%ymm12", "%ymm13",
@@ -1755,50 +1752,55 @@ EE convolution_1x1_direct(TensorDesc inputDesc,
     CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
     CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
 
-    if (((fdf != DF_NCHWCxN24) && (fdf != DF_NCHWCxN32)) || (idf != DF_NCHWC8)) {
+    if ((fdf != DF_NCHWCxN24 && fdf != DF_NCHWCxN32) || (idf != DF_NCHWC8) || (ic % 8 != 0)) {
         CHECK_STATUS(NOT_MATCH);
     }
 
-    if (eltwiseInput == nullptr) {
-        eltwiseInput = outArray;
-    }
+    // get kernels
+    kernelFunc kernel[2][4] = {{Avx2PointwiseKernel1x8, Avx2PointwiseKernel1x16,
+                                   Avx2PointwiseKernel1x24, Avx2PointwiseKernel1x32},
+        {Avx2PointwiseKernel12x8, Avx2PointwiseKernel6x16, Avx2PointwiseKernel4x24,
+            Avx2PointwiseKernel3x32}};
+    I32 unrollOcArray[4] = {8, 16, 24, 32};
+    I32 unrollHwArray[4] = {12, 6, 4, 3};
 
+    // get computing params
     U32 paddingT = convParamSpec.padding_top;
     U32 paddingB = convParamSpec.padding_bottom;
     U32 paddingL = convParamSpec.padding_left;
     U32 paddingR = convParamSpec.padding_right;
-
-    F32 *ftmp = inArray;
-    F32 *btmp = (F32 *)tmp;
-
-    U32 oStep = oh * ow * SIMDW * 4;
-    U32 fStep = ih * iw * SIMDW * 4;
-    U32 store = 0, icSize = 0, ocBlocking = 0;
+    U32 strideH = convParamSpec.stride_h;
+    U32 strideW = convParamSpec.stride_w;
     U32 ohow = oh * ow;
-    U32 icPadding = (ic + 8 - 1) / 8 * 8;
-    kernel_func kernel[2][4] = {{avx2_pointwise_kernel_1x8, avx2_pointwise_kernel_1x16,
-                                    avx2_pointwise_kernel_1x24, avx2_pointwise_kernel_1x32},
-        {avx2_pointwise_kernel_12x8, avx2_pointwise_kernel_6x16, avx2_pointwise_kernel_4x24,
-            avx2_pointwise_kernel_3x32}};
+    U32 ihiw = ih * iw;
+    U32 newIh = (ih + strideH - 1) / strideH;
+    U32 newIw = (iw + strideW - 1) / strideW;
 
-    U32 unroll_oc_array[4] = {8, 16, 24, 32};
-    U32 unroll_hw_array[4] = {12, 6, 4, 3};
-    U32 unroll_oc = 24, unroll_hw = 0;
-
-    if ((oc % 24 != 0) && (oc % 32 == 0)) {
-        unroll_oc = 32;
-        unroll_hw = 3;
+    // infer block params
+    U32 unrollOc = InferConvPointwiseUnrollOc(oc);
+    U32 unrollHwX = unrollHwArray[(unrollOc >> 3) - 1];
+    I32 ocbArray[4] = {0};
+    U32 ocBlockNums = InferConvDirectOcBlockNum(oc, ocbArray, unrollOc, unrollOcArray);
+    U32 ocBBlockNums = BLOCK_OC_DIM / unrollOc;
+    U32 alpha = OMP_NUM_THREADS / gcd<U32>(ocBlockNums, OMP_NUM_THREADS);
+    U32 blockHwDim = InferConvBlockHW(ohow, BLOCK_HW_DIM, alpha);
+    blockHwDim = (blockHwDim + unrollHwX - 1) / unrollHwX * unrollHwX;
+    U32 hwBlockNums = CeilDivide(ohow, blockHwDim);
+    if (paddingT != 0 || paddingB != 0 || paddingL != 0 || paddingR != 0) {
+        hwBlockNums = oh;
     }
 
-#ifdef _USE_OPENMP
-    U32 alpha = (ohow + OMP_NUM_THREADS * BLOCK_HW_DIM - 1) / (OMP_NUM_THREADS * BLOCK_HW_DIM);
-    U32 block_hw_dim = (ohow + OMP_NUM_THREADS * alpha - 1) / (OMP_NUM_THREADS * alpha);
-#else
-    U32 block_hw_dim = BLOCK_HW_DIM;
+#if defined(_WIN32) && defined(_USE_OPENMP)
+    OpenMPController ompCtr;
+    ompCtr.checkAndSetOpenMP(ohow, BLOCK_HW_DIM, ocBlockNums);
 #endif
 
-    U32 hwBlockNums = (ohow + block_hw_dim - 1) / block_hw_dim;
+    // infer kernel params
+    U32 oStep = ohow * SIMDW * 4;
+    U32 fStep = newIh * newIw * SIMDW * 4;
 
+    // activate bias when padding
+    F32 *btmp = (F32 *)tmp;
     if ((paddingT != 0) || (paddingB != 0) || (paddingL != 0) || (paddingR != 0)) {
         __m256 zero = _mm256_set1_ps(0.);
         switch (activationDesc.mode) {
@@ -1828,38 +1830,73 @@ EE convolution_1x1_direct(TensorDesc inputDesc,
         }
     }
 
-    for (U32 n = 0; n < in; ++n) {
-        for (U32 ocbb = 0; ocbb < oc; ocbb += ocBlocking) {
-            store = 0;
-            ocBlocking = UNI_MIN(oc - ocbb, BLOCK_OC_DIM);
-            for (U32 icb = 0; icb < icPadding; icb += icSize) {
-                icSize = UNI_MIN(icPadding - icb, BLOCK_IC_DIM);
-                store |= (icb > 0);
-                store |= (eltwiseInput != outArray) << 1;
-                if (icb == icPadding - icSize) {
-                    store |= U32(activationDesc.mode) << 2;
-                }
-                F32 *curI = ftmp + icb * ih * iw;
-                if (paddingT == 0 && paddingB == 0 && paddingL == 0 && paddingR == 0) {
 #ifdef _USE_OPENMP
-#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#pragma omp parallel num_threads(OMP_NUM_THREADS)
+    {
 #endif
-                    for (U32 hwIdx = 0; hwIdx < hwBlockNums; ++hwIdx) {
-                        _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
-                        U32 hw = hwIdx * block_hw_dim;
-                        U32 hwSize = UNI_MIN(block_hw_dim, ohow - hw);
-                        U32 ocSize = 0, ihwSize = 0;
-                        for (U32 ocb = ocbb; ocb < ocbb + ocBlocking; ocb += ocSize) {
-                            ocSize = UNI_MIN(ocbb + ocBlocking - ocb, unroll_oc);
-                            ocSize = unroll_oc_array[(ocSize >> 3) - 1];
-                            U32 unroll_hw = unroll_hw_array[(ocSize >> 3) - 1];
+        F32 *tmpI = inArray;
+        for (U32 n = 0; n < in; ++n) {
+            F32 *bInArray = inArray + n * ic * ih * iw;
+            F32 *bOutArray = outArray + n * oc * oh * ow;
+            if (strideH > 1 || strideW > 1) {
+                U32 ic8 = ic / 8;
+                tmpI = (F32 *)tmp;
+#ifdef _USE_OPENMP
+#pragma omp for schedule(static)
+#endif
+                for (U32 hc = 0; hc < ih * ic8; hc += strideH) {
+                    U32 c = hc / ih;
+                    U32 h = hc % ih;
+                    for (U32 w = 0; w < iw; w += strideW) {
+                        U32 nh = h / strideH;
+                        U32 nw = w / strideW;
+                        memcpy(tmpI + c * newIw * newIh * SIMDW + (nh * newIw + nw) * SIMDW,
+                            bInArray + c * ihiw * SIMDW + (h * iw + w) * SIMDW, SIMDW * sizeof(F32));
+                    }
+                }
+                paddingT = (paddingT + strideH - 1) / strideH;
+                paddingB = (paddingB + strideH - 1) / strideH;
+                paddingL = (paddingL + strideW - 1) / strideW;
+                paddingR = (paddingR + strideW - 1) / strideW;
+            } else {
+                tmpI = bInArray;
+            }
+
+            U32 ocbSize = 0;
+            for (U32 ocbb = 0; ocbb < ocBlockNums; ocbb += ocBBlockNums) {
+                ocbSize = UNI_MIN(ocBBlockNums, ocBlockNums - ocbb);
+                U32 hwocBlockNums = hwBlockNums * ocbSize;
+                U32 icSize = 0;
+                for (U32 icb = 0; icb < ic; icb += icSize) {
+                    icSize = UNI_MIN(ic - icb, BLOCK_IC_DIM);
+                    U32 flags = (icb > 0) | (eltwiseInput != nullptr) << 1;
+                    if (icb == ic - icSize) {
+                        flags |= U32(activationDesc.mode) << 2;
+                    }
+
+                    F32 *curI = tmpI + icb * newIw * newIh;
+                    if (paddingT == 0 && paddingB == 0 && paddingL == 0 && paddingR == 0) {
+#ifdef _USE_OPENMP
+#pragma omp for schedule(static)
+#endif
+                        for (U32 bIdx = 0; bIdx < hwocBlockNums; ++bIdx) {
+                            FTZ;
+                            U32 hw = (bIdx / ocbSize) * blockHwDim;
+                            U32 hwSize = UNI_MIN(blockHwDim, ohow - hw);
+                            U32 ocBlockIdx = bIdx % ocbSize + ocbb;
+                            U32 ocb = GetOcIdx(ocBlockIdx, oc, unrollOc, ocbArray);
+                            U32 ocSize = UNI_MIN(unrollOc, oc - ocb);
+                            U32 unrollHw = unrollHwArray[(ocSize >> 3) - 1];
+                            ocSize = unrollOcArray[(ocSize >> 3) - 1];
+
                             const F32 *curB = biasArray + ocb;
-                            const F32 *curW = filterArray + ocb * icPadding + icb * ocSize;
-                            F32 *curO = outArray + ocb * oh * ow;
+                            const F32 *curW = filterArray + ocb * ic + icb * ocSize;
+                            F32 *curO = bOutArray + ocb * oh * ow;
                             F32 *curE = eltwiseInput + ocb * oh * ow;
+                            U32 ihwSize = 0;
                             for (U32 ihw = hw; ihw < hw + hwSize; ihw += ihwSize) {
-                                if ((hw + hwSize - ihw) >= unroll_hw) {
-                                    ihwSize = unroll_hw;
+                                if ((hw + hwSize - ihw) >= unrollHw) {
+                                    ihwSize = unrollHw;
                                 } else {
                                     ihwSize = 1;
                                 }
@@ -1867,52 +1904,57 @@ EE convolution_1x1_direct(TensorDesc inputDesc,
                                 F32 *calO = curO + ihw * SIMDW;
                                 F32 *calE = curE + ihw * SIMDW;
                                 kernel[ihwSize > 1][(ocSize >> 3) - 1](
-                                    calI, curW, calO, curB, calE, oStep, store, icSize, fStep);
+                                    calI, curW, calO, curB, calE, oStep, flags, icSize, fStep);
                             }
                         }
-                    }
-                } else {
+                    } else {
 #ifdef _USE_OPENMP
-#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#pragma omp for schedule(static)
 #endif
-                    for (U32 h = 0; h < oh; ++h) {
-                        _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
-                        // _MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
-                        U32 ocSize = 0, ihwSize = 0;
-                        for (U32 ocb = ocbb; ocb < ocbb + ocBlocking; ocb += ocSize) {
-                            ocSize = UNI_MIN(ocbb + ocBlocking - ocb, unroll_oc);
-                            ocSize = unroll_oc_array[(ocSize >> 3) - 1];
-                            U32 unroll_hw = unroll_hw_array[(ocSize >> 3) - 1];
+                        for (U32 bIdx = 0; bIdx < hwocBlockNums; ++bIdx) {
+                            FTZ;
+                            U32 h = bIdx / ocbSize;
+                            U32 ocBlockIdx = bIdx % ocbSize + ocbb;
+                            U32 ocb = GetOcIdx(ocBlockIdx, oc, unrollOc, ocbArray);
+                            U32 ocSize = UNI_MIN(unrollOc, oc - ocb);
+                            U32 unrollHw = unrollHwArray[(ocSize >> 3) - 1];
+                            ocSize = unrollOcArray[(ocSize >> 3) - 1];
+
                             const F32 *curB = biasArray + ocb;
-                            const F32 *curW = filterArray + ocb * icPadding + icb * ocSize;
-                            F32 *curO = outArray + ocb * oh * ow;
+                            const F32 *curW = filterArray + ocb * ic + icb * ocSize;
+                            F32 *curO = bOutArray + ocb * oh * ow;
                             F32 *curE = eltwiseInput + ocb * oh * ow;
+                            U32 ihwSize = 0;
                             for (U32 w = 0; w < ow; w += ihwSize) {
-                                F32 *calI = curI + ((h - paddingT) * iw + w - paddingL) * SIMDW;
-                                F32 *calO = curO + (h * ow + w) * SIMDW;
-                                F32 *calE = curE + (h * ow + w) * SIMDW;
                                 ihwSize = 1;
-                                if ((h < paddingT) || (h >= ih + paddingT) || (w < paddingL) ||
-                                    (w >= paddingL + iw)) {
+                                F32 *calO = curO + (h * ow + w) * SIMDW;
+                                // directly store activated bias
+                                if ((h < paddingT) || (h >= newIh + paddingT) || (w < paddingL) ||
+                                    (w >= paddingL + newIw)) {
                                     for (U32 oci = 0; oci < ocSize; oci += SIMDW) {
-                                        _mm256_storeu_ps(  // directly store activated bias
+                                        _mm256_storeu_ps(
                                             calO + ohow * oci, _mm256_load_ps(btmp + oci + ocb));
                                     }
                                     continue;
                                 }
-                                if ((iw - (w - paddingL)) >= unroll_hw) {
-                                    ihwSize = unroll_hw;
+                                if ((newIw - (w - paddingL)) >= unrollHw) {
+                                    ihwSize = unrollHw;
                                 }
+                                F32 *calI = curI + ((h - paddingT) * newIw + w - paddingL) * SIMDW;
+                                F32 *calE = curE + (h * ow + w) * SIMDW;
                                 kernel[ihwSize > 1][(ocSize >> 3) - 1](
-                                    calI, curW, calO, curB, calE, oStep, store, icSize, fStep);
+                                    calI, curW, calO, curB, calE, oStep, flags, icSize, fStep);
                             }
                         }
                     }
                 }
             }
         }
-        inArray += ic * ih * iw;
-        outArray += oc * oh * ow;
+#ifdef _USE_OPENMP
     }
+#ifdef _WIN32
+    ompCtr.resetOpenMP();
+#endif
+#endif
     return SUCCESS;
 }

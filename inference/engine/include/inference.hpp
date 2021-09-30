@@ -15,7 +15,7 @@
 #define _HPP_INFERENCE
 
 #include "cnn.h"
-#ifdef _USE_MALI
+#ifdef _USE_GPU
 #include "gcl.h"
 #endif
 #include "thread_affinity.h"

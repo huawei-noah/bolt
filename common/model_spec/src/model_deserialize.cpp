@@ -300,7 +300,13 @@ EE deserialize_weight(const char *bytes, ModelSpec *spec, U32 *pos)
             ptr[i].mdt = DT_F32;
             quantFP16 = true;
         } else if (DT_I8 == ptr[i].mdt && DT_I8 != spec->dt) {
-            ptr[i].mdt = (spec->dt == DT_F16_8Q) ? DT_F16 : spec->dt;
+            if (spec->dt == DT_F16_8Q) {
+                ptr[i].mdt = DT_F16;
+            } else if (spec->dt == DT_F32_8Q) {
+                ptr[i].mdt = DT_F32;
+            } else {
+                ptr[i].mdt = spec->dt;
+            }
             quantInt8 = true;
         }
 
@@ -367,7 +373,8 @@ EE deserialize_weight(const char *bytes, ModelSpec *spec, U32 *pos)
                         scale, (INT8 *)serialWeight, (unsigned short *)ptr[i].weight);
 #endif
                 } else {
-                    UNI_ERROR_LOG("Can not support convert INT8 data to %d.\n", ptr[i].mdt);
+                    UNI_ERROR_LOG(
+                        "Can not support convert INT8 data to %s.\n", DataTypeName()[ptr[i].mdt]);
                     exit(1);
                 }
             } else {
@@ -398,7 +405,7 @@ EE deserialize_model_from_file(const char *fn, ModelSpec *spec, bool useFileStre
     UNI_PROFILE(
         {
             char *bytes = nullptr;
-            int fd;
+            int fd = -1;
             size_t fileLength;
             spec->mfd = (ModelFileDescriptor *)mt_new_storage(sizeof(ModelFileDescriptor));
             spec->mfd->useFileStream = useFileStream;

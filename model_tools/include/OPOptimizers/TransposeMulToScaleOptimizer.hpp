@@ -19,8 +19,6 @@
 class TransposeMulToScaleOptimizer : public OPOptimizer {
     bool optimize(ModelSpec *spec) override
     {
-        const int queryNum = 2;
-        OperatorType queryOps[queryNum] = {OT_Transpose, OT_Reshape};
         bool hasOptimized = false;
         for (int i = 1; i < spec->num_operator_specs; i++) {
             if (spec->ops[i].type == OT_Eltwise && spec->ops[i].num_inputs == 2 &&
@@ -34,6 +32,11 @@ class TransposeMulToScaleOptimizer : public OPOptimizer {
                     continue;
                 }
                 int transposeOpIndex00 = prevOpIndexes[0].first;
+                std::vector<std::pair<int, int>> nextOpIndexes = searchOperatorIndexByInput(spec,
+                    spec->ops[transposeOpIndex00].output_tensors_name[0], transposeOpIndex00 + 1);
+                if (nextOpIndexes.size() != 1) {
+                    continue;
+                }
 
                 prevOpIndexes = searchOperatorIndexByOutput(
                     spec, spec->ops[mulOpIndex].input_tensors_name[1], 0, mulOpIndex);
@@ -43,12 +46,20 @@ class TransposeMulToScaleOptimizer : public OPOptimizer {
                     continue;
                 }
                 int transposeOpIndex01 = prevOpIndexes[0].first;
-
-                int transposeOpIndex10 =
-                    searchOperatorIndexForward(spec, mulOpIndex + 1, queryOps, queryNum, false);
-                if (transposeOpIndex10 == -1) {
+                nextOpIndexes = searchOperatorIndexByInput(spec,
+                    spec->ops[transposeOpIndex01].output_tensors_name[0], transposeOpIndex01 + 1);
+                if (nextOpIndexes.size() != 1) {
                     continue;
                 }
+
+                nextOpIndexes = searchOperatorIndexByInput(
+                    spec, spec->ops[mulOpIndex].output_tensors_name[0], mulOpIndex + 1);
+                if (nextOpIndexes.size() != 1 ||
+                    (OT_Transpose != spec->ops[nextOpIndexes[0].first].type &&
+                        OT_Reshape != spec->ops[nextOpIndexes[0].first].type)) {
+                    continue;
+                }
+                int transposeOpIndex10 = nextOpIndexes[0].first;
 
                 if (transposeOpIndex10 == mulOpIndex + 1 ||
                     (transposeOpIndex10 == mulOpIndex + 2 &&

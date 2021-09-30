@@ -10,6 +10,9 @@
 // WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#include "kernel_def.h"
+#define MANGLE_NAME_IMPL(base, IOM) base##IOM
+#define MANGLE_NAME(base, IOM) MANGLE_NAME_IMPL(base, IOM)
 
 #define sumvec4(x, y)        \
     {                        \
@@ -18,33 +21,39 @@
         x.s2 += (float)y.s2; \
         x.s3 += (float)y.s3; \
     }
+#if defined(USE_OUTPUT_IMG)
+#define STORE_OUT                                                                  \
+    {                                                                              \
+        STORE_MEM_V4((T4)(sum.x, sum.y, sum.z, sum.w), (int4)(0, 0, idx, 0), out); \
+    }
+#else
+#define STORE_OUT                                                     \
+    {                                                                 \
+        int out_off = idx * ohw_str + o_off;                          \
+        STORE_MEM_V4((T4)(sum.x, sum.y, sum.z, sum.w), out_off, out); \
+    }
+#endif
 
-__kernel void pooling_global_mean_w(const int ih_str,
-    const int ihw_str,
-    const int ih_off,
-    const int iw_off,
-    const int ih,
-    const int iw,
+__kernel void MANGLE_NAME(pooling_global_mean_w_, IOM)(const int iw,
+    const int ow_str,
+    const int ohw_str,
+    const int o_off,
     const int bx,
-    const int by,
     __global const T *in,
-    __global T *out)
+    KERNEL_MEM out)
 {
     const int idx = get_global_id(0);
-    const int idy = get_global_id(1);
-    if (idx >= bx || idy >= by) {
+    if (idx >= bx) {
         return;
     }
-
-    int in_off = idy * ihw_str + iw_off * ih_str + idx + ih_off;
+    const int in_off = idx * iw;
 
     T4 val;
     float4 sum = 0;
     for (int i = 0; i < iw; ++i) {
-        val = vload4(in_off + ih_str * i, in);
+        val = vload4(in_off + i, in);
         sumvec4(sum, val);
     }
-    sum = sum / (float)(iw);
-    int out_off = (idy * ih) + idx;
-    vstore4((T4)(sum.x, sum.y, sum.z, sum.w), out_off, out);
+    sum = sum / ((float)(iw));
+    STORE_OUT;
 }

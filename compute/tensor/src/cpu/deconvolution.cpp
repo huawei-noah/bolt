@@ -11,9 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifdef _USE_OPENMP
-#include <omp.h>
-#endif
 #include "thread_affinity.h"
 #include "cpu/tensor_computing_cpu.h"
 #include "cpu/cpu_functions.h"
@@ -52,6 +49,13 @@ EE deconvolution_infer_forward_algorithm_cpu(TensorDesc inputDesc,
         return SUCCESS;
     }
 
+#ifdef _USE_X86
+    if (IS_X86(arch) && idf == DF_NCHWC8 && (fc * 2 < ic || fc < 128)) {
+        *algorithm = CONVOLUTION_ALGORITHM_POINTWISE;
+        return SUCCESS;
+    }
+#endif
+
     *algorithm = CONVOLUTION_ALGORITHM_IM2COL_GEMM;
     return SUCCESS;
 }
@@ -63,7 +67,8 @@ EE deconvolution_transform_filter_bytes_cpu(TensorDesc filterDesc,
     Arch arch)
 {
     EE ret = NOT_SUPPORTED;
-    if (algorithm == CONVOLUTION_ALGORITHM_IM2COL_GEMM) {
+    if (algorithm == CONVOLUTION_ALGORITHM_IM2COL_GEMM ||
+        algorithm == CONVOLUTION_ALGORITHM_POINTWISE) {
         *bytes = tensorNumBytes(filterDesc) + 32;
         ret = SUCCESS;
     } else if (algorithm == CONVOLUTION_ALGORITHM_GROUP_DECONV) {
@@ -104,7 +109,7 @@ EE deconvolution_transform_filter_cpu(TensorDesc filterDesc,
             filterDesc, filter, algorithm, ftmDesc, filterTransformed);
 #endif
 #ifdef _USE_X86
-    } else if (IS_X86_AVX2(arch)) {
+    } else if (IS_X86(arch)) {
         ret = deconvolution_transform_filter_x86(
             filterDesc, filter, algorithm, ftmDesc, filterTransformed);
 #endif
@@ -129,9 +134,14 @@ EE deconvolution_infer_forward_tmp_bytes_cpu(TensorDesc inputDesc,
     U32 in, ic, ih, iw, fn, fc, fh, fw, on, oc, oh, ow;
     CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
     CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
+    fh = convParamSpec.kernel_h;
+    fw = convParamSpec.kernel_w;
+
+    if (algorithm == CONVOLUTION_ALGORITHM_POINTWISE) {
+        *bytes = (in * ih * iw + 1) * oc * fh * fw * bytesOf(idt) + 32;
+        return SUCCESS;
+    }
     if (algorithm == CONVOLUTION_ALGORITHM_IM2COL_GEMM) {
-        fh = convParamSpec.kernel_h;
-        fw = convParamSpec.kernel_w;
         TensorDesc matrixADesc = tensor2df(idt, DF_NKN8, ic, in * ih * iw);
         TensorDesc matrixBDesc = tensor2df(idt, DF_NORMAL, ic, oc * fh * fw);
         CHECK_STATUS(matrix_matrix_multiply_tmp_bytes(matrixADesc, matrixBDesc, bytes, X86_AVX2));
@@ -152,12 +162,12 @@ EE deconvolution_infer_forward_tmp_bytes_cpu(TensorDesc inputDesc,
     U32 paddingL = convParamSpec.padding_left;
     U32 paddingR = convParamSpec.padding_right;
 
-    CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
     U32 tPadding = fh - 1 - paddingT;
     U32 bPadding = fh - 1 - paddingB;
     U32 lPadding = fw - 1 - paddingL;
     U32 rPadding = fw - 1 - paddingR;
 
+    CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
     ih = ih + (ih - 1) * (strideH - 1) + tPadding + bPadding;
     iw = iw + (iw - 1) * (strideW - 1) + lPadding + rPadding;
     TensorDesc inPaddedDesc = tensor4df(idt, idf, in, ic, ih, iw);
@@ -186,11 +196,10 @@ EE deconvolution_gemm(TensorDesc inputDesc,
     CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
     U32 fh = convParamSpec.kernel_h;
     U32 fw = convParamSpec.kernel_w;
-    CHECK_REQUIREMENT(idf == DF_NCHWC8 || idf == DF_NCHW);
 
     TensorDesc matrixADesc = tensor2df(idt, DF_TRANSPOSE, ic, in * ih * iw);
     if (idf == DF_NCHWC8) {
-        if (IS_X86_AVX2(arch)) {
+        if (IS_X86(arch)) {
             matrixADesc = tensor2df(idt, DF_NKN8, ic, in * ih * iw);
         } else {
             TensorDesc tmpDesc = tensor4df(odt, DF_NCHW, in, ic, ih, iw);
@@ -205,8 +214,8 @@ EE deconvolution_gemm(TensorDesc inputDesc,
     tmpOutput += in * ih * iw * ic * bytesOf(idt);
 
     memset(tmpOutput, 0, in * ih * iw * fw * fh * oc * bytesOf(idt));
-    CHECK_STATUS(matrix_matrix_multiply(
-        matrixADesc, input, filterDesc, filter, tmpBytes, tmp, matrixCDesc, tmpOutput, arch));
+    CHECK_STATUS(matrix_matrix_multiply(matrixADesc, input, filterDesc, filter, tmpBytes, tmp,
+        matrixCDesc, tmpOutput, nullptr, arch));
 
     U8 *tmpOutputPtr = (U8 *)output;
     U32 biasTileSize = bytesOf(biasDesc.dt) * 8;
@@ -225,7 +234,7 @@ EE deconvolution_gemm(TensorDesc inputDesc,
             deconvolution_overlap_crop_arm(tmpOutput, output, inputDesc, outputDesc, convParamSpec);
 #endif
 #ifdef _USE_X86
-    } else if (IS_X86_AVX2(arch)) {
+    } else if (IS_X86(arch)) {
         ret =
             deconvolution_overlap_crop_x86(tmpOutput, output, inputDesc, outputDesc, convParamSpec);
 #endif
@@ -263,6 +272,13 @@ EE deconvolution_cpu(TensorDesc inputDesc,
         return deconvolution_gemm(inputDesc, input, filterDesc, filter, convParamSpec, biasDesc,
             bias, tmpBytes, tmp, outputDesc, output, activationDesc, arch);
     }
+
+#ifdef _USE_X86
+    if (IS_X86(arch) && algorithm == CONVOLUTION_ALGORITHM_POINTWISE) {
+        return deconvolution_pointwise_x86(inputDesc, input, filterDesc, filter, convParamSpec,
+            biasDesc, bias, tmpBytes, tmp, outputDesc, output, activationDesc, arch);
+    }
+#endif
 
     if (nullptr == input || nullptr == filter || nullptr == output || nullptr == bias ||
         nullptr == tmp) {

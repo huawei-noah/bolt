@@ -12,13 +12,16 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "image.h"
+#ifdef _USE_CPU
+#include "cpu/image_cpu.h"
+#endif
 #ifdef _USE_GENERAL
 #include "cpu/general/image_general.h"
 #endif
 #ifdef _USE_NEON
 #include "cpu/arm/image_arm.h"
 #endif
-#ifdef _USE_MALI
+#ifdef _USE_GPU
 #include "gpu/mali/image_mali.h"
 #endif
 #ifdef _USE_X86
@@ -84,17 +87,11 @@ EE resize_infer_output_size(Tensor *inputTensor,
     TensorDesc inputDesc = inputTensor->get_desc();
     TensorDesc outputDesc = outputTensor->get_desc();
     EE ret = NOT_SUPPORTED;
-    if (IS_MALI_GPU(archInfo->arch)) {
-#ifdef _USE_MALI
-        GCLMemDesc gclmemInputDesc = ocl_get_desc(*inputTensor);
-        GCLMemDesc gclmemOutputDesc = ocl_get_desc(*outputTensor);
-        ret = resize_infer_output_size_mali(inputDesc, paramDT, params, &outputDesc, outputBytes,
-            &gclmemInputDesc, &gclmemOutputDesc);
-        ocl_set_desc(inputTensor, gclmemInputDesc);
-        ocl_set_desc(outputTensor, gclmemOutputDesc);
+    ret = resize_infer_output_size_cpu(inputDesc, paramDT, params, &outputDesc, outputBytes);
+    if (IS_GPU(archInfo->arch)) {
+#ifdef _USE_GPU
+        outputDesc.df = inputDesc.df;
 #endif
-    } else {
-        ret = resize_infer_output_size_cpu(inputDesc, paramDT, params, &outputDesc, outputBytes);
     }
     outputTensor->resize(outputDesc);
     return ret;
@@ -115,7 +112,7 @@ EE resize_bilinear(TensorDesc inputDesc,
         ret = resize_bilinear_general(inputDesc, input, outputDesc, output);
 #endif
 #ifdef _USE_X86
-    } else if (IS_X86_AVX2(arch)) {
+    } else if (IS_X86(arch)) {
         ret = resize_bilinear_x86(inputDesc, input, outputDesc, tmp, output, p);
 #endif
 #ifdef _USE_NEON
@@ -139,10 +136,10 @@ EE resize_bilinear(TensorDesc inputDesc,
             transformToNCHW(outDescARM, outputARM, outputDesc, output);
         }
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
         ret = resize_bilinear_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc,
-            (GCLMem_t)input, outputDesc, (GCLMem_t)output);
+            (GCLMem_t)input, outputDesc, (GCLMem_t)tmp, (GCLMem_t)output);
 #endif
     }
     CHECK_STATUS(ret);
@@ -161,10 +158,14 @@ EE resize_nearest(TensorDesc inputDesc,
     EE ret = NOT_SUPPORTED;
     if (IS_CPU(arch)) {
 #ifdef _USE_CPU
-        ret = resize_nearest_general(inputDesc, input, outputDesc, output);
+        ret = resize_nearest_cpu(inputDesc, input, p, outputDesc, output);
+#endif
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
+        ret = resize_nearest_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc,
+            (GCLMem_t)input, p, outputDesc, (GCLMem_t)tmp, (GCLMem_t)output);
 #endif
     }
-    CHECK_STATUS(ret);
     return ret;
 }
 
@@ -187,19 +188,21 @@ EE resize(
 
     CHECK_REQUIREMENT(in == on && ic == oc);
 
-    if (ih == oh && iw == ow && archInfo->arch != MALI) {
+    if (ih == oh && iw == ow && IS_CPU(arch)) {
         memcpy(output, input, tensorNumBytes(inputDesc));
         return SUCCESS;
     }
 
-    EE ret = SUCCESS;
+    EE ret;
     switch (p.mode) {
         case NEAREST:
             ret = resize_nearest(inputDesc, input, outputDesc, output, tmp, p, archInfo);
             break;
         case LINEAR:
-        default:
             ret = resize_bilinear(inputDesc, input, outputDesc, output, tmp, p, archInfo);
+            break;
+        default:
+            ret = NOT_SUPPORTED;
             break;
     }
     return ret;

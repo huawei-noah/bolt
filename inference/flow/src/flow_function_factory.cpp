@@ -33,6 +33,11 @@ FlowFunction flowGetFunctionByName(std::string functionName)
     if (flowFunctions.find(functionName) != flowFunctions.end()) {
         return flowFunctions[functionName];
     } else {
+        if (functionName != "NULL" && functionName != "") {
+            UNI_ERROR_LOG("can not find Flow function %s. Maybe you didn't register it to Flow by "
+                          "using flowRegisterFunction API.\n",
+                functionName.c_str());
+        }
         return NULL;
     }
 }

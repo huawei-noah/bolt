@@ -43,7 +43,7 @@ cd ${kernelBinPath}
 rm -rf build
 mkdir build
 cd build
-cmake_options="-DUSE_MALI=ON \
+cmake_options="-DUSE_GPU=ON \
          -DUSE_DYNAMIC_LIBRARY=ON \
          -DBUILD_TEST=ON \
          -DUSE_THREAD_SAFE=OFF"

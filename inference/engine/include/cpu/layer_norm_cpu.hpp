@@ -45,6 +45,21 @@ public:
         return SUCCESS;
     }
 
+    U32 infer_tmp_memory_size() override
+    {
+        U32 bytes = 0;
+#ifdef _USE_INT8
+        if (featureScale.size() > 0 && -1 == (featureScale.back())[0]) {
+            TensorDesc inputDesc = this->inputTensors[0].get_desc();
+            TensorDesc outputDesc = this->outputTensors[0].get_desc();
+            if (inputDesc.dt != outputDesc.dt) {
+                bytes = bytesOf(this->dt) * tensorNumElements(outputDesc);
+            }
+        }
+#endif
+        return bytes;
+    }
+
     void run() override
     {
         Tensor inputTensor = this->inputTensors[0];
@@ -60,6 +75,19 @@ public:
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
         CHECK_STATUS(normalization_infer_output_size(inTensors[0], outTensors[0], &this->archInfo));
+#ifdef _USE_INT8
+        if (DT_F16_8Q == this->dt || DT_F32_8Q == this->dt) {
+            if (featureScale.size() > 0 && -1 == (featureScale.back())[0]) {
+                TensorDesc outputDesc = outTensors[0]->get_desc();
+#ifdef _USE_X86
+                outputDesc.dt = DT_U8_Q;
+#else
+                outputDesc.dt = DT_I8;
+#endif
+                outTensors[0]->resize(outputDesc);
+            }
+        }
+#endif
         return SUCCESS;
     }
 };

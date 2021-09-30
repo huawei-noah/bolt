@@ -20,11 +20,32 @@ class DilationConvolutionOptimizer : public OPOptimizer {
     bool optimize(ModelSpec *spec) override
     {
         bool hasOptimized = false;
-        for (int i = 2; i < spec->num_operator_specs - 1; i++) {
-            if (spec->ops[i].type == OT_Conv && spec->ops[i - 1].type == OT_SpaceToBatchNd &&
-                spec->ops[i + 1].type == OT_BatchToSpaceNd) {
-                int spaceToBatchIndex = searchWeightIndex(spec, spec->ops[i - 1].name);
-                int batchToSpaceIndex = searchWeightIndex(spec, spec->ops[i + 1].name);
+        for (int i = 0; i < spec->num_operator_specs; i++) {
+            bool mergeDilation = false;
+            int spaceToBatchOpIndex = 0;
+            int batchToSpaceOpIndex = 0;
+            int convOpIndex = 0;
+            if (spec->ops[i].type == OT_SpaceToBatchNd) {
+                spaceToBatchOpIndex = i;
+                std::string outName = spec->ops[i].output_tensors_name[0];
+                auto indexPair =
+                    searchOperatorIndexByInput(spec, outName, 0, spec->num_operator_specs);
+                int index = indexPair[0].first;
+                if (spec->ops[index].type == OT_Conv) {
+                    convOpIndex = index;
+                    outName = spec->ops[index].output_tensors_name[0];
+                    indexPair =
+                        searchOperatorIndexByInput(spec, outName, 0, spec->num_operator_specs);
+                    index = indexPair[0].first;
+                    if (spec->ops[index].type == OT_BatchToSpaceNd) {
+                        batchToSpaceOpIndex = index;
+                        mergeDilation = true;
+                    }
+                }
+            }
+            if (mergeDilation) {
+                int spaceToBatchIndex = searchWeightIndex(spec, spec->ops[spaceToBatchOpIndex].name);
+                int batchToSpaceIndex = searchWeightIndex(spec, spec->ops[batchToSpaceOpIndex].name);
                 float *vecPtr = (float *)(spec->ws[spaceToBatchIndex].vec);
                 float *vecPtr2 = (float *)(spec->ws[batchToSpaceIndex].vec);
                 if (spec->ws[spaceToBatchIndex].bytes_of_vec != 16 &&
@@ -32,16 +53,16 @@ class DilationConvolutionOptimizer : public OPOptimizer {
                     UNI_ERROR_LOG("not support");
                 }
 
-                spec->ops[i].ps.conv_spec.convolution_type = Convolution_Dilation;
-                spec->ops[i].ps.conv_spec.padding_top = vecPtr[0] - vecPtr2[0];
-                spec->ops[i].ps.conv_spec.padding_bottom = vecPtr[1] - vecPtr2[1];
-                spec->ops[i].ps.conv_spec.padding_left = vecPtr[2] - vecPtr2[2];
-                spec->ops[i].ps.conv_spec.padding_right = vecPtr[3] - vecPtr2[3];
-                spec->ops[i].ps.conv_spec.dilatedRate_h = 2;
-                spec->ops[i].ps.conv_spec.dilatedRate_w = 2;
+                spec->ops[convOpIndex].ps.conv_spec.convolution_type = Convolution_Dilation;
+                spec->ops[convOpIndex].ps.conv_spec.padding_top = vecPtr[0] - vecPtr2[0];
+                spec->ops[convOpIndex].ps.conv_spec.padding_bottom = vecPtr[1] - vecPtr2[1];
+                spec->ops[convOpIndex].ps.conv_spec.padding_left = vecPtr[2] - vecPtr2[2];
+                spec->ops[convOpIndex].ps.conv_spec.padding_right = vecPtr[3] - vecPtr2[3];
+                spec->ops[convOpIndex].ps.conv_spec.dilatedRate_h = 2;
+                spec->ops[convOpIndex].ps.conv_spec.dilatedRate_w = 2;
 
-                setOperatorInvalid(spec, i - 1, true);
-                setOperatorInvalid(spec, i + 1, true);
+                setOperatorInvalid(spec, spaceToBatchOpIndex, true);
+                setOperatorInvalid(spec, batchToSpaceOpIndex, true);
 
                 if (spec->ws[spaceToBatchIndex].weight != nullptr) {
                     spec->ws[spaceToBatchIndex].bytes_of_weight = 0;

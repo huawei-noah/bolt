@@ -59,7 +59,7 @@ public:
     void resize(TensorDesc desc) override
     {
         this->desc = desc;
-        if (tensorNumBytes(desc) > this->capacity()) {
+        if (tensorNumBytes(desc) > this->capacitySize) {
             this->allocated = false;
         }
     }
@@ -67,7 +67,7 @@ public:
     void alloc() override
     {
         auto size = this->bytes();
-        if (!this->allocated && size > this->capacity()) {
+        if (!this->allocated && size > this->capacitySize) {
             this->capacitySize = size;
             try {
 #ifndef _USE_X86
@@ -88,6 +88,11 @@ public:
         return this->desc;
     }
 
+    TensorDesc get_dims() override
+    {
+        return this->desc;
+    }
+
     void set_ptr(U8 *val)
     {
         this->set_shared_ptr(std::shared_ptr<U8>(val));
@@ -100,9 +105,11 @@ public:
 
     void set_shared_ptr(std::shared_ptr<U8> val)
     {
-        this->val = val;
-        this->allocated = true;
-        this->capacitySize = this->bytes();
+        if (val != this->val) {
+            this->val = val;
+            this->allocated = true;
+            this->capacitySize = this->bytes();
+        }
     }
 
     std::shared_ptr<U8> get_shared_ptr()
@@ -120,9 +127,9 @@ public:
         return tensorNumBytes(this->desc);
     }
 
-    U32 capacity() override
+    void capacity(U32 *size) override
     {
-        return this->capacitySize;
+        *size = this->capacitySize;
     }
 
     EE reuse(Memory *other) override
@@ -131,10 +138,11 @@ public:
         if (other->get_mem_type() != CPUMem) {
             ret = this->copy_from(other);
         } else {
-            U32 other_size = other->capacity();
+            U32 other_size;
+            other->capacity(&other_size);
             if (other_size >= this->bytes()) {
                 this->set_shared_ptr(((CpuMemory *)other)->get_shared_ptr());
-                this->capacitySize = other->capacity();
+                other->capacity(&this->capacitySize);
                 ret = SUCCESS;
             } else {
                 UNI_ERROR_LOG("Small CPU memory can not meet big CPU memory demand\n");
@@ -170,10 +178,16 @@ public:
 
     std::string string(U32 num, F32 factor) override
     {
+        U32 capacityNum = this->capacitySize / bytesOf(this->desc.dt);
         std::string line = "desc: " + tensorDesc2Str(this->desc) + " data:";
-        for (U32 i = 0; i < num && i < this->capacitySize; i++) {
+        for (U32 i = 0; i < num && i < capacityNum; i++) {
             line = line + std::to_string(this->element(i) / factor) + " ";
         }
+        double sum = 0;
+        for (U32 i = 0; i < UNI_MIN(tensorNumElements(this->desc), capacityNum); i++) {
+            sum += this->element(i) / factor;
+        }
+        line += " sum: " + std::to_string(sum);
         return line;
     }
 

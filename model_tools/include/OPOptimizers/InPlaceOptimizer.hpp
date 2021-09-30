@@ -72,6 +72,11 @@ class InPlaceOptimizer : public OPOptimizer {
                     continue;
                 }
 
+                std::vector<int> modelInputs = searchString(
+                    spec->input_names, spec->num_inputs, spec->ops[i].input_tensors_name[0]);
+                if (modelInputs.size() > 0) {
+                    continue;
+                }
                 std::vector<int> modelOutputs = searchString(
                     spec->output_names, spec->num_outputs, spec->ops[i].input_tensors_name[0]);
                 if (modelOutputs.size() > 0) {

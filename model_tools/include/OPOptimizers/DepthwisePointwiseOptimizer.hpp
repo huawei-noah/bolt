@@ -21,6 +21,9 @@ class DepthwisePointwiseOptimizer : public OPOptimizer {
     {
         bool hasOptimized = false;
         for (int i = 0; i < spec->num_operator_specs; i++) {
+            if (isModelOutput(spec, i)) {
+                continue;
+            }
             // process depthwise convolution
             if (spec->ops[i].type == OT_Conv &&
                 spec->ops[i].ps.conv_spec.convolution_type == Convolution_Depthwise) {

@@ -16,31 +16,34 @@
 
 #include <bitset>
 #include <string.h>
-#if defined(_USE_NEON) || defined(_USE_MALI)
+#include <math.h>
+#if defined(_USE_NEON) || defined(_USE_GPU)
 #include <arm_neon.h>
 #ifdef __aarch64__
 typedef __fp16 F16;
 #endif
-typedef int8_t INT8;
-#else
-typedef char INT8;
 #endif
 #ifdef _USE_X86
 #include <immintrin.h>
 #include <xmmintrin.h>
+#define FTZ _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
+typedef float F16;
 #endif
 
+typedef int8_t INT8;
+typedef uint8_t UINT8;
 typedef unsigned char U8;
 typedef const unsigned char CU8;
 typedef char I8;
 typedef const char CI8;
 typedef unsigned int U32;
 typedef const unsigned int CU32;
-typedef int I32;
+typedef int32_t I32;
 typedef const int CI32;
 typedef float F32;
 typedef double F64;
 typedef int64_t I64;
+typedef uint64_t U64;
 typedef unsigned char BIN8;
 
 typedef enum {
@@ -53,24 +56,102 @@ typedef enum {
     DT_F32 = 6,
     DT_BIN01 = 7,
     DT_BIN11 = 8,
-    DT_NUM = 9
+    DT_F32_8Q = 9,
+    DT_U8_Q = 10,
+    DT_NUM = 11
 } DataType;
 
 inline const char *const *DataTypeName()
 {
     static const char *const names[] = {"DT_U8", "DT_I8", "DT_U32", "DT_I32", "DT_F16", "DT_F16_8Q",
-        "DT_F32", "DT_BIN01", "DT_BIN11", "DT_NUM"};
+        "DT_F32", "DT_BIN01", "DT_BIN11", "DT_F32_8Q", "DT_U8_Q", "DT_NUM"};
     return names;
 }
 
 inline U32 bytesOf(DataType dt)
 {
     // Please divide number of elements by 8 first in the case of binary data types
-    U32 bytes[] = {1, 1, 4, 4, 2, 2, 4, 1, 1, 8};
+    U32 bytes[] = {1, 1, 4, 4, 2, 2, 4, 1, 1, 4, 1};
     return dt < DT_NUM ? bytes[dt] : 0;
 }
 
-inline void transformFromFloat(DataType dataType, float *src, void *dst, int num, float scale = 1)
+#ifdef _USE_FP16
+inline void transformFromHalf(DataType dataType, const F16 *src, void *dst, int num)
+{
+    if (num % 8 != 0) {
+        printf("[ERROR] can not support to transformFromHalf for array(length(%d) mod 8 != 0).\n",
+            num);
+        exit(1);
+    }
+    float threshold = 0;
+    switch (dataType) {
+        case DT_BIN11: {
+            threshold = 0;
+            break;
+        }
+        case DT_BIN01: {
+            threshold = 0.5;
+            break;
+        }
+        default: {
+            printf("[ERROR] can not transform half to %s.\n", DataTypeName()[dataType]);
+            exit(1);
+        }
+    }
+    BIN8 *ptr = (BIN8 *)dst;
+    for (int i = 0, k = 0; i < num / 8; i++) {
+        BIN8 temp = 0;
+        for (int j = 0; j < 8; j++, k++) {
+            if (src[k] >= threshold) {
+                temp |= (1 << (7 - j));
+            }
+        }
+        ptr[i] = temp;
+    }
+}
+
+inline void transformToHalf(DataType dataType, const void *src, F16 *dst, int num)
+{
+    if (num % 8 != 0) {
+        printf(
+            "[ERROR] can not support to transformToHalf for array(length(%d) mod 8 != 0).\n", num);
+        exit(1);
+    }
+    switch (dataType) {
+        case DT_BIN01: {
+            const BIN8 *ptr = (const BIN8 *)src;
+            for (int i = 0; i < num; i++) {
+                std::bitset<8> Val(((BIN8 *)ptr)[i / 8]);
+                if (Val.test(7 - (i % 8))) {
+                    dst[i] = 1.0;
+                } else {
+                    dst[i] = 0;
+                }
+            }
+            break;
+        }
+        case DT_BIN11: {
+            const BIN8 *ptr = (const BIN8 *)src;
+            for (int i = 0; i < num; i++) {
+                std::bitset<8> Val(((BIN8 *)ptr)[i / 8]);
+                if (Val.test(7 - (i % 8))) {
+                    dst[i] = 1.0;
+                } else {
+                    dst[i] = -1.0;
+                }
+            }
+            break;
+        }
+        default: {
+            printf("[ERROR] can not transform %s to half.\n", DataTypeName()[dataType]);
+            exit(1);
+        }
+    }
+}
+#endif
+
+inline void transformFromFloat(
+    DataType dataType, const float *src, void *dst, int num, float scale = 1)
 {
     switch (dataType) {
         case DT_F32: {
@@ -96,7 +177,7 @@ inline void transformFromFloat(DataType dataType, float *src, void *dst, int num
 #ifdef __aarch64__
             F16 *ptr = (F16 *)dst;
 #else
-            U32 *word = (U32 *)src;
+            const U32 *word = (const U32 *)src;
             unsigned short *q = (unsigned short *)dst;
 #endif
             for (int i = 0; i < num; i++) {
@@ -147,28 +228,30 @@ inline void transformFromFloat(DataType dataType, float *src, void *dst, int num
             break;
         }
         default: {
-            printf("can not transform float to %s.\n", DataTypeName()[dataType]);
+            printf("[ERROR] can not transform float to %s.\n", DataTypeName()[dataType]);
             exit(1);
         }
     }
 }
 
-inline void transformToFloat(DataType dataType, void *src, float *dst, int num, float scale = 1)
+inline void transformToFloat(
+    DataType dataType, const void *src, float *dst, int num, float scale = 1)
 {
     switch (dataType) {
+        case DT_F32_8Q:
         case DT_F32: {
             memcpy(dst, src, sizeof(float) * num);
             break;
         }
         case DT_U32: {
-            U32 *ptr = (U32 *)src;
+            const U32 *ptr = (const U32 *)src;
             for (int i = 0; i < num; i++) {
                 dst[i] = ptr[i];
             }
             break;
         }
         case DT_I32: {
-            I32 *ptr = (I32 *)src;
+            const I32 *ptr = (const I32 *)src;
             for (int i = 0; i < num; i++) {
                 dst[i] = ptr[i];
             }
@@ -177,9 +260,9 @@ inline void transformToFloat(DataType dataType, void *src, float *dst, int num, 
         case DT_F16_8Q:
         case DT_F16: {
 #ifdef __aarch64__
-            F16 *ptr = (F16 *)src;
+            const F16 *ptr = (const F16 *)src;
 #else
-            unsigned short *q = (unsigned short *)src;
+            const unsigned short *q = (const unsigned short *)src;
             U32 *word = (U32 *)dst;
 #endif
             for (int i = 0; i < num; i++) {
@@ -216,21 +299,28 @@ inline void transformToFloat(DataType dataType, void *src, float *dst, int num, 
             break;
         }
         case DT_I8: {
-            INT8 *ptr = (INT8 *)src;
+            const INT8 *ptr = (const INT8 *)src;
             for (int i = 0; i < num; i++) {
                 dst[i] = ptr[i] / scale;
             }
             break;
         }
         case DT_U8: {
-            U8 *ptr = (U8 *)src;
+            const U8 *ptr = (const U8 *)src;
             for (int i = 0; i < num; i++) {
                 dst[i] = ptr[i];
             }
             break;
         }
+        case DT_U8_Q: {
+            const U8 *ptr = (const U8 *)src;
+            for (int i = 0; i < num; i++) {
+                dst[i] = ptr[i] - 128;
+            }
+            break;
+        }
         case DT_BIN01: {
-            BIN8 *ptr = (BIN8 *)src;
+            const BIN8 *ptr = (const BIN8 *)src;
             for (int i = 0; i < num; i++) {
                 std::bitset<8> Val(((BIN8 *)ptr)[i / 8]);
                 if (Val.test(7 - (i % 8))) {
@@ -242,7 +332,7 @@ inline void transformToFloat(DataType dataType, void *src, float *dst, int num, 
             break;
         }
         case DT_BIN11: {
-            BIN8 *ptr = (BIN8 *)src;
+            const BIN8 *ptr = (const BIN8 *)src;
             for (int i = 0; i < num; i++) {
                 std::bitset<8> Val(((BIN8 *)ptr)[i / 8]);
                 if (Val.test(7 - (i % 8))) {
@@ -254,7 +344,7 @@ inline void transformToFloat(DataType dataType, void *src, float *dst, int num, 
             break;
         }
         default: {
-            printf("can not transform %s to float.\n", DataTypeName()[dataType]);
+            printf("[ERROR] can not transform %s to float.\n", DataTypeName()[dataType]);
             exit(1);
         }
     }
@@ -294,9 +384,27 @@ inline void UNI_INIT(U32 num, DataType dt, F32 val, void *dst)
             break;
         }
         default: {
-            printf("can not init %s type data.\n", DataTypeName()[dt]);
+            printf("[ERROR] can not init %s type data.\n", DataTypeName()[dt]);
             exit(1);
         }
     }
+}
+
+inline INT8 round_towards_zero(F32 num, bool clamp = true)
+{
+    INT8 ret;
+    if (clamp) {
+        if (num > 127.0) {
+            return 127;
+        } else if (num < -127.0) {
+            return -127;
+        }
+    }
+    if (num > 0) {
+        ret = floor(num);
+    } else {
+        ret = ceil(num);
+    }
+    return ret;
 }
 #endif

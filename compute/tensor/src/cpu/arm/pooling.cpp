@@ -21,6 +21,20 @@
 #ifdef _USE_INT8
 #include "cpu/arm/int8/tensor_computing_int8.h"
 #endif
+typedef EE (*ArmPoolingFunction)(const I32 &tstart,
+    const I32 &tend,
+    const I32 &hstart,
+    const I32 &hend,
+    const I32 &wstart,
+    const I32 &wend,
+    const I32 &poolSize,
+    const I32 &kernelSize,
+    const U8 *input,
+    const I32 &it,
+    const I32 &ih,
+    const I32 &iw,
+    U8 *output,
+    void *scale);
 
 EE pooling_arm(TensorDesc inputDesc,
     const void *input,
@@ -60,53 +74,75 @@ EE pooling_arm(TensorDesc inputDesc,
     }
     if (p.padding_before >= p.kernel_t || p.padding_top >= p.kernel_h ||
         p.padding_left >= p.kernel_w) {
-        ret = NOT_SUPPORTED;
+        return NOT_SUPPORTED;
     }
 
     ic /= 8;
+    int kernelSize = p.kernel_t * p.kernel_h * p.kernel_w;
+    ArmPoolingFunction func = nullptr;
+    if (p.mode == POOLING_MAX) {
+        switch (idt) {
+#ifdef _USE_FP32
+            case DT_F32:
+                func = pooling_c8_fp32<POOLING_MAX>;
+                break;
+#endif
+#ifdef _USE_FP16
+            case DT_F16:
+                func = pooling_c8_fp16<POOLING_MAX>;
+                break;
+#endif
+#ifdef _USE_INT8
+            case DT_I8:
+                func = pooling_c8_int8<POOLING_MAX>;
+                break;
+#endif
+            default:
+                return NOT_SUPPORTED;
+        }
+    } else if (p.mode == POOLING_MEAN) {
+        switch (idt) {
+#ifdef _USE_FP32
+            case DT_F32:
+                func = pooling_c8_fp32<POOLING_MEAN>;
+                break;
+#endif
+#ifdef _USE_FP16
+            case DT_F16:
+                func = pooling_c8_fp16<POOLING_MEAN>;
+                break;
+#endif
+#ifdef _USE_INT8
+            case DT_I8:
+                func = pooling_c8_int8<POOLING_MEAN>;
+                break;
+#endif
+            default:
+                return NOT_SUPPORTED;
+        }
+    } else {
+        return NOT_SUPPORTED;
+    }
+
     const U8 *inputPtr = (const U8 *)input;
     U8 *outputPtr = (U8 *)output;
     for (U32 n = 0; n < in; n++) {
         for (U32 c = 0; c < ic; c++) {
             for (U32 t = 0; t < ot; t++) {
+                int tstart = t * (int)p.stride_t - (int)p.padding_before;
+                int tend = UNI_MIN(tstart + p.kernel_t, it);
+                tstart = UNI_MAX(tstart, 0);
                 for (U32 h = 0; h < oh; h++) {
+                    int hstart = h * (int)p.stride_h - (int)p.padding_top;
+                    int hend = UNI_MIN(hstart + p.kernel_h, ih);
+                    hstart = UNI_MAX(hstart, 0);
                     for (U32 w = 0; w < ow; w++, outputPtr += 8 * bytesOf(odt)) {
-                        int tstart = t * (int)p.stride_t - (int)p.padding_before;
-                        int hstart = h * (int)p.stride_h - (int)p.padding_top;
                         int wstart = w * (int)p.stride_w - (int)p.padding_left;
-                        int tend = UNI_MIN(tstart + (int)p.kernel_t, (int)it);
-                        int hend = UNI_MIN(hstart + (int)p.kernel_h, (int)ih);
-                        int wend = UNI_MIN(wstart + (int)p.kernel_w, (int)iw);
-                        tstart = UNI_MAX(tstart, 0);
-                        hstart = UNI_MAX(hstart, 0);
+                        int wend = UNI_MIN(wstart + p.kernel_w, iw);
                         wstart = UNI_MAX(wstart, 0);
                         int poolSize = (tend - tstart) * (hend - hstart) * (wend - wstart);
-                        switch (idt) {
-#ifdef _USE_FP32
-                            case DT_F32:
-                                ret = pooling_c8_fp32(tstart, tend, hstart, hend, wstart, wend,
-                                    poolSize, (const F32 *)inputPtr, it, ih, iw, p,
-                                    (F32 *)outputPtr);
-                                break;
-#endif
-#ifdef _USE_FP16
-                            case DT_F16:
-                                ret = pooling_c8_fp16(tstart, tend, hstart, hend, wstart, wend,
-                                    poolSize, (const F16 *)inputPtr, it, ih, iw, p,
-                                    (F16 *)outputPtr);
-                                break;
-#endif
-#ifdef _USE_INT8
-                            case DT_I8:
-                                ret = pooling_c8_int8(tstart, tend, hstart, hend, wstart, wend,
-                                    poolSize, (const INT8 *)inputPtr, it, ih, iw, p,
-                                    (INT8 *)outputPtr, scale);
-                                break;
-#endif
-                            default:
-                                ret = NOT_SUPPORTED;
-                                break;
-                        }
+                        ret = func(tstart, tend, hstart, hend, wstart, wend, kernelSize, poolSize,
+                            inputPtr, it, ih, iw, outputPtr, scale);
                     }
                 }
             }

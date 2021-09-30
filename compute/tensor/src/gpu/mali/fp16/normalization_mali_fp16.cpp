@@ -32,12 +32,15 @@ inline EE normalization_core_mali_fp16(GCLHandle_t handle,
     GCLMem_t output)
 {
     U32 iw, ih, ic, in;
-    U32 iw_str, ih_str, iw_off, ih_off;
-    U32 ow_str, oh_str, ow_off, oh_off;
+    U32 iw_str, ih_str, iw_off, ih_off, i_off;
+    U32 ow_str, oh_str, ow_off, oh_off, o_off;
 
     CHECK_STATUS(gclmem_get_desc_dim(input->desc, NULL, NULL, &in, &ic, &ih, &iw));
     CHECK_STATUS(gclmem_get_desc_padding(input->desc, &iw_str, &ih_str, NULL, &iw_off, &ih_off));
     CHECK_STATUS(gclmem_get_desc_padding(output->desc, &ow_str, &oh_str, NULL, &ow_off, &oh_off));
+    i_off = ih_off * iw_str + iw_off;
+    o_off = oh_off * ow_str + ow_off;
+
     U32 axis_len = iw;  //normalization on axis 0;
     cl_mem alpbuf, betbuf, inbuf, outbuf, tmp;
     alpbuf = alpha->mem;
@@ -49,7 +52,7 @@ inline EE normalization_core_mali_fp16(GCLHandle_t handle,
     bool useNchw = (input->desc.memFormat == DF_NCHW) ? true : false;
     char kernelName[128];
     U32 gs[3];
-    U32 ls[3] = {0, 0, 0};
+    U32 ls[3] = {16, 1, 1};
     U32 dim = 3;
     Kernel kernel;
     KernelOpt kernelOpt;
@@ -60,18 +63,15 @@ inline EE normalization_core_mali_fp16(GCLHandle_t handle,
         gs[0] = 16;
         gs[1] = ih;
         gs[2] = ic * in;
-        ls[0] = 16;
-        ls[1] = 1;
-        ls[2] = 1;
     } else {
-        gs[0] = ih;
-        gs[1] = iw;
+        gs[0] = 16;
+        gs[1] = ih;
         gs[2] = (ic + 3) / 4 * in;
     }
 
     float para = 1.0 / axis_len;
-    CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, iw_off, ih_off, ow_str, oh_str, ow_off,
-        oh_off, axis_len, gs[0], gs[1], para, tmp, alpbuf, betbuf, inbuf, outbuf));
+    CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, ow_str, oh_str, i_off, o_off, axis_len,
+        gs[0], gs[1], para, tmp, alpbuf, betbuf, inbuf, outbuf));
     gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
 #ifdef _DEBUG
     CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
@@ -82,12 +82,11 @@ inline EE normalization_core_mali_fp16(GCLHandle_t handle,
 EE normalization_infer_forward_tmp_bytes_mali_fp16(GCLMemDesc gclmemInputDesc, U32 *bytes)
 {
     U32 size = 0;
-    if (gclmemInputDesc.memFormat == DF_NCHW) {
-        DataType dt;
-        U32 ih, ic, in;
-        CHECK_STATUS(gclmem_get_desc_dim(gclmemInputDesc, &dt, NULL, &in, &ic, &ih, NULL));
-        size = in * ic * ih * 16 * bytesOf(DT_F32) * 2;
-    }
+    DataType dt;
+    U32 ih, ic, in;
+    CHECK_STATUS(gclmem_get_desc_dim(gclmemInputDesc, &dt, NULL, &in, &ic, &ih, NULL));
+    ic = (gclmemInputDesc.memFormat == DF_NCHW) ? ic : ALIGN(ic, 4);
+    size = in * ic * ih * 16 * bytesOf(DT_F32) * 2;
     *bytes = size;
     return SUCCESS;
 }

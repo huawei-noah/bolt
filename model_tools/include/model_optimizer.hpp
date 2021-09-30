@@ -33,7 +33,6 @@
 #include "OPOptimizers/MemoryReuseOptimizer.hpp"
 #include "OPOptimizers/ShGaUnCoReOptimizer.hpp"
 #include "OPOptimizers/RNNOptimizer.hpp"
-#include "OPOptimizers/CastOptimizer.hpp"
 #include "OPOptimizers/LayerNormOptimizer.hpp"
 #include "OPOptimizers/InnerProductOptimizer.hpp"
 #include "OPOptimizers/GeluOptimizer.hpp"
@@ -46,7 +45,6 @@
 #include "OPOptimizers/ConvolutionEltwiseOptimizer.hpp"
 #include "OPOptimizers/SpliceFCOptimizer.hpp"
 #include "OPOptimizers/DilationConvOptimizer.hpp"
-#include "OPOptimizers/TransposeScanToRNNOptimizer.hpp"
 #include "OPOptimizers/ConvolutionSliceOptimizer.hpp"
 #include "OPOptimizers/SignOptimizer.hpp"
 #include "OPOptimizers/SwapPadTranspose.hpp"
@@ -56,7 +54,16 @@
 #include "OPOptimizers/SwapTransposeElt.hpp"
 #include "OPOptimizers/TransConcatTrans.hpp"
 #include "OPOptimizers/HSwishOptimizer.hpp"
+#include "OPOptimizers/HSigmoidOptimizer.hpp"
 #include "OPOptimizers/ReorderChannelResizeOptimizer.hpp"
+//#include "OPOptimizers/ScaleWeightOptimizer.hpp"
+#include "OPOptimizers/ModifyDtOfInputOptimizer.hpp"
+#include "OPOptimizers/ReshapeINOptimizer.hpp"
+#include "OPOptimizers/FuseReshapeOptimizer.hpp"
+#include "OPOptimizers/RsqrtOptimizer.hpp"
+#include "OPOptimizers/MergeSharedWeightOptimizer.hpp"
+#include "OPOptimizers/GATOptimizer.hpp"
+#include "OPOptimizers/ConvConvOptimizer.hpp"
 
 class ModelSpecOptimizer {
 public:
@@ -80,6 +87,10 @@ public:
         this->opos.push_back(std::shared_ptr<OPOptimizer>(new ResizeFuseOptimizer()));
         this->opos.push_back(std::shared_ptr<OPOptimizer>(new DeprecatedOPOptimizer()));
 
+        this->opos.push_back(std::shared_ptr<OPOptimizer>(new GATOptimizer()));
+        this->opos.push_back(std::shared_ptr<OPOptimizer>(new RsqrtOptimizer()));
+        this->opos.push_back(std::shared_ptr<OPOptimizer>(new FuseReshapeOptimizer()));
+        this->opos.push_back(std::shared_ptr<OPOptimizer>(new ModifyDtOfInputOptimizer()));
         this->opos.push_back(std::shared_ptr<OPOptimizer>(new ClipOptimizer()));
         this->opos.push_back(std::shared_ptr<OPOptimizer>(new TransposeOptimizer()));
         this->opos.push_back(std::shared_ptr<OPOptimizer>(new SwapTransposeEltOptimizer()));
@@ -88,11 +99,10 @@ public:
         this->opos.push_back(std::shared_ptr<OPOptimizer>(new TransposeOptimizer()));
         this->opos.push_back(std::shared_ptr<OPOptimizer>(new DilationConvolutionOptimizer()));
         this->opos.push_back(std::shared_ptr<OPOptimizer>(new SignOptimizer()));
-        this->opos.push_back(std::shared_ptr<OPOptimizer>(new LayerNormOptimizer()));
         this->opos.push_back(std::shared_ptr<OPOptimizer>(new GeluOptimizer()));
         this->opos.push_back(std::shared_ptr<OPOptimizer>(new HSwishOptimizer()));
+        this->opos.push_back(std::shared_ptr<OPOptimizer>(new HSigmoidOptimizer()));
         this->opos.push_back(std::shared_ptr<OPOptimizer>(new TransposeMatMulToFCOptimizer()));
-        //this->opos.push_back(std::shared_ptr<OPOptimizer>(new TransposeScanToRNNOptimizer()));
         this->opos.push_back(std::shared_ptr<OPOptimizer>(new InnerProductOptimizer()));
         // this->opos.push_back(std::shared_ptr<OPOptimizer>(new MultiHeadAttentionOptimizer()));
         this->opos.push_back(std::shared_ptr<OPOptimizer>(new InvariantSliceOptimizer()));
@@ -108,27 +118,32 @@ public:
             this->opos.push_back(std::shared_ptr<OPOptimizer>(new WeightScaleOptimizer()));
             this->opos.push_back(std::shared_ptr<OPOptimizer>(new WeightBNOptimizer()));
             this->opos.push_back(std::shared_ptr<OPOptimizer>(new WeightScaleOptimizer()));
+            this->opos.push_back(std::shared_ptr<OPOptimizer>(new ActivationOptimizer()));
         }
         this->opos.push_back(std::shared_ptr<OPOptimizer>(new BNScaleOptimizer()));
         this->opos.push_back(std::shared_ptr<OPOptimizer>(new PadOptimizer()));
 
         this->opos.push_back(std::shared_ptr<OPOptimizer>(new ActivationOptimizer()));
+        this->opos.push_back(std::shared_ptr<OPOptimizer>(new ConvConvOptimizer()));
         this->opos.push_back(std::shared_ptr<OPOptimizer>(new ChannelPaddingOptimizer()));
         if (!isPTQ) {
+            //this->opos.push_back(std::shared_ptr<OPOptimizer>(new ScaleWeightOptimizer()));
             this->opos.push_back(std::shared_ptr<OPOptimizer>(new DepthwisePointwiseOptimizer()));
         }
         this->opos.push_back(std::shared_ptr<OPOptimizer>(new TransposeMulToScaleOptimizer()));
 
+        this->opos.push_back(std::shared_ptr<OPOptimizer>(new LayerNormOptimizer()));
         this->opos.push_back(std::shared_ptr<OPOptimizer>(new ReshapeOptimizer()));
         this->opos.push_back(std::shared_ptr<OPOptimizer>(new ShGaUnCoReOptimizer()));
         this->opos.push_back(std::shared_ptr<OPOptimizer>(new RNNOptimizer()));
-        this->opos.push_back(std::shared_ptr<OPOptimizer>(new CastOptimizer()));
         this->opos.push_back(std::shared_ptr<OPOptimizer>(new StdDeviationOptimizer()));
 
         this->opos.push_back(std::shared_ptr<OPOptimizer>(new MergeSameAndScaleOPOptimizer()));
         this->opos.push_back(std::shared_ptr<OPOptimizer>(new ConvolutionStrideOptimizer()));
-        // this->opos.push_back(std::shared_ptr<OPOptimizer>(new ConvolutionEltwiseOptimizer()));
         this->opos.push_back(std::shared_ptr<OPOptimizer>(new InputTransOptimizer()));
+        //this->opos.push_back(std::shared_ptr<OPOptimizer>(new ReshapeINOptimizer()));
+        this->opos.push_back(std::shared_ptr<OPOptimizer>(new MergeSharedWeightOptimizer()));
+        // this->opos.push_back(std::shared_ptr<OPOptimizer>(new ConvolutionEltwiseOptimizer()));
         // this->opos.push_back(std::shared_ptr<OPOptimizer>(new ReorderChannelResizeOptimizer()));
 
         // Please leave MemoryReuseOptimizer at last
@@ -145,13 +160,15 @@ public:
         this->opos.push_back(std::shared_ptr<OPOptimizer>(new NoQuantLabelOptimizer(false, 0)));
     }
 
-    void suggest_for_ptq(std::string inferPrecision, bool fuseBN, F32 clipVal)
+    void suggest_for_ptq(std::string inferPrecision, bool fuseBN, F32 clipVal, bool hasScale)
     {
         if (fuseBN) {
             // Fuse BN with previous conv or fc
             this->opos.push_back(std::shared_ptr<OPOptimizer>(new WeightBNOptimizer()));
             // Fuse scale with previous conv or fc
             this->opos.push_back(std::shared_ptr<OPOptimizer>(new WeightScaleOptimizer()));
+            this->opos.push_back(std::shared_ptr<OPOptimizer>(new WeightBNOptimizer()));
+            this->opos.push_back(std::shared_ptr<OPOptimizer>(new ActivationOptimizer()));
         }
 
         bool hiddenMode = (inferPrecision == "HIDDEN");
@@ -159,8 +176,10 @@ public:
             this->opos.push_back(std::shared_ptr<OPOptimizer>(new DepthwisePointwiseOptimizer()));
         }
 
-        this->opos.push_back(
-            std::shared_ptr<OPOptimizer>(new NoQuantLabelOptimizer(hiddenMode, clipVal)));
+        if (!hasScale) {
+            this->opos.push_back(
+                std::shared_ptr<OPOptimizer>(new NoQuantLabelOptimizer(hiddenMode, clipVal)));
+        }
     }
 
     void empty()

@@ -20,8 +20,7 @@ class ClipOCL : public Clip {
 public:
     ClipOCL(DataType dt, ClipParamSpec p) : Clip(dt, p)
     {
-        setMALIArchInfo(
-            &(this->archInfo), nullptr, &this->needSetKernelVec, &this->needSelectKernelLS);
+        INIT_GPU_INFO(nullptr)
     }
 
     ~ClipOCL(){DESTROY_OCL_KERNEL}

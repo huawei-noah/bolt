@@ -24,21 +24,25 @@ EE scale_x86(TensorDesc inputDesc,
     TensorDesc outputDesc,
     void *output)
 {
-    UNUSED(outputDesc);
-    U32 length = tensorNumElements(inputDesc);
-    int axis = (p.axis + inputDesc.nDims) % inputDesc.nDims;
-    I32 in = inputDesc.dims[inputDesc.nDims - 1];
+    U32 length = tensorNumElements(outputDesc);
+    int axis = (p.axis + outputDesc.nDims) % outputDesc.nDims;
+    I32 on = outputDesc.dims[outputDesc.nDims - 1];
+    I32 oc = outputDesc.dims[outputDesc.nDims - 1 - axis];
     I32 ic = inputDesc.dims[inputDesc.nDims - 1 - axis];
-    I32 elements_per_channel = length / (in * ic);
-    if (inputDesc.df == DF_NCHWC8) {
-        axis = inputDesc.nDims;
+    I32 elements_per_channel = length / (on * oc);
+    if (outputDesc.df == DF_NCHWC8) {
+        axis = outputDesc.nDims;
+    }
+    if (outputDesc.df == DF_NCHWC16) {
+        CHECK_REQUIREMENT(oc % 16 == 0);
+        axis = outputDesc.nDims + 1;
     }
     EE ret = SUCCESS;
-    switch (inputDesc.dt) {
+    switch (outputDesc.dt) {
 #ifdef _USE_FP32
         case DT_F32: {
-            ret = scale_fp32((F32 *)input, axis, inputDesc.nDims, (F32 *)alpha, (F32 *)beta, in, ic,
-                elements_per_channel, (F32 *)output);
+            ret = scale_fp32((F32 *)input, axis, outputDesc.nDims, (F32 *)alpha, (F32 *)beta, on,
+                oc, elements_per_channel, ic, (F32 *)output);
             break;
         }
 #endif

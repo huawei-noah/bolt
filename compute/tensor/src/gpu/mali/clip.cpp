@@ -18,42 +18,13 @@
 #include "gpu/mali/tensor_computing_mali.h"
 #include "gpu/mali/fp16/clip_mali_fp16.h"
 
-EE clip_infer_output_size_mali(TensorDesc inputDesc,
-    TensorDesc *outputDesc,
-    GCLMemDesc_t gclmemInputDesc,
-    GCLMemDesc_t gclmemOutputDesc)
-{
-    /*tensorDesc record cpu org data format info*/
-    /*gclmemDesc record gpu trans data format info*/
-    if (outputDesc) {
-        *outputDesc = inputDesc;
-    }
-    DataType idt;
-    DataFormat idf;
-    U32 iw, ih, ic, in;
-    tensorSelectGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw);
-
-    if (idf == DF_NCHW) {
-        CHECK_STATUS(infer_gclmem_desc_ncwhc4(
-            iw, ih, ic, 0, 0, iw, ih, ic, idt, idt, gclmemInputDesc, gclmemOutputDesc));
-        if (gclmemInputDesc && gclmemOutputDesc) {
-            *gclmemOutputDesc = *gclmemInputDesc;  // the input and output mem maybe the same
-        }
-        return SUCCESS;
-    }
-    return NOT_SUPPORTED;
-}
-
 inline EE clip_checkpara_mali(
     GCLHandle_t handle, TensorDesc inputDesc, GCLMem_t input, TensorDesc outputDesc, GCLMem_t output)
 {
     if (handle == nullptr || nullptr == input || nullptr == output) {
         return NULL_POINTER;
     }
-    if (inputDesc.df != outputDesc.df || inputDesc.df != DF_NCHW) {
-        return NOT_SUPPORTED;
-    }
-    if (input->desc.memFormat != output->desc.memFormat || input->desc.memFormat != DF_NCWHC4) {
+    if (input->desc.memFormat != output->desc.memFormat) {
         return NOT_SUPPORTED;
     }
     return SUCCESS;

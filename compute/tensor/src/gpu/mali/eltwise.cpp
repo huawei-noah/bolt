@@ -18,80 +18,35 @@
 #include "gpu/mali/tensor_computing_mali.h"
 #include "gpu/mali/fp16/eltwise_mali_fp16.h"
 
-EE eltwise_infer_output_size_mali(std::vector<TensorDesc> inputDesc,
+EE eltwise_padding_input_mali(std::vector<TensorDesc> inputDesc,
     TensorDesc *outputDesc,
-    GCLMemDesc_t gclmemInputDesc,
-    GCLMemDesc_t gclmemOutputDesc)
+    std::vector<OclMemory *> inputMems,
+    OclMemory *outputMem)
 {
-    /*tensorDesc record cpu org data format info*/
-    /*gclmemDesc record gpu trans data format info*/
-    if (outputDesc == nullptr || gclmemInputDesc == nullptr || gclmemOutputDesc == nullptr) {
+    if (outputDesc == nullptr || outputMem == nullptr) {
         CHECK_STATUS(NULL_POINTER);
     }
     U32 arrayDimMax = 0;
     bool sameDesc = eltwise_same_desc(inputDesc, &arrayDimMax);
     *outputDesc = inputDesc[arrayDimMax];
 
-    DataType idt;
-    DataFormat idf;
-    U32 iw, ih, ic, in, it;
-    tensorSelectGet(inputDesc[arrayDimMax], &idt, &idf, &in, &ic, &ih, &iw, &it);
-
     if (sameDesc) {
-        U32 size = inputDesc.size();
         bool useNCHW = true;
-        for (U32 i = 0; i < size; i++) {
-            if (gclmemInputDesc[i].memFormat != DF_NCHW && gclmemInputDesc[i].byteSize != 0) {
+        for (U32 i = 0; i < inputDesc.size(); i++) {
+            if (inputDesc[i].df == DF_NCHWC4) {
                 useNCHW = false;
                 break;
             }
         }
-        if (useNCHW) {
-            CHECK_STATUS(infer_gclmem_desc_nchw_3d(
-                0, 0, 0, 0, 0, 0, 0, iw, ih, ic, it, in, idt, idt, NULL, gclmemOutputDesc));
-            for (U32 i = 0; i < size; i++) {
-                CHECK_STATUS(infer_gclmem_desc_nchw_3d(
-                    iw, ih, ic, it, in, 0, 0, 0, 0, 0, 0, 0, idt, idt, &gclmemInputDesc[i], NULL));
-            }
-        } else {
-            CHECK_STATUS(infer_gclmem_desc_ncwhc4_3d(
-                0, 0, 0, 0, 0, 0, 0, iw, ih, ic, it, in, idt, idt, NULL, gclmemOutputDesc));
-            for (U32 i = 0; i < size; i++) {
-                CHECK_STATUS(infer_gclmem_desc_ncwhc4_3d(
-                    iw, ih, ic, it, in, 0, 0, 0, 0, 0, 0, 0, idt, idt, &gclmemInputDesc[i], NULL));
-            }
+        if (!useNCHW) {
+            (*outputDesc).df = DF_NCHWC4;
         }
-        return SUCCESS;
     } else {
         if (inputDesc.size() > 2) {
             CHECK_STATUS(NOT_SUPPORTED);
         }
-        DataFormat imf[2];
-        DataFormat omf;
-        U32 ibytes[2];
-        imf[0] = gclmemInputDesc[arrayDimMax].memFormat;
-        imf[1] = gclmemInputDesc[1 - arrayDimMax].memFormat;
-        ibytes[0] = gclmemInputDesc[arrayDimMax].byteSize;
-        ibytes[1] = gclmemInputDesc[1 - arrayDimMax].byteSize;
-
-        if (imf[0] == DF_NCHW || ibytes[0] == 0) {
-            CHECK_STATUS(infer_gclmem_desc_nchw_3d(iw, ih, ic, it, in, 0, 0, iw, ih, ic, it, in,
-                idt, idt, &gclmemInputDesc[arrayDimMax], gclmemOutputDesc));
-        } else {
-            CHECK_STATUS(infer_gclmem_desc_ncwhc4_3d(iw, ih, ic, it, in, 0, 0, iw, ih, ic, it, in,
-                idt, idt, &gclmemInputDesc[arrayDimMax], gclmemOutputDesc));
-        }
-
-        tensorSelectGet(inputDesc[1 - arrayDimMax], &idt, NULL, &in, &ic, &ih, &iw, &it);
-        if (imf[1] == DF_NCHW || ibytes[1] == 0) {
-            CHECK_STATUS(infer_gclmem_desc_nchw_3d(iw, ih, ic, it, in, 0, 0, iw, ih, ic, it, in,
-                idt, idt, &gclmemInputDesc[1 - arrayDimMax], NULL));
-        } else {
-            CHECK_STATUS(infer_gclmem_desc_ncwhc4_3d(iw, ih, ic, it, in, 0, 0, iw, ih, ic, it, in,
-                idt, idt, &gclmemInputDesc[1 - arrayDimMax], NULL));
-        }
-        return SUCCESS;
     }
+    return SUCCESS;
 }
 
 inline EE eltwise_checkpara_mali(GCLHandle_t handle,
@@ -120,12 +75,11 @@ inline EE eltwise_checkpara_mali(GCLHandle_t handle,
             }
         }
         for (auto it : inputDesc) {
-            if (it.nDims != outputDesc.nDims) {
-                CHECK_STATUS(NOT_SUPPORTED);
-            }
-            for (U32 i = 0; i < it.nDims; i++) {
-                if (it.dims[i] != outputDesc.dims[i]) {
-                    CHECK_STATUS(NOT_SUPPORTED);
+            U32 nDims = outputDesc.nDims;
+            for (U32 i = 0; i < nDims; i++) {
+                U32 dv = (i < it.nDims) ? it.dims[i] : 1;
+                if (dv != outputDesc.dims[i]) {
+                    CHECK_STATUS(NOT_MATCH);
                 }
             }
         }

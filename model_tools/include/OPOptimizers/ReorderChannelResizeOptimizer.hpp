@@ -13,7 +13,6 @@
 
 #ifndef _H_REORDERCHANNELRESIZEOPTIMIZER
 #define _H_REORDERCHANNELRESIZEOPTIMIZER
-#include <iostream>
 #include "ReorderChannelResizeOptimizer.hpp"
 
 class ReorderChannelResizeOptimizer : public OPOptimizer {
@@ -22,8 +21,8 @@ class ReorderChannelResizeOptimizer : public OPOptimizer {
         bool hasOptimized = false;
         for (int i = 0; i < spec->num_operator_specs; i++) {
             if (spec->ops[i].type == OT_ChannelResize) {
-                std::vector<std::pair<int, int>> nextOpIndexes = searchOperatorIndexByInput(spec,
-                    spec->ops[i].output_tensors_name[0], i + 1, spec->num_operator_specs);
+                std::vector<std::pair<int, int>> nextOpIndexes = searchOperatorIndexByInput(
+                    spec, spec->ops[i].output_tensors_name[0], i + 1, spec->num_operator_specs);
                 if (nextOpIndexes.size() != 1 ||
                     OT_Resize != spec->ops[nextOpIndexes[0].first].type) {
                     continue;

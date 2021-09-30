@@ -150,7 +150,6 @@ inline EE has_dedicated_local(Device device, I32 *b)
     map_cl_error_2_ee(ret);
 }
 
-
 typedef enum {
     HOST_TO_DEVICE_BUF = 0,
     HOST_TO_DEVICE_IMG = 1,
@@ -184,6 +183,8 @@ struct GCLHandle {
     U32 device_max_ls_size[3];
     U32 device_max_cu;
     U32 device_max_work_group;
+    U32 device_max_image3d_size[3];
+    bool useQualcommDev;
 
     Context context;
     CommandQueue queue;
@@ -222,7 +223,7 @@ typedef GCLHandleConfig *GCLHandleConfig_t;
 
 typedef struct {
     I32 algorithm;
-    U32 best_w[6];
+    U32 best_h[6];
     U32 best_c[6];
     U32 best_k[6];
 } ForwardRunInfoMali;

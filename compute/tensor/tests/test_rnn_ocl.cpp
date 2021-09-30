@@ -11,59 +11,23 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string.h>
 #include "tensor_computing.h"
-#include "ut_util.h"
-#include "gcl.h"
-#include "libkernelsource.h"
-inline GCLMem_t alloc(Tensor tensor)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    mem->alloc();
-    return (GCLMem_t)mem->get_ptr();
-}
+#include "ut_util_ocl.h"
 
-inline GCLMem_t alloc_map(Tensor tensor)
+int rnnTest(int argc, char **argv, DataType dt, RNNMode mode)
 {
-    auto mem = (OclMemory *)tensor.get_memory();
-    mem->mapped_alloc();
-    return (GCLMem_t)mem->get_ptr();
-}
-
-inline GCLMem_t alloc_bytes(Tensor tensor, U32 size)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    GCLMem_t ptr = NULL;
-    if (size > 0) {
-        mem->resize(tensor1d(DT_U8, size));
-        mem->alloc();
-        ptr = (GCLMem_t)mem->get_ptr();
-    }
-    return ptr;
-}
-
-inline GCLMem_t alloc_desc(Tensor tensor, GCLMemDesc desc)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    mem->padding(desc);
-    mem->alloc();
-    return (GCLMem_t)mem->get_ptr();
-}
-
-int rnncellTest(int argc, char **argv, DataType dt, RNNMode mode)
-{
-    U32 xDim, hDim, numProjection;
-    xDim = atoi(argv[1]);
-    hDim = atoi(argv[2]);
-    if (argc == 4) {
-        numProjection = atoi(argv[3]);
-    } else {
-        numProjection = 0;
-    }
+    U32 batch, step, xDim, hDim, numProjection, biDir;
+    batch = atoi(argv[1]);
+    step = atoi(argv[2]);
+    xDim = atoi(argv[3]);
+    hDim = atoi(argv[4]);
+    numProjection = atoi(argv[5]);
+    biDir = atoi(argv[6]);
     ArchInfo archInfo;
     archInfo.arch = MALI;
-    ArchInfo archInfo_org;
-    archInfo_org.arch = CPU_GENERAL;
+    if (gcl_check_device_qualcomm(OCLContext::getInstance().handle.get())) {
+        archInfo.arch = QUALCOMM;
+    }
 
     RNNParamSpec rnnParamSpec;
     rnnParamSpec.mode = RNN_LSTM;
@@ -72,13 +36,12 @@ int rnncellTest(int argc, char **argv, DataType dt, RNNMode mode)
     rnnParamSpec.forgetBias = 1.0;
     rnnParamSpec.zoneoutCell = 0;
     rnnParamSpec.zoneoutOutput = 0;
-    rnnParamSpec.steps = -1;
-    rnnParamSpec.biDirection = false;
+    rnnParamSpec.steps = 0;
+    rnnParamSpec.biDirection = (biDir) ? true : false;
     rnnParamSpec.activationMode = ACTIVATION_TANH;
 
     U32 col = (numProjection > 0) ? numProjection : hDim;
-    TensorDesc inputDesc = tensor2df(dt, DF_NORMAL, 1, xDim);
-    TensorDesc stateDesc = tensor2df(dt, DF_NORMAL, 1, col + hDim);
+    TensorDesc inputDesc = tensor3df(dt, DF_NORMAL, batch, step, xDim);
 
     std::vector<TensorDesc> biasDesc(2);
     std::vector<TensorDesc> filterDesc(2);
@@ -90,74 +53,80 @@ int rnncellTest(int argc, char **argv, DataType dt, RNNMode mode)
     Tensor inputTensorCpu;
     inputTensorCpu.resize(inputDesc);
     inputTensorCpu.alloc();
-    Tensor stateTensorCpu;
-    stateTensorCpu.resize(stateDesc);
-    stateTensorCpu.alloc();
 
-    std::vector<Tensor> filterTensorCpu(2);
-    std::vector<Tensor> biasTensorCpu(2);
-    std::vector<Tensor> ftmTensorCpu(2);
-    for (U32 i = 0; i < 2; i++) {
-        filterTensorCpu[i].resize(filterDesc[i]);
-        filterTensorCpu[i].alloc();
-        biasTensorCpu[i].resize(biasDesc[i]);
-        biasTensorCpu[i].alloc();
+    U32 filterNum = (numProjection) ? 2 : 1;
+    U32 biDirNum = (biDir) ? 2 : 1;
+    std::vector<Tensor> filterTensorCpu(filterNum * biDirNum);
+    std::vector<Tensor> biasTensorCpu(filterNum * biDirNum);
+    std::vector<Tensor> ftmTensorCpu(filterNum * biDirNum);
+    for (U32 i = 0; i < biDirNum; i++) {
+        for (U32 j = 0; j < filterNum; j++) {
+            filterTensorCpu[i * filterNum + j].resize(filterDesc[j]);
+            filterTensorCpu[i * filterNum + j].alloc();
+            biasTensorCpu[i * filterNum + j].resize(biasDesc[j]);
+            biasTensorCpu[i * filterNum + j].alloc();
+        }
     }
     Tensor outputTensorCpu;
     U32 inputLen = tensorNumElements(inputDesc);
-    U32 stateLen = tensorNumElements(stateDesc);
     U8 *input_cpu = ut_input_v(inputLen, dt, UT_INIT_RANDOM);
-    memcpy(get_ptr_from_tensor(inputTensorCpu, UT_ARCH), input_cpu, inputLen * bytesOf(dt));
+    memcpy(get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), input_cpu, inputLen * bytesOf(dt));
 
-    U8 *state_cpu = ut_input_v(stateLen, dt, UT_INIT_RANDOM);
-    memcpy(get_ptr_from_tensor(stateTensorCpu, UT_ARCH), state_cpu, stateLen * bytesOf(dt));
-    U8 *state_gpu_host = ut_input_v(stateLen, dt, UT_INIT_ZERO);
+    std::vector<U8 *> bias_cpu(filterNum * biDirNum);
+    std::vector<U8 *> filter_cpu(filterNum * biDirNum);
+    for (U32 i = 0; i < biDirNum; i++) {
+        for (U32 j = 0; j < filterNum; j++) {
+            U32 len = tensorNumElements(biasDesc[j]);
+            bias_cpu[i * filterNum + j] = ut_input_v(len, dt, UT_INIT_RANDOM);
+            memcpy(get_ptr_from_tensor(biasTensorCpu[i * filterNum + j], CPU_GENERAL),
+                bias_cpu[i * filterNum + j], len * bytesOf(dt));
 
-    std::vector<U8 *> bias_cpu(2);
-    std::vector<U8 *> filter_cpu(2);
-    for (U32 i = 0; i < 2; i++) {
-        U32 len = tensorNumElements(biasDesc[i]);
-        bias_cpu[i] = ut_input_v(len, dt, UT_INIT_RANDOM);
-        memcpy(get_ptr_from_tensor(biasTensorCpu[i], UT_ARCH), bias_cpu[i], len * bytesOf(dt));
-
-        len = tensorNumElements(filterDesc[i]);
-        filter_cpu[i] = ut_input_v(len, dt, UT_INIT_RANDOM);
-        memcpy(get_ptr_from_tensor(filterTensorCpu[i], UT_ARCH), filter_cpu[i], len * bytesOf(dt));
+            len = tensorNumElements(filterDesc[j]);
+            filter_cpu[i * filterNum + j] = ut_input_v(len, dt, UT_INIT_RANDOM);
+            memcpy(get_ptr_from_tensor(filterTensorCpu[i * filterNum + j], CPU_GENERAL),
+                filter_cpu[i * filterNum + j], len * bytesOf(dt));
+        }
     }
 
-    std::vector<Tensor *> inputTensorPtrCpu(2);
+    std::vector<Tensor *> inputTensorPtrCpu(1);
     inputTensorPtrCpu[0] = &inputTensorCpu;
-    inputTensorPtrCpu[1] = &stateTensorCpu;
-    CHECK_STATUS(
-        rnncell_infer_output_size(inputTensorPtrCpu, rnnParamSpec, &outputTensorCpu, &archInfo_org));
+    std::vector<Tensor *> outputTensorPtrCpu(1);
+    outputTensorPtrCpu[0] = &outputTensorCpu;
+    CHECK_STATUS(rnn_infer_output_size(
+        inputTensorPtrCpu, rnnParamSpec, outputTensorPtrCpu, &UT_SERIAL_ARCHINFO));
     outputTensorCpu.alloc();
 
     U32 tmpBytes;
-    CHECK_STATUS(rnncell_infer_forward_tmp_bytes(inputTensorCpu, filterTensorCpu[0],
-        outputTensorCpu, rnnParamSpec, &tmpBytes, &archInfo_org));
+    CHECK_STATUS(rnn_infer_forward_tmp_bytes(inputTensorCpu, filterTensorCpu[0], outputTensorCpu,
+        rnnParamSpec, &tmpBytes, &UT_SERIAL_ARCHINFO));
     Tensor tmpTensorCpu;
     TensorDesc tmpDesc = tensor1d(DT_U8, tmpBytes);
     tmpTensorCpu.resize(tmpDesc);
     tmpTensorCpu.alloc();
-    memset(get_ptr_from_tensor(tmpTensorCpu, UT_ARCH), 0, tmpBytes);
+    memset(get_ptr_from_tensor(tmpTensorCpu, CPU_GENERAL), 0, tmpBytes);
 
-    std::vector<U32> ftmBytes(2);
-    CHECK_STATUS(
-        rnn_transform_filter_bytes(filterTensorCpu, rnnParamSpec, ftmBytes.data(), &archInfo_org));
+    std::vector<U32> ftmBytes(4);
+    CHECK_STATUS(rnn_transform_filter_bytes(
+        filterTensorCpu, rnnParamSpec, ftmBytes.data(), &UT_SERIAL_ARCHINFO));
 
-    std::vector<Tensor *> ftmTensorPtrCpu(2);
-    for (U32 i = 0; i < 2; i++) {
-        tmpDesc = tensor1d(DT_U8, ftmBytes[i]);
-        ftmTensorCpu[i].resize(tmpDesc);
-        ftmTensorCpu[i].alloc();
-        ftmTensorPtrCpu[i] = &ftmTensorCpu[i];
+    std::vector<Tensor *> ftmTensorPtrCpu(filterNum * biDirNum);
+    for (U32 i = 0; i < biDirNum; i++) {
+        for (U32 j = 0; j < filterNum; j++) {
+            tmpDesc = tensor1d(DT_U8, ftmBytes[j]);
+            ftmTensorCpu[i * filterNum + j].resize(tmpDesc);
+            ftmTensorCpu[i * filterNum + j].alloc();
+            ftmTensorPtrCpu[i * filterNum + j] = &ftmTensorCpu[i * filterNum + j];
+        }
     }
 
-    CHECK_STATUS(
-        rnn_transform_filter(filterTensorCpu, rnnParamSpec, ftmTensorPtrCpu, &archInfo_org));
+    CHECK_STATUS(rnn_transform_filter(
+        filterTensorCpu, rnnParamSpec, tmpTensorCpu, ftmTensorPtrCpu, &UT_SERIAL_ARCHINFO));
 
-    CHECK_STATUS(rnncell(inputTensorCpu, ftmTensorCpu, biasTensorCpu, stateTensorCpu, rnnParamSpec,
-        xDim, col, 0, tmpTensorCpu, outputTensorCpu, &archInfo_org));
+    std::vector<Tensor> inputTensorVecCpu(1, inputTensorCpu);
+    std::vector<Tensor> outputTensorVecCpu(1, outputTensorCpu);
+    std::vector<Tensor> tmpTensorVecCpu(1, tmpTensorCpu);
+    CHECK_STATUS(rnn(inputTensorVecCpu, ftmTensorCpu, biasTensorCpu, rnnParamSpec, tmpTensorVecCpu,
+        outputTensorVecCpu, &UT_SERIAL_ARCHINFO));
 
     /*************GPU*************/
     std::shared_ptr<GCLHandle> handleSharedPtr = OCLContext::getInstance().handle;
@@ -167,28 +136,30 @@ int rnncellTest(int argc, char **argv, DataType dt, RNNMode mode)
 
     Tensor inputTensor = Tensor(OCLMem);
     inputTensor.resize(inputDesc);
-    inputTensor.alloc();
-    Tensor stateTensor = Tensor(OCLMem);
-    stateTensor.resize(stateDesc);
-    stateTensor.alloc();
 
-    std::vector<Tensor> filterTensor(2);
-    std::vector<Tensor> biasTensor(2);
-    std::vector<Tensor> ftmTensor(2);
-    for (U32 i = 0; i < 2; i++) {
-        filterTensor[i] = Tensor(OCLMem);
-        filterTensor[i].resize(filterDesc[i]);
-        biasTensor[i] = Tensor(OCLMem);
-        biasTensor[i].resize(biasDesc[i]);
-        ftmTensor[i] = Tensor(OCLMem);
+    std::vector<Tensor> filterTensor(filterNum * biDirNum);
+    std::vector<Tensor> biasTensor(filterNum * biDirNum);
+    std::vector<Tensor> ftmTensor((filterNum + 1) * biDirNum);
+    for (U32 i = 0; i < biDirNum; i++) {
+        for (U32 j = 0; j < filterNum; j++) {
+            filterTensor[i * filterNum + j] = Tensor(OCLMem);
+            filterTensor[i * filterNum + j].resize(filterDesc[j]);
+            biasTensor[i * filterNum + j] = Tensor(OCLMem);
+            biasTensor[i * filterNum + j].resize(biasDesc[j]);
+        }
+    }
+    for (U32 i = 0; i < biDirNum; i++) {
+        for (U32 j = 0; j < filterNum + 1; j++) {
+            if (j == 0 && archInfo.arch == QUALCOMM) {
+                ftmTensor[i * (filterNum + 1) + j] = Tensor(OCLMemImg);
+            } else {
+                ftmTensor[i * (filterNum + 1) + j] = Tensor(OCLMem);
+            }
+        }
     }
     Tensor outputTensor = Tensor(OCLMem);
     Tensor tmpTensor = Tensor(OCLMem);
-    U32 stride[3] = {0, 0, 0};
-    U32 offset[3] = {0, 0, 0};
-    GCLMemDesc desc = gcl_mem_desc(stride, offset, DT_U8, DF_NCHW);
-    ocl_set_desc(&inputTensor, desc);
-    ocl_set_desc(&stateTensor, desc);
+    Tensor tmpTensorImg = Tensor(OCLMemImg);
     MaliPara maliPara;
     ForwardRunInfoMali runInfo;
     runInfo.algorithm = (I32)(CONVOLUTION_ALGORITHM_NULL);
@@ -196,58 +167,63 @@ int rnncellTest(int argc, char **argv, DataType dt, RNNMode mode)
     maliPara.forwardRunInfo = &runInfo;
     archInfo.archPara = &maliPara;
 
-    std::vector<Tensor *> inputTensorPtr(2);
+    std::vector<Tensor *> inputTensorPtr(1);
     inputTensorPtr[0] = &inputTensor;
-    inputTensorPtr[1] = &stateTensor;
-    CHECK_STATUS(rnncell_infer_output_size(inputTensorPtr, rnnParamSpec, &outputTensor, &archInfo));
-    CHECK_STATUS(rnncell_infer_forward_algorithm(inputTensor, filterTensor[0], biasTensor[0],
-        stateTensor, rnnParamSpec, xDim, col, outputTensor, &archInfo));
+    std::vector<Tensor *> outputTensorPtr(1);
+    outputTensorPtr[0] = &outputTensor;
+    CHECK_STATUS(rnn_infer_output_size(inputTensorPtr, rnnParamSpec, outputTensorPtr, &archInfo));
+    TensorDesc outputDesc = outputTensor.get_desc();
+    U8 *output_gpu = ut_input_v(tensorNumElements(outputDesc), dt, UT_INIT_RANDOM);
 
-    U32 maxBytes = 0;
-    CHECK_STATUS(rnncell_infer_forward_tmp_bytes(
-        inputTensor, filterTensor[0], outputTensor, rnnParamSpec, &tmpBytes, &archInfo));
-    maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
+    CHECK_STATUS(rnn_infer_forward_algorithm(
+        inputTensor, filterTensor, biasTensor, rnnParamSpec, outputTensor, &archInfo));
+    runInfo.algorithm = (I32)(CONVOLUTION_ALGORITHM_GEMM);
 
-    GCLMemDesc ftmMemDesc[2];
-    ftmMemDesc[0] = gclmem_build_desc();
-    ftmMemDesc[1] = gclmem_build_desc();
-    maliPara.gclmemFilterDesc = ftmMemDesc;
-    CHECK_STATUS(rnn_transform_filter_bytes(filterTensor, rnnParamSpec, ftmBytes.data(), &archInfo));
+    U32 maxBytes[4] = {0};
+    CHECK_STATUS(rnn_infer_forward_tmp_bytes(
+        inputTensor, filterTensor[0], outputTensor, rnnParamSpec, maxBytes, &archInfo));
 
-    GCLMem_t output = alloc_map(outputTensor);
+    TensorDesc ftmDesc[3];
+    CHECK_STATUS(rnn_transform_filter_bytes(filterTensor, rnnParamSpec, ftmDesc, &archInfo));
+
+    GCLMem_t output = alloc(outputTensor);
     GCLMem_t input = alloc(inputTensor);
-    GCLMem_t state = alloc(stateTensor);
     CHECK_STATUS(gcl_fill_memory_zero(handle, input));
-    CHECK_STATUS(gcl_fill_memory_zero(handle, state));
 
-    stride[0] = 4 * col;
-    stride[1] = 1;
-    stride[2] = 1;
-    std::vector<Tensor *> ftmTensorPtr(2);
-    for (U32 i = 0; i < 2; i++) {
-        stride[0] = biasDesc[i].dims[0];
-        CHECK_STATUS(gclmem_set_desc_padding(&desc, stride, offset, dt, DF_NCHW, GCL_MEM_BUF,
-            CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, bias_cpu[i]));
-        alloc_desc(biasTensor[i], desc);
-        stride[0] = filterDesc[i].dims[0];
-        stride[1] = filterDesc[i].dims[1];
-        CHECK_STATUS(gclmem_set_desc_padding(&desc, stride, offset, dt, DF_NCHW, GCL_MEM_BUF,
-            CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR, filter_cpu[i]));
-        alloc_desc(filterTensor[i], desc);
-        alloc_desc(ftmTensor[i], ftmMemDesc[i]);
-        ftmTensorPtr[i] = &ftmTensor[i];
+    std::vector<Tensor *> ftmTensorPtr((filterNum + 1) * biDirNum);
+    for (U32 i = 0; i < biDirNum; i++) {
+        for (U32 j = 0; j < filterNum; j++) {
+            auto biasMemCpu = biasTensorCpu[i * filterNum + j].get_memory();
+            auto biasMemGpu = (OclMemory *)biasTensor[i * filterNum + j].get_memory();
+            biasMemGpu->padding(0, 8, 0, 0);
+            biasMemGpu->copy_from(biasMemCpu);
+            alloc_host_ptr(filterTensor[i * filterNum + j], filter_cpu[i * filterNum + j]);
+        }
+    }
+    for (U32 i = 0; i < biDirNum; i++) {
+        for (U32 j = 0; j < filterNum + 1; j++) {
+            ftmTensor[i * (filterNum + 1) + j].resize(ftmDesc[j]);
+            alloc(ftmTensor[i * (filterNum + 1) + j]);
+            ftmTensorPtr[i * (filterNum + 1) + j] = &ftmTensor[i * (filterNum + 1) + j];
+        }
     }
     tmpBytes = tensorNumBytes(inputDesc);
-    maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
-    tmpBytes = tensorNumBytes(stateDesc);
-    maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
-    GCLMem_t tmpbuf = alloc_bytes(tmpTensor, maxBytes);
+    maxBytes[0] = (tmpBytes > maxBytes[0]) ? tmpBytes : maxBytes[0];
+    tmpBytes = tensorNumBytes(outputDesc);
+    maxBytes[0] = (tmpBytes > maxBytes[0]) ? tmpBytes : maxBytes[0];
+    GCLMem_t tmpbuf = alloc_bytes(tmpTensor, maxBytes[0]);
+    alloc_img(tmpTensorImg, maxBytes + 1);
+    std::vector<Tensor> tmpTensors(2);
+    tmpTensors[0] = tmpTensor;
+    tmpTensors[1] = tmpTensorImg;
 
-    CHECK_STATUS(rnn_transform_filter(filterTensor, rnnParamSpec, ftmTensorPtr, &archInfo));
+    CHECK_STATUS(
+        rnn_transform_filter(filterTensor, rnnParamSpec, tmpTensor, ftmTensorPtr, &archInfo));
     CHECK_STATUS(ocl_set_input(handle, input, inputDesc, input_cpu, tmpbuf, true));
-    CHECK_STATUS(ocl_set_input(handle, state, stateDesc, state_cpu, tmpbuf, true));
-    CHECK_STATUS(rnncell(inputTensor, ftmTensor, biasTensor, stateTensor, rnnParamSpec, xDim, col,
-        0, tmpTensor, outputTensor, &archInfo));
+    std::vector<Tensor> inputTensors(1, inputTensor);
+    std::vector<Tensor> outputTensors(1, outputTensor);
+    CHECK_STATUS(rnn(
+        inputTensors, ftmTensor, biasTensor, rnnParamSpec, tmpTensors, outputTensors, &archInfo));
     /*warp up*/
     UNI_INFO_LOG("warm up gpu:\n");
     for (U32 i = 0; i < 0; i++) {
@@ -275,32 +251,23 @@ int rnncellTest(int argc, char **argv, DataType dt, RNNMode mode)
 #else
     CHECK_STATUS(gcl_run_kernelVec(handle));
 #endif
-    TensorDesc outputDesc = outputTensor.get_desc();
-    CHECK_STATUS(ocl_get_output(handle, output, outputDesc, true));
-    void *output_gpu = output->mapPtrArray.back();
+    CHECK_STATUS(ocl_get_output(handle, output, outputDesc, output_gpu, tmpbuf, true));
     // log performance data
     char buffer[150];
     char params[120];
-    sprintf(params, "%u (%u %u %u)=(%u %u)", 1, 1, xDim, hDim, 1, hDim);
-    sprintf(buffer, "%20s, %80s", "RNN", params);
+    sprintf(params, "%u (%u %u %u)=(%u %u)", batch, step, xDim, hDim, batch, hDim);
 #ifdef _DEBUG
     double hxDim = hDim + xDim;
-    double ops = 1.0 *
+    double ops = 1.0 * batch * step *
         (2.0 * hxDim * col * 4 + col * 4 + rnnParamSpec.numProjection * rnnParamSpec.numOutput);
     ut_log(dt, buffer, ops, time);
 #endif
-    ut_check_a(output_gpu, get_ptr_from_tensor(outputTensorCpu, UT_ARCH),
+    ut_check_a(output_gpu, get_ptr_from_tensor(outputTensorCpu, CPU_GENERAL),
         tensorNumElements(outputDesc), outputDesc.dt);
-    UNI_INFO_LOG("state:\n");
-    U32 stateSize = tensorNumBytes(stateDesc);
-    CHECK_STATUS(
-        gcl_trans_memory(handle, state, state_gpu_host, &stateSize, DEVICE_BUF_TO_HOST, true));
-    ut_check_a(state_gpu_host, get_ptr_from_tensor(stateTensorCpu, UT_ARCH),
-        tensorNumElements(stateDesc), stateDesc.dt);
 
+    free(output_gpu);
     free(input_cpu);
-    free(state_cpu);
-    for (U32 i = 0; i < 2; i++) {
+    for (U32 i = 0; i < filterNum * biDirNum; i++) {
         free(filter_cpu[i]);
         free(bias_cpu[i]);
     }
@@ -310,7 +277,7 @@ int rnncellTest(int argc, char **argv, DataType dt, RNNMode mode)
 int main(int argc, char **argv)
 {
 #ifdef _USE_FP16
-    rnncellTest(argc, argv, DT_F16, RNN_LSTM);
+    rnnTest(argc, argv, DT_F16, RNN_LSTM);
 #endif
     return 0;
 }

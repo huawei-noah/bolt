@@ -12,38 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "tensor_computing.h"
-#include "ut_util.h"
-#include "libkernelsource.h"
-#include <string.h>
-#include "gcl.h"
-#include <iostream>
-
-#ifdef _USE_FP16
-inline GCLMem_t alloc(Tensor tensor)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    mem->alloc();
-    return (GCLMem_t)mem->get_ptr();
-}
-
-inline GCLMem_t alloc_map(Tensor tensor)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    mem->mapped_alloc();
-    return (GCLMem_t)mem->get_ptr();
-}
-
-inline GCLMem_t alloc_bytes(Tensor tensor, U32 size)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    GCLMem_t ptr = NULL;
-    if (size > 0) {
-        mem->resize(tensor1d(DT_U8, size));
-        mem->alloc();
-        ptr = (GCLMem_t)mem->get_ptr();
-    }
-    return ptr;
-}
+#include "ut_util_ocl.h"
 
 int concatTest(int argc, char **argv, DataType dt)
 {
@@ -65,11 +34,8 @@ int concatTest(int argc, char **argv, DataType dt)
         std::shared_ptr<Tensor> tensorCpu(new Tensor());
         std::shared_ptr<Tensor> tensor(new Tensor(OCLMem));
         tensorCpu->resize(inputDesc[i]);
+        inputDesc[i].df = DF_NCHWC4;
         tensor->resize(inputDesc[i]);
-        U32 str[3] = {1, 1, 1};
-        U32 off[3] = {0, 0, 0};
-        GCLMemDesc inputMemDesc = gcl_mem_desc(str, off, DT_U8, DF_NCWHC4);
-        ocl_set_desc(tensor.get(), inputMemDesc);
         inputTensorCpu.push_back(*tensorCpu.get());
         inputTensor.push_back(*tensor.get());
     }
@@ -80,8 +46,6 @@ int concatTest(int argc, char **argv, DataType dt)
 
     ArchInfo archInfo;
     archInfo.arch = MALI;
-    ArchInfo archInfo_org;
-    archInfo_org.arch = CPU_GENERAL;
 
     std::vector<Tensor *> inputTensorCpuPtr;
     std::vector<Tensor *> inputTensorPtr;
@@ -110,6 +74,7 @@ int concatTest(int argc, char **argv, DataType dt)
         input_cpu[i] = (void *)(tmp + count * bytesOf(dt));
         count += tensorNumElements(inputDesc[i]);
     }
+    U8 *output_gpu = ut_input_v(on * oc * oh * ow, dt, UT_INIT_RANDOM);
 
     MaliPara maliPara;
     maliPara.handle = handle;
@@ -123,11 +88,13 @@ int concatTest(int argc, char **argv, DataType dt)
     CHECK_STATUS(concat_infer_forward_tmp_bytes(inputTensor, &tmpBytes, &archInfo));
     maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
 
-    GCLMem_t output = alloc_map(outputTensor);
+    GCLMem_t output = alloc(outputTensor);
     for (int i = 0; i < num; i++) {
         tmpBytes = tensorNumBytes(inputTensor[i].get_desc());
         maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
     }
+    tmpBytes = tensorNumBytes(outputDesc);
+    maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
     GCLMem_t tmpbuf = alloc_bytes(tmpTensor, maxBytes);
 
     for (int i = 0; i < num; i++) {
@@ -139,20 +106,17 @@ int concatTest(int argc, char **argv, DataType dt)
     CHECK_STATUS(concat(inputTensor, p, tmpTensor, outputTensor, &archInfo));
 
     /*warp up*/
-    UNI_INFO_LOG("warm up gpu:\n")
     for (U32 i = 0; i < 2; i++) {
         CHECK_STATUS(gcl_run_kernelVec(handle));
     }
 
-    UNI_INFO_LOG("Run:\n")
 #ifdef _DEBUG
     CHECK_STATUS(gcl_run_kernelVec_timing(handle, 0, handle->kernelVec->size()));
     double time = handle->t_execute * 0.001;
 #else
     CHECK_STATUS(gcl_run_kernelVec(handle));
 #endif
-    CHECK_STATUS(ocl_get_output(handle, output, outputDesc, true));
-    U8 *output_gpu_val = output->mapPtrArray.back();
+    CHECK_STATUS(ocl_get_output(handle, output, outputDesc, output_gpu, tmpbuf, true));
 
     char buffer[150];
     char params[120];
@@ -164,24 +128,27 @@ int concatTest(int argc, char **argv, DataType dt)
 #endif
     for (int i = 0; i < num; i++) {
         inputTensorCpu[i].alloc();
-        memcpy(get_ptr_from_tensor(inputTensorCpu[i], UT_ARCH), input_cpu[i],
+        inputDesc[i].df = DF_NCHW;
+        memcpy(get_ptr_from_tensor(inputTensorCpu[i], CPU_GENERAL), input_cpu[i],
             tensorNumBytes(inputDesc[i]));
     }
 
     Tensor outputTensorCpu;
-    CHECK_STATUS(concat_infer_output_size(inputTensorCpuPtr, p, &outputTensorCpu, &archInfo_org));
+    CHECK_STATUS(
+        concat_infer_output_size(inputTensorCpuPtr, p, &outputTensorCpu, &UT_SERIAL_ARCHINFO));
     outputTensorCpu.alloc();
 
     Tensor tmpTensorCpu;
-    CHECK_STATUS(concat(inputTensorCpu, p, tmpTensorCpu, outputTensorCpu, &archInfo_org));
-    ut_check_a(output_gpu_val, get_ptr_from_tensor(outputTensorCpu, UT_ARCH), on * oc * ow * oh, dt);
+    CHECK_STATUS(concat(inputTensorCpu, p, tmpTensorCpu, outputTensorCpu, &UT_SERIAL_ARCHINFO));
+    ut_check_a(output_gpu, get_ptr_from_tensor(outputTensorCpu, CPU_GENERAL), on * oc * ow * oh, dt);
 
     CHECK_STATUS(gcl_finish(handle));
     CHECK_STATUS(gcl_clean_kernelVec(handle));
+    free(output_gpu);
     free(tmp);
     return 0;
 }
-#endif
+
 int main(int argc, char **argv)
 {
 #ifdef _USE_FP16

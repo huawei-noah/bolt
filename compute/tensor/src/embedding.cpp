@@ -15,7 +15,7 @@
 #ifdef _USE_CPU
 #include "cpu/tensor_computing_cpu.h"
 #endif
-#ifdef _USE_MALI
+#ifdef _USE_GPU
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
 
@@ -33,65 +33,72 @@ EE embedding_infer_output_size(Tensor *inputTensor,
     }
     TensorDesc inputDesc = inputTensor->get_desc();
     TensorDesc outputDesc = outputTensor->get_desc();
-    EE ret = NOT_SUPPORTED;
-    if (IS_MALI_GPU(archInfo->arch)) {
-#ifdef _USE_MALI
-        GCLMemDesc gclmemInputDesc = ocl_get_desc(*inputTensor);
-        GCLMemDesc gclmemOutputDesc = ocl_get_desc(*outputTensor);
-        ret = embedding_infer_output_size_mali(
-            inputDesc, p, outputDt, &outputDesc, &gclmemInputDesc, &gclmemOutputDesc);
-        ocl_set_desc(inputTensor, gclmemInputDesc);
-        ocl_set_desc(outputTensor, gclmemOutputDesc);
-#endif
-#ifdef _USE_CPU
-    } else {
-        DataType dt;
-        DataFormat df;
-        U32 batch, step;
-        bool inputOneDim = false;
-        if (inputDesc.nDims == 1) {
-            inputOneDim = true;
-            inputDesc.nDims = 2;
-            inputDesc.dims[1] = 1;
-        }
-        CHECK_REQUIREMENT(tensorIs2d(inputDesc));
-        CHECK_STATUS(tensor2dGet(inputDesc, &dt, &df, &batch, &step));
-        outputDesc = tensor3df(outputDt, DF_MTK, batch, step, p.num_output);
-        if (inputOneDim) {
-            outputDesc.nDims = 2;
-            outputDesc.df = DF_NORMAL;
-        }
-        ret = SUCCESS;
-#endif
+    DataType dt;
+    DataFormat df;
+    U32 batch, step;
+    bool inputOneDim = false;
+    if (inputDesc.nDims == 1) {
+        inputOneDim = true;
+        inputDesc.nDims = 2;
+        inputDesc.dims[1] = 1;
+    }
+    CHECK_REQUIREMENT(tensorIs2d(inputDesc));
+    CHECK_STATUS(tensor2dGet(inputDesc, &dt, &df, &batch, &step));
+    outputDesc = tensor3df(outputDt, DF_MTK, batch, step, p.num_output);
+    if (inputOneDim) {
+        outputDesc.nDims = 2;
+        outputDesc.df = DF_NORMAL;
     }
     outputTensor->resize(outputDesc);
-    return ret;
+    return SUCCESS;
 }
 
 EE embedding(Tensor inputTensor,
     Tensor weightTensor,
     EmbedParamSpec p,
+    Tensor tmpTensor,
     Tensor outputTensor,
     ArchInfo_t archInfo)
 {
     auto arch = archInfo->arch;
     TensorDesc inputDesc = inputTensor.get_desc();
     void *input = get_ptr_from_tensor(inputTensor, arch);
+    TensorDesc weightDesc = weightTensor.get_desc();
     void *weight = get_ptr_from_tensor(weightTensor, arch);
     TensorDesc outputDesc = outputTensor.get_desc();
     void *output = get_ptr_from_tensor(outputTensor, arch);
+    void *tmp = get_ptr_from_tensor(tmpTensor, arch);
 
     EE ret = NOT_SUPPORTED;
-    if (IS_MALI_GPU(arch)) {
-#ifdef _USE_MALI
-        TensorDesc weightDesc = weightTensor.get_desc();
+    if (IS_GPU(arch)) {
+#ifdef _USE_GPU
         ret = embedding_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc, (GCLMem_t)input,
             weightDesc, (GCLMem_t)weight, p, outputDesc, (GCLMem_t)output);
 #endif
 #ifdef _USE_CPU
     } else {
-        ret = embedding_cpu(inputDesc, input, weight, p, outputDesc, output);
+#ifdef _USE_INT8
+        if (weightDesc.dt != outputDesc.dt) {
+            output = tmp;
+        }
+#endif
+        ret = embedding_cpu(inputDesc, input, weight, p, weightDesc, outputDesc, output);
 #endif
     }
+
+#ifdef _USE_INT8
+    if (weightDesc.dt != outputDesc.dt) {
+        TensorDesc qDesc = outputDesc;
+        outputDesc.dt = weightDesc.dt;
+        F32 scaleO = -1;
+        if (DT_I8 == qDesc.dt || DT_U8_Q == qDesc.dt) {
+            CHECK_STATUS(quantize_cpu(outputDesc, output, &qDesc,
+                get_ptr_from_tensor(outputTensor, arch), &scaleO, arch));
+            outputTensor.set_scale(scaleO);
+        } else {
+            ret = NOT_SUPPORTED;
+        }
+    }
+#endif
     return ret;
 }

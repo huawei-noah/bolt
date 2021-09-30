@@ -20,8 +20,7 @@ class ConcatOCL : public Concat {
 public:
     ConcatOCL(ConcatParamSpec p) : Concat(p)
     {
-        setMALIArchInfo(
-            &(this->archInfo), nullptr, &this->needSetKernelVec, &this->needSelectKernelLS);
+        INIT_GPU_INFO(nullptr)
     }
 
     ~ConcatOCL(){DESTROY_OCL_KERNEL}
@@ -40,11 +39,34 @@ public:
         CHECK_STATUS(concat(this->inputTensors, this->p, this->temp, outputTensor, &this->archInfo));
     }
 
+    inline bool use_output_tensor_image(std::vector<Tensor *> inTensors)
+    {
+        bool axisWAlign = true;
+        for (auto &tensor : inTensors) {
+            TensorDesc desc = tensor->get_desc();
+            if (desc.df == DF_NCHWC4) {
+                return true;
+            }
+            U32 concatDim = (p.axis + desc.nDims) % desc.nDims;
+            if (concatDim == desc.nDims - 1) {
+                if ((desc.dims[0] & 3) != 0) {
+                    axisWAlign = false;
+                }
+            }
+        }
+        return axisWAlign;
+    }
+
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
         this->needSetKernelVec = true;
         CHECK_STATUS(concat_infer_output_size(inTensors, this->p, outTensors[0], &this->archInfo));
+        if (check_tensors_image(inTensors)) {
+            if (use_output_tensor_image(inTensors)) {
+                CHECK_STATUS(set_tensors_image(outTensors, inTensors.size()));
+            }
+        }
         return SUCCESS;
     }
 

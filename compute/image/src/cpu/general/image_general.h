@@ -14,78 +14,7 @@
 #ifndef _H_IMAGE_GENERAL
 #define _H_IMAGE_GENERAL
 
-#include "error.h"
 #include "tensor_desc.h"
 
 EE resize_bilinear_general(TensorDesc inputDesc, void *input, TensorDesc outputDesc, void *output);
-
-EE resize_nearest_general(TensorDesc inputDesc, void *input, TensorDesc outputDesc, void *output);
-
-template <typename T>
-inline EE from_nchwc8_to_nchw(TensorDesc *desc, T *data)
-{
-    if (desc == nullptr || data == nullptr) {
-        CHECK_STATUS(NULL_POINTER);
-    }
-
-    DataType idt;
-    DataFormat idf;
-    U32 in, ic, ih, iw;
-    CHECK_STATUS(tensor4dGet(*desc, &idt, &idf, &in, &ic, &ih, &iw));
-    if (idf != DF_NCHWC8) {
-        CHECK_STATUS(NOT_MATCH);
-    }
-
-    *desc = tensor4df(idt, DF_NCHW, in, ic, ih, iw);
-
-    T *tmp = (T *)malloc(tensorNumBytes(*desc));
-    ic /= 8;
-    for (U32 n = 0; n < in; n++) {
-        for (U32 c = 0; c < ic; c++) {
-            for (U32 hw = 0; hw < ih * iw; hw++) {
-                for (U32 c8 = 0; c8 < 8; c8++) {
-                    tmp[n * ic * 8 * ih * iw + (c * 8 + c8) * ih * iw + hw] =
-                        data[n * ic * ih * iw * 8 + c * ih * iw * 8 + hw * 8 + c8];
-                }
-            }
-        }
-    }
-    memcpy(data, tmp, tensorNumBytes(*desc));
-    free(tmp);
-    return SUCCESS;
-}
-
-template <typename T>
-inline EE from_nchw_to_nchwc8(TensorDesc *desc, T *data)
-{
-    if (desc == nullptr || data == nullptr) {
-        CHECK_STATUS(NULL_POINTER);
-    }
-
-    DataType idt;
-    DataFormat idf;
-    U32 in, ic, ih, iw;
-    CHECK_STATUS(tensor4dGet(*desc, &idt, &idf, &in, &ic, &ih, &iw));
-    if (idf != DF_NCHW) {
-        CHECK_STATUS(NOT_MATCH);
-    }
-
-    *desc = tensor4df(idt, DF_NCHWC8, in, ic, ih, iw);
-
-    T *tmp = (T *)malloc(tensorNumBytes(*desc));
-    ic /= 8;
-    for (U32 n = 0; n < in; n++) {
-        for (U32 c = 0; c < ic; c++) {
-            for (U32 hw = 0; hw < ih * iw; hw++) {
-                for (U32 c8 = 0; c8 < 8; c8++) {
-                    tmp[n * ic * ih * iw * 8 + c * ih * iw * 8 + hw * 8 + c8] =
-                        data[n * ic * 8 * ih * iw + (c * 8 + c8) * ih * iw + hw];
-                }
-            }
-        }
-    }
-    memcpy(data, tmp, tensorNumBytes(*desc));
-    free(tmp);
-    return SUCCESS;
-}
 #endif

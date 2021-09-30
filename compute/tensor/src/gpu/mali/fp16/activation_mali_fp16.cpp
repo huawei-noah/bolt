@@ -43,29 +43,26 @@ inline EE activation_core_mali_fp16(GCLHandle_t handle,
     bool useNchwFormat = (input->desc.memFormat == DF_NCHW) ? true : false;
     char kernelName[128];
     KernelOpt kernelOpt;
-    CHECK_STATUS(set_activation_opt_mali(useNchwFormat, activationMode, DT_F16, kernelName, &kernelOpt));
+    CHECK_STATUS(set_activation_opt_mali(useNchwFormat, activationMode, DT_F16, input->desc.memType,
+        output->desc.memType, kernelName, &kernelOpt));
     Kernel kernel;
     U32 gs[3] = {1, 1, 1};
     U32 ls[3] = {16, 1, 1};
     U32 dim = 3;
-    U32 i_off = 0;
-    U32 o_off = 0;
+    U32 i_off = ih_off * iw_str + iw_off;
+    U32 o_off = oh_off * ow_str + ow_off;
     if (useNchwFormat) {
-        i_off = ih_off * iw_str + iw_off;
-        o_off = oh_off * ow_str + ow_off;
         gs[0] = (ow + 3) / 4;
         gs[1] = oh;
-        gs[2] = oc;
+        gs[2] = oc * on;
     } else {
-        i_off = iw_off * ih_str + ih_off;
-        o_off = ow_off * oh_str + oh_off;
-        gs[0] = oh;
-        gs[1] = ow;
-        gs[2] = (oc + 3) / 4;
+        gs[0] = ow;
+        gs[1] = oh;
+        gs[2] = (oc + 3) / 4 * on;
     }
     CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
-    CHECK_STATUS(gcl_set_kernelArgs(kernel, ow, oh, oc, iw_str, ih_str, ow_str,
-        oh_str, i_off, o_off, gs[0], gs[1], inbuf, outbuf));
+    CHECK_STATUS(gcl_set_kernelArgs(kernel, ow, oh, oc, iw_str, ih_str, ow_str, oh_str, i_off,
+        o_off, gs[0], gs[1], inbuf, outbuf));
     gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
     return SUCCESS;
 }

@@ -41,9 +41,19 @@ public:
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
+        if (this->p.axes_num == 0) {
+            TensorDesc desc = inTensors[0]->get_desc();
+            this->p.axes_num = desc.nDims;
+            for (int i = 0; i < this->p.axes_num; i++) {
+                this->p.axes[i] = i;
+            }
+        }
+
         MemoryType type = CPUMem;
-        if (this->archInfo.arch == MALI) {
+        if (IS_MALI_GPU(this->archInfo.arch)) {
             type = OCLMem;
+        } else if (IS_QUALCOMM_GPU(this->archInfo.arch)) {
+            type = OCLMemImg;
         }
         Tensor maskTensor(type);
         if (inTensors.size() > 1) {

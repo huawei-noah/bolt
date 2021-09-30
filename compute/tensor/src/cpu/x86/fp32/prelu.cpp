@@ -30,29 +30,60 @@ EE prelu_fp32(TensorDesc inputDesc,
     if (tensorIs4d(inputDesc) && tensorIs4d(outputDesc)) {
         CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
         CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
-        if (idf != DF_NCHWC8) {
-            CHECK_STATUS(NOT_SUPPORTED);
-        }
+    } else if (tensorIs3d(inputDesc) && tensorIs3d(outputDesc)) {
+        CHECK_STATUS(tensor3dGet(inputDesc, &idt, &idf, &in, &ic, &ih));
+        CHECK_STATUS(tensor3dGet(outputDesc, &odt, &odf, &on, &oc, &oh));
+        iw = ow = 1;
+    } else if (tensorIs2d(inputDesc) && tensorIs2d(outputDesc)) {
+        CHECK_STATUS(tensor2dGet(inputDesc, &idt, &idf, &in, &ic));
+        CHECK_STATUS(tensor2dGet(outputDesc, &odt, &odf, &on, &oc));
+        ih = oh = iw = ow = 1;
     } else {
         return NOT_SUPPORTED;
     }
 
     CHECK_REQUIREMENT(in == on && ic == oc && ih == oh && iw == ow);
-    __m256 slope;
-    __m256 mask0, mask1;
-    __m256 data, out;
-    for (U32 n = 0; n < in; n++) {
-        for (U32 c = 0; c < ic; c += 8) {
-            slope = preluDesc.propagate_down ? _mm256_set1_ps(weight[0])
-                                             : _mm256_loadu_ps(weight + c);
-            for (U32 hw = 0; hw < ih * iw; hw++) {
-                data = _mm256_loadu_ps(input);
-                mask0 = _mm256_max_ps(data, _mm256_setzero_ps());
-                mask1 = _mm256_min_ps(data, _mm256_setzero_ps());
-                out = _mm256_fmadd_ps(mask1, slope, mask0);
-                _mm256_storeu_ps(output, out);
-                input += 8;
-                output += 8;
+    I32 ihiw = ih * iw;
+    if (idf == DF_NCHWC8) {
+        for (U32 n = 0; n < in; n++) {
+            for (U32 c = 0; c < ic; c += 8) {
+                __m256 slope = preluDesc.propagate_down ? _mm256_set1_ps(weight[0])
+                                                        : _mm256_loadu_ps(weight + c);
+                for (I32 hw = 0; hw < ihiw; hw++) {
+                    __m256 data = _mm256_loadu_ps(input);
+                    __m256 mask0 = _mm256_max_ps(data, _mm256_setzero_ps());
+                    __m256 mask1 = _mm256_min_ps(data, _mm256_setzero_ps());
+                    __m256 out = _mm256_fmadd_ps(mask1, slope, mask0);
+                    _mm256_storeu_ps(output, out);
+                    input += 8;
+                    output += 8;
+                }
+            }
+        }
+    } else {
+        for (U32 n = 0; n < in; n++) {
+            for (U32 c = 0; c < ic; c++) {
+                F32 slope_s = preluDesc.propagate_down ? weight[0] : weight[c];
+                __m256 slope = _mm256_set1_ps(slope_s);
+                I32 hw;
+                for (hw = 0; hw < ihiw - 7; hw += 8) {
+                    __m256 data = _mm256_loadu_ps(input);
+                    __m256 mask0 = _mm256_max_ps(data, _mm256_setzero_ps());
+                    __m256 mask1 = _mm256_min_ps(data, _mm256_setzero_ps());
+                    __m256 out = _mm256_fmadd_ps(mask1, slope, mask0);
+                    _mm256_storeu_ps(output, out);
+                    input += 8;
+                    output += 8;
+                }
+                for (; hw < ihiw; hw++) {
+                    if (input[0] >= 0) {
+                        output[0] = input[0];
+                    } else {
+                        output[0] = input[0] * slope_s;
+                    }
+                    input++;
+                    output++;
+                }
             }
         }
     }

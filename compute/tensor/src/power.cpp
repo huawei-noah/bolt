@@ -15,7 +15,7 @@
 #ifdef _USE_CPU
 #include "cpu/tensor_computing_cpu.h"
 #endif
-#ifdef _USE_MALI
+#ifdef _USE_GPU
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
 
@@ -38,21 +38,9 @@ EE power_infer_output_size(Tensor *inputTensor, Tensor *outputTensor, ArchInfo_t
     }
     TensorDesc inputDesc = inputTensor->get_desc();
     TensorDesc outputDesc = outputTensor->get_desc();
-    EE ret = NOT_SUPPORTED;
-    if (IS_MALI_GPU(archInfo->arch)) {
-#ifdef _USE_MALI
-        GCLMemDesc gclmemInputDesc = ocl_get_desc(*inputTensor);
-        GCLMemDesc gclmemOutputDesc = ocl_get_desc(*outputTensor);
-        ret = power_infer_output_size_mali(
-            inputDesc, &outputDesc, &gclmemInputDesc, &gclmemOutputDesc);
-        ocl_set_desc(inputTensor, gclmemInputDesc);
-        ocl_set_desc(outputTensor, gclmemOutputDesc);
-#endif
-    } else {
-        ret = power_infer_output_size_cpu(inputDesc, &outputDesc);
-    }
+    CHECK_STATUS(power_infer_output_size_cpu(inputDesc, &outputDesc));
     outputTensor->resize(outputDesc);
-    return ret;
+    return SUCCESS;
 }
 
 EE power(Tensor inputTensor, PowerParamSpec p, Tensor outputTensor, ArchInfo_t archInfo)
@@ -68,8 +56,8 @@ EE power(Tensor inputTensor, PowerParamSpec p, Tensor outputTensor, ArchInfo_t a
 #ifdef _USE_CPU
         ret = power_cpu(inputDesc, input, p, outputDesc, output, arch);
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
         ret = power_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc, (GCLMem_t)input, p,
             outputDesc, (GCLMem_t)output);
 #endif

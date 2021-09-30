@@ -18,13 +18,13 @@
 #include "gpu/mali/tensor_computing_mali.h"
 #include "gpu/mali/fp16/transpose_mali_fp16.h"
 
-EE transpose_infer_output_size_mali(TensorDesc inputDesc,
+EE transpose_padding_input_mali(TensorDesc inputDesc,
     TransposeParamSpec p,
     TensorDesc *outputDesc,
-    GCLMemDesc_t gclmemInputDesc,
-    GCLMemDesc_t gclmemOutputDesc)
+    OclMemory *inputMem,
+    OclMemory *outputMem)
 {
-    if (outputDesc == nullptr || gclmemInputDesc == nullptr || gclmemOutputDesc == nullptr) {
+    if (outputDesc == nullptr || inputMem == nullptr || outputMem == nullptr) {
         CHECK_STATUS(NULL_POINTER);
     }
     U32 *dim = p.trans_dims;
@@ -37,22 +37,9 @@ EE transpose_infer_output_size_mali(TensorDesc inputDesc,
     for (U32 i = 0; i < nDims; ++i) {
         (*outputDesc).dims[i] = dimTran[i];
     }
-
-    DataType idt;
-    DataType odt;
-    U32 iw, ih, ic, in, it;
-    U32 ow, oh, oc, on, ot;
-    tensorSelectGet(inputDesc, &idt, NULL, &in, &ic, &ih, &iw, &it);
-    tensorSelectGet(*outputDesc, &odt, NULL, &on, &oc, &oh, &ow, &ot);
-    if (gclmemInputDesc->byteSize == 0 || gclmemInputDesc->memFormat == DF_NCHW) {
-        CHECK_STATUS(infer_gclmem_desc_nchw_3d(
-            iw, ih, ic, it, in, 0, 0, 0, 0, 0, 0, 0, idt, odt, gclmemInputDesc, NULL));
-    } else {
-        CHECK_STATUS(infer_gclmem_desc_ncwhc4_3d(
-            iw, ih, ic, it, in, 0, 0, 0, 0, 0, 0, 0, idt, odt, gclmemInputDesc, NULL));
+    if (inputDesc.df == DF_NCHWC4) {
+        (*outputDesc).df = DF_NCHW;
     }
-    CHECK_STATUS(infer_gclmem_desc_nchw_3d(
-        0, 0, 0, 0, 0, 0, 0, ow, oh, oc, ot, on, idt, odt, NULL, gclmemOutputDesc));
     return SUCCESS;
 }
 
@@ -63,7 +50,7 @@ inline EE transpose_checkpara_mali(
         return NULL_POINTER;
     }
 
-    if (inputDesc.df != outputDesc.df) {
+    if (inputDesc.nDims != outputDesc.nDims) {
         return NOT_SUPPORTED;
     }
     return SUCCESS;

@@ -14,140 +14,171 @@
 #ifndef _H_LayerNormOPTIMIZER
 #define _H_LayerNormOPTIMIZER
 
-#include <map>
 #include "OPOptimizer.hpp"
 
 class LayerNormOptimizer : public OPOptimizer {
     bool optimize(ModelSpec *spec) override
     {
         bool hasOptimized = false;
-        for (int i = 0; i < spec->num_operator_specs; i++) {
-            if (spec->ops[i].type == OT_Power && spec->ops[i].ps.power_spec.power == 2) {
-                int powOpIndex = i;
-                int backAddIndex = -1;
-                for (int j = powOpIndex - 1; j >= 0; j--) {
-                    if (spec->ops[j].type == OT_Eltwise) {
-                        if (spec->ops[j].ps.eltwise_spec.elt_mode == ELTWISE_SUM) {
-                            backAddIndex = j;
-                            break;
-                        } else {
-                            continue;
-                        }
-                    }
-                }
-
-                if (backAddIndex == -1) {
+        for (int i = 0; i < spec->num_operator_specs - 6; i++) {
+            int k = i;
+            int reduce_mean = 0;
+            if (k < spec->num_operator_specs && spec->ops[k].type == OT_Reduction &&
+                spec->ops[k].ps.reduction_spec.reduction_mode == REDUCTION_MEAN) {
+                if (spec->ops[k].ps.reduction_spec.axes_num != 1) {
                     continue;
                 }
-
-                int forDivIndex = -1;
-                for (int j = powOpIndex + 1; j < spec->num_operator_specs; j++) {
-                    if (spec->ops[j].type == OT_Eltwise) {
-                        if (spec->ops[j].ps.eltwise_spec.elt_mode == ELTWISE_DIV) {
-                            forDivIndex = j;
-                            break;
-                        } else {
-                            continue;
-                        }
-                    }
+                reduce_mean++;
+                k++;
+            }
+            if (k < spec->num_operator_specs && spec->ops[k].type == OT_Pooling &&
+                spec->ops[k].ps.pooling_spec.mode == POOLING_MEAN) {
+                reduce_mean++;
+                k++;
+            }
+            if (reduce_mean != 1) {
+                continue;
+            }
+            // var = sum(x - u) ^ 2 / n
+            if (k < spec->num_operator_specs && spec->ops[k].type == OT_Eltwise &&
+                spec->ops[k].num_inputs == 2 &&
+                spec->ops[k].ps.eltwise_spec.elt_mode == ELTWISE_SUB) {
+                k++;
+                k = skipInvalidOperator(spec, k);
+                if (k < spec->num_operator_specs && spec->ops[k].type == OT_Cast) {
+                    k++;
                 }
-
-                if (forDivIndex == -1) {
-                    continue;
-                }
-
-                std::map<std::string, int> info_map;
-                bool tag = true;
-                for (int k = backAddIndex + 1; k < forDivIndex; k++) {
-                    std::string tmp_str = "";
-                    if (spec->ops[k].type == OT_Pooling) {
-                        if (spec->ops[k].ps.pooling_spec.mode != POOLING_MEAN) {
-                            tag = false;
-                            break;
-                        }
-                        tmp_str = "ReduceMean";
-                    } else if (spec->ops[k].type == OT_Reduction) {
-                        if (spec->ops[k].ps.reduction_spec.reduction_mode != REDUCTION_MEAN) {
-                            tag = false;
-                            break;
-                        }
-                        tmp_str = "ReduceMean";
-                    } else if (spec->ops[k].type == OT_Eltwise) {
-                        tmp_str = "Sub";
-                    } else if (spec->ops[k].type == OT_Power &&
-                        spec->ops[k].ps.power_spec.power == 2) {
-                        tmp_str = "Pow";
-                    } else if (spec->ops[k].type == OT_Power &&
-                        spec->ops[k].ps.power_spec.power == 0.5) {
-                        tmp_str = "Sqrt";
-                    } else if (spec->ops[k].type == OT_Power) {
-                        tmp_str = "Scale";
-                    } else {
-                        tag = false;
-                        break;
-                    }
-
-                    if (info_map.find(tmp_str) == info_map.end()) {
-                        info_map[tmp_str] = 1;
-                    } else {
-                        info_map[tmp_str] = info_map[tmp_str] + 1;
-                    }
-                }
-
-                if (tag == false) {
-                    continue;
-                }
-
-                if (info_map["ReduceMean"] == 2 && (info_map["Sub"] == 2 || info_map["Sub"] == 1) &&
-                    info_map["Scale"] == 1 && info_map["Pow"] == 1 && info_map["Sqrt"] == 1 &&
-                    spec->ops[forDivIndex + 1].type == OT_Scale &&
-                    spec->ops[forDivIndex + 2].type == OT_Scale) {
-                    hasOptimized = true;
+                if (k < spec->num_operator_specs && spec->ops[k].type == OT_Power &&
+                    spec->ops[k].ps.power_spec.scale == 1 &&
+                    spec->ops[k].ps.power_spec.shift == 0 && spec->ops[k].ps.power_spec.power == 2) {
+                    k++;
                 } else {
                     continue;
                 }
-
-                int tailMulIndex = forDivIndex + 1;
-                int tailAddIndex = forDivIndex + 2;
-                spec->ops[tailMulIndex].type = OT_LayerNorm;
-                int tailMulWeightIndex = searchWeightIndex(spec, spec->ops[tailMulIndex].name);
-                int tailAddWeightIndex = searchWeightIndex(spec, spec->ops[tailAddIndex].name);
-                CHECK_REQUIREMENT(tailAddWeightIndex >= 0);
-                CHECK_REQUIREMENT(spec->ws[tailAddWeightIndex].mdt == DT_F32);
-
-                spec->ws[tailMulWeightIndex].bytes_of_vec =
-                    spec->ws[tailAddWeightIndex].bytes_of_vec;
-                U8 *ln_vec = (U8 *)mt_new_storage(spec->ws[tailAddWeightIndex].bytes_of_vec);
-                memcpy(ln_vec, spec->ws[tailAddWeightIndex].vec,
-                    spec->ws[tailAddWeightIndex].bytes_of_vec);
-                spec->ws[tailMulWeightIndex].vec = ln_vec;
-
-                if (spec->ws[tailAddWeightIndex].weight != nullptr) {
-                    spec->ws[tailAddWeightIndex].bytes_of_weight = 0;
-                    if (outOfFileMapRange(spec->ws[tailAddWeightIndex].weight, spec->mfd)) {
-                        delete spec->ws[tailAddWeightIndex].weight;
+                if (k < spec->num_operator_specs && spec->ops[k].type == OT_Reduction &&
+                    spec->ops[k].ps.reduction_spec.reduction_mode == REDUCTION_MEAN) {
+                    if (spec->ops[k].ps.reduction_spec.axes_num != 1) {
+                        continue;
                     }
-                    spec->ws[tailAddWeightIndex].weight = nullptr;
+                    reduce_mean++;
+                    k++;
                 }
-
-                if (spec->ws[tailAddWeightIndex].vec != nullptr) {
-                    spec->ws[tailAddWeightIndex].bytes_of_vec = 0;
-                    if (outOfFileMapRange(spec->ws[tailAddWeightIndex].vec, spec->mfd)) {
-                        delete spec->ws[tailAddWeightIndex].vec;
+                if (k < spec->num_operator_specs && spec->ops[k].type == OT_Pooling &&
+                    spec->ops[k].ps.pooling_spec.mode == POOLING_MEAN) {
+                    reduce_mean++;
+                    k++;
+                }
+                if (reduce_mean != 2) {
+                    continue;
+                }
+                // var = sum(x ^ 2) / n  - u ^ 2
+            } else if (k < spec->num_operator_specs && spec->ops[k].type == OT_Power &&
+                spec->ops[k].ps.power_spec.scale == 1 && spec->ops[k].ps.power_spec.shift == 0 &&
+                spec->ops[k].ps.power_spec.power == 2) {
+                k++;
+                if (k < spec->num_operator_specs && spec->ops[k].type == OT_Reduction &&
+                    spec->ops[k].ps.reduction_spec.reduction_mode == REDUCTION_MEAN) {
+                    if (spec->ops[k].ps.reduction_spec.axes_num != 1) {
+                        continue;
                     }
-                    spec->ws[tailAddWeightIndex].vec = nullptr;
+                    reduce_mean++;
+                    k++;
                 }
-
-                memcpy(spec->ops[tailMulIndex].output_tensors_name[0],
-                    spec->ops[tailAddIndex].output_tensors_name[0], NAME_LEN);
-                memcpy(spec->ops[tailMulIndex].input_tensors_name[0],
-                    spec->ops[backAddIndex].output_tensors_name[0], NAME_LEN);
-
-                for (int k = backAddIndex + 1; k <= forDivIndex; k++) {
-                    setOperatorInvalid(spec, k);
+                if (k < spec->num_operator_specs && spec->ops[k].type == OT_Pooling &&
+                    spec->ops[k].ps.pooling_spec.mode == POOLING_MEAN) {
+                    reduce_mean++;
+                    k++;
                 }
-                setOperatorInvalid(spec, tailAddIndex);
-                setOperatorInvalid(spec, forDivIndex - 2, true);
+                if (reduce_mean != 2) {
+                    continue;
+                }
+                if (k < spec->num_operator_specs && spec->ops[k].type == OT_Power &&
+                    spec->ops[k].ps.power_spec.scale == 1 &&
+                    spec->ops[k].ps.power_spec.shift == 0 && spec->ops[k].ps.power_spec.power == 2) {
+                    k++;
+                } else {
+                    continue;
+                }
+                if (k < spec->num_operator_specs && spec->ops[k].type == OT_Eltwise &&
+                    spec->ops[k].num_inputs == 2 &&
+                    spec->ops[k].ps.eltwise_spec.elt_mode == ELTWISE_SUB) {
+                    k++;
+                } else {
+                    continue;
+                }
+                if (k < spec->num_operator_specs && spec->ops[k].type == OT_Eltwise &&
+                    spec->ops[k].num_inputs == 2 &&
+                    spec->ops[k].ps.eltwise_spec.elt_mode == ELTWISE_SUB) {
+                    k++;
+                } else {
+                    continue;
+                }
+            } else {
+                continue;
+            }
+            k = skipInvalidOperator(spec, k);
+            if (k < spec->num_operator_specs && spec->ops[k].type == OT_Power &&
+                spec->ops[k].ps.power_spec.scale == 1 && spec->ops[k].ps.power_spec.power == 1 &&
+                UNI_ABS(spec->ops[k].ps.power_spec.shift) < 0.0001) {
+                k++;
+            }
+            if (k < spec->num_operator_specs && spec->ops[k].type == OT_Power &&
+                spec->ops[k].ps.power_spec.scale == 1 && spec->ops[k].ps.power_spec.shift == 0 &&
+                UNI_ABS(spec->ops[k].ps.power_spec.power) == 0.5) {
+                k++;
+            } else {
+                continue;
+            }
+            k = skipInvalidOperator(spec, k);
+            if (k < spec->num_operator_specs && spec->ops[k].type == OT_Eltwise &&
+                spec->ops[k].num_inputs == 2 &&
+                spec->ops[k].ps.eltwise_spec.elt_mode == ELTWISE_DIV) {
+                k++;
+                k = skipInvalidOperator(spec, k);
+                if (k < spec->num_operator_specs && spec->ops[k].type == OT_Scale) {
+                    for (int j = i; j < k; j++) {
+                        setOperatorInvalid(spec, j, true);
+                    }
+                    spec->ops[k].type = OT_LayerNorm;
+                    i = k;
+                    hasOptimized = true;
+                }
+            } else if (k < spec->num_operator_specs - 4 && spec->ops[k].type == OT_Scale &&
+                spec->ops[k + 1].type == OT_Eltwise && spec->ops[k + 2].type == OT_Eltwise &&
+                spec->ops[k + 2].ps.eltwise_spec.elt_mode == ELTWISE_SUB &&
+                spec->ops[k + 3].type == OT_Eltwise && spec->ops[k + 4].type == OT_Eltwise) {
+                char *subWeightName = spec->ops[k + 2].input_tensors_name[0];
+                int scaleWeightIndex = searchWeightIndex(spec, spec->ops[k].name);
+                int subWeightIndex = searchWeightIndex(spec, subWeightName);
+                CHECK_REQUIREMENT(scaleWeightIndex >= 0);
+                CHECK_REQUIREMENT(subWeightIndex >= 0);
+                if (spec->ws[scaleWeightIndex].bytes_of_vec != 0) {
+                    continue;
+                }
+                int sub0Index;
+                for (sub0Index = 0; sub0Index < i; sub0Index++) {
+                    if (spec->ops[sub0Index].name == std::string(subWeightName)) {
+                        break;
+                    }
+                }
+                spec->ws[scaleWeightIndex].bytes_of_vec = spec->ws[subWeightIndex].bytes_of_weight;
+                spec->ws[scaleWeightIndex].vec =
+                    (U8 *)mt_new_storage(spec->ws[scaleWeightIndex].bytes_of_vec);
+                memcpy(spec->ws[scaleWeightIndex].vec, spec->ws[subWeightIndex].weight,
+                    spec->ws[scaleWeightIndex].bytes_of_vec);
+
+                for (int j = i; j < k; j++) {
+                    setOperatorInvalid(spec, j, true);
+                }
+                strcpy(spec->ops[k].output_tensors_name[0], spec->ops[k + 4].output_tensors_name[0]);
+                for (int j = 1; j < 5; j++) {
+                    setOperatorInvalid(spec, k + j, false);
+                }
+                setOperatorInvalid(spec, sub0Index, true);
+                spec->ops[k].type = OT_LayerNorm;
+                i = k + 5;
+                hasOptimized = true;
+            } else {
             }
         }
         return hasOptimized;

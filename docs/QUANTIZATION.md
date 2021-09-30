@@ -13,10 +13,10 @@ Before using this tool, you need to first produce the input model with X2bolt us
 ./post_training_quantization -p model_ptq_input.bolt
 ```
 
-Different options of the tool are explained below. The default setting will produce model_int8_q.bolt which will be executed with dynamic int8 quantization. The command above is equivalent to this one:
+Different options of the tool are explained below. The default setting will produce model_int8_q.bolt which will be executed with dynamic int8 quantization. INT8_FP16 is for machine(ARMv8.2+) that supports fp16 to compute non quantized operators. INT8_FP32 is for machine(ARMv7, v8. Intel AVX512) that supports fp32 to compute non quantized operators. The command above is equivalent to this one:
 
 ```
-./post_training_quantization -p model_ptq_input.bolt -i INT8 -b true -q NOQUANT -c 0 -o false
+./post_training_quantization -p model_ptq_input.bolt -i INT8_FP16 -b true -q NOQUANT -c 0 -o false
 ```
 
 Here are the list of covered utilities:
@@ -30,22 +30,33 @@ Here are the list of covered utilities:
 * **Global Clipping of GEMM Inputs**: In some cases of quantization-aware training (QAT), GEMM inputs will be clipped so that they can be better quantized symmetrically. For example, if the QAT uses a global clipping value of 2.5 for int8 inference, use this command:
 
     ```
-    ./post_training_quantization -p model_ptq_input.bolt -i INT8 -c 2.5
+    ./post_training_quantization -p model_ptq_input.bolt -i INT8_FP16 -c 2.5
     ```
 
-* **Ad-Hoc Clipping of Feature Maps**: In some other cases, the clip value is a trainable parameter for individual layers. Please use the -s option. The parameter **scaleFileDirectory** is the directory of your scale table file (.txt). Note that text format of the file is like the following codes, and **clipvalue** is the clip value of each feature map in your model. In our tool, we will calculate true scales of each tensor with the equation clipvalue/127.0 and store them into the created int8 model. The example command is also given below.
+* **Ad-Hoc Clipping with Quantization Aware Training**: In some other cases, the clip value is a trainable parameter for individual layers. Please use the -s option. The parameter **scaleFileDirectory** is the directory of your scale table file (.json). Note that text format of the file is like the following codes, the scale table contains all the layers that need to be quantized, and you can specify the clipvalue of any tensor. If the clipvalue of a output tensor is not set, the tensor will not be quantized during inference. In our tool, we will calculate true scales of each tensor with the equation clipvalue/127.0 and store them into the created int8 model. The example command is also given below.
     ```
-    tensor_name_0 clipvalue
-    tensor_name_1 clipvalue
-    tensor_name_2 clipvalue
-    ...
+    {
+        "quantized_layer_name": {
+            "inputs": {
+                "tensor0": clipvalue_of_tensor0,
+                "tensor1": clipvalue_of_tensor1
+            },
+            "weights": {
+                "tensor2": clipvalue_of_tensor2
+            },
+            "outputs": {
+                "tensor3": clipvalue_of_tensor3
+            }
+        },
+        ...
+    }
 
-    ./post_training_quantization -p model_ptq_input.bolt -i INT8 -s /path/to/scale/dir
+    ./post_training_quantization -p model_ptq_input.bolt -i INT8 -s /path/to/scale.json
     ```
 
 * **Offline Calibration**: To use this mode, a calibration dataset should be provided. Currently bolt provides calibration of int8 models with KL-divergence. Please use the -o option to turn on this mode. Currently we accept a directory of jpeg images as the dataset, which should be specified with the -d option. The -f option sets the preprocessing style of inputs, and the -m option sets the multiplying scale used in preprocessing. Example usage:
     ```
-    ./post_training_quantization -p model_ptq_input.bolt -i INT8 -o true -d calibration_dataset/ -f BGR -m 0.017
+    ./post_training_quantization -p model_ptq_input.bolt -i INT8_FP16 -o true -d calibration_dataset/ -f BGR -m 0.017
     ```
 
 * More options:
@@ -53,7 +64,7 @@ Here are the list of covered utilities:
     - The -b option sets whether to fuse BatchNorm parameters with weight of convolution, etc. Default value is true for highest inference speed. This option is useful for the following scenario: Usually in quantization-aware training, FakeQuant nodes are inserted before each convolution layer, but BatchNorm is not handled. In this case, if we fuse BatchNorm and then quantize the convolution weight, it will create a difference between training and inference. When you find that this difference leads to accuracy drop, you can set the -b option to false:
 
         ```
-        ./post_training_quantization -p model_ptq_input.bolt -i INT8 -b false
+        ./post_training_quantization -p model_ptq_input.bolt -i INT8_FP16 -b false
         ```
 
     - The -V option triggers verbose mode that prints detailed information.

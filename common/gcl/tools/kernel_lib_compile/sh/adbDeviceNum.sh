@@ -9,4 +9,4 @@ while [ "$i" -lt "$length" ]; do
     fi
     ((i++))
 done
-adbDeviceNum=(E5B0119506000260 GCL5T19822000030)
+adbDeviceNum=(E5B0119424000001 GCL5T19822000030)

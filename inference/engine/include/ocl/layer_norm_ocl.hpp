@@ -20,8 +20,7 @@ class LayerNormOCL : public LayerNorm {
 public:
     LayerNormOCL(DataType dt, U32 weightNum) : LayerNorm(dt, weightNum)
     {
-        setMALIArchInfo(
-            &(this->archInfo), nullptr, &this->needSetKernelVec, &this->needSelectKernelLS);
+        INIT_GPU_INFO(nullptr)
     }
 
     ~LayerNormOCL(){DESTROY_OCL_KERNEL}
@@ -45,18 +44,8 @@ public:
         TensorDesc biasDesc = tensor1d(dtNoQ, this->weightNum);
         Tensor modelWeightTensor = Tensor(OCLMem);
         Tensor modelBiasTensor = Tensor(OCLMem);
-        auto weightMem = (OclMemory *)modelWeightTensor.get_memory();
-        auto vectorMem = (OclMemory *)modelBiasTensor.get_memory();
         modelWeightTensor.resize(weightDesc);
         modelBiasTensor.resize(biasDesc);
-        U32 stride[3] = {(this->weightNum + 3) / 4 * 4, 1, 1};
-        U32 offset[3] = {0, 0, 0};
-        GCLMemType mt = GCL_MEM_BUF;
-        MemFlags flags = CL_MEM_READ_WRITE;
-        GCLMemDesc desc = gclmem_build_desc();
-        CHECK_STATUS(gclmem_set_desc_padding(&desc, stride, offset, dtNoQ, DF_NCHW, mt, flags));
-        weightMem->padding(desc);
-        vectorMem->padding(desc);
         this->weightTensors.push_back(modelWeightTensor);
         this->biasTensors.push_back(modelBiasTensor);
         return SUCCESS;

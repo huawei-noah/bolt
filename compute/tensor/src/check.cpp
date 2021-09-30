@@ -21,7 +21,7 @@
 #ifdef _USE_NEON
 #include "cpu/arm/tensor_computing_arm.h"
 #endif
-#ifdef _USE_MALI
+#ifdef _USE_GPU
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
 
@@ -44,15 +44,15 @@ EE check(Tensor inputTensorA,
         ret = check_general(inputDescA, inputA, inputDescB, inputB, p, outputDesc, output);
 #endif
 #ifdef _USE_X86
-    } else if (IS_X86_AVX2(arch)) {
+    } else if (IS_X86(arch)) {
         ret = check_x86(inputDescA, inputA, inputDescB, inputB, p, outputDesc, output);
 #endif
 #ifdef _USE_NEON
     } else if (IS_ARM(arch)) {
         ret = check_arm(inputDescA, inputA, inputDescB, inputB, p, outputDesc, output);
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
         ret = check_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDescA, (GCLMem_t)inputA,
             inputDescB, (GCLMem_t)inputB, p, outputDesc, (GCLMem_t)output);
 #endif
@@ -74,23 +74,17 @@ EE check_infer_output_size(
     }
     TensorDesc inputDesc = inputTensor[0]->get_desc();
     TensorDesc outputDesc = outputTensor->get_desc();
-    if (IS_MALI_GPU(archInfo->arch)) {
-#ifdef _USE_MALI
-        GCLMemDesc gclmemInputDescA = ocl_get_desc(*(inputTensor[0]));
-        GCLMemDesc gclmemInputDescB = ocl_get_desc(*(inputTensor[1]));
-        GCLMemDesc gclmemOutputDesc = ocl_get_desc(*outputTensor);
-        ret = check_infer_output_size_mali(
-            inputDesc, &outputDesc, &gclmemInputDescA, &gclmemInputDescB, &gclmemOutputDesc);
-        ocl_set_desc(inputTensor[0], gclmemInputDescA);
-        ocl_set_desc(inputTensor[1], gclmemInputDescB);
-        ocl_set_desc(outputTensor, gclmemOutputDesc);
+    outputDesc.dt = DT_I32;
+    outputDesc.nDims = 1;
+    outputDesc.df = DF_NORMAL;
+    outputDesc.dims[0] = inputDesc.dims[inputDesc.nDims - 1];
+    if (IS_GPU(archInfo->arch)) {
+#ifdef _USE_GPU
+        if (outputDesc.dims[0] > 1) {
+            CHECK_STATUS(NOT_SUPPORTED);
+        }
 #endif
-    } else {
-        outputDesc.dt = DT_I32;
-        outputDesc.nDims = 1;
-        outputDesc.dims[0] = inputDesc.dims[inputDesc.nDims - 1];
-        ret = SUCCESS;
     }
     outputTensor->resize(outputDesc);
-    return ret;
+    return SUCCESS;
 }

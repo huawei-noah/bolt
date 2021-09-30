@@ -14,54 +14,80 @@
 #include <float.h>
 #include "cpu/arm/fp32/tensor_computing_fp32.h"
 
-EE pooling_c8_fp32(I32 tstart,
-    I32 tend,
-    I32 hstart,
-    I32 hend,
-    I32 wstart,
-    I32 wend,
-    I32 poolSize,
-    const F32 *input,
-    I32 it,
-    I32 ih,
-    I32 iw,
-    PoolingParamSpec p,
-    F32 *output)
+template <PoolingMode pm>
+EE pooling_c8_fp32(const I32 &tstart,
+    const I32 &tend,
+    const I32 &hstart,
+    const I32 &hend,
+    const I32 &wstart,
+    const I32 &wend,
+    const I32 &poolSize,
+    const I32 &kernelSize,
+    const U8 *_input,
+    const I32 &it,
+    const I32 &ih,
+    const I32 &iw,
+    U8 *_output,
+    void *_scale)
 {
-    EE ret = SUCCESS;
-    PoolingMode pm = p.mode;
-    float32x4_t poolSize_v = vdupq_n_f32(poolSize);
-    float32x4_t in0, in1, out0, out1;
-    out0 = vdupq_n_f32((pm == POOLING_MAX) ? -FLT_MAX : 0);
-    out1 = out0;
+    const F32 *input = (const F32 *)_input;
+    F32 *output = (F32 *)_output;
+    UNUSED(_scale);
+    float32x4_t out0 = vdupq_n_f32((pm == POOLING_MAX) ? -FLT_MAX : 0);
+    float32x4_t out1 = out0;
     for (int kernelT = tstart; kernelT < tend; kernelT++) {
         for (int kernelH = hstart; kernelH < hend; kernelH++) {
             for (int kernelW = wstart; kernelW < wend; kernelW++) {
                 U32 index = ((kernelT * ih + kernelH) * iw + kernelW) * 8;
-                in0 = vld1q_f32(input + index);
-                in1 = vld1q_f32(input + index + 4);
-                switch (pm) {
-                    case POOLING_MAX: {
-                        out0 = vmaxq_f32(in0, out0);
-                        out1 = vmaxq_f32(in1, out1);
-                        break;
-                    }
-                    case POOLING_MEAN: {
-                        out0 = vaddq_f32(out0, in0);
-                        out1 = vaddq_f32(out1, in1);
-                        break;
-                    }
-                    default:
-                        ret = NOT_SUPPORTED;
-                        break;
+                float32x4_t in0 = vld1q_f32(input + index);
+                float32x4_t in1 = vld1q_f32(input + index + 4);
+                if (pm == POOLING_MAX) {
+                    out0 = vmaxq_f32(in0, out0);
+                    out1 = vmaxq_f32(in1, out1);
+                } else {
+                    out0 = vaddq_f32(out0, in0);
+                    out1 = vaddq_f32(out1, in1);
                 }
             }
         }
     }
-    vst1q_f32(output, ((pm == POOLING_MAX) ? out0 : vdivq_f32(out0, poolSize_v)));
-    vst1q_f32(output + 4, ((pm == POOLING_MAX) ? out1 : vdivq_f32(out1, poolSize_v)));
-    return ret;
+    if (pm == POOLING_MEAN) {
+        float32x4_t poolSize_v = vdupq_n_f32(poolSize);
+        out0 = vdivq_f32(out0, poolSize_v);
+        out1 = vdivq_f32(out1, poolSize_v);
+    }
+    vst1q_f32(output, out0);
+    vst1q_f32(output + 4, out1);
+    return SUCCESS;
 }
+template EE pooling_c8_fp32<POOLING_MEAN>(const I32 &tstart,
+    const I32 &tend,
+    const I32 &hstart,
+    const I32 &hend,
+    const I32 &wstart,
+    const I32 &wend,
+    const I32 &poolSize,
+    const I32 &kernelSize,
+    const U8 *_input,
+    const I32 &it,
+    const I32 &ih,
+    const I32 &iw,
+    U8 *_output,
+    void *_scale);
+template EE pooling_c8_fp32<POOLING_MAX>(const I32 &tstart,
+    const I32 &tend,
+    const I32 &hstart,
+    const I32 &hend,
+    const I32 &wstart,
+    const I32 &wend,
+    const I32 &poolSize,
+    const I32 &kernelSize,
+    const U8 *_input,
+    const I32 &it,
+    const I32 &ih,
+    const I32 &iw,
+    U8 *_output,
+    void *_scale);
 
 EE pooling_bp_c8_fp32(const F32 *input,
     int hstart,

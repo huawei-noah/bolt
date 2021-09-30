@@ -21,66 +21,18 @@ public:
     Activation(ActivationParamSpec activationDesc)
     {
         this->activationDesc = activationDesc;
-        switch (activationDesc.mode) {
-            case ACTIVATION_RELU: {
-                this->opt = OT_Relu;
-                break;
-            }
-            case ACTIVATION_RELU6: {
-                this->opt = OT_Relu6;
-                break;
-            }
-            case ACTIVATION_H_SWISH: {
-                this->opt = OT_HSwish;
-                break;
-            }
-            case ACTIVATION_H_SWISH_NODIV: {
-                this->opt = OT_HSwishNoDiv;
-                break;
-            }
-            case ACTIVATION_SIGMOID: {
-                this->opt = OT_Sigmoid;
-                break;
-            }
-            case ACTIVATION_H_SIGMOID: {
-                this->opt = OT_HSigmoid;
-                break;
-            }
-            case ACTIVATION_GELU: {
-                this->opt = OT_Gelu;
-                break;
-            }
-            case ACTIVATION_TANH: {
-                this->opt = OT_TanH;
-                break;
-            }
-            case ACTIVATION_MISH: {
-                this->opt = OT_Mish;
-                break;
-            }
-            case ACTIVATION_GREATER: {
-                this->opt = OT_Greater;
-                break;
-            }
-            case ACTIVATION_EXP: {
-                this->opt = OT_Exp;
-                break;
-            }
-            case ACTIVATION_SOFTPLUS: {
-                this->opt = OT_SoftPlus;
-                break;
-            }
-            case ACTIVATION_ABS: {
-                this->opt = OT_Abs;
-                break;
-            }
-            case ACTIVATION_SIGN: {
-                this->opt = OT_Sign;
-                break;
-            }
-            default: {
-                CHECK_STATUS(NOT_SUPPORTED);
-            }
+        std::map<ActivationMode, OperatorType> activationMap = {{ACTIVATION_RELU, OT_Relu},
+            {ACTIVATION_RELU6, OT_Relu6}, {ACTIVATION_H_SWISH, OT_HSwish},
+            {ACTIVATION_H_SWISH_NODIV, OT_HSwishNoDiv}, {ACTIVATION_SIGMOID, OT_Sigmoid},
+            {ACTIVATION_H_SIGMOID, OT_HSigmoid}, {ACTIVATION_GELU, OT_Gelu},
+            {ACTIVATION_TANH, OT_TanH}, {ACTIVATION_MISH, OT_Mish}, {ACTIVATION_GREATER, OT_Greater},
+            {ACTIVATION_EXP, OT_Exp}, {ACTIVATION_SOFTPLUS, OT_SoftPlus}, {ACTIVATION_ABS, OT_Abs},
+            {ACTIVATION_SIGN, OT_Sign}, {ACTIVATION_NOT, OT_Not}, {ACTIVATION_LOG, OT_Log},
+            {ACTIVATION_NEG, OT_Neg}};
+        if (activationMap.find(activationDesc.mode) == activationMap.end()) {
+            UNI_ERROR_LOG("can not map ActivationMode to OperatorType.\n");
+        } else {
+            this->opt = activationMap[activationDesc.mode];
         }
         this->lenOfTemp = 0;
     }

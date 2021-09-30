@@ -18,64 +18,22 @@
 #include "gpu/mali/tensor_computing_mali.h"
 #include "gpu/mali/fp16/slice_mali_fp16.h"
 
-EE slice_infer_output_size_mali(TensorDesc inputDesc,
+EE slice_padding_input_mali(TensorDesc inputDesc,
     SliceParamSpec p,
     std::vector<TensorDesc> *outputDesc,
-    GCLMemDesc_t gclmemInputDesc,
-    GCLMemDesc_t gclmemOutputDesc)
+    OclMemory *inputMem,
+    std::vector<OclMemory *> outputMem)
 {
-    if (outputDesc == nullptr || gclmemInputDesc == nullptr || gclmemOutputDesc == nullptr) {
+    if (outputDesc == nullptr || inputMem == nullptr) {
         CHECK_STATUS(NULL_POINTER);
     }
-    int axis = p.axis;
-    int *slice_points = p.slice_points;
-    axis = (axis + inputDesc.nDims) % inputDesc.nDims;
-    U32 target_axis = inputDesc.nDims - 1 - axis;
-    U32 num = outputDesc->size();
-    for (U32 i = 0; i < num; i++) {
-        (*outputDesc)[i] = inputDesc;
-
-        I32 prev_point = 0;
-        if (i > 0) {
-            prev_point = slice_points[i - 1];
-        }
-        I32 next_point = inputDesc.dims[target_axis];
-        if (i < num - 1) {
-            next_point = slice_points[i];
-        }
-        if (prev_point < 0) {
-            prev_point = (prev_point + inputDesc.dims[target_axis]) % inputDesc.dims[target_axis];
-        }
-        if (next_point < 0) {
-            next_point = (next_point + inputDesc.dims[target_axis]) % inputDesc.dims[target_axis];
-        }
-        (*outputDesc)[i].dims[target_axis] = next_point - prev_point;
-    }
-
-    DataType dt;
-    U32 in, ic, ih, iw;
-    U32 on, oc, oh, ow;
-    tensorSelectGet(inputDesc, &dt, NULL, &in, &ic, &ih, &iw);
-    if (gclmemInputDesc->memFormat == DF_NCHW || gclmemInputDesc->byteSize == 0) {
-        CHECK_STATUS(
-            infer_gclmem_desc_nchw(iw, ih, ic * in, 0, 0, 0, 0, 0, dt, dt, gclmemInputDesc, NULL));
-        for (U32 i = 0; i < num; ++i) {
-            tensorSelectGet((*outputDesc)[i], NULL, NULL, &on, &oc, &oh, &ow);
-            CHECK_STATUS(infer_gclmem_desc_nchw(
-                0, 0, 0, 0, 0, ow, oh, oc * on, dt, dt, gclmemInputDesc, NULL));
-        }
-    } else {
-        CHECK_STATUS(
-            infer_gclmem_desc_ncwhc4(iw, ih, ic * in, 0, 0, 0, 0, 0, dt, dt, gclmemInputDesc, NULL));
+    if (inputDesc.df == DF_NCHWC4) {
+        int axis = p.axis;
+        U32 target_axis = inputDesc.nDims - 1 - axis;
         bool axisAlign4 = slice_axis_c_align4(target_axis, *outputDesc);
-        for (U32 i = 0; i < num; ++i) {
-            tensorSelectGet((*outputDesc)[i], &dt, NULL, &on, &oc, &oh, &ow);
-            if (axisAlign4) {
-                CHECK_STATUS(infer_gclmem_desc_ncwhc4(
-                    0, 0, 0, 0, 0, ow, oh, oc * on, dt, dt, gclmemInputDesc, NULL));
-            } else {
-                CHECK_STATUS(infer_gclmem_desc_nchw(
-                    0, 0, 0, 0, 0, ow, oh, oc * on, dt, dt, gclmemInputDesc, NULL));
+        if (!axisAlign4) {
+            for (U32 i = 0; i < outputDesc->size(); i++) {
+                (*outputDesc)[i].df = DF_NCHW;
             }
         }
     }

@@ -15,7 +15,7 @@
 #define _H_TENSOR_COMPUTING_ARM
 
 #include <vector>
-#include "sys.h"
+#include "uni.h"
 #include "tensor_desc.h"
 #include "parameter_spec.h"
 
@@ -208,9 +208,6 @@ EE scale_arm(TensorDesc inputDesc,
 EE softmax_arm(
     TensorDesc inputDesc, const void *input, SoftmaxParamSpec p, TensorDesc outputDesc, void *output);
 
-EE quantize_tensor_arm(
-    TensorDesc dDesc, const void *data, TensorDesc *qDesc, void *qData, void *scale);
-
 EE check_arm(TensorDesc inputDescA,
     const void *inputA,
     TensorDesc inputDescB,
@@ -231,4 +228,12 @@ EE prelu_arm(TensorDesc inputDesc,
     PReLUParamSpec preluDesc,
     TensorDesc outputDesc,
     void *output);
+
+EE dequantize_arm(TensorDesc qDesc,
+    void *qData,
+    const F32 *scale,
+    TensorDesc bDesc,
+    void *bData,
+    TensorDesc dDesc,
+    void *data);
 #endif

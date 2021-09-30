@@ -99,7 +99,8 @@ EE depthwise_convolution_x86(TensorDesc inputDesc,
 {
     TensorDesc blankTensorDesc;
     ActivationParamSpec blankActivationParamSpec;
-    return depthwise_pointwise_convolution_x86(inputDesc, input, filterDesc, filter, blankTensorDesc,
-        nullptr, convParamSpec, algorithm, blankTensorDesc, bias, biasDesc, nullptr, tmpBytes, tmp,
-        outputDesc, output, depthwiseActivationParamSpec, blankActivationParamSpec, arch);
+    return depthwise_pointwise_convolution_x86(inputDesc, input, nullptr, filterDesc, filter,
+        blankTensorDesc, nullptr, convParamSpec, algorithm, blankTensorDesc, bias, biasDesc,
+        nullptr, tmpBytes, tmp, outputDesc, output, depthwiseActivationParamSpec,
+        blankActivationParamSpec, arch);
 }

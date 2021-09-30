@@ -17,43 +17,22 @@
 #include "error.h"
 #include "gpu/mali/tensor_computing_mali.h"
 #include "gpu/mali/fp16/matmul_mali_fp16.h"
+#include "gpu/mali/cl/kernel_option/gemm_tn_opt.h"
 inline void matmul_produce_algos_paras(bool transposeA,
     TensorDesc matrixADesc,
     bool transposeB,
     TensorDesc matrixBDesc,
     std::vector<ConvolutionForwardAlgorithm> *matmulAlgorithms,
-    std::vector<U32> *vecW,
+    std::vector<U32> *vecH,
     std::vector<U32> *vecC,
     std::vector<U32> *vecK)
 {
-    U32 configInfo[3][192];
-    U32 configNum = 0;
     if (matmulAlgorithms) {
         (*matmulAlgorithms).push_back(CONVOLUTION_ALGORITHM_GEMM);
     }
-    for (U32 i = 1; i <= 8; ++i) {
-        for (U32 j = 1; j <= 8; ++j) {
-            if (i * j <= 2) {
-                continue;
-            }
-            configInfo[0][configNum] = j;  // w
-            configInfo[1][configNum] = 1;  // c
-            configInfo[2][configNum] = i;  // k
-            configNum++;
-        }
-    }
-
-    for (U32 i = 0; i < configNum; i++) {
-        if (vecW) {
-            (*vecW).push_back(configInfo[0][i]);
-        }
-        if (vecC) {
-            (*vecC).push_back(configInfo[1][i]);
-        }
-        if (vecK) {
-            (*vecK).push_back(configInfo[2][i]);
-        }
-    }
+    bool useImg = check_qualcomm_device();
+    GCLMemType mt = (useImg) ? GCL_MEM_IMG_3D : GCL_MEM_BUF;
+    CHECK_STATUS(get_gemm_tn_cal_scheme(vecH, vecC, vecK, mt, mt, GCL_MEM_BUF));
 }
 
 inline EE matmul_checkpara_mali(GCLHandle_t handle,
@@ -69,15 +48,12 @@ inline EE matmul_checkpara_mali(GCLHandle_t handle,
     if (nullptr == handle || nullptr == matrixA || nullptr == matrixB || nullptr == matrixC) {
         return NULL_POINTER;
     }
-    U32 ac, ah, aw;
-    U32 bc, bh, bw;
-    U32 cc, ch, cw;
-    tensorSelectGet(matrixADesc, NULL, NULL, NULL, &ac, &ah, &aw);
-    tensorSelectGet(matrixBDesc, NULL, NULL, NULL, &bc, &bh, &bw);
-    tensorSelectGet(matrixCDesc, NULL, NULL, NULL, &cc, &ch, &cw);
-    if (ac != bc || ac != cc) {
-        CHECK_STATUS(NOT_MATCH);
-    }
+    U32 ah, aw;
+    U32 bh, bw;
+    U32 ch, cw;
+    tensorSelectGet(matrixADesc, NULL, NULL, NULL, NULL, &ah, &aw);
+    tensorSelectGet(matrixBDesc, NULL, NULL, NULL, NULL, &bh, &bw);
+    tensorSelectGet(matrixCDesc, NULL, NULL, NULL, NULL, &ch, &cw);
     U32 m, n, ra, rb;
     if (!transposeA) {
         m = ah;
@@ -100,59 +76,66 @@ inline EE matmul_checkpara_mali(GCLHandle_t handle,
         CHECK_STATUS(NOT_MATCH);
     }
 
-    if (matrixA->desc.memFormat != DF_NCHW || matrixB->desc.memFormat != DF_NCHW ||
-        matrixC->desc.memFormat != DF_NCHW) {
+    if (matrixC->desc.memFormat != DF_NCHW) {
         return NOT_SUPPORTED;
     }
     return SUCCESS;
 }
 
-EE matmul_infer_output_size_mali(TensorDesc matrixADesc,
+EE matmul_padding_input_mali(TensorDesc matrixADesc,
     bool transposeA,
     TensorDesc matrixBDesc,
     bool transposeB,
     TensorDesc *matrixCDesc,
-    GCLMemDesc_t gclmemMatrixADesc,
-    GCLMemDesc_t gclmemMatrixBDesc,
-    GCLMemDesc_t gclmemMatrixCDesc)
+    OclMemory *inputAMem,
+    OclMemory *inputBMem,
+    OclMemory *outputCMem)
 {
-    if (matrixCDesc == nullptr || gclmemMatrixADesc == nullptr || gclmemMatrixBDesc == nullptr ||
-        gclmemMatrixCDesc == nullptr) {
+    if (matrixCDesc == nullptr || inputAMem == nullptr || inputBMem == nullptr ||
+        outputCMem == nullptr) {
         CHECK_STATUS(NULL_POINTER);
     }
-    U32 adims = matrixADesc.nDims;
-    U32 bdims = matrixBDesc.nDims;
+    U32 aDims = matrixADesc.nDims;
+    U32 bDims = matrixBDesc.nDims;
     DataType adt = matrixADesc.dt;
     DataType bdt = matrixBDesc.dt;
-    if (adims < 2 || bdims < 2) {
-        CHECK_STATUS(NOT_MATCH);
-    }
     if (adt != bdt) {
         CHECK_STATUS(NOT_MATCH);
     }
-    U32 ac, ah, aw;
-    U32 bc, bh, bw;
-    U32 cc, ch, cw;
-    tensorSelectGet(matrixADesc, NULL, NULL, NULL, &ac, &ah, &aw);
-    tensorSelectGet(matrixBDesc, NULL, NULL, NULL, &bc, &bh, &bw);
-    bool need_pad_a = false;
-    bool need_pad_b = false;
-    if (ac != bc) {
-        CHECK_STATUS(NOT_SUPPORTED);
-    }
-    cc = ac;
+    U32 aw, ah;
+    U32 bw, bh;
+    U32 ch, cw;
+    aw = matrixADesc.dims[0];
+    ah = (aDims > 1) ? matrixADesc.dims[1] : 1;
+    bw = matrixBDesc.dims[0];
+    bh = (bDims > 1) ? matrixBDesc.dims[1] : 1;
+    bool needReshapeA, needReshapeB;
+    get_reshaped_desc(
+        matrixADesc, matrixBDesc, transposeA, transposeB, &needReshapeA, &needReshapeB, NULL, NULL);
+    GCLMemType amt = inputAMem->gclMemType();
+    GCLMemType bmt = inputBMem->gclMemType();
+    bool needProcessA = need_process_matmul_input(matrixADesc, amt, needReshapeA, transposeA, true);
+    bool needProcessB = need_process_matmul_input(matrixBDesc, bmt, needReshapeB, transposeB, false);
 
-    std::vector<U32> vecW;
+    std::vector<ConvolutionForwardAlgorithm> matmulAlgorithms;
+    std::vector<U32> vecH;
+    std::vector<U32> vecC;
     std::vector<U32> vecK;
-    matmul_produce_algos_paras(
-        transposeA, matrixADesc, transposeB, matrixBDesc, NULL, &vecW, NULL, &vecK);
+    if (!needProcessA || !needProcessB) {
+        GCLMemType cmt = outputCMem->gclMemType();
+        matmul_produce_algos_paras(transposeA, matrixADesc, transposeB, matrixBDesc,
+            &matmulAlgorithms, &vecH, &vecC, &vecK);
+    }
+
     U32 aw_align = aw;
     U32 bw_align = bw;
     U32 ar, br;
     if (transposeA) {
-        for (auto item_k : vecK) {
-            U32 i = ALIGN(aw, item_k);
-            aw_align = (aw_align < i) ? i : aw_align;
+        if (!needProcessA) {
+            for (auto item_k : vecK) {
+                U32 i = ALIGN(aw, item_k);
+                aw_align = (aw_align < i) ? i : aw_align;
+            }
         }
         ch = aw;
         ar = ah;  //reduce axis len for matrix A
@@ -162,9 +145,11 @@ EE matmul_infer_output_size_mali(TensorDesc matrixADesc,
     }
 
     if (!transposeB) {
-        for (auto item_w : vecW) {
-            U32 i = ALIGN(bw, item_w);
-            bw_align = (bw_align < i) ? i : bw_align;
+        if (!needProcessB) {
+            for (auto item_h : vecH) {
+                U32 i = ALIGN(bw, item_h);
+                bw_align = (bw_align < i) ? i : bw_align;
+            }
         }
         cw = bw;
         br = bh;  //reduce axis len for matrix B
@@ -175,22 +160,27 @@ EE matmul_infer_output_size_mali(TensorDesc matrixADesc,
     if (ar != br) {
         CHECK_STATUS(NOT_MATCH);
     }
-    (*matrixCDesc) = matrixADesc;
-    (*matrixCDesc).dims[0] = cw;
-    (*matrixCDesc).dims[1] = ch;
-    (*matrixCDesc).dims[2] = cc;
-
-    if (aw_align != aw) {
-        need_pad_a = true;
+    U32 cDims = (aDims > bDims) ? aDims : bDims;
+    if (cDims < 2) {
+        CHECK_STATUS(NOT_MATCH);
     }
-    if (bw_align != bw) {
-        need_pad_b = true;
+    DataFormat cdf = getTensorDefaultDataFormat(cDims);
+    TensorDesc cDesc;
+    cDesc.dt = adt;
+    cDesc.df = cdf;
+    cDesc.nDims = cDims;
+    cDesc.dims[0] = cw;
+    cDesc.dims[1] = ch;
+    for (U32 i = 2; i < cDims; i++) {
+        U32 av = (i < aDims) ? matrixADesc.dims[i] : 1;
+        U32 bv = (i < bDims) ? matrixBDesc.dims[i] : 1;
+        cDesc.dims[i] = (av > bv) ? av : bv;
     }
-
-    CHECK_STATUS(infer_gclmem_desc_nchw(aw_align, ah, ac, 0, 0, cw, ch, cc, adt, adt,
-        gclmemMatrixADesc, gclmemMatrixCDesc, need_pad_a));
-    CHECK_STATUS(infer_gclmem_desc_nchw(
-        bw_align, bh, bc, 0, 0, 0, 0, 0, adt, adt, gclmemMatrixBDesc, NULL, need_pad_b));
+    (*matrixCDesc) = cDesc;
+    U32 pr = aw_align - aw;
+    inputAMem->padding(0, pr, 0, 0);
+    pr = bw_align - bw;
+    inputBMem->padding(0, pr, 0, 0);
     return SUCCESS;
 }
 
@@ -213,11 +203,11 @@ EE matmul_infer_forward_algorithm_mali(GCLHandle_t handle,
         return SUCCESS;
     }
     std::vector<ConvolutionForwardAlgorithm> matmulAlgorithms;
-    std::vector<U32> vecW;
+    std::vector<U32> vecH;
     std::vector<U32> vecC;
     std::vector<U32> vecK;
     matmul_produce_algos_paras(
-        transposeA, matrixADesc, transposeB, matrixBDesc, &matmulAlgorithms, &vecW, &vecC, &vecK);
+        transposeA, matrixADesc, transposeB, matrixBDesc, &matmulAlgorithms, &vecH, &vecC, &vecK);
 
     CHECK_STATUS(gcl_clean_kernelVec(handle));
     CHECK_STATUS(gcl_enable_queue_profiling(handle));
@@ -225,57 +215,77 @@ EE matmul_infer_forward_algorithm_mali(GCLHandle_t handle,
     GCLMem_t matrixB = gcl_create_gclmem();
     GCLMem_t matrixC = gcl_create_gclmem();
     GCLMem_t tmpbuf = gcl_create_gclmem();
+    GCLMem_t tmpImgA = gcl_create_gclmem();
+    GCLMem_t tmpImgB = gcl_create_gclmem();
     std::vector<ForwardRunInfoMali> runInfos;
-    U32 stride[3] = {0, 0, 0};
-    U32 offset[3] = {0, 0, 0};
-    U32 bytes;
-    U32 maxBytes = 0;
+    U32 stride[3] = {0};
+    U32 offset[3] = {0};
+    U32 bytes[7] = {0};
+    U32 maxBytes[7] = {0};
     ForwardRunInfoMali runInfo;
     runInfo.algorithm = matmulAlgorithms[0];
 
-    for (U32 i = 0; i < vecW.size(); i++) {
-        runInfo.best_w[0] = vecW[i];
+    for (U32 i = 0; i < vecH.size(); i++) {
+        runInfo.best_h[0] = vecH[i];
         runInfo.best_c[0] = vecC[i];
         runInfo.best_k[0] = vecK[i];
-        if (matmul_infer_forward_tmp_bytes_mali(
-                matrixADesc, transposeA, matrixBDesc, transposeB, &bytes, &runInfo) != SUCCESS) {
+        if (matmul_infer_forward_tmp_bytes_mali(matrixADesc, transposeA, matrixBDesc, transposeB,
+                matrixCDesc, gclmemMatrixADesc, gclmemMatrixBDesc, gclmemMatrixCDesc, bytes,
+                &runInfo) != SUCCESS) {
             continue;
         }
-        maxBytes = (maxBytes < bytes) ? bytes : maxBytes;
+        for (U32 i = 0; i < 7; i++) {
+            maxBytes[i] = (maxBytes[i] < bytes[i]) ? bytes[i] : maxBytes[i];
+        }
         runInfos.push_back(runInfo);
     }
-
     U32 algosNum = runInfos.size();
     if (algosNum == 0) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
+    gclmemMatrixCDesc.need_pad = false;
     matrixA->desc = gclmemMatrixADesc;
     matrixB->desc = gclmemMatrixBDesc;
     matrixC->desc = gclmemMatrixCDesc;
-    tmpbuf->desc.byteSize = maxBytes;
     gcl_create_memory(handle, matrixA);
     gcl_create_memory(handle, matrixB);
     gcl_create_memory(handle, matrixC);
-    if (maxBytes) {
-        gcl_create_memory(handle, tmpbuf);
+    std::vector<GCLMem_t> tmp(3, NULL);
+    maxBytes[0] += 1;
+    tmpbuf->desc.byteSize = maxBytes[0];
+    gcl_create_memory(handle, tmpbuf);
+    tmp[0] = tmpbuf;
+    if (maxBytes[1] > 0 && maxBytes[2] > 0 && maxBytes[3] > 0) {
+        tmpImgA->desc.memType = GCL_MEM_IMG_3D;
+        tmpImgA->desc.stride[0] = maxBytes[1];
+        tmpImgA->desc.stride[1] = maxBytes[2];
+        tmpImgA->desc.stride[2] = maxBytes[3];
+        gcl_create_memory(handle, tmpImgA);
+        tmp[1] = tmpImgA;
+    }
+    if (maxBytes[4] > 0 && maxBytes[5] > 0 && maxBytes[6] > 0) {
+        tmpImgB->desc.memType = GCL_MEM_IMG_3D;
+        tmpImgB->desc.stride[0] = maxBytes[4];
+        tmpImgB->desc.stride[1] = maxBytes[5];
+        tmpImgB->desc.stride[2] = maxBytes[6];
+        gcl_create_memory(handle, tmpImgB);
+        tmp[2] = tmpImgB;
     }
 
-    U32 runKernelBe = 0;
-    U32 runKernelEnd = 0;
     double minTime = DBL_MAX;
     ForwardRunInfoMali bestRunInfo;
     for (U32 i = 0; i < algosNum; i++) {
         if (matmul_mali(handle, matrixADesc, transposeA, matrixA, matrixBDesc, transposeB, matrixB,
-                tmpbuf, matrixCDesc, matrixC, &runInfos[i]) == SUCCESS) {
-            runKernelEnd = handle->kernelVec->size();
-            gcl_run_kernelVec_timing(handle, runKernelBe, runKernelEnd);
-            runKernelBe = runKernelEnd;
+                matrixADesc, NULL, tmp, matrixCDesc, matrixC, &runInfos[i]) == SUCCESS) {
+            U32 kernelVecNum = handle->kernelVec->size();
+            gcl_run_kernelVec_timing(handle, kernelVecNum - 1, kernelVecNum);
             if (minTime > handle->t_execute) {
                 minTime = handle->t_execute;
                 bestRunInfo = runInfos[i];
             }
         }
     }
+
     if (minTime == DBL_MAX) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
@@ -285,6 +295,8 @@ EE matmul_infer_forward_algorithm_mali(GCLHandle_t handle,
     gcl_destroy_gclmem(matrixB);
     gcl_destroy_gclmem(matrixC);
     gcl_destroy_gclmem(tmpbuf);
+    gcl_destroy_gclmem(tmpImgA);
+    gcl_destroy_gclmem(tmpImgB);
     runInfos.clear();
     CHECK_STATUS(gcl_clean_kernelVec(handle));
     CHECK_STATUS(gcl_clean_programMap(handle));
@@ -296,14 +308,19 @@ EE matmul_infer_forward_tmp_bytes_mali(TensorDesc matrixADesc,
     bool transposeA,
     TensorDesc matrixBDesc,
     bool transposeB,
+    TensorDesc matrixCDesc,
+    GCLMemDesc gclmemMatrixADesc,
+    GCLMemDesc gclmemMatrixBDesc,
+    GCLMemDesc gclmemMatrixCDesc,
     U32 *bytes,
     ForwardRunInfoMali_t forwardRunInfo)
 {
     EE ret = SUCCESS;
     switch (matrixADesc.dt) {
         case DT_F16: {
-            ret = matmul_infer_forward_tmp_bytes_mali_fp16(
-                matrixADesc, transposeA, matrixBDesc, transposeB, bytes, forwardRunInfo);
+            ret = matmul_infer_forward_tmp_bytes_mali_fp16(matrixADesc, transposeA, matrixBDesc,
+                transposeB, matrixCDesc, gclmemMatrixADesc, gclmemMatrixBDesc, gclmemMatrixCDesc,
+                bytes, forwardRunInfo);
             break;
         }
         case DT_I8: {
@@ -320,11 +337,13 @@ EE matmul_infer_forward_tmp_bytes_mali(TensorDesc matrixADesc,
 EE matmul_mali(GCLHandle_t handle,
     TensorDesc matrixADesc,
     bool transposeA,
-    const GCLMem_t matrixA,
+    GCLMem_t matrixA,
     TensorDesc matrixBDesc,
     bool transposeB,
-    const GCLMem_t matrixB,
-    GCLMem_t tmp,
+    GCLMem_t matrixB,
+    TensorDesc biasDesc,
+    GCLMem_t bias,
+    std::vector<GCLMem_t> tmp,
     TensorDesc matrixCDesc,
     GCLMem_t matrixC,
     ForwardRunInfoMali_t forwardRunInfo)
@@ -335,7 +354,7 @@ EE matmul_mali(GCLHandle_t handle,
     switch (matrixADesc.dt) {
         case DT_F16: {
             ret = matmul_mali_fp16(handle, matrixADesc, transposeA, matrixA, matrixBDesc,
-                transposeB, matrixB, tmp, matrixCDesc, matrixC, forwardRunInfo);
+                transposeB, matrixB, biasDesc, bias, tmp, matrixCDesc, matrixC, forwardRunInfo);
             break;
         }
         case DT_I8: {

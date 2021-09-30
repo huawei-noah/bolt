@@ -12,38 +12,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "tensor_computing.h"
-#include "ut_util.h"
-#include "libkernelsource.h"
-#include <string.h>
-#include "gcl.h"
-#include <iostream>
+#include "ut_util_ocl.h"
 
-#ifdef _USE_FP16
-inline GCLMem_t alloc(Tensor tensor)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    mem->alloc();
-    return (GCLMem_t)mem->get_ptr();
-}
-
-inline GCLMem_t alloc_map(Tensor tensor)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    mem->mapped_alloc();
-    return (GCLMem_t)mem->get_ptr();
-}
-
-inline GCLMem_t alloc_bytes(Tensor tensor, U32 size)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    GCLMem_t ptr = NULL;
-    if (size > 0) {
-        mem->resize(tensor1d(DT_U8, size));
-        mem->alloc();
-        ptr = (GCLMem_t)mem->get_ptr();
-    }
-    return ptr;
-}
 void NCHWC8_to_NCHW(F16 *input_cpu, F16 *input_cpu_nchw, U32 ih, U32 iw, U32 ic)
 {
     int index_c = 0;
@@ -76,7 +46,7 @@ int poolingTest(int argc, char **argv, DataType dt)
     U32 iw = atoi(argv[5]);
 
     PoolingParamSpec p;
-    p.mode = POOLING_MAX;
+    p.mode = POOLING_MEAN;
     p.rm = CEIL;
     p.kernel_t = atoi(argv[6]);
     p.kernel_h = atoi(argv[7]);
@@ -93,39 +63,42 @@ int poolingTest(int argc, char **argv, DataType dt)
 
     ArchInfo archInfo;
     archInfo.arch = MALI;
-    ArchInfo archInfo_org;
-    archInfo_org.arch = CPU_GENERAL;
 
-    TensorDesc input_desc_cpu, input_desc_gpu;
+    if (gcl_check_device_qualcomm(OCLContext::getInstance().handle.get())) {
+        archInfo.arch = QUALCOMM;  //off qualcomm
+    }
+
+    TensorDesc inputDescCpu, inputDescGpu;
     if (it == 1) {
-        input_desc_cpu = tensor4df(dt, DF_NCHWC8, in, ic, ih, iw);
-        input_desc_gpu = tensor4df(dt, DF_NCHW, in, ic, ih, iw);
+        inputDescCpu = tensor4df(dt, DF_NCHWC8, in, ic, ih, iw);
+        inputDescGpu = tensor4df(dt, DF_NCHWC4, in, ic, ih, iw);
     } else {
-        input_desc_cpu = tensor5df(dt, DF_NCHWC8, in, ic, it, ih, iw);
-        input_desc_gpu = tensor5df(dt, DF_NCHW, in, ic, it, ih, iw);
+        inputDescCpu = tensor5df(dt, DF_NCHWC8, in, ic, it, ih, iw);
+        inputDescGpu = tensor5df(dt, DF_NCHWC4, in, ic, it, ih, iw);
     }
     TensorDesc output_desc_cpu, output_desc_gpu;
-    U32 input_len = tensorNumElements(input_desc_cpu);
+    U32 input_len = tensorNumElements(inputDescCpu);
     U8 *input_cpu_nchwc8 = ut_input_v(input_len, dt, UT_INIT_RANDOM);
     U8 *input_cpu_nchw = ut_input_v(input_len, dt, UT_INIT_ZERO);
     NCHWC8_to_NCHW((F16 *)input_cpu_nchwc8, (F16 *)input_cpu_nchw, ih, iw, ic);
     Tensor inputTensorCpu;
-    inputTensorCpu.resize(input_desc_cpu);
+    inputTensorCpu.resize(inputDescCpu);
     inputTensorCpu.alloc();
-    memcpy(get_ptr_from_tensor(inputTensorCpu, UT_ARCH), input_cpu_nchwc8,
-        tensorNumBytes(input_desc_cpu));
+    memcpy(get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), input_cpu_nchwc8,
+        tensorNumBytes(inputDescCpu));
 
     Tensor outputTensorCpu;
     Tensor tmpTensorCpu;
-    CHECK_STATUS(pooling_infer_output_size(&inputTensorCpu, p, &outputTensorCpu, &archInfo_org));
+    CHECK_STATUS(
+        pooling_infer_output_size(&inputTensorCpu, p, &outputTensorCpu, &UT_SERIAL_ARCHINFO));
 
     outputTensorCpu.alloc();
-    CHECK_STATUS(pooling(inputTensorCpu, p, tmpTensorCpu, outputTensorCpu, &archInfo_org));
+    CHECK_STATUS(pooling(inputTensorCpu, p, tmpTensorCpu, outputTensorCpu, &UT_SERIAL_ARCHINFO));
 
     TensorDesc outputDescCpu = outputTensorCpu.get_desc();
     DataType odt;
     DataFormat odf;
-    U32 on = 0, oc = 0, ot = 0, oh = 0, ow = 0;
+    U32 on = 0, oc = 0, ot = 1, oh = 0, ow = 0;
     if (tensorIs4d(outputDescCpu)) {
         CHECK_STATUS(tensor4dGet(outputDescCpu, &odt, &odf, &on, &oc, &oh, &ow));
     } else if (tensorIs5d(outputDescCpu)) {
@@ -134,36 +107,46 @@ int poolingTest(int argc, char **argv, DataType dt)
 
     U32 output_len = outputTensorCpu.length();
     U8 *output_cpu_nchw = ut_input_v(output_len, dt, UT_INIT_ZERO);
-    NCHWC8_to_NCHW(
-        (F16 *)get_ptr_from_tensor(outputTensorCpu, UT_ARCH), (F16 *)output_cpu_nchw, oh, ow, oc);
+    NCHWC8_to_NCHW((F16 *)get_ptr_from_tensor(outputTensorCpu, CPU_GENERAL), (F16 *)output_cpu_nchw,
+        oh, ow, oc);
 
     std::shared_ptr<GCLHandle> handleSharedPtr = OCLContext::getInstance().handle;
     GCLHandle_t handle = handleSharedPtr.get();
     std::vector<GCLKernelInfo> kernelVec;
     handle->kernelVec = &kernelVec;
-    Tensor inputTensor = Tensor(OCLMem);
-    Tensor outputTensor = Tensor(OCLMem);
+    MemoryType memType = OCLMem;
+    if (archInfo.arch == QUALCOMM) {
+        memType = OCLMemImg;
+    }
+    Tensor inputTensor = Tensor(memType);
+    Tensor outputTensor = Tensor(memType);
     Tensor tmpTensor = Tensor(OCLMem);
-    inputTensor.resize(input_desc_gpu);
+    inputTensor.resize(inputDescGpu);
 
     MaliPara maliPara;
     maliPara.handle = handle;
     archInfo.archPara = &maliPara;
 
     CHECK_STATUS(pooling_infer_output_size(&inputTensor, p, &outputTensor, &archInfo));
+    TensorDesc outputDesc = outputTensor.get_desc();
+    U8 *output_gpu = ut_input_v(on * oc * ot * oh * ow, dt, UT_INIT_ZERO);
+
     U32 maxBytes = 0;
     U32 tmpBytes = 0;
     CHECK_STATUS(pooling_infer_forward_tmp_bytes(inputTensor, outputTensor, &tmpBytes, &archInfo));
     maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
 
-    GCLMem_t output = alloc_map(outputTensor);
+    GCLMem_t output = alloc(outputTensor);
     GCLMem_t input = alloc(inputTensor);
     CHECK_STATUS(gcl_fill_memory_zero(handle, input));
-    tmpBytes = tensorNumBytes(input_desc_gpu);
+
+    tmpBytes = tensorNumBytes(inputDescGpu);
+    maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
+    tmpBytes = tensorNumBytes(outputDesc);
     maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
     GCLMem_t tmpbuf = alloc_bytes(tmpTensor, maxBytes);
 
-    CHECK_STATUS(ocl_set_input(handle, input, input_desc_gpu, input_cpu_nchw, tmpbuf, true));
+    CHECK_STATUS(ocl_set_input(handle, input, inputDescGpu, input_cpu_nchw, tmpbuf, true));
     CHECK_STATUS(pooling(inputTensor, p, tmpTensor, outputTensor, &archInfo));
 
     /*warp up*/
@@ -179,9 +162,7 @@ int poolingTest(int argc, char **argv, DataType dt)
 #else
     CHECK_STATUS(gcl_run_kernelVec(handle));
 #endif
-    TensorDesc outputDesc = outputTensor.get_desc();
-    CHECK_STATUS(ocl_get_output(handle, output, outputDesc, true));
-    void *output_gpu_val = output->mapPtrArray.back();
+    CHECK_STATUS(ocl_get_output(handle, output, outputDesc, output_gpu, tmpbuf, true));
 
     char buffer[150];
     char params[120];
@@ -193,15 +174,16 @@ int poolingTest(int argc, char **argv, DataType dt)
     ut_log(dt, buffer, ops, time);
 #endif
 
-    ut_check_a(output_gpu_val, output_cpu_nchw, on * oc * ow * oh, dt);
+    ut_check_a(output_gpu, output_cpu_nchw, on * oc * ot * ow * oh, dt);
     free(input_cpu_nchwc8);
     free(input_cpu_nchw);
     free(output_cpu_nchw);
+    free(output_gpu);
     CHECK_STATUS(gcl_finish(handle));
     CHECK_STATUS(gcl_clean_kernelVec(handle));
     return 0;
 }
-#endif
+
 int main(int argc, char **argv)
 {
 #ifdef _USE_FP16

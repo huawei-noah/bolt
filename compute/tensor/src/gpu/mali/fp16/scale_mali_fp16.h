@@ -19,6 +19,7 @@
 EE scale_mali_fp16(GCLHandle_t handle,
     GCLMem_t alpha,
     GCLMem_t beta,
+    ScaleParamSpec p,
     TensorDesc inputDesc,
     GCLMem_t input,
     TensorDesc outputDesc,

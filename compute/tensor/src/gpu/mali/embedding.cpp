@@ -18,37 +18,6 @@
 #include "gpu/mali/tensor_computing_mali.h"
 #include "gpu/mali/fp16/embedding_mali_fp16.h"
 
-EE embedding_infer_output_size_mali(TensorDesc inputDesc,
-    EmbedParamSpec p,
-    DataType odt,
-    TensorDesc *outputDesc,
-    GCLMemDesc_t gclmemInputDesc,
-    GCLMemDesc_t gclmemOutputDesc)
-{
-    if (outputDesc == nullptr || gclmemInputDesc == nullptr || gclmemOutputDesc == nullptr) {
-        CHECK_STATUS(NULL_POINTER);
-    }
-    DataType dt;
-    DataFormat df;
-    U32 batch, step, nDims;
-    nDims = inputDesc.nDims;
-    dt = inputDesc.dt;
-    if (nDims == 1) {
-        batch = 1;
-        step = inputDesc.dims[0];
-        *outputDesc = tensor2df(odt, DF_NORMAL, step, p.num_output);
-    } else if (nDims == 2) {
-        batch = inputDesc.dims[1];
-        step = inputDesc.dims[0];
-        *outputDesc = tensor3df(odt, DF_MTK, batch, step, p.num_output);
-    } else {
-        return NOT_SUPPORTED;
-    }
-    CHECK_STATUS(infer_gclmem_desc_nchw(step, batch, 1, 0, 0, p.num_output, step, batch, dt, dt,
-        gclmemInputDesc, gclmemOutputDesc));
-    return SUCCESS;
-}
-
 inline EE embedding_checkpara_mali(
     GCLHandle_t handle, GCLMem_t input, GCLMem_t weight, GCLMem_t output)
 {

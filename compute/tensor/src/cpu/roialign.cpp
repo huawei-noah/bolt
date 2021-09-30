@@ -110,8 +110,6 @@ static EE roialign_kernel(std::vector<void *> input,
                     F32 output_val = 0;
                     F32 start_x = roi_start_x1 + pw * bin_size_w;
                     F32 start_y = roi_start_y1 + ph * bin_size_h;
-                    start_x = std::min(std::max(start_x, 0.f), (F32)feature_w);
-                    start_y = std::min(std::max(start_y, 0.f), (F32)feature_h);
                     for (U32 by = 0; by < bin_grid_h; by++) {
                         F32 y = start_y +
                             static_cast<F32>(by + 0.5f) * bin_size_h / static_cast<F32>(bin_grid_h);
@@ -136,7 +134,7 @@ static EE roialign_kernel(std::vector<void *> input,
 
 EE roialign_cpu(std::vector<TensorDesc> inputDesc,
     std::vector<void *> input,
-    RoiAlignParamSpec roiAlignParamSpec,
+    RoIAlignParamSpec roiAlignParamSpec,
     TensorDesc outputDesc,
     void *output)
 {

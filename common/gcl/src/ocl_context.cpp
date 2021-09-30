@@ -36,6 +36,7 @@ OCLContext::OCLContext()
     this->handle->source_head_name[0] = "unknow";
     this->handle->useBinMap = false;
     this->handle->existProfilingQueue = false;
+    this->handle->useQualcommDev = false;
     CHECK_STATUS(get_platforms(&(this->handle->numPlatform), &(this->handle->platforms)));
     CHECK_STATUS(platform_get_devices(this->handle->platforms[this->handle->platformId],
         this->handle->deviceType, &this->handle->numDevice, &this->handle->devices));
@@ -53,10 +54,14 @@ OCLContext::OCLContext()
     if (!this->handle->useBinMap) {
         this->registerSourceKernelMap();
     }
+    if (this->handle->useQualcommDev) {
+        gcl_get_device_max_image3d_size(this->handle.get(), this->handle->device_max_image3d_size);
+    }
     CHECK_STATUS(gcl_get_device_max_ls_size(this->handle.get(), this->handle->device_max_ls_size));
     CHECK_STATUS(gcl_get_device_max_cu(this->handle.get(), &this->handle->device_max_cu));
     CHECK_STATUS(
         gcl_get_device_max_work_group(this->handle.get(), &this->handle->device_max_work_group));
+
     UNI_DEBUG_LOG("OCLContext %p constructor end\n", (char *)this);
 }
 
@@ -141,6 +146,7 @@ void OCLContext::setDeviceName()
                 devName[i] = '_';
             }
         }
+        this->handle->useQualcommDev = true;
     }
 
     U32 be = deviceV.find("r");
@@ -174,8 +180,9 @@ void OCLContext::registerBinaryKernelMap()
         this->handle->useBinMap = true;
         this->handle->kernel_binmap_handle = dvm_handle;
     } else {
+        err = dlerror();
         UNI_DEBUG_LOG("try to dlopen %s failed, %s, create kernel from source code\n",
-            libKernelBinName.c_str(), dlerror());
+            libKernelBinName.c_str(), err);
     }
 }
 

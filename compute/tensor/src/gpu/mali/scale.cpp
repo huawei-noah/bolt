@@ -18,38 +18,6 @@
 #include "gpu/mali/tensor_computing_mali.h"
 #include "gpu/mali/fp16/scale_mali_fp16.h"
 
-EE scale_infer_output_size_mali(TensorDesc inputDesc,
-    TensorDesc *outputDesc,
-    GCLMemDesc_t gclmemInputDesc,
-    GCLMemDesc_t gclmemOutputDesc)
-{
-    /*tensorDesc record cpu org data format info*/
-    /*gclmemDesc record gpu trans data format info*/
-
-    if (outputDesc == nullptr || gclmemInputDesc == nullptr || gclmemOutputDesc == nullptr) {
-        CHECK_STATUS(NOT_SUPPORTED);
-    }
-    DataType idt;
-    DataFormat idf;
-    U32 iw, ih, ic, in;
-    tensorSelectGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw);
-    *outputDesc = inputDesc;
-
-    if (gclmemInputDesc->memFormat == DF_NCHW || gclmemInputDesc->byteSize == 0) {
-        iw = ALIGN(iw, 4);
-        CHECK_STATUS(infer_gclmem_desc_nchw(
-            iw, ih, ic, 0, 0, iw, ih, ic, idt, idt, gclmemInputDesc, gclmemOutputDesc));
-    } else {
-        CHECK_STATUS(infer_gclmem_desc_ncwhc4(
-            iw, ih, ic, 0, 0, iw, ih, ic, idt, idt, gclmemInputDesc, gclmemOutputDesc));
-    }
-
-    if (gclmemInputDesc && gclmemOutputDesc) {
-        *gclmemOutputDesc = *gclmemInputDesc;  // the input and output mem maybe the same
-    }
-    return SUCCESS;
-}
-
 inline EE scale_checkpara_mali(GCLHandle_t handle,
     GCLMem_t alpha,
     GCLMem_t beta,
@@ -73,6 +41,7 @@ inline EE scale_checkpara_mali(GCLHandle_t handle,
 EE scale_mali(GCLHandle_t handle,
     GCLMem_t alpha,
     GCLMem_t beta,
+    ScaleParamSpec p,
     TensorDesc inputDesc,
     GCLMem_t input,
     TensorDesc outputDesc,
@@ -82,7 +51,7 @@ EE scale_mali(GCLHandle_t handle,
     CHECK_STATUS(scale_checkpara_mali(handle, alpha, beta, inputDesc, input, outputDesc, output));
     switch (inputDesc.dt) {
         case DT_F16: {
-            ret = scale_mali_fp16(handle, alpha, beta, inputDesc, input, outputDesc, output);
+            ret = scale_mali_fp16(handle, alpha, beta, p, inputDesc, input, outputDesc, output);
             break;
         }
         case DT_I8: {

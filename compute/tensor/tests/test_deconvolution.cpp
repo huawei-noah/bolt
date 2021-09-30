@@ -11,7 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string.h>
 #include "tensor_computing.h"
 #include "ut_util.h"
 
@@ -40,10 +39,6 @@ int deconvolutionTest(int argc, char **argv, DataType dt)
     CHECK_REQUIREMENT(in == 1 && on == 1);
     CHECK_REQUIREMENT(ic % 8 == 0 && oc % 8 == 0);
 
-    ArchInfo archInfo;
-    archInfo.arch = UT_ARCH;
-    ArchInfo archInfo_org;
-    archInfo_org.arch = CPU_GENERAL;
     ActivationParamSpec activationDesc;
     activationDesc.mode = ACTIVATION_NULL;
     ConvolutionParamSpec convParamSpec = createConvolutionParamSpec(group, 1, fh, fw, 1, stride,
@@ -78,15 +73,15 @@ int deconvolutionTest(int argc, char **argv, DataType dt)
     filterTensor.alloc();
     filterTensorRef.alloc();
     biasTensor.alloc();
-    memcpy(get_ptr_from_tensor(inputTensor, UT_ARCH), input, bytesOf(dt) * in * ic * ih * iw);
-    memcpy(get_ptr_from_tensor(inputTensorRef, UT_ARCH), input, bytesOf(dt) * in * ic * ih * iw);
-    memcpy(get_ptr_from_tensor(filterTensor, UT_ARCH), filter, tensorNumBytes(filterDesc));
-    memcpy(get_ptr_from_tensor(filterTensorRef, UT_ARCH), filter, tensorNumBytes(filterDesc));
-    memcpy(get_ptr_from_tensor(biasTensor, UT_ARCH), bias, tensorNumBytes(biasDesc));
+    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, bytesOf(dt) * in * ic * ih * iw);
+    memcpy(get_ptr_from_tensor(inputTensorRef, CPU_GENERAL), input, bytesOf(dt) * in * ic * ih * iw);
+    memcpy(get_ptr_from_tensor(filterTensor, CPU_GENERAL), filter, tensorNumBytes(filterDesc));
+    memcpy(get_ptr_from_tensor(filterTensorRef, CPU_GENERAL), filter, tensorNumBytes(filterDesc));
+    memcpy(get_ptr_from_tensor(biasTensor, CPU_GENERAL), bias, tensorNumBytes(biasDesc));
 
     // setup output, bias
     CHECK_STATUS(deconvolution_infer_output_size(
-        &inputTensor, filterTensor, convParamSpec, &outputTensor, dt, &archInfo));
+        &inputTensor, filterTensor, convParamSpec, &outputTensor, dt, &UT_CPU_ARCHINFO));
     U32 output_size = outputTensor.length();
 
     outputTensor.alloc();
@@ -97,12 +92,12 @@ int deconvolutionTest(int argc, char **argv, DataType dt)
     ConvolutionPolicy policy = CONVOLUTION_FASTEST;
     ConvolutionForwardAlgorithm alg = CONVOLUTION_ALGORITHM_NULL;
     CHECK_STATUS(deconvolution_infer_forward_algorithm(inputTensor, filterTensor, outputTensor,
-        convParamSpec, policy, &alg, dt, activationDesc, &archInfo));
+        convParamSpec, policy, &alg, dt, activationDesc, &UT_CPU_ARCHINFO));
 
     // setup tmp
     U32 tmpBytes;
     CHECK_STATUS(deconvolution_infer_forward_tmp_bytes(
-        inputTensor, filterTensor, outputTensor, convParamSpec, alg, &tmpBytes, &archInfo));
+        inputTensor, filterTensor, outputTensor, convParamSpec, alg, &tmpBytes, &UT_CPU_ARCHINFO));
     Tensor tmpTensor;
     tmpTensor.resize(tensor1d(DT_U8, tmpBytes));
     tmpTensor.alloc();
@@ -110,33 +105,34 @@ int deconvolutionTest(int argc, char **argv, DataType dt)
     // setup filter trans
     U32 ftmBytes;
     CHECK_STATUS(deconvolution_transform_filter_bytes(
-        filterTensor, convParamSpec, alg, &ftmBytes, &archInfo));
+        filterTensor, convParamSpec, alg, &ftmBytes, &UT_CPU_ARCHINFO));
     Tensor ftmTensor;
     ftmTensor.resize(tensor1d(DT_U8, ftmBytes));
     ftmTensor.alloc();
 
     // trans filter
     CHECK_STATUS(deconvolution_transform_filter(
-        filterTensor, convParamSpec, alg, tmpTensor, &ftmTensor, &archInfo));
+        filterTensor, convParamSpec, alg, tmpTensor, &ftmTensor, &UT_CPU_ARCHINFO));
 
     if (UT_CHECK) {
         CHECK_STATUS(deconvolution(inputTensor, ftmTensor, convParamSpec, alg, nullptr, biasTensor,
-            tmpTensor, outputTensor, activationDesc, &archInfo));
+            tmpTensor, outputTensor, activationDesc, &UT_CPU_ARCHINFO));
 
         // naive implement
         CHECK_STATUS(deconvolution(inputTensorRef, filterTensorRef, convParamSpec, alg, nullptr,
-            biasTensor, tmpTensor, outputTensorRef, activationDesc, &archInfo_org));
+            biasTensor, tmpTensor, outputTensorRef, activationDesc, &UT_SERIAL_ARCHINFO));
 
         // check
-        ut_check_v(get_ptr_from_tensor(outputTensor, UT_ARCH),
-            get_ptr_from_tensor(outputTensorRef, UT_ARCH), output_size, dt, 1, __FILE__, __LINE__);
+        ut_check_v(get_ptr_from_tensor(outputTensor, CPU_GENERAL),
+            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), output_size, dt, 1, __FILE__,
+            __LINE__);
     }
 
     // benchmark
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
         CHECK_STATUS(deconvolution(inputTensor, ftmTensor, convParamSpec, alg, nullptr, biasTensor,
-            tmpTensor, outputTensor, activationDesc, &archInfo));
+            tmpTensor, outputTensor, activationDesc, &UT_CPU_ARCHINFO));
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;

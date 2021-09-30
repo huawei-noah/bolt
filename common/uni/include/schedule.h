@@ -185,7 +185,6 @@ private:
         int threadId = schedule->getThreadId(pthread_self());
         UNI_DEBUG_LOG("worker(%d) begin\n", threadId);
         std::map<std::string, Graph<GraphParameter, ComputeNode, DataTensor>> threadPrivateGraph;
-        double timeStart = ut_time_ms();
 #ifdef _USE_WEIGHT_SHARE
         int gpuId = -1, cpuId = -1;
         if (schedule->useGPU && threadId == schedule->threadNum - 1) {
@@ -241,8 +240,6 @@ private:
         }
 #endif
         UNI_DEBUG_LOG("start to wait task\n");
-        double timeEnd = ut_time_ms();
-        UNI_PROFILE_INFO("graphs init", "init", timeStart * 1000, (timeEnd - timeStart) * 1000);
         while (1) {
             pthread_mutex_lock(&(schedule->taskQueueLock));
             while (schedule->taskQueue.empty() && !(schedule->stop)) {

@@ -20,8 +20,7 @@ class TfSliceOCL : public TfSlice {
 public:
     TfSliceOCL(DataType dt, TfSliceParamSpec p) : TfSlice(dt, p)
     {
-        setMALIArchInfo(
-            &(this->archInfo), nullptr, &this->needSetKernelVec, &this->needSelectKernelLS);
+        INIT_GPU_INFO(nullptr)
     }
 
     ~TfSliceOCL(){DESTROY_OCL_KERNEL}

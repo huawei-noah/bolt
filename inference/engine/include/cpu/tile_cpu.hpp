@@ -30,7 +30,8 @@ public:
 
     void run() override
     {
-        CHECK_STATUS(tile(this->inputTensors[0], this->p, this->outputTensors[0], &this->archInfo));
+        CHECK_STATUS(tile(
+            this->inputTensors[0], this->p, this->temp, this->outputTensors[0], &this->archInfo));
     }
 
     EE infer_output_tensors_size(

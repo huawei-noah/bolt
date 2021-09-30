@@ -42,19 +42,23 @@ inline EE embedding_core_mali_fp16(GCLHandle_t handle,
     inbuf = input->mem;
     weibuf = weight->mem;
     outbuf = output->mem;
+    U32 i_off = ih_off * iw_str + iw_off;
+    U32 f_off = fh_off * fw_str + fw_off;
+    U32 o_off = oh_off * ow_str + ow_off;
 
     if (!p.transpose) {
         U32 gs[3] = {(ow + 3) / 4, oh, oc};
         U32 ls[3] = {0, 0, 0};
         U32 dim = 3;
         Kernel kernel;
-        CHECK_STATUS(gcl_create_kernel(handle, "embedding", &kernel));
-        CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, iw_off, ih_off, fw_str, fw_off, fh_off,
-            ow_str, oh_str, ow_off, oh_off, ow, gs[0], gs[1], inbuf, weibuf, outbuf));
-        gcl_set_kernelVec(handle, kernel, dim, gs, ls, "embedding");
-#ifdef _DEBUG
-        CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, "embedding"));
-#endif
+        KernelOpt kernelOpt;
+        char kernelName[128];
+        CHECK_STATUS(
+            set_common_opt(DT_F16, GCL_MEM_BUF, GCL_MEM_BUF, "embedding", kernelName, &kernelOpt));
+        CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
+        CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, fw_str, ow_str, oh_str, i_off, f_off, o_off,
+            ow, gs[0], gs[1], inbuf, weibuf, outbuf));
+        gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
         return SUCCESS;
     } else {
         return NOT_SUPPORTED;

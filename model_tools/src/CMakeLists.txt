@@ -1,5 +1,7 @@
 file(GLOB srcs ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
 
+include_directories(${JSONCPP_INCLUDE_DIR})
+
 # shared library 
 add_library(${PROJECT_NAME} SHARED ${srcs})
 

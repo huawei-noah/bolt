@@ -12,11 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "cpu/x86/fp32/blas_fp32.h"
-#include "error.h"
-
-#ifdef _USE_OPENMP
-#include <omp.h>
-#endif
+#include "thread_affinity.h"
 
 #define UNROLL_K 4
 #define UNROLL_N 24
@@ -31,7 +27,7 @@ typedef void (*kernel_func)(
 void matrix_matrix_multiply_tmp_bytes_fp32(
     U32 row1, U32 col1, U32 row2, U32 col2, DataType dt, U32 *bytes)
 {
-    *bytes = row1 * col1;
+    *bytes = row1 * col1 + row2 * col2;
     *bytes *= sizeof(dt);
     *bytes += 32;
 }

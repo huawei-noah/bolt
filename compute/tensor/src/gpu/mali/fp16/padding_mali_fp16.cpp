@@ -12,6 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "gpu/mali/fp16/padding_mali_fp16.h"
+#include "gpu/mali/cl/kernel_option/padding_opt.h"
 
 inline EE padding_checkpara_mali_fp16(GCLHandle_t handle,
     TensorDesc inputDesc,
@@ -53,60 +54,51 @@ inline EE padding_core_mali_fp16(GCLHandle_t handle,
     inbuf = input->mem;
     outbuf = output->mem;
 
-    U32 iw_str, ih_str, iw_off, ih_off;
-    U32 ow_str, oh_str, ow_off, oh_off;
+    U32 iw_str, ih_str, iw_off, ih_off, i_off;
+    U32 ow_str, oh_str, ow_off, oh_off, o_off;
     get_gclmem_dim(input->desc, &iw_str, &ih_str, NULL, &iw_off, &ih_off);
     get_gclmem_dim(output->desc, &ow_str, &oh_str, NULL, &ow_off, &oh_off);
+    i_off = ih_off * iw_str + iw_off;
+    o_off = oh_off * ow_str + ow_off;
 
-    U32 pl, pr, pt, pb;
+    U32 pl, pr, pt, pb, pf, pa;
     pl = padParamSpec.left;
     pr = padParamSpec.right;
     pt = padParamSpec.top;
     pb = padParamSpec.bottom;
+    pf = padParamSpec.front;
+    pa = padParamSpec.back;
+    if (pf > 0 || pa > 0) {
+        CHECK_STATUS(NOT_SUPPORTED);
+    }
 
     char kernelName[128];
-    char formatName[128];
-    char modeName[128];
+    Kernel kernel;
+    KernelOpt kernelOpt;
+    bool useNchw = (inputDesc.df == DF_NCHWC4) ? false : true;
+    CHECK_STATUS(set_padding_opt_mali(
+        useNchw, padParamSpec.pad_mode, DT_F16, GCL_MEM_BUF, GCL_MEM_BUF, kernelName, &kernelOpt));
+
     U32 gs[3] = {0, 0, 0};
     U32 ls[3] = {0, 0, 0};
     U32 dim = 3;
     if (input->desc.memFormat == DF_NCHW) {
-        strcpy(formatName, "nchw_");
         gs[0] = (ow + 3) / 4;
         gs[1] = oh;
         gs[2] = oc * on;
-    } else if (input->desc.memFormat == DF_NCWHC4) {
-        strcpy(formatName, "");
-        gs[0] = oh;
-        gs[1] = ow;
+    } else if (input->desc.memFormat == DF_NCHWC4) {
+        gs[0] = ow;
+        gs[1] = oh;
         gs[2] = (oc + 3) / 4 * on;
     } else {
         CHECK_STATUS(NOT_SUPPORTED)
     }
-    switch (padParamSpec.pad_mode) {
-        case Pad_Constant:
-            strcpy(modeName, "constant");
-            break;
-        case Pad_Edge:
-            strcpy(modeName, "edge");
-            break;
-        case Pad_Reflect:
-            strcpy(modeName, "reflect");
-            break;
-        case Pad_Symmetric:
-            strcpy(modeName, "symmetric");
-            break;
-        default:
-            return NOT_SUPPORTED;
-    }
-    sprintf(kernelName, "padding_%s%s", formatName, modeName);
-    Kernel kernel;
-    CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel));
-    CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, iw_off, ih_off, ow_str, oh_str, ow_off,
-        oh_off, iw, ih, ow, oh, pt, pb, pl, pr, 0, 0, gs[0], gs[1], inbuf, outbuf));
+    CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
+    CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, ow_str, oh_str, i_off, o_off, iw, ih,
+        ow, oh, pl, pr, pt, pb, gs[0], gs[1], inbuf, outbuf));
     gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
 #ifdef _DEBUG
-    CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, "padding_constant"));
+    CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
 #endif
     return SUCCESS;
 }

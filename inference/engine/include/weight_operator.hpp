@@ -30,6 +30,7 @@ public:
         this->ws.weight = nullptr;
         this->ws.bytes_of_vec = 0;
         this->ws.vec = nullptr;
+        this->wtmType = CPUMem;
     }
 
     bool is_weight() override
@@ -74,17 +75,12 @@ public:
         return 0;
     }
 
-#ifdef _USE_MALI
-    virtual GCLMemDesc infer_wtm_memory_size_mali()
+    virtual EE alloc_wtm_memory()
     {
         this->lenOfWtm = 0;
         this->wtm = std::shared_ptr<Tensor>();
-        U32 stride[3] = {0, 0, 0};
-        U32 offset[3] = {0, 0, 0};
-        GCLMemDesc tmpdesc = gcl_mem_desc(stride, offset, DT_U8, DF_NCWHC4);
-        return tmpdesc;
+        return SUCCESS;
     }
-#endif
 
     virtual void set_wtm_memory(U32 len, Tensor wtm)
     {
@@ -187,6 +183,27 @@ public:
     {
         return SUCCESS;
     }
+#ifdef _USE_GPU
+    virtual EE set_wtm_image(TensorDesc desc, std::shared_ptr<Tensor> *targetWtm = nullptr)
+    {
+        if (IS_QUALCOMM_GPU(this->archInfo.arch)) {
+            std::shared_ptr<Tensor> tensor = std::shared_ptr<Tensor>(new Tensor(OCLMemImg));
+            tensor->resize(desc);
+            U32 str[3];
+            auto mem = (OclMemoryImg *)(tensor->get_memory());
+            mem->stride(str);
+            if (gcl_check_meet_device_image3d_limits(
+                    OCLContext::getInstance().handle.get(), str[0], str[1], str[2])) {
+                if (targetWtm) {
+                    *targetWtm = tensor;
+                } else {
+                    this->wtm = tensor;
+                }
+            }
+        }
+        return SUCCESS;
+    }
+#endif
 
 protected:
     std::vector<Tensor> weightTensors;
@@ -195,6 +212,7 @@ protected:
 
     U32 lenOfWtm;
     std::shared_ptr<Tensor> wtm;
+    MemoryType wtmType;
     WeightSpec ws;
 };
 

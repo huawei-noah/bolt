@@ -14,6 +14,7 @@
 #include <cstring>
 #include "cpu/x86/fp32/tensor_computing_fp32.h"
 #include "cpu/x86/fp32/transform_functions_fp32.h"
+#include "cpu/x86/fp32/convolution_functions.h"
 
 // N is 32/24
 template <U32 N>
@@ -88,52 +89,39 @@ EE convolution_transform_filter_fp32(TensorDesc filterDesc,
     TensorDesc *ftmDesc,
     F32 *filterTransformed)
 {
-    U32 cx = 0;
     DataFormat ftmDataFormat;
     DataType fdt;
     DataFormat fdf;
     U32 fn, fc, fh, fw;
     CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-    fn = (fn + 7) / 8 * 8 / convParamSpec.group;
+    U32 cx = 0;
+    U32 fnBlock = 0;
+    fn = CeilDivide(fn, 8) * 8 / convParamSpec.group;
     switch (algorithm) {
         case CONVOLUTION_ALGORITHM_DIRECT: {
-            if ((fn % 24 == 0) && (fn % 32 != 0)) {
-                ftmDataFormat = DF_NCHWCxN24;
-            } else {
-                ftmDataFormat = DF_NCHWCxN32;
-            }
+            fnBlock = InferConvDirectUnrollOc(fn);
             cx = 8;
             break;
         }
         case CONVOLUTION_ALGORITHM_POINTWISE: {
-            if ((fn % 24 != 0) && (fn % 32 == 0)) {
-                ftmDataFormat = DF_NCHWCxN32;
-            } else {
-                ftmDataFormat = DF_NCHWCxN24;
-            }
+            fnBlock = InferConvPointwiseUnrollOc(fn);
             cx = 128;
             break;
         }
         case CONVOLUTION_ALGORITHM_GEMM_ICNCHW: {
-            if ((fn % 24 != 0) && (fn % 32 == 0)) {
-                ftmDataFormat = DF_NCHWCxN32;
-            } else {
-                ftmDataFormat = DF_NCHWCxN24;
-            }
+            fnBlock = InferConvPointwiseUnrollOc(fn);
             cx = 1;
             break;
         }
         default:
             return NOT_MATCH;
     }
+    CHECK_STATUS(InferConvWeightFormat(ftmDataFormat, fnBlock));
 
     U32 channelAxis = filterDesc.nDims - 1;
     TensorDesc tmpFilterDesc = filterDesc;
     tmpFilterDesc.dims[channelAxis] /= convParamSpec.group;
-    U32 fnPadding = tmpFilterDesc.dims[channelAxis];
-    if (fnPadding % 8 != 0) {
-        fnPadding = (fnPadding / 8 + 1) * 8;
-    }
+    U32 fnPadding = CeilDivide(tmpFilterDesc.dims[channelAxis], 8) * 8;
     U32 originalTileSize = tensorNumElements(tmpFilterDesc);
     for (U32 g = 0; g < convParamSpec.group; g++) {
         CHECK_STATUS(convolution_transform_filter_kernel_fp32(

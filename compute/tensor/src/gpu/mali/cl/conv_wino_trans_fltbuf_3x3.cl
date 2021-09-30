@@ -78,7 +78,7 @@
         flt[off + str * 5] = reg[5];  \
     }
 
-__kernel void conv_wino_trans_fltbuf_3x3(
+__kernel void conv_wino_trans_fltbuf_3x3_(
     const int fn, const int fc, const int fnc, __global const T *fltbuf, __global T *flttran)
 {
     const int idx = get_global_id(0);
@@ -87,9 +87,9 @@ __kernel void conv_wino_trans_fltbuf_3x3(
 
     T g[3];
     T h0[6], h1[6], h2[6], h3[6], h4[6], h5[6], t[6], tmp[6];
-    loadG(g, fnc, in_off, fltbuf);
-    calCore(g, tmp);
-    mulReg6((T)(0.75), tmp, h0);
+    loadG(g, fnc, in_off, fltbuf);  //fwh[0][3]
+    calCore(g, tmp);                //fwh[0][3] * G^T
+    mulReg6((T)(0.75), tmp, h0);    //G * row0, row 1/2 treat as zero
     mulReg6((T)(-0.5), tmp, t);
     setReg6(t, h1);
     setReg6(t, h2);
@@ -99,7 +99,7 @@ __kernel void conv_wino_trans_fltbuf_3x3(
 
     loadG(g, fnc, in_off + 3 * fnc, fltbuf);
     calCore(g, tmp);
-    mulReg6((T)(0.5), tmp, t);
+    mulReg6((T)(0.5), tmp, t);  //G * row1 row 0/2 treat as zero
     minReg6(t, h1);
     addReg6(t, h2);
     mulReg6((T)(0.25), tmp, t);
@@ -108,7 +108,7 @@ __kernel void conv_wino_trans_fltbuf_3x3(
 
     loadG(g, fnc, in_off + 6 * fnc, fltbuf);
     calCore(g, tmp);
-    mulReg6((T)(0.5), tmp, t);
+    mulReg6((T)(0.5), tmp, t);  //G * row2 row 0/1 treat as zero
     minReg6(t, h1);
     minReg6(t, h2);
     addReg6(t, h3);

@@ -36,9 +36,15 @@ class ResizeFuseOptimizer : public OPOptimizer {
                                 continue;
                             }
                             if (spec->ops[i + 4].type == OT_Resize) {
-                                float *weight_ptr = (float *)(spec->ws[weightIndex].weight);
-                                spec->ops[i + 4].ps.resize_spec.sizes[0] = weight_ptr[0];
-                                spec->ops[i + 4].ps.resize_spec.sizes[1] = weight_ptr[1];
+                                if (spec->ws[weightIndex].mdt == DT_I32) {
+                                    int *weight_ptr = (int *)(spec->ws[weightIndex].weight);
+                                    spec->ops[i + 4].ps.resize_spec.sizes[0] = weight_ptr[0];
+                                    spec->ops[i + 4].ps.resize_spec.sizes[1] = weight_ptr[1];
+                                } else {
+                                    float *weight_ptr = (float *)(spec->ws[weightIndex].weight);
+                                    spec->ops[i + 4].ps.resize_spec.sizes[0] = weight_ptr[0];
+                                    spec->ops[i + 4].ps.resize_spec.sizes[1] = weight_ptr[1];
+                                }
                                 spec->ops[i + 4].ps.resize_spec.num_sizes = 2;
                                 spec->ops[i + 4].ps.resize_spec.num_scales = 0;
                                 setOperatorInvalid(spec, i + 1, true);

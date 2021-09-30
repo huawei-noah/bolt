@@ -15,6 +15,18 @@
 #define _RNNCELL_MALI_FP16
 
 #include "gpu/mali/fp16/tensor_computing_fp16.h"
+EE rnncell_transform_filter_bytes_mali_fp16(TensorDesc filterDesc,
+    RNNParamSpec rnnParamSpec,
+    ForwardRunInfoMali_t forwardRunInfo,
+    TensorDesc *ftmDesc);
+
+EE rnncell_transform_filter_mali_fp16(GCLHandle_t handle,
+    TensorDesc filterDesc,
+    GCLMem_t filter,
+    RNNParamSpec rnnParamSpec,
+    TensorDesc *fltmemDesc,
+    GCLMem_t fltmem,
+    ForwardRunInfoMali_t forwardRunInfo);
 
 EE rnncell_infer_forward_tmp_bytes_mali_fp16(TensorDesc inputDesc,
     TensorDesc filterDesc,

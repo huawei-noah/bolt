@@ -12,6 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "blas_fp32.h"
+#include "thread_affinity.h"
 
 void mvm_row_kernel(U32 N, U32 K, F32 *matrix, F32 *vector, F32 *result)
 {
@@ -173,6 +174,9 @@ void mvm_row_fp32(U32 numRows, U32 numColumns, F32 *matrix, F32 *vector, F32 *re
     U32 K = numColumns;
     U32 NTail = N % 4;
     U32 NInner = N / 4;
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
     for (U32 i = 0; i < NInner; i++) {
         mvm_row_kernel(NInner, K, matrix + i * K, vector, result + i);
     }

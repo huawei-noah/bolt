@@ -32,10 +32,6 @@ int nonmaxsuppressionTest(int argc, char **argv, DataType dt)
     U32 max_output_boxes_per_class = atoi(argv[9]);
     F32 iou_threshold = (F32)atof(argv[10]);
     F32 score_threshold = (F32)atof(argv[11]);
-    ArchInfo archInfo;
-    archInfo.arch = UT_ARCH;
-    ArchInfo archInfo_org;
-    archInfo_org.arch = CPU_GENERAL;
 
     NonMaxSuppressionParamSpec nonMaxSuppressionParamSpec;
     nonMaxSuppressionParamSpec.max_output_boxes_per_class = max_output_boxes_per_class;
@@ -49,11 +45,11 @@ int nonmaxsuppressionTest(int argc, char **argv, DataType dt)
     inputTensors[1] = Tensor::alloc_sized<CPUMem>(input_desc_scores);
     U32 input_len_boxes = tensorNumElements(input_desc_boxes);
     U8 *input_boxes = ut_input_v(input_len_boxes, dt, UT_INIT_RANDOM);
-    memcpy(get_ptr_from_tensor(inputTensors[0], UT_ARCH), input_boxes,
+    memcpy(get_ptr_from_tensor(inputTensors[0], CPU_GENERAL), input_boxes,
         tensorNumBytes(input_desc_boxes));
     U32 input_len_scores = tensorNumElements(input_desc_scores);
     U8 *input_scores = ut_input_v(input_len_scores, dt, UT_INIT_RANDOM);
-    memcpy(get_ptr_from_tensor(inputTensors[1], UT_ARCH), input_scores,
+    memcpy(get_ptr_from_tensor(inputTensors[1], CPU_GENERAL), input_scores,
         tensorNumBytes(input_desc_scores));
     std::vector<Tensor *> inputTensorsPtr(2);
     inputTensorsPtr[0] = &inputTensors[0];
@@ -61,7 +57,7 @@ int nonmaxsuppressionTest(int argc, char **argv, DataType dt)
     //set output
     Tensor outputTensor;
     CHECK_STATUS(non_max_suppression_infer_output_size(
-        inputTensorsPtr, nonMaxSuppressionParamSpec, &outputTensor, &archInfo));
+        inputTensorsPtr, nonMaxSuppressionParamSpec, &outputTensor, &UT_CPU_ARCHINFO));
     outputTensor.alloc();
     Tensor outputTensorRef = Tensor::alloc_sized<CPUMem>(outputTensor.get_desc());
     U32 output_len = outputTensor.length();
@@ -88,18 +84,19 @@ int nonmaxsuppressionTest(int argc, char **argv, DataType dt)
                        0,  1,  5 };
      */
     if (UT_CHECK) {
-        CHECK_STATUS(
-            non_max_suppression(inputTensors, nonMaxSuppressionParamSpec, outputTensor, &archInfo));
         CHECK_STATUS(non_max_suppression(
-            inputTensors, nonMaxSuppressionParamSpec, outputTensorRef, &archInfo_org));
+            inputTensors, nonMaxSuppressionParamSpec, outputTensor, &UT_CPU_ARCHINFO));
+        CHECK_STATUS(non_max_suppression(
+            inputTensors, nonMaxSuppressionParamSpec, outputTensorRef, &UT_SERIAL_ARCHINFO));
         // check
-        ut_check_v(get_ptr_from_tensor(outputTensor, UT_ARCH),
-            get_ptr_from_tensor(outputTensorRef, UT_ARCH), output_len, dt, 0.05, __FILE__, __LINE__);
+        ut_check_v(get_ptr_from_tensor(outputTensor, CPU_GENERAL),
+            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), output_len, dt, 0.05, __FILE__,
+            __LINE__);
     }
 
     U32 num_detected_max = max_output_boxes_per_class * ic1;
     if (dt == DT_F32) {
-        F32 *output_f32 = (F32 *)get_ptr_from_tensor(outputTensor, UT_ARCH);
+        F32 *output_f32 = (F32 *)get_ptr_from_tensor(outputTensor, CPU_GENERAL);
         int idx = 0;
         for (U32 i = 0; i < 1 + num_detected_max; i++) {
             for (int j = 0; j < 3; j++) {
@@ -111,7 +108,7 @@ int nonmaxsuppressionTest(int argc, char **argv, DataType dt)
     }
 #ifdef _USE_FP16
     if (dt == DT_F16) {
-        F16 *output_f16 = (F16 *)get_ptr_from_tensor(outputTensorRef, UT_ARCH);
+        F16 *output_f16 = (F16 *)get_ptr_from_tensor(outputTensorRef, CPU_GENERAL);
         int idx = 0;
         for (U32 i = 0; i < 1 + num_detected_max; i++) {
             for (int j = 0; j < 3; j++) {

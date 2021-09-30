@@ -14,7 +14,7 @@
 #include "tensor_desc.h"
 
 #include "gpu/mali/fp16/reduction_mali_fp16.h"
-#include "gpu/mali/cl/kernel_option/copy_opt.h"
+#include "gpu/mali/cl/kernel_option/reduction_opt.h"
 
 inline EE reduction_checkpara_mali_fp16(TensorDesc inputDesc, TensorDesc outputDesc)
 {
@@ -48,12 +48,18 @@ inline EE reduction_core_mali_fp16(GCLHandle_t handle,
     DataFormat imf, omf;
     U32 in, ic, ih, iw;
     U32 on, oc, oh, ow;
-    U32 iw_str, ih_str, ic_str, iw_off, ih_off;
-    U32 ow_str, oh_str, oc_str, ow_off, oh_off;
+    U32 iw_str, ih_str, ic_str, iw_off, ih_off, i_off;
+    U32 ow_str, oh_str, oc_str, ow_off, oh_off, o_off;
     tensorSelectGet(inputDesc, NULL, NULL, &in, &ic, &ih, &iw);
     tensorSelectGet(outputDesc, NULL, NULL, &on, &oc, &oh, &ow);
     get_gclmem_dim(input->desc, &iw_str, &ih_str, &ic_str, &iw_off, &ih_off);
     get_gclmem_dim(output->desc, &ow_str, &oh_str, &oc_str, &ow_off, &oh_off);
+    i_off = ih_off * iw_str + iw_off;
+    o_off = oh_off * ow_str + ow_off;
+    if (in > 1 && axis > 2) {
+        CHECK_STATUS(NOT_SUPPORTED);
+    }
+
     axis = axisTran[0];
     U32 od = outputDesc.nDims;
     imf = input->desc.memFormat;
@@ -63,110 +69,44 @@ inline EE reduction_core_mali_fp16(GCLHandle_t handle,
     Mem tmpbuf = tmp->mem;
     int keep_dim = (p.keep_dim) ? 1 : 0;
     char kernelName[128];
-    char modeName[16];
     KernelOpt kernelOpt;
     Kernel kernel;
     U32 gs[3] = {0, 0, 0};
     U32 ls[3] = {0, 0, 0};
     U32 dim = 3;
-    switch (p.reduction_mode) {
-        case REDUCTION_SUM:
-            strcpy(modeName, "sum");
-            break;
-        case REDUCTION_MEAN:
-            strcpy(modeName, "mean");
-            break;
-        case REDUCTION_STD_DEVIATION:
-            strcpy(modeName, "std_deviation");
-            break;
-        case REDUCTION_SCALAR_PRODUCT:
-            strcpy(modeName, "scalar_product");
-            break;
-        default:
-            return NOT_SUPPORTED;
-    }
-
-    if (imf == DF_NCWHC4 && omf == DF_NCWHC4 && keep_dim) {
-        sprintf(kernelName, "reduction_oc4_%s%d", modeName, axis);
-        gs[0] = oh;
-        gs[1] = ow;
+    bool useOc4 = false;
+    bool useNchw = false;
+    U32 edge;
+    if (imf == DF_NCHWC4 && omf == DF_NCHWC4 && keep_dim) {
+        useOc4 = true;
+        gs[0] = ow;
+        gs[1] = oh;
         gs[2] = (oc + 3) / 4 * on;
-        CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel));
-        CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, iw_str, ih_off, iw_off, oh_str, ow_str,
-            oh_off, ow_off, ih, iw, ic, keep_dim, od, gs[0], gs[1], inbuf, outbuf));
-        gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
-        return SUCCESS;
+        edge = oc;
+    } else if (imf == DF_NCHWC4) {
+        gs[0] = iw;
+        gs[1] = ih;
+        gs[2] = (ic + 3) / 4 * in;
+        gs[axis] = 1;
+        edge = ic;
     } else {
-        bool needTran = (omf == DF_NCWHC4) ? true : false;
-        U32 th_str = oh;
-        U32 tw_str = ow;
-        U32 th_off = 0;
-        U32 tw_off = 0;
-        if (!needTran) {
-            tmpbuf = outbuf;
-            th_str = oh_str;
-            tw_str = ow_str;
-            th_off = oh_off;
-            th_off = ow_off;
-        }
-        if (imf == DF_NCWHC4) {
-            sprintf(kernelName, "reduction_%s%d", modeName, axis);
-            gs[0] = ih;
-            gs[1] = iw;
-            gs[2] = ic * in;
-            if (axis == 2) {
-                gs[2] = 1;
-            } else {
-                gs[1 - axis] = 1;
-            }
-            CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel));
-            CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, iw_str, ih_off, iw_off, th_str, tw_str,
-                th_off, tw_off, ih, iw, ic * in, keep_dim, od, gs[0], gs[1], inbuf, tmpbuf));
-        } else if (imf == DF_NCHW) {
-            gs[0] = (iw + 3) >> 2;
-            gs[1] = ih;
-            gs[2] = ic * in;
-            gs[axis] = 1;
-            sprintf(kernelName, "reduction_nchw_%s%d", modeName, axis);
-            CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel));
-            CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, iw_str, ih_off, iw_off, th_str, tw_str,
-                th_off, tw_off, ih, iw, ic * in, ow, oh, keep_dim, od, gs[0], gs[1], inbuf, tmpbuf));
-        } else {
-            return NOT_SUPPORTED;
-        }
-        gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
-#ifdef _DEBUG
-        CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
-#endif
-        if (needTran) {
-            U32 max_str = (ow_str > oh_str) ? ow_str : oh_str;
-            max_str = (max_str > oc_str) ? max_str : oc_str;
-            char kernelname[128];
-            if (ow_off == 0 && oh_off == 0 && max_str == ow_str * oh_str * oc_str) {
-                set_copy_opt_mali(false, DT_F16, kernelName, &kernelOpt);
-                U32 copy_len = max_str * 4;
-                gs[0] = max_str;
-                dim = 1;
-                CHECK_STATUS(gcl_create_kernel(handle, kernelname, &kernel, &kernelOpt));
-                CHECK_STATUS(
-                    gcl_set_kernelArgs(kernel, copy_len, copy_len, 0, 0, gs[0], inbuf, outbuf));
-            } else {
-                sprintf(kernelname, "mem_trans_nchw_to_ncwhc4");
-                gs[0] = (ow + 3) >> 2;
-                gs[1] = oh;
-                gs[2] = (oc + 3) / 4 * on;
-                CHECK_STATUS(gcl_create_kernel(handle, kernelname, &kernel));
-                CHECK_STATUS(gcl_set_kernelArgs(kernel, ow, oh, 0, 0, ow_str, oh_str, ow_off,
-                    oh_off, ow, oh, oc, ow, oh, oc, 0, 0, tmpbuf, outbuf));
-            }
-            gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelname);
-#ifdef _DEBUG
-            CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelname));
-#endif
-        }
-        return SUCCESS;
+        gs[0] = (iw + 3) >> 2;
+        gs[1] = ih;
+        gs[2] = ic * in;
+        gs[axis] = 1;
+        useNchw = true;
+        edge = ow;
     }
-    return NOT_SUPPORTED;
+    CHECK_STATUS(set_reduction_opt_mali(useNchw, useOc4, axis, p.reduction_mode, DT_F16,
+        GCL_MEM_BUF, GCL_MEM_BUF, kernelName, &kernelOpt));
+    CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
+    CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, ow_str, oh_str, i_off, o_off, iw, ih,
+        ic, edge, keep_dim, od, gs[0], gs[1], inbuf, outbuf));
+    gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
+#ifdef _DEBUG
+    CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
+#endif
+    return SUCCESS;
 }
 
 EE reduction_infer_forward_tmp_bytes_mali_fp16(TensorDesc inputDesc,
@@ -176,14 +116,7 @@ EE reduction_infer_forward_tmp_bytes_mali_fp16(TensorDesc inputDesc,
     GCLMemDesc gclmemOutputDesc,
     U32 *bytes)
 {
-    UNUSED(inputDesc);
-    UNUSED(outputDesc);
     U32 size = 0;
-    if (gclmemOutputDesc.memFormat == DF_NCWHC4) {
-        if (gclmemInputDesc.memFormat == DF_NCHW || !p.keep_dim) {
-            size = gclmemOutputDesc.byteSize;
-        }
-    }
     *bytes = size;
     return SUCCESS;
 }

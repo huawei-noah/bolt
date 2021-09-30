@@ -50,13 +50,14 @@ class ConvolutionEltwiseOptimizer : public OPOptimizer {
                 }
                 if (nextNodeNum == 1 && isValidOperator(spec, curInIdx) &&
                     spec->ops[curInIdx].type == OT_Conv &&
-                    spec->ops[curInIdx].ps.conv_spec.convolution_type == Convolution_Pointwise &&
+                    (spec->ops[curInIdx].ps.conv_spec.convolution_type == Convolution_Pointwise ||
+                        spec->ops[curInIdx].ps.conv_spec.convolution_type ==
+                            Convolution_Depthwise_Pointwise) &&
                     spec->ops[curInIdx].ps.conv_spec.pw_activation_type == ACTIVATION_NULL) {
                     thisOptimized = true;
                     fuseConvIdx = curInIdx;
                     curInIdx = 0;
                 }
-
                 if (!thisOptimized) {
                     nextNodeNum = 1;
                     curIn = spec->ops[i].input_tensors_name[1];
@@ -72,7 +73,9 @@ class ConvolutionEltwiseOptimizer : public OPOptimizer {
                     }
                     if (nextNodeNum == 1 && isValidOperator(spec, curInIdx) &&
                         spec->ops[curInIdx].type == OT_Conv &&
-                        spec->ops[curInIdx].ps.conv_spec.convolution_type == Convolution_Pointwise &&
+                        (spec->ops[curInIdx].ps.conv_spec.convolution_type == Convolution_Pointwise ||
+                            spec->ops[curInIdx].ps.conv_spec.convolution_type ==
+                                Convolution_Depthwise_Pointwise) &&
                         spec->ops[curInIdx].ps.conv_spec.pw_activation_type == ACTIVATION_NULL) {
                         thisOptimized = true;
                         fuseConvIdx = curInIdx;

@@ -27,8 +27,7 @@ public:
         std::map<std::string, std::shared_ptr<Tensor>> *tensorMapPtr)
         : SharedWeight(dt, desc, outputTensorName, tensorMapPtr)
     {
-        setMALIArchInfo(
-            &(this->archInfo), nullptr, &this->needSetKernelVec, &this->needSelectKernelLS);
+        INIT_GPU_INFO(nullptr)
     }
 
     ~SharedWeightOCL(){DESTROY_OCL_KERNEL}
@@ -47,22 +46,6 @@ public:
         this->needSetKernelVec = true;
         UNUSED(inTensors);
         outTensors[0]->resize(this->desc);
-        DataFormat df;
-        DataType dt;
-        U32 n, c, h, w;
-        tensorSelectGet(this->desc, &dt, &df, &n, &c, &h, &w);
-        U32 s0, s1, s2;
-        s0 = w;
-        s1 = h;
-        s2 = c * n;
-        U32 stride[3] = {s0, s1, s2};
-        U32 offset[3] = {0, 0, 0};
-        GCLMemType mt = GCL_MEM_BUF;
-        MemFlags flags = CL_MEM_READ_WRITE;
-        GCLMemDesc gclMemDesc = gclmem_build_desc();
-        DataFormat mf = (df == DF_NHWC) ? DF_NHWC : DF_NCHW;
-        CHECK_STATUS(gclmem_set_desc_padding(&gclMemDesc, stride, offset, dt, mf, mt, flags));
-        ocl_set_desc(outTensors[0], gclMemDesc);
         return SUCCESS;
     }
 

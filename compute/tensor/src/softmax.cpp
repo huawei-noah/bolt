@@ -21,7 +21,7 @@
 #ifdef _USE_NEON
 #include "cpu/arm/tensor_computing_arm.h"
 #endif
-#ifdef _USE_MALI
+#ifdef _USE_GPU
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
 
@@ -39,15 +39,15 @@ EE softmax(
         ret = softmax_general(inputDesc, input, p, outputDesc, output);
 #endif
 #ifdef _USE_X86
-    } else if (IS_X86_AVX2(arch)) {
+    } else if (IS_X86(arch)) {
         ret = softmax_x86(inputDesc, input, p, outputDesc, output);
 #endif
 #ifdef _USE_NEON
     } else if (IS_ARM(arch)) {
         ret = softmax_arm(inputDesc, input, p, outputDesc, output);
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
         void *tmp = get_ptr_from_tensor(tmpTensor, arch);
         ret = softmax_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc, (GCLMem_t)input,
             p, (GCLMem_t)tmp, outputDesc, (GCLMem_t)output);
@@ -56,19 +56,8 @@ EE softmax(
     return ret;
 }
 
-inline EE softmax_infer_output_size_cpu(TensorDesc inputDesc, TensorDesc *outputDesc)
-{
-    if (nullptr == outputDesc) {
-        CHECK_STATUS(NULL_POINTER);
-    }
-    *outputDesc = inputDesc;
-    if (DF_NCHWC8 == (*outputDesc).df) {
-        (*outputDesc).df = DF_NCHW;
-    }
-    return SUCCESS;
-}
-
-EE softmax_infer_output_size(Tensor *inputTensor, Tensor *outputTensor, ArchInfo_t archInfo)
+EE softmax_infer_output_size(
+    Tensor *inputTensor, SoftmaxParamSpec p, Tensor *outputTensor, ArchInfo_t archInfo)
 {
     if (inputTensor == nullptr) {
         CHECK_STATUS(NULL_POINTER);
@@ -77,35 +66,35 @@ EE softmax_infer_output_size(Tensor *inputTensor, Tensor *outputTensor, ArchInfo
         CHECK_STATUS(NULL_POINTER);
     }
     TensorDesc inputDesc = inputTensor->get_desc();
-    TensorDesc outputDesc = outputTensor->get_desc();
-    EE ret = NOT_SUPPORTED;
-    if (IS_MALI_GPU(archInfo->arch)) {
-#ifdef _USE_MALI
-        GCLMemDesc gclmemInputDesc = ocl_get_desc(*inputTensor);
-        GCLMemDesc gclmemOutputDesc = ocl_get_desc(*outputTensor);
-        ret = softmax_infer_output_size_mali(
-            inputDesc, &outputDesc, &gclmemInputDesc, &gclmemOutputDesc);
-        ocl_set_desc(inputTensor, gclmemInputDesc);
-        ocl_set_desc(outputTensor, gclmemOutputDesc);
+    TensorDesc outputDesc = inputDesc;
+    if (IS_GPU(archInfo->arch)) {
+#ifdef _USE_GPU
+        OclMemory *inputMem = (OclMemory *)inputTensor->get_memory();
+        OclMemory *outputMem = (OclMemory *)outputTensor->get_memory();
+        CHECK_STATUS(softmax_padding_input_mali(inputDesc, &outputDesc, inputMem, outputMem));
 #endif
     } else {
-        ret = softmax_infer_output_size_cpu(inputDesc, &outputDesc);
+        int axis = (p.axis + inputDesc.nDims) % inputDesc.nDims;
+        if (DF_NCHWC8 == outputDesc.df && axis == 1) {
+            outputDesc.df = DF_NCHW;
+        }
+        outputTensor->resize(outputDesc);
     }
-    outputTensor->resize(outputDesc);
-    return ret;
+    return SUCCESS;
 }
 
-EE softmax_infer_forward_tmp_bytes(Tensor inputTensor, U32 *bytes, ArchInfo_t archInfo)
+EE softmax_infer_forward_tmp_bytes(
+    Tensor inputTensor, SoftmaxParamSpec p, U32 *bytes, ArchInfo_t archInfo)
 {
     if (bytes == nullptr) {
         CHECK_STATUS(NULL_POINTER);
     }
     EE ret = NOT_SUPPORTED;
-    if (IS_MALI_GPU(archInfo->arch)) {
-#ifdef _USE_MALI
+    if (IS_GPU(archInfo->arch)) {
+#ifdef _USE_GPU
         TensorDesc inputDesc = inputTensor.get_desc();
-        ret = softmax_infer_forward_tmp_bytes_mali(
-            inputDesc, bytes, ((MaliPara_t)(archInfo->archPara))->forwardRunInfo);
+        GCLMemDesc gclmemInputDesc = ocl_get_desc(inputTensor);
+        ret = softmax_infer_forward_tmp_bytes_mali(inputDesc, gclmemInputDesc, p, bytes);
 #endif
     } else {
         *bytes = 0;

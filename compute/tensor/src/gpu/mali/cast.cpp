@@ -16,6 +16,7 @@
 #include "tensor_desc.h"
 #include "error.h"
 #include "gpu/mali/tensor_computing_mali.h"
+#include "gpu/mali/cl/kernel_option/cast_opt.h"
 
 inline EE cast_checkpara_mali(
     GCLHandle_t handle, TensorDesc inputDesc, GCLMem_t input, TensorDesc outputDesc, GCLMem_t output)
@@ -30,9 +31,6 @@ inline EE cast_checkpara_mali(
         if (inputDesc.dims[i] != outputDesc.dims[i]) {
             CHECK_STATUS(NOT_MATCH);
         }
-    }
-    if (input->desc.memFormat != DF_NCHW && input->desc.memFormat != DF_NCWHC4) {
-        CHECK_STATUS(NOT_SUPPORTED);
     }
     if (input->desc.memFormat != output->desc.memFormat) {
         CHECK_STATUS(NOT_MATCH);
@@ -60,72 +58,40 @@ inline EE cast_core_mali_fp16(GCLHandle_t handle,
 {
     UNUSED(p);
     U32 n, c, h, w;
-    U32 iw_str, ih_str, iw_off, ih_off;
-    U32 ow_str, oh_str, ow_off, oh_off;
+    U32 iw_str, ih_str, iw_off, ih_off, i_off;
+    U32 ow_str, oh_str, ow_off, oh_off, o_off;
     CHECK_STATUS(gclmem_get_desc_dim(output->desc, NULL, NULL, &n, &c, &h, &w));
     CHECK_STATUS(gclmem_get_desc_padding(input->desc, &iw_str, &ih_str, NULL, &iw_off, &ih_off));
     CHECK_STATUS(gclmem_get_desc_padding(output->desc, &ow_str, &oh_str, NULL, &ow_off, &oh_off));
+    i_off = ih_off * iw_str + iw_off;
+    o_off = oh_off * ow_str + ow_off;
+    DataType idt = inputDesc.dt;
+    DataType odt = outputDesc.dt;
     char kernelName[128];
-    char idtName[16];
-    char odtName[16];
-    char formatName[16];
-    set_dt_name(inputDesc, idtName);
-    set_dt_name(outputDesc, odtName);
+    KernelOpt kernelOpt;
+    Kernel kernel;
     U32 gs[3];
     U32 ls[3] = {0, 0, 0};
     U32 dim = 3;
-    Kernel kernel;
-
-    if (input->desc.memFormat == DF_NCHW) {
+    bool useNchw = (input->desc.memFormat == DF_NCHW) ? true : false;
+    if (useNchw) {
         gs[0] = (w + 3) / 4;
         gs[1] = h;
         gs[2] = n * c;
-        strcpy(formatName, "_nchw");
     } else {
-        gs[0] = h;
-        gs[1] = w;
+        gs[0] = w;
+        gs[1] = h;
         gs[2] = (c + 3) / 4 * n;
-        strcpy(formatName, "");
     }
-    sprintf(kernelName, "cast_%s_to_%s%s", idtName, odtName, formatName);
-    CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel));
-    CHECK_STATUS(gcl_set_kernelArgs(kernel, w, iw_str, ih_str, iw_off, ih_off, ow_str, oh_str,
-        ow_off, oh_off, gs[0], gs[1], input->mem, output->mem))
+    CHECK_STATUS(
+        set_cast_opt_mali(useNchw, idt, odt, GCL_MEM_BUF, GCL_MEM_BUF, kernelName, &kernelOpt));
+    CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
+    CHECK_STATUS(gcl_set_kernelArgs(kernel, w, iw_str, ih_str, i_off, ow_str, oh_str, o_off, gs[0],
+        gs[1], input->mem, output->mem));
     gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
 #ifdef _DEBUG
-    CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
+//    CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
 #endif
-    return SUCCESS;
-}
-
-EE cast_infer_output_size_mali(TensorDesc inputDesc,
-    CastParamSpec p,
-    TensorDesc *outputDesc,
-    GCLMemDesc_t gclmemInputDesc,
-    GCLMemDesc_t gclmemOutputDesc)
-{
-    if (gclmemInputDesc == nullptr || gclmemOutputDesc == nullptr || outputDesc == nullptr) {
-        CHECK_STATUS(NULL_POINTER);
-    }
-    (*outputDesc) = inputDesc;
-    if (p.targetDt == DT_I32) {
-        (*outputDesc).dt = DT_I32;
-    } else if (p.targetDt == DT_F16) {
-        (*outputDesc).dt = DT_F16;
-    } else {
-        CHECK_STATUS(NOT_SUPPORTED);
-    }
-
-    DataType dt;
-    U32 w, h, c, n;
-    tensorSelectGet(inputDesc, &dt, NULL, &n, &c, &h, &w);
-    if (gclmemInputDesc->memFormat == DF_NCHW || gclmemInputDesc->byteSize == 0) {
-        CHECK_STATUS(infer_gclmem_desc_nchw(
-            w, h, c, 0, 0, w, h, c, dt, dt, gclmemInputDesc, gclmemOutputDesc));
-    } else {
-        CHECK_STATUS(infer_gclmem_desc_ncwhc4(
-            w, h, c, 0, 0, w, h, c, dt, dt, gclmemInputDesc, gclmemOutputDesc));
-    }
     return SUCCESS;
 }
 

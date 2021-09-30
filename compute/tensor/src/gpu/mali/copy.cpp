@@ -50,6 +50,11 @@ inline EE copy_checkpara_mali(GCLHandle_t handle,
     if (input[0] == nullptr || input[1] == nullptr) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
+    for (U32 i = 0; i < input.size(); i++) {
+        if (inputDesc[i].df == DF_NCHWC4) {
+            CHECK_STATUS(NOT_SUPPORTED);
+        }
+    }
     GCLMem_t srcMem = (GCLMem_t)input[0];
     GCLMem_t dstMem = (GCLMem_t)input[1];
     U32 sn, sc, sh, sw, sw_off, sh_off;
@@ -109,39 +114,6 @@ inline EE copy_core_mali_fp16(GCLHandle_t handle,
 #ifdef _DEBUG
     CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, &gs, &ls, kernelName));
 #endif
-    return SUCCESS;
-}
-
-EE copy_infer_output_size_mali(std::vector<TensorDesc> inputDesc, GCLMemDesc_t gclmemInputDesc)
-{
-    if (gclmemInputDesc == nullptr) {
-        CHECK_STATUS(NULL_POINTER);
-    }
-    DataType sdt, ddt;
-    U32 sw, sh, sc, sn;
-    U32 dw, dh, dc, dn;
-    TensorDesc srcDesc = inputDesc[0];
-    TensorDesc dstDesc = inputDesc[1];
-    tensorSelectGet(srcDesc, &sdt, NULL, &sn, &sc, &sh, &sw);
-    tensorSelectGet(dstDesc, &ddt, NULL, &dn, &dc, &dh, &dw);
-    if (sdt == DT_U32 && ddt == DT_I32) {
-        sdt = DT_I32;
-    }
-    if (sdt != DT_F16 && sdt != DT_I32 && sdt != DT_U32) {
-        CHECK_STATUS(NOT_SUPPORTED);
-    }
-    if (sdt != ddt) {
-        CHECK_STATUS(NOT_MATCH);
-    }
-    CHECK_STATUS(
-        infer_gclmem_desc_nchw(sw, sh, sc, 0, 0, 0, 0, 0, sdt, sdt, &gclmemInputDesc[0], NULL));
-    CHECK_STATUS(
-        infer_gclmem_desc_nchw(dw, dh, dc, 0, 0, 0, 0, 0, ddt, ddt, &gclmemInputDesc[1], NULL));
-    for (U32 i = 2; i < inputDesc.size(); i++) {
-        tensorSelectGet(inputDesc[i], &sdt, NULL, &sn, &sc, &sh, &sw);
-        CHECK_STATUS(
-            infer_gclmem_desc_nchw(sw, sh, sc, 0, 0, 0, 0, 0, sdt, sdt, &gclmemInputDesc[i], NULL));
-    }
     return SUCCESS;
 }
 

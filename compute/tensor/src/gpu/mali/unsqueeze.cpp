@@ -18,25 +18,6 @@
 #include "gpu/mali/tensor_computing_mali.h"
 #include "gpu/mali/fp16/unsqueeze_mali_fp16.h"
 
-EE unsqueeze_infer_output_size_mali(TensorDesc inputDesc,
-    TensorDesc outputDesc,
-    GCLMemDesc_t gclmemInputDesc,
-    GCLMemDesc_t gclmemOutputDesc)
-{
-    if (gclmemInputDesc == nullptr || gclmemOutputDesc == nullptr) {
-        CHECK_STATUS(NULL_POINTER);
-    }
-
-    DataType idt;
-    U32 iw, ih, ic, in;
-    U32 ow, oh, oc, on;
-    tensorSelectGet(inputDesc, &idt, NULL, &in, &ic, &ih, &iw);
-    tensorSelectGet(outputDesc, &idt, NULL, &on, &oc, &oh, &ow);
-    CHECK_STATUS(infer_gclmem_desc_nchw(
-        iw, ih, ic, 0, 0, ow, oh, oc, idt, idt, gclmemInputDesc, gclmemOutputDesc));
-    return SUCCESS;
-}
-
 inline EE unsqueeze_checkpara_mali(
     GCLHandle_t handle, TensorDesc inputDesc, GCLMem_t input, TensorDesc outputDesc, GCLMem_t output)
 {

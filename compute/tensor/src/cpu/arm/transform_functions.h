@@ -13,12 +13,19 @@
 
 #ifndef _H_TRANSFORM_FUNCTIONS
 #define _H_TRANSFORM_FUNCTIONS
-
 #ifdef _USE_FP32
 #include "cpu/arm/fp32/convolution_winograd_transform.h"
 #endif
 #ifdef _USE_FP16
 #include "cpu/arm/fp16/convolution_winograd_transform.h"
+#endif
+#include "thread_affinity.h"
+
+#define _USE_CACHE
+#ifdef _USE_CACHE
+#include <map>
+#include <vector>
+extern std::map<std::string, std::vector<U32>> arm_cache;
 #endif
 
 template <typename T, U32 N>
@@ -154,21 +161,24 @@ inline EE transformCNHWToHWNCNx(
 
 template <typename T, U32 CAlignSize>
 inline T *convolution_input_padding_per_channel(
-    U32 n, U32 ic, U32 it, U32 ih, U32 iw, ConvolutionParamSpec p, T *src, T *dst)
+    U32 n, U32 ic, U32 it, U32 ih, U32 iw, const ConvolutionParamSpec &p, T *src, T *dst)
 {
     U32 it_pad = it + p.padding_before + p.padding_after;
     U32 ih_pad = ih + p.padding_top + p.padding_bottom;
     U32 iw_pad = iw + p.padding_left + p.padding_right;
     T *inArray_pad;
-    T *inArray_mov = src + n * ic * it * ih * iw * CAlignSize;
     if (p.padding_before == 0 && p.padding_after == 0 && p.padding_top == 0 &&
         p.padding_bottom == 0 && p.padding_left == 0 && p.padding_right == 0) {
+        T *inArray_mov = src + n * ic * it * ih * iw * CAlignSize;
         inArray_pad = inArray_mov;
     } else {
-        // copy input into a input with padding
         inArray_pad = dst;
-        T *inArray_pad_mov = inArray_pad;
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
         for (U32 c = 0; c < ic; c++) {
+            T *inArray_mov = src + (n * ic + c) * it * ih * iw * CAlignSize;
+            T *inArray_pad_mov = inArray_pad + c * it_pad * ih_pad * iw_pad * CAlignSize;
             memset(inArray_pad_mov, 0, p.padding_before * ih_pad * iw_pad * CAlignSize * sizeof(T));
             inArray_pad_mov += p.padding_before * ih_pad * iw_pad * CAlignSize;
             for (U32 t = p.padding_before; t < it_pad - p.padding_after; t++) {
@@ -194,12 +204,12 @@ inline T *convolution_input_padding_per_channel(
 }
 
 template <U32 TileSize, U32 CAlignSize>
-inline void convolution_padding_input_offset(U32 ih_pad,
-    U32 iw_pad,
-    ConvolutionParamSpec p,
-    U32 oh,
-    U32 ow,
-    U32 output_hw_start,
+inline void convolution_padding_input_offset(const U32 &ih_pad,
+    const U32 &iw_pad,
+    const ConvolutionParamSpec &p,
+    const U32 &oh,
+    const U32 &ow,
+    const U32 &output_hw_start,
     U32 *input_offset)
 {
     U32 ohow = oh * ow;
@@ -213,18 +223,54 @@ inline void convolution_padding_input_offset(U32 ih_pad,
     }
 }
 
+template <typename T, U32 TileSize, U32 CAlignSize>
+inline void convolution_input_pack(const U32 &ic,
+    const U32 &it_pad,
+    const U32 &ih_pad,
+    const U32 &iw_pad,
+    const ConvolutionParamSpec &p,
+    const U32 &ft,
+    const U32 &fh,
+    const U32 &fw,
+    T *src,
+    U32 *padding_input_offset,
+    T *dst)
+{
+    for (U32 c = 0; c < ic; c++) {
+        for (U32 ft_idx = 0; ft_idx < ft; ft_idx++) {
+            for (U32 fh_idx = 0; fh_idx < fh; fh_idx++) {
+                for (U32 fw_idx = 0; fw_idx < fw; fw_idx++) {
+                    T *in_hw = src +
+                        (((c * it_pad + ft_idx * p.dilatedRate_t) * ih_pad +
+                             fh_idx * p.dilatedRate_h) *
+                                iw_pad +
+                            p.dilatedRate_w * fw_idx) *
+                            CAlignSize;
+                    T *in_pack_hw = dst +
+                        (((ft_idx * fh + fh_idx) * fw + fw_idx) * ic + c) * CAlignSize * TileSize;
+                    for (U32 i = 0, id = 0; i < CAlignSize; i++) {
+                        for (U32 j = 0; j < TileSize; j++, id++) {
+                            in_pack_hw[id] = in_hw[padding_input_offset[j] + i];
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 template <typename T>
-inline void convolution_nchwc8_input_pack_tile1(U32 ic,
-    U32 it_pad,
-    U32 ih_pad,
-    U32 iw_pad,
-    ConvolutionParamSpec p,
-    U32 ft,
-    U32 fh,
-    U32 fw,
-    U32 ot,
-    U32 oh,
-    U32 ow,
+inline void convolution_nchwc8_input_pack_tile1(const U32 &ic,
+    const U32 &it_pad,
+    const U32 &ih_pad,
+    const U32 &iw_pad,
+    const ConvolutionParamSpec &p,
+    const U32 &ft,
+    const U32 &fh,
+    const U32 &fw,
+    const U32 &ot,
+    const U32 &oh,
+    const U32 &ow,
     T *src,
     U32 hw,
     T *dst)
@@ -232,66 +278,62 @@ inline void convolution_nchwc8_input_pack_tile1(U32 ic,
     const int TileSize = 1;
     U32 padding_input_offset[TileSize];
     convolution_padding_input_offset<1, 8>(ih_pad, iw_pad, p, oh, ow, hw, padding_input_offset);
-    for (U32 c = 0; c < ic; c++) {
-        for (U32 ft_idx = 0; ft_idx < ft; ft_idx++) {
-            for (U32 fh_idx = 0; fh_idx < fh; fh_idx++) {
-                for (U32 fw_idx = 0; fw_idx < fw; fw_idx++) {
-                    T *in_hw1c8 = src +
-                        (((c * it_pad + ft_idx * p.dilatedRate_t) * ih_pad +
-                             fh_idx * p.dilatedRate_h) *
-                                iw_pad +
-                            p.dilatedRate_w * fw_idx) *
-                            8;
-                    T *in_pack_c8hw1 =
-                        dst + (((ft_idx * fh + fh_idx) * fw + fw_idx) * ic + c) * TileSize * 8;
-
-                    T *in_0 = in_hw1c8 + padding_input_offset[0];
-                    memcpy(in_pack_c8hw1, in_0, 8 * sizeof(T));
-                }
-            }
-        }
-    }
+    convolution_input_pack<T, 1, 8>(
+        ic, it_pad, ih_pad, iw_pad, p, ft, fh, fw, src, padding_input_offset, dst);
 }
 
 template <typename T, U32 TileSize>
-inline void convolution_nchw_input_pack(U32 ic,
-    U32 it_pad,
-    U32 ih_pad,
-    U32 iw_pad,
-    ConvolutionParamSpec p,
-    U32 ft,
-    U32 fh,
-    U32 fw,
-    U32 ot,
-    U32 oh,
-    U32 ow,
+inline void convolution_nchw_input_pack(const U32 &ic,
+    const U32 &it_pad,
+    const U32 &ih_pad,
+    const U32 &iw_pad,
+    const ConvolutionParamSpec &p,
+    const U32 &ft,
+    const U32 &fh,
+    const U32 &fw,
+    const U32 &ot,
+    const U32 &oh,
+    const U32 &ow,
     T *src,
-    U32 hw,
+    const U32 &hw,
     T *dst)
 {
     U32 padding_input_offset[TileSize];
     convolution_padding_input_offset<TileSize, 1>(
         ih_pad, iw_pad, p, oh, ow, hw, padding_input_offset);
-    for (U32 c = 0; c < ic; c++) {
-        for (U32 ft_idx = 0; ft_idx < ft; ft_idx++) {
-            for (U32 fh_idx = 0; fh_idx < fh; fh_idx++) {
-                for (U32 fw_idx = 0; fw_idx < fw; fw_idx++) {
-                    T *in_hw = src +
-                        ((c * it_pad + ft_idx * p.dilatedRate_t) * ih_pad +
-                            fh_idx * p.dilatedRate_h) *
-                            iw_pad +
-                        p.dilatedRate_w * fw_idx;
-                    T *in_pack_hw =
-                        dst + (((ft_idx * fh + fh_idx) * fw + fw_idx) * ic + c) * TileSize;
-                    for (U32 id = 0; id < TileSize; id++) {
-                        T *in_0 = in_hw + padding_input_offset[id];
-                        *(in_pack_hw + id) = *in_0;
-                    }
-                }
-            }
-        }
-    }
+    convolution_input_pack<T, TileSize, 1>(
+        ic, it_pad, ih_pad, iw_pad, p, ft, fh, fw, src, padding_input_offset, dst);
 }
+
+#ifdef _USE_CACHE
+template <I32 TileSize, I32 CAlignSize>
+inline U32 *get_convolution_padding_input_offset(const std::string &key,
+    const U32 &ih_pad,
+    const U32 &iw_pad,
+    const ConvolutionParamSpec &p,
+    const U32 &oh,
+    const U32 &ow,
+    const I32 &ohow)
+{
+    U32 *ret;
+#ifdef _THREAD_SAFE
+    pthread_mutex_lock(&uniThreadMutex);
+#endif
+    if (arm_cache.find(key) == arm_cache.end()) {
+        std::vector<U32> offset(ohow);
+        for (I32 hw = 0; hw < ohow - TileSize + 1; hw += TileSize) {
+            convolution_padding_input_offset<TileSize, CAlignSize>(
+                ih_pad, iw_pad, p, oh, ow, hw, offset.data() + hw);
+        }
+        arm_cache[key] = offset;
+    }
+    ret = arm_cache[key].data();
+#ifdef _THREAD_SAFE
+    pthread_mutex_unlock(&uniThreadMutex);
+#endif
+    return ret;
+}
+#endif
 
 template <typename T, U32 N>
 inline EE transformNCHWToNHWCNx(

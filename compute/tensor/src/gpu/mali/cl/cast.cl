@@ -12,8 +12,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "kernel_def.h"
-#define MANGLE_NAME_IMPL(base, IT, OT, FM) base##IT##OT##FM
-#define MANGLE_NAME(base, IT, OT, FM) MANGLE_NAME_IMPL(base, IT, OT, FM)
+#define MANGLE_NAME_IMPL(base, FM, IT, OT) base##FM##IT##OT
+#define MANGLE_NAME(base, FM, IT, OT) MANGLE_NAME_IMPL(base, FM, IT, OT)
 
 #if defined(INPUT_F16)
 #define IT f16_to_
@@ -29,18 +29,16 @@
 
 #define FM
 #if defined(USE_NCHW)
-#define FM _nchw
+#define FM nchw_
 #endif
 
-__kernel void MANGLE_NAME(cast_, IT, OT, FM)(const int w,
+__kernel void MANGLE_NAME(cast_, FM, IT, OT)(const int w,
     const int iw_str,
     const int ih_str,
-    const int iw_off,
-    const int ih_off,
+    const int i_off,
     const int ow_str,
     const int oh_str,
-    const int ow_off,
-    const int oh_off,
+    const int o_off,
     const int bx,
     const int by,
 #if defined(INPUT_F16)
@@ -74,46 +72,17 @@ __kernel void MANGLE_NAME(cast_, IT, OT, FM)(const int w,
 #endif
 
 #if defined(USE_NCHW)
-    int in_off = (idz * ih_str + idy + ih_off) * iw_str + (idx << 2) + iw_off;
-    char ew = ((idx << 2) + 4 <= w) ? 4 : (w & 3);
-    if (ew == 4) {
-        iv = vload4(0, in + in_off);
-    } else {
-        if (ew == 3) {
-            iv.xyz = vload3(0, in + in_off);
-        }
-        if (ew == 2) {
-            iv.xy = vload2(0, in + in_off);
-        }
-        if (ew == 1) {
-            iv.x = in[in_off];
-        }
-    }
+    LOAD_MEM_V4_C1_COMMON(iv, idx, idy, idz, iw_str, ih_str, i_off, w, in);
 #else
-    int in_off = (idz * iw_str + idy + iw_off) * ih_str + idx + ih_off;
-    iv = vload4(in_off, in);
+    LOAD_MEM_V4_COMMON(iv, idx, idy, idz, iw_str, ih_str, i_off, in);
 #endif
     ov.x = iv.x;
     ov.y = iv.y;
     ov.z = iv.z;
     ov.w = iv.w;
 #if defined(USE_NCHW)
-    int out_off = (idz * oh_str + idy + oh_off) * ow_str + (idx << 2) + ow_off;
-    if (ew == 4) {
-        vstore4(ov, 0, out + out_off);
-    } else {
-        if (ew == 3) {
-            vstore3(ov.xyz, 0, out + out_off);
-        }
-        if (ew == 2) {
-            vstore2(ov.xy, 0, out + out_off);
-        }
-        if (ew == 1) {
-            out[out_off] = ov.x;
-        }
-    }
+    STORE_MEM_V4_C1_COMMON(ov, idx, idy, idz, ow_str, oh_str, o_off, w, out);
 #else
-    int out_off = (idz * ow_str + idy + ow_off) * oh_str + idx + oh_off;
-    vstore4(ov, out_off, out);
+    STORE_MEM_V4_COMMON(ov, idx, idy, idz, ow_str, oh_str, o_off, out);
 #endif
 }

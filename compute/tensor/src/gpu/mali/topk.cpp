@@ -18,50 +18,6 @@
 #include "gpu/mali/tensor_computing_mali.h"
 #include "gpu/mali/fp16/topk_mali_fp16.h"
 
-EE topk_infer_output_size_mali(TensorDesc inputDesc,
-    TopKParamSpec p,
-    TensorDesc *outputDesc,
-    TensorDesc *outputDescIndices,
-    GCLMemDesc_t gclmemInputDesc,
-    GCLMemDesc_t gclmemOutputDesc,
-    GCLMemDesc_t gclmemOutputIndicesDesc)
-{
-    /*tensorDesc record cpu org data format info*/
-    /*gclmemDesc record gpu trans data format info*/
-    if (outputDesc == nullptr || outputDescIndices == nullptr || gclmemInputDesc == nullptr ||
-        gclmemOutputDesc == nullptr || gclmemOutputIndicesDesc == nullptr) {
-        CHECK_STATUS(NULL_POINTER);
-    }
-    int axis = p.axis;
-    if (axis < 0) {
-        axis += inputDesc.nDims;
-    }
-    axis = inputDesc.nDims - 1 - axis;
-    int topk = p.topk;
-    TensorDesc desc = inputDesc;
-    desc.dims[axis] = topk;
-    (*outputDesc) = desc;
-    desc.dt = DT_I32;
-    (*outputDescIndices) = desc;
-
-    U32 iw, ih, ic;
-    U32 ow, oh, oc;
-    U32 inDims = inputDesc.nDims;
-    U32 onDims = desc.nDims;
-    iw = inputDesc.dims[0];
-    ih = (inDims > 1) ? inputDesc.dims[1] : 1;
-    ic = (inDims > 2) ? inputDesc.dims[2] : 1;
-    ow = desc.dims[0];
-    oh = (onDims > 1) ? desc.dims[1] : 1;
-    oc = (onDims > 2) ? desc.dims[2] : 1;
-    DataType dt = inputDesc.dt;
-    CHECK_STATUS(infer_gclmem_desc_nchw(
-        iw, ih, ic, 0, 0, ow, oh, oc, dt, dt, gclmemInputDesc, gclmemOutputDesc));
-    CHECK_STATUS(infer_gclmem_desc_nchw(
-        0, 0, 0, 0, 0, ow, oh, oc, DT_I32, DT_I32, NULL, gclmemOutputIndicesDesc));
-    return SUCCESS;
-}
-
 inline EE topk_checkpara_mali(GCLHandle_t handle,
     TensorDesc inputDesc,
     GCLMem_t input,

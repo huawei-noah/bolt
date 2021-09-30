@@ -11,7 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string.h>
 #include "blas_enhance.h"
 #include "ut_util.h"
 
@@ -59,11 +58,11 @@ int mvmTestKernel(
     // check
     if (UT_CHECK) {
         CHECK_STATUS(matrix_vector_multiply(
-            tranDesc, matTran, vec_desc, vec, bytes, tmp, res_desc, res, UT_ARCH));
+            tranDesc, matTran, vec_desc, vec, bytes, tmp, res_desc, res, nullptr, UT_ARCH));
 
         // naive implement
         CHECK_STATUS(matrix_vector_multiply(
-            mat_desc, mat, vec_desc, vec, bytes, tmp, res_desc, res_ref, CPU_GENERAL));
+            mat_desc, mat, vec_desc, vec, bytes, tmp, res_desc, res_ref, nullptr, CPU_GENERAL));
 
         ut_check_v(res, res_ref, m, dt, threshold, __FILE__, __LINE__);
     }
@@ -71,7 +70,8 @@ int mvmTestKernel(
     // benchmark
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        matrix_vector_multiply(tranDesc, matTran, vec_desc, vec, bytes, tmp, res_desc, res, UT_ARCH);
+        matrix_vector_multiply(
+            tranDesc, matTran, vec_desc, vec, bytes, tmp, res_desc, res, nullptr, UT_ARCH);
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;

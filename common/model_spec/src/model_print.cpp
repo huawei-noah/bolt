@@ -76,6 +76,17 @@ void print_operator_tensor_relationship(const ModelSpec ms, bool deleteDeprecate
 
 void print_weights(const ModelSpec ms)
 {
+    std::map<std::string, DataType> vec_data_type;
+    for (int i = 0; i < ms.num_operator_specs; i++) {
+        switch (ms.ops[i].type) {
+            case OT_Gather:
+            case OT_Scatter:
+                vec_data_type[ms.ops[i].name] = DT_I32;
+                break;
+            default:
+                break;
+        }
+    }
     int number = ms.num_weight_specs;
     printf("    [Weights] %d\n", number);
     if (number > 0) {
@@ -95,14 +106,19 @@ void print_weights(const ModelSpec ms)
             F32 value;
             transformToFloat(ms.ws[i].mdt, ms.ws[i].weight, &value, 1);
             printf(" %10.4f ...", value);
-        } else if ((ms.ws[i].bytes_of_weight == 0 && ms.ws[i].weight != nullptr) ||
-            (ms.ws[i].bytes_of_weight != 0 && ms.ws[i].weight == nullptr)) {
-            UNI_ERROR_LOG("weight is null but size is not zero.\n");
+        } else {
+            printf("               ");
+            if ((ms.ws[i].bytes_of_weight == 0 && ms.ws[i].weight != nullptr) ||
+                (ms.ws[i].bytes_of_weight != 0 && ms.ws[i].weight == nullptr)) {
+                UNI_ERROR_LOG("weight is null but size is not zero.\n");
+            }
         }
         if (ms.ws[i].bytes_of_vec > 0 && ms.ws[i].vec != nullptr) {
             DataType dt = ms.ws[i].mdt;
             if (DT_BIN01 == ms.ws[i].mdt || DT_BIN11 == ms.ws[i].mdt) {
                 dt = DT_F16;
+            } else if (vec_data_type.find(ms.ws[i].op_name) != vec_data_type.end()) {
+                dt = vec_data_type[ms.ws[i].op_name];
             }
             F32 value;
             transformToFloat(dt, ms.ws[i].vec, &value, 1);

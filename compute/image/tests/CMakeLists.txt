@@ -9,6 +9,6 @@ set_test_c_cxx_flags()
 
 image_test(test_image_processing)
 image_test(test_image_resize)
-if (USE_MALI)
+if (USE_GPU)
     image_test(test_image_resize_ocl test_image_resize_ocl.cpp)
-endif (USE_MALI)
+endif (USE_GPU)

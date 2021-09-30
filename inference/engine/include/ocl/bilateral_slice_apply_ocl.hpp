@@ -21,8 +21,7 @@ public:
     BilateralSliceApplyOCL(BilateralSliceApplyParamSpec p) : BilateralSliceApply(p)
     {
         this->guideTensor = Tensor(OCLMem);
-        setMALIArchInfo(
-            &(this->archInfo), nullptr, &this->needSetKernelVec, &this->needSelectKernelLS);
+        INIT_GPU_INFO(nullptr)
     }
 
     ~BilateralSliceApplyOCL(){DESTROY_OCL_KERNEL}

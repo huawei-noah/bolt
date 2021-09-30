@@ -47,8 +47,8 @@ public:
         embedParamSpec.input_dim = this->inputFrameSize;
         embedParamSpec.num_output = inputDesc.dims[0];
         embedParamSpec.transpose = false;
-        CHECK_STATUS(embedding(
-            this->weightTensors[0], inputTensor, embedParamSpec, outputTensor, &this->archInfo));
+        CHECK_STATUS(embedding(this->weightTensors[0], inputTensor, embedParamSpec, this->temp,
+            outputTensor, &this->archInfo));
     }
 
     void get_context_min_max(int *context_min, int *context_max)

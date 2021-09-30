@@ -949,21 +949,29 @@ class Operators:
         return x
 
     @staticmethod
-    def relative_shift(_x, axis, shift_length, name):
+    def relative_shift(_x, ref_data, axis, shift_length, name):
         if (not Operators.calculate):
             return None;
         x = _x.copy()
         shapes = [i for i in x.shape]
-        pad_shapes = [[0, 0] for i in range(len(shapes))]
-        pad_shapes[axis][0] = shift_length
-        x = np.pad(x, pad_shapes, mode='constant')
-        tmp = shapes[axis-1]
-        shapes[axis-1] = shapes[axis] + 1
-        shapes[axis] = tmp
-        x = x.reshape(shapes)
-        xx = Operators.slice(x, axis-1, [shift_length], ["other", "remain"], False)
-        x = xx[1]
-        x = x.reshape([i for i in _x.shape])
+        if ref_data is not None:
+            klen = ref_data.shape[axis]
+            assert axis == 3
+            x = np.reshape(x, [shapes[0], shapes[1], shapes[3], shapes[2]])
+            x = x[:,:,shift_length:,:]
+            x = np.reshape(x, [shapes[0], shapes[1], shapes[2], shapes[3] - shift_length])
+            x = x[:,:,:,:klen]
+        else:
+            pad_shapes = [[0, 0] for i in range(len(shapes))]
+            pad_shapes[axis][0] = shift_length
+            x = np.pad(x, pad_shapes, mode='constant')
+            tmp = shapes[axis-1]
+            shapes[axis-1] = shapes[axis] + 1
+            shapes[axis] = tmp
+            x = x.reshape(shapes)
+            xx = Operators.slice(x, axis-1, [shift_length], ["other", "remain"], False)
+            x = xx[1]
+            x = x.reshape([i for i in _x.shape])
         Operators.print_data(x, name)
         return x
 

@@ -247,6 +247,24 @@ inline EE get_image_info(Mem mem, cl_mem_info info, void **value, U32 *len)
     map_cl_error_2_ee(ret);
 }
 
+inline EE get_image_size(Mem mem, U32 *width, U32 *height, U32 *depth)
+{
+    size_t w, h, d;
+    I32 ret = clGetImageInfo(mem, CL_IMAGE_WIDTH, sizeof(size_t), &w, NULL);
+    if (ret != CL_SUCCESS) {
+        map_cl_error_2_ee(ret);
+    }
+    *width = w;
+    ret = clGetImageInfo(mem, CL_IMAGE_HEIGHT, sizeof(size_t), &h, NULL);
+    if (ret != CL_SUCCESS) {
+        map_cl_error_2_ee(ret);
+    }
+    *height = h;
+    ret = clGetImageInfo(mem, CL_IMAGE_DEPTH, sizeof(size_t), &d, NULL);
+    *depth = d;
+    map_cl_error_2_ee(ret);
+}
+
 /**
  * @brief get supported image format
  *

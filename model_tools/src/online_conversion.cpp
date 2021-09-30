@@ -34,7 +34,7 @@ void *OnlineModelConversion(const char *storagePath,
     DataConvertType converterMode = F32_to_F32;
     if (inferPrecision == std::string("PTQ")) {
         converterMode = F32_to_F32;
-    } else if (inferPrecision == std::string("FP16")) {
+    } else if (inferPrecision == std::string("FP16") || inferPrecision == std::string("BNN_FP16")) {
         converterMode = F32_to_F16;
     } else if (inferPrecision == std::string("FP32")) {
         converterMode = F32_to_F32;
@@ -61,7 +61,8 @@ void *OnlineModelConversion(const char *storagePath,
 #ifdef _USE_ONNX
     } else if (fileExist(prefix + ".onnx")) {
         UNI_INFO_LOG("Start to convert %s.onnx...\n", prefix.c_str());
-        onnx_converter(storagePath, modelName, removeProcessOpsNum, originalMs);
+        onnx_converter(storagePath, modelName, removeProcessOpsNum,
+            inferPrecision == std::string("BNN_FP16"), originalMs);
 #endif
 #ifdef _USE_TFLITE
     } else if (fileExist(prefix + ".tflite")) {

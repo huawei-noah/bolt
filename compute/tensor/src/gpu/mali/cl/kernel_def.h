@@ -14,6 +14,7 @@
 #ifndef _KERNEL_DEF
 #define _KERNEL_DEF
 
+__constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP | CLK_FILTER_NEAREST;
 /*
  * READ IMAGE
  */
@@ -25,7 +26,157 @@
 #define WRITE_IMAGE(image, coord, data) write_imagef(image, coord, data)
 #endif
 
-__constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP | CLK_FILTER_NEAREST;
+#if defined(USE_INPUT_IMG)
+#define READ_ONLY_KERNEL_MEM __read_only image3d_t
+
+#define LOAD_MEM_V4(val, coord, mem)           \
+    {                                          \
+        val = READ_IMAGE(mem, sampler, coord); \
+    }
+
+#define LOAD_MEM_V4_C1(val, off, edge, mem) \
+    {                                       \
+        LOAD_MEM_V4(val, off, mem);         \
+    }
+
+#define LOAD_MEM_V4_COMMON(val, ix, iy, iz, w_str, h_str, wh_off, mem) \
+    {                                                                  \
+        LOAD_MEM_V4(val, (int4)(ix, iy, iz, 0), mem);                  \
+    }
+
+#define LOAD_MEM_V4_C1_COMMON(val, ix, iy, iz, w_str, h_str, wh_off, w, mem) \
+    {                                                                        \
+        LOAD_MEM_V4(val, (int4)(ix, iy, iz, 0), mem);                        \
+    }
+
+#define LOAD_MEM_V4_AXIS_Y(val, img_x, img_y, img_z, step, mem)       \
+    {                                                                 \
+        LOAD_MEM_V4(val, (int4)(img_x, img_y + step, img_z, 0), mem); \
+    }
+
+#else
+#define READ_ONLY_KERNEL_MEM __global const T *
+
+#define LOAD_MEM_V4(val, off, mem) \
+    {                              \
+        val = vload4(off, mem);    \
+    }
+
+#define LOAD_MEM_V4_C1(val, off, edge, mem)     \
+    {                                           \
+        if (edge == 4) {                        \
+            val = vload4(0, mem + off);         \
+        } else {                                \
+            if (edge == 1) {                    \
+                val.x = mem[off];               \
+            } else if (edge == 2) {             \
+                val.xy = vload2(0, mem + off);  \
+            } else if (edge == 3) {             \
+                val.xyz = vload3(0, mem + off); \
+            }                                   \
+        }                                       \
+    }
+
+#define LOAD_MEM_V4_COMMON(val, ix, iy, iz, w_str, h_str, wh_off, mem) \
+    {                                                                  \
+        const int off = (iz * h_str + iy) * w_str + ix + wh_off;       \
+        LOAD_MEM_V4(val, off, mem);                                    \
+    }
+
+#define LOAD_MEM_V4_C1_COMMON(val, ix, iy, iz, w_str, h_str, wh_off, w, mem) \
+    {                                                                        \
+        const int off = (iz * h_str + iy) * w_str + (ix << 2) + wh_off;      \
+        char edge = ((ix << 2) + 4 <= w) ? 4 : (w & 3);                      \
+        LOAD_MEM_V4_C1(val, off, edge, mem);                                 \
+    }
+
+#define LOAD_MEM_V4_AXIS_Y(val, buf_off, buf_str, buf_no_use, step, mem) \
+    {                                                                    \
+        LOAD_MEM_V4(val, buf_off + buf_str * step, mem);                 \
+    }
+#endif
+
+#if defined(USE_OUTPUT_IMG)
+#define KERNEL_MEM __write_only image3d_t
+
+#define STORE_MEM_V4(val, off, mem) \
+    {                               \
+        WRITE_IMAGE(mem, off, val); \
+    }
+
+#define STORE_MEM_V4_C1(val, off, edge, mem) \
+    {                                        \
+        if (edge == 1) {                     \
+            val.s123 = 0;                    \
+        } else if (edge == 2) {              \
+            val.s23 = 0;                     \
+        } else if (edge == 3) {              \
+            val.s3 = 0;                      \
+        }                                    \
+        STORE_MEM_V4(val, off, mem);         \
+    }
+
+#define STORE_MEM_V4_COMMON(val, ix, iy, iz, w_str, h_str, wh_off, mem) \
+    {                                                                   \
+        STORE_MEM_V4(val, (int4)(ix, iy, iz, 0), mem);                  \
+    }
+
+#define STORE_MEM_V4_C1_COMMON(val, ix, iy, iz, w_str, h_str, wh_off, w, mem) \
+    {                                                                         \
+        STORE_MEM_V4(val, (int4)(ix, iy, iz, 0), mem);                        \
+    }
+
+#define STORE_MEM_V4_AXIS_Y(val, img_x, img_y, img_z, step, id, bd, mem)   \
+    {                                                                      \
+        if (id + step < bd) {                                              \
+            STORE_MEM_V4(val, (int4)(img_x, img_y + step, img_z, 0), mem); \
+        }                                                                  \
+    }
+
+#else
+#define KERNEL_MEM __global T *
+
+#define STORE_MEM_V4(val, off, mem) \
+    {                               \
+        vstore4(val, off, mem);     \
+    }
+
+#define STORE_MEM_V4_C1(val, off, edge, mem)    \
+    {                                           \
+        if (edge == 4) {                        \
+            vstore4(val, 0, mem + off);         \
+        } else {                                \
+            if (edge == 1) {                    \
+                mem[off] = val.x;               \
+            } else if (edge == 2) {             \
+                vstore2(val.xy, 0, mem + off);  \
+            } else if (edge == 3) {             \
+                vstore3(val.xyz, 0, mem + off); \
+            }                                   \
+        }                                       \
+    }
+
+#define STORE_MEM_V4_COMMON(val, ix, iy, iz, w_str, h_str, wh_off, mem) \
+    {                                                                   \
+        const int off = (iz * h_str + iy) * w_str + ix + wh_off;        \
+        STORE_MEM_V4(val, off, mem);                                    \
+    }
+
+#define STORE_MEM_V4_C1_COMMON(val, ix, iy, iz, w_str, h_str, wh_off, w, mem) \
+    {                                                                         \
+        const int off = (iz * h_str + iy) * w_str + (ix << 2) + wh_off;       \
+        char edge = ((ix << 2) + 4 <= w) ? 4 : (w & 3);                       \
+        STORE_MEM_V4_C1(val, off, edge, mem);                                 \
+    }
+
+#define STORE_MEM_V4_AXIS_Y(val, buf_off, buf_str, buf_no_use, step, id, bd, mem) \
+    {                                                                             \
+        if (id + step < bd) {                                                     \
+            STORE_MEM_V4(val, buf_off + buf_str * step, mem);                     \
+        }                                                                         \
+    }
+
+#endif
 
 #if defined(USE_V1)
 #define READ_BUF(v, off, buf) \
@@ -400,12 +551,12 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         c += (a.s4 * b.s4 + a.s5 * b.s5 + a.s6 * b.s6 + a.s7 * b.s7); \
     }
 
-#define DOT_A16B16C1(a, b, c)                                     \
-    {                                                             \
-        c += (a.x * b.s0 + a.y * b.s1 + a.z * b.s2 + a.w * b.s3); \
-        c += (a.x * b.s4 + a.y * b.s5 + a.z * b.s6 + a.w * b.s7); \
-        c += (a.x * b.s8 + a.y * b.s9 + a.z * b.sa + a.w * b.sb); \
-        c += (a.x * b.sc + a.y * b.sd + a.z * b.se + a.w * b.sf); \
+#define DOT_A16B16C1(a, b, c)                                         \
+    {                                                                 \
+        c += (a.s0 * b.s0 + a.s1 * b.s1 + a.s2 * b.s2 + a.s3 * b.s3); \
+        c += (a.s4 * b.s4 + a.s5 * b.s5 + a.s6 * b.s6 + a.s7 * b.s7); \
+        c += (a.s8 * b.s8 + a.s9 * b.s9 + a.sa * b.sa + a.sb * b.sb); \
+        c += (a.sc * b.sc + a.sd * b.sd + a.se * b.se + a.sf * b.sf); \
     }
 
 #define DOT_A_NORMAL_B1C1_ARRAY(a, b, c) \
@@ -1189,12 +1340,28 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         v.s3 = 1.0 / (1.0 + exp(-1.0 * v.s3)); \
     }
 #elif defined(USE_ABS)
-#define ACTIVATION_V4(v)                       \
-    {                                          \
+#define ACTIVATION_V4(v)   \
+    {                      \
         v.s0 = fabs(v.s0); \
         v.s1 = fabs(v.s1); \
         v.s2 = fabs(v.s2); \
         v.s3 = fabs(v.s3); \
+    }
+#elif defined(USE_LOG)
+#define ACTIVATION_V4(v)                      \
+    {                                         \
+        v.s0 = (v.s0 > 0) ? log(v.s0) : v.s0; \
+        v.s1 = (v.s1 > 0) ? log(v.s1) : v.s1; \
+        v.s2 = (v.s2 > 0) ? log(v.s2) : v.s2; \
+        v.s3 = (v.s3 > 0) ? log(v.s3) : v.s3; \
+    }
+#elif defined(USE_NEG)
+#define ACTIVATION_V4(v) \
+    {                    \
+        v.s0 = -v.s0;    \
+        v.s1 = -v.s1;    \
+        v.s2 = -v.s2;    \
+        v.s3 = -v.s3;    \
     }
 #else
 #define ACTIVATION_V1(v) \
@@ -1478,13 +1645,48 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
  * Matrix A has been transposed
  * Operator define for Matrix B and Matrix C
  */
+#if defined(USE_OUTPUT_IMG)
+#if (LN == 4)
+#define GEMM_STORE_C(c, c_off, str, ex, ey, C)                                \
+    {                                                                         \
+        for (char i = 0; i < ey; i++) {                                       \
+            STORE_MEM_V4((T4)(c[i][0], c[i][1], c[i][2], c[i][3]), c_off, C); \
+            c_off.y += 1;                                                     \
+        }                                                                     \
+    }
+#elif (LN == 8)
+#define GEMM_STORE_C(c, c_off, str, ex, ey, C)                                \
+    {                                                                         \
+        for (char i = 0; i < ey; i++) {                                       \
+            STORE_MEM_V4((T4)(c[i][0], c[i][1], c[i][2], c[i][3]), c_off, C); \
+            STORE_MEM_V4((T4)(c[i][4], c[i][5], c[i][6], c[i][7]),            \
+                (int4)(c_off.x + 1, c_off.y, c_off.z, c_off.w), C);           \
+            c_off.y += 1;                                                     \
+        }                                                                     \
+    }
+#endif
+#else
+#define GEMM_STORE_C(c, c_off, str, ex, ey, C)    \
+    {                                             \
+        for (char i = 0; i < ey; i++) {           \
+            for (char j = 0; j < ex; j++) {       \
+                C[c_off + i * str + j] = c[i][j]; \
+            }                                     \
+        }                                         \
+    }
+#endif
 #if (LN == 0)
-#define LOAD_INPUT_BUF_ARRAY_V4(V, off, str, buf) \
+#define LOAD_INPUT_MEM_ARRAY_V4(V, i, j, k, s, buf) \
     {}
 #elif (LN == 1)
-#define LOAD_INPUT_BUF_ARRAY_V4(V, off, str, buf) \
-    {                                             \
-        V[0] = vload4(off, buf);                  \
+#define LOAD_INPUT_MEM_ARRAY_V4(V, i, j, k, s, buf) \
+    {                                               \
+        LOAD_MEM_V4_AXIS_Y(V[0], i, j, k, 0, buf);  \
+    }
+
+#define GEMM_LOAD_BIAS_MATCH_B(v, off, buf) \
+    {                                       \
+        LOAD_BUF_ARRAY1(v, off, buf);       \
     }
 
 #define GEMM_SET_C_BIAS_A_X(v, reg) \
@@ -1520,20 +1722,20 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         MUL_REG_NORMAL_ARRAY1(a, b, reg); \
     }
 
-#define GEMM_STORE_C_X(v, off, ex, buf) \
-    {                                   \
-        STORE_BUF_ARRAY1(v, off, buf);  \
-    }
-
 #define GEMM_NT_LOAD_B(v, off, str, buf) \
     {                                    \
         READ_BUF(v[0], off, buf);        \
     }
 #elif (LN == 2)
-#define LOAD_INPUT_BUF_ARRAY_V4(V, off, str, buf) \
-    {                                             \
-        V[0] = vload4(off, buf);                  \
-        V[1] = vload4(off + str, buf);            \
+#define LOAD_INPUT_MEM_ARRAY_V4(V, i, j, k, s, buf) \
+    {                                               \
+        LOAD_MEM_V4_AXIS_Y(V[0], i, j, k, 0, buf);  \
+        LOAD_MEM_V4_AXIS_Y(V[1], i, j, k, s, buf);  \
+    }
+
+#define GEMM_LOAD_BIAS_MATCH_B(v, off, buf) \
+    {                                       \
+        LOAD_BUF_ARRAY2(v, off, buf);       \
     }
 
 #define GEMM_SET_C_BIAS_A_X(v, reg) \
@@ -1572,26 +1774,22 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         MUL_REG_NORMAL_ARRAY2(a, b, reg); \
     }
 
-#define GEMM_STORE_C_X(v, off, ex, buf)    \
-    {                                      \
-        if (ex > 1) {                      \
-            STORE_BUF_ARRAY2(v, off, buf); \
-        } else {                           \
-            STORE_BUF_ARRAY1(v, off, buf); \
-        }                                  \
-    }
-
 #define GEMM_NT_LOAD_B(v, off, str, buf) \
     {                                    \
         READ_BUF(v[0], off, buf);        \
         READ_BUF(v[1], off + str, buf);  \
     }
 #elif (LN == 3)
-#define LOAD_INPUT_BUF_ARRAY_V4(V, off, str, buf) \
-    {                                             \
-        V[0] = vload4(off, buf);                  \
-        V[1] = vload4(off + str, buf);            \
-        V[2] = vload4(off + str * 2, buf);        \
+#define LOAD_INPUT_MEM_ARRAY_V4(V, i, j, k, s, buf)    \
+    {                                                  \
+        LOAD_MEM_V4_AXIS_Y(V[0], i, j, k, 0, buf);     \
+        LOAD_MEM_V4_AXIS_Y(V[1], i, j, k, s, buf);     \
+        LOAD_MEM_V4_AXIS_Y(V[2], i, j, k, s * 2, buf); \
+    }
+
+#define GEMM_LOAD_BIAS_MATCH_B(v, off, buf) \
+    {                                       \
+        LOAD_BUF_ARRAY3(v, off, buf);       \
     }
 
 #define GEMM_SET_C_BIAS_A_X(v, reg) \
@@ -1633,17 +1831,6 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         MUL_REG_NORMAL_ARRAY3(a, b, reg); \
     }
 
-#define GEMM_STORE_C_X(v, off, ex, buf)    \
-    {                                      \
-        if (ex > 2) {                      \
-            STORE_BUF_ARRAY3(v, off, buf); \
-        } else if (ex > 1) {               \
-            STORE_BUF_ARRAY2(v, off, buf); \
-        } else {                           \
-            STORE_BUF_ARRAY1(v, off, buf); \
-        }                                  \
-    }
-
 #define GEMM_NT_LOAD_B(v, off, str, buf)    \
     {                                       \
         READ_BUF(v[0], off, buf);           \
@@ -1651,12 +1838,17 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         READ_BUF(v[2], off + str * 2, buf); \
     }
 #elif (LN == 4)
-#define LOAD_INPUT_BUF_ARRAY_V4(V, off, str, buf) \
-    {                                             \
-        V[0] = vload4(off, buf);                  \
-        V[1] = vload4(off + str, buf);            \
-        V[2] = vload4(off + str * 2, buf);        \
-        V[3] = vload4(off + str * 3, buf);        \
+#define LOAD_INPUT_MEM_ARRAY_V4(V, i, j, k, s, buf)    \
+    {                                                  \
+        LOAD_MEM_V4_AXIS_Y(V[0], i, j, k, 0, buf);     \
+        LOAD_MEM_V4_AXIS_Y(V[1], i, j, k, s, buf);     \
+        LOAD_MEM_V4_AXIS_Y(V[2], i, j, k, s * 2, buf); \
+        LOAD_MEM_V4_AXIS_Y(V[3], i, j, k, s * 3, buf); \
+    }
+
+#define GEMM_LOAD_BIAS_MATCH_B(v, off, buf) \
+    {                                       \
+        LOAD_BUF_ARRAY4(v, off, buf);       \
     }
 
 #define GEMM_SET_C_BIAS_A_X(v, reg) \
@@ -1686,10 +1878,21 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         ADD_BUF_ARRAY4(v, off, buf);    \
     }
 
+#if defined(USE_INPUT_B_IMG)
+#define GEMM_LOAD_B(v, off, buf)                \
+    {                                           \
+        T4 tmp = READ_IMAGE(buf, sampler, off); \
+        v[0] = tmp.x;                           \
+        v[1] = tmp.y;                           \
+        v[2] = tmp.z;                           \
+        v[3] = tmp.w;                           \
+    }
+#else
 #define GEMM_LOAD_B(v, off, buf)      \
     {                                 \
         LOAD_BUF_ARRAY4(v, off, buf); \
     }
+#endif
 
 #define GEMM_CALCORE_X(a, b, c)        \
     {                                  \
@@ -1701,19 +1904,6 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         MUL_REG_NORMAL_ARRAY4(a, b, reg); \
     }
 
-#define GEMM_STORE_C_X(v, off, ex, buf)    \
-    {                                      \
-        if (ex > 3) {                      \
-            STORE_BUF_ARRAY4(v, off, buf); \
-        } else if (ex > 2) {               \
-            STORE_BUF_ARRAY3(v, off, buf); \
-        } else if (ex > 1) {               \
-            STORE_BUF_ARRAY2(v, off, buf); \
-        } else {                           \
-            STORE_BUF_ARRAY1(v, off, buf); \
-        }                                  \
-    }
-
 #define GEMM_NT_LOAD_B(v, off, str, buf)    \
     {                                       \
         READ_BUF(v[0], off, buf);           \
@@ -1722,13 +1912,18 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         READ_BUF(v[3], off + str * 3, buf); \
     }
 #elif (LN == 5)
-#define LOAD_INPUT_BUF_ARRAY_V4(V, off, str, buf) \
-    {                                             \
-        V[0] = vload4(off, buf);                  \
-        V[1] = vload4(off + str, buf);            \
-        V[2] = vload4(off + str * 2, buf);        \
-        V[3] = vload4(off + str * 3, buf);        \
-        V[4] = vload4(off + str * 4, buf);        \
+#define LOAD_INPUT_MEM_ARRAY_V4(V, i, j, k, s, buf)    \
+    {                                                  \
+        LOAD_MEM_V4_AXIS_Y(V[0], i, j, k, 0, buf);     \
+        LOAD_MEM_V4_AXIS_Y(V[1], i, j, k, s, buf);     \
+        LOAD_MEM_V4_AXIS_Y(V[2], i, j, k, s * 2, buf); \
+        LOAD_MEM_V4_AXIS_Y(V[3], i, j, k, s * 3, buf); \
+        LOAD_MEM_V4_AXIS_Y(V[4], i, j, k, s * 4, buf); \
+    }
+
+#define GEMM_LOAD_BIAS_MATCH_B(v, off, buf) \
+    {                                       \
+        LOAD_BUF_ARRAY5(v, off, buf);       \
     }
 
 #define GEMM_SET_C_BIAS_A_X(v, reg) \
@@ -1776,21 +1971,6 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         MUL_REG_NORMAL_ARRAY5(a, b, reg); \
     }
 
-#define GEMM_STORE_C_X(v, off, ex, buf)    \
-    {                                      \
-        if (ex > 4) {                      \
-            STORE_BUF_ARRAY5(v, off, buf); \
-        } else if (ex > 3) {               \
-            STORE_BUF_ARRAY4(v, off, buf); \
-        } else if (ex > 2) {               \
-            STORE_BUF_ARRAY3(v, off, buf); \
-        } else if (ex > 1) {               \
-            STORE_BUF_ARRAY2(v, off, buf); \
-        } else {                           \
-            STORE_BUF_ARRAY1(v, off, buf); \
-        }                                  \
-    }
-
 #define GEMM_NT_LOAD_B(v, off, str, buf)    \
     {                                       \
         READ_BUF(v[0], off, buf);           \
@@ -1800,14 +1980,19 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         READ_BUF(v[4], off + str * 4, buf); \
     }
 #elif (LN == 6)
-#define LOAD_INPUT_BUF_ARRAY_V4(V, off, str, buf) \
-    {                                             \
-        V[0] = vload4(off, buf);                  \
-        V[1] = vload4(off + str, buf);            \
-        V[2] = vload4(off + str * 2, buf);        \
-        V[3] = vload4(off + str * 3, buf);        \
-        V[4] = vload4(off + str * 4, buf);        \
-        V[5] = vload4(off + str * 5, buf);        \
+#define LOAD_INPUT_MEM_ARRAY_V4(V, i, j, k, s, buf)    \
+    {                                                  \
+        LOAD_MEM_V4_AXIS_Y(V[0], i, j, k, 0, buf);     \
+        LOAD_MEM_V4_AXIS_Y(V[1], i, j, k, s, buf);     \
+        LOAD_MEM_V4_AXIS_Y(V[2], i, j, k, s * 2, buf); \
+        LOAD_MEM_V4_AXIS_Y(V[3], i, j, k, s * 3, buf); \
+        LOAD_MEM_V4_AXIS_Y(V[4], i, j, k, s * 4, buf); \
+        LOAD_MEM_V4_AXIS_Y(V[5], i, j, k, s * 5, buf); \
+    }
+
+#define GEMM_LOAD_BIAS_MATCH_B(v, off, buf) \
+    {                                       \
+        LOAD_BUF_ARRAY6(v, off, buf);       \
     }
 
 #define GEMM_SET_C_BIAS_A_X(v, reg) \
@@ -1858,23 +2043,6 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         MUL_REG_NORMAL_ARRAY6(a, b, reg); \
     }
 
-#define GEMM_STORE_C_X(v, off, ex, buf)    \
-    {                                      \
-        if (ex > 5) {                      \
-            STORE_BUF_ARRAY6(v, off, buf); \
-        } else if (ex > 4) {               \
-            STORE_BUF_ARRAY5(v, off, buf); \
-        } else if (ex > 3) {               \
-            STORE_BUF_ARRAY4(v, off, buf); \
-        } else if (ex > 2) {               \
-            STORE_BUF_ARRAY3(v, off, buf); \
-        } else if (ex > 1) {               \
-            STORE_BUF_ARRAY2(v, off, buf); \
-        } else {                           \
-            STORE_BUF_ARRAY1(v, off, buf); \
-        }                                  \
-    }
-
 #define GEMM_NT_LOAD_B(v, off, str, buf)    \
     {                                       \
         READ_BUF(v[0], off, buf);           \
@@ -1885,15 +2053,20 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         READ_BUF(v[5], off + str * 5, buf); \
     }
 #elif (LN == 7)
-#define LOAD_INPUT_BUF_ARRAY_V4(V, off, str, buf) \
-    {                                             \
-        V[0] = vload4(off, buf);                  \
-        V[1] = vload4(off + str, buf);            \
-        V[2] = vload4(off + str * 2, buf);        \
-        V[3] = vload4(off + str * 3, buf);        \
-        V[4] = vload4(off + str * 4, buf);        \
-        V[5] = vload4(off + str * 5, buf);        \
-        V[6] = vload4(off + str * 6, buf);        \
+#define LOAD_INPUT_MEM_ARRAY_V4(V, i, j, k, s, buf)    \
+    {                                                  \
+        LOAD_MEM_V4_AXIS_Y(V[0], i, j, k, 0, buf);     \
+        LOAD_MEM_V4_AXIS_Y(V[1], i, j, k, s, buf);     \
+        LOAD_MEM_V4_AXIS_Y(V[2], i, j, k, s * 2, buf); \
+        LOAD_MEM_V4_AXIS_Y(V[3], i, j, k, s * 3, buf); \
+        LOAD_MEM_V4_AXIS_Y(V[4], i, j, k, s * 4, buf); \
+        LOAD_MEM_V4_AXIS_Y(V[5], i, j, k, s * 5, buf); \
+        LOAD_MEM_V4_AXIS_Y(V[6], i, j, k, s * 6, buf); \
+    }
+
+#define GEMM_LOAD_BIAS_MATCH_B(v, off, buf) \
+    {                                       \
+        LOAD_BUF_ARRAY7(v, off, buf);       \
     }
 
 #define GEMM_SET_C_BIAS_A_X(v, reg) \
@@ -1947,25 +2120,6 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         MUL_REG_NORMAL_ARRAY7(a, b, reg); \
     }
 
-#define GEMM_STORE_C_X(v, off, ex, buf)    \
-    {                                      \
-        if (ex > 6) {                      \
-            STORE_BUF_ARRAY7(v, off, buf); \
-        } else if (ex > 5) {               \
-            STORE_BUF_ARRAY6(v, off, buf); \
-        } else if (ex > 4) {               \
-            STORE_BUF_ARRAY5(v, off, buf); \
-        } else if (ex > 3) {               \
-            STORE_BUF_ARRAY4(v, off, buf); \
-        } else if (ex > 2) {               \
-            STORE_BUF_ARRAY3(v, off, buf); \
-        } else if (ex > 1) {               \
-            STORE_BUF_ARRAY2(v, off, buf); \
-        } else {                           \
-            STORE_BUF_ARRAY1(v, off, buf); \
-        }                                  \
-    }
-
 #define GEMM_NT_LOAD_B(v, off, str, buf)    \
     {                                       \
         READ_BUF(v[0], off, buf);           \
@@ -1977,16 +2131,21 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         READ_BUF(v[6], off + str * 6, buf); \
     }
 #elif (LN == 8)
-#define LOAD_INPUT_BUF_ARRAY_V4(V, off, str, buf) \
-    {                                             \
-        V[0] = vload4(off, buf);                  \
-        V[1] = vload4(off + str, buf);            \
-        V[2] = vload4(off + str * 2, buf);        \
-        V[3] = vload4(off + str * 3, buf);        \
-        V[4] = vload4(off + str * 4, buf);        \
-        V[5] = vload4(off + str * 5, buf);        \
-        V[6] = vload4(off + str * 6, buf);        \
-        V[7] = vload4(off + str * 7, buf);        \
+#define LOAD_INPUT_MEM_ARRAY_V4(V, i, j, k, s, buf)    \
+    {                                                  \
+        LOAD_MEM_V4_AXIS_Y(V[0], i, j, k, 0, buf);     \
+        LOAD_MEM_V4_AXIS_Y(V[1], i, j, k, s, buf);     \
+        LOAD_MEM_V4_AXIS_Y(V[2], i, j, k, s * 2, buf); \
+        LOAD_MEM_V4_AXIS_Y(V[3], i, j, k, s * 3, buf); \
+        LOAD_MEM_V4_AXIS_Y(V[4], i, j, k, s * 4, buf); \
+        LOAD_MEM_V4_AXIS_Y(V[5], i, j, k, s * 5, buf); \
+        LOAD_MEM_V4_AXIS_Y(V[6], i, j, k, s * 6, buf); \
+        LOAD_MEM_V4_AXIS_Y(V[7], i, j, k, s * 7, buf); \
+    }
+
+#define GEMM_LOAD_BIAS_MATCH_B(v, off, buf) \
+    {                                       \
+        LOAD_BUF_ARRAY8(v, off, buf);       \
     }
 
 #define GEMM_SET_C_BIAS_A_X(v, reg) \
@@ -2028,10 +2187,26 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         ADD_BUF_ARRAY8(v, off, buf);    \
     }
 
+#if defined(USE_INPUT_B_IMG)
+#define GEMM_LOAD_B(v, off, buf)                                                \
+    {                                                                           \
+        T4 tmp = READ_IMAGE(buf, sampler, off);                                 \
+        v[0] = tmp.x;                                                           \
+        v[1] = tmp.y;                                                           \
+        v[2] = tmp.z;                                                           \
+        v[3] = tmp.w;                                                           \
+        tmp = READ_IMAGE(buf, sampler, (int4)(off.x + 1, off.y, off.z, off.w)); \
+        v[4] = tmp.x;                                                           \
+        v[5] = tmp.y;                                                           \
+        v[6] = tmp.z;                                                           \
+        v[7] = tmp.w;                                                           \
+    }
+#else
 #define GEMM_LOAD_B(v, off, buf)      \
     {                                 \
         LOAD_BUF_ARRAY8(v, off, buf); \
     }
+#endif
 
 #define GEMM_CALCORE_X(a, b, c)        \
     {                                  \
@@ -2041,27 +2216,6 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
 #define GEMM_MUL_C_X(a, b, reg)           \
     {                                     \
         MUL_REG_NORMAL_ARRAY8(a, b, reg); \
-    }
-
-#define GEMM_STORE_C_X(v, off, ex, buf)    \
-    {                                      \
-        if (ex > 7) {                      \
-            STORE_BUF_ARRAY8(v, off, buf); \
-        } else if (ex > 6) {               \
-            STORE_BUF_ARRAY7(v, off, buf); \
-        } else if (ex > 5) {               \
-            STORE_BUF_ARRAY6(v, off, buf); \
-        } else if (ex > 4) {               \
-            STORE_BUF_ARRAY5(v, off, buf); \
-        } else if (ex > 3) {               \
-            STORE_BUF_ARRAY4(v, off, buf); \
-        } else if (ex > 2) {               \
-            STORE_BUF_ARRAY3(v, off, buf); \
-        } else if (ex > 1) {               \
-            STORE_BUF_ARRAY2(v, off, buf); \
-        } else {                           \
-            STORE_BUF_ARRAY1(v, off, buf); \
-        }                                  \
     }
 
 #define GEMM_NT_LOAD_B(v, off, str, buf)    \
@@ -2076,62 +2230,62 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         READ_BUF(v[7], off + str * 7, buf); \
     }
 #elif (LN == 9)
-#define LOAD_INPUT_BUF_ARRAY_V4(V, off, str, buf) \
-    {                                             \
-        V[0] = vload4(off, buf);                  \
-        V[1] = vload4(off + str, buf);            \
-        V[2] = vload4(off + str * 2, buf);        \
-        V[3] = vload4(off + str * 3, buf);        \
-        V[4] = vload4(off + str * 4, buf);        \
-        V[5] = vload4(off + str * 5, buf);        \
-        V[6] = vload4(off + str * 6, buf);        \
-        V[7] = vload4(off + str * 7, buf);        \
-        V[8] = vload4(off + str * 8, buf);        \
+#define LOAD_INPUT_MEM_ARRAY_V4(V, i, j, k, s, buf)    \
+    {                                                  \
+        LOAD_MEM_V4_AXIS_Y(V[0], i, j, k, 0, buf);     \
+        LOAD_MEM_V4_AXIS_Y(V[1], i, j, k, s, buf);     \
+        LOAD_MEM_V4_AXIS_Y(V[2], i, j, k, s * 2, buf); \
+        LOAD_MEM_V4_AXIS_Y(V[3], i, j, k, s * 3, buf); \
+        LOAD_MEM_V4_AXIS_Y(V[4], i, j, k, s * 4, buf); \
+        LOAD_MEM_V4_AXIS_Y(V[5], i, j, k, s * 5, buf); \
+        LOAD_MEM_V4_AXIS_Y(V[6], i, j, k, s * 6, buf); \
+        LOAD_MEM_V4_AXIS_Y(V[7], i, j, k, s * 7, buf); \
+        LOAD_MEM_V4_AXIS_Y(V[8], i, j, k, s * 8, buf); \
     }
 #elif (LN == 10)
-#define LOAD_INPUT_BUF_ARRAY_V4(V, off, str, buf) \
-    {                                             \
-        V[0] = vload4(off, buf);                  \
-        V[1] = vload4(off + str, buf);            \
-        V[2] = vload4(off + str * 2, buf);        \
-        V[3] = vload4(off + str * 3, buf);        \
-        V[4] = vload4(off + str * 4, buf);        \
-        V[5] = vload4(off + str * 5, buf);        \
-        V[6] = vload4(off + str * 6, buf);        \
-        V[7] = vload4(off + str * 7, buf);        \
-        V[8] = vload4(off + str * 8, buf);        \
-        V[9] = vload4(off + str * 9, buf);        \
+#define LOAD_INPUT_MEM_ARRAY_V4(V, i, j, k, s, buf)    \
+    {                                                  \
+        LOAD_MEM_V4_AXIS_Y(V[0], i, j, k, 0, buf);     \
+        LOAD_MEM_V4_AXIS_Y(V[1], i, j, k, s, buf);     \
+        LOAD_MEM_V4_AXIS_Y(V[2], i, j, k, s * 2, buf); \
+        LOAD_MEM_V4_AXIS_Y(V[3], i, j, k, s * 3, buf); \
+        LOAD_MEM_V4_AXIS_Y(V[4], i, j, k, s * 4, buf); \
+        LOAD_MEM_V4_AXIS_Y(V[5], i, j, k, s * 5, buf); \
+        LOAD_MEM_V4_AXIS_Y(V[6], i, j, k, s * 6, buf); \
+        LOAD_MEM_V4_AXIS_Y(V[7], i, j, k, s * 7, buf); \
+        LOAD_MEM_V4_AXIS_Y(V[8], i, j, k, s * 8, buf); \
+        LOAD_MEM_V4_AXIS_Y(V[9], i, j, k, s * 9, buf); \
     }
 #elif (LN == 11)
-#define LOAD_INPUT_BUF_ARRAY_V4(V, off, str, buf) \
-    {                                             \
-        V[0] = vload4(off, buf);                  \
-        V[1] = vload4(off + str, buf);            \
-        V[2] = vload4(off + str * 2, buf);        \
-        V[3] = vload4(off + str * 3, buf);        \
-        V[4] = vload4(off + str * 4, buf);        \
-        V[5] = vload4(off + str * 5, buf);        \
-        V[6] = vload4(off + str * 6, buf);        \
-        V[7] = vload4(off + str * 7, buf);        \
-        V[8] = vload4(off + str * 8, buf);        \
-        V[9] = vload4(off + str * 9, buf);        \
-        V[10] = vload4(off + str * 10, buf);      \
+#define LOAD_INPUT_MEM_ARRAY_V4(V, i, j, k, s, buf)      \
+    {                                                    \
+        LOAD_MEM_V4_AXIS_Y(V[0], i, j, k, 0, buf);       \
+        LOAD_MEM_V4_AXIS_Y(V[1], i, j, k, s, buf);       \
+        LOAD_MEM_V4_AXIS_Y(V[2], i, j, k, s * 2, buf);   \
+        LOAD_MEM_V4_AXIS_Y(V[3], i, j, k, s * 3, buf);   \
+        LOAD_MEM_V4_AXIS_Y(V[4], i, j, k, s * 4, buf);   \
+        LOAD_MEM_V4_AXIS_Y(V[5], i, j, k, s * 5, buf);   \
+        LOAD_MEM_V4_AXIS_Y(V[6], i, j, k, s * 6, buf);   \
+        LOAD_MEM_V4_AXIS_Y(V[7], i, j, k, s * 7, buf);   \
+        LOAD_MEM_V4_AXIS_Y(V[8], i, j, k, s * 8, buf);   \
+        LOAD_MEM_V4_AXIS_Y(V[9], i, j, k, s * 9, buf);   \
+        LOAD_MEM_V4_AXIS_Y(V[10], i, j, k, s * 10, buf); \
     }
 #elif (LN == 12)
-#define LOAD_INPUT_BUF_ARRAY_V4(V, off, str, buf) \
-    {                                             \
-        V[0] = vload4(off, buf);                  \
-        V[1] = vload4(off + str, buf);            \
-        V[2] = vload4(off + str * 2, buf);        \
-        V[3] = vload4(off + str * 3, buf);        \
-        V[4] = vload4(off + str * 4, buf);        \
-        V[5] = vload4(off + str * 5, buf);        \
-        V[6] = vload4(off + str * 6, buf);        \
-        V[7] = vload4(off + str * 7, buf);        \
-        V[8] = vload4(off + str * 8, buf);        \
-        V[9] = vload4(off + str * 9, buf);        \
-        V[10] = vload4(off + str * 10, buf);      \
-        V[11] = vload4(off + str * 11, buf);      \
+#define LOAD_INPUT_MEM_ARRAY_V4(V, i, j, k, s, buf)      \
+    {                                                    \
+        LOAD_MEM_V4_AXIS_Y(V[0], i, j, k, 0, buf);       \
+        LOAD_MEM_V4_AXIS_Y(V[1], i, j, k, s, buf);       \
+        LOAD_MEM_V4_AXIS_Y(V[2], i, j, k, s * 2, buf);   \
+        LOAD_MEM_V4_AXIS_Y(V[3], i, j, k, s * 3, buf);   \
+        LOAD_MEM_V4_AXIS_Y(V[4], i, j, k, s * 4, buf);   \
+        LOAD_MEM_V4_AXIS_Y(V[5], i, j, k, s * 5, buf);   \
+        LOAD_MEM_V4_AXIS_Y(V[6], i, j, k, s * 6, buf);   \
+        LOAD_MEM_V4_AXIS_Y(V[7], i, j, k, s * 7, buf);   \
+        LOAD_MEM_V4_AXIS_Y(V[8], i, j, k, s * 8, buf);   \
+        LOAD_MEM_V4_AXIS_Y(V[9], i, j, k, s * 9, buf);   \
+        LOAD_MEM_V4_AXIS_Y(V[10], i, j, k, s * 10, buf); \
+        LOAD_MEM_V4_AXIS_Y(V[11], i, j, k, s * 11, buf); \
     }
 #endif
 
@@ -2142,6 +2296,11 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
 #define GEMM_LOAD_A(v, off, buf)      \
     {                                 \
         LOAD_BUF_ARRAY1(v, off, buf); \
+    }
+
+#define GEMM_LOAD_BIAS_MATCH_A(v, off, buf) \
+    {                                       \
+        LOAD_BUF_ARRAY1(v, off, buf);       \
     }
 
 #define GEMM_SET_C_BIAS_A(v, reg)          \
@@ -2177,11 +2336,6 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         GEMM_MUL_C_X(a, b, reg[0]); \
     }
 
-#define GEMM_STORE_C(v, off, str, ex, ey, buf) \
-    {                                          \
-        GEMM_STORE_C_X(v[0], off, ex, buf);    \
-    }
-
 #define GEMM_NT_LOAD_A(v, off, str, buf) \
     {                                    \
         READ_BUF(v[0], off, buf);        \
@@ -2190,6 +2344,11 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
 #define GEMM_LOAD_A(v, off, buf)      \
     {                                 \
         LOAD_BUF_ARRAY2(v, off, buf); \
+    }
+
+#define GEMM_LOAD_BIAS_MATCH_A(v, off, buf) \
+    {                                       \
+        LOAD_BUF_ARRAY2(v, off, buf);       \
     }
 
 #define GEMM_SET_C_BIAS_A(v, reg)          \
@@ -2240,13 +2399,6 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         GEMM_MUL_C_X(a, b, reg[1]); \
     }
 
-#define GEMM_STORE_C(v, off, str, ex, ey, buf)        \
-    {                                                 \
-        GEMM_STORE_C_X(v[0], off, ex, buf);           \
-        if (ey > 1)                                   \
-            GEMM_STORE_C_X(v[1], off + str, ex, buf); \
-    }
-
 #define GEMM_NT_LOAD_A(v, off, str, buf) \
     {                                    \
         READ_BUF(v[0], off, buf);        \
@@ -2256,6 +2408,11 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
 #define GEMM_LOAD_A(v, off, buf)      \
     {                                 \
         LOAD_BUF_ARRAY3(v, off, buf); \
+    }
+
+#define GEMM_LOAD_BIAS_MATCH_A(v, off, buf) \
+    {                                       \
+        LOAD_BUF_ARRAY3(v, off, buf);       \
     }
 
 #define GEMM_SET_C_BIAS_A(v, reg)          \
@@ -2307,15 +2464,6 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         GEMM_MUL_C_X(a, b, reg[2]); \
     }
 
-#define GEMM_STORE_C(v, off, str, ex, ey, buf)            \
-    {                                                     \
-        GEMM_STORE_C_X(v[0], off, ex, buf);               \
-        if (ey > 1)                                       \
-            GEMM_STORE_C_X(v[1], off + str, ex, buf);     \
-        if (ey > 2)                                       \
-            GEMM_STORE_C_X(v[2], off + str * 2, ex, buf); \
-    }
-
 #define GEMM_NT_LOAD_A(v, off, str, buf)    \
     {                                       \
         READ_BUF(v[0], off, buf);           \
@@ -2323,9 +2471,25 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         READ_BUF(v[2], off + str * 2, buf); \
     }
 #elif (LM == 4)
+#if defined(USE_INPUT_A_IMG)
+#define GEMM_LOAD_A(v, off, buf)                \
+    {                                           \
+        T4 tmp = READ_IMAGE(buf, sampler, off); \
+        v[0] = tmp.x;                           \
+        v[1] = tmp.y;                           \
+        v[2] = tmp.z;                           \
+        v[3] = tmp.w;                           \
+    }
+#else
 #define GEMM_LOAD_A(v, off, buf)      \
     {                                 \
         LOAD_BUF_ARRAY4(v, off, buf); \
+    }
+#endif
+
+#define GEMM_LOAD_BIAS_MATCH_A(v, off, buf) \
+    {                                       \
+        LOAD_BUF_ARRAY4(v, off, buf);       \
     }
 
 #define GEMM_SET_C_BIAS_A(v, reg)          \
@@ -2393,17 +2557,6 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         GEMM_MUL_C_X(a, b, reg[3]); \
     }
 
-#define GEMM_STORE_C(v, off, str, ex, ey, buf)            \
-    {                                                     \
-        GEMM_STORE_C_X(v[0], off, ex, buf);               \
-        if (ey > 1)                                       \
-            GEMM_STORE_C_X(v[1], off + str, ex, buf);     \
-        if (ey > 2)                                       \
-            GEMM_STORE_C_X(v[2], off + str * 2, ex, buf); \
-        if (ey > 3)                                       \
-            GEMM_STORE_C_X(v[3], off + str * 3, ex, buf); \
-    }
-
 #define GEMM_NT_LOAD_A(v, off, str, buf)    \
     {                                       \
         READ_BUF(v[0], off, buf);           \
@@ -2415,6 +2568,11 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
 #define GEMM_LOAD_A(v, off, buf)      \
     {                                 \
         LOAD_BUF_ARRAY5(v, off, buf); \
+    }
+
+#define GEMM_LOAD_BIAS_MATCH_A(v, off, buf) \
+    {                                       \
+        LOAD_BUF_ARRAY5(v, off, buf);       \
     }
 
 #define GEMM_SET_C_BIAS_A(v, reg)          \
@@ -2482,19 +2640,6 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         GEMM_MUL_C_X(a, b, reg[4]); \
     }
 
-#define GEMM_STORE_C(v, off, str, ex, ey, buf)            \
-    {                                                     \
-        GEMM_STORE_C_X(v[0], off, ex, buf);               \
-        if (ey > 1)                                       \
-            GEMM_STORE_C_X(v[1], off + str, ex, buf);     \
-        if (ey > 2)                                       \
-            GEMM_STORE_C_X(v[2], off + str * 2, ex, buf); \
-        if (ey > 3)                                       \
-            GEMM_STORE_C_X(v[3], off + str * 3, ex, buf); \
-        if (ey > 4)                                       \
-            GEMM_STORE_C_X(v[4], off + str * 4, ex, buf); \
-    }
-
 #define GEMM_NT_LOAD_A(v, off, str, buf)    \
     {                                       \
         READ_BUF(v[0], off, buf);           \
@@ -2507,6 +2652,11 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
 #define GEMM_LOAD_A(v, off, buf)      \
     {                                 \
         LOAD_BUF_ARRAY6(v, off, buf); \
+    }
+
+#define GEMM_LOAD_BIAS_MATCH_A(v, off, buf) \
+    {                                       \
+        LOAD_BUF_ARRAY6(v, off, buf);       \
     }
 
 #define GEMM_SET_C_BIAS_A(v, reg)          \
@@ -2582,21 +2732,6 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         GEMM_MUL_C_X(a, b, reg[5]); \
     }
 
-#define GEMM_STORE_C(v, off, str, ex, ey, buf)            \
-    {                                                     \
-        GEMM_STORE_C_X(v[0], off, ex, buf);               \
-        if (ey > 1)                                       \
-            GEMM_STORE_C_X(v[1], off + str, ex, buf);     \
-        if (ey > 2)                                       \
-            GEMM_STORE_C_X(v[2], off + str * 2, ex, buf); \
-        if (ey > 3)                                       \
-            GEMM_STORE_C_X(v[3], off + str * 3, ex, buf); \
-        if (ey > 4)                                       \
-            GEMM_STORE_C_X(v[4], off + str * 4, ex, buf); \
-        if (ey > 5)                                       \
-            GEMM_STORE_C_X(v[5], off + str * 5, ex, buf); \
-    }
-
 #define GEMM_NT_LOAD_A(v, off, str, buf)    \
     {                                       \
         READ_BUF(v[0], off, buf);           \
@@ -2610,6 +2745,11 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
 #define GEMM_LOAD_A(v, off, buf)      \
     {                                 \
         LOAD_BUF_ARRAY7(v, off, buf); \
+    }
+
+#define GEMM_LOAD_BIAS_MATCH_A(v, off, buf) \
+    {                                       \
+        LOAD_BUF_ARRAY7(v, off, buf);       \
     }
 
 #define GEMM_SET_C_BIAS_A(v, reg)          \
@@ -2693,23 +2833,6 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         GEMM_MUL_C_X(a, b, reg[6]); \
     }
 
-#define GEMM_STORE_C(v, off, str, ex, ey, buf)            \
-    {                                                     \
-        GEMM_STORE_C_X(v[0], off, ex, buf);               \
-        if (ey > 1)                                       \
-            GEMM_STORE_C_X(v[1], off + str, ex, buf);     \
-        if (ey > 2)                                       \
-            GEMM_STORE_C_X(v[2], off + str * 2, ex, buf); \
-        if (ey > 3)                                       \
-            GEMM_STORE_C_X(v[3], off + str * 3, ex, buf); \
-        if (ey > 4)                                       \
-            GEMM_STORE_C_X(v[4], off + str * 4, ex, buf); \
-        if (ey > 5)                                       \
-            GEMM_STORE_C_X(v[5], off + str * 5, ex, buf); \
-        if (ey > 6)                                       \
-            GEMM_STORE_C_X(v[6], off + str * 6, ex, buf); \
-    }
-
 #define GEMM_NT_LOAD_A(v, off, str, buf)    \
     {                                       \
         READ_BUF(v[0], off, buf);           \
@@ -2721,9 +2844,30 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         READ_BUF(v[6], off + str * 6, buf); \
     }
 #elif (LM == 8)
+#if defined(USE_INPUT_A_IMG)
+#define GEMM_LOAD_A(v, off, buf)                                                \
+    {                                                                           \
+        T4 tmp = READ_IMAGE(buf, sampler, off);                                 \
+        v[0] = tmp.x;                                                           \
+        v[1] = tmp.y;                                                           \
+        v[2] = tmp.z;                                                           \
+        v[3] = tmp.w;                                                           \
+        tmp = READ_IMAGE(buf, sampler, (int4)(off.x + 1, off.y, off.z, off.w)); \
+        v[4] = tmp.x;                                                           \
+        v[5] = tmp.y;                                                           \
+        v[6] = tmp.z;                                                           \
+        v[7] = tmp.w;                                                           \
+    }
+#else
 #define GEMM_LOAD_A(v, off, buf)      \
     {                                 \
         LOAD_BUF_ARRAY8(v, off, buf); \
+    }
+#endif
+
+#define GEMM_LOAD_BIAS_MATCH_A(v, off, buf) \
+    {                                       \
+        LOAD_BUF_ARRAY8(v, off, buf);       \
     }
 
 #define GEMM_SET_C_BIAS_A(v, reg)          \
@@ -2825,25 +2969,6 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         GEMM_MUL_C_X(a, b, reg[5]); \
         GEMM_MUL_C_X(a, b, reg[6]); \
         GEMM_MUL_C_X(a, b, reg[7]); \
-    }
-
-#define GEMM_STORE_C(v, off, str, ex, ey, buf)            \
-    {                                                     \
-        GEMM_STORE_C_X(v[0], off, ex, buf);               \
-        if (ey > 1)                                       \
-            GEMM_STORE_C_X(v[1], off + str, ex, buf);     \
-        if (ey > 2)                                       \
-            GEMM_STORE_C_X(v[2], off + str * 2, ex, buf); \
-        if (ey > 3)                                       \
-            GEMM_STORE_C_X(v[3], off + str * 3, ex, buf); \
-        if (ey > 4)                                       \
-            GEMM_STORE_C_X(v[4], off + str * 4, ex, buf); \
-        if (ey > 5)                                       \
-            GEMM_STORE_C_X(v[5], off + str * 5, ex, buf); \
-        if (ey > 6)                                       \
-            GEMM_STORE_C_X(v[6], off + str * 6, ex, buf); \
-        if (ey > 7)                                       \
-            GEMM_STORE_C_X(v[7], off + str * 7, ex, buf); \
     }
 
 #define GEMM_NT_LOAD_A(v, off, str, buf)    \
@@ -3175,10 +3300,16 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
  * STORE_OUTPUT_BUF_ARRAY_V4 WITH ACTIVATION
  */
 #if (ON == 1)
-#define STORE_OUTPUT_BUF_ARRAY_V4(V, off, str, id, bd, buf) \
+#define STORE_OUTPUT_MEM_ARRAY_V4(V, i, j, k, id, bd, buf)  \
     {                                                       \
         ACTIVATION_V4(V[0]);                                \
-        vstore4(V[0], off, buf);                            \
+        STORE_MEM_V4_AXIS_Y(V[0], i, j, k, 0, id, bd, buf); \
+    }
+
+#define STORE_OUTPUT_MEM_ARRAY_V4_W(V, off, id, bd, buf) \
+    {                                                    \
+        ACTIVATION_V4(V[0]);                             \
+        vstore4(V[0], off, buf);                         \
     }
 
 #define ADD_ELTWISE_BUF_ARRAY_V4(V, off, str, buf) \
@@ -3186,7 +3317,7 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         V[0] += vload4(off, buf);                  \
     }
 
-#define STORE_OUTPUT_BUF_ARRAY_V4_NCWH(V, off, str_h, str_hw, id, bd, buf) \
+#define STORE_OUTPUT_BUF_ARRAY_V4_NCHW(V, off, str_w, str_hw, id, bd, buf) \
     {                                                                      \
         ACTIVATION_V4(V[0]);                                               \
         buf[off] = V[0].x;                                                 \
@@ -3205,13 +3336,21 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         SET_REG_ARRAY1(v, reg); \
     }
 #elif (ON == 2)
-#define STORE_OUTPUT_BUF_ARRAY_V4(V, off, str, id, bd, buf) \
+#define STORE_OUTPUT_MEM_ARRAY_V4(V, i, j, k, id, bd, buf)  \
     {                                                       \
         ACTIVATION_V4(V[0]);                                \
         ACTIVATION_V4(V[1]);                                \
-        vstore4(V[0], off, buf);                            \
-        if (id + 1 < bd)                                    \
-            vstore4(V[1], off + str, buf);                  \
+        STORE_MEM_V4_AXIS_Y(V[0], i, j, k, 0, id, bd, buf); \
+        STORE_MEM_V4_AXIS_Y(V[1], i, j, k, 1, id, bd, buf); \
+    }
+#define STORE_OUTPUT_MEM_ARRAY_V4_W(V, off, id, bd, buf) \
+    {                                                    \
+        ACTIVATION_V4(V[0]);                             \
+        ACTIVATION_V4(V[1]);                             \
+        vstore4(V[0], off, buf);                         \
+        if (id + 1 < bd) {                               \
+            vstore4(V[1], off + 1, buf);                 \
+        }                                                \
     }
 
 #define ADD_ELTWISE_BUF_ARRAY_V4(V, off, str, buf) \
@@ -3220,7 +3359,7 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         V[1] += vload4(off + str, buf);            \
     }
 
-#define STORE_OUTPUT_BUF_ARRAY_V4_NCWH(V, off, str_h, str_hw, id, bd, buf) \
+#define STORE_OUTPUT_BUF_ARRAY_V4_NCHW(V, off, str_w, str_hw, id, bd, buf) \
     {                                                                      \
         ACTIVATION_V4(V[0]);                                               \
         ACTIVATION_V4(V[1]);                                               \
@@ -3229,10 +3368,10 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         buf[off + str_hw * 2] = V[0].z;                                    \
         buf[off + str_hw * 3] = V[0].w;                                    \
         if (id + 1 < bd) {                                                 \
-            buf[off + str_h] = V[1].x;                                     \
-            buf[off + str_h + str_hw] = V[1].y;                            \
-            buf[off + str_h + str_hw * 2] = V[1].z;                        \
-            buf[off + str_h + str_hw * 3] = V[1].w;                        \
+            buf[off + str_w] = V[1].x;                                     \
+            buf[off + str_w + str_hw] = V[1].y;                            \
+            buf[off + str_w + str_hw * 2] = V[1].z;                        \
+            buf[off + str_w + str_hw * 3] = V[1].w;                        \
         }                                                                  \
     }
 
@@ -3247,16 +3386,27 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         SET_REG_ARRAY2(v, reg); \
     }
 #elif (ON == 3)
-#define STORE_OUTPUT_BUF_ARRAY_V4(V, off, str, id, bd, buf) \
+#define STORE_OUTPUT_MEM_ARRAY_V4(V, i, j, k, id, bd, buf)  \
     {                                                       \
         ACTIVATION_V4(V[0]);                                \
         ACTIVATION_V4(V[1]);                                \
         ACTIVATION_V4(V[2]);                                \
-        vstore4(V[0], off, buf);                            \
-        if (id + 1 < bd)                                    \
-            vstore4(V[1], off + str, buf);                  \
-        if (id + 2 < bd)                                    \
-            vstore4(V[2], off + str * 2, buf);              \
+        STORE_MEM_V4_AXIS_Y(V[0], i, j, k, 0, id, bd, buf); \
+        STORE_MEM_V4_AXIS_Y(V[1], i, j, k, 1, id, bd, buf); \
+        STORE_MEM_V4_AXIS_Y(V[2], i, j, k, 2, id, bd, buf); \
+    }
+#define STORE_OUTPUT_MEM_ARRAY_V4_W(V, off, id, bd, buf) \
+    {                                                    \
+        ACTIVATION_V4(V[0]);                             \
+        ACTIVATION_V4(V[1]);                             \
+        ACTIVATION_V4(V[2]);                             \
+        vstore4(V[0], off, buf);                         \
+        if (id + 1 < bd) {                               \
+            vstore4(V[1], off + 1, buf);                 \
+        }                                                \
+        if (id + 2 < bd) {                               \
+            vstore4(V[2], off + 2, buf);                 \
+        }                                                \
     }
 
 #define ADD_ELTWISE_BUF_ARRAY_V4(V, off, str, buf) \
@@ -3266,7 +3416,7 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         V[2] += vload4(off + str * 2, buf);        \
     }
 
-#define STORE_OUTPUT_BUF_ARRAY_V4_NCWH(V, off, str_h, str_hw, id, bd, buf) \
+#define STORE_OUTPUT_BUF_ARRAY_V4_NCHW(V, off, str_w, str_hw, id, bd, buf) \
     {                                                                      \
         ACTIVATION_V4(V[0]);                                               \
         ACTIVATION_V4(V[1]);                                               \
@@ -3276,16 +3426,16 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         buf[off + str_hw * 2] = V[0].z;                                    \
         buf[off + str_hw * 3] = V[0].w;                                    \
         if (id + 1 < bd) {                                                 \
-            buf[off + str_h] = V[1].x;                                     \
-            buf[off + str_h + str_hw] = V[1].y;                            \
-            buf[off + str_h + str_hw * 2] = V[1].z;                        \
-            buf[off + str_h + str_hw * 3] = V[1].w;                        \
+            buf[off + str_w] = V[1].x;                                     \
+            buf[off + str_w + str_hw] = V[1].y;                            \
+            buf[off + str_w + str_hw * 2] = V[1].z;                        \
+            buf[off + str_w + str_hw * 3] = V[1].w;                        \
         }                                                                  \
         if (id + 2 < bd) {                                                 \
-            buf[off + str_h * 2] = V[2].x;                                 \
-            buf[off + str_h * 2 + str_hw] = V[2].y;                        \
-            buf[off + str_h * 2 + str_hw * 2] = V[2].z;                    \
-            buf[off + str_h * 2 + str_hw * 3] = V[2].w;                    \
+            buf[off + str_w * 2] = V[2].x;                                 \
+            buf[off + str_w * 2 + str_hw] = V[2].y;                        \
+            buf[off + str_w * 2 + str_hw * 2] = V[2].z;                    \
+            buf[off + str_w * 2 + str_hw * 3] = V[2].w;                    \
         }                                                                  \
     }
 
@@ -3301,19 +3451,33 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         SET_REG_ARRAY3(v, reg); \
     }
 #elif (ON == 4)
-#define STORE_OUTPUT_BUF_ARRAY_V4(V, off, str, id, bd, buf) \
+#define STORE_OUTPUT_MEM_ARRAY_V4(V, i, j, k, id, bd, buf)  \
     {                                                       \
         ACTIVATION_V4(V[0]);                                \
         ACTIVATION_V4(V[1]);                                \
         ACTIVATION_V4(V[2]);                                \
         ACTIVATION_V4(V[3]);                                \
-        vstore4(V[0], off, buf);                            \
-        if (id + 1 < bd)                                    \
-            vstore4(V[1], off + str, buf);                  \
-        if (id + 2 < bd)                                    \
-            vstore4(V[2], off + str * 2, buf);              \
-        if (id + 3 < bd)                                    \
-            vstore4(V[3], off + str * 3, buf);              \
+        STORE_MEM_V4_AXIS_Y(V[0], i, j, k, 0, id, bd, buf); \
+        STORE_MEM_V4_AXIS_Y(V[1], i, j, k, 1, id, bd, buf); \
+        STORE_MEM_V4_AXIS_Y(V[2], i, j, k, 2, id, bd, buf); \
+        STORE_MEM_V4_AXIS_Y(V[3], i, j, k, 3, id, bd, buf); \
+    }
+#define STORE_OUTPUT_MEM_ARRAY_V4_W(V, off, id, bd, buf) \
+    {                                                    \
+        ACTIVATION_V4(V[0]);                             \
+        ACTIVATION_V4(V[1]);                             \
+        ACTIVATION_V4(V[2]);                             \
+        ACTIVATION_V4(V[3]);                             \
+        vstore4(V[0], off, buf);                         \
+        if (id + 1 < bd) {                               \
+            vstore4(V[1], off + 1, buf);                 \
+        }                                                \
+        if (id + 2 < bd) {                               \
+            vstore4(V[2], off + 2, buf);                 \
+        }                                                \
+        if (id + 3 < bd) {                               \
+            vstore4(V[3], off + 3, buf);                 \
+        }                                                \
     }
 
 #define ADD_ELTWISE_BUF_ARRAY_V4(V, off, str, buf) \
@@ -3324,7 +3488,7 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         V[3] += vload4(off + str * 3, buf);        \
     }
 
-#define STORE_OUTPUT_BUF_ARRAY_V4_NCWH(V, off, str_h, str_hw, id, bd, buf) \
+#define STORE_OUTPUT_BUF_ARRAY_V4_NCHW(V, off, str_w, str_hw, id, bd, buf) \
     {                                                                      \
         ACTIVATION_V4(V[0]);                                               \
         ACTIVATION_V4(V[1]);                                               \
@@ -3335,22 +3499,22 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         buf[off + str_hw * 2] = V[0].z;                                    \
         buf[off + str_hw * 3] = V[0].w;                                    \
         if (id + 1 < bd) {                                                 \
-            buf[off + str_h] = V[1].x;                                     \
-            buf[off + str_h + str_hw] = V[1].y;                            \
-            buf[off + str_h + str_hw * 2] = V[1].z;                        \
-            buf[off + str_h + str_hw * 3] = V[1].w;                        \
+            buf[off + str_w] = V[1].x;                                     \
+            buf[off + str_w + str_hw] = V[1].y;                            \
+            buf[off + str_w + str_hw * 2] = V[1].z;                        \
+            buf[off + str_w + str_hw * 3] = V[1].w;                        \
         }                                                                  \
         if (id + 2 < bd) {                                                 \
-            buf[off + str_h * 2] = V[2].x;                                 \
-            buf[off + str_h * 2 + str_hw] = V[2].y;                        \
-            buf[off + str_h * 2 + str_hw * 2] = V[2].z;                    \
-            buf[off + str_h * 2 + str_hw * 3] = V[2].w;                    \
+            buf[off + str_w * 2] = V[2].x;                                 \
+            buf[off + str_w * 2 + str_hw] = V[2].y;                        \
+            buf[off + str_w * 2 + str_hw * 2] = V[2].z;                    \
+            buf[off + str_w * 2 + str_hw * 3] = V[2].w;                    \
         }                                                                  \
         if (id + 3 < bd) {                                                 \
-            buf[off + str_h * 3] = V[3].x;                                 \
-            buf[off + str_h * 3 + str_hw] = V[3].y;                        \
-            buf[off + str_h * 3 + str_hw * 2] = V[3].z;                    \
-            buf[off + str_h * 3 + str_hw * 3] = V[3].w;                    \
+            buf[off + str_w * 3] = V[3].x;                                 \
+            buf[off + str_w * 3 + str_hw] = V[3].y;                        \
+            buf[off + str_w * 3 + str_hw * 2] = V[3].z;                    \
+            buf[off + str_w * 3 + str_hw * 3] = V[3].w;                    \
         }                                                                  \
     }
 
@@ -3367,22 +3531,39 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         SET_REG_ARRAY4(v, reg); \
     }
 #elif (ON == 5)
-#define STORE_OUTPUT_BUF_ARRAY_V4(V, off, str, id, bd, buf) \
+#define STORE_OUTPUT_MEM_ARRAY_V4(V, i, j, k, id, bd, buf)  \
     {                                                       \
         ACTIVATION_V4(V[0]);                                \
         ACTIVATION_V4(V[1]);                                \
         ACTIVATION_V4(V[2]);                                \
         ACTIVATION_V4(V[3]);                                \
         ACTIVATION_V4(V[4]);                                \
-        vstore4(V[0], off, buf);                            \
-        if (id + 1 < bd)                                    \
-            vstore4(V[1], off + str, buf);                  \
-        if (id + 2 < bd)                                    \
-            vstore4(V[2], off + str * 2, buf);              \
-        if (id + 3 < bd)                                    \
-            vstore4(V[3], off + str * 3, buf);              \
-        if (id + 4 < bd)                                    \
-            vstore4(V[4], off + str * 4, buf);              \
+        STORE_MEM_V4_AXIS_Y(V[0], i, j, k, 0, id, bd, buf); \
+        STORE_MEM_V4_AXIS_Y(V[1], i, j, k, 1, id, bd, buf); \
+        STORE_MEM_V4_AXIS_Y(V[2], i, j, k, 2, id, bd, buf); \
+        STORE_MEM_V4_AXIS_Y(V[3], i, j, k, 3, id, bd, buf); \
+        STORE_MEM_V4_AXIS_Y(V[4], i, j, k, 4, id, bd, buf); \
+    }
+#define STORE_OUTPUT_MEM_ARRAY_V4_W(V, off, id, bd, buf) \
+    {                                                    \
+        ACTIVATION_V4(V[0]);                             \
+        ACTIVATION_V4(V[1]);                             \
+        ACTIVATION_V4(V[2]);                             \
+        ACTIVATION_V4(V[3]);                             \
+        ACTIVATION_V4(V[4]);                             \
+        vstore4(V[0], off, buf);                         \
+        if (id + 1 < bd) {                               \
+            vstore4(V[1], off + 1, buf);                 \
+        }                                                \
+        if (id + 2 < bd) {                               \
+            vstore4(V[2], off + 2, buf);                 \
+        }                                                \
+        if (id + 3 < bd) {                               \
+            vstore4(V[3], off + 3, buf);                 \
+        }                                                \
+        if (id + 4 < bd) {                               \
+            vstore4(V[4], off + 4, buf);                 \
+        }                                                \
     }
 
 #define ADD_ELTWISE_BUF_ARRAY_V4(V, off, str, buf) \
@@ -3394,7 +3575,7 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         V[4] += vload4(off + str * 4, buf);        \
     }
 
-#define STORE_OUTPUT_BUF_ARRAY_V4_NCWH(V, off, str_h, str_hw, id, bd, buf) \
+#define STORE_OUTPUT_BUF_ARRAY_V4_NCHW(V, off, str_w, str_hw, id, bd, buf) \
     {                                                                      \
         ACTIVATION_V4(V[0]);                                               \
         ACTIVATION_V4(V[1]);                                               \
@@ -3406,28 +3587,28 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         buf[off + str_hw * 2] = V[0].z;                                    \
         buf[off + str_hw * 3] = V[0].w;                                    \
         if (id + 1 < bd) {                                                 \
-            buf[off + str_h] = V[1].x;                                     \
-            buf[off + str_h + str_hw] = V[1].y;                            \
-            buf[off + str_h + str_hw * 2] = V[1].z;                        \
-            buf[off + str_h + str_hw * 3] = V[1].w;                        \
+            buf[off + str_w] = V[1].x;                                     \
+            buf[off + str_w + str_hw] = V[1].y;                            \
+            buf[off + str_w + str_hw * 2] = V[1].z;                        \
+            buf[off + str_w + str_hw * 3] = V[1].w;                        \
         }                                                                  \
         if (id + 2 < bd) {                                                 \
-            buf[off + str_h * 2] = V[2].x;                                 \
-            buf[off + str_h * 2 + str_hw] = V[2].y;                        \
-            buf[off + str_h * 2 + str_hw * 2] = V[2].z;                    \
-            buf[off + str_h * 2 + str_hw * 3] = V[2].w;                    \
+            buf[off + str_w * 2] = V[2].x;                                 \
+            buf[off + str_w * 2 + str_hw] = V[2].y;                        \
+            buf[off + str_w * 2 + str_hw * 2] = V[2].z;                    \
+            buf[off + str_w * 2 + str_hw * 3] = V[2].w;                    \
         }                                                                  \
         if (id + 3 < bd) {                                                 \
-            buf[off + str_h * 3] = V[3].x;                                 \
-            buf[off + str_h * 3 + str_hw] = V[3].y;                        \
-            buf[off + str_h * 3 + str_hw * 2] = V[3].z;                    \
-            buf[off + str_h * 3 + str_hw * 3] = V[3].w;                    \
+            buf[off + str_w * 3] = V[3].x;                                 \
+            buf[off + str_w * 3 + str_hw] = V[3].y;                        \
+            buf[off + str_w * 3 + str_hw * 2] = V[3].z;                    \
+            buf[off + str_w * 3 + str_hw * 3] = V[3].w;                    \
         }                                                                  \
         if (id + 4 < bd) {                                                 \
-            buf[off + str_h * 4] = V[4].x;                                 \
-            buf[off + str_h * 4 + str_hw] = V[4].y;                        \
-            buf[off + str_h * 4 + str_hw * 2] = V[4].z;                    \
-            buf[off + str_h * 4 + str_hw * 3] = V[4].w;                    \
+            buf[off + str_w * 4] = V[4].x;                                 \
+            buf[off + str_w * 4 + str_hw] = V[4].y;                        \
+            buf[off + str_w * 4 + str_hw * 2] = V[4].z;                    \
+            buf[off + str_w * 4 + str_hw * 3] = V[4].w;                    \
         }                                                                  \
     }
 
@@ -3436,7 +3617,7 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         SET_REG_ARRAY5(v, reg); \
     }
 #elif (ON == 6)
-#define STORE_OUTPUT_BUF_ARRAY_V4(V, off, str, id, bd, buf) \
+#define STORE_OUTPUT_MEM_ARRAY_V4(V, i, j, k, id, bd, buf)  \
     {                                                       \
         ACTIVATION_V4(V[0]);                                \
         ACTIVATION_V4(V[1]);                                \
@@ -3444,17 +3625,37 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         ACTIVATION_V4(V[3]);                                \
         ACTIVATION_V4(V[4]);                                \
         ACTIVATION_V4(V[5]);                                \
-        vstore4(V[0], off, buf);                            \
-        if (id + 1 < bd)                                    \
-            vstore4(V[1], off + str, buf);                  \
-        if (id + 2 < bd)                                    \
-            vstore4(V[2], off + str * 2, buf);              \
-        if (id + 3 < bd)                                    \
-            vstore4(V[3], off + str * 3, buf);              \
-        if (id + 4 < bd)                                    \
-            vstore4(V[4], off + str * 4, buf);              \
-        if (id + 5 < bd)                                    \
-            vstore4(V[5], off + str * 5, buf);              \
+        STORE_MEM_V4_AXIS_Y(V[0], i, j, k, 0, id, bd, buf); \
+        STORE_MEM_V4_AXIS_Y(V[1], i, j, k, 1, id, bd, buf); \
+        STORE_MEM_V4_AXIS_Y(V[2], i, j, k, 2, id, bd, buf); \
+        STORE_MEM_V4_AXIS_Y(V[3], i, j, k, 3, id, bd, buf); \
+        STORE_MEM_V4_AXIS_Y(V[4], i, j, k, 4, id, bd, buf); \
+        STORE_MEM_V4_AXIS_Y(V[5], i, j, k, 5, id, bd, buf); \
+    }
+#define STORE_OUTPUT_MEM_ARRAY_V4_W(V, off, id, bd, buf) \
+    {                                                    \
+        ACTIVATION_V4(V[0]);                             \
+        ACTIVATION_V4(V[1]);                             \
+        ACTIVATION_V4(V[2]);                             \
+        ACTIVATION_V4(V[3]);                             \
+        ACTIVATION_V4(V[4]);                             \
+        ACTIVATION_V4(V[5]);                             \
+        vstore4(V[0], off, buf);                         \
+        if (id + 1 < bd) {                               \
+            vstore4(V[1], off + 1, buf);                 \
+        }                                                \
+        if (id + 2 < bd) {                               \
+            vstore4(V[2], off + 2, buf);                 \
+        }                                                \
+        if (id + 3 < bd) {                               \
+            vstore4(V[3], off + 3, buf);                 \
+        }                                                \
+        if (id + 4 < bd) {                               \
+            vstore4(V[4], off + 4, buf);                 \
+        }                                                \
+        if (id + 5 < bd) {                               \
+            vstore4(V[5], off + 5, buf);                 \
+        }                                                \
     }
 
 #define ADD_ELTWISE_BUF_ARRAY_V4(V, off, str, buf) \
@@ -3467,7 +3668,7 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         V[5] += vload4(off + str * 5, buf);        \
     }
 
-#define STORE_OUTPUT_BUF_ARRAY_V4_NCWH(V, off, str_h, str_hw, id, bd, buf) \
+#define STORE_OUTPUT_BUF_ARRAY_V4_NCHW(V, off, str_w, str_hw, id, bd, buf) \
     {                                                                      \
         ACTIVATION_V4(V[0]);                                               \
         ACTIVATION_V4(V[1]);                                               \
@@ -3480,34 +3681,34 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         buf[off + str_hw * 2] = V[0].z;                                    \
         buf[off + str_hw * 3] = V[0].w;                                    \
         if (id + 1 < bd) {                                                 \
-            buf[off + str_h] = V[1].x;                                     \
-            buf[off + str_h + str_hw] = V[1].y;                            \
-            buf[off + str_h + str_hw * 2] = V[1].z;                        \
-            buf[off + str_h + str_hw * 3] = V[1].w;                        \
+            buf[off + str_w] = V[1].x;                                     \
+            buf[off + str_w + str_hw] = V[1].y;                            \
+            buf[off + str_w + str_hw * 2] = V[1].z;                        \
+            buf[off + str_w + str_hw * 3] = V[1].w;                        \
         }                                                                  \
         if (id + 2 < bd) {                                                 \
-            buf[off + str_h * 2] = V[2].x;                                 \
-            buf[off + str_h * 2 + str_hw] = V[2].y;                        \
-            buf[off + str_h * 2 + str_hw * 2] = V[2].z;                    \
-            buf[off + str_h * 2 + str_hw * 3] = V[2].w;                    \
+            buf[off + str_w * 2] = V[2].x;                                 \
+            buf[off + str_w * 2 + str_hw] = V[2].y;                        \
+            buf[off + str_w * 2 + str_hw * 2] = V[2].z;                    \
+            buf[off + str_w * 2 + str_hw * 3] = V[2].w;                    \
         }                                                                  \
         if (id + 3 < bd) {                                                 \
-            buf[off + str_h * 3] = V[3].x;                                 \
-            buf[off + str_h * 3 + str_hw] = V[3].y;                        \
-            buf[off + str_h * 3 + str_hw * 2] = V[3].z;                    \
-            buf[off + str_h * 3 + str_hw * 3] = V[3].w;                    \
+            buf[off + str_w * 3] = V[3].x;                                 \
+            buf[off + str_w * 3 + str_hw] = V[3].y;                        \
+            buf[off + str_w * 3 + str_hw * 2] = V[3].z;                    \
+            buf[off + str_w * 3 + str_hw * 3] = V[3].w;                    \
         }                                                                  \
         if (id + 4 < bd) {                                                 \
-            buf[off + str_h * 4] = V[4].x;                                 \
-            buf[off + str_h * 4 + str_hw] = V[4].y;                        \
-            buf[off + str_h * 4 + str_hw * 2] = V[4].z;                    \
-            buf[off + str_h * 4 + str_hw * 3] = V[4].w;                    \
+            buf[off + str_w * 4] = V[4].x;                                 \
+            buf[off + str_w * 4 + str_hw] = V[4].y;                        \
+            buf[off + str_w * 4 + str_hw * 2] = V[4].z;                    \
+            buf[off + str_w * 4 + str_hw * 3] = V[4].w;                    \
         }                                                                  \
         if (id + 5 < bd) {                                                 \
-            buf[off + str_h * 5] = V[5].x;                                 \
-            buf[off + str_h * 5 + str_hw] = V[5].y;                        \
-            buf[off + str_h * 5 + str_hw * 2] = V[5].z;                    \
-            buf[off + str_h * 5 + str_hw * 3] = V[5].w;                    \
+            buf[off + str_w * 5] = V[5].x;                                 \
+            buf[off + str_w * 5 + str_hw] = V[5].y;                        \
+            buf[off + str_w * 5 + str_hw * 2] = V[5].z;                    \
+            buf[off + str_w * 5 + str_hw * 3] = V[5].w;                    \
         }                                                                  \
     }
 
@@ -3516,7 +3717,7 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         SET_REG_ARRAY6(v, reg); \
     }
 #elif (ON == 7)
-#define STORE_OUTPUT_BUF_ARRAY_V4(V, off, str, id, bd, buf) \
+#define STORE_OUTPUT_MEM_ARRAY_V4(V, i, j, k, id, bd, buf)  \
     {                                                       \
         ACTIVATION_V4(V[0]);                                \
         ACTIVATION_V4(V[1]);                                \
@@ -3525,19 +3726,42 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         ACTIVATION_V4(V[4]);                                \
         ACTIVATION_V4(V[5]);                                \
         ACTIVATION_V4(V[6]);                                \
-        vstore4(V[0], off, buf);                            \
-        if (id + 1 < bd)                                    \
-            vstore4(V[1], off + str, buf);                  \
-        if (id + 2 < bd)                                    \
-            vstore4(V[2], off + str * 2, buf);              \
-        if (id + 3 < bd)                                    \
-            vstore4(V[3], off + str * 3, buf);              \
-        if (id + 4 < bd)                                    \
-            vstore4(V[4], off + str * 4, buf);              \
-        if (id + 5 < bd)                                    \
-            vstore4(V[5], off + str * 5, buf);              \
-        if (id + 6 < bd)                                    \
-            vstore4(V[6], off + str * 6, buf);              \
+        STORE_MEM_V4_AXIS_Y(V[0], i, j, k, 0, id, bd, buf); \
+        STORE_MEM_V4_AXIS_Y(V[1], i, j, k, 1, id, bd, buf); \
+        STORE_MEM_V4_AXIS_Y(V[2], i, j, k, 2, id, bd, buf); \
+        STORE_MEM_V4_AXIS_Y(V[3], i, j, k, 3, id, bd, buf); \
+        STORE_MEM_V4_AXIS_Y(V[4], i, j, k, 4, id, bd, buf); \
+        STORE_MEM_V4_AXIS_Y(V[5], i, j, k, 5, id, bd, buf); \
+        STORE_MEM_V4_AXIS_Y(V[6], i, j, k, 6, id, bd, buf); \
+    }
+#define STORE_OUTPUT_MEM_ARRAY_V4_W(V, off, id, bd, buf) \
+    {                                                    \
+        ACTIVATION_V4(V[0]);                             \
+        ACTIVATION_V4(V[1]);                             \
+        ACTIVATION_V4(V[2]);                             \
+        ACTIVATION_V4(V[3]);                             \
+        ACTIVATION_V4(V[4]);                             \
+        ACTIVATION_V4(V[5]);                             \
+        ACTIVATION_V4(V[6]);                             \
+        vstore4(V[0], off, buf);                         \
+        if (id + 1 < bd) {                               \
+            vstore4(V[1], off + 1, buf);                 \
+        }                                                \
+        if (id + 2 < bd) {                               \
+            vstore4(V[2], off + 2, buf);                 \
+        }                                                \
+        if (id + 3 < bd) {                               \
+            vstore4(V[3], off + 3, buf);                 \
+        }                                                \
+        if (id + 4 < bd) {                               \
+            vstore4(V[4], off + 4, buf);                 \
+        }                                                \
+        if (id + 5 < bd) {                               \
+            vstore4(V[5], off + 5, buf);                 \
+        }                                                \
+        if (id + 6 < bd) {                               \
+            vstore4(V[6], off + 6, buf);                 \
+        }                                                \
     }
 
 #define ADD_ELTWISE_BUF_ARRAY_V4(V, off, str, buf) \
@@ -3551,7 +3775,7 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         V[6] += vload4(off + str * 6, buf);        \
     }
 
-#define STORE_OUTPUT_BUF_ARRAY_V4_NCWH(V, off, str_h, str_hw, id, bd, buf) \
+#define STORE_OUTPUT_BUF_ARRAY_V4_NCHW(V, off, str_w, str_hw, id, bd, buf) \
     {                                                                      \
         ACTIVATION_V4(V[0]);                                               \
         ACTIVATION_V4(V[1]);                                               \
@@ -3565,40 +3789,40 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         buf[off + str_hw * 2] = V[0].z;                                    \
         buf[off + str_hw * 3] = V[0].w;                                    \
         if (id + 1 < bd) {                                                 \
-            buf[off + str_h] = V[1].x;                                     \
-            buf[off + str_h + str_hw] = V[1].y;                            \
-            buf[off + str_h + str_hw * 2] = V[1].z;                        \
-            buf[off + str_h + str_hw * 3] = V[1].w;                        \
+            buf[off + str_w] = V[1].x;                                     \
+            buf[off + str_w + str_hw] = V[1].y;                            \
+            buf[off + str_w + str_hw * 2] = V[1].z;                        \
+            buf[off + str_w + str_hw * 3] = V[1].w;                        \
         }                                                                  \
         if (id + 2 < bd) {                                                 \
-            buf[off + str_h * 2] = V[2].x;                                 \
-            buf[off + str_h * 2 + str_hw] = V[2].y;                        \
-            buf[off + str_h * 2 + str_hw * 2] = V[2].z;                    \
-            buf[off + str_h * 2 + str_hw * 3] = V[2].w;                    \
+            buf[off + str_w * 2] = V[2].x;                                 \
+            buf[off + str_w * 2 + str_hw] = V[2].y;                        \
+            buf[off + str_w * 2 + str_hw * 2] = V[2].z;                    \
+            buf[off + str_w * 2 + str_hw * 3] = V[2].w;                    \
         }                                                                  \
         if (id + 3 < bd) {                                                 \
-            buf[off + str_h * 3] = V[3].x;                                 \
-            buf[off + str_h * 3 + str_hw] = V[3].y;                        \
-            buf[off + str_h * 3 + str_hw * 2] = V[3].z;                    \
-            buf[off + str_h * 3 + str_hw * 3] = V[3].w;                    \
+            buf[off + str_w * 3] = V[3].x;                                 \
+            buf[off + str_w * 3 + str_hw] = V[3].y;                        \
+            buf[off + str_w * 3 + str_hw * 2] = V[3].z;                    \
+            buf[off + str_w * 3 + str_hw * 3] = V[3].w;                    \
         }                                                                  \
         if (id + 4 < bd) {                                                 \
-            buf[off + str_h * 4] = V[4].x;                                 \
-            buf[off + str_h * 4 + str_hw] = V[4].y;                        \
-            buf[off + str_h * 4 + str_hw * 2] = V[4].z;                    \
-            buf[off + str_h * 4 + str_hw * 3] = V[4].w;                    \
+            buf[off + str_w * 4] = V[4].x;                                 \
+            buf[off + str_w * 4 + str_hw] = V[4].y;                        \
+            buf[off + str_w * 4 + str_hw * 2] = V[4].z;                    \
+            buf[off + str_w * 4 + str_hw * 3] = V[4].w;                    \
         }                                                                  \
         if (id + 5 < bd) {                                                 \
-            buf[off + str_h * 5] = V[5].x;                                 \
-            buf[off + str_h * 5 + str_hw] = V[5].y;                        \
-            buf[off + str_h * 5 + str_hw * 2] = V[5].z;                    \
-            buf[off + str_h * 5 + str_hw * 3] = V[5].w;                    \
+            buf[off + str_w * 5] = V[5].x;                                 \
+            buf[off + str_w * 5 + str_hw] = V[5].y;                        \
+            buf[off + str_w * 5 + str_hw * 2] = V[5].z;                    \
+            buf[off + str_w * 5 + str_hw * 3] = V[5].w;                    \
         }                                                                  \
         if (id + 6 < bd) {                                                 \
-            buf[off + str_h * 6] = V[6].x;                                 \
-            buf[off + str_h * 6 + str_hw] = V[6].y;                        \
-            buf[off + str_h * 6 + str_hw * 2] = V[6].z;                    \
-            buf[off + str_h * 6 + str_hw * 3] = V[6].w;                    \
+            buf[off + str_w * 6] = V[6].x;                                 \
+            buf[off + str_w * 6 + str_hw] = V[6].y;                        \
+            buf[off + str_w * 6 + str_hw * 2] = V[6].z;                    \
+            buf[off + str_w * 6 + str_hw * 3] = V[6].w;                    \
         }                                                                  \
     }
 
@@ -3607,7 +3831,7 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         SET_REG_ARRAY7(v, reg); \
     }
 #elif (ON == 8)
-#define STORE_OUTPUT_BUF_ARRAY_V4(V, off, str, id, bd, buf) \
+#define STORE_OUTPUT_MEM_ARRAY_V4(V, i, j, k, id, bd, buf)  \
     {                                                       \
         ACTIVATION_V4(V[0]);                                \
         ACTIVATION_V4(V[1]);                                \
@@ -3617,21 +3841,48 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         ACTIVATION_V4(V[5]);                                \
         ACTIVATION_V4(V[6]);                                \
         ACTIVATION_V4(V[7]);                                \
-        vstore4(V[0], off, buf);                            \
-        if (id + 1 < bd)                                    \
-            vstore4(V[1], off + str, buf);                  \
-        if (id + 2 < bd)                                    \
-            vstore4(V[2], off + str * 2, buf);              \
-        if (id + 3 < bd)                                    \
-            vstore4(V[3], off + str * 3, buf);              \
-        if (id + 4 < bd)                                    \
-            vstore4(V[4], off + str * 4, buf);              \
-        if (id + 5 < bd)                                    \
-            vstore4(V[5], off + str * 5, buf);              \
-        if (id + 6 < bd)                                    \
-            vstore4(V[6], off + str * 6, buf);              \
-        if (id + 7 < bd)                                    \
-            vstore4(V[7], off + str * 7, buf);              \
+        STORE_MEM_V4_AXIS_Y(V[0], i, j, k, 0, id, bd, buf); \
+        STORE_MEM_V4_AXIS_Y(V[1], i, j, k, 1, id, bd, buf); \
+        STORE_MEM_V4_AXIS_Y(V[2], i, j, k, 2, id, bd, buf); \
+        STORE_MEM_V4_AXIS_Y(V[3], i, j, k, 3, id, bd, buf); \
+        STORE_MEM_V4_AXIS_Y(V[4], i, j, k, 4, id, bd, buf); \
+        STORE_MEM_V4_AXIS_Y(V[5], i, j, k, 5, id, bd, buf); \
+        STORE_MEM_V4_AXIS_Y(V[6], i, j, k, 6, id, bd, buf); \
+        STORE_MEM_V4_AXIS_Y(V[7], i, j, k, 7, id, bd, buf); \
+    }
+
+#define STORE_OUTPUT_MEM_ARRAY_V4_W(V, off, id, bd, buf) \
+    {                                                    \
+        ACTIVATION_V4(V[0]);                             \
+        ACTIVATION_V4(V[1]);                             \
+        ACTIVATION_V4(V[2]);                             \
+        ACTIVATION_V4(V[3]);                             \
+        ACTIVATION_V4(V[4]);                             \
+        ACTIVATION_V4(V[5]);                             \
+        ACTIVATION_V4(V[6]);                             \
+        ACTIVATION_V4(V[7]);                             \
+        vstore4(V[0], off, buf);                         \
+        if (id + 1 < bd) {                               \
+            vstore4(V[1], off + 1, buf);                 \
+        }                                                \
+        if (id + 2 < bd) {                               \
+            vstore4(V[2], off + 2, buf);                 \
+        }                                                \
+        if (id + 3 < bd) {                               \
+            vstore4(V[3], off + 3, buf);                 \
+        }                                                \
+        if (id + 4 < bd) {                               \
+            vstore4(V[4], off + 4, buf);                 \
+        }                                                \
+        if (id + 5 < bd) {                               \
+            vstore4(V[5], off + 5, buf);                 \
+        }                                                \
+        if (id + 6 < bd) {                               \
+            vstore4(V[6], off + 6, buf);                 \
+        }                                                \
+        if (id + 7 < bd) {                               \
+            vstore4(V[7], off + 7, buf);                 \
+        }                                                \
     }
 
 #define ADD_ELTWISE_BUF_ARRAY_V4(V, off, str, buf) \
@@ -3646,7 +3897,7 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         V[7] += vload4(off + str * 7, buf);        \
     }
 
-#define STORE_OUTPUT_BUF_ARRAY_V4_NCWH(V, off, str_h, str_hw, id, bd, buf) \
+#define STORE_OUTPUT_BUF_ARRAY_V4_NCHW(V, off, str_w, str_hw, id, bd, buf) \
     {                                                                      \
         ACTIVATION_V4(V[0]);                                               \
         ACTIVATION_V4(V[1]);                                               \
@@ -3661,46 +3912,46 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         buf[off + str_hw * 2] = V[0].z;                                    \
         buf[off + str_hw * 3] = V[0].w;                                    \
         if (id + 1 < bd) {                                                 \
-            buf[off + str_h] = V[1].x;                                     \
-            buf[off + str_h + str_hw] = V[1].y;                            \
-            buf[off + str_h + str_hw * 2] = V[1].z;                        \
-            buf[off + str_h + str_hw * 3] = V[1].w;                        \
+            buf[off + str_w] = V[1].x;                                     \
+            buf[off + str_w + str_hw] = V[1].y;                            \
+            buf[off + str_w + str_hw * 2] = V[1].z;                        \
+            buf[off + str_w + str_hw * 3] = V[1].w;                        \
         }                                                                  \
         if (id + 2 < bd) {                                                 \
-            buf[off + str_h * 2] = V[2].x;                                 \
-            buf[off + str_h * 2 + str_hw] = V[2].y;                        \
-            buf[off + str_h * 2 + str_hw * 2] = V[2].z;                    \
-            buf[off + str_h * 2 + str_hw * 3] = V[2].w;                    \
+            buf[off + str_w * 2] = V[2].x;                                 \
+            buf[off + str_w * 2 + str_hw] = V[2].y;                        \
+            buf[off + str_w * 2 + str_hw * 2] = V[2].z;                    \
+            buf[off + str_w * 2 + str_hw * 3] = V[2].w;                    \
         }                                                                  \
         if (id + 3 < bd) {                                                 \
-            buf[off + str_h * 3] = V[3].x;                                 \
-            buf[off + str_h * 3 + str_hw] = V[3].y;                        \
-            buf[off + str_h * 3 + str_hw * 2] = V[3].z;                    \
-            buf[off + str_h * 3 + str_hw * 3] = V[3].w;                    \
+            buf[off + str_w * 3] = V[3].x;                                 \
+            buf[off + str_w * 3 + str_hw] = V[3].y;                        \
+            buf[off + str_w * 3 + str_hw * 2] = V[3].z;                    \
+            buf[off + str_w * 3 + str_hw * 3] = V[3].w;                    \
         }                                                                  \
         if (id + 4 < bd) {                                                 \
-            buf[off + str_h * 4] = V[4].x;                                 \
-            buf[off + str_h * 4 + str_hw] = V[4].y;                        \
-            buf[off + str_h * 4 + str_hw * 2] = V[4].z;                    \
-            buf[off + str_h * 4 + str_hw * 3] = V[4].w;                    \
+            buf[off + str_w * 4] = V[4].x;                                 \
+            buf[off + str_w * 4 + str_hw] = V[4].y;                        \
+            buf[off + str_w * 4 + str_hw * 2] = V[4].z;                    \
+            buf[off + str_w * 4 + str_hw * 3] = V[4].w;                    \
         }                                                                  \
         if (id + 5 < bd) {                                                 \
-            buf[off + str_h * 5] = V[5].x;                                 \
-            buf[off + str_h * 5 + str_hw] = V[5].y;                        \
-            buf[off + str_h * 5 + str_hw * 2] = V[5].z;                    \
-            buf[off + str_h * 5 + str_hw * 3] = V[5].w;                    \
+            buf[off + str_w * 5] = V[5].x;                                 \
+            buf[off + str_w * 5 + str_hw] = V[5].y;                        \
+            buf[off + str_w * 5 + str_hw * 2] = V[5].z;                    \
+            buf[off + str_w * 5 + str_hw * 3] = V[5].w;                    \
         }                                                                  \
         if (id + 6 < bd) {                                                 \
-            buf[off + str_h * 6] = V[6].x;                                 \
-            buf[off + str_h * 6 + str_hw] = V[6].y;                        \
-            buf[off + str_h * 6 + str_hw * 2] = V[6].z;                    \
-            buf[off + str_h * 6 + str_hw * 3] = V[6].w;                    \
+            buf[off + str_w * 6] = V[6].x;                                 \
+            buf[off + str_w * 6 + str_hw] = V[6].y;                        \
+            buf[off + str_w * 6 + str_hw * 2] = V[6].z;                    \
+            buf[off + str_w * 6 + str_hw * 3] = V[6].w;                    \
         }                                                                  \
         if (id + 7 < bd) {                                                 \
-            buf[off + str_h * 7] = V[7].x;                                 \
-            buf[off + str_h * 7 + str_hw] = V[7].y;                        \
-            buf[off + str_h * 7 + str_hw * 2] = V[7].z;                    \
-            buf[off + str_h * 7 + str_hw * 3] = V[7].w;                    \
+            buf[off + str_w * 7] = V[7].x;                                 \
+            buf[off + str_w * 7 + str_hw] = V[7].y;                        \
+            buf[off + str_w * 7 + str_hw * 2] = V[7].z;                    \
+            buf[off + str_w * 7 + str_hw * 3] = V[7].w;                    \
         }                                                                  \
     }
 
@@ -3711,10 +3962,10 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
 #endif
 
 #if defined(DILATION2)
-#define LOAD_INPUT_EXCESS_DILATION2(reg, off, str, LN, buf) \
-    {                                                       \
-        reg[LN] = vload4(off + LN * str, buf);              \
-        reg[LN + 1] = vload4(off + (LN + 1) * str, buf);    \
+#define LOAD_INPUT_EXCESS_DILATION2(reg, i, j, k, LN, mem)       \
+    {                                                            \
+        LOAD_MEM_V4_AXIS_Y(reg[LN], i, j, k, LN, mem);           \
+        LOAD_MEM_V4_AXIS_Y(reg[LN + 1], i, j, k, (LN + 1), mem); \
     }
 #if (ON == 3)
 #define UPDATE_REG_DILATION2(reg) \

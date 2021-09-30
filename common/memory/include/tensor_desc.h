@@ -15,11 +15,12 @@
 #define _H_TENSOR_DESC
 
 #include <limits.h>
+#include <string.h>
 #include <vector>
 
 #include "data_type.h"
 #include "error.h"
-#ifdef _USE_MALI
+#ifdef _USE_GPU
 #define CL_TARGET_OPENCL_VERSION 200
 #include "CL/cl.h"
 #endif
@@ -47,7 +48,7 @@ typedef enum {
     DF_NKN32,       // MMM/MVM filter, vectorized for N=32
     DF_NKN64,       // MMM/MVM filter, vectorized for N=64
     DF_NKN32K4,     // int8 MVM filter, vectorized for N=32
-    DF_NCWHC4,      // ocl mali input and output
+    DF_NCHWC4,      // ocl mali input and output
     DF_NCHWC3,      // ocl mali support input rgb
     DF_NHWC,        // ocl mali support input/output
     DF_NCHWN4C4,    // ocl mali conv filter
@@ -60,12 +61,14 @@ typedef enum {
     DF_CHWNC16,     // ocl mali filter
     DF_CHWC8_NCN8,  // fp32 dw_conv, vectorized for C8 and N8
     DF_RGB,
-    DF_HWNCN8,     // fp32 filter for winograd
-    DF_NKN24,      // Optimized MMM filter for FP16
-    DF_NKN12,      // Optimized MMM filter for FP32
-    DF_NKN8,       // Optimized MMM filter for FP32
-    DF_NKN12K4,    // Optimized MMM filter for INT8
-    DF_NKNx_NKN32  // Optimized LSTM filter
+    DF_HWNCN8,      // fp32 filter for winograd
+    DF_NKN24,       // Optimized MMM filter for FP16
+    DF_NKN12,       // Optimized MMM filter for FP32
+    DF_NKN8,        // Optimized MMM filter for FP32
+    DF_NKN12K4,     // Optimized MMM filter for INT8
+    DF_NKNx_NKN32,  // Optimized LSTM filter
+    DF_NCHWC16,     // vectorize for C=16, for input and output
+    DF_NCHWC2NxC4
 } DataFormat;
 
 inline const char *const *DataFormatName()
@@ -73,10 +76,10 @@ inline const char *const *DataFormatName()
     static const char *const names[] = {"DF_NCHW", "DF_NCHWN16", "DF_NCHWC8", "DF_HWNCN16",
         "DF_NHWCN16", "DF_NHWCN8", "DF_HWNCN8C4", "DF_NCHWN8C4", "DF_NCHWN8HW4", "DF_NCHWN16C8",
         "DF_NCHWCxN32", "DF_NCHWCxN24", "DF_NCHWC24", "DF_TRANSPOSE", "DF_NORMAL", "DF_MTK",
-        "DF_MKT", "DF_NK", "DF_NKN16", "DF_NKN32", "DF_NKN64", "DF_NKN32K4", "DF_NCWHC4",
+        "DF_MKT", "DF_NK", "DF_NKN16", "DF_NKN32", "DF_NKN64", "DF_NKN32K4", "DF_NCHWC4",
         "DF_NCHWC3", "DF_NHWC", "DF_NCHWN4C4", "DF_NCHWN4", "DF_HWCN", "DF_NCWHN4C4", "DF_NHWCN4",
         "DF_CHWNC4", "DF_CHWNC8", "DF_CHWNC16", "DF_CHWC8_NCN8", "DF_RGB", "DF_HWNCN8", "DF_NKN24",
-        "DF_NKN12", "DF_NKN8", "DF_NKN12K4", "DF_NKNx_NKN32"};
+        "DF_NKN12", "DF_NKN8", "DF_NKN12K4", "DF_NKNx_NKN32", "DF_NCHWC16", "DF_NCHWC2NxC4"};
     return names;
 }
 
@@ -86,6 +89,13 @@ typedef struct TensorDesc {
     U32 nDims = 0;
     U32 dims[6] = {0};
 } TensorDesc;
+
+inline TensorDesc tensor0d()
+{
+    TensorDesc desc;
+    memset(&desc, 0, sizeof(TensorDesc));
+    return desc;
+}
 
 inline TensorDesc tensor5df(
     DataType dt, DataFormat df, U32 num, U32 numChannels, U32 time, U32 height, U32 width)
@@ -273,9 +283,6 @@ inline EE tensorSelectGet(TensorDesc desc,
     if (df) {
         *df = desc.df;
     }
-    if (time && ndims < 5) {
-        *time = 1;
-    }
     if (ndims == 5) {
         if (width) {
             *width = desc.dims[0];
@@ -304,6 +311,9 @@ inline EE tensorSelectGet(TensorDesc desc,
         }
         if (num) {
             *num = (ndims > 3) ? desc.dims[3] : 1;
+        }
+        if (time) {
+            *time = 1;
         }
     }
     return SUCCESS;
@@ -417,7 +427,7 @@ inline DataFormat getTensorDefaultDataFormat(int nDims)
     return df;
 }
 
-inline std::vector<U32> calculateLocalIndex(U32 index, U32 *dims, U32 nDims)
+inline std::vector<U32> calculateLocalIndex(U32 index, const U32 *dims, U32 nDims)
 {
     std::vector<U32> indexes(nDims);
     for (U32 i = 0; i < nDims; i++) {
@@ -427,7 +437,7 @@ inline std::vector<U32> calculateLocalIndex(U32 index, U32 *dims, U32 nDims)
     return indexes;
 }
 
-inline U32 calculateGlobalIndex(U32 *indexes, U32 *dims, U32 nDims)
+inline U32 calculateGlobalIndex(const U32 *indexes, const U32 *dims, U32 nDims)
 {
     U32 index = 0;
     for (int i = ((int)nDims) - 1; i >= 0; i--) {
@@ -436,7 +446,22 @@ inline U32 calculateGlobalIndex(U32 *indexes, U32 *dims, U32 nDims)
     return index;
 }
 
-#ifdef _USE_MALI
+inline TensorDesc transformDescTo4d(TensorDesc inputDesc)
+{
+    TensorDesc resultDesc;
+    if (tensorIs3d(inputDesc)) {
+        DataType idt;
+        DataFormat idf;
+        U32 in, ic, ih;
+        CHECK_STATUS(tensor3dGet(inputDesc, &idt, &idf, &in, &ic, &ih));
+        resultDesc = tensor4df(idt, idf, in, ic, ih, 1);
+    } else {
+        resultDesc = inputDesc;
+    }
+    return resultDesc;
+}
+
+#ifdef _USE_GPU
 typedef enum {
     GCL_MEM_BUF = 0,
     GCL_MEM_IMG_1D = 1,
@@ -451,7 +476,7 @@ struct GCLMemDesc {
     DataFormat df;
 
     U32 stride[3];
-    U32 offset[3];
+    U32 offset[6];
     GCLMemType memType;
     DataFormat memFormat;
     U32 byteSize;

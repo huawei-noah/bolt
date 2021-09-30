@@ -12,6 +12,7 @@ safe_mkdir() {
 current_dir=${PWD}
 
 cd ${script_dir}
+echo "[INFO] generate bolt gcl code in ${PWD}..."
 safe_mkdir src
 safe_mkdir src/cl
 safe_mkdir src/option

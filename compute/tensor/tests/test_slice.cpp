@@ -31,8 +31,6 @@ int sliceTest(int argc, char **argv, DataType dt)
     for (U32 i = 0; i < p.slice_size; i++) {
         p.slice_points[i] = atoi(argv[7 + i]);
     }
-    ArchInfo archInfo;
-    archInfo.arch = UT_ARCH;
 
     DataFormat df = DF_NCHW;
     TensorDesc inDesc = tensor4df(dt, df, in, ic, ih, iw);
@@ -41,21 +39,21 @@ int sliceTest(int argc, char **argv, DataType dt)
     Tensor inputTensor;
     inputTensor.resize(inDesc);
     inputTensor.alloc();
-    memcpy(get_ptr_from_tensor(inputTensor, UT_ARCH), input, tensorNumBytes(inDesc));
+    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inDesc));
 
     std::vector<Tensor> outputTensors(num);
     std::vector<Tensor *> outputTensorsPtr(num);
     for (I32 i = 0; i < num; i++) {
         outputTensorsPtr[i] = &outputTensors[i];
     }
-    CHECK_STATUS(slice_infer_output_size(&inputTensor, p, outputTensorsPtr, &archInfo));
+    CHECK_STATUS(slice_infer_output_size(&inputTensor, p, outputTensorsPtr, &UT_CPU_ARCHINFO));
     for (I32 i = 0; i < num; i++) {
         outputTensors[i].alloc();
     }
 
     Tensor tmpTensor;
     if (UT_CHECK) {
-        CHECK_STATUS(slice(inputTensor, p, tmpTensor, outputTensors, &archInfo));
+        CHECK_STATUS(slice(inputTensor, p, tmpTensor, outputTensors, &UT_CPU_ARCHINFO));
 
         U32 tmp = 0;
         for (I32 i = 0; i < num; i++) {
@@ -66,7 +64,7 @@ int sliceTest(int argc, char **argv, DataType dt)
 
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        CHECK_STATUS(slice(inputTensor, p, tmpTensor, outputTensors, &archInfo));
+        CHECK_STATUS(slice(inputTensor, p, tmpTensor, outputTensors, &UT_CPU_ARCHINFO));
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;

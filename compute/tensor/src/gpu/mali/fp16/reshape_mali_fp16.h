@@ -18,8 +18,8 @@
 
 EE reshape_infer_forward_tmp_bytes_mali_fp16(TensorDesc inputDesc,
     TensorDesc outputDesc,
-    GCLMemDesc_t gclmemInputDesc,
-    GCLMemDesc_t gclmemOutputDesc,
+    GCLMemDesc gclmemInputDesc,
+    GCLMemDesc gclmemOutputDesc,
     U32 *bytes);
 
 EE reshape_mali_fp16(GCLHandle_t handle,
