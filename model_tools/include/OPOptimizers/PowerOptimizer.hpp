@@ -17,15 +17,15 @@
 #include "OPOptimizer.hpp"
 
 class PowerOptimizer : public OPOptimizer {
+    // scale = 1, shift = 0, pow = 1
     bool optimizeUnusedPower(ModelSpec *spec)
     {
         bool hasOptimized = false;
-        float threshold = 0.0001;
         for (int i = 0; i < spec->num_operator_specs; i++) {
             if (spec->ops[i].type == OT_Power &&
-                UNI_ABS(spec->ops[i].ps.power_spec.scale - 1) < threshold &&
-                UNI_ABS(spec->ops[i].ps.power_spec.shift) < threshold &&
-                UNI_ABS(spec->ops[i].ps.power_spec.power - 1) < threshold) {
+                UNI_ABS(spec->ops[i].ps.power_spec.scale - 1) < eps &&
+                UNI_ABS(spec->ops[i].ps.power_spec.shift) < eps &&
+                UNI_ABS(spec->ops[i].ps.power_spec.power - 1) < eps) {
                 setOperatorInvalid(spec, i, true);
                 hasOptimized = true;
             }
@@ -33,14 +33,42 @@ class PowerOptimizer : public OPOptimizer {
         return hasOptimized;
     }
 
+    bool optimizePowerPower(ModelSpec *spec)
+    {
+        bool hasOptimized = false;
+        for (int i = 0; i < spec->num_operator_specs - 1; i++) {
+            if (spec->ops[i].type == OT_Power &&
+                UNI_ABS(spec->ops[i].ps.power_spec.power - 1) < eps) {
+                int powerIndex0 = i;
+                std::vector<std::pair<int, int>> nextOpIndexes = searchOperatorIndexByInput(spec,
+                    spec->ops[powerIndex0].output_tensors_name[0], powerIndex0 + 1,
+                    spec->num_operator_specs);
+                if (nextOpIndexes.size() != 1 || OT_Power != spec->ops[nextOpIndexes[0].first].type ||
+                    UNI_ABS(spec->ops[nextOpIndexes[0].first].ps.power_spec.power - 1) >= eps) {
+                    continue;
+                }
+                int powerIndex1 = nextOpIndexes[0].first;
+                float scale = spec->ops[powerIndex1].ps.power_spec.scale *
+                    spec->ops[powerIndex0].ps.power_spec.scale;
+                float shift = spec->ops[powerIndex1].ps.power_spec.scale *
+                        spec->ops[powerIndex0].ps.power_spec.shift +
+                    spec->ops[powerIndex1].ps.power_spec.shift;
+                spec->ops[powerIndex1].ps.power_spec.scale = scale;
+                spec->ops[powerIndex1].ps.power_spec.shift = shift;
+                setOperatorInvalid(spec, i, true);
+                hasOptimized = true;
+            }
+        }
+        return hasOptimized;
+    }
+
+    // power + shared weight
     bool optimizePowerEltwise(ModelSpec *spec)
     {
         bool hasOptimized = false;
-        float threshold = 0.0001;
         for (int i = 0; i < spec->num_operator_specs - 2; i++) {
-            if (spec->ops[i].type == OT_Power &&
-                UNI_ABS(spec->ops[i].ps.power_spec.shift) < threshold &&
-                UNI_ABS(spec->ops[i].ps.power_spec.power - 1) < threshold) {
+            if (spec->ops[i].type == OT_Power && UNI_ABS(spec->ops[i].ps.power_spec.shift) < eps &&
+                UNI_ABS(spec->ops[i].ps.power_spec.power - 1) < eps) {
                 int powerIndex0 = i;
                 std::vector<std::pair<int, int>> nextOpIndexes = searchOperatorIndexByInput(spec,
                     spec->ops[powerIndex0].output_tensors_name[0], powerIndex0 + 1,
@@ -59,10 +87,10 @@ class PowerOptimizer : public OPOptimizer {
                 if (prevOpIndexes.size() != 1 || OT_Power != spec->ops[prevOpIndexes[0].first].type ||
                     std::string(spec->ops[powerIndex0].input_tensors_name[0]) !=
                         std::string(spec->ops[prevOpIndexes[0].first].input_tensors_name[0]) ||
-                    UNI_ABS(spec->ops[prevOpIndexes[0].first].ps.power_spec.shift) >= threshold ||
-                    UNI_ABS(spec->ops[prevOpIndexes[0].first].ps.power_spec.power - 1) >= threshold ||
+                    UNI_ABS(spec->ops[prevOpIndexes[0].first].ps.power_spec.shift) >= eps ||
+                    UNI_ABS(spec->ops[prevOpIndexes[0].first].ps.power_spec.power - 1) >= eps ||
                     UNI_ABS(spec->ops[powerIndex0].ps.power_spec.scale +
-                        spec->ops[prevOpIndexes[0].first].ps.power_spec.scale - 1) >= threshold) {
+                        spec->ops[prevOpIndexes[0].first].ps.power_spec.scale - 1) >= eps) {
                     continue;
                 }
                 int powerIndex1 = prevOpIndexes[0].first;
@@ -100,7 +128,7 @@ class PowerOptimizer : public OPOptimizer {
     bool optimizeSquareSqrt(ModelSpec *spec)
     {
         bool hasOptimized = false;
-        for (int i = 0; i < spec->num_operator_specs; i++) {
+        for (int i = 0; i < spec->num_operator_specs - 1; i++) {
             if (spec->ops[i].type == OT_Power) {
                 std::vector<std::pair<int, int>> nextOpIndexes = searchOperatorIndexByInput(
                     spec, spec->ops[i].output_tensors_name[0], i + 1, spec->num_operator_specs);
@@ -120,14 +148,39 @@ class PowerOptimizer : public OPOptimizer {
         return hasOptimized;
     }
 
+    bool optimizeSquare(ModelSpec *spec)
+    {
+        bool hasOptimized = false;
+        for (int i = 0; i < spec->num_operator_specs; i++) {
+            if (spec->ops[i].type == OT_Eltwise && spec->ops[i].num_inputs == 2 &&
+                spec->ops[i].ps.eltwise_spec.elt_mode == ELTWISE_PROD &&
+                std::string(spec->ops[i].input_tensors_name[0]) ==
+                    spec->ops[i].input_tensors_name[1]) {
+                spec->ops[i].type = OT_Power;
+                spec->ops[i].ps.power_spec.scale = 1;
+                spec->ops[i].ps.power_spec.shift = 0;
+                spec->ops[i].ps.power_spec.power = 2;
+                spec->ops[i].num_inputs = 1;
+                delete spec->ops[i].input_tensors_name[1];
+                hasOptimized = true;
+            }
+        }
+        return hasOptimized;
+    }
+
     bool optimize(ModelSpec *spec) override
     {
         bool hasOptimized = false;
         hasOptimized |= optimizeUnusedPower(spec);
         hasOptimized |= optimizeSquareSqrt(spec);
+        hasOptimized |= optimizePowerPower(spec);
         hasOptimized |= optimizeUnusedPower(spec);
         hasOptimized |= optimizePowerEltwise(spec);
+        hasOptimized |= optimizeSquare(spec);
         return hasOptimized;
     }
+
+private:
+    float eps = 0.0001;
 };
 #endif

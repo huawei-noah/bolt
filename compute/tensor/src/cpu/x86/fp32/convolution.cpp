@@ -50,9 +50,17 @@ EE convolution_infer_forward_tmp_bytes_fp32(TensorDesc inputDesc,
         case CONVOLUTION_ALGORITHM_DIRECT:
             *bytes = icPadding * ih_pad * iw_pad;
             break;
-        case CONVOLUTION_ALGORITHM_POINTWISE:
-            *bytes = oc;
+        case CONVOLUTION_ALGORITHM_POINTWISE: {
+            U32 strideH = convParamSpec.stride_h;
+            U32 strideW = convParamSpec.stride_w;
+            *bytes = oc + 32;
+            if (strideH > 1 || strideW > 1) {
+                U32 noStrideH = (ih + strideH - 1) / strideH;
+                U32 noStrideW = (iw + strideW - 1) / strideW;
+                *bytes += icPadding * noStrideW * noStrideH;
+            }
             break;
+        }
         case CONVOLUTION_ALGORITHM_GEMM_ICNCHW:
             *bytes = 0;
             break;

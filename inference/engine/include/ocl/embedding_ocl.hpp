@@ -20,8 +20,7 @@ class EmbeddingOCL : public Embedding {
 public:
     EmbeddingOCL(DataType dt, EmbedParamSpec p) : Embedding(dt, p)
     {
-        setMALIArchInfo(
-            &(this->archInfo), nullptr, &this->needSetKernelVec, &this->needSelectKernelLS);
+        INIT_GPU_INFO(nullptr)
     }
 
     ~EmbeddingOCL(){DESTROY_OCL_KERNEL}
@@ -45,7 +44,8 @@ public:
             weightTensor = this->inputTensors[1];
         }
         Tensor outputTensor = this->outputTensors[0];
-        CHECK_STATUS(embedding(inputTensor, weightTensor, this->p, outputTensor, &this->archInfo));
+        CHECK_STATUS(embedding(
+            inputTensor, weightTensor, this->p, this->temp, outputTensor, &this->archInfo));
     }
 
     EE infer_output_tensors_size(
@@ -56,8 +56,7 @@ public:
             if (inTensors.size() <= 1) {
                 CHECK_STATUS(NOT_SUPPORTED);
             }
-            auto mem = (OclMemory *)inTensors[1]->get_memory();
-            GCLMemDesc desc = mem->get_desc();
+            TensorDesc desc = inTensors[1]->get_desc();
             if (desc.nDims != 2) {
                 CHECK_STATUS(NOT_MATCH);
             }
@@ -67,15 +66,6 @@ public:
             } else {
                 this->p.input_dim = desc.dims[1];
                 this->p.num_output = desc.dims[0];
-            }
-            if (desc.byteSize == 0) {
-                GCLMemType mt = GCL_MEM_BUF;
-                MemFlags flags = CL_MEM_READ_WRITE;
-                U32 stride[3] = {desc.dims[0], desc.dims[1], 1};
-                U32 offset[3] = {0, 0, 0};
-                CHECK_STATUS(
-                    gclmem_set_desc_padding(&desc, stride, offset, this->dt, DF_NCHW, mt, flags));
-                mem->padding(desc);
             }
         }
         CHECK_STATUS(embedding_infer_output_size(
@@ -96,15 +86,7 @@ public:
             weightDesc = tensor2df(this->dt, DF_NORMAL, this->p.input_dim, this->p.num_output);
         }
         Tensor modelWeightTensor = Tensor(OCLMem);
-        auto weightMem = (OclMemory *)modelWeightTensor.get_memory();
         modelWeightTensor.resize(weightDesc);
-        U32 stride[3] = {weightDesc.dims[0], weightDesc.dims[1], 1};
-        U32 offset[3] = {0, 0, 0};
-        GCLMemType mt = GCL_MEM_BUF;
-        MemFlags flags = CL_MEM_READ_WRITE;
-        GCLMemDesc desc = gclmem_build_desc();
-        CHECK_STATUS(gclmem_set_desc_padding(&desc, stride, offset, this->dt, DF_NCHW, mt, flags));
-        weightMem->padding(desc);
 
         CpuMemory weight_mem_src;
         std::shared_ptr<U8> weight_ptr;
@@ -115,6 +97,8 @@ public:
         }
         weight_mem_src.resize(weightDesc);
         weight_mem_src.set_shared_ptr(std::shared_ptr<U8>(weight_ptr));
+
+        auto weightMem = (OclMemory *)modelWeightTensor.get_memory();
         weightMem->copy_from((Memory *)&weight_mem_src);
         this->weightTensors.push_back(modelWeightTensor);
         if (modelPtr) {

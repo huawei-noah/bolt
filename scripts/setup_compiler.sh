@@ -92,6 +92,12 @@ if [[ "${target}" == "android-aarch64" ]]; then
     STRIP=aarch64-linux-android-strip
     AR=aarch64-linux-android-ar
     RANLIB=aarch64-linux-android-ranlib
+    checkExe ${AR}
+    if [[ $? == 0 ]]; then
+        STRIP=llvm-strip
+        AR=llvm-ar
+        RANLIB=llvm-ranlib
+    fi
     CONFIGURE_OPTIONS="--host=arm-linux --enable-neon"
     CCFLAGS="${CCFLAGS} --target=aarch64-linux-android21"
     androidNDKIsValid ${AR}
@@ -102,6 +108,12 @@ if [[ "${target}" == "android-armv7" ]]; then
     STRIP=arm-linux-androideabi-strip
     AR=arm-linux-androideabi-ar
     RANLIB=arm-linux-androideabi-ranlib
+    checkExe ${AR}
+    if [[ $? == 0 ]]; then
+        STRIP=llvm-strip
+        AR=llvm-ar
+        RANLIB=llvm-ranlib
+    fi
     CONFIGURE_OPTIONS="--host=arm-linux "
     CCFLAGS="${CCFLAGS} --target=armv7a-linux-androideabi16"
     androidNDKIsValid ${AR}
@@ -112,6 +124,12 @@ if [[ "${target}" == "android-x86_64" ]]; then
     STRIP=x86_64-linux-android-strip
     AR=x86_64-linux-android-ar
     RANLIB=x86_64-linux-android-ranlib
+    checkExe ${AR}
+    if [[ $? == 0 ]]; then
+        STRIP=llvm-strip
+        AR=llvm-ar
+        RANLIB=llvm-ranlib
+    fi
     CONFIGURE_OPTIONS="--host=x86-linux"
     CCFLAGS="${CCFLAGS} --target=x86_64-linux-android21"
 fi
@@ -230,7 +248,7 @@ if [[ "${host}" != "${target}" ]]; then
     fi
 fi
 if [[ ${target} =~ blank ]]; then
-    CCFLAGS=""
+    CCFLAGS=`echo ${CC#* }`
 fi
 
 exeIsValid ${CC}

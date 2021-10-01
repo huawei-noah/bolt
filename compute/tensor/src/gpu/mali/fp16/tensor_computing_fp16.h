@@ -19,5 +19,9 @@
 #include "gcl.h"
 #include "ocl_desc_trans.h"
 #define ALIGN(len, align_num) ((len + align_num - 1) / align_num * align_num)
+#define BUFFER_ALIGN_BASE 128
+#define CHECK_MEET_IMAGE_LIMITS(width, height, depth) \
+    (gcl_check_meet_device_image3d_limits(            \
+        OCLContext::getInstance().handle.get(), width, height, depth))
 
 #endif

@@ -1,6 +1,7 @@
 Before you try any step described in this document, please make sure you have installed Bolt correctly. You can refer to [INSTALL.md](INSTALL.md) for more details.
 
 # Contents
+---
 &nbsp;&nbsp;&nbsp;&nbsp;[Basic Usage](#basic-usage)  
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Model Conversion](#model-conversion)   
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Model Inference](#model-inference)  
@@ -13,22 +14,24 @@ Before you try any step described in this document, please make sure you have in
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Time-Series Data Acceleration](#time-series-data-acceleration)  
 
 # Basic Usage
+---
 
-## Environment variables
+### Environment variables
 
 Some Linux shell environment variables are reserved for Bolt.
 
 - *BOLT_MEMORY_REUSE_OPTIMIZATION*: whether to use memory reuse optimization. The default value is ON, You can set it *OFF* before model conversion to disable memory reuse optimization. Note that this setting takes effect during the model conversion. Once the model (.bolt) is stored, the memory reuse behavior is fixed.
-- *BOLT_BNN*: Bolt converts 0/1, -1/1 float weight to 1-bit bolt model file and mark to run 1-bit network. The default value is ON. You can set it "OFF" before model conversion to close 1-bit optimization and run float network.
-- *BOLT_PADDING*: Bolt only supports RNN/GRU/LSTM hidden states number mod 32 = 0 case, If you want to run number mod 32 != 0 case, please set it to *ON* before model conversion. The default value is OFF.
+- *BOLT_PADDING*: Bolt only supports RNN/GRU/LSTM hidden states number mod 32 = 0 case, If you want to run number mod 32 != 0 case, please set it to *ON* before model conversion. The default value is ON.
+- *BOLT_INT8_STORAGE_ERROR_THRESHOLD*: Bolt supports storage precision and computation precision independent. You can use int8 model storage, FP32/FP16 computation. There will be a huge accuracy error when you quantize all float weight to int8 storage. So we provide a configure parameter to control only quantize < *BOLT_INT8_STORAGE_ERROR_THRESHOLD* weight.
 - *Bolt_TensorComputing_LibraryAlgoritmMap*: a path on the target device set by user to save tensor_computing library performance tuning result.
 
-## Model Conversion
+### Model Conversion
 
-<div align=center><img src="images/ModelConversion.PNG" width = 623 height = 333 /></div>
+<div align=center><img src="images/ModelConversion.PNG" width = 100% height = 100% style="border: 1px solid rgba(151,151,151,0.50)"/></div>
 
 * [Keras2onnx](https://github.com/onnx/keras-onnx)
 * [Tensorflow2onnx](https://github.com/onnx/tensorflow-onnx)
+* [tflite2onnx](https://github.com/onnx/tensorflow-onnx)
 * [Pytorch2onnx](https://pytorch.org/docs/stable/onnx.html)
 * [MindSpore2onnx](https://www.mindspore.cn/tutorial/training/zh-CN/master/use/save_model.html#onnx)
 * [MMdnn](https://github.com/Microsoft/MMdnn) provides rich model conversion functions.
@@ -39,7 +42,7 @@ Some Linux shell environment variables are reserved for Bolt.
  
 Here we list the examples of two typical model conversions for Android backend, for X86 backend the ADB tool is not required.
 
-### Caffe/ONNX/Tflite Model Conversion
+#### Caffe/ONNX/Tflite Model Conversion
 
 resnet50(caffe) model contains two model files : [resnet50.prototxt](https://github.com/KaimingHe/deep-residual-networks/blob/master/prototxt/ResNet-50-deploy.prototxt) and [resnet50.caffemodel](https://deepdetect.com/models/resnet/ResNet-50-model.caffemodel). Prepare these two model files on */home/resnet/* in advance.
 
@@ -74,7 +77,7 @@ resnet50(caffe) model contains two model files : [resnet50.prototxt](https://git
 
 Note : Model conversion procedure of onnx and tflite is similar to caffe. 
 
-### Tensorflow Model Conversion
+#### Tensorflow Model Conversion
 
 Save your mobilenet_v1 to frozen .pb model. And preprocess your model using [tf2json](../model_tools/tools/tensorflow2json/tf2json.py) which can convert the .pb to .json. Then use **X2bolt** to convert .json to .bolt model.
 
@@ -124,9 +127,9 @@ Here is the example of mobilenet_v1_frozen.pb converted to mobilenet_v1.bolt.
    # command output$ mobilenet_v1.json mobilenet_v1_f32.bolt
    ```
 
-## Model Inference
+### Model Inference
 
-### General Benchmark
+#### General Benchmark
 
 [*benchmark*](../inference/examples/benchmark/benchmark.cpp) is a general tool for measuring any .bolt model inference performace.
 
@@ -148,7 +151,7 @@ Here is the example of mobilenet_v1_frozen.pb converted to mobilenet_v1.bolt.
    adb shell "./data/local/tmp/bolt/bin/benchmark -m /data/local/tmp/bolt_model/caffe/resnet/resnet_f16.bolt -i /data/local/tmp/data/1_3_224_224_fp16.bin"
    ```
 
-### Imagenet classification
+#### Imagenet classification
 
 Example: Run mobilenet_v1 for image classification with CPU
 
@@ -209,7 +212,7 @@ NOTE:
 - The file name of algorithm selected results are constitute with "modelName + archInfo + dataType", such as "algorithmInfo_MOBILENET_2_4".
 - If you modified your model, please delete the old algorithm selected results and run it again, or it may cause unpredicted errors.    
 
-### tinybert
+#### tinybert
 
 1. Push tinybert to the phone;
 
@@ -234,7 +237,7 @@ NOTE:
 
 After running, you should be able to see the labels for each sequence calculated according to the model, and the execution time.
 
-### neural machine translation(nmt)
+#### neural machine translation(nmt)
 
 1. Push nmt to the phone;
 
@@ -259,7 +262,7 @@ After running, you should be able to see the labels for each sequence calculated
 
 After running, you should be able to see the machine translation result, and the execution time.
 
-### voice wake-up
+#### voice wake-up
 
 Bolt supports [Kaldi](https://github.com/kaldi-asr/kaldi) Tdnn network and do slide window method to accelerate.
 
@@ -284,15 +287,15 @@ adb shell "export BOLT_MEMORY_REUSE_OPTIMIZATION=OFF && ./X2bolt -d model_direct
 adb shell "./slide_tdnn -m model_directory/tdnn_f32.bolt"
 ```
 
-## API
+### API
 
 Please refer to [Developer Customize](DEVELOPER.md#api-usage) for more details.
 
-## Performance Profiling
+### Performance Profiling
 
 Bolt provides a program performance visualization interface to help user identify performance bottlenecks.
 
-- ### Visualize an inference program performance
+- #### Visualize an inference program performance
 
 1. Use *--profilie* flag to compile bolt library.
 
@@ -320,16 +323,22 @@ Bolt provides a program performance visualization interface to help user identif
 ![](images/PerformanceProfiling.PNG)
 
 # Advanced Features
+---
 
-## INT8 Post Training Quantization
+### INT8 Post Training Quantization
 
-Operations are smartly quantized, avoiding layers that are critical to accuracy. When possible, gemm layers (e.g. conv, FC) will directly output int8 tensors so as to save dequantization time. The quantization method is symmetrical for both activation and weight. Please refer to [Quantization](QUANTIZATION.md) for more details.
+Operations are smartly quantized, avoiding layers that are critical to accuracy. 
+When possible, gemm layers (e.g. conv, FC) will directly output int8 tensors so as to save dequantization time. 
+The quantization method is symmetrical for both activation and weight. Please refer to [Quantization](QUANTIZATION.md) for more details.
 
-## BNN Network Support
+### BNN Network Support
 
-Bolt supports both XNOR-style and DoReFa-style BNN networks. Just save the binary weights as FP32 in an Onnx model, and X2bolt will automatically convert the storage to 1-bit representations. So far, the floating-point portion of the BNN network can only be FP16 operations, so pass "FP16" as the precision parameter to X2bolt. The number of output channels for BNN convolution layers should be divisible by 32.
+Bolt supports both XNOR-style and DoReFa-style BNN networks. 
+Just save the binary weights as FP32 in an Onnx model(weight value is -1/1 or 0/1), and X2bolt will automatically convert the storage to 1-bit representations. 
+So far, the floating-point portion of the BNN network can only be FP16 operations, so pass *BNN_FP16* as the precision parameter to *X2bolt*. 
+The number of output channels for BNN convolution layers should be divisible by 32.
 
-## Algorithm Tuning for Key Layers
+### Algorithm Tuning for Key Layers
 
 Bolt provides tensor_computing_library_search program for performance tuning of the operator library. Bolt currently supports convolution layer algorithm tuning.
 
@@ -352,10 +361,10 @@ After running, you should be able to get algorithm map file on device.
 
 Modify Convolution algorithm search policy in [inference/engine/include/cpu/convolution_cpu.hpp](../inference/engine/include/cpu/convolution_cpu.hpp)
 
-## Time-Series Data Acceleration
+### Time-Series Data Acceleration
 
 Flow is the time-series data acceleration module for Bolt. Flow simplifies the application development process. Flow uses graph as an abstraction of application deployment, and each stage (function) is viewed as a node. A node can do data preprocessing, deep learning inference or result postprocessing. Separate feature extraction can also be abstracted as a node. The bridging entity between function is data (tensor), and that can be represented as an edge.
 
 Flow provides flexible CPU multi-core parallelism and heterogeneous scheduling (CPU + GPU). User don't need to pay excessive attention to heterogeneous management and write lots of non-reusable code to implement a heterogeneous application. User can get the best end-to-end performance with the help of Flow. Flow supports data parallelism and subgraph parallelism, with a simple API.
 
-More usage information can be find in [DEVELOPER.md](docs/DEVELOPER.md#time-series-data-acceleration-by-using-flow).
+More usage information can be find in [DEVELOPER.md](./DEVELOPER.md#time-series-data-acceleration-by-using-flow).

@@ -190,13 +190,13 @@ EE priorbox_cpu(std::vector<TensorDesc> inputDesc,
             ret = priorbox_kernel<F16>(idt0, (F16 *)output, ih0, iw0, ih1, iw1, minsizes, maxsizes,
                 ars, flip, clip, vars, imageW, imageH, stepW, stepH, offset, arch);
             break;
-#endif
 #ifdef _USE_INT8
         case DT_I8: {
             ret = priorbox_kernel<F16>(idt0, (F16 *)output, ih0, iw0, ih1, iw1, minsizes, maxsizes,
                 ars, flip, clip, vars, imageW, imageH, stepW, stepH, offset, arch);
             break;
         }
+#endif
 #endif
         default:
             ret = NOT_SUPPORTED;

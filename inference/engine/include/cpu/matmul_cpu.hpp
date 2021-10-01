@@ -35,16 +35,27 @@ public:
         TensorDesc inputDescA = inputTensorA.get_desc();
         Tensor inputTensorB = this->inputTensors[1];
         TensorDesc inputDescB = inputTensorB.get_desc();
+        Tensor inputTensorC;
+        if (this->inputTensors.size() > 2) {
+            inputTensorC = this->inputTensors[2];
+        }
         Tensor outputTensor = this->outputTensors[0];
-        if (3 == featureScale.size() && featureScale[0][0] > 0 && DT_I8 != inputDescA.dt) {
+        TensorDesc outputDesc = outputTensor.get_desc();
+
+        if (3 == featureScale.size() && featureScale[0][0] > 0 && DT_I8 != inputDescA.dt &&
+            DT_U8_Q != inputDescA.dt) {
             inputTensorA.set_scale(featureScale[0][0]);
         }
-        if (3 == featureScale.size() && featureScale[1][0] > 0 && DT_I8 != inputDescB.dt) {
+        if (3 == featureScale.size() && featureScale[1][0] > 0 && DT_I8 != inputDescB.dt &&
+            DT_U8_Q != inputDescB.dt) {
             inputTensorB.set_scale(featureScale[1][0]);
         }
-
+        if (featureScale.size() > 0) {
+            outputTensor.set_scale((featureScale.back())[0]);
+        }
+        std::vector<Tensor> tmpTensor(1, this->temp);
         CHECK_STATUS(matmul(inputTensors[0], this->p.transpose_a, inputTensors[1],
-            this->p.transpose_b, this->temp, outputTensors[0], &this->archInfo));
+            this->p.transpose_b, inputTensorC, tmpTensor, outputTensors[0], &this->archInfo));
     }
 
     EE infer_output_tensors_size(
@@ -52,10 +63,18 @@ public:
     {
         CHECK_STATUS(matmul_infer_output_size(inTensors[0], this->p.transpose_a, inTensors[1],
             this->p.transpose_b, outTensors[0], &this->archInfo));
-        if (DT_F16_8Q == this->dt && featureScale.size() > 0 && -2 == (featureScale.back())[0]) {
-            auto outDesc = outTensors[0]->get_desc();
-            outDesc.dt = DT_F16;
-            outTensors[0]->resize(outDesc);
+        if (DT_F16_8Q == this->dt || DT_F32_8Q == this->dt) {
+            auto outputDesc = outTensors[0]->get_desc();
+            if (featureScale.size() > 0 && -2 == (featureScale.back())[0]) {
+                outputDesc.dt = (DT_F16_8Q == this->dt) ? DT_F16 : DT_F32;
+            } else {
+#ifdef _USE_X86
+                outputDesc.dt = DT_U8_Q;
+#else
+                outputDesc.dt = DT_I8;
+#endif
+            }
+            outTensors[0]->resize(outputDesc);
         }
         return SUCCESS;
     }
@@ -64,7 +83,7 @@ public:
     {
         U32 bytes = 0;
         CHECK_STATUS(matmul_infer_forward_tmp_bytes(inputTensors[0], this->p.transpose_a,
-            inputTensors[1], this->p.transpose_b, &bytes, &this->archInfo));
+            inputTensors[1], this->p.transpose_b, outputTensors[0], &bytes, &this->archInfo));
         return bytes;
     }
 };

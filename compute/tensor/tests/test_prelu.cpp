@@ -24,10 +24,6 @@ int preluTest(int argc, char **argv, DataType dt)
     U32 iw = atoi(argv[4]);
 
     CHECK_REQUIREMENT(ic % 8 == 0);
-    ArchInfo archInfo;
-    archInfo.arch = UT_ARCH;
-    ArchInfo archInfo_org;
-    archInfo_org.arch = CPU_GENERAL;
 
     PReLUParamSpec prelu_desc;
     prelu_desc.propagate_down = 0;
@@ -39,30 +35,32 @@ int preluTest(int argc, char **argv, DataType dt)
 
     Tensor inputTensor = Tensor::alloc_sized<CPUMem>(inputDesc);
     Tensor weightTensor = Tensor::alloc_sized<CPUMem>(weightDesc);
-    memcpy(get_ptr_from_tensor(inputTensor, UT_ARCH), input, tensorNumBytes(inputDesc));
-    memcpy(get_ptr_from_tensor(weightTensor, UT_ARCH), weight, tensorNumBytes(weightDesc));
+    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inputDesc));
+    memcpy(get_ptr_from_tensor(weightTensor, CPU_GENERAL), weight, tensorNumBytes(weightDesc));
 
     // set output
     Tensor outputTensor;
-    CHECK_STATUS(prelu_infer_output_size(&inputTensor, &outputTensor, &archInfo));
+    CHECK_STATUS(prelu_infer_output_size(&inputTensor, &outputTensor, &UT_CPU_ARCHINFO));
     outputTensor.alloc();
     Tensor outputTensorRef = Tensor::alloc_sized<CPUMem>(outputTensor.get_desc());
     U32 output_len = outputTensor.length();
     CHECK_REQUIREMENT(input_len == in * ic * ih * iw && output_len == in * ic * ih * iw);
 
     if (UT_CHECK) {
-        CHECK_STATUS(prelu(inputTensor, weightTensor, prelu_desc, outputTensor, &archInfo));
+        CHECK_STATUS(prelu(inputTensor, weightTensor, prelu_desc, outputTensor, &UT_CPU_ARCHINFO));
 
-        CHECK_STATUS(prelu(inputTensor, weightTensor, prelu_desc, outputTensorRef, &archInfo_org));
+        CHECK_STATUS(
+            prelu(inputTensor, weightTensor, prelu_desc, outputTensorRef, &UT_SERIAL_ARCHINFO));
         // check
-        ut_check_v(get_ptr_from_tensor(outputTensor, UT_ARCH),
-            get_ptr_from_tensor(outputTensorRef, UT_ARCH), output_len, dt, 0.05, __FILE__, __LINE__);
+        ut_check_v(get_ptr_from_tensor(outputTensor, CPU_GENERAL),
+            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), output_len, dt, 0.05, __FILE__,
+            __LINE__);
     }
 
     // benchmark
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        CHECK_STATUS(prelu(inputTensor, weightTensor, prelu_desc, outputTensor, &archInfo));
+        CHECK_STATUS(prelu(inputTensor, weightTensor, prelu_desc, outputTensor, &UT_CPU_ARCHINFO));
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;

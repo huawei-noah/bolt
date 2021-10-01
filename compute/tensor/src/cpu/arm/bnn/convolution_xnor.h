@@ -14,7 +14,6 @@
 #ifndef _H_CONVOLUTION_XNOR
 #define _H_CONVOLUTION_XNOR
 
-#ifdef _USE_FP16
 #include "sys.h"
 #include "uni.h"
 #include "tensor_desc.h"
@@ -77,9 +76,9 @@ inline EE convolution_xnor(TensorDesc inputDesc,
                 scaleDesc, scale, biasDesc, bias, tmpBytes, tmp, outputDesc, output, activationDesc);
             break;
         default:
-            return NOT_SUPPORTED;
+            ret = NOT_SUPPORTED;
+            break;
     }
     return ret;
 }
-#endif
 #endif

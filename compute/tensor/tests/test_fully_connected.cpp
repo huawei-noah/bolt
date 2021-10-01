@@ -22,72 +22,61 @@ int fullyConnectedTest(int argc, char **argv, DataType dt)
     U32 n = atoi(argv[3]);
 
     DataFormat df = DF_TRANSPOSE;
-    ArchInfo archInfo;
-    archInfo.arch = UT_ARCH;
-    ArchInfo archInfo_org;
-    archInfo_org.arch = CPU_GENERAL;
 
     TensorDesc inputDesc = tensor4df(dt, DF_NCHW, m, 1, 1, k);
     TensorDesc filterDesc = tensor2df(dt, df, n, k);
     TensorDesc biasDesc = tensor1d(dt, n);
 
-    Tensor inputTensor, filterTensor, biasTensor;
-    inputTensor.resize(inputDesc);
-    inputTensor.alloc();
+    Tensor inputTensor = Tensor::alloc_sized<CPUMem>(inputDesc);
     U8 *input = ut_input_v(m * k, dt, UT_INIT_RANDOM);
-    memcpy(get_ptr_from_tensor(inputTensor, UT_ARCH), input, tensorNumBytes(inputDesc));
+    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inputDesc));
 
-    filterTensor.resize(filterDesc);
-    filterTensor.alloc();
+    Tensor filterTensor = Tensor::alloc_sized<CPUMem>(filterDesc);
     U8 *filter = ut_input_v(k * n, dt, UT_INIT_RANDOM);
-    memcpy(get_ptr_from_tensor(filterTensor, UT_ARCH), filter, tensorNumBytes(filterDesc));
+    memcpy(get_ptr_from_tensor(filterTensor, CPU_GENERAL), filter, tensorNumBytes(filterDesc));
 
-    biasTensor.resize(biasDesc);
-    biasTensor.alloc();
+    Tensor biasTensor = Tensor::alloc_sized<CPUMem>(biasDesc);
     U8 *bias = ut_input_v(n, dt, UT_INIT_RANDOM);
-    memcpy(get_ptr_from_tensor(biasTensor, UT_ARCH), bias, tensorNumBytes(biasDesc));
+    memcpy(get_ptr_from_tensor(biasTensor, CPU_GENERAL), bias, tensorNumBytes(biasDesc));
     // set output
-    Tensor outputTensor, outputTensorRef;
-    CHECK_STATUS(
-        fully_connected_infer_output_size(&inputTensor, filterTensor, &outputTensor, &archInfo));
+    Tensor outputTensor;
+    CHECK_STATUS(fully_connected_infer_output_size(
+        &inputTensor, filterTensor, &outputTensor, &UT_CPU_ARCHINFO));
     outputTensor.alloc();
-    TensorDesc outputDesc_ref = outputTensor.get_desc();
-    outputTensorRef.resize(outputDesc_ref);
-    outputTensorRef.alloc();
+    Tensor outputTensorRef = Tensor::alloc_sized<CPUMem>(outputTensor.get_desc());
+
     // setup tmp
-    Tensor tmpTensor;
     U32 tmpBytes;
-    CHECK_STATUS(
-        fully_connected_infer_forward_tmp_bytes(inputTensor, filterTensor, &tmpBytes, &archInfo));
-    tmpTensor.resize(tensor1d(DT_U8, tmpBytes));
-    tmpTensor.alloc();
+    CHECK_STATUS(fully_connected_infer_forward_tmp_bytes(
+        inputTensor, filterTensor, outputTensor, &tmpBytes, &UT_CPU_ARCHINFO));
+    Tensor tmpTensor = Tensor::alloc_sized<CPUMem>(tensor1d(DT_U8, tmpBytes));
     // setup filter trans
     U32 ftmBytes;
-    CHECK_STATUS(fully_connected_transform_filter_bytes(filterTensor, &ftmBytes, &archInfo));
+    CHECK_STATUS(fully_connected_transform_filter_bytes(filterTensor, &ftmBytes, &UT_CPU_ARCHINFO));
     // trans filter
-    Tensor ftmTensor;
-    ftmTensor.resize(tensor1d(DT_U8, ftmBytes));
-    ftmTensor.alloc();
-    CHECK_STATUS(fully_connected_transform_filter(inputTensor, filterTensor, &ftmTensor, &archInfo));
+    Tensor ftmTensor = Tensor::alloc_sized<CPUMem>(tensor1d(DT_U8, ftmBytes));
+    CHECK_STATUS(
+        fully_connected_transform_filter(inputTensor, filterTensor, &ftmTensor, &UT_CPU_ARCHINFO));
 
     //U32 bytes = 0;
+    std::vector<Tensor> tmpTensors(1, tmpTensor);
     if (UT_CHECK) {
-        CHECK_STATUS(
-            fully_connected(inputTensor, ftmTensor, biasTensor, tmpTensor, outputTensor, &archInfo));
+        CHECK_STATUS(fully_connected(
+            inputTensor, ftmTensor, biasTensor, tmpTensors, outputTensor, &UT_CPU_ARCHINFO));
 
         // naive implement
         CHECK_STATUS(fully_connected(
-            inputTensor, ftmTensor, biasTensor, tmpTensor, outputTensorRef, &archInfo_org));
+            inputTensor, ftmTensor, biasTensor, tmpTensors, outputTensorRef, &UT_SERIAL_ARCHINFO));
 
         // check
-        ut_check_v(get_ptr_from_tensor(outputTensor, UT_ARCH),
-            get_ptr_from_tensor(outputTensorRef, UT_ARCH), m * n, dt, 1, __FILE__, __LINE__);
+        ut_check_v(get_ptr_from_tensor(outputTensor, CPU_GENERAL),
+            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), m * n, dt, 1, __FILE__, __LINE__);
     }
     // benchmark
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        CHECK_STATUS(
-            fully_connected(inputTensor, ftmTensor, biasTensor, tmpTensor, outputTensor, &archInfo));
+        CHECK_STATUS(fully_connected(
+            inputTensor, ftmTensor, biasTensor, tmpTensors, outputTensor, &UT_CPU_ARCHINFO));
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;

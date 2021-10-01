@@ -18,34 +18,6 @@
 #include "gpu/mali/tensor_computing_mali.h"
 #include "gpu/mali/fp16/activation_mali_fp16.h"
 
-EE activation_infer_output_size_mali(TensorDesc inputDesc,
-    TensorDesc *outputDesc,
-    GCLMemDesc_t gclmemInputDesc,
-    GCLMemDesc_t gclmemOutputDesc)
-{
-    /*tensorDesc record cpu org data format info*/
-    /*gclmemDesc record gpu trans data format info*/
-    if (outputDesc == nullptr || gclmemInputDesc == nullptr || gclmemOutputDesc == nullptr) {
-        CHECK_STATUS(NULL_POINTER);
-    }
-    *outputDesc = inputDesc;
-
-    DataType idt;
-    DataFormat idf;
-    U32 iw, ih, ic, in;
-    tensorSelectGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw);
-
-    if (gclmemInputDesc->byteSize == 0 || gclmemInputDesc->memFormat == DF_NCHW) {
-        CHECK_STATUS(infer_gclmem_desc_nchw(
-            iw, ih, ic, 0, 0, iw, ih, ic, idt, idt, gclmemInputDesc, gclmemOutputDesc));
-    } else {
-        CHECK_STATUS(infer_gclmem_desc_ncwhc4(
-            iw, ih, ic, 0, 0, iw, ih, ic, idt, idt, gclmemInputDesc, gclmemOutputDesc));
-    }
-    *gclmemOutputDesc = *gclmemInputDesc;
-    return SUCCESS;
-}
-
 inline EE activation_checkpara_mali(GCLHandle_t handle,
     TensorDesc inputDesc,
     GCLMem_t input,
@@ -63,7 +35,8 @@ inline EE activation_checkpara_mali(GCLHandle_t handle,
         activationMode != ACTIVATION_RELU6 && activationMode != ACTIVATION_H_SIGMOID &&
         activationMode != ACTIVATION_H_SWISH && activationMode != ACTIVATION_GELU &&
         activationMode != ACTIVATION_TANH && activationMode != ACTIVATION_SIGMOID &&
-        activationMode != ACTIVATION_ABS) {
+        activationMode != ACTIVATION_ABS && activationMode != ACTIVATION_LOG &&
+        activationMode != ACTIVATION_NEG) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
     if (input->desc.memFormat != output->desc.memFormat) {

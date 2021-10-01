@@ -20,8 +20,7 @@ class UnsqueezeOCL : public Unsqueeze {
 public:
     UnsqueezeOCL(DataType dt, UnsqueezeParamSpec p) : Unsqueeze(dt, p)
     {
-        setMALIArchInfo(
-            &(this->archInfo), nullptr, &this->needSetKernelVec, &this->needSelectKernelLS);
+        INIT_GPU_INFO(nullptr)
     }
 
     ~UnsqueezeOCL(){DESTROY_OCL_KERNEL}

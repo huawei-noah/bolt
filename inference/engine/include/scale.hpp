@@ -36,6 +36,44 @@ public:
         return true;
     }
 
+    U32 find_target_axis_len(std::vector<Tensor *> inTensors)
+    {
+        auto curOpWs = this->get_weightspec();
+        U32 weightNum = 0;
+        U32 vecNum = 0;
+        if (0 != curOpWs.bytes_of_weight) {
+            weightNum = curOpWs.bytes_of_weight / UNI_MAX(1, bytesOf(curOpWs.mdt));
+        } else if (0 != curOpWs.bytes_of_vec) {
+            vecNum = curOpWs.bytes_of_vec / UNI_MAX(1, bytesOf(curOpWs.mdt));
+        }
+        if (weightNum > 0 && vecNum > 0 && weightNum != vecNum) {
+            CHECK_STATUS(NOT_MATCH);
+        }
+        this->numChannels = (weightNum) ? weightNum : vecNum;
+        if (weightNum == 0 && vecNum == 0) {
+            if (inTensors.size() == 1) {
+                CHECK_STATUS(NOT_MATCH);
+            }
+            TensorDesc desc = inTensors[1 - dataID]->get_desc();
+            this->numChannels = tensorNumElements(desc);
+        }
+
+        TensorDesc inputDesc = inTensors[dataID]->get_desc();
+        U32 axisLen = this->numChannels;
+        I32 axis = p.axis;
+        U32 nDims = inputDesc.nDims;
+        axis = (nDims + axis) % nDims;
+        axis = nDims - 1 - axis;
+        if (axisLen != inputDesc.dims[axis]) {
+            for (U32 i = 0; i < nDims; i++) {
+                if (inputDesc.dims[nDims - 1 - i] == axisLen) {
+                    p.axis = i;
+                }
+            }
+        }
+        return axisLen;
+    }
+
 protected:
     ScaleParamSpec p;
     U32 numChannels;

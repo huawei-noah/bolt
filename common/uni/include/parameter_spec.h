@@ -26,7 +26,17 @@ typedef enum { CEIL, FLOOR, TF_SAME, TF_VALID, ROUND_PREFER_FLOOR, ROUND_PREFER_
 
 typedef enum { LINEAR, NEAREST, CUBIC } ResizeMode;
 
-typedef enum { ALIGN_CORNERS, HALF_PIXEL } ResizeCoordinateTransMode;
+typedef enum {
+    ROIALIGN_HALF_PIXEL,
+    ROIALIGN_OUTPUT_HALF_PIXEL
+} ROIAlignCoordinateTransformationMode;
+
+typedef enum {
+    ALIGN_CORNERS,
+    HALF_PIXEL,
+    PYTORCH_HALF_PIXEL,
+    ASYMMETRIC
+} ResizeCoordinateTransMode;
 
 typedef enum {
     ELTWISE_SUM,
@@ -36,7 +46,11 @@ typedef enum {
     ELTWISE_SUB,
     ELTWISE_DIV,
     ELTWISE_SQRT,
-    ELTWISE_ERF
+    ELTWISE_ERF,
+
+    ELTWISE_AND,
+    ELTWISE_OR,
+    ELTWISE_XOR
 } EltwiseMode;
 
 typedef enum {
@@ -54,7 +68,10 @@ typedef enum {
     ACTIVATION_EXP,
     ACTIVATION_ABS,
     ACTIVATION_SIGN,
-    ACTIVATION_H_SWISH_NODIV
+    ACTIVATION_H_SWISH_NODIV,
+    ACTIVATION_LOG,
+    ACTIVATION_NOT,
+    ACTIVATION_NEG
 } ActivationMode;
 
 typedef enum { BSliceApply_NULL, BSliceApply_CONV } BilateralSliceApplyMode;
@@ -78,7 +95,8 @@ typedef enum {
     REDUCTION_STD_DEVIATION,
     REDUCTION_SCALAR_PRODUCT,
     REDUCTION_MAX,
-    REDUCTION_MIN
+    REDUCTION_MIN,
+    REDUCTION_L2
 } ReductionMode;
 
 typedef enum { F32_to_F32, F32_to_F16, F32_to_I8 } DataConvertType;
@@ -143,13 +161,6 @@ typedef struct {
     float score_threshold;
 } NonMaxSuppressionParamSpec;
 
-typedef struct {
-    unsigned int output_h;
-    unsigned int output_w;
-    unsigned int sampling_ratio;
-    float spatial_scale;
-} RoiAlignParamSpec;
-
 typedef enum {
     DEPTHWISE_CONVOLUTION_ALGORITHM_DIRECT,
     DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_DIRECT,
@@ -168,10 +179,6 @@ typedef struct {
     ResizeCoordinateTransMode trans_mode;
     RoundMode round_mode;
 } ResizeParamSpec;
-
-typedef struct {
-    int gather_axis;
-} GatherParamSpec;
 
 typedef struct {
     int axes[8];
@@ -261,9 +268,11 @@ typedef struct {
     PoolingMode mode;
 } PoolingParamSpec;
 
-typedef struct {
+// FC's weight is reordered to NxK, K is removed dimension.
+// slice parameter is for multi FC merge optimizer, default is 1.
+typedef struct FullyConnectedParamSpec {
     unsigned int num_outputs;
-    unsigned int num_slices;
+    unsigned int num_slices = 1;
     int slice_point[32];
 } FullyConnectedParamSpec;
 
@@ -273,6 +282,12 @@ typedef struct {
     float gama;
     float momentum;
 } BatchNormParamSpec;
+
+typedef struct {
+    float eps;
+    int axis;
+    int axis_dim;
+} InstanceNormParamSpec;
 
 typedef struct {
     // padding on time dimension
@@ -513,6 +528,67 @@ typedef struct {
     TensorDesc yDesc;
 } WhereParamSpec;
 
+typedef struct {
+    int shape_dims[8];
+    int shape_size;
+} ExpandParamSpec;
+
+typedef struct ScatterParamSpec {
+    TensorDesc data_desc;
+    TensorDesc index_desc;
+    TensorDesc update_desc;
+
+    // axis is used for ScatterElemnts, else axis = INT_MAX
+    int axis = INT_MAX;
+} ScatterParamSpec;
+
+typedef struct GatherParamSpec {
+    TensorDesc data_desc;
+    TensorDesc index_desc;
+
+    // axis is used for Gather/GatherElemnts, else axis = INT_MAX
+    int axis = INT_MAX;
+    // data dimension is 7x10, index content is 6;
+    // index_scalar = false, index = [6], result dimension is 1 x 10
+    // index_scalar = true, index = 6, result dimension is 10
+    bool index_scalar = false;
+    // element_level is used for GatherElemnts(true), else false
+    bool element_level = false;
+    // batch_dims for GatherND
+    int batch_dims = 0;
+} GatherParamSpec;
+
+typedef struct EqualParamSpec {
+    bool invert = false;
+} EqualParamSpec;
+
+typedef struct {
+    unsigned int num_heads;
+    ActivationParamSpec activation;
+} GATParamSpec;
+
+typedef struct RoIAlignParamSpec {
+    ROIAlignCoordinateTransformationMode coordinateTransformationMode;
+    PoolingMode mode;
+    unsigned int output_h;
+    unsigned int output_w;
+    int sampling_ratio;
+    float spatial_scale;
+} RoIAlignParamSpec;
+
+typedef struct GenerateProposalsParamSpec {
+    int angle_bound_hi;
+    int angle_bound_lo;
+    int angle_bound_on;
+    float clip_angle_thresh;
+    int legacy_plus_one;
+    float min_size;
+    float nms_thresh;
+    int post_nms_topN;
+    int pre_nms_topN;
+    float spatial_scale;
+} GenerateProposalsParamSpec;
+
 typedef union ParameterSpec {
     ParameterSpec()
     {}
@@ -525,6 +601,7 @@ typedef union ParameterSpec {
     PoolingParamSpec pooling_spec;
     ScaleParamSpec scale_spec;
     BatchNormParamSpec bn_spec;
+    InstanceNormParamSpec in_spec;
     ReductionParamSpec reduction_spec;
     ArgMaxParamSpec argmax_spec;
     SoftmaxParamSpec softmax_spec;
@@ -563,6 +640,12 @@ typedef union ParameterSpec {
     TdnnParamSpec tdnn_spec;
     TopKParamSpec topk_spec;
     WhereParamSpec where_spec;
+    ExpandParamSpec expand_spec;
+    ScatterParamSpec scatter_spec;
+    EqualParamSpec equal_spec;
+    RoIAlignParamSpec roialign_spec;
+    GenerateProposalsParamSpec generate_proposals_spec;
+    GATParamSpec gat_spec;
 } ParameterSpec;
 
 typedef struct {
@@ -603,7 +686,11 @@ inline int get_operator_parameter_size(OperatorType operatorType)
         {OT_MultiHeadAttention, sizeof(MultiheadAttentionParamSpec)},
         {OT_Tile, sizeof(TileParamSpec)}, {OT_Splice, sizeof(SpliceParamSpec)},
         {OT_Tdnn, sizeof(TdnnParamSpec)}, {OT_TopK, sizeof(TopKParamSpec)},
-        {OT_Where, sizeof(WhereParamSpec)}};
+        {OT_Where, sizeof(WhereParamSpec)}, {OT_Expand, sizeof(ExpandParamSpec)},
+        {OT_InstanceNorm, sizeof(InstanceNormParamSpec)}, {OT_Scatter, sizeof(ScatterParamSpec)},
+        {OT_LogSoftmax, sizeof(SoftmaxParamSpec)}, {OT_Equal, sizeof(EqualParamSpec)},
+        {OT_GenerateProposals, sizeof(GenerateProposalsParamSpec)},
+        {OT_RoIAlign, sizeof(RoIAlignParamSpec)}, {OT_GAT, sizeof(GATParamSpec)}};
     int size;
     if (operatorParameterSizeMap.find(operatorType) == operatorParameterSizeMap.end()) {
         size = 0;
@@ -701,7 +788,8 @@ inline PoolingParamSpec createPoolingParamSpec(PoolingMode pm,
     return p;
 }
 
-inline ReshapeParamSpec createReshapeParamSpec(int *shape_dims, int shape_size, int axis, int num_axes)
+inline ReshapeParamSpec createReshapeParamSpec(
+    int *shape_dims, int shape_size, int axis, int num_axes)
 {
     ReshapeParamSpec p;
     p.shape_size = shape_size;

@@ -20,8 +20,7 @@ class SqueezeOCL : public Squeeze {
 public:
     SqueezeOCL(DataType dt, SqueezeParamSpec p) : Squeeze(dt, p)
     {
-        setMALIArchInfo(
-            &(this->archInfo), nullptr, &this->needSetKernelVec, &this->needSelectKernelLS);
+        INIT_GPU_INFO(nullptr)
     }
 
     ~SqueezeOCL(){DESTROY_OCL_KERNEL}

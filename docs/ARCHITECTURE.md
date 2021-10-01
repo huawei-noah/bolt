@@ -1,14 +1,17 @@
 # Architecture
+---
 
-<div align=center><img src="images/Framework.PNG" width = 468 height = 316 /></div>
+<div align=center><img src="images/Framework.PNG" width = 100% height = 100%  style="border:1px solid rgba(151,151,151,0.50)"/></div>
 
 - [common](../common)
   - [uni](../common/uni) hosts the common headers that are used in bolt. 
-  - [gcl](../common/gcl) hosts the setup of MALI GPU environment.
+  - [gcl](../common/gcl) hosts the setup of GPU environment.
   - [memory](../common/memory) hosts the memory data management.
+  - [model_spec](../common/model_spec) hosts the bolt model definition.
 - [model_tools](../model_tools)
   - [X2bolt](../model_tools/tools/X2bolt) : a general converter of converting different deep learning models to bolt models.
   - [model_optimizer](../model_tools/include/model_optimizer.hpp) : a static computing graph optimizer to fuse the operators and simplify the calculation graph. 
+  - [post_training_quantization](../model_tools/include/model_optimizer.hpp) : a post training quantization tool. 
 - [compute](../compute)
   - [blas_enhance](../compute/blas_enhance) hosts the fast implementation of matrix-matrix multiplication and matrix-vector multiplication of FP32, FP16 and INT8. It is referenced by some of the operators in [tensor](compute/tensor).
   - [tensor](../compute/tensor) hosts the implementation for all kinds of operators defined by bolt.

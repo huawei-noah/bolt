@@ -11,39 +11,8 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string.h>
 #include "tensor_computing.h"
-#include "ut_util.h"
-#include "gcl.h"
-#include "libkernelsource.h"
-#include "iostream"
-
-#ifdef _USE_FP16
-inline GCLMem_t alloc(Tensor tensor)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    mem->alloc();
-    return (GCLMem_t)mem->get_ptr();
-}
-
-inline GCLMem_t alloc_map(Tensor tensor)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    mem->mapped_alloc();
-    return (GCLMem_t)mem->get_ptr();
-}
-
-inline GCLMem_t alloc_bytes(Tensor tensor, U32 size)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    GCLMem_t ptr = NULL;
-    if (size > 0) {
-        mem->resize(tensor1d(DT_U8, size));
-        mem->alloc();
-        ptr = (GCLMem_t)mem->get_ptr();
-    }
-    return ptr;
-}
+#include "ut_util_ocl.h"
 
 int channelresizeTest(int argc, char *argv[], DataType dt)
 {
@@ -67,11 +36,6 @@ int channelresizeTest(int argc, char *argv[], DataType dt)
     CHECK_REQUIREMENT(in == 1 && on == 1);
     CHECK_REQUIREMENT(p.channel_before == (int)ic);
 
-    ArchInfo archInfo;
-    archInfo.arch = MALI;
-    ArchInfo archInfo_org;
-    archInfo_org.arch = CPU_GENERAL;
-
     TensorDesc inputDesc_cpu, inputDesc_gpu, outputDesc;
     inputDesc_cpu = tensor4df(dt, DF_NCHW, in, ic, ih, iw);
     inputDesc_gpu = tensor4df(dt, DF_NCHW, in, ic, ih, iw);
@@ -80,7 +44,7 @@ int channelresizeTest(int argc, char *argv[], DataType dt)
     // setup input
     U8 *input_cpu = ut_input_v(in * ic * ih * iw, dt, UT_INIT_RANDOM);
     U8 *output_cpu = ut_input_v(on * oc * oh * ow, dt, UT_INIT_RANDOM);
-    U8 *output_gpu = NULL;
+    U8 *output_gpu = ut_input_v(on * oc * oh * ow, dt, UT_INIT_RANDOM);
     F16 *in_val = (F16 *)input_cpu;
     U32 len_in = tensorNumElements(inputDesc_cpu);
     for (U32 i = 0; i < len_in; i++) {
@@ -104,13 +68,15 @@ int channelresizeTest(int argc, char *argv[], DataType dt)
 
     MaliPara maliPara;
     maliPara.handle = handle;
+    ArchInfo archInfo;
+    archInfo.arch = MALI;
     archInfo.archPara = &maliPara;
 
     CHECK_STATUS(channel_resize_infer_output_size(&inputTensor, p, &outputTensor, &archInfo));
     outputDesc = outputTensor.get_desc();
     CHECK_REQUIREMENT(tensorNumElements(outputDesc) == on * oc * oh * ow);
 
-    GCLMem_t output = alloc_map(outputTensor);
+    GCLMem_t output = alloc(outputTensor);
     GCLMem_t input = alloc(inputTensor);
     CHECK_STATUS(gcl_fill_memory_zero(handle, input));
 
@@ -118,25 +84,25 @@ int channelresizeTest(int argc, char *argv[], DataType dt)
     U32 tmpBytes = 0;
     tmpBytes = tensorNumBytes(inputDesc_gpu);
     maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
+    tmpBytes = tensorNumBytes(outputDesc);
+    maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
     GCLMem_t tmpbuf = alloc_bytes(tmpTensor, maxBytes);
 
     CHECK_STATUS(ocl_set_input(handle, input, inputDesc_gpu, input_cpu, tmpbuf, true));
     CHECK_STATUS(channel_resize(inputTensor, p, outputTensor, &archInfo));
+
     /*warp up*/
-    UNI_INFO_LOG("warm up gpu:\n")
     for (U32 i = 0; i < 2; i++) {
         CHECK_STATUS(gcl_run_kernelVec(handle));
     }
 
-    UNI_INFO_LOG("Run:\n")
 #ifdef _DEBUG
     CHECK_STATUS(gcl_run_kernelVec_timing(handle, 0, handle->kernelVec->size()));
     double time = handle->t_execute * 0.001;
 #else
     CHECK_STATUS(gcl_run_kernelVec(handle));
 #endif
-    CHECK_STATUS(ocl_get_output(handle, output, outputDesc, true));
-    output_gpu = output->mapPtrArray.back();
+    CHECK_STATUS(ocl_get_output(handle, output, outputDesc, output_gpu, tmpbuf, true));
 
     char buffer[150];
     char params[120];
@@ -150,11 +116,11 @@ int channelresizeTest(int argc, char *argv[], DataType dt)
     ut_check_a(output_gpu, output_cpu, on * oc * ow * oh, dt);
     CHECK_STATUS(gcl_finish(handle));
     CHECK_STATUS(gcl_clean_kernelVec(handle));
+    free(output_gpu);
     free(input_cpu);
     free(output_cpu);
     return 0;
 }
-#endif
 
 int main(int argc, char **argv)
 {

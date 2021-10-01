@@ -53,7 +53,7 @@ static std::string tinybertTestKernel(U32 sequenceIndex,
 
     U32 intentNum = intentSoftmax.length();
     U32 intentMaxIndex = 0;
-#ifdef _USE_MALI
+#ifdef _USE_GPU
     if (useGPU) {
         auto mem = (OclMemory *)intentSoftmax.get_memory();
         mem->get_mapped_ptr();
@@ -78,7 +78,7 @@ static std::string tinybertTestKernel(U32 sequenceIndex,
     auto slotDesc = slotSoftmax.get_desc();
     U32 slotNum = slotDesc.dims[1];
     U32 slotRange = slotDesc.dims[0];
-#ifdef _USE_MALI
+#ifdef _USE_GPU
     if (useGPU) {
         auto mem = (OclMemory *)slotSoftmax.get_memory();
         mem->get_mapped_ptr();
@@ -202,7 +202,7 @@ inline void tinybertTest(int argc,
         }
     }
 #else
-#ifdef _USE_MALI
+#ifdef _USE_GPU
     /*warp up*/
     if (useGPU) {
         pipelineBase->run();

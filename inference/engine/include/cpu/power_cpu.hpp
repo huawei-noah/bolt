@@ -34,7 +34,7 @@ public:
         TensorDesc inputDesc = inputTensor.get_desc();
         Tensor outputTensor = this->outputTensors[0];
 
-        if (DT_I8 == inputDesc.dt) {
+        if (DT_I8 == inputDesc.dt || DT_U8_Q == inputDesc.dt) {
 #ifdef _USE_INT8
             CHECK_REQUIREMENT(0 == this->p.shift);
             F32 scaleO = inputTensor.get_scale() / this->p.scale;

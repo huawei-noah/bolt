@@ -15,24 +15,46 @@
 
 #include "tensor_desc.h"
 #include "gcl_common.h"
-typedef enum { NCHW_TO_NCWHC4 = 0, NCWHC4_TO_NCHW = 1, NCHW_TO_NCHW = 2 } DataTransFormType;
+#include "mem_trans_opt.h"
+#include "padding_opt.h"
 
 EE ocl_data_trans_form(GCLHandle_t handle,
     GCLMem_t input,
     GCLMem_t output,
     U32 in_off,
     U32 out_off,
-    DataTransFormType type,
+    MemTransFormType type,
+    bool setKernelVec = true);
+
+EE ocl_data_trans_form_3d(GCLHandle_t handle,
+    GCLMem_t input,
+    GCLMem_t output,
+    U32 in_off,
+    U32 out_off,
+    MemTransFormType type,
+    bool setKernelVec = true);
+
+EE ocl_data_trans_c(GCLHandle_t handle,
+    GCLMem_t input,
+    GCLMem_t output,
+    U32 in_off,
+    U32 out_off,
+    MemTransCType type,
     bool setKernelVec = true);
 
 EE ocl_set_input(GCLHandle_t handle,
-    GCLMem_t input,
+    GCLMem_t dst,
     TensorDesc hostDesc,
     const U8 *hostPtr,
     GCLMem_t tmpBuf,
     bool blocking);
 
-EE ocl_get_output(GCLHandle_t handle, const GCLMem_t input, TensorDesc hostDesc, bool blocking);
+EE ocl_get_output(GCLHandle_t handle,
+    const GCLMem_t src,
+    TensorDesc hostDesc,
+    const U8 *hostPtr,
+    GCLMem_t tmpBuf,
+    bool blocking);
 
 EE ocl_trans_mem(
     GCLHandle_t handle, GCLMem_t src, GCLMemDesc srcDesc, GCLMem_t dst, GCLMemDesc dstDesc);

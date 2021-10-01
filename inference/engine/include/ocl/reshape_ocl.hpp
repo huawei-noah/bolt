@@ -20,8 +20,7 @@ class ReshapeOCL : public Reshape {
 public:
     ReshapeOCL(DataType dt, ReshapeParamSpec p) : Reshape(dt, p)
     {
-        setMALIArchInfo(
-            &(this->archInfo), nullptr, &this->needSetKernelVec, &this->needSelectKernelLS);
+        INIT_GPU_INFO(nullptr)
     }
 
     ~ReshapeOCL(){DESTROY_OCL_KERNEL}

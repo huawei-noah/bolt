@@ -126,6 +126,7 @@ EE depthwise_pointwise_convolution_transform_filter_fp32(TensorDesc dwFilterDesc
 
 EE depthwise_pointwise_convolution_fp32(TensorDesc inputDesc,
     F32 *input,
+    F32 *eltwiseInput,
     TensorDesc dwFilterDesc,
     const F32 *dwFilter,
     TensorDesc pwFilterDesc,
@@ -184,6 +185,7 @@ EE depthwise_convolution_fp32(TensorDesc inputDesc,
 
 EE depthwise_convolution_direct(TensorDesc inputDesc,
     F32 *inArray,
+    F32 *eltwiseInput,
     TensorDesc dwFilterDesc,
     const F32 *dwFilterArray,
     TensorDesc pwFilterDesc,
@@ -201,6 +203,20 @@ EE depthwise_convolution_direct(TensorDesc inputDesc,
     ActivationParamSpec pointwiseActivationParamSpec);
 
 EE eltwise_fp32(std::vector<void *> input,
+    std::vector<int> inputSize,
+    U32 num,
+    U32 len,
+    void *output,
+    EltwiseMode eltwiseMode);
+
+EE eltwise_i32(std::vector<void *> input,
+    std::vector<int> inputSize,
+    U32 num,
+    U32 len,
+    void *output,
+    EltwiseMode eltwiseMode);
+
+EE eltwise_u8(std::vector<void *> input,
     std::vector<int> inputSize,
     U32 num,
     U32 len,
@@ -266,6 +282,12 @@ EE pooling_fp32(TensorDesc inputDesc,
     TensorDesc outputDesc,
     F32 *output);
 
+EE pooling_c16_fp32(TensorDesc inputDesc,
+    const F32 *input,
+    PoolingParamSpec poolingParamSpec,
+    TensorDesc outputDesc,
+    F32 *output);
+
 EE pooling_bp_fp32(
     TensorDesc inputDesc, const F32 *input, PoolingParamSpec p, TensorDesc outputDesc, F32 *output);
 
@@ -274,9 +296,10 @@ EE scale_fp32(F32 *input,
     I32 nDims,
     F32 *alpha,
     F32 *beta,
-    I32 in,
-    I32 ic,
+    I32 on,
+    I32 oc,
     I32 elements_per_channel,
+    I32 ic,
     F32 *output);
 
 EE softmax_fp32(
@@ -293,6 +316,14 @@ EE prelu_fp32(TensorDesc inputDesc,
     F32 *weight,
     PReLUParamSpec preluDesc,
     TensorDesc outputDesc,
+    F32 *output);
+
+EE instance_norm_fp32(TensorDesc inputDesc,
+    F32 *input,
+    F32 *tmp,
+    F32 *scale,
+    F32 *bias,
+    InstanceNormParamSpec p,
     F32 *output);
 
 #endif  //CHEETAH_TENSOR_COMPUTING_FP32_H

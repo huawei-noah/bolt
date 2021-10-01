@@ -99,7 +99,6 @@ inline void runBoltModel(
             ptr[i] = 1;
         }
         input_ptr[i] = (unsigned char *)ptr;
-        break;
     }
     PrepareModel(model_address, num_input, (const char **)name, n, c, h, w, dt_input, df_input);
     ResultHandle model_result = AllocAllResultHandle(model_address);

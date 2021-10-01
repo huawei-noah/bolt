@@ -25,11 +25,9 @@ class InputTransOptimizer : public OPOptimizer {
             modelInput[spec->input_names[i]] = i;
         }
         for (int i = 0; i < spec->num_operator_specs; i++) {
-            auto transPs = spec->ops[i].ps.transpose_spec;
-            if (spec->ops[i].type == OT_Transpose && transPs.trans_size == 4 &&
-                transPs.trans_dims[0] == 0 && transPs.trans_dims[1] == 3 &&
-                transPs.trans_dims[2] == 1 && transPs.trans_dims[3] == 2) {
-                std::string name = spec->ops[i].input_tensors_name[0];
+            std::string name;
+            if (spec->ops[i].num_inputs > 0) {
+                name = spec->ops[i].input_tensors_name[0];
                 if (modelInput.find(name) == modelInput.end()) {
                     continue;
                 }
@@ -37,6 +35,13 @@ class InputTransOptimizer : public OPOptimizer {
                 if (tmpVec.size() != 1) {
                     continue;
                 }
+            } else {
+                continue;
+            }
+            auto transPs = spec->ops[i].ps.transpose_spec;
+            if (spec->ops[i].type == OT_Transpose && transPs.trans_size == 4 &&
+                transPs.trans_dims[0] == 0 && transPs.trans_dims[1] == 3 &&
+                transPs.trans_dims[2] == 1 && transPs.trans_dims[3] == 2) {
                 setOperatorInvalid(spec, i, true);
                 int id = modelInput[name];
                 int c = spec->input_dims[id].dims[0];
@@ -48,6 +53,13 @@ class InputTransOptimizer : public OPOptimizer {
                 spec->input_dims[id].dims[2] = c;
                 spec->input_dims[id].dims[3] = n;
                 hasOptimized = true;
+            }
+            if (spec->ops[i].type == OT_Embedding || spec->ops[i].type == OT_Gather) {
+                if (spec->input_dims[modelInput[name]].dt == DT_F32 ||
+                    spec->input_dims[modelInput[name]].dt == DT_F16) {
+                    spec->input_dims[modelInput[name]].dt = DT_U32;
+                    hasOptimized = true;
+                }
             }
         }
         return hasOptimized;

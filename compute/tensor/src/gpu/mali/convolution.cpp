@@ -18,335 +18,175 @@
 #include "error.h"
 #include "gpu/mali/tensor_computing_mali.h"
 #include "gpu/mali/fp16/convolution_mali_fp16.h"
+#include "gpu/mali/cl/kernel_option/conv_direct_opt.h"
+#include "gpu/mali/cl/kernel_option/gemv_opt.h"
+#include "gpu/mali/cl/kernel_option/gemm_tn_opt.h"
+#include "gpu/mali/cl/kernel_option/conv_wino_opt.h"
 
 inline void convolution_produce_algos_paras(TensorDesc inputDesc,
     TensorDesc filterDesc,
     ConvolutionParamSpec convParamSpec,
-    DataFormat inputGclmemFormat,
+    DataFormat idf,
+    DataFormat odf,
+    GCLMemType inputMemType,
+    GCLMemType outputMemType,
     std::vector<ConvolutionForwardAlgorithm> *convolutionAlgorithms,
     std::vector<U32> *algoNumIndex,
-    std::vector<U32> *vecW,
+    std::vector<U32> *vecH,
     std::vector<U32> *vecC,
     std::vector<U32> *vecK)
 {
-    DataFormat idf;
     U32 in, ic, it, ih, iw, fn, ft, fh, fw, sh, sw, dh, dw;
-    tensorSelectGet(inputDesc, NULL, &idf, &in, &ic, &ih, &iw, &it);
+    tensorSelectGet(inputDesc, NULL, NULL, &in, &ic, &ih, &iw, &it);
     tensorSelectGet(filterDesc, NULL, NULL, &fn, NULL, &fh, &fw, &ft);
     sh = convParamSpec.stride_h;
     sw = convParamSpec.stride_w;
     dh = convParamSpec.dilatedRate_h;
     dw = convParamSpec.dilatedRate_w;
 
-    U32 configInfo[3][128];
-    U32 configNums[2];
-    ConvolutionForwardAlgorithm algo[2];
-    U32 algoNum = 1;
-    U32 configNum = 0;
-    algo[0] = CONVOLUTION_ALGORITHM_DIRECT;
-    if (inputGclmemFormat == DF_NCHW) {
-        for (U32 i = 2; i <= 8; i++) {
-            configInfo[0][configNum] = i;
-            configInfo[1][configNum] = 1;
-            configInfo[2][configNum] = 4;
-            configNum++;
-        }
-        configNums[0] = configNum;
+    convolutionAlgorithms->push_back(CONVOLUTION_ALGORITHM_DIRECT);
+    if (useGemvCalMode(inputDesc, convParamSpec, inputMemType, outputMemType)) {
+        CHECK_STATUS(get_gemv_cal_scheme(vecH, vecC, vecK));
+    } else if (useNchwCalMode(idf, fw, ic, dw, dh)) {
+        CHECK_STATUS(get_conv_direct_nchw_to_nchwc4_cal_scheme(vecH, vecC, vecK, fw, sw));
+    } else if (odf == DF_NCHW) {
+        CHECK_STATUS(get_conv_direct_sh1_fn_spe_cal_scheme(vecH, vecC, vecK, fh, outputMemType));
     } else {
-        if (fn * sw * ft == 1 && (fw == fh) && (fw == 1 || fw == 3 || fw == 5 || fw == 7) &&
-            dw == 1 && dh == 1) {  //spe case for fn = 1
-            configInfo[0][0] = (fw == 7) ? 6 : 8;
-            configInfo[1][0] = 4;
-            configInfo[2][0] = 1;
-            configNums[0] = 1;
-        } else if (fw * fh * ft * iw * ih * it * dw * dh ==
-            1) {  //spe case for iw = ih = fw = fh = 1, fn > 1
-            U32 j = 8;
-            for (U32 i = 0; i < 3; i++) {
-                configInfo[0][configNum] = 1;
-                configInfo[1][configNum] = 1 << (2 + i);
-                configInfo[2][configNum] = 0;
-                configNum++;
-                if (ic % j != 0) {
-                    break;
-                }
-                j = j << 1;
+        if (dw * dh == 1) {
+            CHECK_STATUS(get_conv_direct_cal_scheme(vecH, vecC, vecK, fh, sh, fn));
+            if (fw * fh * ft * sw == 1 && inputMemType == GCL_MEM_BUF &&
+                outputMemType == GCL_MEM_BUF) {
+                CHECK_STATUS(
+                    get_conv_direct_reuse_w_cal_scheme(vecH, vecC, vecK, iw, fn, inputMemType));
             }
-            configNums[0] = configNum;
+            if (in > 1 && ft == 1 && inputMemType == GCL_MEM_BUF && outputMemType == GCL_MEM_BUF) {
+                CHECK_STATUS(get_conv_direct_multi_batch_cal_scheme(vecH, vecC, vecK, fn));
+            }
         } else {
-            if (fw == 3 && fh == 3 && sw == 1 && sh == 1 && in == 1 && dw == 1 && dh == 1) {
-                algo[1] = CONVOLUTION_ALGORITHM_WINOGRAD;
-                algoNum = 2;
-            }
-            for (U32 ii = 0; ii < algoNum; ii++) {
-                if (algo[ii] == CONVOLUTION_ALGORITHM_DIRECT) {
-                    U32 k = 4;
-                    U32 nj = 8;
-                    U32 be_w = (dw == 2) ? 2 : 0;
-                    for (U32 i = 0; i < 2; i++) {  //normal case for use k = 4 / 8 and reuse on w
-                        for (U32 j = be_w; j < nj; j++) {
-                            configInfo[0][configNum] = j + 1;
-                            configInfo[1][configNum] = 4;
-                            configInfo[2][configNum] = k;
-                            configNum++;
-                        }
-                        k = k << 1;
-                        if (fn % k != 0) {
-                            break;
-                        }
-                        nj = 4;
-                    }
-
-                    if ((fw == 1 || fw == 3) && sw == 1 && sw == sh && fw == fh && dw == 1 &&
-                        dh == 1) {  //spe case for use k = 16
-                        if (fn % 16 == 0) {
-                            for (U32 i = 0; i < 3; i++) {
-                                configInfo[0][configNum] = i + 1;
-                                configInfo[1][configNum] = 4;
-                                configInfo[2][configNum] = 16;
-                                configNum++;
-                            }
-                        }
-                    }
-
-                    if (fw == 1 && fh == 1 && sw == 1 && sh == 1 && dw == 1 &&
-                        dh == 1) {  //spe case for fw = fh = 1 and reuse on h
-                        U32 k = 4;
-                        U32 nj = 2;
-                        for (U32 i = 0; i < 3; i++) {
-                            U32 w = 2;
-                            if (i == 2) {
-                                nj = 1;
-                            }
-                            for (U32 j = 0; j < nj; j++) {
-                                if (ih % w != 0) {
-                                    continue;
-                                }
-                                configInfo[0][configNum] = w << 8;
-                                configInfo[1][configNum] = 4;
-                                configInfo[2][configNum] = k;
-                                configNum += 1;
-                                w = w << 1;
-                            }
-                            k = k << 1;
-                            if (fn % k != 0) {
-                                break;
-                            }
-                        }
-                    }
-
-                    if (fw == 3 && fw == fh && in > 1 && dw == 1 &&
-                        dh == 1) {  //spe case for mul batch and reuse on batch
-                        for (U32 item_n = 2; item_n <= 4; item_n++) {
-                            for (U32 item_k = 4; item_k <= 8; item_k += 4) {
-                                for (U32 item_w = 1; item_w <= 3; item_w++) {
-                                    if (item_k == 8 && (item_w > 1 || fn % item_k != 0)) {
-                                        continue;
-                                    }
-                                    if (item_n > 2 && (item_w * item_k > 8 || item_w > 1)) {
-                                        continue;
-                                    }
-                                    configInfo[0][configNum] = item_w + (item_n << 4);
-                                    configInfo[1][configNum] = 4;
-                                    configInfo[2][configNum] = item_k;
-                                    configNum += 1;
-                                }
-                            }
-                        }
-                    }
-                }
-
-                if (algo[ii] ==
-                    CONVOLUTION_ALGORITHM_WINOGRAD) {  //case for winograd, config on matmul
-                    for (U32 i = 1; i <= 8; i++) {
-                        for (U32 j = 4; j <= 8; j += 4) {
-                            if (i * j <= 2) {
-                                continue;
-                            }
-                            configInfo[0][configNum] = i;
-                            configInfo[1][configNum] = 1;
-                            configInfo[2][configNum] = j;
-                            configNum++;
-                        }
-                    }
-                }
-                configNums[ii] = configNum;
-            }
+            CHECK_STATUS(get_conv_direct_dila_cal_scheme(vecH, vecC, vecK, dh, fn));
         }
     }
+    algoNumIndex->push_back(vecH->size());
 
-    for (U32 i = 0; i < algoNum; i++) {
-        (*convolutionAlgorithms).push_back(algo[i]);
-        (*algoNumIndex).push_back(configNums[i]);
-        U32 be = (i == 0) ? 0 : configNums[i - 1];
-        U32 end = configNums[i];
-        for (U32 j = be; j < end; j++) {
-            if (vecW) {
-                (*vecW).push_back(configInfo[0][j]);
-            }
-            if (vecC) {
-                (*vecC).push_back(configInfo[1][j]);
-            }
-            if (vecK) {
-                (*vecK).push_back(configInfo[2][j]);
-            }
-        }
+    if (fw == 3 && fh == 3 && sw == 1 && sh == 1 && dw == 1 && dh == 1 
+        && idf != DF_NCHW && odf != DF_NCHW && ic > 32 && fn >= 128 && ih > 64 && iw > 64)
+    {
+        convolutionAlgorithms->push_back(CONVOLUTION_ALGORITHM_WINOGRAD);
+        GCLMemType mt = (check_qualcomm_device()) ? GCL_MEM_IMG_3D : GCL_MEM_BUF;
+        get_gemm_tn_cal_scheme(vecH, vecC, vecK, mt, mt, GCL_MEM_BUF);
+        algoNumIndex->push_back(vecH->size());
     }
 }
 
 inline void infer_align_val(ConvolutionForwardAlgorithm algo,
     U32 algoNum,
-    std::vector<U32> vecW,
+    bool useNchwMode,
+    std::vector<U32> vecH,
     U32 ow,
+    U32 oh,
     U32 in,
-    U32 *iw_align,
-    U32 *in_align)
+    U32 *w_align,
+    U32 *h_align,
+    U32 *n_align)
 {
-    U32 w_val = *iw_align;
-    U32 n_val = *in_align;
-    if (algo == CONVOLUTION_ALGORITHM_WINOGRAD) {
-        w_val = std::max(ALIGN(ow, 16), w_val);
+    U32 w_val = *w_align;
+    U32 h_val = *h_align;
+    U32 n_val = *n_align;
+    if (useNchwMode) {
+        if (algo == CONVOLUTION_ALGORITHM_WINOGRAD) {
+            w_val = ALIGN(w_val, 4);
+            h_val = ALIGN(h_val, 4);
+        } else {
+            for (U32 i = 0; i < algoNum; i++) {
+                U32 item_w = vecH[i];
+                w_val = std::max(ALIGN(ow, item_w), w_val);
+            }
+        }
     } else {
         for (U32 i = 0; i < algoNum; i++) {
-            U32 item_w = vecW[i];
-            if ((item_w >> 8 > 0)) {
-                item_w = 1;
-            } else if ((item_w >> 4) > 0) {
-                U32 item_n = item_w >> 4;
-                item_w = item_w & 15;
+            U32 item_h = vecH[i];
+            if ((item_h >> 8) > 0) {
+                item_h = 1;
+            }
+            if ((item_h >> 4) > 0) {
+                U32 item_n = item_h >> 4;
+                item_h = item_h & 15;
                 n_val = std::max(ALIGN(in, item_n), n_val);
             }
-            w_val = std::max(ALIGN(ow, item_w), w_val);
+            h_val = std::max(ALIGN(oh, item_h), h_val);
         }
     }
-    *iw_align = w_val;
-    *in_align = n_val;
+    *w_align = w_val;
+    *h_align = h_val;
+    *n_align = n_val;
 }
 
-EE convolution_infer_output_size_mali(TensorDesc inputDesc,
+EE convolution_padding_input_mali(TensorDesc inputDesc,
     TensorDesc filterDesc,
     ConvolutionParamSpec convParamSpec,
     TensorDesc *outputDesc,
-    GCLMemDesc_t gclmemInputDesc,
-    GCLMemDesc_t gclmemOutputDesc)
+    OclMemory *inputMem,
+    OclMemory *outputMem)
 {
-    if (outputDesc == nullptr || gclmemInputDesc == nullptr || gclmemOutputDesc == nullptr) {
+    if (inputMem == nullptr || outputMem == nullptr || outputDesc == nullptr) {
         CHECK_STATUS(NULL_POINTER);
     }
-    DataType idt, fdt;
-    DataFormat idf, fdf;
-    U32 iw, ih, ic, in, it;
-    U32 fw, fh, fc, fn, ft;
-    I32 ow, oh, ot;
-    U32 sw, sh, st, dw, dh, fwd, fhd;
-    U32 pl, pr, pt, pb, pt_b, pt_a;
-    U32 inDims;
-    tensorSelectGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw, &it);
-    tensorSelectGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw, &ft);
-    pl = convParamSpec.padding_left;
-    pr = convParamSpec.padding_right;
-    pt = convParamSpec.padding_top;
-    pb = convParamSpec.padding_bottom;
-    sw = convParamSpec.stride_w;
-    sh = convParamSpec.stride_h;
-    dw = convParamSpec.dilatedRate_w;
-    dh = convParamSpec.dilatedRate_h;
-    pt_b = convParamSpec.padding_before;
-    pt_a = convParamSpec.padding_after;
-    st = convParamSpec.stride_t;
-    inDims = inputDesc.nDims;
-
-    if (fw < 1 || fh < 1) {
-        CHECK_STATUS(NOT_SUPPORTED);
-    }
+    U32 sw = convParamSpec.stride_w;
+    U32 sh = convParamSpec.stride_h;
+    U32 dw = convParamSpec.dilatedRate_w;
+    U32 dh = convParamSpec.dilatedRate_h;
     if (sw != 1 && sw != 2) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
     if (sh != 1 && sh != 2) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
-    fwd = (fw - 1) * dw + 1;
-    fhd = (fh - 1) * dh + 1;
-    ow = (iw + pl + pr - fwd) / sw + 1;
-    oh = (ih + pt + pb - fhd) / sh + 1;
-    ot = (inDims == 5) ? (it + pt_b + pt_a - ft) / st + 1 : 1;
-    if (ow < 0 || oh < 0 || ot < 0) {
-        CHECK_STATUS(NOT_MATCH);
-    }
-    if (inDims == 5) {
-        *outputDesc = tensor5df(idt, idf, in, fn, ot, oh, ow);
-    } else {
-        *outputDesc = tensor4df(idt, idf, in, fn, oh, ow);
-    }
+    DataFormat idf, odf;
+    U32 fw, fh, fc, fn, ft;
+    idf = inputDesc.df;
+    U32 in = inputDesc.dims[inputDesc.nDims - 1];
+    U32 ic = inputDesc.dims[inputDesc.nDims - 2];
+    tensorSelectGet(filterDesc, NULL, NULL, &fn, &fc, &fh, &fw, &ft);
+    GCLMemType imt = inputMem->gclMemType();
+    GCLMemType omt = outputMem->gclMemType();
 
-    U32 iw_align, ih_align, in_align, ext_w, ext_h;
-    bool need_pad = false;
-    ext_w = (fwd / 2 < pl) ? pl : fwd / 2;  // if fw / 2 < pl, use pl as offset
-    ext_h = pt;
-    iw_align = ow;
-    in_align = in;
-    ih_align = ih + pt + pb;
-    ih_align = ih_align - ext_h * 2;
-
-    DataFormat inputGclmemFormat;
-    if (dw > 1 || dh > 1) {
-        inputGclmemFormat = DF_NCWHC4;
-    } else if (gclmemInputDesc->byteSize == 0) {
-        inputGclmemFormat = DF_NCHW;
-    } else {
-        inputGclmemFormat = gclmemInputDesc->memFormat;
+    odf = DF_NCHWC4;
+    if (idf == DF_NCHWC4 && fn * sh * ft == 1 && omt == GCL_MEM_BUF) {  //spe case for fn = 1
+        odf = DF_NCHW;
     }
+    (*outputDesc).df = odf;
 
-    if (inputGclmemFormat == DF_NCHW) {
-        if (fw * fh * ft * iw * ih * it == 1) {
-            inputGclmemFormat = DF_NCWHC4;  //use spe case for fw = fh = iw = ih = 1
-        }
-        if (fn * sw * ft == 1 && (fw == fh) &&
-            (fw == 1 || fw == 3 || fw == 5 || fw == 7)) {  //spe case for fn = 1
-            inputGclmemFormat = DF_NCWHC4;                 //use spe case for fn = 1
-        }
-    }
-
+    bool useNchwMode = useNchwCalMode(idf, fw, ic, dw, dh);
     std::vector<ConvolutionForwardAlgorithm> convolutionAlgorithms;
     std::vector<U32> algoNumIndex;
-    std::vector<U32> vecW;
-    convolution_produce_algos_paras(inputDesc, filterDesc, convParamSpec, inputGclmemFormat,
-        &convolutionAlgorithms, &algoNumIndex, &vecW, NULL, NULL);
+    std::vector<U32> vecH;
+    std::vector<U32> vecC;
+    std::vector<U32> vecK;
+    convolution_produce_algos_paras(inputDesc, filterDesc, convParamSpec, idf, odf, imt, omt,
+        &convolutionAlgorithms, &algoNumIndex, &vecH, &vecC, &vecK);
+
+    U32 ow = (*outputDesc).dims[0];
+    U32 oh = (*outputDesc).dims[1];
+    U32 w_align = ow;
+    U32 h_align = oh;
+    U32 n_align = in;
     for (U32 i = 0; i < convolutionAlgorithms.size(); i++) {
         infer_align_val(
-            convolutionAlgorithms[i], algoNumIndex[i], vecW, ow, in, &iw_align, &in_align);
+            convolutionAlgorithms[i], algoNumIndex[i], useNchwMode, 
+            vecH, ow, oh, in, &w_align, &h_align, &n_align);
     }
 
-    iw_align = iw_align * sw;
-    if (pl < ext_w) {  // if fw / 2 > pl, use pl as offset, and pad (ext_w - pl) * 2 in the end
-        iw_align = iw_align + 2 * (ext_w - pl);
-        ext_w = pl;
+    U32 pl = 0;
+    U32 pr = 0;
+    U32 pt = 0;
+    U32 pb = 0;
+    U32 pf = 0;
+    U32 pa = 0;
+    if (useNchwMode || idf == DF_NCHWC4) {
+        calPaddingVal(inputDesc, filterDesc, convParamSpec, w_align, h_align, n_align, useNchwMode,
+            &pl, &pr, &pt, &pb, &pa, &pf);
     }
-    if (iw_align != iw || ih_align != ih) {
-        need_pad = true;
-    }
-    if (ext_w != 0 || ext_h != 0) {
-        need_pad = true;
-    }
-
-    if (inputGclmemFormat == DF_NCHW) {
-        CHECK_STATUS(infer_gclmem_desc_nchw_3d(iw_align, ih_align, ic, it, in_align, ext_w, ext_h,
-            0, 0, 0, 0, 0, idt, idt, gclmemInputDesc, NULL, need_pad));
-        CHECK_STATUS(infer_gclmem_desc_ncwhc4_3d(
-            0, 0, 0, 0, 0, 0, 0, ow, oh, fn, ot, in, idt, idt, NULL, gclmemOutputDesc));
-        return SUCCESS;
-    }
-
-    CHECK_STATUS(infer_gclmem_desc_ncwhc4_3d(iw_align, ih_align, ic, it, in_align, ext_w, ext_h, 0,
-        0, 0, 0, 0, idt, idt, gclmemInputDesc, NULL, need_pad));
-
-    if (fn * ft * sw == 1 && (fw == fh) && (fw == 1 || fw == 3 || fw == 5 || fw == 7)) {
-        CHECK_STATUS(infer_gclmem_desc_nchw_3d(
-            0, 0, 0, 0, 0, 0, 0, ow, oh, fn, ot, in, idt, idt, NULL, gclmemOutputDesc));
-    } else {
-        CHECK_STATUS(infer_gclmem_desc_ncwhc4_3d(
-            0, 0, 0, 0, 0, 0, 0, ow, oh, fn, ot, in, idt, idt, NULL, gclmemOutputDesc));
-    }
+    inputMem->padding(pl, pr, pt, pb, pf, pa);
     return SUCCESS;
 }
 
@@ -375,20 +215,27 @@ EE convolution_infer_forward_algorithm_mali(GCLHandle_t handle,
         CHECK_STATUS(NOT_SUPPORTED);
     }
     DataType dt;
-    U32 ih, iw, fn, fh, fw;
-    tensorSelectGet(inputDesc, NULL, NULL, NULL, NULL, &ih, &iw);
-    tensorSelectGet(filterDesc, &dt, NULL, &fn, NULL, &fh, &fw);
+    U32 ic, ih, iw, fn, fh, fw, ft;
+    tensorSelectGet(inputDesc, NULL, NULL, NULL, &ic, &ih, &iw);
+    tensorSelectGet(filterDesc, &dt, NULL, &fn, NULL, &fh, &fw, &ft);
+    U32 sh = convParamSpec.stride_h;
+    U32 dh = convParamSpec.dilatedRate_h;
+    U32 dw = convParamSpec.dilatedRate_w;
+    bool useNchwMode = useNchwCalMode(inputDesc.df, fw, ic, dw, dh);
 
     std::vector<ConvolutionForwardAlgorithm> convolutionAlgorithms;
     std::vector<U32> algoNumIndex;
-    std::vector<U32> vecW;
+    std::vector<U32> vecH;
     std::vector<U32> vecC;
     std::vector<U32> vecK;
-    DataFormat inputGclmemFormat = inputMemDesc.memFormat;
-    convolution_produce_algos_paras(inputDesc, filterDesc, convParamSpec, inputGclmemFormat,
-        &convolutionAlgorithms, &algoNumIndex, &vecW, &vecC, &vecK);
-    if (vecW.size() == 1) {
-        forwardRunInfo->best_w[0] = vecW[0];
+    DataFormat idf = inputDesc.df;
+    DataFormat odf = outputDesc.df;
+    GCLMemType imt = inputMemDesc.memType;
+    GCLMemType omt = outputMemDesc.memType;
+    convolution_produce_algos_paras(inputDesc, filterDesc, convParamSpec, idf, odf, imt, omt,
+        &convolutionAlgorithms, &algoNumIndex, &vecH, &vecC, &vecK);
+    if (vecH.size() == 1) {
+        forwardRunInfo->best_h[0] = vecH[0];
         forwardRunInfo->best_k[0] = vecK[0];
         forwardRunInfo->best_c[0] = vecC[0];
         forwardRunInfo->algorithm = convolutionAlgorithms[0];
@@ -400,76 +247,114 @@ EE convolution_infer_forward_algorithm_mali(GCLHandle_t handle,
         CHECK_STATUS(gcl_enable_queue_profiling(handle));
         GCLMem_t input = gcl_create_gclmem();
         GCLMem_t filter = gcl_create_gclmem();
+        GCLMem_t filterImg = gcl_create_gclmem();
         GCLMem_t output = gcl_create_gclmem();
         GCLMem_t bias = gcl_create_gclmem();
+        GCLMem_t biasbuf = gcl_create_gclmem();
         GCLMem_t tmpbuf = gcl_create_gclmem();
+        GCLMem_t tmpImgA = gcl_create_gclmem();
+        GCLMem_t tmpImgB = gcl_create_gclmem();
         U32 maxFilterSize = 0;
-        U32 maxBytes = 0;
+        U32 maxBytes[7] = {0};
         U32 algosNum = 0;
         std::vector<ForwardRunInfoMali> runInfos;
         U32 stride[3] = {0, 0, 0};
         U32 offset[3] = {0, 0, 0};
-        std::vector<GCLMemDesc> filterMemDescs;
+        TensorDesc ftmDesc;
         for (U32 i = 0; i < algoNumIndex.size(); i++) {
-            U32 bytes = 0;
+            U32 bytes[7] = {0};
             ForwardRunInfoMali runInfo;
             U32 be = (i == 0) ? 0 : algoNumIndex[i - 1];
             U32 end = algoNumIndex[i];
             runInfo.algorithm = convolutionAlgorithms[i];
             for (U32 j = be; j < end; j++) {
-                GCLMemDesc filterMemDesc = gcl_mem_desc(stride, offset, DT_U8, DF_NCWHC4);
-                runInfo.best_w[0] = vecW[j];
+                TensorDesc desc;
+                runInfo.best_h[0] = vecH[j];
                 runInfo.best_c[0] = vecC[j];
                 runInfo.best_k[0] = vecK[j];
-                if (convolution_transform_filter_bytes_mali(
-                        filterDesc, &runInfo, &filterMemDesc, &bytes) != SUCCESS) {
+                if (convolution_transform_filter_bytes_mali(filterDesc, &runInfo, &desc) != SUCCESS) {
                     continue;
                 }
-                maxBytes = (maxBytes < bytes) ? bytes : maxBytes;
                 if (convolution_infer_forward_tmp_bytes_mali(inputDesc, filterDesc, outputDesc,
-                        convParamSpec, &runInfo, &bytes) != SUCCESS) {
+                        convParamSpec, &runInfo, bytes) != SUCCESS) {
                     continue;
                 }
-                maxBytes = (maxBytes < bytes) ? bytes : maxBytes;
-                maxFilterSize = (maxFilterSize < filterMemDesc.byteSize) ? filterMemDesc.byteSize
-                                                                         : maxFilterSize;
-                filterMemDescs.push_back(filterMemDesc);
+                if (tensorNumBytes(desc) > maxFilterSize) {
+                    ftmDesc = desc;
+                    maxFilterSize = tensorNumBytes(desc);
+                }
+                for (U32 i = 0; i < 7; i++) {
+                    maxBytes[i] = (maxBytes[i] < bytes[i]) ? bytes[i] : maxBytes[i];
+                }
                 runInfos.push_back(runInfo);
             }
         }
 
-        if (ih == 1 && iw == 1 && fh == 1 && fw == 1) {
-            U32 stride[3] = {fn, 1, 1};
-            U32 offset[3] = {0, 0, 0};
-            CHECK_STATUS(gclmem_set_desc_padding(
-                &bias->desc, stride, offset, dt, DF_NHWC, GCL_MEM_BUF, CL_MEM_READ_WRITE));
-        } else {
-            U32 stride[3] = {(fn + 3) / 4, 1, 1};
-            U32 offset[3] = {0, 0, 0};
-            CHECK_STATUS(gclmem_set_desc_padding(
-                &bias->desc, stride, offset, dt, DF_NHWC, GCL_MEM_IMG_1D, CL_MEM_READ_WRITE));
+        stride[0] = (fn + 3) / 4;
+        stride[1] = 1;
+        stride[2] = 1;
+        CHECK_STATUS(gclmem_set_desc_padding(
+            &bias->desc, stride, offset, dt, DF_NHWC, GCL_MEM_IMG_1D, CL_MEM_READ_WRITE));
+        stride[0] = fn;
+        CHECK_STATUS(gclmem_set_desc_padding(
+            &biasbuf->desc, stride, offset, dt, DF_NHWC, GCL_MEM_BUF, CL_MEM_READ_WRITE));
+        stride[0] = ftmDesc.dims[0];
+        stride[1] = ftmDesc.dims[1];
+        stride[2] = ftmDesc.dims[2];
+        CHECK_STATUS(gclmem_set_desc_padding(
+            &filter->desc, stride, offset, dt, DF_NCHW, GCL_MEM_BUF, CL_MEM_READ_WRITE));
+        bool useImg = check_qualcomm_device();
+        bool useWinoFltImg = false;
+        if (useImg) {
+            if (CHECK_MEET_IMAGE_LIMITS(stride[0] / 4, stride[1], stride[2])) {
+                stride[0] = stride[0] / 4;
+                CHECK_STATUS(gclmem_set_desc_padding(
+                    &filterImg->desc, stride, offset, dt, DF_NCHW, GCL_MEM_IMG_3D, CL_MEM_READ_WRITE));
+                useWinoFltImg = true;
+            }
         }
+
         algosNum = runInfos.size();
         if (algosNum == 0) {
             CHECK_STATUS(NOT_SUPPORTED);
         }
         TensorDesc scaleDesc = tensor1d(DT_F32, 0);
         TensorDesc biasDesc = tensor1d(dt, fn);
-        filterMemDescs[0].byteSize = maxFilterSize;
         outputMemDesc.need_pad = false;
         input->desc = inputMemDesc;
         output->desc = outputMemDesc;
-        filter->desc = filterMemDescs[0];
-        tmpbuf->desc.byteSize = maxBytes;
         gcl_create_memory(handle, input);
         gcl_create_memory(handle, output);
         gcl_create_memory(handle, filter);
         gcl_create_memory(handle, bias);
-        if (maxBytes) {
-            gcl_create_memory(handle, tmpbuf);
+        gcl_create_memory(handle, biasbuf);
+        std::vector<GCLMem_t> tmpDir(3, NULL);
+        std::vector<GCLMem_t> tmpWino(3, NULL);
+        std::vector<GCLMem_t> tmp;
+        tmpbuf->desc.byteSize = maxBytes[0] + 1;
+        gcl_create_memory(handle, tmpbuf);
+        tmpDir[0] = tmpbuf;
+        tmpWino[0] = tmpbuf;
+        if (check_qualcomm_device() && 
+            maxBytes[1] > 0 && maxBytes[2] > 0 && maxBytes[3] > 0) {
+            tmpImgA->desc.memType = GCL_MEM_IMG_3D;
+            tmpImgA->desc.stride[0] = maxBytes[1];
+            tmpImgA->desc.stride[1] = maxBytes[2];
+            tmpImgA->desc.stride[2] = maxBytes[3];
+            gcl_create_memory(handle, tmpImgA);
+            tmpDir[0] = tmpImgA;
+            tmpWino[1] = tmpImgA;
+        } 
+        if (check_qualcomm_device() && 
+            maxBytes[4] > 0 && maxBytes[5] > 0 && maxBytes[6] > 0) {
+            tmpImgB->desc.memType = GCL_MEM_IMG_3D;
+            tmpImgB->desc.stride[0] = maxBytes[4];
+            tmpImgB->desc.stride[1] = maxBytes[5];
+            tmpImgB->desc.stride[2] = maxBytes[6];
+            gcl_create_memory(handle, tmpImgB);
+            tmpWino[2] = tmpImgB;
         }
 
-        double minTimeDirect = DBL_MAX;
         double minTimeWinograd = DBL_MAX;
         double minTime = DBL_MAX;
         double winogradPicTranTime = DBL_MAX;
@@ -477,52 +362,66 @@ EE convolution_infer_forward_algorithm_mali(GCLHandle_t handle,
         U32 runKernelBe = 0;
         U32 runKernelEnd = 0;
         ForwardRunInfoMali bestRunInfo;
-        ForwardRunInfoMali bestRunInfoDirect;
         ForwardRunInfoMali bestRunInfoWinograd;
+        GCLMem_t fltMem = filter;
+        tmp = tmpDir;
         for (U32 i = 0; i < algosNum; i++) {
-            filter->desc = filterMemDescs[i];
-            if (convolution_mali(handle, inputDesc, input, filterDesc, filter, convParamSpec,
-                    &runInfos[i], scaleDesc, NULL, biasDesc, bias, maxBytes, tmpbuf, outputDesc,
+            GCLMem_t biasMem = (runInfos[i].best_k[0] == 0) ? biasbuf : bias;
+            if (check_qualcomm_device()) {
+                if (input->desc.memType == GCL_MEM_BUF && tmpbuf->desc.memType == GCL_MEM_BUF) {
+                    if (ft > 1 && runInfos[i].best_h[0] >= 7 && !useNchwMode) {
+                        break;
+                    }
+                    if (sh == 2 && dh > 2 && runInfos[i].best_h[0] >= 6) {
+                        break;
+                    }
+                }
+                if (runInfos[i].algorithm == (I32)CONVOLUTION_ALGORITHM_WINOGRAD) {
+                    if (useWinoFltImg) {
+                        gcl_create_memory(handle, filterImg);
+                        useWinoFltImg = false;
+                        fltMem = filterImg;
+                    }
+                    tmp = tmpWino;
+                } 
+            }
+            if (convolution_mali(handle, inputDesc, input, filterDesc, fltMem, convParamSpec,
+                    &runInfos[i], scaleDesc, NULL, biasDesc, biasMem, maxBytes[0], tmp, outputDesc,
                     output, activationMode) == SUCCESS) {
                 if (runInfos[i].algorithm == (I32)CONVOLUTION_ALGORITHM_DIRECT) {
                     runKernelEnd = handle->kernelVec->size();
-                    gcl_run_kernelVec_timing(handle, runKernelBe, runKernelEnd);
+                    gcl_run_kernelVec_timing(handle, runKernelEnd - 1, runKernelEnd);
                     runKernelBe = runKernelEnd;
-                    if (minTimeDirect > handle->t_execute) {
-                        minTimeDirect = handle->t_execute;
-                        bestRunInfoDirect = runInfos[i];
+                    if (minTime > handle->t_execute) {
+                        minTime = handle->t_execute;
+                        bestRunInfo = runInfos[i];
                     }
                 }
 
                 if (runInfos[i].algorithm == (I32)CONVOLUTION_ALGORITHM_WINOGRAD) {
                     if (winogradPicTranTime == DBL_MAX) {
-                        runKernelEnd = runKernelBe + 2;
+                        runKernelEnd = (inputDesc.df == DF_NCHW) ? runKernelBe + 1 : runKernelBe + 2;
                         gcl_run_kernelVec_timing(handle, runKernelBe, runKernelEnd);
                         winogradPicTranTime = handle->t_execute;
                     }
-                    runKernelBe += 2;
-                    runKernelEnd = runKernelBe + 1;
-                    gcl_run_kernelVec_timing(handle, runKernelBe, runKernelEnd);
+                    runKernelEnd = handle->kernelVec->size();
+                    if (winogradOutTranTime == DBL_MAX) {
+                        gcl_run_kernelVec_timing(handle, runKernelEnd - 1, runKernelEnd);
+                        winogradOutTranTime = handle->t_execute;
+                    }
+                    gcl_run_kernelVec_timing(handle, runKernelEnd - 2, runKernelEnd - 1);
                     if (minTimeWinograd > handle->t_execute) {
                         minTimeWinograd = handle->t_execute;
                         bestRunInfoWinograd = runInfos[i];
                     }
-                    runKernelBe += 36;
-                    if (winogradOutTranTime == DBL_MAX) {
-                        runKernelEnd = runKernelBe + 1;
-                        gcl_run_kernelVec_timing(handle, runKernelBe, runKernelEnd);
-                        winogradOutTranTime = handle->t_execute;
-                    }
-                    runKernelBe = handle->kernelVec->size();
+                    runKernelBe = runKernelEnd;
                 }
             }
         }
 
         if (minTimeWinograd != DBL_MAX) {
-            minTimeWinograd = 36 * minTimeWinograd + winogradPicTranTime + winogradOutTranTime;
+            minTimeWinograd = minTimeWinograd + winogradPicTranTime + winogradOutTranTime;
         }
-        minTime = minTimeDirect;
-        bestRunInfo = bestRunInfoDirect;
         if (minTimeWinograd < minTime) {
             minTime = minTimeWinograd;
             bestRunInfo = bestRunInfoWinograd;
@@ -534,12 +433,15 @@ EE convolution_infer_forward_algorithm_mali(GCLHandle_t handle,
         CHECK_STATUS(gcl_finish(handle));
         gcl_destroy_gclmem(input);
         gcl_destroy_gclmem(filter);
+        gcl_destroy_gclmem(filterImg);
         gcl_destroy_gclmem(output);
         gcl_destroy_gclmem(bias);
+        gcl_destroy_gclmem(biasbuf);
         gcl_destroy_gclmem(tmpbuf);
+        gcl_destroy_gclmem(tmpImgA);
+        gcl_destroy_gclmem(tmpImgB);
         convolutionAlgorithms.clear();
         runInfos.clear();
-        filterMemDescs.clear();
         CHECK_STATUS(gcl_clean_kernelVec(handle));
         CHECK_STATUS(gcl_clean_programMap(handle));
         CHECK_STATUS(gcl_off_queue_profiling(handle));
@@ -548,16 +450,13 @@ EE convolution_infer_forward_algorithm_mali(GCLHandle_t handle,
     return NOT_SUPPORTED;
 }
 
-EE convolution_transform_filter_bytes_mali(TensorDesc filterDesc,
-    ForwardRunInfoMali_t forwardRunInfo,
-    GCLMemDesc_t gclmemFilterDesc,
-    U32 *bytes)
+EE convolution_transform_filter_bytes_mali(
+    TensorDesc filterDesc, ForwardRunInfoMali_t forwardRunInfo, TensorDesc *ftmDesc)
 {
     EE ret = SUCCESS;
     switch (filterDesc.dt) {
         case DT_F16: {
-            ret = convolution_transform_filter_bytes_mali_fp16(
-                filterDesc, forwardRunInfo, gclmemFilterDesc, bytes);
+            ret = convolution_transform_filter_bytes_mali_fp16(filterDesc, forwardRunInfo, ftmDesc);
             break;
         }
         case DT_I8: {
@@ -633,7 +532,7 @@ EE convolution_mali(GCLHandle_t handle,
     TensorDesc biasDesc,
     const GCLMem_t bias,
     U32 tmpBytes,
-    GCLMem_t tmpBuf,
+    std::vector<GCLMem_t> tmpBuf,
     TensorDesc outputDesc,
     GCLMem_t output,
     ActivationMode activationMode)

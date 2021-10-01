@@ -54,7 +54,6 @@ class Tensorflow2Caffe:
                 graph_nodes=[n for n in graph_def.node]
         weight_map = {}
         for node in graph_nodes:
-            #print("[INFO] tensorflow pb node %s" % (node.name))
             if node.op == 'Const':
                 weight_map[node.name] = tensor_util.MakeNdarray(node.attr['value'].tensor)
         return weight_map
@@ -413,15 +412,30 @@ class Tensorflow2Caffe:
             output_name = scale_name
         return output_name
 
+    def transpose_nchwc8_nhwc(self, x):
+        x = self.add_transpose(x, x+"_nchc8_nhc", [0, 2, 3, 1, 4])
+        shape = self.get_tensor_shape(x)
+        x = self.add_reshape(x, x+"_r", [self.batch, shape[1], shape[2], shape[3]*shape[4]])
+        return x
+
+    def transpose_nchwc8_nchw(self, x):
+        x = self.transpose_nchwc8_nhwc(x)
+        x = self.transpose_nhwc_nchw(x)
+        return x
+
+    def transpose_nhwc_nchw(self, x):
+        x = self.add_transpose(x, x+"_nhwc_nchw", [0, 3, 1, 2])
+        return x
+
+    def transpose_nchw_nhwc(self, x):
+        x = self.add_transpose(x, x+"_nchw_nhwc", [0, 2, 3, 1])
+        return x
+
     def transpose_nchc8_nhc(self, x):
         x = self.add_transpose(x, x+"_nchc8_nhc", [0, 2, 3, 1, 4])
         shape = self.get_tensor_shape(x)
         assert(shape[2] == 1)
         x = self.add_reshape(x, x+"_r", [self.batch, -1, shape[3]*shape[4]])
-        return x
-
-    def transpose_nhwc_nchw(self, x):
-        x = self.add_transpose(x, x+"_nhwc_nchw", [0, 3, 1, 2])
         return x
 
     def transpose_nhc_nchw(self, x):
@@ -1064,12 +1078,17 @@ class Tensorflow2Caffe:
         self.data_dict[output_name] = Operators.pad(self.data_dict[input_name], padding_shapes, padding_values, output_name)
         return output_name
 
-    def add_relative_shift(self, input_name, output_name, axis, shift_length):
+    def add_relative_shift(self, input_name, output_name, axis, shift_length, ref_name=None):
+        input_names = [input_name]
+        ref_data = None
+        if (ref_name is not None):
+            input_names.append(ref_name)
+            ref_data = self.data_dict[ref_name]
         layer = caffe_net.LayerParameter(name=output_name, type='RelativeShift',
-                    bottom=[input_name], top=[output_name])
+                    bottom=input_names, top=[output_name])
         layer.relative_shift_param(axis, shift_length)
         self.caffe_model.add_layer(layer)
-        self.data_dict[output_name] = Operators.relative_shift(self.data_dict[input_name], axis, shift_length, output_name)
+        self.data_dict[output_name] = Operators.relative_shift(self.data_dict[input_name], ref_data, axis, shift_length, output_name)
         return output_name
 
     def add_clip(self, input_name, output_name, min_value, max_value):

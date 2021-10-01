@@ -82,7 +82,7 @@ std::shared_ptr<Tensor> get_resize_image(
             transform[2] = 2;
             break;
         default:
-            UNI_ERROR_LOG("[ERROR] unsupported image format\n");
+            UNI_ERROR_LOG("unsupported image format\n");
             return nullptr;
     }
 
@@ -189,7 +189,7 @@ std::shared_ptr<Tensor> load_resize_image(
         imageDesc, &imageDt, &imageDf, &imageNum, &imageChannel, &imageHeight, &imageWidth));
 
     switch (imageDt) {
-#ifdef __aarch64__
+#ifdef _USE_FP16
         case DT_F16: {
             return get_resize_image<F16>(rgbTensor, imageDesc, targetImageFormat, scaleValue);
         }

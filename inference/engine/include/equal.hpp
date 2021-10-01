@@ -18,9 +18,10 @@
 
 class Equal : public WeightOperator {
 public:
-    Equal(DataType dt)
+    Equal(DataType dt, EqualParamSpec p)
     {
         this->dt = dt;
+        this->p = p;
     }
 
     OperatorType get_type() override
@@ -32,6 +33,9 @@ public:
     {
         return false;
     }
+
+protected:
+    EqualParamSpec p;
 };
 
 #endif  // _EQUAL_H

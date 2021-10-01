@@ -74,28 +74,118 @@ inline F32 array_var_f32(const F32 *data, I32 len, F32 mean)
     return sum_s / len;
 }
 
-// array max
-inline F32 array_max_value_f32(const F32 *data, I32 len)
+template <int mode>
+inline static void array_minmax_value_f32_template(const F32 *data, I32 len, F32 *result)
 {
+    F32 min_s = data[0];
     F32 max_s = data[0];
     I32 i = 0;
     if (len >= 4) {
-        float32x4_t max_v, tmp_v;
-        max_v = vld1q_f32(data);
+        float32x4_t min_v, max_v, tmp_v;
+        min_v = max_v = vld1q_f32(data);
         for (i = 4; i < len - 3; i += 4) {
             tmp_v = vld1q_f32(data + i);
-            max_v = vmaxq_f32(tmp_v, max_v);
+            if (mode & 1)
+                min_v = vminq_f32(tmp_v, min_v);
+            if (mode & 2)
+                max_v = vmaxq_f32(tmp_v, max_v);
         }
-        max_s = vmaxvq_f32(max_v);
+        if (mode & 1)
+            min_s = vminvq_f32(min_v);
+        if (mode & 2)
+            max_s = vmaxvq_f32(max_v);
     }
 
     for (; i < len; i++) {
+        if (data[i] < min_s) {
+            min_s = data[i];
+        }
         if (data[i] > max_s) {
             max_s = data[i];
         }
     }
+    int id = 0;
+    if (mode & 1)
+        result[id++] = min_s;
+    if (mode & 2)
+        result[id++] = max_s;
+}
 
-    return max_s;
+inline EE array_minmax_value_f32(const F32 *data, I32 len, int mode, F32 *result)
+{
+    EE ret = SUCCESS;
+    switch (mode) {
+        case 1:
+            array_minmax_value_f32_template<1>(data, len, result);
+            break;
+        case 2:
+            array_minmax_value_f32_template<2>(data, len, result);
+            break;
+        case 3:
+            array_minmax_value_f32_template<3>(data, len, result);
+            break;
+        default:
+            ret = NOT_SUPPORTED;
+            break;
+    }
+    return ret;
+}
+
+template <int mode>
+inline static void array_minmax_value_i32_template(const I32 *data, I32 len, F32 *result)
+{
+    I32 min_s = data[0];
+    I32 max_s = data[0];
+    I32 i = 0;
+    if (len >= 4) {
+        int32x4_t min_v, max_v, tmp_v;
+        min_v = max_v = vld1q_s32(data);
+        for (i = 4; i < len - 3; i += 4) {
+            tmp_v = vld1q_s32(data + i);
+            if (mode & 1)
+                min_v = vminq_s32(tmp_v, min_v);
+            if (mode & 2)
+                max_v = vmaxq_s32(tmp_v, max_v);
+        }
+        if (mode & 1)
+            min_s = vminvq_s32(min_v);
+        if (mode & 2)
+            max_s = vmaxvq_s32(max_v);
+    }
+
+    for (; i < len; i++) {
+        if (data[i] < min_s) {
+            min_s = data[i];
+        }
+        if (data[i] > max_s) {
+            max_s = data[i];
+        }
+    }
+    int id = 0;
+    if (mode & 1)
+        result[id++] = min_s;
+    if (mode & 2)
+        result[id++] = max_s;
+}
+
+inline EE array_minmax_value_i32(const I32 *data, I32 len, int mode, F32 *result)
+{
+    EE ret = SUCCESS;
+    switch (mode) {
+        case 1:
+            array_minmax_value_i32_template<1>(data, len, result);
+            break;
+        case 2:
+            array_minmax_value_i32_template<2>(data, len, result);
+            break;
+        case 3:
+            array_minmax_value_i32_template<3>(data, len, result);
+            break;
+        default:
+            ret = NOT_SUPPORTED;
+            break;
+    }
+    return ret;
 }
 
 inline void array_scale_f32(const F32 *input, F32 *output, I32 len, F32 alpha, F32 beta)
@@ -405,6 +495,24 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
             }
             break;
         }
+        case ACTIVATION_LOG: {
+            for (U32 i = 0; i < len; i++) {
+                output[i] = log(input[i]);
+            }
+            break;
+        }
+        case ACTIVATION_NOT: {
+            for (U32 i = 0; i < len; i++) {
+                output[i] = (input[i] > 0) ? 0 : 1;
+            }
+            break;
+        }
+        case ACTIVATION_NEG: {
+            for (U32 i = 0; i < len; i++) {
+                output[i] = -input[i];
+            }
+            break;
+        }
         default:
             ret = NOT_SUPPORTED;
             break;
@@ -424,6 +532,27 @@ inline void array_mul_f32(const F32 *inputA, const F32 *inputB, F32 *output, I32
 
     for (; i < len; i++) {
         output[i] = inputA[i] * inputB[i];
+    }
+}
+
+inline void array_mul_and_add_f32(
+    const F32 *inputA, const F32 *inputB, const F32 *inputC, F32 *output, I32 len)
+{
+    I32 i = 0;
+    for (i = 0; i < len - 3; i += 4) {
+        float32x4_t a = vld1q_f32(inputA + i);
+        float32x4_t b;
+        if (inputA == inputB) {
+            b = a;
+        } else {
+            b = vld1q_f32(inputB + i);
+        }
+        float32x4_t c = vaddq_f32(vmulq_f32(a, b), vld1q_f32(inputC + i));
+        vst1q_f32(output + i, c);
+    }
+
+    for (; i < len; i++) {
+        output[i] = inputA[i] * inputB[i] + inputC[i];
     }
 }
 
@@ -452,6 +581,29 @@ inline void array_max_f32(const F32 *inputA, const F32 *inputB, F32 *output, I32
     }
     for (; i < len; i++) {
         output[i] = UNI_MAX(inputA[i], inputB[i]);
+    }
+}
+
+inline void array_norm_scalar_scale_fp32(
+    F32 *input, F32 *output, I32 len, F32 mean, F32 var, F32 *alpha, F32 *beta)
+{
+    F32 eps = 1e-6;
+    F32 std_value = sqrt(var + eps);
+    float32x4_t mean_v = vdupq_n_f32(mean);
+    float32x4_t std_v = vdupq_n_f32(std_value);
+    float32x4_t alpha_v = vdupq_n_f32(*alpha);
+    float32x4_t beta_v = vdupq_n_f32(*beta);
+
+    I32 i = 0;
+    for (i = 0; i < len - 3; i += 4) {
+        float32x4_t in = vld1q_f32(input + i);
+        float32x4_t tmp_v = vsubq_f32(in, mean_v);
+        tmp_v = vdivq_f32(tmp_v, std_v);
+        tmp_v = vfmaq_f32(beta_v, alpha_v, tmp_v);
+        vst1q_f32(output + i, tmp_v);
+    }
+    for (; i < len; i++) {
+        output[i] = *alpha * (input[i] - mean) / std_value + *beta;
     }
 }
 

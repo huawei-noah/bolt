@@ -14,7 +14,6 @@
 #ifndef _H_TENSOR_COMPUTING_BNN
 #define _H_TENSOR_COMPUTING_BNN
 
-#ifdef _USE_FP16
 #include "cpu/arm/bnn/convolution_transform_bnn.h"
 #include "cpu/arm/bnn/convolution_dorefa.h"
 #include "cpu/arm/bnn/convolution_xnor.h"
@@ -34,5 +33,4 @@ EE convolution_bnn(TensorDesc inputDesc,
     F16 *output,
     ActivationParamSpec activationDesc,
     Arch arch);
-#endif
 #endif

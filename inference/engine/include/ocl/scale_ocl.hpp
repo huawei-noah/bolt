@@ -20,8 +20,7 @@ class ScaleOCL : public Scale {
 public:
     ScaleOCL(DataType dt, ScaleParamSpec p, int numChannels) : Scale(dt, p, numChannels)
     {
-        setMALIArchInfo(
-            &(this->archInfo), nullptr, &this->needSetKernelVec, &this->needSelectKernelLS);
+        INIT_GPU_INFO(nullptr)
     }
 
     ~ScaleOCL(){DESTROY_OCL_KERNEL}
@@ -46,42 +45,22 @@ public:
         if (0 != curOpWs.bytes_of_vec) {
             vecNum = curOpWs.bytes_of_vec / UNI_MAX(1, bytesOf(curOpWs.mdt));
         }
-        if (weightNum > 0 && vecNum > 0) {
-            if (weightNum != vecNum) {
-                CHECK_STATUS(NOT_SUPPORTED);
-            }
-            this->numChannels = weightNum;
-        } else if (weightNum == 0) {
-            this->numChannels = vecNum;
-        } else if (vecNum == 0) {
-            this->numChannels = weightNum;
-        }
-        Tensor modelWeightTensor = Tensor(OCLMem);
-        Tensor modelBiasTensor = Tensor(OCLMem);
-        TensorDesc weightDesc = tensor1d(this->dt, weightNum);
-        TensorDesc biasDesc = tensor1d(this->dt, vecNum);
-        modelWeightTensor.resize(weightDesc);
-        modelBiasTensor.resize(biasDesc);
-        auto weightMem = (OclMemory *)modelWeightTensor.get_memory();
-        auto vectorMem = (OclMemory *)modelBiasTensor.get_memory();
-
-        U32 offset[3] = {0, 0, 0};
-        GCLMemType mt = GCL_MEM_BUF;
-        MemFlags flags = CL_MEM_READ_WRITE;
-        GCLMemDesc desc = gclmem_build_desc();
         if (weightNum) {
-            U32 stride[3] = {(weightNum + 3) / 4 * 4, 1, 1};
-            CHECK_STATUS(
-                gclmem_set_desc_padding(&desc, stride, offset, this->dt, DF_NCHW, mt, flags));
-            weightMem->padding(desc);
+            Tensor modelWeightTensor = Tensor(OCLMem);
+            TensorDesc weightDesc = tensor1d(this->dt, weightNum);
+            modelWeightTensor.resize(weightDesc);
+            auto weightMem = (OclMemory *)modelWeightTensor.get_memory();
+            U32 pr = (weightNum + 3) / 4 * 4 - weightNum;
+            weightMem->padding(0, pr, 0, 0);
             this->weightTensors.push_back(modelWeightTensor);
         }
-
         if (vecNum) {
-            U32 stride[3] = {(vecNum + 3) / 4 * 4, 1, 1};
-            CHECK_STATUS(
-                gclmem_set_desc_padding(&desc, stride, offset, this->dt, DF_NCHW, mt, flags));
-            vectorMem->padding(desc);
+            Tensor modelBiasTensor = Tensor(OCLMem);
+            TensorDesc biasDesc = tensor1d(this->dt, vecNum);
+            modelBiasTensor.resize(biasDesc);
+            auto biasMem = (OclMemory *)modelBiasTensor.get_memory();
+            U32 pr = (vecNum + 3) / 4 * 4 - vecNum;
+            biasMem->padding(0, pr, 0, 0);
             this->biasTensors.push_back(modelBiasTensor);
         }
         return SUCCESS;
@@ -107,7 +86,7 @@ public:
                         if (desc.num == cNum && desc.offset[0] == 0 && desc.offset[1] == 0) {
                             continue;
                         }
-                    } else if (desc.memFormat == DF_NCWHC4) {
+                    } else if (desc.memFormat == DF_NCHWC4) {
                         if (desc.stride[0] == 1 && desc.stride[1] == 1 &&
                             desc.stride[2] * 4 == (cNum + 3) / 4 * 4 && desc.offset[0] == 0 &&
                             desc.offset[1] == 0) {
@@ -144,9 +123,17 @@ public:
             if (len1 > len0) {
                 this->dataID = 1;
             }
+            auto alphaMem = (OclMemory *)inTensors[1 - this->dataID]->get_memory();
+            U32 alphaLen = alphaMem->length();
+            U32 pr = (alphaLen + 3) / 4 * 4 - alphaLen;
+            alphaMem->padding(0, pr, 0, 0);
         }
-        CHECK_STATUS(
-            scale_infer_output_size(inTensors[this->dataID], outTensors[0], &this->archInfo));
+        U32 axisLen = find_target_axis_len(inTensors);
+        CHECK_STATUS(scale_infer_output_size(
+            inTensors[this->dataID], this->p, axisLen, outTensors[0], &this->archInfo));
+        if (check_tensors_image(inTensors, this->dataID)) {
+            CHECK_STATUS(set_tensors_image(outTensors, inTensors.size()));
+        }
         return SUCCESS;
     }
 

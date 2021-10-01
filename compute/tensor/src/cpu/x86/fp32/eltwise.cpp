@@ -14,12 +14,8 @@
 #include "cpu/x86/fp32/tensor_computing_fp32.h"
 #include "cpu/cpu_functions.h"
 
-#define eltwise_kernel(velt, velts)                                                               \
-    __asm__ __volatile__("vxorps %%ymm8, %%ymm8, %%ymm8       \n\t"                               \
-                         "vxorps %%ymm9, %%ymm9, %%ymm9       \n\t"                               \
-                         "vxorps %%ymm10, %%ymm10, %%ymm10    \n\t"                               \
-                         "vxorps %%ymm11, %%ymm11, %%ymm11    \n\t"                               \
-                         "mov %0, %%ecx                       \n\t"                               \
+#define eltwise_kernel(velt, velts, block, in0, in1, out)                                         \
+    __asm__ __volatile__("mov %0, %%ecx                       \n\t"                               \
                          "cmp $32, %%ecx                      \n\t"                               \
                          "jl 1f                               \n\t"                               \
                          ".align 16                           \n\t"                               \
@@ -96,7 +92,7 @@
                          ".align 16                           \n\t"                               \
                          "6:                                  \n\t"                               \
                          :                                                                        \
-                         : "r"(len), "r"(input[0]), "r"(input[1]), "r"(output)                    \
+                         : "r"(block), "r"(in0), "r"(in1), "r"(out)                               \
                          : "%ecx", "%xmm0", "%xmm8", "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm8", \
                          "%ymm9", "%ymm10", "%ymm11", "memory");
 
@@ -107,32 +103,92 @@ EE eltwise_fp32(std::vector<void *> input,
     void *output,
     EltwiseMode eltwiseMode)
 {
-    if (((int)num == 2) && (inputSize[0] == (int)len) && (inputSize[0] == inputSize[1])) {
-        switch (eltwiseMode) {
-            case ELTWISE_SUM: {
-                eltwise_kernel(vaddps, vaddss);
-                break;
+    EE ret = SUCCESS;
+    if ((num == 2) && (inputSize[0] == (I32)len) && (inputSize[0] == inputSize[1])) {
+        F32 *in0 = (F32 *)input[0];
+        F32 *in1 = (F32 *)input[1];
+        F32 *out = (F32 *)output;
+
+#ifdef _USE_OPENMP
+        U32 BLOCK = ((len + OMP_NUM_THREADS - 1) / OMP_NUM_THREADS + 7) / 8 * 8;
+        U32 blockNum = (len + BLOCK - 1) / BLOCK;
+#pragma omp parallel num_threads(OMP_NUM_THREADS)
+        {
+#endif
+            switch (eltwiseMode) {
+                case ELTWISE_SUM: {
+#ifdef _USE_OPENMP
+#pragma omp for
+                    for (U32 ii = 0; ii < blockNum; ++ii) {
+                        U32 off = ii * BLOCK;
+                        U32 blockSize = UNI_MIN(len - off, BLOCK);
+                        eltwise_kernel(vaddps, vaddss, blockSize, in0 + off, in1 + off, out + off);
+                    }
+#else
+                eltwise_kernel(vaddps, vaddss, len, in0, in1, out);
+#endif
+                    break;
+                }
+                case ELTWISE_MAX: {
+#ifdef _USE_OPENMP
+#pragma omp for
+                    for (U32 ii = 0; ii < blockNum; ++ii) {
+                        U32 off = ii * BLOCK;
+                        U32 blockSize = UNI_MIN(len - off, BLOCK);
+                        eltwise_kernel(vmaxps, vmaxss, blockSize, in0 + off, in1 + off, out + off);
+                    }
+#else
+                eltwise_kernel(vmaxps, vmaxss, len, in0, in1, out);
+#endif
+                    break;
+                }
+                case ELTWISE_AND:
+                case ELTWISE_PROD: {
+#ifdef _USE_OPENMP
+#pragma omp for
+                    for (U32 ii = 0; ii < blockNum; ++ii) {
+                        U32 off = ii * BLOCK;
+                        U32 blockSize = UNI_MIN(len - off, BLOCK);
+                        eltwise_kernel(vmulps, vmulss, blockSize, in0 + off, in1 + off, out + off);
+                    }
+#else
+                eltwise_kernel(vmulps, vmulss, len, in0, in1, out);
+#endif
+                    break;
+                }
+                case ELTWISE_SUB: {
+#ifdef _USE_OPENMP
+#pragma omp for
+                    for (U32 ii = 0; ii < blockNum; ++ii) {
+                        U32 off = ii * BLOCK;
+                        U32 blockSize = UNI_MIN(len - off, BLOCK);
+                        eltwise_kernel(vsubps, vsubss, blockSize, in0 + off, in1 + off, out + off);
+                    }
+#else
+                eltwise_kernel(vsubps, vsubss, len, in0, in1, out);
+#endif
+                    break;
+                }
+                case ELTWISE_DIV: {
+#ifdef _USE_OPENMP
+#pragma omp for
+                    for (U32 ii = 0; ii < blockNum; ++ii) {
+                        U32 off = ii * BLOCK;
+                        U32 blockSize = UNI_MIN(len - off, BLOCK);
+                        eltwise_kernel(vdivps, vdivss, blockSize, in0 + off, in1 + off, out + off);
+                    }
+#else
+                eltwise_kernel(vdivps, vdivss, len, in0, in1, out);
+#endif
+                    break;
+                }
+                default:
+                    ret = NOT_SUPPORTED;
             }
-            case ELTWISE_MAX: {
-                eltwise_kernel(vmaxps, vmaxss);
-                break;
-            }
-            case ELTWISE_PROD: {
-                eltwise_kernel(vmulps, vmulss);
-                break;
-            }
-            case ELTWISE_SUB: {
-                eltwise_kernel(vsubps, vsubss);
-                break;
-            }
-            case ELTWISE_DIV: {
-                eltwise_kernel(vdivps, vdivss);
-                break;
-            }
-            default:
-                return NOT_SUPPORTED;
+#ifdef _USE_OPENMP
         }
-        return SUCCESS;
+#endif
+        return ret;
     }
 
     F32 buffer[8];
@@ -163,7 +219,7 @@ EE eltwise_fp32(std::vector<void *> input,
                     tmp_v = _mm256_div_ps(tmp_v, value_v);
                     break;
                 default:
-                    return NOT_SUPPORTED;
+                    ret = NOT_SUPPORTED;
             }
         }
         _mm256_storeu_ps(output_ptr + i, tmp_v);
@@ -185,11 +241,162 @@ EE eltwise_fp32(std::vector<void *> input,
                 case ELTWISE_PROD:
                     tmp_s *= value_s;
                     break;
+                case ELTWISE_SUB:
+                    tmp_s = tmp_s - value_s;
+                    break;
+                case ELTWISE_DIV:
+                    tmp_s = tmp_s / value_s;
+                    break;
                 default:
-                    return NOT_SUPPORTED;
+                    ret = NOT_SUPPORTED;
             }
         }
         output_ptr[i] = tmp_s;
     }
-    return SUCCESS;
+    return ret;
+}
+
+EE eltwise_i32(std::vector<void *> input,
+    std::vector<int> inputSize,
+    U32 num,
+    U32 len,
+    void *output,
+    EltwiseMode eltwiseMode)
+{
+    EE ret = SUCCESS;
+    if ((num == 2) && (inputSize[0] == (I32)len) && (inputSize[0] == inputSize[1])) {
+        I32 *in0 = (I32 *)input[0];
+        I32 *in1 = (I32 *)input[1];
+        I32 *out = (I32 *)output;
+
+#ifdef _USE_OPENMP
+        U32 BLOCK = ((len + OMP_NUM_THREADS - 1) / OMP_NUM_THREADS + 7) / 8 * 8;
+        U32 blockNum = (len + BLOCK - 1) / BLOCK;
+#pragma omp parallel num_threads(OMP_NUM_THREADS)
+        {
+#endif
+            switch (eltwiseMode) {
+                case ELTWISE_SUM: {
+#ifdef _USE_OPENMP
+#pragma omp for
+                    for (U32 ii = 0; ii < blockNum; ++ii) {
+                        U32 off = ii * BLOCK;
+                        U32 blockSize = UNI_MIN(len - off, BLOCK);
+                        eltwise_kernel(vpaddd, vpaddd, blockSize, in0 + off, in1 + off, out + off);
+                    }
+#else
+                eltwise_kernel(vpaddd, vpaddd, len, in0, in1, out);
+#endif
+                    break;
+                }
+                case ELTWISE_MAX: {
+#ifdef _USE_OPENMP
+#pragma omp for
+                    for (U32 ii = 0; ii < blockNum; ++ii) {
+                        U32 off = ii * BLOCK;
+                        U32 blockSize = UNI_MIN(len - off, BLOCK);
+                        eltwise_kernel(vpmaxsd, vpmaxsd, blockSize, in0 + off, in1 + off, out + off);
+                    }
+#else
+                eltwise_kernel(vpmaxsd, vpmaxsd, len, in0, in1, out);
+#endif
+                    break;
+                }
+                case ELTWISE_PROD: {
+#ifdef _USE_OPENMP
+#pragma omp for
+                    for (U32 ii = 0; ii < blockNum; ++ii) {
+                        U32 off = ii * BLOCK;
+                        U32 blockSize = UNI_MIN(len - off, BLOCK);
+                        eltwise_kernel(vpmulld, vpmulld, blockSize, in0 + off, in1 + off, out + off);
+                    }
+#else
+                eltwise_kernel(vpmulld, vpmulld, len, in0, in1, out);
+#endif
+                    break;
+                }
+                case ELTWISE_SUB: {
+#ifdef _USE_OPENMP
+#pragma omp for
+                    for (U32 ii = 0; ii < blockNum; ++ii) {
+                        U32 off = ii * BLOCK;
+                        U32 blockSize = UNI_MIN(len - off, BLOCK);
+                        eltwise_kernel(vpsubd, vpsubd, blockSize, in0 + off, in1 + off, out + off);
+                    }
+#else
+                eltwise_kernel(vpsubd, vpsubd, len, in0, in1, out);
+#endif
+                    break;
+                }
+                default:
+                    ret = NOT_SUPPORTED;
+            }
+#ifdef _USE_OPENMP
+        }
+#endif
+        return ret;
+    }
+
+    return NOT_SUPPORTED;
+}
+
+EE eltwise_u8(std::vector<void *> input,
+    std::vector<int> inputSize,
+    U32 num,
+    U32 len,
+    void *output,
+    EltwiseMode eltwiseMode)
+{
+    EE ret = SUCCESS;
+    U8 buffer[32];
+    U8 *tmp = buffer;
+    U32 len_tail = len % 32;
+    U32 len_main = len - len_tail;
+    U8 *output_ptr = (U8 *)output;
+    for (U32 i = 0; i < len_main; i += 32) {
+        get_vector<U8>((U8 *)input[0], inputSize[0], &tmp, 32, i, 32, buffer);
+        __m256i tmp_v = _mm256_loadu_si256((__m256i const *)tmp);
+        for (U32 j = 1; j < num; j++) {
+            get_vector<U8>((U8 *)input[j], inputSize[j], &tmp, 32, i, 32, buffer);
+            __m256i value_v = _mm256_loadu_si256((__m256i const *)tmp);
+            switch (eltwiseMode) {
+                case ELTWISE_AND:
+                    tmp_v = _mm256_and_si256(value_v, tmp_v);
+                    break;
+                case ELTWISE_OR:
+                    tmp_v = _mm256_or_si256(value_v, tmp_v);
+                    break;
+                case ELTWISE_XOR:
+                    tmp_v = _mm256_xor_si256(value_v, tmp_v);
+                    break;
+                default:
+                    ret = NOT_SUPPORTED;
+            }
+        }
+        _mm256_storeu_si256((__m256i *)(output_ptr + i), tmp_v);
+    }
+
+    for (U32 i = len_main; i < len; i++) {
+        get_vector<U8>((U8 *)input[0], inputSize[0], &tmp, 32, i, 1, buffer);
+        U8 tmp_s = tmp[0];
+        for (U32 j = 1; j < num; j++) {
+            get_vector<U8>((U8 *)input[j], inputSize[j], &tmp, 32, i, 1, buffer);
+            U8 value_s = tmp[0];
+            switch (eltwiseMode) {
+                case ELTWISE_AND:
+                    tmp_s = value_s & tmp_s;
+                    break;
+                case ELTWISE_OR:
+                    tmp_s = value_s | tmp_s;
+                    break;
+                case ELTWISE_XOR:
+                    tmp_s = value_s ^ tmp_s;
+                    break;
+                default:
+                    ret = NOT_SUPPORTED;
+            }
+        }
+        output_ptr[i] = tmp_s;
+    }
+    return ret;
 }

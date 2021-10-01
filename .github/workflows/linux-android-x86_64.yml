@@ -18,4 +18,5 @@ jobs:
           export ANDROID_NDK_ROOT=${PWD}/android-ndk-r20b
           export PATH=${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH
           cd ..
+          chmod +x install.sh
           ./install.sh --target=android-x86_64

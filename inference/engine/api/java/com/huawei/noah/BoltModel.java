@@ -27,8 +27,8 @@ public final class BoltModel implements Cloneable {
     static
     {
         loadLibrary("c++_shared", true);
-        loadLibrary("OpenCL", true);
-        loadLibrary("kernelsource", true);
+        //loadLibrary("OpenCL", false);
+        loadLibrary("GLES_mali", false);
         loadLibrary("BoltModel", false);
     }
 
@@ -192,6 +192,17 @@ public final class BoltModel implements Cloneable {
         }
         setRuntimeDeviceDynamicJNI(this.modelAddr);
     }
+
+    /**
+     * @brief set parallel threads num
+     * @param  threads       number of threads
+     *
+     * @note
+     * This can only be used before run.
+     * This setting is global to each inference threads.
+     * @return
+     */
+    public native void setNumThreads(int threads);
 
     /**
      * @brief inference result from input

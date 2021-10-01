@@ -30,7 +30,7 @@ void ut_time_statistics();
 #define UNI_TIME_STATISTICS
 #endif
 
-#ifdef _PROFILE
+#if defined(_PROFILE) || defined(_PROFILE_STATISTICS)
 #define UNI_PROFILE(func, name, category)        \
     double profile_time_start_ms = ut_time_ms(); \
     func;                                        \

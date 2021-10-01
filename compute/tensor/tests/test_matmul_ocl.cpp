@@ -11,61 +11,27 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string.h>
 #include "tensor_computing.h"
-#include "ut_util.h"
-#include "gcl.h"
-#include "libkernelsource.h"
+#include "ut_util_ocl.h"
 
-#ifdef _USE_FP16
-inline GCLMem_t alloc(Tensor tensor)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    mem->alloc();
-    return (GCLMem_t)mem->get_ptr();
-}
-
-inline GCLMem_t alloc_map(Tensor tensor)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    mem->mapped_alloc();
-    return (GCLMem_t)mem->get_ptr();
-}
-
-inline GCLMem_t alloc_bytes(Tensor tensor, U32 size)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    GCLMem_t ptr = NULL;
-    if (size > 0) {
-        mem->resize(tensor1d(DT_U8, size));
-        mem->alloc();
-        ptr = (GCLMem_t)mem->get_ptr();
-    }
-    return ptr;
-}
-
-inline GCLMem_t alloc_desc(Tensor tensor, GCLMemDesc desc)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    mem->padding(desc);
-    mem->alloc();
-    return (GCLMem_t)mem->get_ptr();
-}
 int matmulTest(int argc, char *argv[], DataType dt)
 {
-    U32 ac, ah, aw;
-    U32 bc, bh, bw;
+    U32 an, ac, ah, aw;
+    U32 bn, bc, bh, bw;
     U32 transA, transB;
 
     ArchInfo archInfo;
     archInfo.arch = MALI;
-    ArchInfo archInfo_org;
-    archInfo_org.arch = CPU_GENERAL;
+    if (gcl_check_device_qualcomm(OCLContext::getInstance().handle.get())) {
+        archInfo.arch = QUALCOMM;
+    }
 
+    an = 1;
     ac = 4;
     ah = 4;
     aw = 4;
 
+    bn = 1;
     bc = 4;
     bh = 4;
     bw = 4;
@@ -83,33 +49,50 @@ int matmulTest(int argc, char *argv[], DataType dt)
         transA = atoi(argv[7]);
         transB = atoi(argv[8]);
     }
+    if (argc == 11) {
+        an = atoi(argv[1]);
+        ac = atoi(argv[2]);
+        ah = atoi(argv[3]);
+        aw = atoi(argv[4]);
+        bn = atoi(argv[5]);
+        bc = atoi(argv[6]);
+        bh = atoi(argv[7]);
+        bw = atoi(argv[8]);
+        transA = atoi(argv[9]);
+        transB = atoi(argv[10]);
+    }
     bool transposeA = (transA) ? true : false;
     bool transposeB = (transB) ? true : false;
     TensorDesc matrixADesc, matrixBDesc, matrixCDesc;
     TensorDesc matrixCDesc_cpu;
 
-    matrixADesc = tensor4df(dt, DF_NCHW, 1, ac, ah, aw);
-    matrixBDesc = tensor4df(dt, DF_NCHW, 1, bc, bh, bw);
+    matrixADesc = tensor4df(dt, DF_NCHWC4, an, ac, ah, aw);
+    matrixBDesc = tensor4df(dt, DF_NCHWC4, bn, bc, bh, bw);
 
     U8 *matrixA_cpu = ut_input_v(ac * ah * aw, dt, UT_INIT_RANDOM);
     U8 *matrixB_cpu = ut_input_v(bc * bh * bw, dt, UT_INIT_RANDOM);
-    U8 *matrixC_gpu = NULL;
 
     std::shared_ptr<GCLHandle> handleSharedPtr = OCLContext::getInstance().handle;
     GCLHandle_t handle = handleSharedPtr.get();
     std::vector<GCLKernelInfo> kernelVec;
     handle->kernelVec = &kernelVec;
-    Tensor matrixATensor = Tensor(OCLMem);
-    Tensor matrixBTensor = Tensor(OCLMem);
+    MemoryType memType = OCLMem;
+    if (archInfo.arch == QUALCOMM) {
+        memType = OCLMemImg;
+    }
+    Tensor matrixATensor = Tensor(memType);
+    Tensor matrixBTensor = Tensor(memType);
     Tensor matrixCTensor = Tensor(OCLMem);
     Tensor tmpTensor = Tensor(OCLMem);
+    Tensor tmpTensorImgA = Tensor(OCLMemImg);
+    Tensor tmpTensorImgB = Tensor(OCLMemImg);
     matrixATensor.resize(matrixADesc);
     matrixBTensor.resize(matrixBDesc);
 
     MaliPara maliPara;
     ForwardRunInfoMali runInfo;
     runInfo.algorithm = (I32)(CONVOLUTION_ALGORITHM_NULL);
-    runInfo.best_w[0] = 1;
+    runInfo.best_h[0] = 1;
     runInfo.best_c[0] = 1;
     runInfo.best_k[0] = 1;
     maliPara.handle = handle;
@@ -121,29 +104,38 @@ int matmulTest(int argc, char *argv[], DataType dt)
     CHECK_STATUS(matmul_infer_forward_algorithm(
         matrixATensor, transposeA, matrixBTensor, transposeB, matrixCTensor, &archInfo));
 
-    U32 maxBytes = 0;
-    U32 tmpBytes;
+    U32 maxBytes[7] = {0};
     CHECK_STATUS(matmul_infer_forward_tmp_bytes(
-        matrixATensor, transposeA, matrixBTensor, transposeB, &tmpBytes, &archInfo));
-    maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
+        matrixATensor, transposeA, matrixBTensor, transposeB, matrixCTensor, maxBytes, &archInfo));
 
-    GCLMem_t matrixC = alloc_map(matrixCTensor);
+    GCLMem_t matrixC = alloc(matrixCTensor);
     GCLMem_t matrixA = alloc(matrixATensor);
     GCLMem_t matrixB = alloc(matrixBTensor);
     CHECK_STATUS(gcl_fill_memory_zero(handle, matrixA));
     CHECK_STATUS(gcl_fill_memory_zero(handle, matrixB));
 
+    U32 tmpBytes;
+    matrixCDesc = matrixCTensor.get_desc();
     tmpBytes = tensorNumBytes(matrixADesc);
-    maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
+    maxBytes[0] = (tmpBytes > maxBytes[0]) ? tmpBytes : maxBytes[0];
     tmpBytes = tensorNumBytes(matrixBDesc);
-    maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
+    maxBytes[0] = (tmpBytes > maxBytes[0]) ? tmpBytes : maxBytes[0];
+    tmpBytes = tensorNumBytes(matrixCDesc);
+    maxBytes[0] = (tmpBytes > maxBytes[0]) ? tmpBytes : maxBytes[0];
 
-    GCLMem_t tmpbuf = alloc_bytes(tmpTensor, maxBytes);
+    GCLMem_t tmpbuf = alloc_bytes(tmpTensor, maxBytes[0]);
+    alloc_img(tmpTensorImgA, maxBytes + 1);
+    alloc_img(tmpTensorImgB, maxBytes + 4);
     CHECK_STATUS(ocl_set_input(handle, matrixA, matrixADesc, matrixA_cpu, tmpbuf, true));
     CHECK_STATUS(ocl_set_input(handle, matrixB, matrixBDesc, matrixB_cpu, tmpbuf, true));
 
-    CHECK_STATUS(matmul(
-        matrixATensor, transposeA, matrixBTensor, transposeB, tmpTensor, matrixCTensor, &archInfo));
+    std::vector<Tensor> tmpTensors(3);
+    tmpTensors[0] = tmpTensor;
+    tmpTensors[1] = tmpTensorImgA;
+    tmpTensors[2] = tmpTensorImgB;
+    Tensor biasTensor = Tensor(OCLMem);
+    CHECK_STATUS(matmul(matrixATensor, transposeA, matrixBTensor, transposeB, biasTensor,
+        tmpTensors, matrixCTensor, &archInfo));
 
     /*warp up*/
     UNI_INFO_LOG("warm up gpu:\n")
@@ -179,11 +171,10 @@ int matmulTest(int argc, char *argv[], DataType dt)
 #else
     CHECK_STATUS(gcl_run_kernelVec(handle));
 #endif
-    matrixCDesc = matrixCTensor.get_desc();
-    CHECK_STATUS(ocl_get_output(handle, matrixC, matrixCDesc, true));
-    matrixC_gpu = matrixC->mapPtrArray.back();
     U32 cc, ch, cw;
     tensorSelectGet(matrixCDesc, NULL, NULL, NULL, &cc, &ch, &cw);
+    U8 *matrixC_gpu = ut_input_v(cc * ch * cw, dt, UT_INIT_RANDOM);
+    CHECK_STATUS(ocl_get_output(handle, matrixC, matrixCDesc, matrixC_gpu, tmpbuf, true));
     char buffer[150];
     char params[120];
     sprintf(params, "(%u %u %u)+(%u %u %u)=(%u %u %u)", ac, ah, aw, bc, bh, bw, cc, ch, cw);
@@ -198,38 +189,43 @@ int matmulTest(int argc, char *argv[], DataType dt)
     double ops = 2.0 * cc * cw * ch * k + cc * cw * ch;
     ut_log(dt, buffer, ops, time);
 #endif
+    matrixADesc.df = DF_NCHW;
+    matrixBDesc.df = DF_NCHW;
     Tensor matrixATensorCpu;
     matrixATensorCpu.resize(matrixADesc);
     matrixATensorCpu.alloc();
-    memcpy(get_ptr_from_tensor(matrixATensorCpu, UT_ARCH), matrixA_cpu, tensorNumBytes(matrixADesc));
+    memcpy(get_ptr_from_tensor(matrixATensorCpu, CPU_GENERAL), matrixA_cpu,
+        tensorNumBytes(matrixADesc));
 
     Tensor matrixBTensorCpu;
     matrixBTensorCpu.resize(matrixBDesc);
     matrixBTensorCpu.alloc();
-    memcpy(get_ptr_from_tensor(matrixBTensorCpu, UT_ARCH), matrixB_cpu, tensorNumBytes(matrixBDesc));
+    memcpy(get_ptr_from_tensor(matrixBTensorCpu, CPU_GENERAL), matrixB_cpu,
+        tensorNumBytes(matrixBDesc));
 
     Tensor matrixCTensorCpu;
     CHECK_STATUS(matmul_infer_output_size(&matrixATensorCpu, transposeA, &matrixBTensorCpu,
-        transposeB, &matrixCTensorCpu, &archInfo_org));
+        transposeB, &matrixCTensorCpu, &UT_SERIAL_ARCHINFO));
     matrixCTensorCpu.alloc();
 
     Tensor tmpTensorCpu;
-    CHECK_STATUS(matmul_infer_forward_tmp_bytes(
-        matrixATensorCpu, transposeA, matrixBTensorCpu, transposeB, &tmpBytes, &archInfo_org));
+    CHECK_STATUS(matmul_infer_forward_tmp_bytes(matrixATensorCpu, transposeA, matrixBTensorCpu,
+        transposeB, matrixCTensorCpu, &tmpBytes, &UT_SERIAL_ARCHINFO));
     tmpTensorCpu.resize(tensor1d(DT_F16, tmpBytes / bytesOf(DT_F16)));
     tmpTensorCpu.alloc();
+    std::vector<Tensor> tmpTensorsCpu(1, tmpTensorCpu);
 
-    CHECK_STATUS(matmul(matrixATensorCpu, transposeA, matrixBTensorCpu, transposeB, tmpTensorCpu,
-        matrixCTensorCpu, &archInfo_org));
-    ut_check_a(matrixC_gpu, get_ptr_from_tensor(matrixCTensorCpu, UT_ARCH), cc * ch * cw, dt);
+    CHECK_STATUS(matmul(matrixATensorCpu, transposeA, matrixBTensorCpu, transposeB, biasTensor,
+        tmpTensorsCpu, matrixCTensorCpu, &UT_SERIAL_ARCHINFO));
+    ut_check_a(matrixC_gpu, get_ptr_from_tensor(matrixCTensorCpu, CPU_GENERAL), cc * ch * cw, dt);
 
     CHECK_STATUS(gcl_finish(handle));
     CHECK_STATUS(gcl_clean_kernelVec(handle));
     free(matrixA_cpu);
     free(matrixB_cpu);
+    free(matrixC_gpu);
     return 0;
 }
-#endif
 
 int main(int argc, char **argv)
 {

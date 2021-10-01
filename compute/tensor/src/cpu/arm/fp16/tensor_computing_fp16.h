@@ -48,19 +48,21 @@ EE deconvolution_transform_filter_fp16(TensorDesc filterDesc,
     TensorDesc *ftmDesc,
     F16 *filterTransformed);
 
-EE pooling_c8_fp16(I32 tstart,
-    I32 tend,
-    I32 hstart,
-    I32 hend,
-    I32 wstart,
-    I32 wend,
-    I32 poolSize,
-    const F16 *input,
-    I32 it,
-    I32 ih,
-    I32 iw,
-    PoolingParamSpec p,
-    F16 *output);
+template <PoolingMode pm>
+EE pooling_c8_fp16(const I32 &tstart,
+    const I32 &tend,
+    const I32 &hstart,
+    const I32 &hend,
+    const I32 &wstart,
+    const I32 &wend,
+    const I32 &poolSize,
+    const I32 &kernelSize,
+    const U8 *input,
+    const I32 &it,
+    const I32 &ih,
+    const I32 &iw,
+    U8 *output,
+    void *scale);
 
 EE softmax_fp16(
     TensorDesc inputDesc, const F16 *input, int axis, TensorDesc outputDesc, F16 *output);
@@ -173,9 +175,10 @@ EE scale_fp16(F16 *input,
     I32 nDims,
     F16 *alpha,
     F16 *beta,
-    I32 in,
-    I32 ic,
+    I32 on,
+    I32 oc,
     I32 elements_per_channel,
+    I32 ic,
     F16 *output);
 
 EE softmax_fp16(TensorDesc inputDesc, const F16 *input, TensorDesc outputDesc, F16 *output);
@@ -187,9 +190,6 @@ EE check_fp16(TensorDesc inputDescA,
     CheckMode checkMode,
     TensorDesc outputDesc,
     I32 *output);
-
-EE quantize_tensor_fp16(
-    TensorDesc dDesc, const void *data, TensorDesc *qDesc, void *qData, F16 *scale);
 
 EE attention_mask_fp16(TensorDesc inputDesc,
     const F16 *input,
@@ -203,4 +203,12 @@ EE prelu_fp16(TensorDesc inputDesc,
     PReLUParamSpec preluDesc,
     TensorDesc outputDesc,
     F16 *output);
+
+EE dequantize_to_f16(TensorDesc qDesc,
+    void *qData,
+    const F32 *scale,
+    TensorDesc bDesc,
+    void *bData,
+    TensorDesc dDesc,
+    void *data);
 #endif

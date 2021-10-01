@@ -15,7 +15,7 @@
 #ifdef _USE_CPU
 #include "cpu/tensor_computing_cpu.h"
 #endif
-#ifdef _USE_MALI
+#ifdef _USE_GPU
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
 
@@ -32,8 +32,8 @@ EE argmax(
 #if defined(_USE_CPU)
         ret = argmax_cpu(inputDesc, input, p, outputDesc, output);
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
         void *tmp = get_ptr_from_tensor(tmpTensor, arch);
         ret = argmax_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc, (GCLMem_t)input, p,
             (GCLMem_t)tmp, outputDesc, (GCLMem_t)output);
@@ -46,8 +46,8 @@ EE argmax_infer_forward_tmp_bytes(
     Tensor inputTensor, ArgMaxParamSpec p, Tensor outputTensor, U32 *bytes, ArchInfo_t archInfo)
 {
     EE ret = NOT_SUPPORTED;
-    if (IS_MALI_GPU(archInfo->arch)) {
-#ifdef _USE_MALI
+    if (IS_GPU(archInfo->arch)) {
+#ifdef _USE_GPU
         TensorDesc inputDesc = inputTensor.get_desc();
         TensorDesc outputDesc = outputTensor.get_desc();
         ret = argmax_infer_forward_tmp_bytes_mali(inputDesc, p, outputDesc, bytes);
@@ -70,30 +70,33 @@ EE argmax_infer_output_size(
     }
     TensorDesc inputDesc = inputTensor->get_desc();
     TensorDesc outputDesc = outputTensor->get_desc();
-    EE ret = NOT_SUPPORTED;
-    if (IS_MALI_GPU(archInfo->arch)) {
-#ifdef _USE_MALI
-        GCLMemDesc gclmemInputDesc = ocl_get_desc(*inputTensor);
-        GCLMemDesc gclmemOutputDesc = ocl_get_desc(*outputTensor);
-        ret = argmax_infer_output_size_mali(
-            inputDesc, p, &outputDesc, &gclmemInputDesc, &gclmemOutputDesc);
-        ocl_set_desc(inputTensor, gclmemInputDesc);
-        ocl_set_desc(outputTensor, gclmemOutputDesc);
+    outputDesc = inputDesc;
+    int axis = p.axis;
+    if (axis < 0) {
+        axis += inputDesc.nDims;
+    }
+    axis = inputDesc.nDims - 1 - axis;
+    for (int i = axis; i < (I32)(inputDesc.nDims) - 1; i++) {
+        outputDesc.dims[i] = outputDesc.dims[i + 1];
+    }
+    outputDesc.nDims = inputDesc.nDims - 1;
+    outputDesc.dt = DT_I32;
+    if (outputDesc.nDims == 2) {
+        outputDesc.df = DF_NORMAL;
+    }
+    if (outputDesc.nDims == 3) {
+        outputDesc.df = DF_MTK;
+    }
+    if (outputDesc.nDims >= 4) {
+        outputDesc.df = DF_NCHW;
+    }
+    if (IS_GPU(archInfo->arch)) {
+#ifdef _USE_GPU
+        OclMemory *inputMem = (OclMemory *)inputTensor->get_memory();
+        OclMemory *outputMem = (OclMemory *)outputTensor->get_memory();
+        CHECK_STATUS(argmax_padding_input_mali(inputDesc, p, &outputDesc, inputMem, outputMem));
 #endif
-    } else {
-        outputDesc = inputDesc;
-        int axis = p.axis;
-        if (axis < 0) {
-            axis += inputDesc.nDims;
-        }
-        axis = inputDesc.nDims - 1 - axis;
-        for (int i = axis; i < (I32)(inputDesc.nDims) - 1; i++) {
-            outputDesc.dims[i] = outputDesc.dims[i + 1];
-        }
-        outputDesc.nDims = inputDesc.nDims - 1;
-        outputDesc.dt = DT_U32;
-        ret = SUCCESS;
     }
     outputTensor->resize(outputDesc);
-    return ret;
+    return SUCCESS;
 }

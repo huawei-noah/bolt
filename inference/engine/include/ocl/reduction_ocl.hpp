@@ -18,13 +18,10 @@
 
 class ReductionOCL : public Reduction {
 public:
-    ReductionOCL(DataType dt, ReductionParamSpec p) : Reduction(dt, p)
-    {
-        setMALIArchInfo(
-            &(this->archInfo), nullptr, &this->needSetKernelVec, &this->needSelectKernelLS);
-    }
+    ReductionOCL(DataType dt, ReductionParamSpec p)
+        : Reduction(dt, p){INIT_GPU_INFO(nullptr)}
 
-    std::shared_ptr<Operator> clone() override
+          std::shared_ptr<Operator> clone() override
     {
         std::shared_ptr<ReductionOCL> mem =
             std::shared_ptr<ReductionOCL>(new ReductionOCL(this->dt, this->p));

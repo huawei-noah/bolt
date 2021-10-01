@@ -23,6 +23,8 @@ class AlgorithmMap {
 public:
     AlgorithmMap(Arch arch, std::string modelName, std::string deviceName, DataType dt)
     {
+        modelName = processName(modelName);
+        deviceName = processName(deviceName);
         this->algorithmFileName = "algorithmInfo_";
         this->algorithmFileName += deviceName;
         this->algorithmFileName += "_";
@@ -40,6 +42,43 @@ public:
         this->commonAlgoFileName += "_";
         this->commonAlgoFileName += std::to_string(dt);
         this->hasCommonAlgoFile = false;
+    }
+
+    inline std::string processName(std::string modelName)
+    {
+        std::set<std::string> numSet;
+        std::set<std::string> charSet;
+        for (int i = 0; i < 9; i++) {
+            numSet.insert(std::to_string(i));
+        }
+        for (char i = 65; i <= 122; i++) {
+            if (i > 90 && i < 95) {
+                continue;
+            }
+            if (i == 96) {
+                continue;
+            }
+            char j[8];
+            sprintf(j, "%c", i);
+            charSet.insert(j);
+        }
+
+        std::string name = modelName;
+        for (U32 i = 0; i < name.size(); i++) {
+            std::string j = name.substr(i, 1);
+            bool asNum = (numSet.find(j) == numSet.end()) ? false : true;
+            bool asChar = (charSet.find(j) == charSet.end()) ? false : true;
+            if (i == 0) {
+                if (!asChar) {
+                    name[i] = '_';
+                }
+            } else {
+                if (!asChar && !asNum) {
+                    name[i] = '_';
+                }
+            }
+        }
+        return name;
     }
 
     void setAlgorithmInfoToMap(
@@ -90,7 +129,7 @@ public:
         }
         U32 be = 0;
         be = readFileStreamForMap(algoFileStream, be, &this->algorithmMap);
-#ifdef _USE_MALI
+#ifdef _USE_GPU
         be = readFileStreamForMap(algoFileStream, be, &this->kernelThreadMap);
 #endif
         be = readFileStreamForMap(algoFileStream, be, &this->commonAlgoMap);
@@ -108,8 +147,8 @@ public:
             UNI_DEBUG_LOG("Not read algorithm map file, because path is not set.\n");
             return;
         }
-        CI8 lastFlag = algorithmMapPath[algorithmMapPath.length() - 1];
-        if (strcmp(&lastFlag, "/") != 0) {
+        char lastFlag = algorithmMapPath[algorithmMapPath.length() - 1];
+        if (lastFlag == '/') {
             algorithmMapPath += "/";
         }
         this->hasAlgorithmFile = readFileForMap(algorithmFileName, algorithmMapPath, &algorithmMap);
@@ -126,14 +165,16 @@ public:
         if (this->hasAlgorithmFile) {
             return;
         }
-        CI8 lastFlag = algorithmMapPath[algorithmMapPath.length() - 1];
-        if (strcmp(&lastFlag, "/") != 0) {
+        char lastFlag = algorithmMapPath[algorithmMapPath.length() - 1];
+        if (lastFlag == '/') {
             algorithmMapPath += "/";
         }
         saveMapToFile(
             this->algorithmFileName, algorithmMapPath, this->algorithmMap, this->hasAlgorithmFile);
-        saveMapToFile(this->commonAlgoFileName, algorithmMapPath, this->commonAlgoMap,
-            this->hasCommonAlgoFile);
+        if (this->commonAlgoMap.size()) {
+            saveMapToFile(this->commonAlgoFileName, algorithmMapPath, this->commonAlgoMap,
+                this->hasCommonAlgoFile);
+        }
     }
 
     void getCommonAlgoMapPara(U32 *ic_step,
@@ -234,7 +275,7 @@ public:
         return getAlgorithmInfoFromMap(algoName, algorithmArray, arrayNum, true);
     }
 
-#ifdef _USE_MALI
+#ifdef _USE_GPU
     void setKernelThreadInfoToMap(std::string name, U32 gs[3], U32 ls[3])
     {
         std::string kernelThreadInfo = "/";
@@ -328,7 +369,7 @@ private:
         if (!file || feof(file)) {
             return false;
         }
-        UNI_INFO_LOG("Read algorithm map file from %s...\n", fullyFileName.c_str());
+        UNI_DEBUG_LOG("Read algorithm map file from %s...\n", fullyFileName.c_str());
         U32 num = 0;
         fread(&num, sizeof(U32), 1, file);
         I8 operatorName[128];
@@ -344,8 +385,8 @@ private:
             algorithm[algorithmLen] = '\0';
             (*targetMap)[operatorName] = algorithm;
         }
-#ifdef _USE_MALI
-        if (this->arch == MALI && fileName == this->algorithmFileName) {
+#ifdef _USE_GPU
+        if (IS_GPU(this->arch) && fileName == this->algorithmFileName) {
             fread(&num, sizeof(U32), 1, file);
             I8 kernelName[100];
             I8 kernelThreadInfo[100];
@@ -374,13 +415,24 @@ private:
         if (noNeedSave) {
             return;
         }
-        if (targetMap.size() > 0) {
-            std::string fullyFileName = path + fileName;
-            UNI_DEBUG_LOG("Write algorithm map file to %s...\n", fullyFileName.c_str());
-            FILE *file = fopen(fullyFileName.c_str(), "w");
-            U32 mapSize = targetMap.size();
+        std::string fullyFileName = path + fileName;
+        UNI_DEBUG_LOG("Write algorithm map file to %s...\n", fullyFileName.c_str());
+        FILE *file = fopen(fullyFileName.c_str(), "w");
+        U32 mapSize = targetMap.size();
+        fwrite(&mapSize, sizeof(U32), 1, file);
+        for (auto iter : targetMap) {
+            U32 firstLen = iter.first.length();
+            U32 secondLen = iter.second.length();
+            fwrite(&firstLen, sizeof(U32), 1, file);
+            fwrite(iter.first.c_str(), firstLen, 1, file);
+            fwrite(&secondLen, sizeof(U32), 1, file);
+            fwrite(iter.second.c_str(), secondLen, 1, file);
+        }
+#ifdef _USE_GPU
+        if (IS_GPU(this->arch) && fileName == this->algorithmFileName) {
+            U32 mapSize = kernelThreadMap.size();
             fwrite(&mapSize, sizeof(U32), 1, file);
-            for (auto iter : targetMap) {
+            for (auto iter : kernelThreadMap) {
                 U32 firstLen = iter.first.length();
                 U32 secondLen = iter.second.length();
                 fwrite(&firstLen, sizeof(U32), 1, file);
@@ -388,24 +440,11 @@ private:
                 fwrite(&secondLen, sizeof(U32), 1, file);
                 fwrite(iter.second.c_str(), secondLen, 1, file);
             }
-#ifdef _USE_MALI
-            if (this->arch == MALI && fileName == this->algorithmFileName) {
-                U32 mapSize = kernelThreadMap.size();
-                fwrite(&mapSize, sizeof(U32), 1, file);
-                for (auto iter : kernelThreadMap) {
-                    U32 firstLen = iter.first.length();
-                    U32 secondLen = iter.second.length();
-                    fwrite(&firstLen, sizeof(U32), 1, file);
-                    fwrite(iter.first.c_str(), firstLen, 1, file);
-                    fwrite(&secondLen, sizeof(U32), 1, file);
-                    fwrite(iter.second.c_str(), secondLen, 1, file);
-                }
-            }
-#endif
-            U32 endFlag = 0;
-            fwrite(&endFlag, sizeof(U32), 1, file);
-            fclose(file);
         }
+#endif
+        U32 endFlag = 0;
+        fwrite(&endFlag, sizeof(U32), 1, file);
+        fclose(file);
     }
 
     std::string getCommonAlgoName(
@@ -427,7 +466,7 @@ private:
     std::string algorithmFileName;
     Arch arch;
     bool hasAlgorithmFile;
-#ifdef _USE_MALI
+#ifdef _USE_GPU
     std::map<std::string, std::string> kernelThreadMap;
 #endif
     std::map<std::string, std::string> commonAlgoMap;

@@ -11,7 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string.h>
 #include "blas_enhance.h"
 #include "ut_util.h"
 
@@ -32,7 +31,7 @@ int axpbyTest(int argc, char **argv, DataType dt)
     memcpy(y_ref, y, tensorNumBytes(yDesc));
     // check
     if (UT_CHECK) {
-        CHECK_STATUS(vector_vector_axpby(a, xDesc, x, b, yDesc, y, UT_ARCH));
+        CHECK_STATUS(vector_vector_axpby(a, xDesc, x, b, yDesc, y, UT_CPU_ARCH));
 
         // naive implement
         CHECK_STATUS(vector_vector_axpby(a, xDesc, x, b, yDesc, y_ref, CPU_GENERAL));
@@ -43,7 +42,7 @@ int axpbyTest(int argc, char **argv, DataType dt)
     // benchmark
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        vector_vector_axpby(a, xDesc, x, b, yDesc, y, UT_ARCH);
+        vector_vector_axpby(a, xDesc, x, b, yDesc, y, UT_CPU_ARCH);
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;

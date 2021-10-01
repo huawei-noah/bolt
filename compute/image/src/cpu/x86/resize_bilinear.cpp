@@ -48,13 +48,24 @@ typedef void (*compute_bilinear_func)(F32 *input0,
 
 inline F32 infer_src(I32 x, I32 iw, I32 ow, ResizeCoordinateTransMode trans_mode)
 {
+    F32 ret;
     switch (trans_mode) {
         case HALF_PIXEL:
-            return (x + 0.5f) * 1.0f * iw / ow - 0.5;
+            ret = (x + 0.5f) * 1.0f * iw / ow - 0.5;
+            break;
         case ALIGN_CORNERS:
+            ret = x * 1.0f * (iw - 1) / (ow - 1);
+            break;
+        case PYTORCH_HALF_PIXEL:
+            ret = (ow > 1) ? ((x + 0.5f) * 1.0f * iw / ow - 0.5) : 0;
+            break;
         default:
-            return x * 1.0f * (iw - 1) / (ow - 1);
+            ret = 0;
+            UNI_ERROR_LOG("X86 Resize currently not support this coordinate transformation "
+                          "mode.\n");
+            break;
     }
+    return ret;
 }
 
 inline void copy_batch_nchwc8_fp32(
@@ -76,7 +87,7 @@ inline void compute_linear_nchwc8_fp32(F32 *input0,
     F32 r1,
     U32 icStep,
     U32 ocStep,
-    I32 oc,
+    I32 ic,
     U32 inStep,
     U32 onStep,
     U32 on)
@@ -85,7 +96,7 @@ inline void compute_linear_nchwc8_fp32(F32 *input0,
     __m256 r1_256 = _mm256_set1_ps(r1);
     __m256 tmp0, tmp1;
     for (U32 n = 0; n < on; ++n) {
-        for (I32 c = 0; c < oc; c += 8) {
+        for (I32 c = 0; c < ic; c += 8) {
             tmp0 = _mm256_mul_ps(_mm256_loadu_ps(input0), r0_256);
             tmp1 = _mm256_mul_ps(_mm256_loadu_ps(input1), r1_256);
             _mm256_storeu_ps(output, _mm256_add_ps(tmp0, tmp1));
@@ -97,7 +108,7 @@ inline void compute_linear_nchwc8_fp32(F32 *input0,
 }
 
 inline void copy_batch_nchw_fp32(
-    F32 *input, F32 *output, U32 icStep, U32 ocStep, I32 oc, U32 inStep, U32 onStep, U32 on)
+    F32 *input, F32 *output, U32 icStep, U32 ocStep, I32 ic, U32 inStep, U32 onStep, U32 on)
 {
     U32 oStep = ocStep / 8;
     U32 iStep = icStep / 8;
@@ -106,15 +117,16 @@ inline void copy_batch_nchw_fp32(
     __m128i v128index = _mm_set_epi32(iStep * 3, iStep * 2, iStep, 0);
     for (U32 n = 0; n < on; ++n) {
         I32 c = 0;
-        for (; c < oc - 7; c += 8) {
+        for (; c < ic - 7; c += 8) {
             _mm256_storeu_ps(
                 output + c * oStep, _mm256_i32gather_ps(input + c * iStep, v256index, 4));
         }
-        for (; c < oc - 3; c += 4) {
-            _mm_storeu_ps(output + c * oStep, _mm_i32gather_ps(input + c * iStep, v128index, 4));
+        I32 mainc = c;
+        for (; c < ic - 3; c += 4) {
+            _mm_storeu_ps(output + mainc * oStep, _mm_i32gather_ps(input + c * iStep, v128index, 4));
         }
-        for (; c < oc; ++c) {
-            *(output + c * oStep) = *(input + c * iStep);
+        for (; c < ic; ++c) {
+            *(output + mainc * oStep + c - mainc) = *(input + c * iStep);
         }
         input += inStep;
         output += onStep;
@@ -128,7 +140,7 @@ inline void compute_linear_nchw_fp32(F32 *input0,
     F32 r1,
     U32 icStep,
     U32 ocStep,
-    I32 oc,
+    I32 ic,
     U32 inStep,
     U32 onStep,
     U32 on)
@@ -144,20 +156,22 @@ inline void compute_linear_nchw_fp32(F32 *input0,
     __m128i v128index = _mm_set_epi32(iStep * 3, iStep * 2, iStep, 0);
     for (U32 n = 0; n < on; ++n) {
         I32 c = 0;
-        for (c = 0; c < oc - 7; c += 8) {
+        for (c = 0; c < ic - 7; c += 8) {
             __m256 tmp0 =
                 _mm256_mul_ps(_mm256_i32gather_ps(input0 + c * iStep, v256index, 4), r0_256);
             __m256 tmp1 =
                 _mm256_mul_ps(_mm256_i32gather_ps(input1 + c * iStep, v256index, 4), r1_256);
             _mm256_storeu_ps(output + c * oStep, _mm256_add_ps(tmp0, tmp1));
         }
-        for (; c < oc - 3; c += 4) {
+        I32 mainc = c;
+        for (; c < ic - 3; c += 4) {
             __m128 tmp0 = _mm_mul_ps(_mm_i32gather_ps(input0 + c * iStep, v128index, 4), r0_128);
             __m128 tmp1 = _mm_mul_ps(_mm_i32gather_ps(input1 + c * iStep, v128index, 4), r1_128);
-            _mm_storeu_ps(output + c * oStep, _mm_add_ps(tmp0, tmp1));
+            _mm_storeu_ps(output + mainc * oStep, _mm_add_ps(tmp0, tmp1));
         }
-        for (; c < oc; ++c) {
-            *(output + c * oStep) = *(input0 + c * iStep) * r0 + *(input1 + c * iStep) * r1;
+        for (; c < ic; ++c) {
+            *(output + mainc * oStep + c - mainc) =
+                *(input0 + c * iStep) * r0 + *(input1 + c * iStep) * r1;
         }
         input0 += inStep;
         input1 += inStep;
@@ -214,7 +228,7 @@ inline void compute_bilinear_nchw_fp32(F32 *input0,
     F32 r3,
     U32 icStep,
     U32 ocStep,
-    I32 oc,
+    I32 ic,
     U32 inStep,
     U32 onStep,
     U32 on)
@@ -234,7 +248,7 @@ inline void compute_bilinear_nchw_fp32(F32 *input0,
     __m128i v128index = _mm_set_epi32(iStep * 3, iStep * 2, iStep, 0);
     for (U32 n = 0; n < on; ++n) {
         I32 c = 0;
-        for (; c < oc - 7; c += 8) {
+        for (; c < ic - 7; c += 8) {
             __m256 tmp0 =
                 _mm256_mul_ps(_mm256_i32gather_ps(input0 + c * iStep, v256index, 4), r0_256);
             __m256 tmp1 =
@@ -246,17 +260,18 @@ inline void compute_bilinear_nchw_fp32(F32 *input0,
             tmp0 = _mm256_add_ps(_mm256_add_ps(tmp0, tmp1), _mm256_add_ps(tmp2, tmp3));
             _mm256_storeu_ps(output + c * oStep, tmp0);
         }
-        for (; c < oc - 3; c += 4) {
+        I32 mainc = c;
+        for (; c < ic - 3; c += 4) {
             __m128 tmp0 = _mm_mul_ps(_mm_i32gather_ps(input0 + c * iStep, v128index, 4), r0_128);
             __m128 tmp1 = _mm_mul_ps(_mm_i32gather_ps(input1 + c * iStep, v128index, 4), r1_128);
             __m128 tmp2 = _mm_mul_ps(_mm_i32gather_ps(input2 + c * iStep, v128index, 4), r2_128);
             __m128 tmp3 = _mm_mul_ps(_mm_i32gather_ps(input3 + c * iStep, v128index, 4), r3_128);
             tmp0 = _mm_add_ps(_mm_add_ps(tmp0, tmp1), _mm_add_ps(tmp2, tmp3));
-            _mm_storeu_ps(output + c * oStep, tmp0);
+            _mm_storeu_ps(output + mainc * oStep, tmp0);
         }
-        for (; c < oc; ++c) {
-            *(output + c * oStep) = *(input0 + c * iStep) * r0 + *(input1 + c * iStep) * r1 +
-                *(input2 + c * iStep) * r2 + *(input3 + c * iStep) * r3;
+        for (; c < ic; ++c) {
+            *(output + mainc * oStep + c - mainc) = *(input0 + c * iStep) * r0 +
+                *(input1 + c * iStep) * r1 + *(input2 + c * iStep) * r2 + *(input3 + c * iStep) * r3;
         }
         input0 += inStep;
         input1 += inStep;
@@ -302,19 +317,19 @@ EE resize_bilinear_x86_fp32(
             F32 wC = infer_src(w, iw, ow, p.trans_mode);
             U32 output_idx = h * ow * 8 + w * 8;
             if (h == 0 && w == 0) {
-                copy[func_idx](input, output, icStep, ocStep, oc, inStep, onStep, on);
+                copy[func_idx](input, output, icStep, ocStep, ic, inStep, onStep, on);
                 continue;
             } else if (h == oh - 1 && w == ow - 1) {
                 copy[func_idx](input + ((ih - 1) * iw + iw - 1) * itile_size, output + output_idx,
-                    icStep, ocStep, oc, inStep, onStep, on);
+                    icStep, ocStep, ic, inStep, onStep, on);
                 continue;
             } else if (h == 0 && w == ow - 1) {
                 copy[func_idx](input + (iw - 1) * itile_size, output + output_idx, icStep, ocStep,
-                    oc, inStep, onStep, on);
+                    ic, inStep, onStep, on);
                 continue;
             } else if (h == oh - 1 && w == 0) {
                 copy[func_idx](input + (ih - 1) * iw * itile_size, output + output_idx, icStep,
-                    ocStep, oc, inStep, onStep, on);
+                    ocStep, ic, inStep, onStep, on);
                 continue;
             }
 
@@ -329,21 +344,21 @@ EE resize_bilinear_x86_fp32(
 
             if (hB == hT && wL == wR) {
                 copy[func_idx](input + (hT * iw + wL) * itile_size, output + output_idx, icStep,
-                    ocStep, oc, inStep, onStep, on);
+                    ocStep, ic, inStep, onStep, on);
             } else if (hB == hT) {
                 compute_linear[func_idx](input + (hT * iw + wL) * itile_size,
                     input + (hT * iw + wR) * itile_size, output + output_idx, wR - wC, wC - wL,
-                    icStep, ocStep, oc, inStep, onStep, on);
+                    icStep, ocStep, ic, inStep, onStep, on);
             } else if (wL == wR) {
                 compute_linear[func_idx](input + (hT * iw + wL) * itile_size,
                     input + (hB * iw + wL) * itile_size, output + output_idx, hB - hC, hC - hT,
-                    icStep, ocStep, oc, inStep, onStep, on);
+                    icStep, ocStep, ic, inStep, onStep, on);
             } else {
                 compute_bilinear[func_idx](input + (hT * iw + wL) * itile_size,
                     input + (hT * iw + wR) * itile_size, input + (hB * iw + wL) * itile_size,
                     input + (hB * iw + wR) * itile_size, output + output_idx, (hB - hC) * (wR - wC),
                     (hB - hC) * (wC - wL), (hC - hT) * (wR - wC), (hC - hT) * (wC - wL), icStep,
-                    ocStep, oc, inStep, onStep, on);
+                    ocStep, ic, inStep, onStep, on);
             }
         }
     }
@@ -394,8 +409,12 @@ EE resize_bilinear_x86_fp32(
     return ret;
 }
 
-EE resize_bilinear_x86(
-    TensorDesc inputDesc, void *input, TensorDesc outputDesc, void *tmp, void *output, ResizeParamSpec p)
+EE resize_bilinear_x86(TensorDesc inputDesc,
+    void *input,
+    TensorDesc outputDesc,
+    void *tmp,
+    void *output,
+    ResizeParamSpec p)
 {
     DataType idt, odt;
     DataFormat idf, odf;
@@ -406,7 +425,8 @@ EE resize_bilinear_x86(
     EE ret = NOT_SUPPORTED;
     switch (idt) {
         case DT_F32:
-            ret = resize_bilinear_x86_fp32(inputDesc, (F32 *)input, outputDesc, (F32 *)tmp, (F32 *)output, p);
+            ret = resize_bilinear_x86_fp32(
+                inputDesc, (F32 *)input, outputDesc, (F32 *)tmp, (F32 *)output, p);
         default:
             break;
     }

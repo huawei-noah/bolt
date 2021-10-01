@@ -53,15 +53,19 @@ inline EE slice_core_mali_fp16(GCLHandle_t handle,
     std::vector<void *> *output)
 {
     U32 in, ic, ih, iw;
-    U32 iw_str, ih_str, iw_off, ih_off;
+    U32 iw_str, ih_str, iw_off, ih_off, i_off;
     CHECK_STATUS(gclmem_get_desc_dim(input->desc, NULL, NULL, &in, &ic, &ih, &iw));
     CHECK_STATUS(gclmem_get_desc_padding(input->desc, &iw_str, &ih_str, NULL, &iw_off, &ih_off));
+    i_off = ih_off * iw_str + iw_off;
     Mem inbuf = input->mem;
     I32 axis = p.axis;
     axis = (axis + inputDesc.nDims) % inputDesc.nDims;
     U32 target_axis = inputDesc.nDims - 1 - axis;
     U32 num = outputDesc.size();
     if (target_axis > 2) {
+        CHECK_STATUS(NOT_SUPPORTED);
+    }
+    if (target_axis == 2 && in > 1) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
     bool useNchwFormat = (input->desc.memFormat == DF_NCHW) ? true : false;
@@ -90,7 +94,7 @@ inline EE slice_core_mali_fp16(GCLHandle_t handle,
         desc.memFormat = DF_NCHW;
         tMem.mem = inbuf;
         tMem.desc = desc;
-        CHECK_STATUS(ocl_data_trans_form(handle, input, &tMem, 0, 0, NCWHC4_TO_NCHW));
+        CHECK_STATUS(ocl_data_trans_form(handle, input, &tMem, 0, 0, NCHWC4_TO_NCHW));
     }
 
     char kernelName[128];
@@ -102,21 +106,22 @@ inline EE slice_core_mali_fp16(GCLHandle_t handle,
     GCLMem_t outMem[4];
     Mem outbuf[4];
     U32 ow[4];
-    U32 ow_str[4], oh_str[4], ow_off[4], oh_off[4];
+    U32 ow_str[4], oh_str[4], ow_off[4], oh_off[4], o_off[4];
     U32 axis_len[4];
     U32 in_size = 0;
     U32 slice_len = 0;
     for (U32 i = 0; i < num; i += 4) {
         U32 slice_num = ((i + 4) <= num) ? 4 : (num & 3);
-        U32 nmax = slice_num;
+        U32 nmax = slice_num - 1;  //id 0 ~ slice_num - 1
         U32 axis_max = 0;
         U32 axis_total = 0;
         for (U32 j = 0; j < slice_num; j++) {
-            outMem[j] = (GCLMem_t)((*output)[j]);
+            outMem[j] = (GCLMem_t)((*output)[j + i]);
             ow[j] = outMem[j]->desc.dims[0];
             CHECK_STATUS(gclmem_get_desc_padding(
-                input->desc, ow_str + j, oh_str + j, NULL, ow_off + j, oh_off + j));
+                outMem[j]->desc, ow_str + j, oh_str + j, NULL, ow_off + j, oh_off + j));
             outbuf[j] = outMem[j]->mem;
+            o_off[j] = oh_off[j] * ow_str[j] + ow_off[j];
 
             axis_len[j] = outMem[j]->desc.dims[target_axis];
             slice_len += axis_len[j];
@@ -129,45 +134,40 @@ inline EE slice_core_mali_fp16(GCLHandle_t handle,
 
         if (useNchwFormat) {
             gs[0] = (iw + 3) / 4;
-            ;
             gs[1] = ih;
-            gs[2] = ic;
+            gs[2] = ic * in;
         } else {
-            gs[0] = ih;
-            gs[1] = iw;
-            gs[2] = (ic + 3) / 4;
+            gs[0] = iw;
+            gs[1] = ih;
+            gs[2] = (ic + 3) / 4 * in;
         }
         gs[target_axis] = axis_total;
 
-        CHECK_STATUS(set_scale_opt_mali(
+        CHECK_STATUS(set_slice_opt_mali(
             useNchwFormat, target_axis, slice_num, DT_F16, kernelName, &kernelOpt));
         CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
         switch (slice_num) {
             case 1:
-                CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, iw_off, ih_off, axis_max,
-                    nmax, in_size, gs[0], gs[1], inbuf, ow_str[0], oh_str[0], ow_off[0], oh_off[0],
-                    ow[0], outbuf[0]));
+                CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, i_off, axis_max, nmax,
+                    in_size, gs[0], gs[1], inbuf, ow_str[0], oh_str[0], o_off[0], ow[0], outbuf[0]));
                 break;
             case 2:
-                CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, iw_off, ih_off, axis_max,
-                    nmax, in_size, gs[0], gs[1], inbuf, ow_str[0], oh_str[0], ow_off[0], oh_off[0],
-                    ow[0], outbuf[0], ow_str[1], oh_str[1], ow_off[1], oh_off[1], ow[1],
-                    axis_len[0], outbuf[1]));
+                CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, i_off, axis_max, nmax,
+                    in_size, gs[0], gs[1], inbuf, ow_str[0], oh_str[0], o_off[0], ow[0], outbuf[0],
+                    ow_str[1], oh_str[1], o_off[1], ow[1], axis_len[0], outbuf[1]));
                 break;
             case 3:
-                CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, iw_off, ih_off, axis_max,
-                    nmax, in_size, gs[0], gs[1], inbuf, ow_str[0], oh_str[0], ow_off[0], oh_off[0],
-                    ow[0], outbuf[0], ow_str[1], oh_str[1], ow_off[1], oh_off[1], ow[1],
-                    axis_len[0], outbuf[1], ow_str[2], oh_str[2], ow_off[2], oh_off[2], ow[2],
-                    axis_len[1], outbuf[2]));
+                CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, i_off, axis_max, nmax,
+                    in_size, gs[0], gs[1], inbuf, ow_str[0], oh_str[0], o_off[0], ow[0], outbuf[0],
+                    ow_str[1], oh_str[1], o_off[1], ow[1], axis_len[0], outbuf[1], ow_str[2],
+                    oh_str[2], o_off[2], ow[2], axis_len[1], outbuf[2]));
                 break;
             case 4:
-                CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, iw_off, ih_off, axis_max,
-                    nmax, in_size, gs[0], gs[1], inbuf, ow_str[0], oh_str[0], ow_off[0], oh_off[0],
-                    ow[0], outbuf[0], ow_str[1], oh_str[1], ow_off[1], oh_off[1], ow[1],
-                    axis_len[0], outbuf[1], ow_str[2], oh_str[2], ow_off[2], oh_off[2], ow[2],
-                    axis_len[1], outbuf[2], ow_str[3], oh_str[3], ow_off[3], oh_off[3], ow[3],
-                    axis_len[2], outbuf[3]));
+                CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, i_off, axis_max, nmax,
+                    in_size, gs[0], gs[1], inbuf, ow_str[0], oh_str[0], o_off[0], ow[0], outbuf[0],
+                    ow_str[1], oh_str[1], o_off[1], ow[1], axis_len[0], outbuf[1], ow_str[2],
+                    oh_str[2], o_off[2], ow[2], axis_len[1], outbuf[2], ow_str[3], oh_str[3],
+                    o_off[3], ow[3], axis_len[2], outbuf[3]));
                 break;
             default:
                 CHECK_STATUS(NOT_MATCH);
@@ -182,12 +182,12 @@ inline EE slice_core_mali_fp16(GCLHandle_t handle,
                 in_size += slice_len * iw_str * ih_str;
             }
         } else {
-            if (target_axis == 1) {
+            if (target_axis == 0) {
                 in_size += slice_len * 4;
-            } else if (target_axis == 0) {
-                in_size += slice_len * ih_str * 4;
+            } else if (target_axis == 1) {
+                in_size += slice_len * iw_str * 4;
             } else if (target_axis == 2) {
-                in_size += slice_len * iw_str * ih_str;
+                in_size += slice_len * iw_str * ih_str * 4;
             }
         }
 #ifdef _DEBUG
@@ -207,7 +207,7 @@ EE slice_infer_forward_tmp_bytes_mali_fp16(TensorDesc inputDesc,
     axis = (axis + inputDesc.nDims) % inputDesc.nDims;
     U32 target_axis = inputDesc.nDims - 1 - axis;
     U32 size = 0;
-    if (gclmemInputDesc.memFormat == DF_NCWHC4) {
+    if (gclmemInputDesc.memFormat == DF_NCHWC4) {
         bool align4 = slice_axis_c_align4(target_axis, outputDesc);
         if (!align4) {
             size = tensorNumBytes(inputDesc);

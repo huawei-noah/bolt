@@ -39,5 +39,4 @@ EE mmm_int8(int M,
     INT8 *tmp,
     I32 *result,
     Arch arch);
-
 #endif

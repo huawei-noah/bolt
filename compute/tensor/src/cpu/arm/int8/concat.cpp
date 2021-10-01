@@ -11,7 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifdef _USE_INT8
 #include <cstring>
 #include "cpu/arm/int8/tensor_computing_int8.h"
 
@@ -141,4 +140,3 @@ EE concat_int8(std::vector<TensorDesc> inputDesc,
     }
     return NOT_SUPPORTED;
 }
-#endif

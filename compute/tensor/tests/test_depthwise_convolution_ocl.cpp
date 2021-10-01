@@ -11,46 +11,9 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string.h>
 #include "tensor_computing.h"
-#include "ut_util.h"
-#include "gcl.h"
-#include "libkernelsource.h"
+#include "ut_util_ocl.h"
 
-#ifdef _USE_FP16
-inline GCLMem_t alloc(Tensor tensor)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    mem->alloc();
-    return (GCLMem_t)mem->get_ptr();
-}
-
-inline GCLMem_t alloc_map(Tensor tensor)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    mem->mapped_alloc();
-    return (GCLMem_t)mem->get_ptr();
-}
-
-inline GCLMem_t alloc_bytes(Tensor tensor, U32 size)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    GCLMem_t ptr = NULL;
-    if (size > 0) {
-        mem->resize(tensor1d(DT_U8, size));
-        mem->alloc();
-        ptr = (GCLMem_t)mem->get_ptr();
-    }
-    return ptr;
-}
-
-inline GCLMem_t alloc_desc(Tensor tensor, GCLMemDesc desc)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    mem->padding(desc);
-    mem->alloc();
-    return (GCLMem_t)mem->get_ptr();
-}
 int depthwiseConvolutionTest(int argc, char *argv[], DataFormat filterDataFormat, DataType dt)
 {
     U32 in, ic, ih, iw;
@@ -60,8 +23,10 @@ int depthwiseConvolutionTest(int argc, char *argv[], DataFormat filterDataFormat
     U32 biasNum;
     ArchInfo archInfo;
     archInfo.arch = MALI;
-    ArchInfo archInfo_org;
-    archInfo_org.arch = CPU_GENERAL;
+
+    if (gcl_check_device_qualcomm(OCLContext::getInstance().handle.get())) {
+        archInfo.arch = QUALCOMM;
+    }
 
     in = 1;
     ic = 8;
@@ -76,6 +41,7 @@ int depthwiseConvolutionTest(int argc, char *argv[], DataFormat filterDataFormat
     padding = 1;
     dila = 1;
 
+    bool useNchw = false;
     if (argc == 9 || argc == 10) {
         ic = atoi(argv[1]);
         ih = atoi(argv[2]);
@@ -88,11 +54,27 @@ int depthwiseConvolutionTest(int argc, char *argv[], DataFormat filterDataFormat
         if (argc == 10) {
             dila = atoi(argv[9]);
         }
+    } else if (argc == 11 || argc == 12) {
+        in = atoi(argv[1]);
+        ic = atoi(argv[2]);
+        ih = atoi(argv[3]);
+        iw = atoi(argv[4]);
+        fc = atoi(argv[5]);
+        fh = atoi(argv[6]);
+        fw = atoi(argv[7]);
+        stride = atoi(argv[8]);
+        padding = atoi(argv[9]);
+        dila = atoi(argv[10]);
+        if (argc == 12) {
+            useNchw = atoi(argv[11]);
+        }
+    } else {
+        CHECK_STATUS(NOT_MATCH);
     }
 
     fhd = (fh - 1) * dila + 1;
     fwd = (fw - 1) * dila + 1;
-    on = 1;
+    on = in;
     oc = fc;
     oh = (ih + padding * 2 - fhd) / stride + 1;
     ow = (iw + padding * 2 - fwd) / stride + 1;
@@ -104,25 +86,35 @@ int depthwiseConvolutionTest(int argc, char *argv[], DataFormat filterDataFormat
 
     U32 filterLen = fn * fc * fh * fw;
     U32 biasLen = oc;
-    TensorDesc inputDesc = tensor4df(dt, DF_NCHW, in, ic, ih, iw);
+    TensorDesc inputDesc;
+    if (useNchw) {
+        inputDesc = tensor4df(dt, DF_NCHW, in, ic, ih, iw);
+    } else {
+        inputDesc = tensor4df(dt, DF_NCHWC4, in, ic, ih, iw);
+    }
     TensorDesc filterDesc = tensor4df(dt, filterDataFormat, fn, fc, fh, fw);
     TensorDesc biasDesc = tensor1d(dt, biasLen);
     U8 *input_cpu = ut_input_v(in * ic * ih * iw, dt, UT_INIT_RANDOM);
     U8 *filter_cpu = ut_input_v(filterLen, dt, UT_INIT_RANDOM);
     U8 *bias_cpu = ut_input_v(biasLen, dt, UT_INIT_RANDOM);
+    U8 *output_gpu = ut_input_v(on * oc * oh * ow, dt, UT_INIT_RANDOM);
 
     std::shared_ptr<GCLHandle> handleSharedPtr = OCLContext::getInstance().handle;
     GCLHandle_t handle = handleSharedPtr.get();
     std::vector<GCLKernelInfo> kernelVec;
     handle->kernelVec = &kernelVec;
-    Tensor inputTensor = Tensor(OCLMem);
-    Tensor outputTensor = Tensor(OCLMem);
+    MemoryType memType = OCLMem;
+    if (archInfo.arch == QUALCOMM) {
+        memType = OCLMemImg;
+    }
+    Tensor inputTensor = Tensor(memType);
+    Tensor outputTensor = Tensor(memType);
     Tensor filterTensorOrg = Tensor(OCLMem);
     Tensor filterTensor = Tensor(OCLMem);
-    Tensor biasTensor = Tensor(OCLMem);
+    Tensor biasTensor = Tensor(OCLMemImg1D);
     Tensor tmpTensor = Tensor(OCLMem);
+    Tensor tmpTensorImg = Tensor(OCLMemImg);
     inputTensor.resize(inputDesc);
-    filterTensor.resize(filterDesc);
     filterTensorOrg.resize(filterDesc);
     biasTensor.resize(biasDesc);
 
@@ -134,66 +126,46 @@ int depthwiseConvolutionTest(int argc, char *argv[], DataFormat filterDataFormat
     archInfo.archPara = &maliPara;
 
     CHECK_STATUS(depthwise_convolution_infer_output_size(
-        &inputTensor, filterTensor, convParamSpec, &outputTensor, dt, &archInfo));
+        &inputTensor, filterTensorOrg, convParamSpec, &outputTensor, dt, &archInfo));
     ConvolutionPolicy policy = CONVOLUTION_TUNNING;
     DepthwiseConvolutionForwardAlgorithm alg = DEPTHWISE_CONVOLUTION_ALGORITHM_NULL;
-    CHECK_STATUS(depthwise_convolution_infer_forward_algorithm(inputTensor, filterTensor,
+    CHECK_STATUS(depthwise_convolution_infer_forward_algorithm(inputTensor, filterTensorOrg,
         outputTensor, convParamSpec, policy, &alg, dt, dwActivationParamSpec, &archInfo));
 
-    U32 maxBytes = 0;
-    U32 tmpBytes;
+    U32 maxBytes[4] = {0};
     CHECK_STATUS(depthwise_convolution_infer_forward_tmp_bytes(
-        inputTensor, filterTensor, outputTensor, convParamSpec, alg, &tmpBytes, &archInfo));
-    maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
+        inputTensor, filterTensorOrg, outputTensor, convParamSpec, alg, maxBytes, &archInfo));
 
-    U32 str[3] = {0, 0, 0};
-    U32 off[3] = {0, 0, 0};
-    GCLMemDesc filterMemDesc = gcl_mem_desc(str, off, DT_U8, DF_NCWHC4);
-    maliPara.gclmemFilterDesc = &filterMemDesc;
-    U32 ftmBytes;
+    TensorDesc ftmDesc;
     CHECK_STATUS(depthwise_convolution_transform_filter_bytes(
-        filterTensor, convParamSpec, alg, &ftmBytes, &archInfo));
+        filterTensorOrg, convParamSpec, alg, &ftmDesc, &archInfo));
+    filterTensor.resize(ftmDesc);
 
-    GCLMem_t output = alloc_map(outputTensor);
+    GCLMem_t output = alloc(outputTensor);
     GCLMem_t input = alloc(inputTensor);
+    alloc_host_ptr(filterTensorOrg, filter_cpu);
+    alloc(filterTensor);
     CHECK_STATUS(gcl_fill_memory_zero(handle, input));
+    if ((oc & 3) != 0) {
+        U32 ocAlign = (oc + 3) / 4 * 4;
+        U8 *bias_cpu_align = ut_input_v(ocAlign, dt, UT_INIT_ZERO);
+        memcpy(bias_cpu_align, bias_cpu, oc * bytesOf(dt));
+        free(bias_cpu);
+        bias_cpu = bias_cpu_align;
+    }
+    alloc_host_ptr(biasTensor, bias_cpu);
 
-    GCLMemDesc desc = gclmem_build_desc();
-    biasNum = (oc + 3) / 4;
-    desc.memType = GCL_MEM_IMG_1D;
-    desc.byteSize = biasNum * 4 * bytesOf(dt);
-    desc.stride[0] = biasNum;
-    desc.stride[1] = 1;
-    desc.stride[2] = 1;
-    desc.offset[0] = 0;
-    desc.offset[1] = 0;
-    desc.offset[2] = 0;
-    desc.num = biasNum;
-    desc.memFormat = DF_NHWC;
-    desc.flags = CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR;
-    desc.host_ptr = bias_cpu;
-    alloc_desc(biasTensor, desc);
-
-    desc = filterMemDesc;
-    alloc_desc(filterTensor, desc);
-
-    desc.stride[0] = fw * fh;
-    desc.stride[1] = fc;
-    desc.stride[2] = fn;
-    desc.offset[0] = 0;
-    desc.offset[1] = 0;
-    desc.offset[2] = 0;
-    desc.byteSize = fw * fh * fc * fn * bytesOf(dt);
-    desc.num = fw * fh * fc * fn;
-    desc.memType = GCL_MEM_BUF;
-    desc.memFormat = DF_NCHW;
-    desc.flags = CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR;
-    desc.host_ptr = filter_cpu;
-    alloc_desc(filterTensorOrg, desc);
-
-    tmpBytes = tensorNumBytes(inputDesc);
-    maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
-    GCLMem_t tmpbuf = alloc_bytes(tmpTensor, maxBytes);
+    TensorDesc outputDesc = outputTensor.get_desc();
+    U32 tmpBytes = tensorNumBytes(inputDesc);
+    maxBytes[0] = (tmpBytes > maxBytes[0]) ? tmpBytes : maxBytes[0];
+    tmpBytes = tensorNumBytes(outputDesc);
+    maxBytes[0] = (tmpBytes > maxBytes[0]) ? tmpBytes : maxBytes[0];
+    GCLMem_t tmpbuf = alloc_bytes(tmpTensor, maxBytes[0]);
+    alloc_img(tmpTensorImg, maxBytes + 1);
+    Tensor tmp = tmpTensor;
+    if (maxBytes[1] > 0 && maxBytes[2] > 0 && maxBytes[3] > 0) {
+        tmp = tmpTensorImg;
+    }
 
     CHECK_STATUS(depthwise_convolution_transform_filter(
         filterTensorOrg, convParamSpec, alg, &filterTensor, &archInfo));
@@ -201,10 +173,9 @@ int depthwiseConvolutionTest(int argc, char *argv[], DataFormat filterDataFormat
     CHECK_STATUS(ocl_set_input(handle, input, inputDesc, input_cpu, tmpbuf, true));
 
     CHECK_STATUS(depthwise_convolution(inputTensor, filterTensor, convParamSpec, alg, biasTensor,
-        tmpTensor, outputTensor, dwActivationParamSpec, &archInfo));
+        tmp, outputTensor, dwActivationParamSpec, &archInfo));
 
     /*warp up*/
-    UNI_INFO_LOG("warm up gpu:\n")
     for (U32 i = 0; i < 2; i++) {
         CHECK_STATUS(gcl_run_kernelVec(handle));
     }
@@ -215,9 +186,7 @@ int depthwiseConvolutionTest(int argc, char *argv[], DataFormat filterDataFormat
 #else
     CHECK_STATUS(gcl_run_kernelVec(handle));
 #endif
-    TensorDesc outputDesc = outputTensor.get_desc();
-    CHECK_STATUS(ocl_get_output(handle, output, outputDesc, true));
-    void *output_gpu = output->mapPtrArray.back();
+    CHECK_STATUS(ocl_get_output(handle, output, outputDesc, output_gpu, tmpbuf, true));
     char buffer[150];
     char params[120];
     sprintf(params, "(%u %u %u %u)+(%u %u %u %u)/(%u %u)=(%u %u %u %u)", in, ic, ih, iw, fn, fc, fh,
@@ -228,19 +197,22 @@ int depthwiseConvolutionTest(int argc, char *argv[], DataFormat filterDataFormat
     ut_log(dt, buffer, ops, time);
 #endif
     Tensor inputTensorCpu;
+    inputDesc.df = DF_NCHW;
+    outputDesc.df = DF_NCHW;
     inputTensorCpu.resize(inputDesc);
     inputTensorCpu.alloc();
-    memcpy(get_ptr_from_tensor(inputTensorCpu, UT_ARCH), input_cpu, tensorNumBytes(inputDesc));
+    memcpy(get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), input_cpu, tensorNumBytes(inputDesc));
 
     Tensor filterTensorCpu;
     filterTensorCpu.resize(filterDesc);
     filterTensorCpu.alloc();
-    memcpy(get_ptr_from_tensor(filterTensorCpu, UT_ARCH), filter_cpu, tensorNumBytes(filterDesc));
+    memcpy(
+        get_ptr_from_tensor(filterTensorCpu, CPU_GENERAL), filter_cpu, tensorNumBytes(filterDesc));
 
     Tensor biasTensorCpu;
     biasTensorCpu.resize(biasDesc);
     biasTensorCpu.alloc();
-    memcpy(get_ptr_from_tensor(biasTensorCpu, UT_ARCH), bias_cpu, tensorNumBytes(biasDesc));
+    memcpy(get_ptr_from_tensor(biasTensorCpu, CPU_GENERAL), bias_cpu, tensorNumBytes(biasDesc));
 
     Tensor outputTensorCpu;
     outputTensorCpu.resize(outputDesc);
@@ -255,17 +227,17 @@ int depthwiseConvolutionTest(int argc, char *argv[], DataFormat filterDataFormat
 
     CHECK_STATUS(depthwise_convolution(inputTensorCpu, filterTensorCpu, convParamSpec,
         DEPTHWISE_CONVOLUTION_ALGORITHM_DIRECT, biasTensorCpu, tmpTensorCpu, outputTensorCpu,
-        dwActivationParamSpec, &archInfo_org));
-    ut_check_a(output_gpu, get_ptr_from_tensor(outputTensorCpu, UT_ARCH), on * oc * ow * oh, dt);
+        dwActivationParamSpec, &UT_SERIAL_ARCHINFO));
+    ut_check_a(output_gpu, get_ptr_from_tensor(outputTensorCpu, CPU_GENERAL), on * oc * ow * oh, dt);
 
     CHECK_STATUS(gcl_finish(handle));
     CHECK_STATUS(gcl_clean_kernelVec(handle));
+    free(output_gpu);
     free(input_cpu);
     free(filter_cpu);
     free(bias_cpu);
     return 0;
 }
-#endif
 
 int main(int argc, char **argv)
 {

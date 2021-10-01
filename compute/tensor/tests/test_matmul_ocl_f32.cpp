@@ -11,60 +11,14 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string.h>
 #include "tensor_computing.h"
-#include "ut_util.h"
-#include "gcl.h"
-#include "libkernelsource.h"
+#include "ut_util_ocl.h"
 #include "../src/gpu/mali/cl/kernel_option/gemm_tn_opt.h"
 
 std::shared_ptr<GCLHandle> handleSharedPtr = OCLContext::getInstance().handle;
 GCLHandle_t handle = handleSharedPtr.get();
 Tensor matrixCTensorCpu;
 Tensor matrixCTensor = Tensor(OCLMem);
-
-#ifdef _USE_FP32
-inline GCLMem_t alloc(Tensor tensor)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    mem->alloc();
-    return (GCLMem_t)mem->get_ptr();
-}
-
-inline GCLMem_t alloc_map(Tensor tensor)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    mem->mapped_alloc();
-    return (GCLMem_t)mem->get_ptr();
-}
-
-inline GCLMem_t alloc_bytes(Tensor tensor, U32 size)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    GCLMem_t ptr = NULL;
-    if (size > 0) {
-        mem->resize(tensor1d(DT_U8, size));
-        mem->alloc();
-        ptr = (GCLMem_t)mem->get_ptr();
-    }
-    return ptr;
-}
-
-inline GCLMem_t alloc_desc(Tensor tensor, GCLMemDesc desc)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    mem->padding(desc);
-    mem->alloc();
-    return (GCLMem_t)mem->get_ptr();
-}
-
-inline GCLMem_t alloc_map_desc(Tensor tensor, GCLMemDesc desc)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    mem->padding(desc);
-    mem->mapped_alloc();
-    return (GCLMem_t)mem->get_ptr();
-}
 
 inline U8 *matmulF32Cpu(TensorDesc matrixADesc,
     TensorDesc matrixBDesc,
@@ -75,32 +29,34 @@ inline U8 *matmulF32Cpu(TensorDesc matrixADesc,
     U8 *matrixB_cpu,
     DataType dt)
 {
-    ArchInfo archInfo_org;
-    archInfo_org.arch = CPU_GENERAL;
     Tensor matrixATensorCpu;
     matrixATensorCpu.resize(matrixADesc);
     matrixATensorCpu.alloc();
-    memcpy(get_ptr_from_tensor(matrixATensorCpu, UT_ARCH), matrixA_cpu, tensorNumBytes(matrixADesc));
+    memcpy(get_ptr_from_tensor(matrixATensorCpu, CPU_GENERAL), matrixA_cpu,
+        tensorNumBytes(matrixADesc));
 
     Tensor matrixBTensorCpu;
     matrixBTensorCpu.resize(matrixBDesc);
     matrixBTensorCpu.alloc();
-    memcpy(get_ptr_from_tensor(matrixBTensorCpu, UT_ARCH), matrixB_cpu, tensorNumBytes(matrixBDesc));
+    memcpy(get_ptr_from_tensor(matrixBTensorCpu, CPU_GENERAL), matrixB_cpu,
+        tensorNumBytes(matrixBDesc));
 
     CHECK_STATUS(matmul_infer_output_size(&matrixATensorCpu, transposeA, &matrixBTensorCpu,
-        transposeB, &matrixCTensorCpu, &archInfo_org));
+        transposeB, &matrixCTensorCpu, &UT_SERIAL_ARCHINFO));
     matrixCTensorCpu.alloc();
 
     Tensor tmpTensorCpu;
     U32 tmpBytes = 0;
-    CHECK_STATUS(matmul_infer_forward_tmp_bytes(
-        matrixATensorCpu, transposeA, matrixBTensorCpu, transposeB, &tmpBytes, &archInfo_org));
+    CHECK_STATUS(matmul_infer_forward_tmp_bytes(matrixATensorCpu, transposeA, matrixBTensorCpu,
+        transposeB, matrixCTensorCpu, &tmpBytes, &UT_SERIAL_ARCHINFO));
     tmpTensorCpu.resize(tensor1d(dt, tmpBytes / bytesOf(dt)));
     tmpTensorCpu.alloc();
+    std::vector<Tensor> tmpTensorCpus(1, tmpTensorCpu);
 
-    CHECK_STATUS(matmul(matrixATensorCpu, transposeA, matrixBTensorCpu, transposeB, tmpTensorCpu,
-        matrixCTensorCpu, &archInfo_org));
-    return (U8 *)get_ptr_from_tensor(matrixCTensorCpu, UT_ARCH);
+    Tensor biasTensor;
+    CHECK_STATUS(matmul(matrixATensorCpu, transposeA, matrixBTensorCpu, transposeB, biasTensor,
+        tmpTensorCpus, matrixCTensorCpu, &UT_SERIAL_ARCHINFO));
+    return (U8 *)get_ptr_from_tensor(matrixCTensorCpu, CPU_GENERAL);
 }
 
 inline U8 *matmulF32Gpu(TensorDesc matrixADesc,
@@ -139,11 +95,6 @@ inline U8 *matmulF32Gpu(TensorDesc matrixADesc,
         matrixATensor.resize(matrixADesc);
         matrixBTensor.resize(matrixBDesc);
         matrixCTensor.resize(matrixCDesc);
-        GCLMemDesc matrixAGclDescOrg = gclmem_build_desc();
-        GCLMemDesc matrixBGclDescOrg = gclmem_build_desc();
-        GCLMemDesc matrixAGclDesc = gclmem_build_desc();
-        GCLMemDesc matrixBGclDesc = gclmem_build_desc();
-        GCLMemDesc matrixCGclDesc = gclmem_build_desc();
         U32 m_align = m;
         U32 n_align = n;
         for (U32 i = 1; i <= 8; i++) {
@@ -157,53 +108,13 @@ inline U8 *matmulF32Gpu(TensorDesc matrixADesc,
             }
         }
 
-        U32 stride[3] = {1, 1, 1};
-        U32 offset[3] = {0, 0, 0};
         /*set gpu memory properties, and alloc gpu memory*/
-        stride[0] = k;
-        stride[1] = m;
-        stride[2] = batch;
-        gclmem_set_desc_padding(
-            &matrixAGclDescOrg, stride, offset, DT_F32, DF_NCHW, GCL_MEM_BUF, CL_MEM_READ_WRITE);
-        GCLMem_t matrixAOrg = alloc_desc(matrixATensorOrg, matrixAGclDescOrg);
-
-        stride[0] = n;
-        stride[1] = k;
-        stride[2] = batch;
-        gclmem_set_desc_padding(
-            &matrixBGclDescOrg, stride, offset, DT_F32, DF_NCHW, GCL_MEM_BUF, CL_MEM_READ_WRITE);
-        GCLMem_t matrixBOrg = alloc_desc(matrixBTensorOrg, matrixBGclDescOrg);
-
-        stride[0] = m_align;
-        stride[1] = k;
-        stride[2] = batch;
-        gclmem_set_desc_padding(
-            &matrixAGclDesc, stride, offset, DT_F32, DF_NCHW, GCL_MEM_BUF, CL_MEM_READ_WRITE);
-        GCLMem_t matrixA = alloc_desc(matrixATensor, matrixAGclDesc);
-
-        stride[0] = n_align;
-        stride[1] = k;
-        stride[2] = batch;
-        gclmem_set_desc_padding(
-            &matrixBGclDesc, stride, offset, DT_F32, DF_NCHW, GCL_MEM_BUF, CL_MEM_READ_WRITE);
-        GCLMem_t matrixB = alloc_desc(matrixBTensor, matrixBGclDesc);
-
-        stride[0] = n;
-        stride[1] = m;
-        stride[2] = batch;
-        gclmem_set_desc_padding(&matrixCGclDesc, stride, offset, DT_F32, DF_NCHW, GCL_MEM_BUF,
-            CL_MEM_READ_WRITE | CL_MEM_ALLOC_HOST_PTR);
-        GCLMem_t matrixC = alloc_map_desc(matrixCTensor, matrixCGclDesc);
-
-        GCLMem_t tmp = alloc_bytes(tmpTensor, matrixAGclDescOrg.byteSize);
-
-        /*trans cpu org val to gpu*/
-        U32 size = matrixAGclDescOrg.byteSize;
-        CHECK_STATUS(
-            gcl_trans_memory(handle, matrixACpu, matrixAOrg, &size, HOST_TO_DEVICE_BUF, CL_TRUE));
-        size = matrixBGclDescOrg.byteSize;
-        CHECK_STATUS(
-            gcl_trans_memory(handle, matrixBCpu, matrixBOrg, &size, HOST_TO_DEVICE_BUF, CL_TRUE));
+        GCLMem_t matrixAOrg = alloc_host_ptr(matrixATensorOrg, matrixACpu);
+        GCLMem_t matrixBOrg = alloc_host_ptr(matrixBTensorOrg, matrixBCpu);
+        GCLMem_t matrixA = alloc_padding(matrixATensor, 0, m_align - m, 0, 0);
+        GCLMem_t matrixB = alloc_padding(matrixBTensor, 0, n_align - n, 0, 0);
+        GCLMem_t matrixC = alloc_map(matrixCTensor);
+        GCLMem_t tmp = alloc_bytes(tmpTensor, tensorNumBytes(matrixADesc));
         gcl_finish(handle);
 
         std::vector<U32> kernelIndex;
@@ -299,8 +210,8 @@ inline U8 *matmulF32Gpu(TensorDesc matrixADesc,
                 if (item_m * item_n == 1) {
                     continue;
                 }
-                CHECK_STATUS(set_gemm_tn_opt_mali(item_m, item_n, false, false, false,
-                    ACTIVATION_NULL, DT_F32, kernelName, &kernelOpt));
+                CHECK_STATUS(set_gemm_tn_opt_mali(item_m, item_n, NO_BIAS, false, ACTIVATION_NULL,
+                    DT_F32, GCL_MEM_BUF, GCL_MEM_BUF, GCL_MEM_BUF, kernelName, &kernelOpt));
                 CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
                 gs[0] = (n + item_n - 1) / item_n;
                 gs[1] = (m + item_m - 1) / item_m;
@@ -325,8 +236,8 @@ inline U8 *matmulF32Gpu(TensorDesc matrixADesc,
         CHECK_STATUS(gcl_finish(handle));
 
         /*set best gemm config*/
-        CHECK_STATUS(set_gemm_tn_opt_mali(
-            best_m, best_n, false, false, false, ACTIVATION_NULL, DT_F32, kernelName, &kernelOpt));
+        CHECK_STATUS(set_gemm_tn_opt_mali(best_m, best_n, NO_BIAS, false, ACTIVATION_NULL, DT_F32,
+            GCL_MEM_BUF, GCL_MEM_BUF, GCL_MEM_BUF, kernelName, &kernelOpt));
         CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
         gs[0] = (n + best_n - 1) / best_n;
         gs[1] = (m + best_m - 1) / best_m;
@@ -416,7 +327,6 @@ int matmulF32Test(int argc, char *argv[], DataType dt)
     free(matrixBCpu);
     return 0;
 }
-#endif
 
 int main(int argc, char **argv)
 {

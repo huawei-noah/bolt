@@ -10,32 +10,41 @@
 // WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#include "kernel_def.h"
+#define MANGLE_NAME_IMPL(base, IOM, FM) base##IOM##FM
+#define MANGLE_NAME(base, IOM, FM) MANGLE_NAME_IMPL(base, IOM, FM)
+#define FM
+#if defined(USE_NCHW)
+#define FM nchw_
+#endif
 
-__kernel void clip(const int h,
-    const int w,
+__kernel void MANGLE_NAME(clip_, IOM, FM)(const int iw_str,
     const int ih_str,
-    const int iw_str,
-    const int ih_off,
-    const int iw_off,
-    const int oh_str,
     const int ow_str,
-    const int oh_off,
-    const int ow_off,
+    const int oh_str,
+    const int i_off,
+    const int o_off,
+    const int w,
+    const int bx,
+    const int by,
     const float min_value,
     const float max_value,
-    __global T *input,
-    __global T *output)
+    READ_ONLY_KERNEL_MEM input,
+    KERNEL_MEM output)
 {
     int idx = get_global_id(0);
     int idy = get_global_id(1);
     int idz = get_global_id(2);
-    if (idx >= h || idy >= w) {
+    if (idx >= bx || idy >= by) {
         return;
     }
 
     T4 val;
-    int in_off = (idz * iw_str + idy + iw_off) * ih_str + idx + ih_off;
-    val = vload4(in_off, input);
+#if defined(USE_NCHW)
+    LOAD_MEM_V4_C1_COMMON(val, idx, idy, idz, iw_str, ih_str, i_off, w, input);
+#else
+    LOAD_MEM_V4_COMMON(val, idx, idy, idz, iw_str, ih_str, i_off, input);
+#endif
     float4 val_f32;
     val_f32.s0 = (float)val.s0;
     val_f32.s1 = (float)val.s1;
@@ -50,6 +59,9 @@ __kernel void clip(const int h,
     val.s2 = (T)val_f32.s2;
     val.s3 = (T)val_f32.s3;
 
-    int out_off = (idz * ow_str + idy + ow_off) * oh_str + idx + oh_off;
-    vstore4(val, out_off, output);
+#if defined(USE_NCHW)
+    STORE_MEM_V4_C1_COMMON(val, idx, idy, idz, ow_str, oh_str, o_off, w, output);
+#else
+    STORE_MEM_V4_COMMON(val, idx, idy, idz, ow_str, oh_str, o_off, output);
+#endif
 }

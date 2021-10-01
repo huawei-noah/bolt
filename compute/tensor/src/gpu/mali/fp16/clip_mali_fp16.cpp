@@ -12,6 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "gpu/mali/fp16/clip_mali_fp16.h"
+#include "gpu/mali/cl/kernel_option/clip_opt.h"
 
 inline EE clip_checkpara_mali_fp16(TensorDesc inputDesc, TensorDesc outputDesc)
 {
@@ -28,36 +29,36 @@ inline EE clip_core_mali_fp16(GCLHandle_t handle,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
-    UNUSED(outputDesc);
     U32 iw, ih, ic, in;
     tensorSelectGet(inputDesc, NULL, NULL, &in, &ic, &ih, &iw);
-    U32 iw_str, ih_str, iw_off, ih_off;
-    U32 ow_str, oh_str, ow_off, oh_off;
-    ih_str = input->desc.stride[0];
-    iw_str = input->desc.stride[1];
-    ih_off = input->desc.offset[0];
-    iw_off = input->desc.offset[1];
-    oh_str = output->desc.stride[0];
-    ow_str = output->desc.stride[1];
-    oh_off = output->desc.offset[0];
-    ow_off = output->desc.offset[1];
+    U32 iw_str, ih_str, iw_off, ih_off, i_off;
+    U32 ow_str, oh_str, ow_off, oh_off, o_off;
+    CHECK_STATUS(gclmem_get_desc_padding(input->desc, &iw_str, &ih_str, NULL, &iw_off, &ih_off));
+    CHECK_STATUS(gclmem_get_desc_padding(output->desc, &ow_str, &oh_str, NULL, &ow_off, &oh_off));
     cl_mem inbuf, outbuf;
     inbuf = input->mem;
     outbuf = output->mem;
+    i_off = ih_off * iw_str + iw_off;
+    o_off = oh_off * ow_str + ow_off;
 
-    U32 gs[3] = {ih, iw, (ic + 3) / 4};
+    bool useNchw = (inputDesc.df == DF_NCHWC4) ? false : true;
+    U32 gs[3] = {iw, ih, (ic + 3) / 4 * in};
     U32 ls[3] = {0, 0, 0};
     U32 dim = 3;
+    if (useNchw) {
+        gs[0] = (iw + 3) / 4;
+        gs[1] = ih;
+        gs[2] = ic * in;
+    }
     Kernel kernel;
-    CHECK_STATUS(gcl_create_kernel(handle, "clip", &kernel));
-    CHECK_STATUS(gcl_set_kernelArgs(kernel, ih, iw, ih_str, iw_str, ih_off, iw_off, oh_str, ow_str,
-        oh_off, ow_off, p.min, p.max, inbuf, outbuf));
-    gcl_set_kernelVec(handle, kernel, dim, gs, ls, "clip");
-#ifdef _DEBUG
-    CHECK_STATUS(gcl_print_memory<F16>(handle, input, "clip_input"));
-    CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, "clip"));
-    CHECK_STATUS(gcl_print_memory<F16>(handle, output, "clip_output"));
-#endif
+    KernelOpt kernelOpt;
+    char kernelName[128];
+    CHECK_STATUS(set_clip_opt_mali(
+        useNchw, inputDesc.dt, input->desc.memType, output->desc.memType, kernelName, &kernelOpt));
+    CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
+    CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, ow_str, oh_str, i_off, o_off, iw, gs[0],
+        gs[1], p.min, p.max, inbuf, outbuf));
+    gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
     return SUCCESS;
 }
 

@@ -11,16 +11,13 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-__kernel void embedding(const int iw_str,
-    const int iw_off,
-    const int ih_off,
+__kernel void embedding_(const int iw_str,
     const int fw_str,
-    const int fw_off,
-    const int fh_off,
     const int ow_str,
     const int oh_str,
-    const int ow_off,
-    const int oh_off,
+    const int i_off,
+    const int f_off,
+    const int o_off,
     const int ow,
     const int bx,
     const int by,
@@ -35,9 +32,9 @@ __kernel void embedding(const int iw_str,
         return;
     }
     T4 val = 0;
-    int in_off = (idz + ih_off) * iw_str + (idy + iw_off);
+    int in_off = idz * iw_str + idy + i_off;
     unsigned int index = input[in_off];
-    const int wei_off = (index + fh_off) * fw_str + (idx << 2) + fw_off;
+    const int wei_off = index * fw_str + (idx << 2) + f_off;
     uchar rw = ((idx << 2) + 4 <= ow) ? 4 : (ow & 3);
     if (rw == 4) {
         val = vload4(0, weight + wei_off);
@@ -52,7 +49,7 @@ __kernel void embedding(const int iw_str,
             val.xyz = vload3(0, weight + wei_off);
         }
     }
-    const int out_off = (idz * oh_str + idy + oh_off) * ow_str + (idx << 2) + ow_off;
+    const int out_off = (idz * oh_str + idy) * ow_str + (idx << 2) + o_off;
     if (rw == 4) {
         vstore4(val, 0, output + out_off);
     } else {

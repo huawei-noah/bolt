@@ -51,6 +51,7 @@ EE eltwise_cpu(std::vector<TensorDesc> inputDesc,
         return NOT_MATCH;
     }
     std::vector<void *> input = input_;
+
     U8 *ptr = (U8 *)tmp;
     std::set<DataFormat> nchw = {DF_NORMAL, DF_MTK, DF_MKT, DF_NCHW};
     for (U32 i = 0; i < num; i++) {
@@ -106,8 +107,9 @@ EE eltwise_cpu(std::vector<TensorDesc> inputDesc,
         lastDimSizes[i] = newInputDesc[i].dims[0];
         if (lastDimSizes[i] != lastDimSize) {
             sameDim = false;
-            if (newInputDesc[0].df == DF_NCHWC8) {
-                UNI_ERROR_LOG("For NCHWc8, eltwise can only handle inputs with matching widths\n");
+            if (newInputDesc[0].df == DF_NCHWC8 || newInputDesc[0].df == DF_NCHWC16) {
+                UNI_ERROR_LOG("For NCHWC8 and NCHWC16, eltwise can only handle inputs with "
+                              "matching widths\n");
             }
         }
     }
@@ -151,7 +153,7 @@ EE eltwise_cpu(std::vector<TensorDesc> inputDesc,
                 eltwiseDesc.elt_mode);
 #endif
 #ifdef _USE_X86
-        } else if (IS_X86_AVX2(arch)) {
+        } else if (IS_X86(arch)) {
             ret = eltwise_x86(newOutputDesc.dt, newInput, lastDimSizes, num, lastDimSize, newOutput,
                 eltwiseDesc.elt_mode);
 #endif

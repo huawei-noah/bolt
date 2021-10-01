@@ -53,11 +53,13 @@ extern pthread_mutex_t uniThreadMutex;
         fflush(stdout);      \
     }
 #endif
+
 #define UNI_EXIT exit(1);
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
 #ifdef _THREAD_SAFE
 #define UNI_THREAD_SAFE(func)            \
     pthread_mutex_lock(&uniThreadMutex); \
@@ -66,7 +68,9 @@ extern "C" {
 #else
 #define UNI_THREAD_SAFE(func) func;
 #endif
+
 #define UNI_CI_LOG(...) printf(__VA_ARGS__);
+
 #define UNI_INFO_LOG(...)                       \
     {                                           \
         UNI_THREADID                            \
@@ -75,6 +79,7 @@ extern "C" {
             UNI_LOGD(__VA_ARGS__);              \
         })                                      \
     }
+
 #define UNI_WARNING_LOG(...)                                                           \
     {                                                                                  \
         UNI_THREADID                                                                   \
@@ -83,6 +88,7 @@ extern "C" {
             UNI_LOGD(__VA_ARGS__);                                                     \
         })                                                                             \
     }
+
 #define UNI_ERROR_LOG(...)                                                           \
     {                                                                                \
         UNI_THREADID                                                                 \
@@ -92,6 +98,7 @@ extern "C" {
         })                                                                           \
         UNI_EXIT;                                                                    \
     }
+
 #ifdef _DEBUG
 #define UNI_DEBUG_LOG(...)                       \
     {                                            \
@@ -104,10 +111,12 @@ extern "C" {
 #else
 #define UNI_DEBUG_LOG(...)
 #endif
+
 #define CHECK_REQUIREMENT(status)                 \
     if (!(status)) {                              \
         UNI_ERROR_LOG("requirement mismatch.\n"); \
     }
+
 #define CHECK_STATUS(ee)                                         \
     {                                                            \
         EE status = (ee);                                        \
@@ -115,20 +124,6 @@ extern "C" {
             UNI_ERROR_LOG("got an error: %s\n", ee2str(status)); \
         }                                                        \
     }
-
-inline void UNI_PROFILE_INFO(const char *name, const char *category, long start, long duration)
-{
-#ifdef _PROFILE
-    int pid = 0;
-    UNI_THREADID;
-    UNI_THREAD_SAFE({
-        UNI_LOGD("[PROFILE] thread %d ", tid);
-        UNI_LOGD("{\"name\": \"%s\", \"cat\": \"%s\", \"ph\": \"X\", \"pid\": \"%d\", \"tid\": "
-                 "\"%d\", \"ts\": %ld, \"dur\": %ld},\n",
-            name, category, pid, tid, start, duration);
-    });
-#endif
-}
 
 typedef enum {
     SUCCESS = 0,

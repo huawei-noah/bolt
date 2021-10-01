@@ -18,7 +18,7 @@
 #include "tensor_desc.h"
 #include "uni.h"
 
-typedef enum { OCLMem = 0, CPUMem = 1 } MemoryType;
+typedef enum { OCLMem = 0, CPUMem = 1, OCLMemImg = 2, OCLMemImg1D = 3, OCLMemImg2D = 4 } MemoryType;
 
 class Memory {
 public:
@@ -46,8 +46,9 @@ public:
 
     virtual U32 length() = 0;
     virtual U32 bytes() = 0;
-    virtual U32 capacity() = 0;
+    virtual void capacity(U32 *size) = 0;
     virtual std::string string(U32 num, F32 factor) = 0;
     virtual F32 element(U32 index) = 0;
+    virtual TensorDesc get_dims() = 0;
 };
 #endif

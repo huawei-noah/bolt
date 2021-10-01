@@ -18,7 +18,7 @@
 #include "tensor_desc.h"
 #include "algorithm_map.h"
 #include "thread_affinity.h"
-#ifdef _USE_MALI
+#ifdef _USE_GPU
 #include "gcl.h"
 #endif
 
@@ -33,12 +33,14 @@ public:
         this->dt = dt;
         this->name = name;
         std::string deviceName = "";
-        if (this->deviceInfo.schedule == MALI) {
-#ifdef _USE_MALI
-            deviceName = OCLContext::getInstance().handle->deviceName;
+        if (IS_GPU(this->deviceInfo.schedule)) {
+#ifdef _USE_GPU
+            if (OCLContext::getInstance().handle->useQualcommDev) {
+                this->deviceInfo.schedule = QUALCOMM;
+            }
 #else
-            UNI_ERROR_LOG("This library not support ARM MALI GPU, please rebuild library with "
-                          "--mali option.\n");
+            UNI_ERROR_LOG("This library not support ARM MALI/Qualcomm GPU, please rebuild library "
+                          "with --gpu option.\n");
             exit(1);
 #endif
         }
@@ -120,7 +122,7 @@ public:
 
     virtual void run_till_breakpoint(U32 opIdx)
     {
-        CHECK_REQUIREMENT(MALI != this->deviceInfo.schedule);
+        CHECK_REQUIREMENT(IS_CPU(this->deviceInfo.schedule));
         for (U32 i = 0; i < this->ops.size();) {
             auto op = this->ops[i];
             if (op->get_type() == OT_Repeat || op->get_type() == OT_Jump) {
@@ -147,9 +149,9 @@ public:
     void loadAlgorithmMap(CI8 *path, bool useFileStream = false)
     {
         std::string algoName = this->algorithmMap->getAlgorithmFileName();
-        CI8* algoInfo = nullptr;
-        if (this->deviceInfo.schedule == MALI) {
-#ifdef _USE_MALI
+        CI8 *algoInfo = nullptr;
+        if (IS_GPU(this->deviceInfo.schedule)) {
+#ifdef _USE_GPU
             algoInfo = gcl_get_algorithm_info(OCLContext::getInstance().handle.get(), algoName);
 #endif
         }

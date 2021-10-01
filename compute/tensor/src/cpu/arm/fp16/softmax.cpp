@@ -11,9 +11,8 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <math.h>
-#include <string.h>
 #include "cpu/arm/fp16/tensor_computing_fp16.h"
+#include "tensor_transpose.h"
 
 void softmax_lastAxis_fp16(const F16 *input, I32 loopOuter, I32 loops, F16 *output)
 {
@@ -23,7 +22,7 @@ void softmax_lastAxis_fp16(const F16 *input, I32 loopOuter, I32 loops, F16 *outp
 
         float16x8_t max_v, sub_v, sum_v, tmp_v;
         F32 max_s, tmp_s;
-        max_s = array_max_value_f16(inputPtr, loops);
+        array_minmax_value_f16(inputPtr, loops, 2, &max_s);
         max_v = vdupq_n_f16(max_s);
         sum_v = vdupq_n_f16(0);
 
@@ -111,29 +110,44 @@ EE softmax_fp16(TensorDesc inputDesc, const F16 *input, int axis, TensorDesc out
     }
 
     U32 size = tensorNumElements(inputDesc);
+    int channel_axis = inputDesc.nDims - 2;
     axis = (axis + inputDesc.nDims) % inputDesc.nDims;
     axis = inputDesc.nDims - 1 - axis;
-    I32 loops = inputDesc.dims[axis];
-
-    I32 loopInner = 1;
-    for (int i = 0; i < axis; i++) {
-        loopInner *= inputDesc.dims[i];
-    }
-    U32 loopOuter = size / loops / loopInner;
-
-    if (loopInner == 1) {
-        if (DF_NCHWC8 == inputDesc.df && 4 == inputDesc.nDims &&
-            (inputDesc.dims[1] != 1 || inputDesc.dims[0] != 1)) {
-            CHECK_REQUIREMENT(2 != axis);
-            loopInner *= 8;
-            loopOuter /= 8;
-            softmax_anyAxis_fp16(input, loopOuter, loops, loopInner, output);
+    std::vector<F16> buffer;
+    if (inputDesc.df == DF_NCHWC8) {
+        if (axis == channel_axis) {
+            U32 hw = 1;
+            for (int i = 0; i < channel_axis; i++) {
+                hw *= inputDesc.dims[i];
+            }
+            if (hw != 1) {
+                buffer = std::vector<F16>(size);
+                TensorDesc tmpInputDesc = inputDesc;
+                tmpInputDesc.df = DF_NCHW;
+                transformToNCHW(inputDesc, input, tmpInputDesc, buffer.data());
+                input = (const F16 *)(buffer.data());
+            }
         } else {
-            softmax_lastAxis_fp16(input, loopOuter, loops, output);
+            for (I32 i = (int)inputDesc.nDims; i > 0; i--) {
+                inputDesc.dims[i] = inputDesc.dims[i - 1];
+            }
+            inputDesc.dims[inputDesc.nDims - 1] /= 8;
+            inputDesc.dims[0] = 8;
+            inputDesc.nDims += 1;
+            axis += 1;
         }
+    }
+    U32 loops = inputDesc.dims[axis];
+
+    U32 loop_inner = 1;
+    for (int i = 0; i < axis; i++) {
+        loop_inner *= inputDesc.dims[i];
+    }
+    U32 loop_outer = size / loops / loop_inner;
+    if (axis == 0) {
+        softmax_lastAxis_fp16(input, loop_outer, loops, output);
     } else {
-        CHECK_REQUIREMENT(DF_NCHWC8 != inputDesc.df);
-        softmax_anyAxis_fp16(input, loopOuter, loops, loopInner, output);
+        softmax_anyAxis_fp16(input, loop_outer, loops, loop_inner, output);
     }
     return SUCCESS;
 }

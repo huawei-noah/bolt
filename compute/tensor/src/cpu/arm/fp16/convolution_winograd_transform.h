@@ -14,7 +14,6 @@
 #ifndef _H_WINOGRAD_TRANSFORM
 #define _H_WINOGRAD_TRANSFORM
 
-#include <math.h>
 #include <string.h>
 #include "cpu/arm/fp16/arm_functions_fp16.h"
 
@@ -209,18 +208,18 @@ inline EE trans_O_4x4_3x3(F16 *const Ow[36],
                     vst1q_f16(O[i * 4 + 1], vminq_f16(vmaxq_f16(vaddq_f16(v_O1, v_b), v_0), v_6));
                     vst1q_f16(O[i * 4 + 2], vminq_f16(vmaxq_f16(vaddq_f16(v_O2, v_b), v_0), v_6));
                     vst1q_f16(O[i * 4 + 3], vminq_f16(vmaxq_f16(vaddq_f16(v_O3, v_b), v_0), v_6));
-                } else if (pad_w_mod_4 == 1) {                                                   
+                } else if (pad_w_mod_4 == 1) {
                     vst1q_f16(O[i * 4 + 0], vminq_f16(vmaxq_f16(vaddq_f16(v_O0, v_b), v_0), v_6));
                     vst1q_f16(O[i * 4 + 1], vminq_f16(vmaxq_f16(vaddq_f16(v_O1, v_b), v_0), v_6));
                     vst1q_f16(O[i * 4 + 2], vminq_f16(vmaxq_f16(vaddq_f16(v_O2, v_b), v_0), v_6));
-                } else if (pad_w_mod_4 == 2) {                                                   
+                } else if (pad_w_mod_4 == 2) {
                     vst1q_f16(O[i * 4 + 0], vminq_f16(vmaxq_f16(vaddq_f16(v_O0, v_b), v_0), v_6));
                     vst1q_f16(O[i * 4 + 1], vminq_f16(vmaxq_f16(vaddq_f16(v_O1, v_b), v_0), v_6));
-                } else if (pad_w_mod_4 == 3) {                                                   
+                } else if (pad_w_mod_4 == 3) {
                     vst1q_f16(O[i * 4 + 0], vminq_f16(vmaxq_f16(vaddq_f16(v_O0, v_b), v_0), v_6));
                 }
                 break;
-            }            
+            }
             default:
                 return NOT_SUPPORTED;
         }
@@ -228,6 +227,7 @@ inline EE trans_O_4x4_3x3(F16 *const Ow[36],
     return SUCCESS;
 }
 
+template <bool Check>
 inline void trans_I_4x4_3x3(F16 *Iw[36], F16 *const I[36])
 {
     F16 T[6][6][8];
@@ -289,238 +289,247 @@ inline void trans_I_4x4_3x3(F16 *Iw[36], F16 *const I[36])
         float16x8_t v_Iw4 = vsubq_f16(v_t2, v_t3);
         float16x8_t v_Iw5 = vfmaq_f16(v_t5, v_T3, v_minus_5);
 
-        F16 max = vmaxvq_f16(v_Iw0);
-        F16 min = vminvq_f16(v_Iw0);
-        if (UNI_ISNAN(max) || UNI_ISINF(max) || UNI_ISNAN(min) || UNI_ISINF(min)) {
-            F16 check[8];
-            vst1q_f16(check, v_Iw0);
-            for (U32 c = 0; c < 8; c++) {
-                F16 tmp = check[c];
-                if (UNI_ISINF(tmp)) {
-                    if (tmp > 0) {
-                        check[c] = 65504;  // FMAX for F16
-                    } else {
-                        check[c] = -65504;
-                    }
-                } else if (UNI_ISNAN(tmp)) {
-                    tmp = (T[i][0][c] - T[i][2][c]) * 4;
-                    if (UNI_ISINF(tmp)) {
-                        if (tmp > 0) {
-                            tmp = 65504;  // FMAX for F16
-                        } else {
-                            tmp = -65504;
-                        }
-                    }
-                    F16 diff = T[i][4][c] - T[i][2][c];
-                    tmp += diff;
-                    if (UNI_ISINF(tmp)) {
-                        if (diff > 0) {
-                            tmp = 65504;
-                        } else {
-                            tmp = -65504;
-                        }
-                    }
-                    check[c] = tmp;
-                }
-            }
-            memcpy(Iw[i * 6 + 0], check, 8 * bytesOf(DT_F16));
-        } else {
+        if (!Check) {
             vst1q_f16(Iw[i * 6 + 0], v_Iw0);
-        }
-
-        max = vmaxvq_f16(v_Iw1);
-        min = vminvq_f16(v_Iw1);
-        if (UNI_ISNAN(max) || UNI_ISINF(max) || UNI_ISNAN(min) || UNI_ISINF(min)) {
-            F16 check[8];
-            vst1q_f16(check, v_Iw1);
-            for (U32 c = 0; c < 8; c++) {
-                F16 tmp = check[c];
-                if (UNI_ISINF(tmp)) {
-                    if (tmp > 0) {
-                        check[c] = 65504;  // FMAX for F16
-                    } else {
-                        check[c] = -65504;
-                    }
-                } else if (UNI_ISNAN(tmp)) {
-                    tmp = (T[i][1][c] + T[i][2][c]) * -4;
-                    if (UNI_ISINF(tmp)) {
-                        if (tmp > 0) {
-                            tmp = 65504;  // FMAX for F16
-                        } else {
-                            tmp = -65504;
-                        }
-                    }
-                    F16 sum = T[i][3][c] + T[i][4][c];
-                    tmp += sum;
-                    if (UNI_ISINF(tmp)) {
-                        if (sum > 0) {
-                            tmp = 65504;
-                        } else {
-                            tmp = -65504;
-                        }
-                    }
-                    check[c] = tmp;
-                }
-            }
-            memcpy(Iw[i * 6 + 1], check, 8 * bytesOf(DT_F16));
-        } else {
             vst1q_f16(Iw[i * 6 + 1], v_Iw1);
-        }
-
-        max = vmaxvq_f16(v_Iw2);
-        min = vminvq_f16(v_Iw2);
-        if (UNI_ISNAN(max) || UNI_ISINF(max) || UNI_ISNAN(min) || UNI_ISINF(min)) {
-            F16 check[8];
-            vst1q_f16(check, v_Iw2);
-            for (U32 c = 0; c < 8; c++) {
-                F16 tmp = check[c];
-                if (UNI_ISINF(tmp)) {
-                    if (tmp > 0) {
-                        check[c] = 65504;  // FMAX for F16
-                    } else {
-                        check[c] = -65504;
-                    }
-                } else if (UNI_ISNAN(tmp)) {
-                    tmp = (T[i][1][c] - T[i][2][c]) * 4;
-                    if (UNI_ISINF(tmp)) {
-                        if (tmp > 0) {
-                            tmp = 65504;  // FMAX for F16
-                        } else {
-                            tmp = -65504;
-                        }
-                    }
-                    F16 diff = T[i][4][c] - T[i][3][c];
-                    tmp += diff;
-                    if (UNI_ISINF(tmp)) {
-                        if (diff > 0) {
-                            tmp = 65504;
-                        } else {
-                            tmp = -65504;
-                        }
-                    }
-                    check[c] = tmp;
-                }
-            }
-            memcpy(Iw[i * 6 + 2], check, 8 * bytesOf(DT_F16));
-        } else {
             vst1q_f16(Iw[i * 6 + 2], v_Iw2);
-        }
-
-        max = vmaxvq_f16(v_Iw3);
-        min = vminvq_f16(v_Iw3);
-        if (UNI_ISNAN(max) || UNI_ISINF(max) || UNI_ISNAN(min) || UNI_ISINF(min)) {
-            F16 check[8];
-            vst1q_f16(check, v_Iw3);
-            for (U32 c = 0; c < 8; c++) {
-                F16 tmp = check[c];
-                if (UNI_ISINF(tmp)) {
-                    if (tmp > 0) {
-                        check[c] = 65504;  // FMAX for F16
-                    } else {
-                        check[c] = -65504;
-                    }
-                } else if (UNI_ISNAN(tmp)) {
-                    tmp = (T[i][3][c] - T[i][1][c]) * 2;
-                    if (UNI_ISINF(tmp)) {
-                        if (tmp > 0) {
-                            tmp = 65504;  // FMAX for F16
-                        } else {
-                            tmp = -65504;
-                        }
-                    }
-                    F16 diff = T[i][4][c] - T[i][2][c];
-                    tmp += diff;
-                    if (UNI_ISINF(tmp)) {
-                        if (diff > 0) {
-                            tmp = 65504;
-                        } else {
-                            tmp = -65504;
-                        }
-                    }
-                    check[c] = tmp;
-                }
-            }
-            memcpy(Iw[i * 6 + 3], check, 8 * bytesOf(DT_F16));
-        } else {
             vst1q_f16(Iw[i * 6 + 3], v_Iw3);
-        }
-
-        max = vmaxvq_f16(v_Iw4);
-        min = vminvq_f16(v_Iw4);
-        if (UNI_ISNAN(max) || UNI_ISINF(max) || UNI_ISNAN(min) || UNI_ISINF(min)) {
-            F16 check[8];
-            vst1q_f16(check, v_Iw4);
-            for (U32 c = 0; c < 8; c++) {
-                F16 tmp = check[c];
-                if (UNI_ISINF(tmp)) {
-                    if (tmp > 0) {
-                        check[c] = 65504;  // FMAX for F16
-                    } else {
-                        check[c] = -65504;
-                    }
-                } else if (UNI_ISNAN(tmp)) {
-                    tmp = (T[i][1][c] - T[i][3][c]) * 2;
-                    if (UNI_ISINF(tmp)) {
-                        if (tmp > 0) {
-                            tmp = 65504;  // FMAX for F16
-                        } else {
-                            tmp = -65504;
-                        }
-                    }
-                    F16 diff = T[i][4][c] - T[i][2][c];
-                    tmp += diff;
-                    if (UNI_ISINF(tmp)) {
-                        if (diff > 0) {
-                            tmp = 65504;
-                        } else {
-                            tmp = -65504;
-                        }
-                    }
-                    check[c] = tmp;
-                }
-            }
-            memcpy(Iw[i * 6 + 4], check, 8 * bytesOf(DT_F16));
-        } else {
             vst1q_f16(Iw[i * 6 + 4], v_Iw4);
-        }
-
-        max = vmaxvq_f16(v_Iw5);
-        min = vminvq_f16(v_Iw5);
-        if (UNI_ISNAN(max) || UNI_ISINF(max) || UNI_ISNAN(min) || UNI_ISINF(min)) {
-            F16 check[8];
-            vst1q_f16(check, v_Iw5);
-            for (U32 c = 0; c < 8; c++) {
-                F16 tmp = check[c];
-                if (UNI_ISINF(tmp)) {
-                    if (tmp > 0) {
-                        check[c] = 65504;  // FMAX for F16
-                    } else {
-                        check[c] = -65504;
-                    }
-                } else if (UNI_ISNAN(tmp)) {
-                    tmp = (T[i][1][c] - T[i][3][c]) * 4;
+            vst1q_f16(Iw[i * 6 + 5], v_Iw5);
+        } else {
+            F16 max = vmaxvq_f16(v_Iw0);
+            F16 min = vminvq_f16(v_Iw0);
+            if (UNI_ISNAN(max) || UNI_ISINF(max) || UNI_ISNAN(min) || UNI_ISINF(min)) {
+                F16 check[8];
+                vst1q_f16(check, v_Iw0);
+                for (U32 c = 0; c < 8; c++) {
+                    F16 tmp = check[c];
                     if (UNI_ISINF(tmp)) {
                         if (tmp > 0) {
-                            tmp = 65504;  // FMAX for F16
+                            check[c] = 65504;  // FMAX for F16
                         } else {
-                            tmp = -65504;
+                            check[c] = -65504;
                         }
-                    }
-                    F16 diff = T[i][5][c] - T[i][3][c];
-                    tmp += diff;
-                    if (UNI_ISINF(tmp)) {
-                        if (diff > 0) {
-                            tmp = 65504;
-                        } else {
-                            tmp = -65504;
+                    } else if (UNI_ISNAN(tmp)) {
+                        tmp = (T[i][0][c] - T[i][2][c]) * 4;
+                        if (UNI_ISINF(tmp)) {
+                            if (tmp > 0) {
+                                tmp = 65504;  // FMAX for F16
+                            } else {
+                                tmp = -65504;
+                            }
                         }
+                        F16 diff = T[i][4][c] - T[i][2][c];
+                        tmp += diff;
+                        if (UNI_ISINF(tmp)) {
+                            if (diff > 0) {
+                                tmp = 65504;
+                            } else {
+                                tmp = -65504;
+                            }
+                        }
+                        check[c] = tmp;
                     }
-                    check[c] = tmp;
                 }
+                memcpy(Iw[i * 6 + 0], check, 8 * bytesOf(DT_F16));
+            } else {
+                vst1q_f16(Iw[i * 6 + 0], v_Iw0);
             }
-            memcpy(Iw[i * 6 + 5], check, 8 * bytesOf(DT_F16));
-        } else {
-            vst1q_f16(Iw[i * 6 + 5], v_Iw5);
+
+            max = vmaxvq_f16(v_Iw1);
+            min = vminvq_f16(v_Iw1);
+            if (UNI_ISNAN(max) || UNI_ISINF(max) || UNI_ISNAN(min) || UNI_ISINF(min)) {
+                F16 check[8];
+                vst1q_f16(check, v_Iw1);
+                for (U32 c = 0; c < 8; c++) {
+                    F16 tmp = check[c];
+                    if (UNI_ISINF(tmp)) {
+                        if (tmp > 0) {
+                            check[c] = 65504;  // FMAX for F16
+                        } else {
+                            check[c] = -65504;
+                        }
+                    } else if (UNI_ISNAN(tmp)) {
+                        tmp = (T[i][1][c] + T[i][2][c]) * -4;
+                        if (UNI_ISINF(tmp)) {
+                            if (tmp > 0) {
+                                tmp = 65504;  // FMAX for F16
+                            } else {
+                                tmp = -65504;
+                            }
+                        }
+                        F16 sum = T[i][3][c] + T[i][4][c];
+                        tmp += sum;
+                        if (UNI_ISINF(tmp)) {
+                            if (sum > 0) {
+                                tmp = 65504;
+                            } else {
+                                tmp = -65504;
+                            }
+                        }
+                        check[c] = tmp;
+                    }
+                }
+                memcpy(Iw[i * 6 + 1], check, 8 * bytesOf(DT_F16));
+            } else {
+                vst1q_f16(Iw[i * 6 + 1], v_Iw1);
+            }
+
+            max = vmaxvq_f16(v_Iw2);
+            min = vminvq_f16(v_Iw2);
+            if (UNI_ISNAN(max) || UNI_ISINF(max) || UNI_ISNAN(min) || UNI_ISINF(min)) {
+                F16 check[8];
+                vst1q_f16(check, v_Iw2);
+                for (U32 c = 0; c < 8; c++) {
+                    F16 tmp = check[c];
+                    if (UNI_ISINF(tmp)) {
+                        if (tmp > 0) {
+                            check[c] = 65504;  // FMAX for F16
+                        } else {
+                            check[c] = -65504;
+                        }
+                    } else if (UNI_ISNAN(tmp)) {
+                        tmp = (T[i][1][c] - T[i][2][c]) * 4;
+                        if (UNI_ISINF(tmp)) {
+                            if (tmp > 0) {
+                                tmp = 65504;  // FMAX for F16
+                            } else {
+                                tmp = -65504;
+                            }
+                        }
+                        F16 diff = T[i][4][c] - T[i][3][c];
+                        tmp += diff;
+                        if (UNI_ISINF(tmp)) {
+                            if (diff > 0) {
+                                tmp = 65504;
+                            } else {
+                                tmp = -65504;
+                            }
+                        }
+                        check[c] = tmp;
+                    }
+                }
+                memcpy(Iw[i * 6 + 2], check, 8 * bytesOf(DT_F16));
+            } else {
+                vst1q_f16(Iw[i * 6 + 2], v_Iw2);
+            }
+
+            max = vmaxvq_f16(v_Iw3);
+            min = vminvq_f16(v_Iw3);
+            if (UNI_ISNAN(max) || UNI_ISINF(max) || UNI_ISNAN(min) || UNI_ISINF(min)) {
+                F16 check[8];
+                vst1q_f16(check, v_Iw3);
+                for (U32 c = 0; c < 8; c++) {
+                    F16 tmp = check[c];
+                    if (UNI_ISINF(tmp)) {
+                        if (tmp > 0) {
+                            check[c] = 65504;  // FMAX for F16
+                        } else {
+                            check[c] = -65504;
+                        }
+                    } else if (UNI_ISNAN(tmp)) {
+                        tmp = (T[i][3][c] - T[i][1][c]) * 2;
+                        if (UNI_ISINF(tmp)) {
+                            if (tmp > 0) {
+                                tmp = 65504;  // FMAX for F16
+                            } else {
+                                tmp = -65504;
+                            }
+                        }
+                        F16 diff = T[i][4][c] - T[i][2][c];
+                        tmp += diff;
+                        if (UNI_ISINF(tmp)) {
+                            if (diff > 0) {
+                                tmp = 65504;
+                            } else {
+                                tmp = -65504;
+                            }
+                        }
+                        check[c] = tmp;
+                    }
+                }
+                memcpy(Iw[i * 6 + 3], check, 8 * bytesOf(DT_F16));
+            } else {
+                vst1q_f16(Iw[i * 6 + 3], v_Iw3);
+            }
+
+            max = vmaxvq_f16(v_Iw4);
+            min = vminvq_f16(v_Iw4);
+            if (UNI_ISNAN(max) || UNI_ISINF(max) || UNI_ISNAN(min) || UNI_ISINF(min)) {
+                F16 check[8];
+                vst1q_f16(check, v_Iw4);
+                for (U32 c = 0; c < 8; c++) {
+                    F16 tmp = check[c];
+                    if (UNI_ISINF(tmp)) {
+                        if (tmp > 0) {
+                            check[c] = 65504;  // FMAX for F16
+                        } else {
+                            check[c] = -65504;
+                        }
+                    } else if (UNI_ISNAN(tmp)) {
+                        tmp = (T[i][1][c] - T[i][3][c]) * 2;
+                        if (UNI_ISINF(tmp)) {
+                            if (tmp > 0) {
+                                tmp = 65504;  // FMAX for F16
+                            } else {
+                                tmp = -65504;
+                            }
+                        }
+                        F16 diff = T[i][4][c] - T[i][2][c];
+                        tmp += diff;
+                        if (UNI_ISINF(tmp)) {
+                            if (diff > 0) {
+                                tmp = 65504;
+                            } else {
+                                tmp = -65504;
+                            }
+                        }
+                        check[c] = tmp;
+                    }
+                }
+                memcpy(Iw[i * 6 + 4], check, 8 * bytesOf(DT_F16));
+            } else {
+                vst1q_f16(Iw[i * 6 + 4], v_Iw4);
+            }
+
+            max = vmaxvq_f16(v_Iw5);
+            min = vminvq_f16(v_Iw5);
+            if (UNI_ISNAN(max) || UNI_ISINF(max) || UNI_ISNAN(min) || UNI_ISINF(min)) {
+                F16 check[8];
+                vst1q_f16(check, v_Iw5);
+                for (U32 c = 0; c < 8; c++) {
+                    F16 tmp = check[c];
+                    if (UNI_ISINF(tmp)) {
+                        if (tmp > 0) {
+                            check[c] = 65504;  // FMAX for F16
+                        } else {
+                            check[c] = -65504;
+                        }
+                    } else if (UNI_ISNAN(tmp)) {
+                        tmp = (T[i][1][c] - T[i][3][c]) * 4;
+                        if (UNI_ISINF(tmp)) {
+                            if (tmp > 0) {
+                                tmp = 65504;  // FMAX for F16
+                            } else {
+                                tmp = -65504;
+                            }
+                        }
+                        F16 diff = T[i][5][c] - T[i][3][c];
+                        tmp += diff;
+                        if (UNI_ISINF(tmp)) {
+                            if (diff > 0) {
+                                tmp = 65504;
+                            } else {
+                                tmp = -65504;
+                            }
+                        }
+                        check[c] = tmp;
+                    }
+                }
+                memcpy(Iw[i * 6 + 5], check, 8 * bytesOf(DT_F16));
+            } else {
+                vst1q_f16(Iw[i * 6 + 5], v_Iw5);
+            }
         }
     }
 }

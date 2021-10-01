@@ -20,8 +20,7 @@ class TopKOCL : public TopK {
 public:
     TopKOCL(DataType dt, TopKParamSpec p) : TopK(dt, p)
     {
-        setMALIArchInfo(
-            &(this->archInfo), nullptr, &this->needSetKernelVec, &this->needSelectKernelLS);
+        INIT_GPU_INFO(nullptr)
     }
 
     ~TopKOCL(){DESTROY_OCL_KERNEL}

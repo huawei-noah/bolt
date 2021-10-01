@@ -20,8 +20,7 @@ class PaddingOCL : public Padding {
 public:
     PaddingOCL(DataType dt, PadParamSpec p) : Padding(dt, p)
     {
-        setMALIArchInfo(
-            &(this->archInfo), nullptr, &this->needSetKernelVec, &this->needSelectKernelLS);
+        INIT_GPU_INFO(nullptr)
     }
 
     ~PaddingOCL(){DESTROY_OCL_KERNEL}

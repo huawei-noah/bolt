@@ -11,46 +11,9 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string.h>
 #include "tensor_computing.h"
-#include "ut_util.h"
-#include "gcl.h"
-#include "libkernelsource.h"
+#include "ut_util_ocl.h"
 
-#ifdef _USE_FP16
-inline GCLMem_t alloc(Tensor tensor)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    mem->alloc();
-    return (GCLMem_t)mem->get_ptr();
-}
-
-inline GCLMem_t alloc_map(Tensor tensor)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    mem->mapped_alloc();
-    return (GCLMem_t)mem->get_ptr();
-}
-
-inline GCLMem_t alloc_bytes(Tensor tensor, U32 size)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    GCLMem_t ptr = NULL;
-    if (size > 0) {
-        mem->resize(tensor1d(DT_U8, size));
-        mem->alloc();
-        ptr = (GCLMem_t)mem->get_ptr();
-    }
-    return ptr;
-}
-
-inline GCLMem_t alloc_desc(Tensor tensor, GCLMemDesc desc)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    mem->padding(desc);
-    mem->alloc();
-    return (GCLMem_t)mem->get_ptr();
-}
 int eltwiseTest(int argc, char *argv[], DataType dt)
 {
     U32 num;
@@ -58,8 +21,6 @@ int eltwiseTest(int argc, char *argv[], DataType dt)
     U32 bn, bc, bh, bw;
     ArchInfo archInfo;
     archInfo.arch = MALI;
-    ArchInfo archInfo_org;
-    archInfo_org.arch = CPU_GENERAL;
 
     num = 2;
     in = 1;
@@ -104,30 +65,29 @@ int eltwiseTest(int argc, char *argv[], DataType dt)
     for (U32 i = 0; i < num; i++) {
         if (i == 1) {
             inputCpu[i] = (void *)ut_input_v(bn * bc * bh * bw, dt, UT_INIT_RANDOM);
-            F16 *val = (F16 *)inputCpu[i];
             inTensorsCpu[i].resize(broadDesc);
         } else {
             inputCpu[i] = (void *)ut_input_v(in * ic * ih * iw, dt, UT_INIT_RANDOM);
-            F16 *val = (F16 *)inputCpu[i];
             inTensorsCpu[i].resize(inDesc);
         }
         inTensorsCpu[i].alloc();
-        memcpy(get_ptr_from_tensor(inTensorsCpu[i], UT_ARCH), inputCpu[i],
+        memcpy(get_ptr_from_tensor(inTensorsCpu[i], CPU_GENERAL), inputCpu[i],
             tensorNumBytes(inTensorsCpu[i].get_desc()));
         inTensorPtrCpu[i] = &inTensorsCpu[i];
     }
-    CHECK_STATUS(eltwise_infer_output_size(inTensorPtrCpu, &outTensorCpu, &archInfo_org));
+    CHECK_STATUS(eltwise_infer_output_size(inTensorPtrCpu, &outTensorCpu, &UT_SERIAL_ARCHINFO));
     outTensorCpu.alloc();
 
     U32 maxBytes = 0;
     U32 tmpBytes;
     CHECK_STATUS(
-        eltwise_infer_forward_tmp_bytes(inTensorsCpu, outTensorCpu, &tmpBytes, &archInfo_org));
+        eltwise_infer_forward_tmp_bytes(inTensorsCpu, outTensorCpu, &tmpBytes, &UT_SERIAL_ARCHINFO));
     maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
     Tensor tmpTensorCpu;
     tmpTensorCpu.resize(tensor1d(DT_U8, tmpBytes));
     tmpTensorCpu.alloc();
-    CHECK_STATUS(eltwise(inTensorsCpu, eltwiseDesc, tmpTensorCpu, outTensorCpu, &archInfo_org));
+    CHECK_STATUS(
+        eltwise(inTensorsCpu, eltwiseDesc, tmpTensorCpu, outTensorCpu, &UT_SERIAL_ARCHINFO));
 
     std::shared_ptr<GCLHandle> handleSharedPtr = OCLContext::getInstance().handle;
     GCLHandle_t handle = handleSharedPtr.get();
@@ -138,18 +98,15 @@ int eltwiseTest(int argc, char *argv[], DataType dt)
     std::vector<Tensor *> inTensorPtr;
     Tensor outTensor = Tensor(OCLMem);
     Tensor tmpTensor = Tensor(OCLMem);
+    inDesc.df = DF_NCHWC4;
+    broadDesc.df = DF_NCHWC4;
     for (U32 i = 0; i < num; i++) {
         Tensor tensor = Tensor(OCLMem);
-        U32 str[3] = {1, 1, 1};
-        U32 off[3] = {0, 0, 0};
-        GCLMemDesc inputMemDesc = gcl_mem_desc(str, off, DT_U8, DF_NCWHC4);
         if (i == 1) {
             tensor.resize(broadDesc);
-            inputMemDesc = gcl_mem_desc(str, off, DT_U8, DF_NCHW);
         } else {
             tensor.resize(inDesc);
         }
-        ocl_set_desc(&tensor, inputMemDesc);
         inTensors[i] = tensor;
         inTensorPtr.push_back(&inTensors[i]);
     }
@@ -160,14 +117,18 @@ int eltwiseTest(int argc, char *argv[], DataType dt)
     CHECK_STATUS(eltwise_infer_output_size(inTensorPtr, &outTensor, &archInfo));
 
     CHECK_STATUS(eltwise_infer_forward_tmp_bytes(inTensors, outTensor, &tmpBytes, &archInfo));
+    TensorDesc outputDesc = outTensor.get_desc();
+    U8 *output_gpu = ut_input_v(tensorNumElements(outputDesc), dt, UT_INIT_RANDOM);
     maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
     tmpBytes = tensorNumBytes(inDesc);
     maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
     tmpBytes = tensorNumBytes(broadDesc);
     maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
+    tmpBytes = tensorNumBytes(outputDesc);
+    maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
 
     std::vector<GCLMem_t> inputVec;
-    GCLMem_t output = alloc_map(outTensor);
+    GCLMem_t output = alloc(outTensor);
     for (U32 i = 0; i < num; i++) {
         GCLMem_t input = alloc(inTensors[i]);
         CHECK_STATUS(gcl_fill_memory_zero(handle, input));
@@ -215,32 +176,32 @@ int eltwiseTest(int argc, char *argv[], DataType dt)
 #else
     CHECK_STATUS(gcl_run_kernelVec(handle));
 #endif
-    TensorDesc outputDesc = outTensor.get_desc();
-    CHECK_STATUS(ocl_get_output(handle, output, outputDesc, true));
-    U8 *output_gpu = output->mapPtrArray.back();
+    CHECK_STATUS(ocl_get_output(handle, output, outputDesc, output_gpu, tmpbuf, true));
     char buffer[150];
     char params[120];
+    U32 on, oc, oh, ow;
+    tensorSelectGet(outputDesc, NULL, NULL, &on, &oc, &oh, &ow);
     if (num == 2) {
-        sprintf(params, "(%u %u %u)+(%u %u %u)=(%u %u %u)", ic, ih, iw, bc, bh, bw, ic, ih, iw);
+        sprintf(params, "(%u %u %u)+(%u %u %u)=(%u %u %u)", ic, ih, iw, bc, bh, bw, oc, oh, ow);
     } else {
         sprintf(params, "%u (%u %u %u %u)=(%u %u %u %u)", num, in, ic, ih, iw, in, ic, ih, iw);
     }
     sprintf(buffer, "%20s, %80s", "eltwise", params);
 #ifdef _DEBUG
-    double ops = 1.9 * num * in * ic * ih * iw;
+    double ops = 1.9 * num * on * oc * oh * ow;
     ut_log(dt, buffer, ops, time);
 #endif
-    ut_check_a(output_gpu, get_ptr_from_tensor(outTensorCpu, UT_ARCH), ic * ih * iw, dt);
+    ut_check_a(output_gpu, get_ptr_from_tensor(outTensorCpu, CPU_GENERAL), on * oc * oh * ow, dt);
 
     CHECK_STATUS(gcl_finish(handle));
     CHECK_STATUS(gcl_clean_kernelVec(handle));
     for (U32 i = 0; i < num; i++) {
         free(inputCpu[i]);
     }
+    free(output_gpu);
 
     return 0;
 }
-#endif
 
 int main(int argc, char **argv)
 {

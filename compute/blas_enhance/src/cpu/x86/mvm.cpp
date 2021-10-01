@@ -18,9 +18,12 @@
 #ifdef _USE_FP32
 #include "cpu/x86/fp32/blas_fp32.h"
 #endif
+#ifdef _USE_INT8
+#include "cpu/x86/int8/blas_int8.h"
+#endif
 
 EE matrix_vector_multiply_transform_weight_x86(
-    TensorDesc desc, const void *src, TensorDesc *descTran, void *dst)
+    TensorDesc desc, const void *src, TensorDesc *descTran, void *dst, void *offsetCBias)
 {
     if (desc.df == targetFormat4mvmMatrix(desc.dt)) {
         return SUCCESS;
@@ -30,6 +33,13 @@ EE matrix_vector_multiply_transform_weight_x86(
 #ifdef _USE_FP32
         case DT_F32: {
             ret = matrix_vector_multiply_transform_weight_fp32(desc, (F32 *)src, (F32 *)dst);
+            break;
+        }
+#endif
+#ifdef _USE_INT8
+        case DT_I8: {
+            ret = matrix_vector_multiply_transform_weight_int8(
+                desc, (INT8 *)src, (INT8 *)dst, (I32 *)offsetCBias);
             break;
         }
 #endif
@@ -45,31 +55,60 @@ EE matrix_vector_multiply_transform_weight_x86(
     return ret;
 }
 
-EE matrix_vector_multiply_tmp_bytes_x86(bool transpose, DataType dt, U32 *bytes)
+EE matrix_vector_multiply_tmp_bytes_x86(bool transpose, TensorDesc matrixDesc, U32 *bytes)
 {
     if (nullptr == bytes) {
         CHECK_STATUS(NULL_POINTER);
     }
-    switch (dt) {
+
+    switch (matrixDesc.dt) {
 #ifdef _USE_FP32
         case DT_F32:
             *bytes = 0;
             break;
 #endif
-        default:
+#ifdef _USE_INT8
+        case DT_I8:
+        case DT_U8_Q:
+            *bytes = (matrixDesc.dims[0] + matrixDesc.dims[1]) * bytesOf(DT_I32) +
+                tensorNumBytes(matrixDesc);
             break;
+#endif
+        default:
+            return NOT_SUPPORTED;
     }
     return SUCCESS;
 }
 
-EE mvm_x86(
-    U32 row, U32 col, DataType dt, DataFormat df, const void *matrix, const void *vector, void *result)
+EE mvm_x86(U32 row,
+    U32 col,
+    DataType dt,
+    DataFormat df,
+    const void *matrix,
+    const void *vector,
+    void *result,
+    void *offsetCBias,
+    const F32 *scale)
 {
     EE ret = SUCCESS;
     switch (dt) {
 #ifdef _USE_FP32
         case DT_F32: {
             ret = mvm_avx2_fp32(row, col, df, (F32 *)matrix, (F32 *)vector, (F32 *)result);
+            break;
+        }
+#endif
+#ifdef _USE_INT8
+        case DT_I8: {
+            CHECK_REQUIREMENT(offsetCBias != nullptr);
+            ret = mvm_avx512_int8(row, col, (INT8 *)matrix, (UINT8 *)vector, (UINT8 *)result,
+                (I32 *)offsetCBias, scale);
+            break;
+        }
+        case DT_U8_Q: {
+            CHECK_REQUIREMENT(offsetCBias != nullptr);
+            ret = mvm_avx512_int8_row_i8u8(row, col, df, (UINT8 *)matrix, (INT8 *)vector,
+                (UINT8 *)result, (I32 *)offsetCBias, scale);
             break;
         }
 #endif

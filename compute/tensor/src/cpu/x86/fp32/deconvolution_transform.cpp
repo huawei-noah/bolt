@@ -115,6 +115,45 @@ inline EE transformCNHW2NCHWCxNx(
     return SUCCESS;
 }
 
+// N is 32/24
+template <U32 N>
+inline void transformDeconvW2NCHWCxNx(
+    TensorDesc inputDesc, const F32 *input, TensorDesc outputDesc, F32 *output)
+{
+    if (input == NULL || output == NULL) {
+        CHECK_STATUS(NULL_POINTER);
+    }
+    DataType idt, odt;
+    DataFormat idf, odf;
+    U32 in, ic, ih, iw;
+    U32 on, oc, oh, ow;
+    CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+    CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
+
+    U32 blocks[2] = {8, 16};
+    U32 inSize = 0;
+    U32 onSize = 0;
+    U32 cSize = 0;
+    for (U32 n = 0; n < ic * ih * iw; n += inSize) {
+        onSize = UNI_MIN(N, ic * ih * iw - n);
+        inSize = onSize;
+        if (inSize < N) {
+            onSize = blocks[onSize >= 16];
+            inSize = UNI_MIN(inSize, onSize);
+        }
+        for (U32 c = 0; c < in; ++c) {
+            for (U32 nn = 0; nn < inSize; ++nn) {
+                U32 oidx = n * in + c * onSize + nn;
+                U32 iih = (n + nn) / (iw * ic);
+                U32 iiw = (n + nn) % (iw * ic) / ic;
+                U32 iic = (n + nn) % ic;
+                U32 iidx = c * ic * ih * iw + iic * ih * iw + iih * iw + iiw;
+                output[oidx] = input[iidx];
+            }
+        }
+    }
+}
+
 inline EE deconvolution_transform_filter_kernel_fp32(TensorDesc filterDesc,
     const F32 *filterArray,
     TensorDesc *ftmDesc,
@@ -145,6 +184,18 @@ inline EE deconvolution_transform_filter_kernel_fp32(TensorDesc filterDesc,
             *ftmDesc = tensor4df(fdt, ftmDataFormat, fn, fc, fh, fw);
             break;
         }
+        case DF_NCHWCxN32: {
+            *ftmDesc = tensor4df(fdt, ftmDataFormat, fn, fc * fh * fw, 1, 1);
+            transformDeconvW2NCHWCxNx<32>(filterDesc, filterArray, *ftmDesc, ftmArray);
+            *ftmDesc = tensor4df(fdt, ftmDataFormat, fc * fh * fw, fn, 1, 1);
+            break;
+        }
+        case DF_NCHWCxN24: {
+            *ftmDesc = tensor4df(fdt, ftmDataFormat, fn, fc * fh * fw, 1, 1);
+            transformDeconvW2NCHWCxNx<24>(filterDesc, filterArray, *ftmDesc, ftmArray);
+            *ftmDesc = tensor4df(fdt, ftmDataFormat, fc * fh * fw, fn, 1, 1);
+            break;
+        }
         default:
             ret = NOT_SUPPORTED;
             break;
@@ -159,10 +210,24 @@ EE deconvolution_transform_filter_fp32(TensorDesc filterDesc,
     F32 *filterTransformed)
 {
     DataFormat ftmDataFormat;
+    DataType fdt;
+    DataFormat fdf;
+    U32 fn, fc, fh, fw;
+    CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
+    fn = fc * fh * fw;
     switch (algorithm) {
-        case CONVOLUTION_ALGORITHM_GROUP_DECONV:
+        case CONVOLUTION_ALGORITHM_GROUP_DECONV: {
             ftmDataFormat = DF_NCHWC24;
             break;
+        }
+        case CONVOLUTION_ALGORITHM_POINTWISE: {
+            if ((fn % 24 != 0) && (fn % 32 == 0)) {
+                ftmDataFormat = DF_NCHWCxN32;
+            } else {
+                ftmDataFormat = DF_NCHWCxN24;
+            }
+            break;
+        }
         default:
             return NOT_MATCH;
     }

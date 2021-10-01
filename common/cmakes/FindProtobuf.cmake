@@ -9,7 +9,7 @@ if (USE_DYNAMIC_LIBRARY)
     set(Protobuf_SHARED_LIBRARY ${Protobuf_LIBRARY})
 else (USE_DYNAMIC_LIBRARY)
     find_library(Protobuf_LIBRARY NAMES ${CMAKE_STATIC_LIBRARY_PREFIX}protobuf${CMAKE_STATIC_LIBRARY_SUFFIX} HINTS $ENV{Protobuf_ROOT}/lib ${Protobuf_ROOT}/lib)
-    find_library(Protobuf_SHARED_LIBRARY NAMES protobuf SHARED_HINTS $ENV{Protobuf_ROOT}/lib ${Protobuf_ROOT}/lib)
+    find_library(Protobuf_SHARED_LIBRARY NAMES protobuf HINTS $ENV{Protobuf_ROOT}/lib ${Protobuf_ROOT}/lib)
 endif (USE_DYNAMIC_LIBRARY)
 
 find_program(Protobuf_PROTOC_EXECUTABLE NAMES protoc HINTS $ENV{Protobuf_ROOT}/bin ${Protobuf_ROOT}/bin)

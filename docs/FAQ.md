@@ -8,7 +8,7 @@
 
 * **How to use 1-bit BNN?**
 
-    Bolt converts 0/1, -1/1 float weight to 1-bit bolt model by default. If you don't want to run 1-bit network, you can set *BOLT_BNN* shell environment to *OFF* before model conversion.
+    Bolt converts 0/1, -1/1 float weight to 1-bit bolt model. If you want to run 1-bit network, you can set model conversion precision to "BNN_FP16".
 
 * **Restrictions for 1-bit BNN?**
 
@@ -40,11 +40,11 @@
 
 * **Restrictions for RNN/LSTM/PLSTM/GRU/GRU_LBR?**
 
-    Only supports hidden states number mod 32 = 0 case. If you want to run number mod 32 != 0 case, please set shell environment variable *BOLT_PADDING* to *ON* before model conversion.
+    Only supports hidden states number mod 32 = 0 case. Bolt will change hidden state size to number that mod 32 == 0. If you don't want to change, you can set shell environment variable *BOLT_PADDING* to *OFF* before model conversion.
 
 * **Some complex ONNX models can not be inferenced.**
 
-    Maybe you can use [onnx-simplifiler](https://github.com/daquexian/onnx-simplifier) to simplify models.
+    Maybe you can use [onnx-simplifiler](https://github.com/daquexian/onnx-simplifier) to simplify models. If you encounter problem when simplifing model, you can try to use *--skip-shape-inference* option.
 
 * **How to use Java API apart from Android NDK?**
 
@@ -75,3 +75,14 @@
 
     This is because some ARMv8 phone not supports armv8.2 feature(float16, int8 instruction), such as Huawei P20. This may tell you **illegal instruction** error or nothing.
     You can solve it by using *--fp16=off --int8=off* to close fp16 and int8 feature when building Bolt.
+
+* **Can not run program on Android phone by using Android ADB**
+
+    You can run C/C++ program in */data/local/tmp* directory by using ADB tool. If you don't have phone's root priviledge. you can only run test in this directory.
+
+    Maybe you will encounter this problem.
+    ```
+    can't execute: Permission denied
+    ```
+
+    This is because program doesn't have execute priviledge. you can give it priviledge by using *chmod +x ./XXX_program*.

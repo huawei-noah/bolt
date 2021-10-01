@@ -51,14 +51,14 @@ inline EE reduction_checkpara_mali(GCLHandle_t handle,
     return SUCCESS;
 }
 
-EE reduction_infer_output_size_mali(TensorDesc inputDesc,
+EE reduction_padding_input_mali(TensorDesc inputDesc,
     TensorDesc maskDesc,
     ReductionParamSpec p,
     TensorDesc *outputDesc,
-    GCLMemDesc_t gclmemInputDesc,
-    GCLMemDesc_t gclmemOutputDesc)
+    OclMemory *inputMem,
+    OclMemory *outputMem)
 {
-    if (outputDesc == nullptr || gclmemInputDesc == nullptr || gclmemOutputDesc == nullptr) {
+    if (outputDesc == nullptr || inputMem == nullptr || outputMem == nullptr) {
         CHECK_STATUS(NULL_POINTER);
     }
 
@@ -95,27 +95,14 @@ EE reduction_infer_output_size_mali(TensorDesc inputDesc,
     }
     tmpDesc.df = getTensorDefaultDataFormat(tmpDesc.nDims);
     *outputDesc = tmpDesc;
-
-    DataType dt;
-    U32 in, ic, ih, iw, it;
-    U32 on, oc, oh, ow, ot;
-    tensorSelectGet(inputDesc, &dt, NULL, &in, &ic, &ih, &iw, &it);
-    tensorSelectGet(tmpDesc, NULL, NULL, &on, &oc, &oh, &ow, &ot);
-    if (gclmemInputDesc->memFormat == DF_NCHW || gclmemInputDesc->byteSize == 0) {
-        iw = ALIGN(iw, 4);
-        CHECK_STATUS(infer_gclmem_desc_nchw_3d(
-            iw, ih, ic, it, in, 0, 0, 0, 0, 0, 0, 0, dt, dt, gclmemInputDesc, NULL));
-    } else {
-        CHECK_STATUS(infer_gclmem_desc_ncwhc4_3d(
-            iw, ih, ic, it, in, 0, 0, 0, 0, 0, 0, 0, dt, dt, gclmemInputDesc, NULL));
+    if (inputDesc.df == DF_NCHWC4 && p.keep_dim && axisTran[0] < 2) {
+        (*outputDesc).df = DF_NCHWC4;
     }
-
-    if (gclmemInputDesc->memFormat == DF_NCWHC4 && p.keep_dim && axisTran[0] < 2) {
-        CHECK_STATUS(infer_gclmem_desc_ncwhc4_3d(
-            0, 0, 0, 0, 0, 0, 0, ow, oh, oc, on, ot, dt, dt, NULL, gclmemOutputDesc));
-    } else {
-        CHECK_STATUS(infer_gclmem_desc_nchw_3d(
-            0, 0, 0, 0, 0, 0, 0, ow, oh, oc, on, ot, dt, dt, NULL, gclmemOutputDesc));
+    if (inputDesc.df != DF_NCHWC4) {
+        U32 iw = inputDesc.dims[0];
+        U32 iw_align = ALIGN(iw, 4);
+        U32 pr = iw_align - iw;
+        inputMem->padding(0, pr, 0, 0);
     }
     return SUCCESS;
 }

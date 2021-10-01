@@ -28,8 +28,15 @@ EE pooling_x86(TensorDesc inputDesc,
 #ifdef _USE_FP32
         case DT_F32: {
             UNUSED(scale);
-            ret = pooling_fp32(
-                inputDesc, (const F32 *)input, poolingParamSpec, outputDesc, (F32 *)output);
+            if (inputDesc.df == DF_NCHWC8) {
+                ret = pooling_fp32(
+                    inputDesc, (const F32 *)input, poolingParamSpec, outputDesc, (F32 *)output);
+            } else if (inputDesc.df == DF_NCHWC16) {
+                ret = pooling_c16_fp32(
+                    inputDesc, (const F32 *)input, poolingParamSpec, outputDesc, (F32 *)output);
+            } else {
+                ret = NOT_SUPPORTED;
+            }
             break;
         }
 #endif

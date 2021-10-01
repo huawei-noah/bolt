@@ -276,6 +276,25 @@ inline EE get_device_info(Device device, cl_device_info info, void **value, U32 
     map_cl_error_2_ee(ret);
 }
 
+inline EE get_device_max_image3d_sizes(Device device, U32 *size)
+{
+    I32 ret;
+    size_t width, height, depth;
+    ret = clGetDeviceInfo(device, CL_DEVICE_IMAGE3D_MAX_WIDTH, sizeof(size_t), &width, NULL);
+    if (CL_SUCCESS != ret) {
+        map_cl_error_2_ee(ret);
+    }
+    ret = clGetDeviceInfo(device, CL_DEVICE_IMAGE3D_MAX_HEIGHT, sizeof(size_t), &height, NULL);
+    if (CL_SUCCESS != ret) {
+        map_cl_error_2_ee(ret);
+    }
+    ret = clGetDeviceInfo(device, CL_DEVICE_IMAGE3D_MAX_DEPTH, sizeof(size_t), &depth, NULL);
+    size[0] = width;
+    size[1] = height;
+    size[2] = depth;
+    map_cl_error_2_ee(ret);
+}
+
 inline EE get_device_max_work_item_sizes(Device device, U32 *size)
 {
     size_t data[3];

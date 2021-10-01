@@ -20,8 +20,7 @@ class ArgMaxOCL : public ArgMax {
 public:
     ArgMaxOCL(DataType dt, ArgMaxParamSpec p) : ArgMax(dt, p)
     {
-        setMALIArchInfo(
-            &(this->archInfo), nullptr, &this->needSetKernelVec, &this->needSelectKernelLS);
+        INIT_GPU_INFO(nullptr)
     }
 
     ~ArgMaxOCL(){DESTROY_OCL_KERNEL}

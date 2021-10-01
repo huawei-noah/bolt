@@ -82,13 +82,14 @@ public:
         CHECK_STATUS(
             rnn_transform_filter_bytes(this->weightTensors, this->p, bytes.data(), &this->archInfo));
         std::vector<Tensor> ftmTensors(filter_num);
-        std::vector<Tensor *> tmp(filter_num);
+        std::vector<Tensor *> tmpFilter(filter_num);
         for (I32 i = 0; i < filter_num; i++) {
             ftmTensors[i].resize(tensor1d(DT_U8, bytes[i]));
             ftmTensors[i].alloc();
-            tmp[i] = &ftmTensors[i];
+            tmpFilter[i] = &ftmTensors[i];
         }
-        CHECK_STATUS(rnn_transform_filter(this->weightTensors, this->p, tmp, &this->archInfo));
+        CHECK_STATUS(rnn_transform_filter(
+            this->weightTensors, this->p, this->temp, tmpFilter, &this->archInfo));
         this->weightTensors = ftmTensors;
         return SUCCESS;
     }

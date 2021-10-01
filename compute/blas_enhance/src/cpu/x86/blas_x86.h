@@ -19,18 +19,25 @@
 #include "tensor_desc.h"
 
 EE matrix_vector_multiply_transform_weight_x86(
-    TensorDesc desc, const void *src, TensorDesc *descTran, void *dst);
+    TensorDesc desc, const void *src, TensorDesc *descTran, void *dst, void *offsetCBias);
 
-EE matrix_vector_multiply_tmp_bytes_x86(bool transpose, DataType dt, U32 *bytes);
+EE matrix_vector_multiply_tmp_bytes_x86(bool transpose, TensorDesc matrixDesc, U32 *bytes);
 
-EE mvm_x86(
-    U32 row, U32 col, DataType dt, DataFormat df, const void *matrix, const void *vector, void *result);
+EE mvm_x86(U32 row,
+    U32 col,
+    DataType dt,
+    DataFormat df,
+    const void *matrix,
+    const void *vector,
+    void *result,
+    void *offsetCBias,
+    const F32 *scale);
 
 EE matrix_matrix_multiply_tmp_bytes_x86(
     U32 matrixA_M, U32 matrixA_K, U32 matrixB_K, U32 matrixB_N, DataType dt, U32 *bytes);
 
 EE matrix_matrix_multiply_transform_rhs_x86(
-    TensorDesc desc, const void *src, TensorDesc *descTran, void *dst);
+    TensorDesc desc, const void *src, TensorDesc *descTran, void *dst, void *offsetCBias);
 
 EE mmm_x86(U32 matrixC_N,
     U32 matrixC_M,
@@ -40,6 +47,7 @@ EE mmm_x86(U32 matrixC_N,
     const void *matrixAData,
     const void *matrixBData,
     void *tmp,
-    void *matrixCData);
+    void *matrixCData,
+    const F32 *scale);
 
 #endif

@@ -18,15 +18,19 @@
 
 class Space2Depth : public Operator {
 public:
-    Space2Depth(DataType dt)
+    Space2Depth(DataType dt, Space2DepthParamSpec p)
     {
         this->dt = dt;
+        this->p = p;
     }
 
     OperatorType get_type() override
     {
         return OT_Space2Depth;
     }
+
+protected:
+    Space2DepthParamSpec p;
 };
 
 #endif  // _SPACE2DEPTH_H

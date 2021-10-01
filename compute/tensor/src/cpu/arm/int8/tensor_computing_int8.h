@@ -13,22 +13,11 @@
 
 #ifndef _H_TENSOR_COMPUTING_INT8
 #define _H_TENSOR_COMPUTING_INT8
-#ifdef _USE_INT8
 #include <vector>
 #include "sys.h"
 
 #include "error.h"
 #include "cpu/arm/int8/arm_functions_int8.h"
-
-EE convolution_infer_forward_algorithm_int8(TensorDesc inputDesc,
-    TensorDesc filterDesc,
-    TensorDesc outputDesc,
-    ConvolutionParamSpec convParamSpec,
-    ConvolutionPolicy policy,
-    ConvolutionForwardAlgorithm *algorithm);
-
-EE convolution_transform_filter_bytes_int8(
-    TensorDesc filterDesc, ConvolutionForwardAlgorithm algorithm, U32 *bytes);
 
 EE convolution_transform_filter_int8(TensorDesc filterDesc,
     const void *filter,
@@ -41,11 +30,11 @@ EE convolution_int8(TensorDesc inputDesc,
     const INT8 *input,
     TensorDesc filterDesc,
     const INT8 *filter,
-    F16 *scales,
+    F32 *scales,
     ConvolutionParamSpec convParamSpec,
     ConvolutionForwardAlgorithm algorithm,
     TensorDesc biasDesc,
-    const F16 *bias,
+    const void *bias,
     U32 tmpBytes,
     void *tmp,
     TensorDesc outputDesc,
@@ -73,19 +62,20 @@ EE depthwise_pointwise_convolution_int8(TensorDesc inputDesc,
     ActivationParamSpec pointwiseActivationParamSpec,
     Arch arch);
 
-EE pooling_c8_int8(I32 tstart,
-    I32 tend,
-    I32 hstart,
-    I32 hend,
-    I32 wstart,
-    I32 wend,
-    I32 poolSize,
-    const INT8 *input,
-    I32 it,
-    I32 ih,
-    I32 iw,
-    PoolingParamSpec p,
-    INT8 *output,
+template <PoolingMode pm>
+EE pooling_c8_int8(const I32 &tstart,
+    const I32 &tend,
+    const I32 &hstart,
+    const I32 &hend,
+    const I32 &wstart,
+    const I32 &wend,
+    const I32 &poolSize,
+    const I32 &kernelSize,
+    const U8 *input,
+    const I32 &it,
+    const I32 &ih,
+    const I32 &iw,
+    U8 *output,
     void *scale);
 
 EE concat_int8(std::vector<TensorDesc> inputDesc,
@@ -95,8 +85,4 @@ EE concat_int8(std::vector<TensorDesc> inputDesc,
     TensorDesc outputDesc,
     void *output,
     F32 *outputScale);
-
-EE quantize_tensor_int32(
-    TensorDesc dDesc, const void *data, TensorDesc *qDesc, void *qData, F32 *scale);
-#endif
 #endif

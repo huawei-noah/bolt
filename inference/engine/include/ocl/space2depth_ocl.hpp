@@ -18,10 +18,9 @@
 
 class Space2DepthOCL : public Space2Depth {
 public:
-    Space2DepthOCL(DataType dt) : Space2Depth(dt)
+    Space2DepthOCL(DataType dt, Space2DepthParamSpec p) : Space2Depth(dt, p)
     {
-        setMALIArchInfo(
-            &(this->archInfo), nullptr, &this->needSetKernelVec, &this->needSelectKernelLS);
+        INIT_GPU_INFO(nullptr)
     }
 
     ~Space2DepthOCL(){DESTROY_OCL_KERNEL}
@@ -29,7 +28,7 @@ public:
     std::shared_ptr<Operator> clone() override
     {
         std::shared_ptr<Space2DepthOCL> mem =
-            std::shared_ptr<Space2DepthOCL>(new Space2DepthOCL(this->dt));
+            std::shared_ptr<Space2DepthOCL>(new Space2DepthOCL(this->dt, this->p));
         *mem = *this;
         return mem;
     }
@@ -37,14 +36,16 @@ public:
     inline void run_prepare()
     {
         OCLContext::getInstance().handle.get()->curOpName = this->get_name();
-        CHECK_STATUS(space2depth(this->inputTensors[0], this->outputTensors[0], &this->archInfo));
+        CHECK_STATUS(
+            space2depth(this->inputTensors[0], this->p, this->outputTensors[0], &this->archInfo));
     }
 
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
         this->needSetKernelVec = true;
-        CHECK_STATUS(space2depth_infer_output_size(inTensors[0], outTensors[0], &this->archInfo));
+        CHECK_STATUS(
+            space2depth_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo));
         return SUCCESS;
     }
 

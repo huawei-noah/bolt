@@ -2325,7 +2325,7 @@ std::vector<short> AudioFeatureExtractor::readWav(const std::string &wavName)
         std::vector<short> data;
         return data;
     }
-
+#if 0
     int wavHeadSize = getWavHead(fp);
     if (wavHeadSize > 4) {
         int retSek = fseek(fp, wavHeadSize - 4, SEEK_SET);
@@ -2334,6 +2334,11 @@ std::vector<short> AudioFeatureExtractor::readWav(const std::string &wavName)
         readSize = fread(&wavSize, sizeof(int), 1, fp);
         CHECK_REQUIREMENT(readSize == 1);
     }
+#else
+    fseek(fp, 0, SEEK_END);
+    wavSize = ftell(fp);
+    fseek(fp, 0, SEEK_SET);
+#endif
     std::vector<short> data(wavSize / 2);
     readSize = fread(data.data(), sizeof(short), wavSize / 2, fp);
     CHECK_REQUIREMENT(readSize == data.size());

@@ -231,7 +231,7 @@ std::map<std::string, std::shared_ptr<Tensor>> get_output(
 {
     std::map<std::string, std::shared_ptr<Tensor>> outMap = pipeline->get_output();
     if (affinity == "GPU") {
-#ifdef _USE_MALI
+#ifdef _USE_GPU
         for (auto iter : outMap) {
             Tensor result = *(iter.second);
             auto mem = (OclMemory *)result.get_memory();

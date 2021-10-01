@@ -51,6 +51,7 @@ public:
         Tensor outputTensor = this->outputTensors[0];
         TensorDesc outputDesc = outputTensor.get_desc();
 
+        UNI_DEBUG_LOG("Tdnn slide window optimization status is %d.\n", this->slide);
         if (inputDesc.nDims != 3 || outputDesc.nDims != 3 ||
             inputDesc.dims[inputDesc.nDims - 1] != 1) {
             UNI_ERROR_LOG("TdnnFullyConnectedCPU not support batch\n");
@@ -94,7 +95,9 @@ public:
                 std::shared_ptr<U8>(validInput, validInput.get() + offset);
             ((CpuMemory *)spliceResult.get_memory())->set_shared_ptr(spliceBuffer);
         } else {
-            int offset = this->temp.capacity() - tensorNumBytes(spliceDesc);
+            int offset;
+            this->temp.capacity((U32 *)&offset);
+            offset -= tensorNumBytes(spliceDesc);
             std::shared_ptr<U8> tmpBuffer = ((CpuMemory *)this->temp.get_memory())->get_shared_ptr();
             std::shared_ptr<U8> spliceBuffer =
                 std::shared_ptr<U8>(tmpBuffer, tmpBuffer.get() + offset);
@@ -104,8 +107,8 @@ public:
             embedParamSpec.input_dim = this->inputFrameSize;
             embedParamSpec.num_output = inputDesc.dims[0];
             embedParamSpec.transpose = false;
-            CHECK_STATUS(
-                embedding(this->index, inputTensor, embedParamSpec, spliceResult, &this->archInfo));
+            CHECK_STATUS(embedding(this->index, inputTensor, embedParamSpec, this->temp,
+                spliceResult, &this->archInfo));
         }
         Tensor tmpOutputTensor;
         if (this->slide) {
@@ -254,9 +257,9 @@ public:
         TensorDesc spliceDesc = this->get_splice_desc(this->inputTensors[0].get_desc());
         U32 bytes = 0;
         Tensor tmpInput;
-        tmpInput.resize(desc_process(spliceDesc));
+        tmpInput.resize(spliceDesc);
         CHECK_STATUS(fully_connected_infer_forward_tmp_bytes(
-            tmpInput, this->weightTensors[0], &bytes, &this->archInfo));
+            tmpInput, this->weightTensors[0], this->outputTensors[0], &bytes, &this->archInfo));
         bytes += tensorNumBytes(spliceDesc);
         return bytes;
     }

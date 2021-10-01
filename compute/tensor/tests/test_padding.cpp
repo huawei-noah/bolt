@@ -39,12 +39,12 @@ int paddingTest(int argc, char **argv, DataType dt)
     CHECK_REQUIREMENT(0 == c_fir);
     CHECK_REQUIREMENT(0 == c_sec);
 
-    ArchInfo archInfo;
-    archInfo.arch = UT_ARCH;
-    ArchInfo archInfo_org;
-    archInfo_org.arch = CPU_GENERAL;
     PadParamSpec padParamSpec;
 
+    padParamSpec.before = n_fir;
+    padParamSpec.after = n_sec;
+    padParamSpec.front = c_fir;
+    padParamSpec.back = c_sec;
     padParamSpec.top = h_fir;
     padParamSpec.bottom = h_sec;
     padParamSpec.left = w_fir;
@@ -80,12 +80,12 @@ int paddingTest(int argc, char **argv, DataType dt)
     inputTensor.alloc();
     U32 input_len = tensorNumElements(inputDesc);
     U8 *input = ut_input_v(input_len, dt, UT_INIT_RANDOM);
-    memcpy(get_ptr_from_tensor(inputTensor, UT_ARCH), input, tensorNumBytes(inputDesc));
+    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inputDesc));
 
     // set output
     Tensor outputTensor, outputTensorRef;
     CHECK_STATUS(
-        padding_infer_output_size(&inputTensor, padParamSpec, &outputTensor, &archInfo_org));
+        padding_infer_output_size(&inputTensor, padParamSpec, &outputTensor, &UT_SERIAL_ARCHINFO));
     outputTensor.alloc();
     TensorDesc outputDesc_ref = outputTensor.get_desc();
     outputTensorRef.resize(outputDesc_ref);
@@ -93,15 +93,14 @@ int paddingTest(int argc, char **argv, DataType dt)
     U32 output_len = outputTensor.length();
 
     if (UT_CHECK) {
-        CHECK_STATUS(padding(inputTensor, padParamSpec, outputTensor, &archInfo));
+        CHECK_STATUS(padding(inputTensor, padParamSpec, outputTensor, &UT_CPU_ARCHINFO));
 
-        CHECK_STATUS(padding(inputTensor, padParamSpec, outputTensorRef, &archInfo_org));
+        CHECK_STATUS(padding(inputTensor, padParamSpec, outputTensorRef, &UT_SERIAL_ARCHINFO));
 
         // check
-        ut_check_a(get_ptr_from_tensor(outputTensor, UT_ARCH),
-            get_ptr_from_tensor(outputTensorRef, UT_ARCH), output_len, dt);
+        ut_check_a(get_ptr_from_tensor(outputTensor, CPU_GENERAL),
+            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), output_len, dt);
     }
-
     free(input);
     return 0;
 }

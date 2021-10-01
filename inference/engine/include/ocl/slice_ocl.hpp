@@ -20,8 +20,7 @@ class SliceOCL : public Slice {
 public:
     SliceOCL(DataType dt, SliceParamSpec p) : Slice(dt, p)
     {
-        setMALIArchInfo(
-            &(this->archInfo), nullptr, &this->needSetKernelVec, &this->needSelectKernelLS);
+        INIT_GPU_INFO(nullptr)
     }
 
     ~SliceOCL(){DESTROY_OCL_KERNEL}

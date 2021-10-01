@@ -47,20 +47,19 @@
         }                                       \
     }
 
-#define CALCORE_AXIS_0(ix, iy, iz, ow, ow_str, oh_str, ow_off, oh_off, in_off, in, out) \
-    {                                                                                   \
-        T4 val = 0;                                                                     \
-        char ew = (((ix << 2) + 4) <= ow) ? 4 : (ow & 3);                               \
-        int out_off = (iz * oh_str + iy + oh_off) * ow_str + (ix << 2) + ow_off;        \
-        LOAD_VAL(in_off, ew, val, in);                                                  \
-        STORE_VAL(out_off, ew, val, out);                                               \
+#define CALCORE_AXIS_0(ix, iy, iz, ow, ow_str, oh_str, o_off, in_off, in, out) \
+    {                                                                          \
+        T4 val = 0;                                                            \
+        char ew = (((ix << 2) + 4) <= ow) ? 4 : (ow & 3);                      \
+        int out_off = (iz * oh_str + iy) * ow_str + (ix << 2) + o_off;         \
+        LOAD_VAL(in_off, ew, val, in);                                         \
+        STORE_VAL(out_off, ew, val, out);                                      \
     }
 #endif
 
 __kernel void MANGLE_NAME(slice_, FM, AXIS_NUM, ON)(const int iw_str,
     const int ih_str,
-    const int iw_off,
-    const int ih_off,
+    const int i_off,
     const int axis_max,
     const int nmax,
     const int in_size,
@@ -69,16 +68,14 @@ __kernel void MANGLE_NAME(slice_, FM, AXIS_NUM, ON)(const int iw_str,
     __global T *input,
     const int ow_str0,
     const int oh_str0,
-    const int ow_off0,
-    const int oh_off0,
+    const int o_off0,
     const int ow0,
     __global T *output0
 #if (ON > 1)
     ,
     const int ow_str1,
     const int oh_str1,
-    const int ow_off1,
-    const int oh_off1,
+    const int o_off1,
     const int ow1,
     const int axis_len_0,
     __global T *output1
@@ -87,8 +84,7 @@ __kernel void MANGLE_NAME(slice_, FM, AXIS_NUM, ON)(const int iw_str,
     ,
     const int ow_str2,
     const int oh_str2,
-    const int ow_off2,
-    const int oh_off2,
+    const int o_off2,
     const int ow2,
     const int axis_len_1,
     __global T *output2
@@ -97,8 +93,7 @@ __kernel void MANGLE_NAME(slice_, FM, AXIS_NUM, ON)(const int iw_str,
     ,
     const int ow_str3,
     const int oh_str3,
-    const int ow_off3,
-    const int oh_off3,
+    const int o_off3,
     const int ow3,
     const int axis_len_2,
     __global T *output3
@@ -153,84 +148,84 @@ __kernel void MANGLE_NAME(slice_, FM, AXIS_NUM, ON)(const int iw_str,
 
 #if defined(USE_NCHW)
 #if (AXIS_NUM == 0)
-    int in_off = (on_idz * ih_str + on_idy + ih_off) * iw_str + (on_idx << 2) + iw_off + in_size;
+    int in_off = (on_idz * ih_str + on_idy) * iw_str + (on_idx << 2) + i_off + in_size;
     if (idn == 0) {
-        CALCORE_AXIS_0(on_idx, on_idy, on_idz, ow0, ow_str0, oh_str0, ow_off0, oh_off0, in_off,
-            input, output0);
+        CALCORE_AXIS_0(
+            on_idx, on_idy, on_idz, ow0, ow_str0, oh_str0, o_off0, in_off, input, output0);
     }
 #if (ON > 1)
     if (idn == 1) {
         in_off += ow0;
-        CALCORE_AXIS_0(on_idx, on_idy, on_idz, ow1, ow_str1, oh_str1, ow_off1, oh_off1, in_off,
-            input, output1);
+        CALCORE_AXIS_0(
+            on_idx, on_idy, on_idz, ow1, ow_str1, oh_str1, o_off1, in_off, input, output1);
     }
 #endif
 #if (ON > 2)
     if (idn == 2) {
         in_off += ow0 + ow1;
-        CALCORE_AXIS_0(on_idx, on_idy, on_idz, ow2, ow_str2, oh_str2, ow_off2, oh_off2, in_off,
-            input, output2);
+        CALCORE_AXIS_0(
+            on_idx, on_idy, on_idz, ow2, ow_str2, oh_str2, o_off2, in_off, input, output2);
     }
 #endif
 #if (ON > 3)
     if (idn == 3) {
         in_off += ow0 + ow1 + ow2;
-        CALCORE_AXIS_0(on_idx, on_idy, on_idz, ow3, ow_str3, oh_str3, ow_off3, oh_off3, in_off,
-            input, output3);
+        CALCORE_AXIS_0(
+            on_idx, on_idy, on_idz, ow3, ow_str3, oh_str3, o_off3, in_off, input, output3);
     }
 #endif
 #else
     T4 val;
     char ew = (((idx << 2) + 4) <= ow0) ? 4 : (ow0 & 3);
-    int in_off = (idz * ih_str + idy + ih_off) * iw_str + (idx << 2) + iw_off + in_size;
+    int in_off = (idz * ih_str + idy) * iw_str + (idx << 2) + i_off + in_size;
     LOAD_VAL(in_off, ew, val, input);
     if (idn == 0) {
-        int out_off = (on_idz * oh_str0 + on_idy + oh_off0) * ow_str0 + (on_idx << 2) + ow_off0;
+        int out_off = (on_idz * oh_str0 + on_idy) * ow_str0 + (on_idx << 2) + o_off0;
         STORE_VAL(out_off, ew, val, output0);
     }
 #if (ON > 1)
     if (idn == 1) {
-        int out_off = (on_idz * oh_str1 + on_idy + oh_off1) * ow_str1 + (on_idx << 2) + ow_off1;
+        int out_off = (on_idz * oh_str1 + on_idy) * ow_str1 + (on_idx << 2) + o_off1;
         STORE_VAL(out_off, ew, val, output1);
     }
 #endif
 #if (ON > 2)
     if (idn == 2) {
-        int out_off = (on_idz * oh_str2 + on_idy + oh_off2) * ow_str2 + (on_idx << 2) + ow_off2;
+        int out_off = (on_idz * oh_str2 + on_idy) * ow_str2 + (on_idx << 2) + o_off2;
         STORE_VAL(out_off, ew, val, output2);
     }
 #endif
 #if (ON > 3)
     if (idn == 3) {
-        int out_off = (on_idz * oh_str3 + on_idy + oh_off3) * ow_str3 + (on_idx << 2) + ow_off3;
+        int out_off = (on_idz * oh_str3 + on_idy) * ow_str3 + (on_idx << 2) + o_off3;
         STORE_VAL(out_off, ew, val, output3);
     }
 #endif
 #endif
 #else
-    //use format ncwhc4, except for slice on axis c and slice len not align to 4
+    //use format nchwc4, except for slice on axis c and slice len not align to 4
     T4 val;
-    int in_off = (idz * iw_str + idy + iw_off) * ih_str + idx + ih_off;
+    int in_off = (idz * ih_str + idy) * iw_str + idx + i_off;
     val = vload4(in_off, input + in_size);
     if (idn == 0) {
-        int out_off = (on_idz * ow_str0 + on_idy + ow_off0) * oh_str1 + on_idx + oh_off0;
+        int out_off = (on_idz * oh_str0 + on_idy) * ow_str0 + on_idx + o_off0;
         vstore4(val, out_off, output0);
     }
 #if (ON > 1)
     if (idn == 1) {
-        int out_off = (on_idz * ow_str1 + on_idy + ow_off1) * oh_str1 + on_idx + oh_off1;
+        int out_off = (on_idz * oh_str1 + on_idy) * ow_str1 + on_idx + o_off1;
         vstore4(val, out_off, output1);
     }
 #endif
 #if (ON > 2)
     if (idn == 2) {
-        int out_off = (on_idz * ow_str2 + on_idy + ow_off2) * oh_str2 + on_idx + oh_off2;
+        int out_off = (on_idz * oh_str2 + on_idy) * ow_str2 + on_idx + o_off2;
         vstore4(val, out_off, output2);
     }
 #endif
 #if (ON > 3)
     if (idn == 3) {
-        int out_off = (on_idz * ow_str3 + on_idy + ow_off3) * oh_str3 + on_idx + oh_off3;
+        int out_off = (on_idz * oh_str3 + on_idy) * ow_str3 + on_idx + o_off3;
         vstore4(val, out_off, output3);
     }
 #endif

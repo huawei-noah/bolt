@@ -13,7 +13,6 @@
 
 #ifndef _ACTIVATION_MALI_FP16
 #define _ACTIVATION_MALI_FP16
-
 #include "gpu/mali/fp16/tensor_computing_fp16.h"
 
 EE activation_mali_fp16(GCLHandle_t handle,

@@ -11,7 +11,7 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 #include "tensor_computing.h"
-#ifdef _USE_MALI
+#ifdef _USE_GPU
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
 
@@ -26,31 +26,17 @@ EE cast_infer_output_size(
     }
     TensorDesc inputDesc = inputTensor->get_desc();
     TensorDesc outputDesc = outputTensor->get_desc();
-    EE ret = NOT_SUPPORTED;
-    if (IS_MALI_GPU(archInfo->arch)) {
-#ifdef _USE_MALI
-        GCLMemDesc gclmemInputDesc = ocl_get_desc(*inputTensor);
-        GCLMemDesc gclmemOutputDesc = ocl_get_desc(*outputTensor);
-        ret = cast_infer_output_size_mali(
-            inputDesc, p, &outputDesc, &gclmemInputDesc, &gclmemOutputDesc);
-        ocl_set_desc(inputTensor, gclmemInputDesc);
-        ocl_set_desc(outputTensor, gclmemOutputDesc);
-#endif
-    } else {
-        outputDesc = inputDesc;
-        switch (p.targetDt) {
-            case DT_I32: {
-                outputDesc.dt = DT_I32;
-                ret = SUCCESS;
-                break;
-            }
-            default:
-                ret = NOT_SUPPORTED;
-                break;
+    outputDesc = inputDesc;
+    outputDesc.dt = p.targetDt;
+    if (IS_GPU(archInfo->arch)) {
+#ifdef _USE_GPU
+        if (outputDesc.dt != DT_I32 && outputDesc.dt != DT_F16) {
+            CHECK_STATUS(NOT_SUPPORTED);
         }
+#endif
     }
     outputTensor->resize(outputDesc);
-    return ret;
+    return SUCCESS;
 }
 
 template <typename TI, typename TO>
@@ -70,6 +56,30 @@ static EE diffSourceCast(TensorDesc inputDesc, T *inputPtr, void *outputPtr, Cas
     switch (p.targetDt) {
         case DT_I32: {
             diffSourceCastKernel<T, I32>(len, inputPtr, (I32 *)outputPtr);
+            break;
+        }
+        case DT_U32: {
+            diffSourceCastKernel<T, U32>(len, inputPtr, (U32 *)outputPtr);
+            break;
+        }
+#ifdef _USE_FP32
+        case DT_F32: {
+            diffSourceCastKernel<T, F32>(len, inputPtr, (F32 *)outputPtr);
+            break;
+        }
+#endif
+#ifdef _USE_FP16
+        case DT_F16: {
+            diffSourceCastKernel<T, F16>(len, inputPtr, (F16 *)outputPtr);
+            break;
+        }
+#endif
+        case DT_U8: {
+            diffSourceCastKernel<T, U8>(len, inputPtr, (U8 *)outputPtr);
+            break;
+        }
+        case DT_I8: {
+            diffSourceCastKernel<T, INT8>(len, inputPtr, (INT8 *)outputPtr);
             break;
         }
         default:
@@ -102,13 +112,29 @@ EE cast(Tensor inputTensor, Tensor outputTensor, CastParamSpec p, ArchInfo_t arc
                 break;
             }
 #endif
+            case DT_U32: {
+                ret = diffSourceCast<U32>(inputDesc, (U32 *)input, output, p);
+                break;
+            }
+            case DT_I32: {
+                ret = diffSourceCast<I32>(inputDesc, (I32 *)input, output, p);
+                break;
+            }
+            case DT_U8: {
+                ret = diffSourceCast<U8>(inputDesc, (U8 *)input, output, p);
+                break;
+            }
+            case DT_I8: {
+                ret = diffSourceCast<INT8>(inputDesc, (INT8 *)input, output, p);
+                break;
+            }
             default:
                 ret = NOT_SUPPORTED;
                 break;
         }
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
         TensorDesc outputDesc = outputTensor.get_desc();
         ret = cast_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc, (GCLMem_t)input, p,
             outputDesc, (GCLMem_t)output);

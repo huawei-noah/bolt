@@ -50,22 +50,4 @@ inline EE activation_int8(INT8 *input, U32 len, ActivationParamSpec activationDe
 
     return SUCCESS;
 }
-
-inline INT8 round_towards_zero(F32 num, bool clamp = true)
-{
-    INT8 ret;
-    if (clamp) {
-        if (num > 127.0) {
-            return 127;
-        } else if (num < -127.0) {
-            return -127;
-        }
-    }
-    if (num > 0) {
-        ret = floor(num);
-    } else {
-        ret = ceil(num);
-    }
-    return ret;
-}
 #endif

@@ -20,11 +20,39 @@
 #include "error.h"
 
 #ifndef __aarch64__
+inline int32x4_t vpaddq_s32(int32x4_t a, int32x4_t b)
+{
+    int32x2_t low = vpadd_s32(vget_low_s32(a), vget_low_s32(b));
+    int32x2_t high = vpadd_s32(vget_high_s32(a), vget_high_s32(b));
+    return vcombine_s32(low, high);
+}
+
 inline float32x4_t vdivq_f32(float32x4_t a, float32x4_t b)
 {
     float32x4_t b_recip = vrecpeq_f32(b);
     b_recip = vmulq_f32(vrecpsq_f32(b, b_recip), b_recip);
     return vmulq_f32(a, b_recip);
+}
+
+inline int vminvq_s32(int32x4_t x)
+{
+    int32x2_t min = vmin_s32(vget_low_s32(x), vget_high_s32(x));
+    min = vpmin_s32(min, min);
+    return vget_lane_s32(min, 0);
+}
+
+inline int vmaxvq_s32(int32x4_t x)
+{
+    int32x2_t max = vmax_s32(vget_low_s32(x), vget_high_s32(x));
+    max = vpmax_s32(max, max);
+    return vget_lane_s32(max, 0);
+}
+
+inline float vminvq_f32(float32x4_t x)
+{
+    float32x2_t min = vmin_f32(vget_low_f32(x), vget_high_f32(x));
+    min = vpmin_f32(min, min);
+    return vget_lane_f32(min, 0);
 }
 
 inline float vmaxvq_f32(float32x4_t x)
@@ -135,7 +163,10 @@ inline float32x4_t vlogq_f32(float32x4_t x)
 inline float32x4_t vsigmoidq_f32(float32x4_t x)
 {
     float32x4_t one_v = vdupq_n_f32(1.f);
-    return vrecpeq_f32(vaddq_f32(vexpq_f32_03_percent_error(vnegq_f32(x)), one_v));
+    float32x4_t tmp_v = vaddq_f32(vexpq_f32_03_percent_error(vnegq_f32(x)), one_v);
+    float32x4_t out_v = vrecpeq_f32(tmp_v);
+    out_v = vmulq_f32(vrecpsq_f32(tmp_v, out_v), out_v);
+    return out_v;
 }
 
 inline float32x4_t vtanhq_f32(float32x4_t x)
@@ -149,7 +180,6 @@ inline float32x4_t vtanhq_f32(float32x4_t x)
 }
 
 #ifdef _USE_FP16
-
 inline float16x8_t vaddq_f16_f32(float16x8_t a, float16x8_t b)
 {
 #ifdef _USE_F16_MIX_PRECISION
@@ -248,7 +278,10 @@ inline float16x8_t vsigmoidq_f16(float16x8_t x)
     return y;
 #else
     float16x8_t one_v = vdupq_n_f16(1.f);
-    return vrecpeq_f16(vaddq_f16_f32(vexpq_f16_03_percent_error(vnegq_f16(x)), one_v));
+    float16x8_t tmp_v = vaddq_f16_f32(vexpq_f16_03_percent_error(vnegq_f16(x)), one_v);
+    float16x8_t out_v = vrecpeq_f16(tmp_v);
+    out_v = vmulq_f16(vrecpsq_f16(tmp_v, out_v), out_v);
+    return out_v;
 #endif
 }
 
@@ -311,6 +344,7 @@ inline void vst1q_lane_f16_builtin(__fp16 *address, float16x8_t vec, const int l
 #endif
 
 #ifdef _USE_INT8
+#ifdef __aarch64__
 inline int32x4_t vdotq_laneq_s32_builtin(int32x4_t c, int8x16_t a, int8x16_t b, const int laneId)
 {
     int32x4_t ret;
@@ -334,5 +368,6 @@ inline int32x4_t vdotq_laneq_s32_builtin(int32x4_t c, int8x16_t a, int8x16_t b, 
     }
     return ret;
 }
+#endif
 #endif
 #endif

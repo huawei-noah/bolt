@@ -45,13 +45,14 @@ EE depthwise_pointwise_convolution_cpu(TensorDesc inputDesc,
     EE ret = NOT_SUPPORTED;
     if (IS_GENERAL(arch)) {
 #ifdef _USE_GENERAL
-        ret = depthwise_pointwise_convolution_general(inputDesc, input, dwFilterDesc, dwFilter,
-            pwFilterDesc, pwFilter, convParamSpec, dwBiasDesc, dwBias, pwBiasDesc, pwBias, tmpBytes,
-            tmp, outputDesc, output, depthwiseActivationParamSpec, pointwiseActivationParamSpec);
+        ret = depthwise_pointwise_convolution_general(inputDesc, input, nullptr, dwFilterDesc,
+            dwFilter, pwFilterDesc, pwFilter, convParamSpec, dwBiasDesc, dwBias, pwBiasDesc, pwBias,
+            tmpBytes, tmp, outputDesc, output, depthwiseActivationParamSpec,
+            pointwiseActivationParamSpec);
 #endif
 #ifdef _USE_X86
-    } else if (IS_X86_AVX2(arch)) {
-        ret = depthwise_pointwise_convolution_x86(inputDesc, input, dwFilterDesc, dwFilter,
+    } else if (IS_X86(arch)) {
+        ret = depthwise_pointwise_convolution_x86(inputDesc, input, nullptr, dwFilterDesc, dwFilter,
             pwFilterDesc, pwFilter, convParamSpec, algorithm, dwBiasDesc, dwBias, pwBiasDesc,
             pwBias, tmpBytes, tmp, outputDesc, output, depthwiseActivationParamSpec,
             pointwiseActivationParamSpec, arch);

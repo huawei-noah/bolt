@@ -37,21 +37,6 @@ public:
         return OT_Conv;
     }
 
-    TensorDesc desc_process(TensorDesc inputDesc)
-    {
-        TensorDesc resultDesc;
-        if (tensorIs3d(inputDesc)) {
-            DataType idt;
-            DataFormat idf;
-            U32 in, ic, ih;
-            CHECK_STATUS(tensor3dGet(inputDesc, &idt, &idf, &in, &ic, &ih));
-            resultDesc = tensor4df(idt, idf, in, ic, ih, 1);
-        } else {
-            resultDesc = inputDesc;
-        }
-        return resultDesc;
-    }
-
 public:
     ConvolutionParamSpec p;
     ActivationParamSpec dwActivationParamSpec;
@@ -59,9 +44,7 @@ public:
 
     ConvolutionForwardAlgorithm pwAlg;
     DepthwiseConvolutionForwardAlgorithm dwAlg;
-#ifdef _USE_FP16
-    std::shared_ptr<F16> scales;
-#endif
+    std::shared_ptr<F32> scales;
 };
 
 #endif  // _CONVOLUTION_H

@@ -15,12 +15,12 @@
 #define _H_MODEL_CALIBRATION
 
 #include <string>
-#include "model_common.h"
-#include "tensor_desc.h"
+#include "model_spec.h"
 
-#if defined(_BUILD_TEST) && defined(_USE_INT8)
+#ifdef _USE_INT8
 void calibrate_model_with_dataset(std::string dataPath,
     ImageFormat imageFormat,
+    DataType inferType,
     F32 scaleValue,
     std::string modelPath,
     ModelSpec *resultMs);

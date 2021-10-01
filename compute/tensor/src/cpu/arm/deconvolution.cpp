@@ -18,6 +18,7 @@
 #ifdef _USE_FP16
 #include "cpu/arm/fp16/tensor_computing_fp16.h"
 #endif
+#include "thread_affinity.h"
 
 EE deconvolution_transform_filter_arm(TensorDesc filterDesc,
     const void *filter,
@@ -67,11 +68,13 @@ EE deconvolution_overlap_crop_arm_kernel(T *input,
     U32 strideW = convParamSpec.stride_w;
     U32 paddingT = convParamSpec.padding_top;
     U32 paddingL = convParamSpec.padding_left;
-    U32 tileSize = bytesOf(odt);
     for (U32 kn = 0; kn < in; ++kn) {
-        for (U32 kh = 0; kh < ih; ++kh) {
-            for (U32 kw = 0; kw < iw; ++kw) {
-                for (U32 kc = 0; kc < oc; kc += 8) {
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
+        for (U32 kc = 0; kc < oc; kc += 8) {
+            for (U32 kh = 0; kh < ih; ++kh) {
+                for (U32 kw = 0; kw < iw; ++kw) {
                     for (U32 jh = 0; jh < fh; ++jh) {
                         for (U32 jw = 0; jw < fw; ++jw) {
                             for (U32 kc8 = 0; kc8 < 8; ++kc8) {
@@ -92,8 +95,8 @@ EE deconvolution_overlap_crop_arm_kernel(T *input,
                 }
             }
         }
-        output += oc * oh * ow * tileSize;
-        input += ic * ih * iw * tileSize;
+        output += oc * oh * ow;
+        input += ic * ih * iw;
     }
 
     return SUCCESS;

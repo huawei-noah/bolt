@@ -18,7 +18,7 @@
 #include "parameter_spec.h"
 #include "sys.h"
 
-#ifdef _USE_MALI
+#ifdef _USE_GPU
 #include "gcl.h"
 #include "ocl_desc_trans.h"
 #endif

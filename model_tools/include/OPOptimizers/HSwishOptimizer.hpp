@@ -78,6 +78,35 @@ class HSwishOptimizer : public OPOptimizer {
                         setOperatorInvalid(spec, relu6Index);
                         hasOptimized = true;
                     }
+                    if (mulIndex + 1 < spec->num_operator_specs &&
+                        spec->ops[mulIndex].type == OT_Power &&
+                        UNI_ABS(spec->ops[mulIndex].ps.power_spec.scale - 1 / 6.0) < 0.0001 &&
+                        spec->ops[mulIndex].ps.power_spec.shift == 0 &&
+                        spec->ops[mulIndex].ps.power_spec.power == 1) {
+                        int div6Index = mulIndex;
+                        mulIndex++;
+                        if (spec->ops[mulIndex].type == OT_Eltwise &&
+                            spec->ops[mulIndex].ps.eltwise_spec.elt_mode == ELTWISE_PROD &&
+                            spec->ops[mulIndex].num_inputs == 2 &&
+                            ((std::string(spec->ops[add3Index].input_tensors_name[0]) ==
+                                     std::string(spec->ops[mulIndex].input_tensors_name[0]) &&
+                                 std::string(spec->ops[div6Index].output_tensors_name[0]) ==
+                                     std::string(spec->ops[mulIndex].input_tensors_name[1])) ||
+                                (std::string(spec->ops[add3Index].input_tensors_name[0]) ==
+                                        std::string(spec->ops[mulIndex].input_tensors_name[1]) &&
+                                    std::string(spec->ops[div6Index].output_tensors_name[0]) ==
+                                        std::string(spec->ops[mulIndex].input_tensors_name[0])))) {
+                            spec->ops[mulIndex].num_inputs = 1;
+                            delete spec->ops[mulIndex].input_tensors_name[1];
+                            memcpy(spec->ops[mulIndex].input_tensors_name[0],
+                                spec->ops[add3Index].input_tensors_name[0], NAME_LEN);
+                            setOperatorInvalid(spec, add3Index);
+                            setOperatorInvalid(spec, relu6Index);
+                            setOperatorInvalid(spec, div6Index);
+                            spec->ops[mulIndex].type = OT_HSwish;
+                            hasOptimized = true;
+                        }
+                    }
                 }
             }
         }

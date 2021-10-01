@@ -24,11 +24,16 @@
 
 #if defined(_USE_NEON)
 const Arch UT_ARCH = ARM_A76;
+const Arch UT_CPU_ARCH = ARM_A76;
 #elif defined(_USE_X86)
-const Arch UT_ARCH = X86_AVX2;
+const Arch UT_ARCH = X86_AVX512;
+const Arch UT_CPU_ARCH = X86_AVX512;
 #else
 const Arch UT_ARCH = CPU_GENERAL;
+const Arch UT_CPU_ARCH = CPU_GENERAL;
 #endif
+static ArchInfo UT_CPU_ARCHINFO = {UT_ARCH, NULL};
+static ArchInfo UT_SERIAL_ARCHINFO = {CPU_GENERAL, NULL};
 
 // whether to check right
 const int UT_CHECK = 1;
@@ -123,7 +128,7 @@ inline void ut_init_v(U8 *data, U32 len, DataType dt, UT_RANDOM_TYPE type)
                 break;
             }
             default:
-                UNI_ERROR_LOG("unsupported data type.\n");
+                UNI_ERROR_LOG("unsupported data type %s.\n", DataTypeName()[dt]);
         }
     }
 }

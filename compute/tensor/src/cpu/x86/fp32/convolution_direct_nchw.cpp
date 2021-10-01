@@ -16,13 +16,11 @@
 
 #include "cpu/x86/fp32/tensor_computing_fp32.h"
 #include "cpu/x86/fp32/transform_functions_fp32.h"
+#include "cpu/x86/fp32/convolution_functions.h"
 
-#define UNROLL_W 4
-#define UNROLL_OC_DIM 8
-#define BLOCK_OC_DIM 24
 #define BLOCK_IC_DIM 8
 #define BLOCK_HW_DIM 1024
-#define UNROLL_IC_BLOCK_DIM 8
+// #define BLOCK_OC_DIM 24
 
 // clang-format off
 #define kernel4x3(m0, r0, r1, r2, r3, m1, m2, m3, m4) \
@@ -47,7 +45,7 @@
     "vfmadd231ps %%ymm15, %%ymm14, %%ymm11             \n\t"
 
 // clang-format on
-typedef void (*kernel_func)(F32 *in_0,
+typedef void (*kernelFunc)(F32 *in_0,
     F32 *in_1,
     F32 *in_2,
     F32 *in_3,
@@ -58,14 +56,14 @@ typedef void (*kernel_func)(F32 *in_0,
     I32 fh,
     I32 oStep,
     I32 hStep,
-    I32 store,
+    I32 flags,
     I32 dw,
     I32 ic,
     I32 iStep,
     I32 fwStep,
     I32 fhStep);
 
-void avx2_conv_kernel_3x32(F32 *in_0,
+void Avx2ConvKernel3x32(F32 *in_0,
     F32 *in_1,
     F32 *in_2,
     F32 *in_3,
@@ -76,7 +74,7 @@ void avx2_conv_kernel_3x32(F32 *in_0,
     I32 fh,
     I32 oStep,
     I32 hStep,
-    I32 store,
+    I32 flags,
     I32 dw,
     I32 ic,
     I32 iStep,
@@ -120,7 +118,7 @@ void avx2_conv_kernel_3x32(F32 *in_0,
                          ".align 16                                         \n\t"
                          "1:                                      \n\t"
                          :
-                         : "r"(curO), "r"(curB), "r"(I64(oStep)), "r"(store)
+                         : "r"(curO), "r"(curB), "r"(I64(oStep)), "r"(flags)
                          : "%eax", "%rax", "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm4", "%ymm5",
                          "%ymm6", "%ymm7", "%ymm8", "%ymm9", "%ymm10", "%ymm11", "memory", "cc");
 
@@ -331,67 +329,66 @@ void avx2_conv_kernel_3x32(F32 *in_0,
                                "memory", "cc");   
     }
 
-    // clang-format on
-    __asm__ __volatile__(
-        // relu
-        "and $0x6, %2                                      \n\t"
-        "je 0f                                             \n\t"
-        "vxorps %%ymm15, %%ymm15, %%ymm15                  \n\t"
-        "vmaxps %%ymm15, %%ymm0, %%ymm0                    \n\t"
-        "vmaxps %%ymm15, %%ymm1, %%ymm1                    \n\t"
-        "vmaxps %%ymm15, %%ymm2, %%ymm2                    \n\t"
-        "vmaxps %%ymm15, %%ymm3, %%ymm3                    \n\t"
-        "vmaxps %%ymm15, %%ymm4, %%ymm4                    \n\t"
-        "vmaxps %%ymm15, %%ymm5, %%ymm5                    \n\t"
-        "vmaxps %%ymm15, %%ymm6, %%ymm6                    \n\t"
-        "vmaxps %%ymm15, %%ymm7, %%ymm7                    \n\t"
-        "vmaxps %%ymm15, %%ymm8, %%ymm8                    \n\t"
-        "vmaxps %%ymm15, %%ymm9, %%ymm9                    \n\t"
-        "vmaxps %%ymm15, %%ymm10, %%ymm10                  \n\t"
-        "vmaxps %%ymm15, %%ymm11, %%ymm11                  \n\t"
+    __asm__ __volatile__(// relu
+                         "and $0x6, %2                                      \n\t"
+                         "je 0f                                             \n\t"
+                         "vxorps %%ymm15, %%ymm15, %%ymm15                  \n\t"
+                         "vmaxps %%ymm15, %%ymm0, %%ymm0                    \n\t"
+                         "vmaxps %%ymm15, %%ymm1, %%ymm1                    \n\t"
+                         "vmaxps %%ymm15, %%ymm2, %%ymm2                    \n\t"
+                         "vmaxps %%ymm15, %%ymm3, %%ymm3                    \n\t"
+                         "vmaxps %%ymm15, %%ymm4, %%ymm4                    \n\t"
+                         "vmaxps %%ymm15, %%ymm5, %%ymm5                    \n\t"
+                         "vmaxps %%ymm15, %%ymm6, %%ymm6                    \n\t"
+                         "vmaxps %%ymm15, %%ymm7, %%ymm7                    \n\t"
+                         "vmaxps %%ymm15, %%ymm8, %%ymm8                    \n\t"
+                         "vmaxps %%ymm15, %%ymm9, %%ymm9                    \n\t"
+                         "vmaxps %%ymm15, %%ymm10, %%ymm10                  \n\t"
+                         "vmaxps %%ymm15, %%ymm11, %%ymm11                  \n\t"
 
-        // relu6
-        "and $0x4, %2                                      \n\t"
-        "je 0f                                             \n\t"
-        "mov $0x40C00000, %%ecx                            \n\t"
-        "vmovd %%ecx, %%xmm12                              \n\t"
-        "vpermps %%ymm12, %%ymm15, %%ymm12                 \n\t"
-        "vminps %%ymm12, %%ymm0, %%ymm0                    \n\t"
-        "vminps %%ymm12, %%ymm1, %%ymm1                    \n\t"
-        "vminps %%ymm12, %%ymm2, %%ymm2                    \n\t"
-        "vminps %%ymm12, %%ymm3, %%ymm3                    \n\t"
-        "vminps %%ymm12, %%ymm4, %%ymm4                    \n\t"
-        "vminps %%ymm12, %%ymm5, %%ymm5                    \n\t"
-        "vminps %%ymm12, %%ymm6, %%ymm6                    \n\t"
-        "vminps %%ymm12, %%ymm7, %%ymm7                    \n\t"
-        "vminps %%ymm12, %%ymm8, %%ymm8                    \n\t"
-        "vminps %%ymm12, %%ymm9, %%ymm9                    \n\t"
-        "vminps %%ymm12, %%ymm10, %%ymm10                  \n\t"
-        "vminps %%ymm12, %%ymm11, %%ymm11                  \n\t"
+                         // relu6
+                         "and $0x4, %2                                      \n\t"
+                         "je 0f                                             \n\t"
+                         "mov $0x40C00000, %%ecx                            \n\t"
+                         "vmovd %%ecx, %%xmm12                              \n\t"
+                         "vpermps %%ymm12, %%ymm15, %%ymm12                 \n\t"
+                         "vminps %%ymm12, %%ymm0, %%ymm0                    \n\t"
+                         "vminps %%ymm12, %%ymm1, %%ymm1                    \n\t"
+                         "vminps %%ymm12, %%ymm2, %%ymm2                    \n\t"
+                         "vminps %%ymm12, %%ymm3, %%ymm3                    \n\t"
+                         "vminps %%ymm12, %%ymm4, %%ymm4                    \n\t"
+                         "vminps %%ymm12, %%ymm5, %%ymm5                    \n\t"
+                         "vminps %%ymm12, %%ymm6, %%ymm6                    \n\t"
+                         "vminps %%ymm12, %%ymm7, %%ymm7                    \n\t"
+                         "vminps %%ymm12, %%ymm8, %%ymm8                    \n\t"
+                         "vminps %%ymm12, %%ymm9, %%ymm9                    \n\t"
+                         "vminps %%ymm12, %%ymm10, %%ymm10                  \n\t"
+                         "vminps %%ymm12, %%ymm11, %%ymm11                  \n\t"
 
-        "0:                                                \n\t"
-        "vmovups %%ymm0, (%0)                          \n\t"
-        "vmovups %%ymm1, 0x20(%0)                      \n\t"
-        "vmovups %%ymm2, 0x40(%0)                      \n\t"
-        "add %1, %0                                  \n\t"
-        "vmovups %%ymm3, (%0)                      \n\t"
-        "vmovups %%ymm4, 0x20(%0)                          \n\t"
-        "vmovups %%ymm5, 0x40(%0)                      \n\t"
-        "add %1, %0                                  \n\t"
-        "vmovups %%ymm6, (%0)                      \n\t"
-        "vmovups %%ymm7, 0x20(%0)                      \n\t"
-        "vmovups %%ymm8, 0x40(%0)                       \n\t"
-        "add %1, %0                                  \n\t"
-        "vmovups %%ymm9, (%0)                   \n\t"
-        "vmovups %%ymm10, 0x20(%0)                  \n\t"
-        "vmovups %%ymm11, 0x40(%0)                  \n\t"
-        :
-        : "r"(curO), "r"(I64(oStep)), "r"(store)
-        : "%ecx", "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm4", "%ymm5", "%ymm6", "%ymm7", "%ymm8",
-        "%ymm9", "%ymm10", "%ymm11", "%ymm12", "%ymm15", "memory", "cc");
+                         "0:                                                \n\t"
+                         "vmovups %%ymm0, (%0)                          \n\t"
+                         "vmovups %%ymm1, 0x20(%0)                      \n\t"
+                         "vmovups %%ymm2, 0x40(%0)                      \n\t"
+                         "add %1, %0                                  \n\t"
+                         "vmovups %%ymm3, (%0)                      \n\t"
+                         "vmovups %%ymm4, 0x20(%0)                          \n\t"
+                         "vmovups %%ymm5, 0x40(%0)                      \n\t"
+                         "add %1, %0                                  \n\t"
+                         "vmovups %%ymm6, (%0)                      \n\t"
+                         "vmovups %%ymm7, 0x20(%0)                      \n\t"
+                         "vmovups %%ymm8, 0x40(%0)                       \n\t"
+                         "add %1, %0                                  \n\t"
+                         "vmovups %%ymm9, (%0)                   \n\t"
+                         "vmovups %%ymm10, 0x20(%0)                  \n\t"
+                         "vmovups %%ymm11, 0x40(%0)                  \n\t"
+                         :
+                         : "r"(curO), "r"(I64(oStep)), "r"(flags)
+                         : "%ecx", "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm4",
+                           "%ymm5", "%ymm6", "%ymm7", "%ymm8", "%ymm9", "%ymm10",
+                           "%ymm11", "%ymm12", "%ymm15", "memory", "cc");
 }
 
-void avx2_conv_kernel_1x32(F32 *in_0,
+void Avx2ConvKernel1x32(F32 *in_0,
     F32 *in_1,
     F32 *in_2,
     F32 *in_3,
@@ -402,7 +399,7 @@ void avx2_conv_kernel_1x32(F32 *in_0,
     I32 fh,
     I32 oStep,
     I32 hStep,
-    I32 store,
+    I32 flags,
     I32 dw,
     I32 ic,
     I32 iStep,
@@ -432,7 +429,7 @@ void avx2_conv_kernel_1x32(F32 *in_0,
                          ".align 16                                         \n\t"
                          "1:                                      \n\t"
                          :
-                         : "r"(curO), "r"(curB), "r"(I64(oStep)), "r"(store)
+                         : "r"(curO), "r"(curB), "r"(I64(oStep)), "r"(flags)
                          : "%eax", "%rax", "%ymm0", "%ymm3", "%ymm6", "%ymm9", "memory", "cc");
 
     if ((fh == 3) && (fw == 3)) {
@@ -581,41 +578,41 @@ void avx2_conv_kernel_1x32(F32 *in_0,
                              "%ymm12", "%ymm13", "%ymm14", "%ymm15", "memory", "cc");
     }
 
-    __asm__ __volatile__(
-        // relu
-        "and $0x6, %2                                      \n\t"
-        "je 0f                                             \n\t"
-        "vxorps %%ymm15, %%ymm15, %%ymm15                  \n\t"
-        "vmaxps %%ymm15, %%ymm0, %%ymm0                    \n\t"
-        "vmaxps %%ymm15, %%ymm3, %%ymm3                    \n\t"
-        "vmaxps %%ymm15, %%ymm6, %%ymm6                    \n\t"
-        "vmaxps %%ymm15, %%ymm9, %%ymm9                    \n\t"
+    __asm__ __volatile__(// relu
+                         "and $0x6, %2                                      \n\t"
+                         "je 0f                                             \n\t"
+                         "vxorps %%ymm15, %%ymm15, %%ymm15                  \n\t"
+                         "vmaxps %%ymm15, %%ymm0, %%ymm0                    \n\t"
+                         "vmaxps %%ymm15, %%ymm3, %%ymm3                    \n\t"
+                         "vmaxps %%ymm15, %%ymm6, %%ymm6                    \n\t"
+                         "vmaxps %%ymm15, %%ymm9, %%ymm9                    \n\t"
 
-        // relu6
-        "and $0x4, %2                                      \n\t"
-        "je 0f                                             \n\t"
-        "mov $0x40C00000, %%ecx                            \n\t"
-        "vmovd %%ecx, %%xmm12                              \n\t"
-        "vpermps %%ymm12, %%ymm15, %%ymm12                 \n\t"
-        "vminps %%ymm12, %%ymm0, %%ymm0                    \n\t"
-        "vminps %%ymm12, %%ymm3, %%ymm3                    \n\t"
-        "vminps %%ymm12, %%ymm6, %%ymm6                    \n\t"
-        "vminps %%ymm12, %%ymm9, %%ymm9                    \n\t"
+                         // relu6
+                         "and $0x4, %2                                      \n\t"
+                         "je 0f                                             \n\t"
+                         "mov $0x40C00000, %%ecx                            \n\t"
+                         "vmovd %%ecx, %%xmm12                              \n\t"
+                         "vpermps %%ymm12, %%ymm15, %%ymm12                 \n\t"
+                         "vminps %%ymm12, %%ymm0, %%ymm0                    \n\t"
+                         "vminps %%ymm12, %%ymm3, %%ymm3                    \n\t"
+                         "vminps %%ymm12, %%ymm6, %%ymm6                    \n\t"
+                         "vminps %%ymm12, %%ymm9, %%ymm9                    \n\t"
 
-        "0:                                                \n\t"
-        "vmovups %%ymm0, (%0)                          \n\t"
-        "add %1, %0                                  \n\t"
-        "vmovups %%ymm3, (%0)                      \n\t"
-        "add %1, %0                                  \n\t"
-        "vmovups %%ymm6, (%0)                      \n\t"
-        "add %1, %0                                  \n\t"
-        "vmovups %%ymm9, (%0)                   \n\t"
-        :
-        : "r"(curO), "r"(I64(oStep)), "r"(store)
-        : "%ecx", "%ymm0", "%ymm3", "%ymm6", "%ymm9", "%ymm12", "%ymm15", "memory", "cc");
+                         "0:                                                \n\t"
+                         "vmovups %%ymm0, (%0)                          \n\t"
+                         "add %1, %0                                  \n\t"
+                         "vmovups %%ymm3, (%0)                      \n\t"
+                         "add %1, %0                                  \n\t"
+                         "vmovups %%ymm6, (%0)                      \n\t"
+                         "add %1, %0                                  \n\t"
+                         "vmovups %%ymm9, (%0)                   \n\t"
+                         :
+                         : "r"(curO), "r"(I64(oStep)), "r"(flags)
+                         : "%ecx", "%ymm0", "%ymm3", "%ymm6", "%ymm9", "%ymm12",
+                           "%ymm15", "memory", "cc");
 }
 
-void avx2_conv_kernel_4x24(F32 *in_0,
+void Avx2ConvKernel4x24(F32 *in_0,
     F32 *in_1,
     F32 *in_2,
     F32 *in_3,
@@ -626,7 +623,7 @@ void avx2_conv_kernel_4x24(F32 *in_0,
     I32 fh,
     I32 oStep,
     I32 hStep,
-    I32 store,
+    I32 flags,
     I32 dw,
     I32 ic,
     I32 iStep,
@@ -668,7 +665,7 @@ void avx2_conv_kernel_4x24(F32 *in_0,
                          ".align 16                                         \n\t"
                          "1:                                      \n\t"
                          :
-                         : "r"(curO), "r"(curB), "r"(I64(oStep)), "r"(store)
+                         : "r"(curO), "r"(curB), "r"(I64(oStep)), "r"(flags)
                          : "%eax", "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm4", "%ymm5", "%ymm6",
                          "%ymm7", "%ymm8", "%ymm9", "%ymm10", "%ymm11", "memory", "cc");
 
@@ -999,63 +996,63 @@ void avx2_conv_kernel_4x24(F32 *in_0,
                              "%ymm13", "%ymm14", "%ymm15", "memory", "cc");
     }
 
-    __asm__ __volatile__(
-        // relu
-        "and $0x6, %2                                      \n\t"
-        "je 0f                                             \n\t"
-        "vxorps %%ymm15, %%ymm15, %%ymm15                  \n\t"
-        "vmaxps %%ymm15, %%ymm0, %%ymm0                    \n\t"
-        "vmaxps %%ymm15, %%ymm1, %%ymm1                    \n\t"
-        "vmaxps %%ymm15, %%ymm2, %%ymm2                    \n\t"
-        "vmaxps %%ymm15, %%ymm3, %%ymm3                    \n\t"
-        "vmaxps %%ymm15, %%ymm4, %%ymm4                    \n\t"
-        "vmaxps %%ymm15, %%ymm5, %%ymm5                    \n\t"
-        "vmaxps %%ymm15, %%ymm6, %%ymm6                    \n\t"
-        "vmaxps %%ymm15, %%ymm7, %%ymm7                    \n\t"
-        "vmaxps %%ymm15, %%ymm8, %%ymm8                    \n\t"
-        "vmaxps %%ymm15, %%ymm9, %%ymm9                    \n\t"
-        "vmaxps %%ymm15, %%ymm10, %%ymm10                  \n\t"
-        "vmaxps %%ymm15, %%ymm11, %%ymm11                  \n\t"
+    __asm__ __volatile__(// relu
+                         "and $0x6, %2                                      \n\t"
+                         "je 0f                                             \n\t"
+                         "vxorps %%ymm15, %%ymm15, %%ymm15                  \n\t"
+                         "vmaxps %%ymm15, %%ymm0, %%ymm0                    \n\t"
+                         "vmaxps %%ymm15, %%ymm1, %%ymm1                    \n\t"
+                         "vmaxps %%ymm15, %%ymm2, %%ymm2                    \n\t"
+                         "vmaxps %%ymm15, %%ymm3, %%ymm3                    \n\t"
+                         "vmaxps %%ymm15, %%ymm4, %%ymm4                    \n\t"
+                         "vmaxps %%ymm15, %%ymm5, %%ymm5                    \n\t"
+                         "vmaxps %%ymm15, %%ymm6, %%ymm6                    \n\t"
+                         "vmaxps %%ymm15, %%ymm7, %%ymm7                    \n\t"
+                         "vmaxps %%ymm15, %%ymm8, %%ymm8                    \n\t"
+                         "vmaxps %%ymm15, %%ymm9, %%ymm9                    \n\t"
+                         "vmaxps %%ymm15, %%ymm10, %%ymm10                  \n\t"
+                         "vmaxps %%ymm15, %%ymm11, %%ymm11                  \n\t"
 
-        // relu6
-        "and $0x4, %2                                      \n\t"
-        "je 0f                                             \n\t"
-        "mov $0x40C00000, %%ecx                            \n\t"
-        "vmovd %%ecx, %%xmm12                              \n\t"
-        "vpermps %%ymm12, %%ymm15, %%ymm12                 \n\t"
-        "vminps %%ymm12, %%ymm0, %%ymm0                    \n\t"
-        "vminps %%ymm12, %%ymm1, %%ymm1                    \n\t"
-        "vminps %%ymm12, %%ymm2, %%ymm2                    \n\t"
-        "vminps %%ymm12, %%ymm3, %%ymm3                    \n\t"
-        "vminps %%ymm12, %%ymm4, %%ymm4                    \n\t"
-        "vminps %%ymm12, %%ymm5, %%ymm5                    \n\t"
-        "vminps %%ymm12, %%ymm6, %%ymm6                    \n\t"
-        "vminps %%ymm12, %%ymm7, %%ymm7                    \n\t"
-        "vminps %%ymm12, %%ymm8, %%ymm8                    \n\t"
-        "vminps %%ymm12, %%ymm9, %%ymm9                    \n\t"
-        "vminps %%ymm12, %%ymm10, %%ymm10                  \n\t"
-        "vminps %%ymm12, %%ymm11, %%ymm11                  \n\t"
+                         // relu6
+                         "and $0x4, %2                                      \n\t"
+                         "je 0f                                             \n\t"
+                         "mov $0x40C00000, %%ecx                            \n\t"
+                         "vmovd %%ecx, %%xmm12                              \n\t"
+                         "vpermps %%ymm12, %%ymm15, %%ymm12                 \n\t"
+                         "vminps %%ymm12, %%ymm0, %%ymm0                    \n\t"
+                         "vminps %%ymm12, %%ymm1, %%ymm1                    \n\t"
+                         "vminps %%ymm12, %%ymm2, %%ymm2                    \n\t"
+                         "vminps %%ymm12, %%ymm3, %%ymm3                    \n\t"
+                         "vminps %%ymm12, %%ymm4, %%ymm4                    \n\t"
+                         "vminps %%ymm12, %%ymm5, %%ymm5                    \n\t"
+                         "vminps %%ymm12, %%ymm6, %%ymm6                    \n\t"
+                         "vminps %%ymm12, %%ymm7, %%ymm7                    \n\t"
+                         "vminps %%ymm12, %%ymm8, %%ymm8                    \n\t"
+                         "vminps %%ymm12, %%ymm9, %%ymm9                    \n\t"
+                         "vminps %%ymm12, %%ymm10, %%ymm10                  \n\t"
+                         "vminps %%ymm12, %%ymm11, %%ymm11                  \n\t"
 
-        "0:                                                \n\t"
-        "vmovups %%ymm0, (%0)                              \n\t"
-        "vmovups %%ymm1, 0x20(%0)                          \n\t"
-        "vmovups %%ymm2, 0x40(%0)                          \n\t"
-        "vmovups %%ymm3, 0x60(%0)                          \n\t"
-        "vmovups %%ymm4, (%0, %1)                          \n\t"
-        "vmovups %%ymm5, 0x20(%0, %1)                          \n\t"
-        "vmovups %%ymm6, 0x40(%0, %1)                              \n\t"
-        "vmovups %%ymm7, 0x60(%0, %1)                          \n\t"
-        "vmovups %%ymm8, (%0, %1, 2)                          \n\t"
-        "vmovups %%ymm9, 0x20(%0, %1, 2)                              \n\t"
-        "vmovups %%ymm10, 0x40(%0, %1, 2)                         \n\t"
-        "vmovups %%ymm11, 0x60(%0, %1, 2)                         \n\t"
-        :
-        : "r"(curO), "r"(I64(oStep)), "r"(store)
-        : "%ecx", "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm4", "%ymm5", "%ymm6", "%ymm7", "%ymm8",
-        "%ymm9", "%ymm10", "%ymm11", "%ymm12", "%ymm15", "memory", "cc");
+                         "0:                                                \n\t"
+                         "vmovups %%ymm0, (%0)                              \n\t"
+                         "vmovups %%ymm1, 0x20(%0)                          \n\t"
+                         "vmovups %%ymm2, 0x40(%0)                          \n\t"
+                         "vmovups %%ymm3, 0x60(%0)                          \n\t"
+                         "vmovups %%ymm4, (%0, %1)                          \n\t"
+                         "vmovups %%ymm5, 0x20(%0, %1)                          \n\t"
+                         "vmovups %%ymm6, 0x40(%0, %1)                              \n\t"
+                         "vmovups %%ymm7, 0x60(%0, %1)                          \n\t"
+                         "vmovups %%ymm8, (%0, %1, 2)                          \n\t"
+                         "vmovups %%ymm9, 0x20(%0, %1, 2)                              \n\t"
+                         "vmovups %%ymm10, 0x40(%0, %1, 2)                         \n\t"
+                         "vmovups %%ymm11, 0x60(%0, %1, 2)                         \n\t"
+                         :
+                         : "r"(curO), "r"(I64(oStep)), "r"(flags)
+                         : "%ecx", "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm4", "%ymm5",
+                           "%ymm6", "%ymm7", "%ymm8", "%ymm9", "%ymm10", "%ymm11", "%ymm12",
+                           "%ymm15", "memory", "cc");
 }
 
-void avx2_conv_kernel_1x24(F32 *in_0,
+void Avx2ConvKernel1x24(F32 *in_0,
     F32 *in_1,
     F32 *in_2,
     F32 *in_3,
@@ -1066,7 +1063,7 @@ void avx2_conv_kernel_1x24(F32 *in_0,
     I32 fh,
     I32 oStep,
     I32 hStep,
-    I32 store,
+    I32 flags,
     I32 dw,
     I32 ic,
     I32 iStep,
@@ -1090,7 +1087,7 @@ void avx2_conv_kernel_1x24(F32 *in_0,
                          ".align 16                                         \n\t"
                          "1:                                      \n\t"
                          :
-                         : "r"(curO), "r"(curB), "r"(I64(oStep)), "r"(store)
+                         : "r"(curO), "r"(curB), "r"(I64(oStep)), "r"(flags)
                          : "%eax", "%ymm0", "%ymm4", "%ymm8", "memory", "cc");
 
     if ((fh > 0) && (fw > 0)) {
@@ -1134,36 +1131,36 @@ void avx2_conv_kernel_1x24(F32 *in_0,
                              "%ymm14", "%ymm15", "memory", "cc");
     }
 
-    __asm__ __volatile__(
-        // relu
-        "and $0x6, %2                                      \n\t"
-        "je 3f                                             \n\t"
-        "vxorps %%ymm15, %%ymm15, %%ymm15                  \n\t"
-        "vmaxps %%ymm15, %%ymm0, %%ymm0                    \n\t"
-        "vmaxps %%ymm15, %%ymm4, %%ymm4                    \n\t"
-        "vmaxps %%ymm15, %%ymm8, %%ymm8                    \n\t"
+    __asm__ __volatile__(// relu
+                         "and $0x6, %2                                      \n\t"
+                         "je 3f                                             \n\t"
+                         "vxorps %%ymm15, %%ymm15, %%ymm15                  \n\t"
+                         "vmaxps %%ymm15, %%ymm0, %%ymm0                    \n\t"
+                         "vmaxps %%ymm15, %%ymm4, %%ymm4                    \n\t"
+                         "vmaxps %%ymm15, %%ymm8, %%ymm8                    \n\t"
 
-        // relu6
-        "and $0x4, %2                                      \n\t"
-        "je 3f                                             \n\t"
-        "mov $0x40C00000, %%ecx                            \n\t"
-        "vmovd %%ecx, %%xmm12                              \n\t"
-        "vpermps %%ymm12, %%ymm15, %%ymm12                 \n\t"
-        "vminps %%ymm12, %%ymm0, %%ymm0                    \n\t"
-        "vminps %%ymm12, %%ymm4, %%ymm4                    \n\t"
-        "vminps %%ymm12, %%ymm8, %%ymm8                    \n\t"
+                         // relu6
+                         "and $0x4, %2                                      \n\t"
+                         "je 3f                                             \n\t"
+                         "mov $0x40C00000, %%ecx                            \n\t"
+                         "vmovd %%ecx, %%xmm12                              \n\t"
+                         "vpermps %%ymm12, %%ymm15, %%ymm12                 \n\t"
+                         "vminps %%ymm12, %%ymm0, %%ymm0                    \n\t"
+                         "vminps %%ymm12, %%ymm4, %%ymm4                    \n\t"
+                         "vminps %%ymm12, %%ymm8, %%ymm8                    \n\t"
 
-        "3:                                                \n\t"
-        "vmovups %%ymm0, (%0)                              \n\t"
-        "vmovups %%ymm4, (%0, %1)                          \n\t"
-        "vmovups %%ymm8, (%0, %1, 2)                       \n\t"
-        :
-        : "r"(curO), "r"(I64(oStep)), "r"(store)
-        : "%ecx", "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm4", "%ymm5", "%ymm6", "%ymm7", "%ymm8",
-        "%ymm9", "%ymm10", "%ymm11", "%ymm12", "%ymm15", "memory", "cc");
+                         "3:                                                \n\t"
+                         "vmovups %%ymm0, (%0)                              \n\t"
+                         "vmovups %%ymm4, (%0, %1)                          \n\t"
+                         "vmovups %%ymm8, (%0, %1, 2)                       \n\t"
+                         :
+                         : "r"(curO), "r"(I64(oStep)), "r"(flags)
+                         : "%ecx", "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm4", "%ymm5",
+                           "%ymm6", "%ymm7", "%ymm8", "%ymm9", "%ymm10", "%ymm11", "%ymm12",
+                           "%ymm15", "memory", "cc");
 }
 
-void avx2_conv_kernel_4x16(F32 *in_0,
+void Avx2ConvKernel4x16(F32 *in_0,
     F32 *in_1,
     F32 *in_2,
     F32 *in_3,
@@ -1174,7 +1171,7 @@ void avx2_conv_kernel_4x16(F32 *in_0,
     I32 fh,
     I32 oStep,
     I32 hStep,
-    I32 store,
+    I32 flags,
     I32 dw,
     I32 ic,
     I32 iStep,
@@ -1208,7 +1205,7 @@ void avx2_conv_kernel_4x16(F32 *in_0,
                          ".align 16                                         \n\t"
                          "1:                                      \n\t"
                          :
-                         : "r"(curO), "r"(curB), "r"(I64(oStep)), "r"(store)
+                         : "r"(curO), "r"(curB), "r"(I64(oStep)), "r"(flags)
                          : "%eax", "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm4", "%ymm5", "%ymm6",
                          "%ymm7", "memory", "cc");
 
@@ -1270,51 +1267,50 @@ void avx2_conv_kernel_4x16(F32 *in_0,
                              "%ymm6", "%ymm7", "%ymm12", "%ymm13", "%ymm15", "memory", "cc");
     }
 
-    __asm__ __volatile__(
-        // relu
-        "and $0x6, %2                                      \n\t"
-        "je 3f                                             \n\t"
-        "vxorps %%ymm15, %%ymm15, %%ymm15                  \n\t"
-        "vmaxps %%ymm15, %%ymm0, %%ymm0                    \n\t"
-        "vmaxps %%ymm15, %%ymm1, %%ymm1                    \n\t"
-        "vmaxps %%ymm15, %%ymm2, %%ymm2                    \n\t"
-        "vmaxps %%ymm15, %%ymm3, %%ymm3                    \n\t"
-        "vmaxps %%ymm15, %%ymm4, %%ymm4                    \n\t"
-        "vmaxps %%ymm15, %%ymm5, %%ymm5                    \n\t"
-        "vmaxps %%ymm15, %%ymm6, %%ymm6                    \n\t"
-        "vmaxps %%ymm15, %%ymm7, %%ymm7                    \n\t"
+    __asm__ __volatile__(// relu
+                         "and $0x6, %2                                      \n\t"
+                         "je 3f                                             \n\t"
+                         "vxorps %%ymm15, %%ymm15, %%ymm15                  \n\t"
+                         "vmaxps %%ymm15, %%ymm0, %%ymm0                    \n\t"
+                         "vmaxps %%ymm15, %%ymm1, %%ymm1                    \n\t"
+                         "vmaxps %%ymm15, %%ymm2, %%ymm2                    \n\t"
+                         "vmaxps %%ymm15, %%ymm3, %%ymm3                    \n\t"
+                         "vmaxps %%ymm15, %%ymm4, %%ymm4                    \n\t"
+                         "vmaxps %%ymm15, %%ymm5, %%ymm5                    \n\t"
+                         "vmaxps %%ymm15, %%ymm6, %%ymm6                    \n\t"
+                         "vmaxps %%ymm15, %%ymm7, %%ymm7                    \n\t"
 
-        // relu6
-        "and $0x4, %2                                      \n\t"
-        "je 3f                                             \n\t"
-        "mov $0x40C00000, %%ecx                            \n\t"
-        "vmovd %%ecx, %%xmm12                              \n\t"
-        "vpermps %%ymm12, %%ymm15, %%ymm12                 \n\t"
-        "vminps %%ymm12, %%ymm0, %%ymm0                    \n\t"
-        "vminps %%ymm12, %%ymm1, %%ymm1                    \n\t"
-        "vminps %%ymm12, %%ymm2, %%ymm2                    \n\t"
-        "vminps %%ymm12, %%ymm3, %%ymm3                    \n\t"
-        "vminps %%ymm12, %%ymm4, %%ymm4                    \n\t"
-        "vminps %%ymm12, %%ymm5, %%ymm5                    \n\t"
-        "vminps %%ymm12, %%ymm6, %%ymm6                    \n\t"
-        "vminps %%ymm12, %%ymm7, %%ymm7                    \n\t"
+                         // relu6
+                         "and $0x4, %2                                      \n\t"
+                         "je 3f                                             \n\t"
+                         "mov $0x40C00000, %%ecx                            \n\t"
+                         "vmovd %%ecx, %%xmm12                              \n\t"
+                         "vpermps %%ymm12, %%ymm15, %%ymm12                 \n\t"
+                         "vminps %%ymm12, %%ymm0, %%ymm0                    \n\t"
+                         "vminps %%ymm12, %%ymm1, %%ymm1                    \n\t"
+                         "vminps %%ymm12, %%ymm2, %%ymm2                    \n\t"
+                         "vminps %%ymm12, %%ymm3, %%ymm3                    \n\t"
+                         "vminps %%ymm12, %%ymm4, %%ymm4                    \n\t"
+                         "vminps %%ymm12, %%ymm5, %%ymm5                    \n\t"
+                         "vminps %%ymm12, %%ymm6, %%ymm6                    \n\t"
+                         "vminps %%ymm12, %%ymm7, %%ymm7                    \n\t"
 
-        "3:                                                \n\t"
-        "vmovups %%ymm0, (%0)                              \n\t"
-        "vmovups %%ymm1, 0x20(%0)                          \n\t"
-        "vmovups %%ymm2, 0x40(%0)                          \n\t"
-        "vmovups %%ymm3, 0x60(%0)                          \n\t"
-        "vmovups %%ymm4, (%0, %1)                          \n\t"
-        "vmovups %%ymm5, 0x20(%0, %1)                          \n\t"
-        "vmovups %%ymm6, 0x40(%0, %1)                              \n\t"
-        "vmovups %%ymm7, 0x60(%0, %1)                          \n\t"
-        :
-        : "r"(curO), "r"(I64(oStep)), "r"(store)
-        : "%ecx", "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm4", "%ymm5", "%ymm6", "%ymm7", "%ymm12",
-        "%ymm15", "memory", "cc");
+                         "3:                                                \n\t"
+                         "vmovups %%ymm0, (%0)                              \n\t"
+                         "vmovups %%ymm1, 0x20(%0)                          \n\t"
+                         "vmovups %%ymm2, 0x40(%0)                          \n\t"
+                         "vmovups %%ymm3, 0x60(%0)                          \n\t"
+                         "vmovups %%ymm4, (%0, %1)                          \n\t"
+                         "vmovups %%ymm5, 0x20(%0, %1)                          \n\t"
+                         "vmovups %%ymm6, 0x40(%0, %1)                              \n\t"
+                         "vmovups %%ymm7, 0x60(%0, %1)                          \n\t"
+                         :
+                         : "r"(curO), "r"(I64(oStep)), "r"(flags)
+                         : "%ecx", "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm4", "%ymm5",
+                           "%ymm6", "%ymm7", "%ymm12", "%ymm15", "memory", "cc");
 }
 
-void avx2_conv_kernel_1x16(F32 *in_0,
+void Avx2ConvKernel1x16(F32 *in_0,
     F32 *in_1,
     F32 *in_2,
     F32 *in_3,
@@ -1325,7 +1321,7 @@ void avx2_conv_kernel_1x16(F32 *in_0,
     I32 fh,
     I32 oStep,
     I32 hStep,
-    I32 store,
+    I32 flags,
     I32 dw,
     I32 ic,
     I32 iStep,
@@ -1347,7 +1343,7 @@ void avx2_conv_kernel_1x16(F32 *in_0,
                          ".align 16                                         \n\t"
                          "1:                                      \n\t"
                          :
-                         : "r"(curO), "r"(curB), "r"(I64(oStep)), "r"(store)
+                         : "r"(curO), "r"(curB), "r"(I64(oStep)), "r"(flags)
                          : "%eax", "%ymm0", "%ymm4", "memory", "cc");
 
     if ((fh > 0) && (fw > 0)) {
@@ -1389,32 +1385,31 @@ void avx2_conv_kernel_1x16(F32 *in_0,
                              "%ymm15", "memory", "cc");
     }
 
-    __asm__ __volatile__(
-        // relu
-        "and $0x6, %2                                      \n\t"
-        "je 3f                                             \n\t"
-        "vxorps %%ymm15, %%ymm15, %%ymm15                  \n\t"
-        "vmaxps %%ymm15, %%ymm0, %%ymm0                    \n\t"
-        "vmaxps %%ymm15, %%ymm4, %%ymm4                    \n\t"
+    __asm__ __volatile__(// relu
+                         "and $0x6, %2                                      \n\t"
+                         "je 3f                                             \n\t"
+                         "vxorps %%ymm15, %%ymm15, %%ymm15                  \n\t"
+                         "vmaxps %%ymm15, %%ymm0, %%ymm0                    \n\t"
+                         "vmaxps %%ymm15, %%ymm4, %%ymm4                    \n\t"
 
-        // relu6
-        "and $0x4, %2                                      \n\t"
-        "je 3f                                             \n\t"
-        "mov $0x40C00000, %%ecx                            \n\t"
-        "vmovd %%ecx, %%xmm12                              \n\t"
-        "vpermps %%ymm12, %%ymm15, %%ymm12                 \n\t"
-        "vminps %%ymm12, %%ymm0, %%ymm0                    \n\t"
-        "vminps %%ymm12, %%ymm4, %%ymm4                    \n\t"
+                         // relu6
+                         "and $0x4, %2                                      \n\t"
+                         "je 3f                                             \n\t"
+                         "mov $0x40C00000, %%ecx                            \n\t"
+                         "vmovd %%ecx, %%xmm12                              \n\t"
+                         "vpermps %%ymm12, %%ymm15, %%ymm12                 \n\t"
+                         "vminps %%ymm12, %%ymm0, %%ymm0                    \n\t"
+                         "vminps %%ymm12, %%ymm4, %%ymm4                    \n\t"
 
-        "3:                                                \n\t"
-        "vmovups %%ymm0, (%0)                              \n\t"
-        "vmovups %%ymm4, (%0, %1)                          \n\t"
-        :
-        : "r"(curO), "r"(I64(oStep)), "r"(store)
-        : "%ecx", "%ymm0", "%ymm4", "%ymm12", "%ymm15", "memory", "cc");
+                         "3:                                                \n\t"
+                         "vmovups %%ymm0, (%0)                              \n\t"
+                         "vmovups %%ymm4, (%0, %1)                          \n\t"
+                         :
+                         : "r"(curO), "r"(I64(oStep)), "r"(flags)
+                         : "%ecx", "%ymm0", "%ymm4", "%ymm12", "%ymm15", "memory", "cc");
 }
 
-void avx2_conv_kernel_4x8(F32 *in_0,
+void Avx2ConvKernel4x8(F32 *in_0,
     F32 *in_1,
     F32 *in_2,
     F32 *in_3,
@@ -1425,7 +1420,7 @@ void avx2_conv_kernel_4x8(F32 *in_0,
     I32 fh,
     I32 oStep,
     I32 hStep,
-    I32 store,
+    I32 flags,
     I32 dw,
     I32 ic,
     I32 iStep,
@@ -1451,7 +1446,7 @@ void avx2_conv_kernel_4x8(F32 *in_0,
                          ".align 16                                         \n\t"
                          "1:                                      \n\t"
                          :
-                         : "r"(curO), "r"(curB), "r"(store)
+                         : "r"(curO), "r"(curB), "r"(flags)
                          : "%eax", "%ymm0", "%ymm1", "%ymm2", "%ymm3", "memory", "cc");
 
     if ((fh > 0) && (fw > 0)) {
@@ -1507,38 +1502,38 @@ void avx2_conv_kernel_4x8(F32 *in_0,
                              "%ymm14", "%ymm12", "%ymm13", "%ymm15", "memory", "cc");
     }
 
-    __asm__ __volatile__(
-        // relu
-        "and $0x6, %1                                      \n\t"
-        "je 3f                                             \n\t"
-        "vxorps %%ymm15, %%ymm15, %%ymm15                  \n\t"
-        "vmaxps %%ymm15, %%ymm0, %%ymm0                    \n\t"
-        "vmaxps %%ymm15, %%ymm1, %%ymm1                    \n\t"
-        "vmaxps %%ymm15, %%ymm2, %%ymm2                    \n\t"
-        "vmaxps %%ymm15, %%ymm3, %%ymm3                    \n\t"
+    __asm__ __volatile__(// relu
+                         "and $0x6, %1                                      \n\t"
+                         "je 3f                                             \n\t"
+                         "vxorps %%ymm15, %%ymm15, %%ymm15                  \n\t"
+                         "vmaxps %%ymm15, %%ymm0, %%ymm0                    \n\t"
+                         "vmaxps %%ymm15, %%ymm1, %%ymm1                    \n\t"
+                         "vmaxps %%ymm15, %%ymm2, %%ymm2                    \n\t"
+                         "vmaxps %%ymm15, %%ymm3, %%ymm3                    \n\t"
 
-        // relu6
-        "and $0x4, %1                                      \n\t"
-        "je 3f                                             \n\t"
-        "mov $0x40C00000, %%ecx                            \n\t"
-        "vmovd %%ecx, %%xmm12                              \n\t"
-        "vpermps %%ymm12, %%ymm15, %%ymm12                 \n\t"
-        "vminps %%ymm12, %%ymm0, %%ymm0                    \n\t"
-        "vminps %%ymm12, %%ymm1, %%ymm1                    \n\t"
-        "vminps %%ymm12, %%ymm2, %%ymm2                    \n\t"
-        "vminps %%ymm12, %%ymm3, %%ymm3                    \n\t"
+                         // relu6
+                         "and $0x4, %1                                      \n\t"
+                         "je 3f                                             \n\t"
+                         "mov $0x40C00000, %%ecx                            \n\t"
+                         "vmovd %%ecx, %%xmm12                              \n\t"
+                         "vpermps %%ymm12, %%ymm15, %%ymm12                 \n\t"
+                         "vminps %%ymm12, %%ymm0, %%ymm0                    \n\t"
+                         "vminps %%ymm12, %%ymm1, %%ymm1                    \n\t"
+                         "vminps %%ymm12, %%ymm2, %%ymm2                    \n\t"
+                         "vminps %%ymm12, %%ymm3, %%ymm3                    \n\t"
 
-        "3:                                                \n\t"
-        "vmovups %%ymm0, (%0)                              \n\t"
-        "vmovups %%ymm1, 0x20(%0)                          \n\t"
-        "vmovups %%ymm2, 0x40(%0)                          \n\t"
-        "vmovups %%ymm3, 0x60(%0)                          \n\t"
-        :
-        : "r"(curO), "r"(store)
-        : "%ecx", "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm12", "%ymm15", "memory", "cc");
+                         "3:                                                \n\t"
+                         "vmovups %%ymm0, (%0)                              \n\t"
+                         "vmovups %%ymm1, 0x20(%0)                          \n\t"
+                         "vmovups %%ymm2, 0x40(%0)                          \n\t"
+                         "vmovups %%ymm3, 0x60(%0)                          \n\t"
+                         :
+                         : "r"(curO), "r"(flags)
+                         : "%ecx", "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm12",
+                           "%ymm15", "memory", "cc");
 }
 
-void avx2_conv_kernel_1x8(F32 *in_0,
+void Avx2ConvKernel1x8(F32 *in_0,
     F32 *in_1,
     F32 *in_2,
     F32 *in_3,
@@ -1549,7 +1544,7 @@ void avx2_conv_kernel_1x8(F32 *in_0,
     I32 fh,
     I32 oStep,
     I32 hStep,
-    I32 store,
+    I32 flags,
     I32 dw,
     I32 ic,
     I32 iStep,
@@ -1569,7 +1564,7 @@ void avx2_conv_kernel_1x8(F32 *in_0,
                          ".align 16                                         \n\t"
                          "1:                                      \n\t"
                          :
-                         : "r"(curO), "r"(curB), "r"(store)
+                         : "r"(curO), "r"(curB), "r"(flags)
                          : "%eax", "%ymm0", "memory", "cc");
 
     if ((fh > 0) && (fw > 0)) {
@@ -1608,46 +1603,25 @@ void avx2_conv_kernel_1x8(F32 *in_0,
                              : "%ecx", "%ebx", "%ymm0", "%ymm12", "%ymm15", "memory", "cc");
     }
 
-    __asm__ __volatile__(
-        // relu
-        "and $0x6, %1                                      \n\t"
-        "je 0f                                             \n\t"
-        "vxorps %%ymm15, %%ymm15, %%ymm15                  \n\t"
-        "vmaxps %%ymm15, %%ymm0, %%ymm0                    \n\t"
+    __asm__ __volatile__(// relu
+                         "and $0x6, %1                                      \n\t"
+                         "je 0f                                             \n\t"
+                         "vxorps %%ymm15, %%ymm15, %%ymm15                  \n\t"
+                         "vmaxps %%ymm15, %%ymm0, %%ymm0                    \n\t"
 
-        // relu6
-        "and $0x4, %1                                      \n\t"
-        "je 0f                                             \n\t"
-        "mov $0x40C00000, %%ecx                            \n\t"
-        "vmovd %%ecx, %%xmm12                              \n\t"
-        "vpermps %%ymm12, %%ymm15, %%ymm12                 \n\t"
-        "vminps %%ymm12, %%ymm0, %%ymm0                    \n\t"
+                         // relu6
+                         "and $0x4, %1                                      \n\t"
+                         "je 0f                                             \n\t"
+                         "mov $0x40C00000, %%ecx                            \n\t"
+                         "vmovd %%ecx, %%xmm12                              \n\t"
+                         "vpermps %%ymm12, %%ymm15, %%ymm12                 \n\t"
+                         "vminps %%ymm12, %%ymm0, %%ymm0                    \n\t"
 
-        "0:                                                \n\t"
-        "vmovups %%ymm0, (%0)                              \n\t"
-        :
-        : "r"(curO), "r"(store)
-        : "%ecx", "%ymm0", "%ymm12", "%ymm15", "memory", "cc");
-}
-
-inline EE tensor4dGetI32(
-    TensorDesc desc, DataType *dt, DataFormat *df, I32 *num, I32 *numChannels, I32 *height, I32 *width)
-{
-    if (nullptr == num || nullptr == numChannels || nullptr == height || nullptr == width ||
-        nullptr == dt || nullptr == df) {
-        return NULL_POINTER;
-    }
-    if (4 != desc.nDims) {
-        return NOT_MATCH;
-    }
-
-    *dt = desc.dt;
-    *df = desc.df;
-    *width = desc.dims[0];
-    *height = desc.dims[1];
-    *numChannels = desc.dims[2];
-    *num = desc.dims[3];
-    return SUCCESS;
+                         "0:                                                \n\t"
+                         "vmovups %%ymm0, (%0)                              \n\t"
+                         :
+                         : "r"(curO), "r"(flags)
+                         : "%ecx", "%ymm0", "%ymm12", "%ymm15", "memory", "cc");
 }
 
 EE convolution_direct_nchw(TensorDesc inputDesc,
@@ -1675,152 +1649,128 @@ EE convolution_direct_nchw(TensorDesc inputDesc,
     CHECK_STATUS(tensor4dGetI32(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
     CHECK_STATUS(tensor4dGetI32(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
 
+    if (((fdf != DF_NCHWCxN24) && (fdf != DF_NCHWCxN32)) || (idf != DF_NCHW && idf != DF_MTK)) {
+        CHECK_STATUS(NOT_MATCH);
+    }
+
+    // get kernels
+    kernelFunc kernel[4][2] = {{Avx2ConvKernel1x8, Avx2ConvKernel4x8},
+                                {Avx2ConvKernel1x16, Avx2ConvKernel4x16},
+                                {Avx2ConvKernel1x24, Avx2ConvKernel4x24},
+                                {Avx2ConvKernel1x32, Avx2ConvKernel3x32}};
+    I32 unrollOcArray[4] = {8, 16, 24, 32};
+    I32 unrollHwArray[4] = {4, 4, 4, 3};
+
+    // get computing params
     I32 strideH = convParamSpec.stride_h;
     I32 strideW = convParamSpec.stride_w;
+    I32 ohow = oh * ow;
+    //dilate
+    I32 dilateH = convParamSpec.dilatedRate_h;
+    I32 dilateW = convParamSpec.dilatedRate_w;
+    I32 fhDilated = (fh - 1) * dilateH + 1;
+    I32 fwDilated = (fw - 1) * dilateW + 1;
+    //pad
     I32 paddingT = convParamSpec.padding_top;
     I32 paddingB = convParamSpec.padding_bottom;
     I32 paddingL = convParamSpec.padding_left;
     I32 paddingR = convParamSpec.padding_right;
-    I32 dilateH = convParamSpec.dilatedRate_h;
-    I32 dilateW = convParamSpec.dilatedRate_w;
-
-    if (((fdf != DF_NCHWCxN24) && (fdf != DF_NCHWCxN32)) || (idf != DF_NCHW)) {
-        CHECK_STATUS(NOT_MATCH);
-    }
-
-    // oc % 8 must be 0
-    oc = (oc + 7) / 8 * 8;
-    fn = oc;
-
-    F32 *curI, *curO, *calI, *calO;
-    const F32 *curW, *curB;
-    F32 *ftmp = inArray;
-
-    I32 oStep = oh * ow * UNROLL_OC_DIM * 4;
-    I32 iStep = ((ih - fh) * iw) * 4;
-    I32 hStep = (iw - fw * dilateW + (dilateH - 1) * iw) * 4;
-    I32 dw = dilateW * 4;
-    I32 wSize = 0, store = 0, ocSize = 0, icSize = 0, hwSize = 0, icbSize = 0;
-    I32 ih_idx = 0;
-    kernel_func kernel[4][2] = {{avx2_conv_kernel_1x8, avx2_conv_kernel_4x8},
-        {avx2_conv_kernel_1x16, avx2_conv_kernel_4x16},
-        {avx2_conv_kernel_1x24, avx2_conv_kernel_4x24},
-        {avx2_conv_kernel_1x32, avx2_conv_kernel_3x32}};
-    I32 ocblocks[4] = {8, 16, 24, 32};
-    I32 wblocks[4] = {4, 4, 4, 3};
-    I32 unroll_w = UNROLL_W, unroll_oc = BLOCK_OC_DIM;
-    I32 ohow = oh * ow;
-    I32 blockIcDim = BLOCK_IC_DIM;
-    if (fw * fh < 9) {
-        blockIcDim *= 2;
-    } else if (fw * fh > 9) {
-        blockIcDim /= 2;
-    }
-
-    if ((oc % 24 != 0) && (oc % 32 == 0)) {
-        unroll_oc = 32;
-    }
-
-    I32 oh_padding_t = 0;
-    I32 oh_padding_b = 0;
-    I32 fhDilated = (fh - 1) * dilateH + 1;
-    I32 fwDilated = (fw - 1) * dilateW + 1;
-
+    I32 ohPaddingT = 0;
+    I32 ohPaddingB = 0;
     if ((paddingL == 0) && (paddingR == 0) && (paddingT != 0 || paddingB != 0)) {
-        oh_padding_t = UNI_MIN((paddingT - 1) / strideH + 1, oh);
-        oh_padding_b = UNI_MIN((paddingB - 1) / strideH + 1, oh - oh_padding_t);
+        ohPaddingT = UNI_MIN((paddingT - 1) / strideH + 1, oh);
+        ohPaddingB = UNI_MIN((paddingB - 1) / strideH + 1, oh - ohPaddingT);
         if (((ih + paddingT - fhDilated) / strideH + 1) >= oh) {
-            oh_padding_b = 0;
+            ohPaddingB = 0;
         }
     }
-    I32 mainOhow = ohow - (oh_padding_b + oh_padding_t) * (I32)ow;
-#ifdef _USE_OPENMP
-    I32 alpha = (mainOhow + OMP_NUM_THREADS * BLOCK_HW_DIM - 1) / (OMP_NUM_THREADS * BLOCK_HW_DIM);
-    I32 block_hw_dim = (mainOhow + OMP_NUM_THREADS * alpha - 1 ) / (OMP_NUM_THREADS * alpha);
-#else
-    I32 block_hw_dim = BLOCK_HW_DIM;
-#endif
-    I32 mainBlockNum = (mainOhow + block_hw_dim - 1) / block_hw_dim;
+
+    // infer block params
+    I32 unrollOc = InferConvPointwiseUnrollOc(oc);
+    I32 mainOhow = ohow - (ohPaddingB + ohPaddingT) * ow;
+    I32 blockHwDim = InferConvBlockHW(mainOhow, BLOCK_HW_DIM, OMP_NUM_THREADS);
+    I32 mainBlockNum = CeilDivide(mainOhow, blockHwDim);
+    I32 blockIcDim = InferConvDirectBolckIcDim(BLOCK_IC_DIM, unrollOc, blockHwDim, fh, fw);
+
+    // infer kernel params
+    I32 oStep = oh * ow * SIMDW * BYTES;
+    I32 iStep = ((ih - fh - (dilateH - 1)) * iw) * BYTES;
+    I32 hStep = (iw - fw * dilateW + (dilateH - 1) * iw) * BYTES;
+    I32 dw = dilateW * BYTES;
 
     for (I32 n = 0; n < in; ++n) {
-        store = 0;
+        I32 icSize = 0;
         for (I32 icbb = 0; icbb < ic; icbb += icSize) {
             icSize = UNI_MIN(blockIcDim, ic - icbb);
-            store |= (icbb > 0);
+            I32 flags = (icbb > 0);
             if (icbb == ic - icSize) {
-                store |= I32(activationDesc.mode) << 1;
+                flags |= I32(activationDesc.mode) << 1;
             }
+
             if ((paddingL == 0) && (paddingR == 0) && (paddingT != 0 || paddingB != 0)) {
+                I32 ocSize = 0;
                 for (I32 ocb = 0; ocb < oc; ocb += ocSize) {
-                    ocSize = UNI_MIN(unroll_oc, oc - ocb);
-                    ocSize = ocblocks[(ocSize >> 3) - 1];
-                    unroll_w = wblocks[(ocSize >> 3) - 1];
-                    curW = filterArray + ocb * ic * fh * fw + ocSize * icbb * fh * fw;
-                    curB = biasArray + ocb;
-                    curI = ftmp + icbb * ih * iw;
-                    for (I32 h = 0; h < oh_padding_t; ++h) {
-                        I32 in_h_0 = h * strideH - paddingT;
-                        I32 pt = fh;
-                        I32 tfh = fhDilated + in_h_0;
-                        if (tfh > ih) {
-                            tfh = (ih - tfh % dilateH) / dilateH * dilateH + tfh % dilateH;
-                        }
-                        if (in_h_0 < 0) {
-                            pt = (-in_h_0 + dilateH - 1) / dilateH;
-                            in_h_0 = (in_h_0 + fhDilated - 1) % dilateH;
-                        }
-                        iStep = ((ih - tfh - (dilateH - 1) + in_h_0) * iw) * 4;
-                        if (tfh > 0 && tfh <= ih) {
-                            tfh = (tfh - 1) / dilateH + 1;
-                        } else {
-                            tfh = 0;
-                        }
-                        I32 wiStep = (fh - tfh) * (I32)fw * ocSize * 4;
-                        const F32 *calW = curW + UNI_MIN(fh - tfh, pt) * (I32)fw * ocSize;
+                    ocSize = UNI_MIN(unrollOc, oc - ocb);
+                    ocSize = unrollOcArray[(ocSize >> 3) - 1];
+
+                    I32 unrollHw = unrollHwArray[(ocSize >> 3) - 1];
+                    const F32 *curW = filterArray + ocb * ic * fh * fw + ocSize * icbb * fh * fw;
+                    const F32 *curB = biasArray + ocb;
+                    F32 *curI = inArray + icbb * ih * iw;
+                    I32 wSize = 0;
+                    for (I32 h = 0; h < ohPaddingT + ohPaddingB; ++h) {
+                        I32 realH = (h >= ohPaddingT)? (oh - ohPaddingB + h - ohPaddingT): h;
+                        I32 inH = realH * strideH - paddingT;
+                        I32 tfh = GetNewKernelDilatedPad(ih, inH, fhDilated, dilateH);
+                        I32 whJump = JumpToWeightPos(inH, dilateH);
+                        I32 ihJump = JumpToInputPos(ih, inH, fhDilated, dilateH);
+                        inH = (inH >= 0)? inH: ihJump;
+                        iStep = (ih - tfh - (dilateH - 1) + ihJump) * iw * BYTES;
+                        tfh = GetKernelnoDilated(tfh, dilateH);
+                        const F32 *calW = curW + whJump * fw * ocSize;
                         for (I32 w = 0; w < ow; w += wSize) {
-                            wSize = UNI_MIN(ow - w, unroll_w);
-                            if (wSize < unroll_w) {
+                            wSize = UNI_MIN(ow - w, unrollHw);
+                            if (wSize < unrollHw) {
                                 wSize = 1;
                             }
                             I32 in_w_0 = w * strideW;
                             I32 in_w_1 = (w + 1) * strideW;
                             I32 in_w_2 = (w + 2) * strideW;
                             I32 in_w_3 = (w + 3) * strideW;
-                            F32 *out_ptr = outArray + (n * oc + ocb) * ohow + (h * ow + w) * 8;
-                            F32 *in_0 = curI + in_w_0 + in_h_0 * iw;
-                            F32 *in_1 = curI + in_w_1 + in_h_0 * iw;
-                            F32 *in_2 = curI + in_w_2 + in_h_0 * iw;
-                            F32 *in_3 = curI + in_w_3 + in_h_0 * iw;
+                            F32 *out_ptr = outArray + (n * oc + ocb) * ohow + (realH * ow + w) * SIMDW;
+                            F32 *in_0 = curI + in_w_0 + inH * iw;
+                            F32 *in_1 = curI + in_w_1 + inH * iw;
+                            F32 *in_2 = curI + in_w_2 + inH * iw;
+                            F32 *in_3 = curI + in_w_3 + inH * iw;
                             kernel[(ocSize >> 3) - 1][wSize > 1](in_0, in_1, in_2, in_3, calW,
-                                out_ptr, curB, fw, tfh, oStep, hStep, store, dw, icSize, iStep, 0,
-                                wiStep);
+                                out_ptr, curB, fw, tfh, oStep, hStep, flags, dw, icSize, iStep, 0,
+                                fw * (fh - tfh) * ocSize * BYTES);
                         }
                     }
                 }
             }
             if ((paddingL == 0) && (paddingR == 0)) {
-                iStep = ((ih - fhDilated - (dilateH - 1)) * iw) * 4;
+                iStep = (ih - fhDilated - (dilateH - 1)) * iw * BYTES;
 #ifdef _USE_OPENMP
 #pragma omp parallel for num_threads(OMP_NUM_THREADS)
 #endif
                 for (I32 bIdx = 0; bIdx < mainBlockNum; ++bIdx) {
-                    _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
-                    //_MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
-                    I32 hw = bIdx * block_hw_dim + oh_padding_t * ow;
-                    I32 hwSizein = UNI_MIN(block_hw_dim, ohow - oh_padding_b * ow - hw);
-                    I32 ocSizein = 0;
-                    for (I32 ocb = 0; ocb < oc; ocb += ocSizein) {
-                        ocSizein = UNI_MIN(unroll_oc, oc - ocb);
-                        ocSizein = ocblocks[(ocSizein >> 3) - 1];
-                        I32 unroll_w_in = wblocks[(ocSizein >> 3) - 1];
-                        const F32 *curWin = filterArray + ocb * ic * fh * fw + ocSizein * icbb * fh * fw;
-                        const F32 *curBin = biasArray + ocb;
-                        F32 *curIin = ftmp + icbb * ih * iw;
-                        I32 wSizein = wSize;
-                        for (I32 ihw = hw; ihw < hw + (I32)hwSizein; ihw += wSizein) {
-                            wSizein = UNI_MIN(hw + hwSizein - ihw, unroll_w_in);
-                            if (wSizein < unroll_w_in) {
-                                wSizein = 1;
+                    FTZ;
+                    I32 hw = bIdx * blockHwDim + ohPaddingT * ow;
+                    I32 hwSize = UNI_MIN(blockHwDim, ohow - ohPaddingB * ow - hw);
+                    I32 ocSize = 0;
+                    for (I32 ocb = 0; ocb < oc; ocb += ocSize) {
+                        ocSize = UNI_MIN(unrollOc, oc - ocb);
+                        ocSize = unrollOcArray[(ocSize >> 3) - 1];
+                        I32 unrollHw = unrollHwArray[(ocSize >> 3) - 1];
+                        const F32 *curW = filterArray + ocb * ic * fh * fw + ocSize * icbb * fh * fw;
+                        const F32 *curB = biasArray + ocb;
+                        F32 *curI = inArray + icbb * ih * iw;
+                        I32 wSize = 0;
+                        for (I32 ihw = hw; ihw < hw + hwSize; ihw += wSize) {
+                            wSize = UNI_MIN(hw + hwSize - ihw, unrollHw);
+                            if (wSize < unrollHw) {
+                                wSize = 1;
                             }
                             I32 in_h_0 = ihw / ow * strideH - paddingT;
                             I32 in_w_0 = ihw % ow * strideW;
@@ -1830,168 +1780,84 @@ EE convolution_direct_nchw(TensorDesc inputDesc,
                             I32 in_w_2 = (ihw + 2) % ow * strideW;
                             I32 in_h_3 = (ihw + 3) / ow * strideH - paddingT;
                             I32 in_w_3 = (ihw + 3) % ow * strideW;
-                            F32 *out_ptr = outArray + (n * oc + ocb) * ohow + ihw * 8;
-                            F32 *in_0 = curIin + in_h_0 * iw + in_w_0;
-                            F32 *in_1 = curIin + in_h_1 * iw + in_w_1;
-                            F32 *in_2 = curIin + in_h_2 * iw + in_w_2;
-                            F32 *in_3 = curIin + in_h_3 * iw + in_w_3;
-                            kernel[(ocSizein >> 3) - 1][wSizein > 1](in_0, in_1, in_2, in_3, curWin,
-                                out_ptr, curBin, fw, fh, oStep, hStep, store, dw, icSize, iStep, 0, 0);
-                        }
-                    }
-                }
-            }
-            if ((paddingL == 0) && (paddingR == 0) && (paddingT != 0 || paddingB != 0)) {
-                for (I32 ocb = 0; ocb < oc; ocb += ocSize) {
-                    ocSize = UNI_MIN(unroll_oc, oc - ocb);
-                    ocSize = ocblocks[(ocSize >> 3) - 1];
-                    unroll_w = wblocks[(ocSize >> 3) - 1];
-                    curW = filterArray + ocb * ic * fh * fw + ocSize * icbb * fh * fw;
-                    curB = biasArray + ocb;
-                    curI = ftmp + icbb * ih * iw;
-                    for (I32 h = oh - oh_padding_b; h < (I32)oh; ++h) {
-                        I32 in_h_0 = h * strideH - paddingT;
-                        I32 tfh = UNI_MAX((I32)ih - in_h_0, 0);
-                        iStep = ((ih - tfh - (dilateH - 1) + (tfh - 1) % dilateH) * iw) * 4;
-                        if (tfh > 0) {
-                            tfh = (tfh - 1) / dilateH + 1;
-                        }
-                        for (I32 w = 0; w < (I32)ow; w += wSize) {
-                            wSize = UNI_MIN(ow - w, unroll_w);
-                            if (wSize < unroll_w) {
-                                wSize = 1;
-                            }
-                            I32 in_w_0 = w * strideW;
-                            I32 in_w_1 = (w + 1) * strideW;
-                            I32 in_w_2 = (w + 2) * strideW;
-                            I32 in_w_3 = (w + 3) * strideW;
-                            F32 *out_ptr = outArray + (n * oc + ocb) * ohow + (h * ow + w) * 8;
+                            F32 *out_ptr = outArray + (n * oc + ocb) * ohow + ihw * SIMDW;
                             F32 *in_0 = curI + in_h_0 * iw + in_w_0;
-                            F32 *in_1 = curI + in_h_0 * iw + in_w_1;
-                            F32 *in_2 = curI + in_h_0 * iw + in_w_2;
-                            F32 *in_3 = curI + in_h_0 * iw + in_w_3;
+                            F32 *in_1 = curI + in_h_1 * iw + in_w_1;
+                            F32 *in_2 = curI + in_h_2 * iw + in_w_2;
+                            F32 *in_3 = curI + in_h_3 * iw + in_w_3;
                             kernel[(ocSize >> 3) - 1][wSize > 1](in_0, in_1, in_2, in_3, curW,
-                                out_ptr, curB, fw, tfh, oStep, hStep, store, dw, icSize, iStep, 0,
-                                fw * (fh - tfh) * ocSize * 4);
+                                out_ptr, curB, fw, fh, oStep, hStep, flags, dw, icSize, iStep, 0, 0);
                         }
                     }
                 }
             }
             if ((paddingL != 0) || (paddingR != 0)) {
-                I32 ow_padding_l = UNI_MIN((paddingL - 1) / strideW + 1, (I32)ow);
-                I32 ow_padding_r = UNI_MIN((paddingR - 1) / strideW + 1, (I32)ow - ow_padding_l);
+                I32 owPaddingL = UNI_MIN((paddingL - 1) / strideW + 1, ow);
+                I32 owPaddingR = UNI_MIN((paddingR - 1) / strideW + 1, ow - owPaddingL);
                 if (((iw + paddingL - fwDilated) / strideW + 1) >= ow) {
-                    ow_padding_r = 0;
+                    owPaddingR = 0;
                 }
 
 #ifdef _USE_OPENMP
 #pragma omp parallel for num_threads(OMP_NUM_THREADS)
 #endif
-                for (I32 h = 0; h < (I32)oh; ++h) {
-                    _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
-                    // _MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
-                    I32 jumpH = 0;
-                    I32 tfhDilated = fhDilated;
-                    I32 iStepJumpH = 0;
-                    I32 tfh = fhDilated;
-                    I32 in_h = h * strideH - paddingT;
-                    I32 in_w = 0;
-                    I32 tfw = fwDilated;
-                    I32 wh = 0;
-                    I32 ocSizein = ocSize;
-                    I32 iStepin = iStep;
-                    I32 hStepin = hStep;
-                    if (fhDilated + in_h <= 0) {
-                        tfhDilated = 0;
-                        tfh = 0;
-                        in_h = 0;
-                    } else if (in_h < 0) {
-                        I32 pt = (-in_h + dilateH - 1) / dilateH;
-                        tfhDilated = fhDilated + in_h;
-                        in_h = (in_h + fhDilated - 1) % dilateH;
-                        if (tfhDilated > ih) {
-                            tfhDilated = (ih - tfhDilated % dilateH) / dilateH * dilateH +
-                                tfhDilated % dilateH;
-                        }
-                        if (tfhDilated > 0 && tfhDilated <= ih) {
-                            tfh = (tfhDilated - 1) / dilateH + 1;
-                        } else {
-                            tfh = 0;
-                        }
-                        jumpH = UNI_MIN(fh - tfh, pt);
-                        iStepJumpH = in_h;
-                    } else if (in_h + fhDilated >= ih) {
-                        tfhDilated = UNI_MAX((I32)ih - in_h, 0);
-                        iStepJumpH = (tfhDilated - 1) % dilateH;
-                        if (tfhDilated > 0) {
-                            tfh = (tfhDilated - 1) / dilateH + 1;
-                        } else {
-                            tfh = 0;
-                        }
-                    }
-                    iStepin = ((ih - tfhDilated - (dilateH - 1) + iStepJumpH) * iw) * 4;
-                    for (I32 ocb = 0; ocb < oc; ocb += ocSizein) {
-                        ocSizein = UNI_MIN(unroll_oc, oc - ocb);
-                        ocSizein = ocblocks[(ocSizein >> 3) - 1];
-                        I32 unroll_w_in = wblocks[(ocSizein >> 3) - 1];
-                        const F32 *curWin = filterArray + ocb * ic * fh * fw + ocSizein * icbb * fh * fw +
-                            jumpH * fw * ocSizein;
-                        const F32 *curBin = biasArray + ocb;
-                        F32 *curIin = ftmp + icbb * ih * iw + in_h * iw;
-                        F32 *curOin = outArray + (n * oc + ocb) * ohow + h * ow * 8;
+                for (I32 h = 0; h < oh; ++h) {
+                    FTZ;
+                    I32 inH = h * strideH - paddingT;
+                    I32 tfhDilated = GetNewKernelDilatedPad(ih, inH, fhDilated, dilateH);
+                    I32 whJump = JumpToWeightPos(inH, dilateH);
+                    I32 ihJump = JumpToInputPos(ih, inH, fhDilated, dilateH);
+                    I32 iStepin = (ih - tfhDilated - (dilateH - 1) + ihJump) * iw * BYTES;
+                    I32 tfh = GetKernelnoDilated(tfhDilated, dilateH);
+                    inH = (inH >= 0)? inH: ihJump;
+
+                    I32 ocSize = 0;
+                    for (I32 ocb = 0; ocb < oc; ocb += ocSize) {
+                        ocSize = UNI_MIN(unrollOc, oc - ocb);
+                        ocSize = unrollOcArray[(ocSize >> 3) - 1];
+                        I32 unrollHw = unrollHwArray[(ocSize >> 3) - 1];
+                        const F32 *curW = filterArray + ocb * ic * fh * fw + 
+                            ocSize * icbb * fh * fw + whJump * fw * ocSize;
+                        const F32 *curB = biasArray + ocb;
+                        F32 *curI = inArray + icbb * ih * iw + inH * iw;
+                        F32 *curO = outArray + (n * oc + ocb) * ohow + h * ow * SIMDW;
                         I32 w = 0;
-                        for (; w < ow_padding_l; ++w) {
-                            I32 in_w = w * strideW - paddingL;
-                            I32 pl = fw;
-                            tfw = fwDilated + in_w;
-                            if (tfw > iw) {
-                                tfw = (iw - tfw % dilateW) / dilateW * dilateW + tfw % dilateW;
-                            }
-                            if (in_w < 0) {
-                                pl = (-in_w + dilateW - 1) / dilateW;
-                                in_w = (in_w + fwDilated - 1) % dilateW;
-                            }
-                            if (tfw > 0 && tfw <= iw) {
-                                tfw = (tfw - 1) / dilateW + 1;
-                            } else {
-                                tfw = 0;
-                            }
-                            const F32 *useW = curWin + UNI_MIN(fw - tfw, pl) * ocSizein;
-                            hStepin = (iw - tfw * dilateW + (dilateH - 1) * iw) * 4;
-                            kernel[(ocSizein >> 3) - 1][0](curIin + in_w, nullptr, nullptr, nullptr, useW,
-                                curOin + w * 8, curBin, tfw, tfh, oStep, hStepin, store, dw, icSize, iStepin,
-                                (fw - tfw) * ocSizein * 4, fw * (fh - tfh) * ocSizein * 4);
+                        for (; w < owPaddingL + owPaddingR; ++w) {
+                            I32 realW = (w >= owPaddingL)? (ow - owPaddingR + w - owPaddingL): w;
+                            I32 inW = realW * strideW - paddingL;
+                            I32 tfw = GetNewKernelDilatedPad(iw, inW, fwDilated, dilateW);
+                            I32 wwJump = JumpToWeightPos(inW, dilateW);
+                            I32 iwJump = JumpToInputPos(iw, inW, fwDilated, dilateW);
+                            inW = (inW >= 0)? inW: iwJump;
+                            tfw = GetKernelnoDilated(tfw, dilateW);
+
+                            const F32 *useW = curW + wwJump * ocSize;
+                            I32 hStepin = (iw - tfw * dilateW + (dilateH - 1) * iw) * BYTES;
+                            kernel[(ocSize >> 3) - 1][0](curI + inW, nullptr, nullptr, nullptr, useW,
+                                curO + realW * SIMDW, curB, tfw, tfh, oStep, hStepin, flags, dw, icSize, iStepin,
+                                (fw - tfw) * ocSize * BYTES, fw * (fh - tfh) * ocSize * BYTES);
                         }
-                        I32 wSizein = wSize;
-                        for (; w < (I32)ow - ow_padding_r; w += wSizein) {
-                            hStepin = (iw - fw * dilateW + (dilateH - 1) * iw) * 4;
-                            wSizein = UNI_MIN(ow - ow_padding_r - w, unroll_w_in);
-                            if (wSizein < unroll_w_in) {
-                                wSizein = 1;
+                        w = owPaddingL;
+                        I32 wSize = 0;
+                        for (; w < ow - owPaddingR; w += wSize) {
+                            wSize = UNI_MIN(ow - owPaddingR - w, unrollHw);
+                            if (wSize < unrollHw) {
+                                wSize = 1;
                             }
-                            F32 *in_0 = curIin + w * strideW - paddingL;
-                            F32 *in_1 = curIin + (w + 1) * strideW - paddingL;
-                            F32 *in_2 = curIin + (w + 2) * strideW - paddingL;
-                            F32 *in_3 = curIin + (w + 3) * strideW - paddingL;
-                            kernel[(ocSizein >> 3) - 1][wSizein > 1](in_0, in_1, in_2, in_3, curWin, curOin + w * 8,
-                                curBin, fw, tfh, oStep, hStepin, store, dw, icSize, iStepin, 0,
-                                fw * (fh - tfh) * ocSizein * 4);
-                        }
-                        for (; w < (I32)ow; ++w) {
-                            I32 in_w = w * strideW - paddingL;
-                            tfw = UNI_MAX((I32)iw - in_w, 0);
-                            tfw = (tfw - 1 ) / dilateW + 1;
-                            hStepin = ((I32)iw - tfw * dilateW + (dilateH - 1) * (I32)iw) * 4;
-                            F32 *in_0 = curIin + in_w;
-                            kernel[(ocSizein >> 3) - 1][0](in_0, nullptr, nullptr, nullptr, curWin,
-                                curOin + w * 8, curBin, tfw, tfh, oStep, hStepin, store, dw, icSize, iStepin,
-                                (fw - tfw) * ocSizein * 4, fw * (fh - tfh) * ocSizein * 4);
+                            F32 *in_0 = curI + w * strideW - paddingL;
+                            F32 *in_1 = curI + (w + 1) * strideW - paddingL;
+                            F32 *in_2 = curI + (w + 2) * strideW - paddingL;
+                            F32 *in_3 = curI + (w + 3) * strideW - paddingL;
+                            I32 hStepin = (iw - fw * dilateW + (dilateH - 1) * iw) * BYTES;
+                            kernel[(ocSize >> 3) - 1][wSize > 1](in_0, in_1, in_2, in_3, curW, curO + w * SIMDW,
+                                curB, fw, tfh, oStep, hStepin, flags, dw, icSize, iStepin, 0,
+                                fw * (fh - tfh) * ocSize * BYTES);
                         }
                     }
                 }
             }
         }
-        ftmp += ic * ih * iw;
+        inArray += ic * ih * iw;
     }
     return SUCCESS;
 }

@@ -20,8 +20,7 @@ class PowerOCL : public Power {
 public:
     PowerOCL(DataType dt, PowerParamSpec p) : Power(dt, p)
     {
-        setMALIArchInfo(
-            &(this->archInfo), nullptr, &this->needSetKernelVec, &this->needSelectKernelLS);
+        INIT_GPU_INFO(nullptr)
     }
 
     ~PowerOCL(){DESTROY_OCL_KERNEL}
@@ -47,6 +46,9 @@ public:
     {
         this->needSetKernelVec = true;
         CHECK_STATUS(power_infer_output_size(inTensors[0], outTensors[0], &this->archInfo));
+        if (check_tensors_image(inTensors) && inTensors[0] != outTensors[0]) {
+            CHECK_STATUS(set_tensors_image(outTensors, inTensors.size()));
+        }
         return SUCCESS;
     }
 

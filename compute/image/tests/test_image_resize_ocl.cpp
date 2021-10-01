@@ -12,37 +12,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "image.h"
-#include "ut_util.h"
-#include "gcl.h"
-#include "libkernelsource.h"
 #include "tensor_computing.h"
+#include "ut_util_ocl.h"
 
-#ifdef _USE_FP16
-inline GCLMem_t alloc(Tensor tensor)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    mem->alloc();
-    return (GCLMem_t)mem->get_ptr();
-}
-
-inline GCLMem_t alloc_map(Tensor tensor)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    mem->mapped_alloc();
-    return (GCLMem_t)mem->get_ptr();
-}
-
-inline GCLMem_t alloc_bytes(Tensor tensor, U32 size)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    GCLMem_t ptr = NULL;
-    if (size > 0) {
-        mem->resize(tensor1d(DT_U8, size));
-        mem->alloc();
-        ptr = (GCLMem_t)mem->get_ptr();
-    }
-    return ptr;
-}
 int resizeTest(int argc, char *argv[], DataType dt)
 {
     CHECK_REQUIREMENT(argc == 9);
@@ -68,10 +40,10 @@ int resizeTest(int argc, char *argv[], DataType dt)
     inputDesc_cpu = tensor4df(dt, DF_NCHW, in, ic, ih, iw);
     inputDesc_gpu = tensor4df(dt, DF_NCHW, in, ic, ih, iw);
 
-    DataType paramDT = DT_F32;
-    F32 scales[2];
-    scales[0] = (F32)oh / (F32)ih;
-    scales[1] = (F32)ow / (F32)iw;
+    DataType paramDT = DT_U32;
+    U32 scales[2];
+    scales[0] = oh;
+    scales[1] = ow;
 
     // setup input
     U8 *input_cpu = ut_input_v(in * ic * ih * iw, dt, UT_INIT_RANDOM);
@@ -88,13 +60,13 @@ int resizeTest(int argc, char *argv[], DataType dt)
     outputTensorCpu.alloc();
 
     ResizeParamSpec p;
-    p.mode = LINEAR;
-    p.trans_mode = ALIGN_CORNERS;
-    // naive implement
+    //p.mode = LINEAR;
+    p.mode = NEAREST;
+    p.trans_mode = ASYMMETRIC;
     // CPU output
     CHECK_STATUS(resize(inputTensorCpu, tmpTensorCpu, outputTensorCpu, p, &archInfo_org));
     std::shared_ptr<GCLHandle> handleSharedPtr = OCLContext::getInstance().handle;
-    ;
+
     GCLHandle_t handle = handleSharedPtr.get();
     std::vector<GCLKernelInfo> kernelVec;
     handle->kernelVec = &kernelVec;
@@ -102,7 +74,6 @@ int resizeTest(int argc, char *argv[], DataType dt)
     Tensor outputTensor = Tensor(OCLMem);
     Tensor tmpTensor = Tensor(OCLMem);
     inputTensor.resize(inputDesc_gpu);
-    U8 *output_gpu = NULL;
 
     MaliPara maliPara;
     maliPara.handle = handle;
@@ -113,10 +84,14 @@ int resizeTest(int argc, char *argv[], DataType dt)
     U32 maxBytes = 0;
     U32 tmpBytes = 0;
 
-    GCLMem_t output = alloc_map(outputTensor);
+    GCLMem_t output = alloc(outputTensor);
     GCLMem_t input = alloc(inputTensor);
     CHECK_STATUS(gcl_fill_memory_zero(handle, input));
+    outputDesc_gpu = outputTensor.get_desc();
+    U8 *output_gpu = ut_input_v(on * oc * oh * ow, dt, UT_INIT_RANDOM);
     tmpBytes = tensorNumBytes(inputDesc_gpu);
+    maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
+    tmpBytes = tensorNumBytes(outputDesc_gpu);
     maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
     GCLMem_t tmpbuf = alloc_bytes(tmpTensor, maxBytes);
     CHECK_STATUS(ocl_set_input(handle, input, inputDesc_gpu, input_cpu, tmpbuf, true));
@@ -135,10 +110,7 @@ int resizeTest(int argc, char *argv[], DataType dt)
 #else
     CHECK_STATUS(gcl_run_kernelVec(handle));
 #endif
-    outputDesc_gpu = outputTensor.get_desc();
-    ;
-    CHECK_STATUS(ocl_get_output(handle, output, outputDesc_gpu, true));
-    output_gpu = output->mapPtrArray.back();
+    CHECK_STATUS(ocl_get_output(handle, output, outputDesc_gpu, output_gpu, tmpbuf, true));
 
     char buffer[150];
     char params[120];
@@ -152,9 +124,9 @@ int resizeTest(int argc, char *argv[], DataType dt)
     CHECK_STATUS(gcl_finish(handle));
     CHECK_STATUS(gcl_clean_kernelVec(handle));
     free(input_cpu);
+    free(output_gpu);
     return 0;
 }
-#endif
 
 int main(int argc, char **argv)
 {

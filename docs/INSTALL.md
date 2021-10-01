@@ -1,59 +1,61 @@
 # Contents
+---
 &nbsp;&nbsp;&nbsp;&nbsp;[Prerequisites](#prerequisites)  
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Linux System Compilation Tools](#linux-system-compilation-tools)  
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Windows System Compilation Tools](#windows-system-compilation-tools)  
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[MacOS System Compilation Tools](#macos-system-compilation-tools)  
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Android Cross-Compilation Tools](#android-cross-compilation-toolsoptional)  
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Linux-AArch64 Cross-Compilation Tools](#linux-aarch64-cross-compilation-toolsoptional)  
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[iOS Cross-Compilation Tools](#ios-cross-compilation-toolsoptional)  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Linux Host System Compilation Tools](#linux-host-system-compilation-tools)  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Windows Host System Compilation Tools](#windows-host-system-compilation-tools)  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[MacOS Host System Compilation Tools](#macos-host-system-compilation-tools)  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Android Target System Cross-Compilation Tools](#android-target-system-cross-compilation-tools)  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Linux-AArch64 Target System Cross-Compilation Tools](#linux-aarch64-target-system-cross-compilation-tools)  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[iOS Target System Cross-Compilation Tools](#ios-target-system-cross-compilation-tools)  
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Tools](#tools)  
 &nbsp;&nbsp;&nbsp;&nbsp;[Download and Build Bolt](#download-and-build-bolt)  
 &nbsp;&nbsp;&nbsp;&nbsp;[Common install problem](#common-install-problem)  
 
 
 # Prerequisites
+---
 
-## Linux System Compilation Tools
+### Linux Host System Compilation Tools
 
-- ### CMake
+- #### CMake
 
    Download and install Cmake from <https://cmake.org/download/>. Set shell environment variable **PATH**.
 
-- ### GNU make
+- #### GNU make
 
    Download and install make from <https://ftp.gnu.org/gnu/make/>. Set shell environment variable **PATH**.
 
-- ### Wget
+- #### Wget
 
    Download and install Wget from <https://www.gnu.org/software/wget/>. Set shell environment variable **PATH**.
 
-## Windows System Compilation Tools
+### Windows Host System Compilation Tools
 
-- ### Git Shell
+- #### Git Shell
 
-   Download and install Git Shell from <https://gitforwindows.org/>. Set shell environment variable **PATH**.
+   Download and install Git Shell from <https://gitforwindows.org/>. Set system environment variable **PATH**.
 
-- ### CMake
+- #### CMake
 
-   Download and install Cmake from <https://cmake.org/download/>. Set shell environment variable **PATH**.
+   Download and install Cmake from <https://cmake.org/download/>. Set system environment variable **PATH**.
 
-- ### Wget
+- #### Wget
 
-   Download and install Wget from <https://eternallybored.org/misc/wget/>. Set shell environment variable **PATH**.
+   Download and install Wget from <https://eternallybored.org/misc/wget/>. Set system environment variable **PATH**.
 
-- ### MinGW toolchains(mingw32-make, gcc, g++)
+- #### MinGW toolchains(mingw32-make, gcc, g++)
 
-   Download and install Mingw32-w64 from <https://udomain.dl.sourceforge.net/project/mingw-w64/Toolchains%20targetting%20Win64/Personal%20Builds/mingw-builds/6.4.0/threads-posix/seh/x86_64-6.4.0-release-posix-seh-rt_v5-rev0.7z>.
+   Download and install Mingw32-w64 from <https://udomain.dl.sourceforge.net/project/mingw-w64/Toolchains%20targetting%20Win64/Personal%20Builds/mingw-builds/6.4.0/threads-posix/seh/x86_64-6.4.0-release-posix-seh-rt_v5-rev0.7z>. Set system environment variable **PATH**.
 
-## MacOS System Compilation Tools
+### MacOS Host System Compilation Tools
 
-- ### Xcode
+- #### Xcode
 
    Download and install Xcode.
 
-## Android Cross-Compilation Tools(optional)
+### Android Target System Cross-Compilation Tools
 
-- ### Android NDK
+- #### Android NDK
 
     Refer to the [NDK installation example](https://askubuntu.com/questions/837847/how-to-install-android-ndk) to install [android-ndk-r20](https://developer.android.google.cn/ndk/downloads) and set shell environment variable **ANDROID_NDK_ROOT**.
 
@@ -61,19 +63,19 @@
     export ANDROID_NDK_ROOT=/data/opt/android-ndk-r20
     ```
 
-## Linux-AArch64 Cross-Compilation Tools(optional)
+### Linux-AArch64 Target System Cross-Compilation Tools
 
-- ### Cross compiler
+- #### Cross compiler
 
     Install [gcc-arm-8.3-2019.03-x86_64-aarch64-linux-gnu](https://developer.arm.com/-/media/Files/downloads/gnu-a/8.3-2019.03/binrel/gcc-arm-8.3-2019.03-x86_64-aarch64-linux-gnu.tar.xz?revision=2e88a73f-d233-4f96-b1f4-d8b36e9bb0b9&la=en&hash=167687FADA00B73D20EED2A67D0939A197504ACD) and set shell environment **PATH**.
 
-## iOS Cross-Compilation Tools(optional)
+### iOS Target System Cross-Compilation Tools
 
-- ### Cross compiler for Linux
+- #### Cross compiler for Linux
 
     [Here is an tutorial for building toolchains](IOS_USAGE.md).
 
-- ### Cross compiler for MacOS
+- #### Cross compiler for MacOS
   
     You can use MacOS's clang to build. Only need to set shell environment **IOS_SDK_ROOT** to iPhoneOS.sdk.
 
@@ -81,9 +83,9 @@
     export IOS_SDK_ROOT=/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk
     ```
 
-## Tools
+### Tools
 
-- ### Android adb
+- #### Android adb
 
   Refer to the [ADB installation example](https://unix.stackexchange.com/questions/378041/how-to-install-adb-on-ubuntu-from-download) to install [ADB](https://developer.android.com/studio/command-line/adb.html) tool helping you transfer the executables to android mobile phones.
 
@@ -91,12 +93,12 @@
   export PATH=/data/opt/platform-tools:$PATH
   ```
 
-- ### Android dx
+- #### Android dx
 
   If you want to directly run *jar* file on Android device, you can use [Android dx tool](https://developer.android.com/studio/releases/build-tools). Install Android *v28.0.3* build tools and set shell environment **PATH**.
 
 
-- ### JDK
+- #### JDK
 
   If you want to use Java API without Android NDK, you need to install JDK.
   
@@ -108,8 +110,11 @@
   ```
 
 # Download and Build Bolt
+---
 
-A simple shell script [install.sh](../install.sh) is provided to build and install the Bolt library, and you should modify it according to your scenario and environment. Use help message to find more useful information. 
+A simple shell script [install.sh](../install.sh) is provided to build and install the Bolt library, and you should modify it according to your scenario and environment.
+*--target* option is requireed to set target deployment platform.
+Use help message to find more useful information. [There are some commn used build command](../README.md#building-status).
 
 We will install Bolt to *install_[target]* directory. These subdirectories will be found in it:
 
@@ -119,39 +124,44 @@ We will install Bolt to *install_[target]* directory. These subdirectories will 
 - lib
     - libBoltModel.so: build for Java application
     - libbolt.so: build for C/C++ application
-    - libflow.so: flow sub project library, when using --flow option
-    - libinference.so: inference sub project library
+    - libflow.so: flow sub project library, when using *--flow* option
+    - libengine.so: inference sub project library
     - libtensor.so: tensor computing sub project library
     - libimage.so: image sub project library
     - libblas_enhance.so: blas_enhance sub project library
-    - libmodel_tools.so: model_tools sub project library
+    - libmodel_tools*.so: model_tools sub project library
+    - libmodel_spec.so: model_spec sub project library
     - libuni.so: uni sub project library
 - tools
-    - *X2bolt* for generally converting deep learning(caffe/onnx/tflite) model to bolt model
+    - *X2bolt* for generally converting deep learning(caffe/onnx/tflite/tensorflow) model to bolt model
+    - *post_training_quantization* for generating bolt int8 inference model
     - *tensorflow2caffe* for converting tensorflow model to caffe model
     - *pytorch2caffe* for converting pytorch model to caffe model
-    - *tensor_computing_library_search* for performance tuning of the operator library
 - tests
     - operator unit test
 - examples
-    - *benchmark* for measuring inference performance of any model (.bolt)
-    These examples will be build when using "--test" install option.
-    - *classification* for imagenet classification task
-    - *tinybert* for intention identification
+    - *benchmark* for measuring inference performance of bolt model
+    
+    These examples will be build when using *--example* option
+    - *classification* for imagenet classification task，*c_image_classifification* is a simplified C API version
+    - *u2net* for object detection
+    - *ultra_face* for face detection
+    - *tinybert* and *tinybert_onnx* for tinybert intention identification
     - *nmt* for machine translation
     - *asr_rnnt* for automatic speech recognition task (RNNT model)
     - *asr_convolution_transformer* for automatic speech recognition task (Convolution+Transformer model)
+    - *vad* for ASR pinyin to chinese
     - *tts* for text to speech
-- docs
-    - API/html: doxygen html document for C/Java/Flow API   
+    - *c_input_method* for input method
 
 # Common install problem
+---
 
-- ### wget error
+- #### wget error
 
   Use wget to download file. If you use proxy to access the network, you may be reminded to add *--no-check-certificate* flag when using wget.
   
-- ### Download is limited by network proxy or time consuming.
+  - #### Download is limited by network proxy or time consuming.
 
   You can download these files and save to a specified directory, Bolt will automatically use it.
   
@@ -162,12 +172,12 @@ We will install Bolt to *install_[target]* directory. These subdirectories will 
   3. save <https://github.com/google/flatbuffers/tree/master/include> to *third_party/sources/flatbuffers/include*.
   4. save <https://github.com/tensorflow/tensorflow/blob/master/tensorflow/lite/schema/schema_generated.h> *third_party/sources/tflite/include/tensorflow/lite/schema/schema_generated.h*.
   5. save <https://github.com/open-source-parsers/jsoncpp/archive/refs/tags/1.9.4.zip> to *third_party/sources/jsoncpp-1.9.4.zip*.
-  6. optional. save <https://github.com/KhronosGroup/OpenCL-Headers/tree/master/CL> to *third_party/sources/opencl/include/CL** when using ARM MALI GPU.
-  7. optional. use *ADB* to pull android phone's </vendor/lib64/libOpenCL.so> and </vendor/lib64/egl/libGLES_mali.so> to *third_party/sources/opencl/lib64* when using ARM MALI GPU.
-  8. optional. save <http://www.ijg.org/files/jpegsrc.v9c.tar.gz> to *third_party/sources/jpegsrc.v9c.tar.gz* when using example.
-  9. optional. save <https://codeload.github.com/anthonix/ffts/zip/master> to *third_party/sources/ffts-master.zip* when using Flow.
+  6. optional. save <https://github.com/KhronosGroup/OpenCL-Headers/tree/master/CL> to *third_party/sources/opencl/include/CL** when using ARM MALI/Qualcomm GPU.
+  7. optional. save <http://www.ijg.org/files/jpegsrc.v9c.tar.gz> to *third_party/sources/jpegsrc.v9c.tar.gz* when using example.
+  8. optional. save <https://codeload.github.com/anthonix/ffts/zip/master> to *third_party/sources/ffts-master.zip* when using Flow.
+  9. optional. save <https://github.com/opencv/opencv/archive/refs/tags/4.5.2.zip> to *third_party/sources/opencv-4.5.2.zip* when using face detection example.
 
-- ### MinGW version error
+- #### MinGW version error
 
   Third party library protobuf use some POSIX standard system library. If you don't use POSIX version mingw, you may encounter these errors.
   You can download this link to download POSIX version mingw. <https://udomain.dl.sourceforge.net/project/mingw-w64/Toolchains%20targetting%20Win64/Personal%20Builds/mingw-builds/6.4.0/threads-posix/seh/x86_64-6.4.0-release-posix-seh-rt_v5-rev0.7z>
@@ -185,19 +195,19 @@ We will install Bolt to *install_[target]* directory. These subdirectories will 
    static std::atomic<std::thread::id> runner;
   ```
 
-- ### Don't want to use third party library or model conversion tools.
+- #### Don't want to use third party library or model conversion tools.
 
   Third party library are used in model conversion tools. If you don't want to use it, you can close it by using *--converter=OFF* option. This will not build third party library.
 
-- ### Only want to use partial model conversion tools.
+- #### Only want to use partial model conversion tools.
 
-  You can implement it by changing install.sh. for example, there are some cmake options, such as *-DUSE_CAFFE=ON*.
+  You can implement it by modifying install.sh. for example, there are some cmake options, such as *-DUSE_CAFFE=ON* for Caffe.
 
-- ### Only want to use partial inference precision.
+- #### Only want to use partial inference precision.
 
-  You can implement it by changing install.sh. for example, there are some cmake options, such as *-DUSE_INT8=ON*.
+  You can implement it by change *--fp32*, *--fp16* and *--int8* option setting.
 
-- ### Can not build success with special compiler(such as MinGW)
+- #### Can not build success with special compiler(such as MinGW)
 
   You may encounter various compilation problem, this maybe caused by compiler or others. Here is an example.
 
@@ -206,3 +216,7 @@ We will install Bolt to *install_[target]* directory. These subdirectories will 
   ```
 
   You can enter build directory *build_[target]* and continuously run *make install*. This may complete all compilation step by step.
+
+- #### Parallel build error
+
+  Bolt use *-t* option to set use parallel build, and default value is 8. If you encounter unknown error, you can try to set *-t 1* to use serial build.

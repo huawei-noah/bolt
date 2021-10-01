@@ -32,6 +32,8 @@ EE convolution_general(TensorDesc inputDesc,
     const void *scale,
     TensorDesc biasDesc,
     const void *bias,
+    U32 tmpBytes,
+    void *tmp,
     TensorDesc outputDesc,
     void *output,
     ActivationParamSpec activationDesc);
@@ -59,6 +61,7 @@ EE depthwise_pointwise_convolution_infer_forward_tmp_bytes_general(TensorDesc in
 
 EE depthwise_pointwise_convolution_general(TensorDesc inputDesc,
     void *input,
+    void *eltwiseInput,
     TensorDesc dwFilterDesc,
     const void *dwFilter,
     TensorDesc pwFilterDesc,
@@ -165,4 +168,12 @@ EE prelu_general(TensorDesc inputDesc,
     PReLUParamSpec preluDesc,
     TensorDesc outputDesc,
     void *output);
+
+EE dequantize_general(TensorDesc qDesc,
+    void *qData,
+    const F32 *scale,
+    TensorDesc bDesc,
+    void *bData,
+    TensorDesc dDesc,
+    void *data);
 #endif

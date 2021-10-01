@@ -11,7 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string.h>
 #include "tensor_computing.h"
 #include "ut_util.h"
 
@@ -37,10 +36,6 @@ int bnnConvolutionTest(int argc, char *argv[], DataType dt)
     U32 oc = atoi(argv[13]);
     U32 oh = atoi(argv[14]);
     U32 ow = atoi(argv[15]);
-    ArchInfo archInfo;
-    archInfo.arch = UT_ARCH;
-    ArchInfo archInfo_org;
-    archInfo_org.arch = CPU_GENERAL;
 
     CHECK_REQUIREMENT(in == 1 && on == 1);
 
@@ -96,15 +91,15 @@ int bnnConvolutionTest(int argc, char *argv[], DataType dt)
     filterTensor.alloc();
     filterTensorRef.alloc();
     biasTensor.alloc();
-    memcpy(get_ptr_from_tensor(inputTensor, UT_ARCH), input, bytesOf(dt) * in * ic * ih * iw);
-    memcpy(get_ptr_from_tensor(inputTensorRef, UT_ARCH), input, bytesOf(dt) * in * ic * ih * iw);
-    memcpy(get_ptr_from_tensor(filterTensor, UT_ARCH), filter, tensorNumBytes(filterDesc));
-    memcpy(get_ptr_from_tensor(filterTensorRef, UT_ARCH), filter, tensorNumBytes(filterDesc));
-    memcpy(get_ptr_from_tensor(biasTensor, UT_ARCH), bias, tensorNumBytes(biasDesc));
+    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, bytesOf(dt) * in * ic * ih * iw);
+    memcpy(get_ptr_from_tensor(inputTensorRef, CPU_GENERAL), input, bytesOf(dt) * in * ic * ih * iw);
+    memcpy(get_ptr_from_tensor(filterTensor, CPU_GENERAL), filter, tensorNumBytes(filterDesc));
+    memcpy(get_ptr_from_tensor(filterTensorRef, CPU_GENERAL), filter, tensorNumBytes(filterDesc));
+    memcpy(get_ptr_from_tensor(biasTensor, CPU_GENERAL), bias, tensorNumBytes(biasDesc));
 
     // setup output, bias
-    CHECK_STATUS(
-        convolution_infer_output_size(&inputTensor, filterTensor, p, &outputTensor, dt, &archInfo));
+    CHECK_STATUS(convolution_infer_output_size(
+        &inputTensor, filterTensor, p, &outputTensor, dt, &UT_CPU_ARCHINFO));
 
     outputTensor.alloc();
     outputTensorRef.resize(outputTensor.get_desc());
@@ -113,46 +108,48 @@ int bnnConvolutionTest(int argc, char *argv[], DataType dt)
     // setup alg
     ConvolutionPolicy policy = CONVOLUTION_FASTEST;
     ConvolutionForwardAlgorithm alg = CONVOLUTION_ALGORITHM_NULL;
-    CHECK_STATUS(convolution_infer_forward_algorithm(
-        inputTensor, filterTensor, outputTensor, p, policy, &alg, fdt, activationDesc, &archInfo));
+    CHECK_STATUS(convolution_infer_forward_algorithm(inputTensor, filterTensor, outputTensor, p,
+        policy, &alg, fdt, activationDesc, &UT_CPU_ARCHINFO));
 
     // setup tmp
     U32 tmpBytes;
     CHECK_STATUS(convolution_infer_forward_tmp_bytes(
-        inputTensor, filterTensor, outputTensor, p, alg, &tmpBytes, &archInfo));
+        inputTensor, filterTensor, outputTensor, p, alg, &tmpBytes, &UT_CPU_ARCHINFO));
     Tensor tmpTensor;
     tmpTensor.resize(tensor1d(DT_U8, tmpBytes));
     tmpTensor.alloc();
     // setup filter trans
     U32 ftmBytes;
-    CHECK_STATUS(convolution_transform_filter_bytes(filterTensor, p, alg, &ftmBytes, &archInfo));
+    CHECK_STATUS(
+        convolution_transform_filter_bytes(filterTensor, p, alg, &ftmBytes, &UT_CPU_ARCHINFO));
     // trans filter
     Tensor ftmTensor;
     ftmTensor.resize(tensor1d(DT_U8, ftmBytes));
     ftmTensor.alloc();
 
     CHECK_STATUS(
-        convolution_transform_filter(filterTensor, p, alg, tmpTensor, &ftmTensor, &archInfo));
+        convolution_transform_filter(filterTensor, p, alg, tmpTensor, &ftmTensor, &UT_CPU_ARCHINFO));
 
     std::vector<Tensor> inputTensors(1, inputTensor);
     std::vector<Tensor> inputTensorsRef(1, inputTensorRef);
+    std::vector<Tensor> tmpTensors(1, tmpTensor);
     if (UT_CHECK) {
-        CHECK_STATUS(convolution(inputTensors, ftmTensor, p, alg, nullptr, biasTensor, tmpTensor,
-            outputTensor, activationDesc, &archInfo));
+        CHECK_STATUS(convolution(inputTensors, ftmTensor, p, alg, nullptr, biasTensor, tmpTensors,
+            outputTensor, activationDesc, &UT_CPU_ARCHINFO));
         // naive implement
         CHECK_STATUS(convolution(inputTensorsRef, filterTensorRef, p, alg, nullptr, biasTensor,
-            tmpTensor, outputTensorRef, activationDesc, &archInfo_org));
+            tmpTensors, outputTensorRef, activationDesc, &UT_SERIAL_ARCHINFO));
         // check
-        ut_check_v(get_ptr_from_tensor(outputTensor, UT_ARCH),
-            get_ptr_from_tensor(outputTensorRef, UT_ARCH), outputTensor.length(), dt, 1, __FILE__,
-            __LINE__);
+        ut_check_v(get_ptr_from_tensor(outputTensor, CPU_GENERAL),
+            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), outputTensor.length(), dt, 1,
+            __FILE__, __LINE__);
     }
 
     // benchmark
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        CHECK_STATUS(convolution(inputTensors, ftmTensor, p, alg, nullptr, biasTensor, tmpTensor,
-            outputTensor, activationDesc, &archInfo));
+        CHECK_STATUS(convolution(inputTensors, ftmTensor, p, alg, nullptr, biasTensor, tmpTensors,
+            outputTensor, activationDesc, &UT_CPU_ARCHINFO));
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;

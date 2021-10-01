@@ -50,8 +50,8 @@ class SwapPadTransposeOptimizer : public OPOptimizer {
 
                                 std::string padName = spec->ops[i].name;
                                 std::string transName = spec->ops[next].name;
-                                str_copy(spec->ops[i].name, transName.c_str(), NAME_LEN);
-                                str_copy(spec->ops[next].name, padName.c_str(), NAME_LEN);
+                                strcpy(spec->ops[i].name, transName.c_str());
+                                strcpy(spec->ops[next].name, padName.c_str());
                                 spec->ops[i].type = OT_Transpose;
                                 spec->ops[next].type = OT_Pad;
                                 spec->ops[i].ps.transpose_spec = transPs;

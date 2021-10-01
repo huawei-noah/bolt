@@ -18,35 +18,6 @@
 #include "gpu/mali/tensor_computing_mali.h"
 #include "gpu/mali/fp16/squeeze_mali_fp16.h"
 
-EE squeeze_infer_output_size_mali(TensorDesc inputDesc,
-    TensorDesc outputDesc,
-    GCLMemDesc_t gclmemInputDesc,
-    GCLMemDesc_t gclmemOutputDesc)
-{
-    /*tensorDesc record cpu org data format info*/
-    /*gclmemDesc record gpu trans data format info*/
-    if (gclmemInputDesc == nullptr || gclmemOutputDesc == nullptr) {
-        CHECK_STATUS(NULL_POINTER);
-    }
-
-    DataType idt, odt;
-    U32 iw, ih, ic, in;
-    U32 ow, oh, oc, on;
-    tensorSelectGet(inputDesc, &idt, NULL, &in, &ic, &ih, &iw);
-    tensorSelectGet(outputDesc, &odt, NULL, &on, &oc, &oh, &ow);
-
-    if (gclmemInputDesc->memFormat == DF_NCHW || gclmemInputDesc->byteSize == 0) {
-        CHECK_STATUS(infer_gclmem_desc_nchw(
-            iw, ih, ic, 0, 0, ow, oh, oc, idt, idt, gclmemInputDesc, gclmemOutputDesc));
-    } else {
-        CHECK_STATUS(
-            infer_gclmem_desc_ncwhc4(iw, ih, ic, 0, 0, 0, 0, 0, idt, idt, gclmemInputDesc, nullptr));
-        CHECK_STATUS(
-            infer_gclmem_desc_nchw(0, 0, 0, 0, 0, ow, oh, oc, idt, idt, nullptr, gclmemOutputDesc));
-    }
-    return SUCCESS;
-}
-
 inline EE squeeze_checkpara_mali(
     GCLHandle_t handle, TensorDesc inputDesc, GCLMem_t input, TensorDesc outputDesc, GCLMem_t output)
 {

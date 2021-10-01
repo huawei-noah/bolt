@@ -17,74 +17,6 @@
 #include "error.h"
 #include "cpu/cpu_functions_template.h"
 
-template <typename T>
-inline EE from_nchwc8_to_nchw(TensorDesc *desc, T *data)
-{
-    if (desc == nullptr || data == nullptr) {
-        CHECK_STATUS(NULL_POINTER);
-    }
-
-    DataType idt;
-    DataFormat idf;
-    U32 in, ic, ih, iw;
-    CHECK_STATUS(tensor4dGet(*desc, &idt, &idf, &in, &ic, &ih, &iw));
-    if (idf != DF_NCHWC8) {
-        CHECK_STATUS(NOT_MATCH);
-    }
-
-    *desc = tensor4df(idt, DF_NCHW, in, ic, ih, iw);
-
-    T *tmp = (T *)malloc(tensorNumBytes(*desc));
-    ic /= 8;
-    for (U32 n = 0; n < in; n++) {
-        for (U32 c = 0; c < ic; c++) {
-            for (U32 hw = 0; hw < ih * iw; hw++) {
-                for (U32 c8 = 0; c8 < 8; c8++) {
-                    tmp[n * ic * 8 * ih * iw + (c * 8 + c8) * ih * iw + hw] =
-                        data[n * ic * ih * iw * 8 + c * ih * iw * 8 + hw * 8 + c8];
-                }
-            }
-        }
-    }
-    memcpy(data, tmp, tensorNumBytes(*desc));
-    free(tmp);
-    return SUCCESS;
-}
-
-template <typename T>
-inline EE from_nchw_to_nchwc8(TensorDesc *desc, T *data)
-{
-    if (desc == nullptr || data == nullptr) {
-        CHECK_STATUS(NULL_POINTER);
-    }
-
-    DataType idt;
-    DataFormat idf;
-    U32 in, ic, ih, iw;
-    CHECK_STATUS(tensor4dGet(*desc, &idt, &idf, &in, &ic, &ih, &iw));
-    if (idf != DF_NCHW) {
-        CHECK_STATUS(NOT_MATCH);
-    }
-
-    *desc = tensor4df(idt, DF_NCHWC8, in, ic, ih, iw);
-
-    T *tmp = (T *)malloc(tensorNumBytes(*desc));
-    ic /= 8;
-    for (U32 n = 0; n < in; n++) {
-        for (U32 c = 0; c < ic; c++) {
-            for (U32 hw = 0; hw < ih * iw; hw++) {
-                for (U32 c8 = 0; c8 < 8; c8++) {
-                    tmp[n * ic * ih * iw * 8 + c * ih * iw * 8 + hw * 8 + c8] =
-                        data[n * ic * 8 * ih * iw + (c * 8 + c8) * ih * iw + hw];
-                }
-            }
-        }
-    }
-    memcpy(data, tmp, tensorNumBytes(*desc));
-    free(tmp);
-    return SUCCESS;
-}
-
 inline F32 array_mean_general(DataType dt, const void *data, I32 len)
 {
     F32 result = 0;
@@ -192,6 +124,28 @@ inline void array_add_general(
     }
 }
 
+inline void array_mul_and_add_general(
+    DataType dt, const void *inputA, const void *inputB, const void *inputC, void *output, I32 len)
+{
+    switch (dt) {
+#ifdef _USE_FP16
+        case DT_F16:
+            array_mul_and_add_template<F16>(
+                (const F16 *)inputA, (const F16 *)inputB, (const F16 *)inputC, (F16 *)output, len);
+            break;
+#endif
+#ifdef _USE_FP32
+        case DT_F32:
+            array_mul_and_add_template<F32>(
+                (const F32 *)inputA, (const F32 *)inputB, (const F32 *)inputC, (F32 *)output, len);
+            break;
+#endif
+        default:
+            CHECK_STATUS(NOT_SUPPORTED);
+            break;
+    }
+}
+
 inline void array_scale_general(
     DataType dt, const void *input, void *output, I32 len, F32 alpha, F32 beta)
 {
@@ -239,13 +193,6 @@ inline F32 array_sum_general(DataType dt, const void *data, I32 len)
     return result;
 }
 
-inline void array_square_and_add_general(
-    DataType dt, const void *inputA, const void *inputB, void *output, I32 len)
-{
-    array_mul_general(dt, inputB, inputB, output, len);
-    array_add_general(dt, inputA, output, output, len);
-}
-
 inline EE array_activation_general(
     DataType dt, void *input, U32 len, ActivationParamSpec activationDesc, void *output)
 {
@@ -271,6 +218,22 @@ inline EE array_activation_general(
             break;
         }
 #endif
+        case DT_I8: {
+            INT8 *inPtr = (INT8 *)input;
+            INT8 *outPtr = (INT8 *)output;
+            for (U32 i = 0; i < len; i++) {
+                activation_template<INT8>(activationDesc, inPtr[i], &outPtr[i]);
+            }
+            break;
+        }
+        case DT_U8: {
+            U8 *inPtr = (U8 *)input;
+            U8 *outPtr = (U8 *)output;
+            for (U32 i = 0; i < len; i++) {
+                activation_template<U8>(activationDesc, inPtr[i], &outPtr[i]);
+            }
+            break;
+        }
         default:
             ret = NOT_SUPPORTED;
             break;
@@ -298,24 +261,49 @@ inline void array_max_general(
     }
 }
 
-inline F32 array_max_value_general(DataType dt, const void *data, I32 len)
+inline EE array_minmax_value_general(DataType dt, const void *data, I32 len, int mode, F32 *result)
 {
-    F32 result = 0;
+    EE ret = SUCCESS;
     switch (dt) {
 #ifdef _USE_FP16
         case DT_F16:
-            result = array_max_value_template<F16>((const F16 *)data, len);
+            ret = array_minmax_value_template<F16>((const F16 *)data, len, mode, result);
             break;
 #endif
 #ifdef _USE_FP32
         case DT_F32:
-            result = array_max_value_template<F32>((const F32 *)data, len);
+            ret = array_minmax_value_template<F32>((const F32 *)data, len, mode, result);
+            break;
+#endif
+        case DT_I32:
+            ret = array_minmax_value_template<I32>((const I32 *)data, len, mode, result);
+            break;
+        default:
+            ret = NOT_SUPPORTED;
+            break;
+    }
+    return ret;
+}
+
+inline void array_norm_scalar_scale_general(
+    DataType dt, void *input, void *output, I32 len, F32 mean, F32 var, void *alpha, void *beta)
+{
+    switch (dt) {
+#ifdef _USE_FP16
+        case DT_F16:
+            array_norm_scalar_scale_template<F16>(
+                (F16 *)input, (F16 *)output, len, mean, var, (F16 *)alpha, (F16 *)beta);
+            break;
+#endif
+#ifdef _USE_FP32
+        case DT_F32:
+            array_norm_scalar_scale_template<F32>(
+                (F32 *)input, (F32 *)output, len, mean, var, (F32 *)alpha, (F32 *)beta);
             break;
 #endif
         default:
             CHECK_STATUS(NOT_SUPPORTED);
             break;
     }
-    return result;
 }
 #endif

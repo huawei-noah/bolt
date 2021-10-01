@@ -12,6 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "gpu/mali/fp16/channel_resize_mali_fp16.h"
+#include "gpu/mali/cl/kernel_option/channel_resize_opt.h"
 
 inline EE channel_resize_checkpara_mali_fp16(TensorDesc inputDesc, TensorDesc outputDesc)
 {
@@ -31,9 +32,9 @@ inline EE channel_resize_core_mali_fp16(GCLHandle_t handle,
     U32 iw, ih, ic, in, oc;
     tensorSelectGet(inputDesc, NULL, NULL, &in, &ic, &ih, &iw);
     tensorSelectGet(outputDesc, NULL, NULL, NULL, &oc, NULL, NULL);
-    U32 iw_str, ih_str, ic_str, iw_off, ih_off;
-    U32 ow_str, oh_str, ow_off, oh_off;
-    get_gclmem_dim(input->desc, &iw_str, &ih_str, &ic_str, &iw_off, &ih_off);
+    U32 iw_str, ih_str, iw_off, ih_off, i_off;
+    U32 ow_str, oh_str, ow_off, oh_off, o_off;
+    get_gclmem_dim(input->desc, &iw_str, &ih_str, NULL, &iw_off, &ih_off);
     get_gclmem_dim(output->desc, &ow_str, &oh_str, NULL, &ow_off, &oh_off);
     cl_mem inbuf, outbuf;
     inbuf = input->mem;
@@ -43,32 +44,23 @@ inline EE channel_resize_core_mali_fp16(GCLHandle_t handle,
     U32 dim = 3;
     Kernel kernel;
     char kernelName[128];
-    U32 gs[3] = {ih, iw, (U32)(p.channel_after + 3) / 4};
+    KernelOpt kernelOpt;
+    bool useNchw = (imf == DF_NCHW) ? true : false;
+    CHECK_STATUS(set_channel_resize_opt_mali(useNchw, input->desc.dt, input->desc.memType,
+        output->desc.memType, kernelName, &kernelOpt));
+
+    U32 gs[3] = {iw, ih, (U32)(p.channel_after + 3) / 4 * in};
     U32 ls[3] = {0, 0, 0};
-    sprintf(kernelName, "channel_resize");
-    if (imf == DF_NCHW && omf == DF_NCHW) {
+    i_off = ih_off * iw_str + iw_off;
+    o_off = oh_off * ow_str + ow_off;
+    if (imf == DF_NCHW) {
         gs[0] = (iw + 3) / 4;
         gs[1] = ih;
-        gs[2] = p.channel_after;
-        sprintf(kernelName, "channel_resize_nchw");
+        gs[2] = p.channel_after * in;
     }
-
-    if (imf == DF_NCHW && omf == DF_NCWHC4) {
-        gs[0] = (iw + 3) / 4;
-        gs[1] = ih;
-        gs[2] = (p.channel_after + 3) / 4;
-        sprintf(kernelName, "channel_resize_nchw_ncwhc4");
-    }
-
-    if (imf == DF_NCWHC4 && omf == DF_NCHW) {
-        gs[0] = ih;
-        gs[1] = (iw + 3) / 4;
-        gs[2] = (p.channel_after + 3) / 4;
-        sprintf(kernelName, "channel_resize_ncwhc4_nchw");
-    }
-    CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel));
-    CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, iw_str, ic_str, ih_off, iw_off, oh_str, ow_str,
-        oh_off, ow_off, p.channel_before, p.channel_after, iw, gs[0], gs[1], inbuf, outbuf));
+    CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
+    CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, ow_str, oh_str, i_off, o_off,
+        p.channel_before, p.channel_after, iw, gs[0], gs[1], inbuf, outbuf));
     gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
 #ifdef _DEBUG
     CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
@@ -84,6 +76,7 @@ EE channel_resize_mali_fp16(GCLHandle_t handle,
     GCLMem_t output)
 {
     CHECK_STATUS(channel_resize_checkpara_mali_fp16(inputDesc, outputDesc));
+    CHECK_STATUS(fill_output_zero(handle, output, outputDesc));
     CHECK_STATUS(channel_resize_core_mali_fp16(handle, inputDesc, input, p, outputDesc, output));
     return SUCCESS;
 }

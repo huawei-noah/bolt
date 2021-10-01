@@ -34,9 +34,9 @@ static EE reduction_kernel(TensorDesc inputDesc,
     ArrayMeanFunction mean_func = get_array_mean_function(arch);
     ArrayVarFunction var_func = get_array_var_function(arch);
     ArrayAddFunction add_func = get_array_add_function(arch);
-    ArraySquareAndAddFunction square_and_add_func = get_array_square_and_add_function(arch);
+    ArrayMulAndAddFunction mul_and_add_func = get_array_mul_and_add_function(arch);
     ArrayScaleFunction scale_func = get_array_scale_function(arch);
-    ArrayMaxValueFunction max_value_func = get_array_max_value_function(arch);
+    ArrayMinMaxValueFunction minmax_value_func = get_array_minmax_value_function(arch);
     ArrayMaxFunction max_func = get_array_max_function(arch);
 
     if (axis < 0) {
@@ -69,17 +69,26 @@ static EE reduction_kernel(TensorDesc inputDesc,
                 case REDUCTION_MEAN:
                     output[i] = mean_func(inputDesc.dt, array, len);
                     break;
-                case REDUCTION_STD_DEVIATION:
+                case REDUCTION_STD_DEVIATION: {
                     tmpValue = mean_func(inputDesc.dt, array, len);
                     tmpValue = var_func(inputDesc.dt, array, len, tmpValue);
                     output[i] = sqrt(tmpValue);
                     break;
+                }
                 case REDUCTION_SCALAR_PRODUCT:
                     output[i] = var_func(inputDesc.dt, array, len, 0);
                     break;
-                case REDUCTION_MAX:
-                    output[i] = max_value_func(inputDesc.dt, array, len);
+                case REDUCTION_MAX: {
+                    F32 maxValue = 0;
+                    CHECK_STATUS(minmax_value_func(inputDesc.dt, array, len, 2, &maxValue));
+                    output[i] = maxValue;
                     break;
+                }
+                case REDUCTION_L2: {
+                    tmpValue = var_func(inputDesc.dt, array, len, 0) * len;
+                    output[i] = sqrt(tmpValue);
+                    break;
+                }
                 default:
                     return NOT_SUPPORTED;
             }
@@ -89,29 +98,26 @@ static EE reduction_kernel(TensorDesc inputDesc,
                 U32 axisIndex = j / len;
                 U32 outputIndex = (i * axisDim + axisIndex) * loopInner;
                 auto ptr2 = output + outputIndex;
-                U32 count = 0;
                 for (U32 k = 0; k < len; k++) {
                     if (mask == nullptr || (mask != nullptr && mask[j + k] == 1)) {
                         auto ptr1 = &input[(i * len + k) * loopInner];
-                        if (count == 0) {
+                        if ((k == 0) && (reductionMode != REDUCTION_SCALAR_PRODUCT)) {
                             memcpy(ptr2, ptr1, loopInner * bytesOf(inputDesc.dt));
-                            count++;
                             continue;
                         }
                         if (reductionMode == REDUCTION_SUM || reductionMode == REDUCTION_MEAN) {
                             add_func(inputDesc.dt, ptr2, ptr1, ptr2, loopInner);
                         } else if (reductionMode == REDUCTION_SCALAR_PRODUCT) {
-                            square_and_add_func(inputDesc.dt, ptr2, ptr1, ptr2, loopInner);
+                            mul_and_add_func(inputDesc.dt, ptr1, ptr1, ptr2, ptr2, loopInner);
                         } else if (reductionMode == REDUCTION_MAX) {
                             max_func(inputDesc.dt, ptr2, ptr1, ptr2, loopInner);
                         } else {
                             return NOT_SUPPORTED;
                         }
-                        count++;
                     }
                 }
                 if (reductionMode == REDUCTION_MEAN) {
-                    scale_func(inputDesc.dt, ptr2, ptr2, loopInner, 1.0 / count, 0);
+                    scale_func(inputDesc.dt, ptr2, ptr2, loopInner, 1.0 / len, 0);
                 }
             }
         }
@@ -134,10 +140,12 @@ EE reduction_cpu(TensorDesc inputDesc,
     ArrayScaleFunction scale_func = get_array_scale_function(arch);
     int start = 0;
     TensorDesc tmpDesc = inputDesc;
-    if (inputDesc.df == DF_NCHWC8) {
+    int channel = tmpDesc.nDims - 1;
+    if (inputDesc.df == DF_NCHWC8 || inputDesc.df == DF_NCHWC16) {
+        U32 cx = (inputDesc.df == DF_NCHWC8) ? 8 : 16;
         for (int i = 0; i < p.axes_num; i++) {
             // channel dimension
-            if (p.axes[i] == 1 || p.axes[i] == -3) {
+            if (p.axes[i] == 1 || p.axes[i] == -channel) {
                 start = -1;
                 break;
             }
@@ -145,9 +153,8 @@ EE reduction_cpu(TensorDesc inputDesc,
         for (int i = (int)inputDesc.nDims - 1; i >= 0; i--) {
             tmpDesc.dims[i + 1] = tmpDesc.dims[i];
         }
-        int channel = tmpDesc.nDims - 1;
-        tmpDesc.dims[channel] /= 8;
-        tmpDesc.dims[0] = 8;
+        tmpDesc.dims[channel] /= cx;
+        tmpDesc.dims[0] = cx;
         tmpDesc.nDims += 1;
     }
     const void *tmp1 = input;
@@ -160,7 +167,7 @@ EE reduction_cpu(TensorDesc inputDesc,
         }
         int axis;
         if (i == -1) {
-            axis = 4;
+            axis = tmpDesc.nDims - 1;
         } else {
             axis = p.axes[i];
         }

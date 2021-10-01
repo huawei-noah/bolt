@@ -14,13 +14,10 @@
 #ifndef _H_CONVOLUTION_TRANSFORM_BNN
 #define _H_CONVOLUTION_TRANSFORM_BNN
 
-#ifdef _USE_FP16
 #include <bitset>
 #include <string.h>
 
 #include "tensor_desc.h"
-#include "error.h"
-#include "tensor_computing.h"
 
 inline void bitwise_copy(BIN8 srcVal, U32 srcBit, BIN8 *dest, U32 destBit)
 {
@@ -87,5 +84,4 @@ inline EE convolution_transform_filter_bnn(
     *ftmDesc = tensor4df(fdt, DF_NCHWN16C8, fn, fc, fh, fw);
     return SUCCESS;
 }
-#endif
 #endif

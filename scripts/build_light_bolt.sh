@@ -16,8 +16,8 @@ STATIC_LIBRARY_SUFFIX=${10}
 build_dir=${11}
 
 CXXFLAGS=`echo ${CXXFLAGS} | sed 's/-fPIC//g'`
-CXXFLAGS=`echo ${CXXFLAGS} | sed 's/-static-libstdc++//g'`
-CXXFLAGS=`echo ${CXXFLAGS} | sed 's/-static//g'`
+NEWCXXFLAGS=`echo ${CXXFLAGS} | sed 's/-static-libstdc++//g'`
+NEWCXXFLAGS=`echo ${NEWCXXFLAGS} | sed 's/-static//g'`
 
 apple_toolchain=false
 if [[ ${CXX} =~ darwin || ${SYSTEM} =~ Darwin ]]; then
@@ -64,7 +64,7 @@ searchFiles
 sharedLibraryObjs=${objs}
 
 gcl_kernel_source_library="common/gcl/tools/kernel_source_compile/${SHARED_LIBRARY_PREFIX}kernelsource${SHARED_LIBRARY_SUFFIX}"
-if [[ -f "${gcl_kernel_source_library}" && ${CXXFLAGS} =~ -D_USE_MALI ]]; then
+if [[ -f "${gcl_kernel_source_library}" && ${CXXFLAGS} =~ -D_USE_GPU ]]; then
     gclLibraryObjs="common/gcl/tools/kernel_source_compile/CMakeFiles/kernelsource.dir/src/cl/gcl_kernel_source.cpp${OBJ_FILE_SUFFIX} \
         common/gcl/tools/kernel_source_compile/CMakeFiles/kernelsource.dir/src/option/gcl_kernel_option.cpp${OBJ_FILE_SUFFIX}"
     jniLibraryObjs="${jniLibraryObjs} ${gclLibraryObjs}"
@@ -96,7 +96,7 @@ fi
 if [[ ${CXXFLAGS} =~ -D_USE_OPENMP ]]; then
     LDFLAGS="${LDFLAGS} -fopenmp"
 fi
-if [[ -f "${gcl_kernel_source_library}" && ${CXXFLAGS} =~ -D_USE_MALI ]]; then
+if [[ -f "${gcl_kernel_source_library}" && ${CXXFLAGS} =~ -D_USE_GPU ]]; then
     ${STRIP} ${gcl_kernel_source_library} || exit 1
     if [[ "${OpenCL_ROOT}" == "" ]]; then
         echo "[ERROR] please source third_party/<target>.sh before make."
@@ -105,7 +105,7 @@ if [[ -f "${gcl_kernel_source_library}" && ${CXXFLAGS} =~ -D_USE_MALI ]]; then
     LDFLAGS="${LDFLAGS} -L${OpenCL_ROOT}/lib -lOpenCL"
 fi
 
-if [[ ${apple_toolchain} ]]; then
+if [[ ${apple_toolchain} == true ]]; then
     BoltModel_write_so_name=""
     bolt_write_so_name=""
 else
@@ -116,12 +116,20 @@ if [[ ${SYSTEM} =~ Windows ]]; then
     BoltModel_write_so_name="${BoltModel_write_so_name} -Wl,--out-implib=BoltModel.lib"
     bolt_write_so_name="${bolt_write_so_name} -Wl,--out-implib=bolt.lib"
 fi
-${CXX} ${CXXFLAGS} -shared -o ${BoltModel_shared_library} ${jniLibraryObjs} ${LDFLAGS} ${BoltModel_write_so_name} || exit 1
-${CXX} ${CXXFLAGS} -shared -o ${bolt_shared_library} ${sharedLibraryObjs} ${LDFLAGS} ${bolt_write_so_name} || exit 1
+${CXX} ${CXXFLAGS} -shared -o ${BoltModel_shared_library} ${jniLibraryObjs} ${LDFLAGS} ${BoltModel_write_so_name} &> log.txt
+if [[ $? -ne 0 ]]; then
+    ${CXX} ${NEWCXXFLAGS} -shared -o ${BoltModel_shared_library} ${jniLibraryObjs} ${LDFLAGS} ${BoltModel_write_so_name} || exit 1
+fi
+${CXX} ${CXXFLAGS} -shared -o ${bolt_shared_library} ${sharedLibraryObjs} ${LDFLAGS} ${bolt_write_so_name} &> log.txt
+if [[ $? -ne 0 ]]; then
+    ${CXX} ${NEWCXXFLAGS} -shared -o ${bolt_shared_library} ${sharedLibraryObjs} ${LDFLAGS} ${bolt_write_so_name} || exit 1
+fi
+rm log.txt
 ${AR} -rc ${bolt_static_library} ${staticLibraryObjs} || exit 1
 
 if [[ ! ${CXXFLAGS} =~ -D_DEBUG && ${apple_toolchain} == "false" ]]; then
     ${STRIP} ${BoltModel_shared_library} || exit 1
     ${STRIP} ${bolt_shared_library} || exit 1
+    #${STRIP} -g -S -d --strip-debug --strip-unneeded ${bolt_static_library} || exit 1
 fi
 cd ${original_dir}

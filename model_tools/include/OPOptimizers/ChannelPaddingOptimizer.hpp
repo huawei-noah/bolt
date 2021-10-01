@@ -74,11 +74,6 @@ class ChannelPaddingOptimizer : public OPOptimizer {
 
     bool optimize(ModelSpec *spec) override
     {
-        return optimize1(spec);
-    }
-
-    bool optimize1(ModelSpec *spec)
-    {
         bool hasOptimized = false;
         int channelAlign = 8;
         std::string channelResizeNamePrefix = "ChannelResize_";
@@ -129,6 +124,7 @@ class ChannelPaddingOptimizer : public OPOptimizer {
                 insertChannelResizeOperator(spec, i + 2, channelResizeName2.c_str(),
                     currentOperator.output_tensors_name[0], nullptr, 1, numKernelsNew, numKernels);
                 i += 2;
+                hasOptimized = true;
                 continue;
             }
             if ((spec->ops[i].type == OT_Conv &&
@@ -247,35 +243,7 @@ class ChannelPaddingOptimizer : public OPOptimizer {
                         groups, numKernelsNew, numKernels);
                     i += 1;
                 }
-                continue;
-            }
-            if (spec->ops[i].type == OT_PRelu) {
-                OperatorSpec currentOperator = spec->ops[i];
-                int weightIndex = searchWeightIndex(spec, currentOperator.name);
-                CHECK_REQUIREMENT(weightIndex >= 0);
-                U32 weightSize = spec->ws[weightIndex].bytes_of_weight;
-                int inputChannels = weightSize / bytesOf(spec->ws[weightIndex].mdt);
-                int inputChannelsNew =
-                    (inputChannels + channelAlign - 1) / channelAlign * channelAlign;
-                if (inputChannels > 1 && inputChannels != inputChannelsNew) {
-                    U32 weightSizeNew = weightSize / inputChannels * inputChannelsNew;
-                    U8 *weight = spec->ws[weightIndex].weight;
-                    spec->ws[weightIndex].bytes_of_weight = weightSizeNew;
-                    spec->ws[weightIndex].weight =
-                        (U8 *)mt_new_storage(spec->ws[weightIndex].bytes_of_weight);
-                    memset(spec->ws[weightIndex].weight, 0, weightSizeNew);
-                    memcpy(spec->ws[weightIndex].weight, weight, weightSize);
-                    delete weight;
-                    std::string channelResizeName1 = channelResizeNamePrefix + std::to_string(i);
-                    std::string channelResizeName2 = channelResizeNamePrefix + std::to_string(i + 2);
-                    insertChannelResizeOperator(spec, i, channelResizeName1.c_str(),
-                        currentOperator.input_tensors_name[0], channelResizeName2.c_str(), 1,
-                        inputChannels, inputChannelsNew);
-                    insertChannelResizeOperator(spec, i + 2, channelResizeName2.c_str(),
-                        currentOperator.output_tensors_name[0], nullptr, 1, inputChannelsNew,
-                        inputChannels);
-                    i += 2;
-                }
+                hasOptimized = true;
                 continue;
             }
         }
@@ -303,111 +271,6 @@ class ChannelPaddingOptimizer : public OPOptimizer {
                         }
                     }
                 }
-            }
-        }
-        return hasOptimized;
-    }
-
-    bool optimize2(ModelSpec *spec)
-    {
-        bool hasOptimized = false;
-        for (int i = 0; i < spec->num_operator_specs; i++) {
-            bool padding = false;  // Whether to check input channels and actually pad
-            bool optimizeOC = false;
-            U32 numKernels = 0;
-            U32 kernelSizeH = 0;
-            U32 kernelSizeW = 0;
-            if (spec->ops[i].type == OT_Conv || spec->ops[i].type == OT_Deconvolution) {
-                if (spec->ops[i].ps.conv_spec.convolution_type != Convolution_Depthwise &&
-                    spec->ops[i].ps.conv_spec.convolution_type != Convolution_Pointwise &&
-                    spec->ops[i].ps.conv_spec.convolution_type != Convolution_Deconvolution) {
-                    continue;
-                }
-
-                numKernels = spec->ops[i].ps.conv_spec.num_outputs;
-                kernelSizeH = spec->ops[i].ps.conv_spec.kernel_h;
-                kernelSizeW = spec->ops[i].ps.conv_spec.kernel_w;
-                if (numKernels % 8 != 0) {  // Check output channels
-                    optimizeOC = true;
-                }
-                padding = hasOptimized ||
-                    optimizeOC;  // If padding has been done before, we need to check the input channels as well
-            } else if (spec->ops[i].type == OT_FC) {
-                numKernels = spec->ops[i].ps.fc_spec.num_outputs;
-                kernelSizeH = 1;
-                kernelSizeW = 1;
-                padding = hasOptimized;
-            } else {
-                continue;
-            }
-
-            if (padding) {
-                std::string curIn = spec->ops[i].input_tensors_name[0];
-                auto prevIndexes = searchOperatorIndexByOutput(spec, curIn, 0, i);
-                if (prevIndexes.size() == 0) {  // input is model input
-                    if (!optimizeOC) {
-                        continue;
-                    }
-                }
-                int weightIndex = searchWeightIndex(spec, spec->ops[i].name);
-                CHECK_REQUIREMENT(weightIndex >= 0);
-                CHECK_REQUIREMENT(
-                    spec->ws[weightIndex].mdt == DT_F32);  // BNN not supported for the time being
-                U32 weightSize =
-                    spec->ws[weightIndex].bytes_of_weight / bytesOf(spec->ws[weightIndex].mdt);
-                U32 inputChannels = weightSize / (numKernels * kernelSizeH * kernelSizeW);
-                if (inputChannels % 8 == 0 && false == optimizeOC) {
-                    continue;
-                }
-
-                U32 numKernelsNew = optimizeOC ? ((numKernels / 8 + 1) * 8) : numKernels;
-                U32 inputChannelsNew = (inputChannels % 8) ? ((inputChannels / 8 + 1) * 8)
-                                                           : inputChannels;
-
-                if (spec->ops[i].ps.conv_spec.convolution_type == Convolution_Depthwise) {
-                    inputChannelsNew = 1;
-                }
-
-                U8 *weight = spec->ws[weightIndex].weight;
-                U8 *vec = spec->ws[weightIndex].vec;
-                U32 vecBytes = spec->ws[weightIndex].bytes_of_vec;
-                spec->ws[weightIndex].bytes_of_weight = bytesOf(spec->ws[weightIndex].mdt) *
-                    numKernelsNew * inputChannelsNew * kernelSizeH * kernelSizeW;
-                spec->ws[weightIndex].bytes_of_vec =
-                    bytesOf(spec->ws[weightIndex].mdt) * numKernelsNew;
-                spec->ws[weightIndex].weight =
-                    (U8 *)mt_new_storage(spec->ws[weightIndex].bytes_of_weight);
-                spec->ws[weightIndex].vec = (U8 *)mt_new_storage(spec->ws[weightIndex].bytes_of_vec);
-                memset(spec->ws[weightIndex].weight, 0, spec->ws[weightIndex].bytes_of_weight);
-                memset(spec->ws[weightIndex].vec, 0, spec->ws[weightIndex].bytes_of_vec);
-                if (spec->ops[i].type == OT_Conv) {
-                    spec->ops[i].ps.conv_spec.num_outputs = numKernelsNew;
-                }
-                if (spec->ops[i].type == OT_FC) {
-                    spec->ops[i].ps.fc_spec.num_outputs = numKernelsNew;
-                }
-                // process weight
-                U32 blockSize = bytesOf(spec->ws[weightIndex].mdt) * kernelSizeH * kernelSizeW;
-                for (U32 oc = 0; oc < numKernels; oc++) {
-                    for (U32 ic = 0; ic < inputChannels; ic++) {
-                        U32 oldIndex = (oc * inputChannels + ic) * blockSize;
-                        U32 newIndex = (oc * inputChannelsNew + ic) * blockSize;
-                        memcpy(
-                            spec->ws[weightIndex].weight + newIndex, weight + oldIndex, blockSize);
-                    }
-                }
-                if (outOfFileMapRange(weight, spec->mfd)) {
-                    delete weight;
-                }
-                // process bias
-                if (vec != nullptr) {
-                    memcpy(spec->ws[weightIndex].vec, vec, vecBytes);
-                    if (outOfFileMapRange(vec, spec->mfd)) {
-                        delete vec;
-                    }
-                }
-
-                hasOptimized = true;
             }
         }
         return hasOptimized;

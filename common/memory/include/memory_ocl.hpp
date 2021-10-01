@@ -25,9 +25,13 @@ public:
     {
         memset(&(this->desc), 0, sizeof(GCLMemDesc));
         this->desc.memFormat = DF_NCHW;
+        this->desc.memType = GCL_MEM_BUF;
+        this->desc.flags = CL_MEM_READ_WRITE;
         this->allocated = false;
         this->mapped = false;
-        this->capacitySize = 0;
+        this->capacitySize[0] = 0;
+        this->capacitySize[1] = 0;
+        this->capacitySize[2] = 0;
     }
 
     ~OclMemory() = default;
@@ -55,50 +59,118 @@ public:
         }
         this->desc.dt = desc.dt;
         this->desc.df = desc.df;
-        if (this->desc.byteSize == 0) {
-            this->desc.memType = GCL_MEM_BUF;
-            this->desc.flags = CL_MEM_READ_WRITE;
-        }
-        if (tensorNumBytes(desc) > this->capacity()) {
-            this->allocated = false;
-        }
+        set_shape(desc);
     }
 
-    void padding(GCLMemDesc desc)
+    virtual EE padding(U32 pl, U32 pr, U32 pt, U32 pb, U32 pf, U32 pa)
     {
-        if (desc.byteSize > this->capacity()) {
+        if (this->desc.byteSize == 0) {
+            return NOT_MATCH;
+        }
+        if (pl == 0 && pr == 0 && pt == 0 && pb == 0 && pf == 0 && pa == 0) {
+            return SUCCESS;
+        }
+        U32 w = this->desc.dims[0];
+        U32 h = (this->desc.nDims < 2) ? 1 : this->desc.dims[1];
+        U32 num;
+        DataFormat mf = this->desc.memFormat;
+        if (pf > 0 || pa > 0) {
+            U32 c = 1;
+            if (mf == DF_NCHWC4) {
+                if (this->desc.nDims == 5) {
+                    c = (this->desc.dims[3] + 3) / 4 * this->desc.dims[2] * this->desc.dims[4];
+                } else if (this->desc.nDims == 4) {
+                    c = (this->desc.dims[2] + 3) / 4 * this->desc.dims[3];
+                }
+            } else {
+                for (U32 i = 2; i < this->desc.nDims; i++) {
+                    c *= this->desc.dims[i];
+                }
+            }
+            if (pf > this->desc.offset[2]) {
+                this->desc.offset[2] = pf;
+            } else {
+                pf = this->desc.offset[2];
+            }
+            c += pf + pa;
+            if (c > this->desc.stride[2]) {
+                this->desc.stride[2] = c;
+                this->desc.need_pad = true;
+            }
+        }
+
+        if (pl > this->desc.offset[0]) {
+            this->desc.offset[0] = pl;
+        } else {
+            pl = this->desc.offset[0];
+        }
+        if (pt > this->desc.offset[1]) {
+            this->desc.offset[1] = pt;
+        } else {
+            pt = this->desc.offset[1];
+        }
+        w += pl + pr;
+        h += pt + pb;
+        if (w > this->desc.stride[0]) {
+            this->desc.stride[0] = w;
+        }
+        if (h > this->desc.stride[1]) {
+            this->desc.stride[1] = h;
+        }
+
+        if (mf == DF_NCHWC4) {
+            num = this->desc.stride[0] * this->desc.stride[1] * this->desc.stride[2] * 4;
+        } else if (mf == DF_NCHW) {
+            num = this->desc.stride[0] * this->desc.stride[1] * this->desc.stride[2];
+        } else {
+            return NOT_SUPPORTED;
+        }
+        if (num > this->desc.num) {
+            this->desc.num = num;
+            this->desc.byteSize = num * bytesOf(this->desc.dt);
+        }
+        if (w != this->desc.dims[0] || h != this->desc.dims[1]) {
+            this->desc.need_pad = true;
+        }
+        if (this->desc.byteSize > this->capacitySize[0]) {
             this->allocated = false;
         }
-        for (U32 i = 0; i < 3; i++) {
-            this->desc.stride[i] = desc.stride[i];
-            this->desc.offset[i] = desc.offset[i];
-        }
-        this->desc.memType = desc.memType;
-        this->desc.memFormat = desc.memFormat;
-        this->desc.byteSize = desc.byteSize;
-        this->desc.num = desc.num;
-        this->desc.flags = desc.flags;
-        this->desc.imgFormat = desc.imgFormat;
-        this->desc.host_ptr = desc.host_ptr;
-        this->desc.need_pad = desc.need_pad;
+        return SUCCESS;
+    }
+
+    EE padding(U32 pl, U32 pr, U32 pt, U32 pb)
+    {
+        return padding(pl, pr, pt, pb, 0, 0);
     }
 
     void alloc() override
     {
-        if (this->desc.byteSize == 0) {
-            U32 num = (this->desc.nDims == 0) ? 0 : 1;
-            for (U32 i = 0; i < this->desc.nDims; i++) {
-                num *= this->desc.dims[i];
-            }
-            this->desc.byteSize = num * bytesOf(this->desc.dt);
-        }
         U32 size = this->desc.byteSize;
-        if (!this->allocated && size > this->capacity()) {
+        if (!this->allocated && size > this->capacitySize[0]) {
             GCLMem_t mem = ocl_alloc_gclmem(this->desc);
             this->val = std::shared_ptr<GCLMem>(mem, ocl_release_gclmem);
             this->allocated = true;
-            this->capacitySize = size;
+            this->capacitySize[0] = size;
         }
+    }
+
+    void alloc(U8 *cpuPtr)
+    {
+        this->desc.host_ptr = cpuPtr;
+        this->desc.flags = CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR;
+        this->alloc();
+    }
+
+    TensorDesc get_dims() override  //replace get_desc after delete GCLMemDesc
+    {
+        TensorDesc desc;
+        desc.nDims = this->desc.nDims;
+        desc.df = this->desc.df;
+        desc.dt = this->desc.dt;
+        for (U32 i = 0; i < desc.nDims; i++) {
+            desc.dims[i] = this->desc.dims[i];
+        }
+        return desc;
     }
 
     GCLMemDesc get_desc()
@@ -106,12 +178,27 @@ public:
         return this->desc;
     }
 
+    void stride(U32 *stride)
+    {
+        stride[0] = this->desc.stride[0];
+        stride[1] = this->desc.stride[1];
+        stride[2] = this->desc.stride[2];
+    }
+
+    void offset(U32 *offset)
+    {
+        offset[0] = this->desc.offset[0];
+        offset[1] = this->desc.offset[1];
+        offset[2] = this->desc.offset[2];
+    }
+
     EE copy_from(Memory *other) override
     {
         EE ret = SUCCESS;
-        if (other->get_mem_type() == CPUMem) {
+        MemoryType srcType = other->get_mem_type();
+        if (srcType == CPUMem) {
             U32 size = ((CpuMemory *)other)->bytes();
-            void *host_ptr = ((CpuMemory *)other)->get_ptr();
+            U8 *host_ptr = (U8 *)((CpuMemory *)other)->get_ptr();
             if (!allocated) {
                 U8 *tmp = nullptr;
                 if (size < this->desc.byteSize) {
@@ -120,9 +207,7 @@ public:
                     memcpy(tmp, host_ptr, size);
                     host_ptr = tmp;
                 }
-                this->desc.host_ptr = host_ptr;
-                this->desc.flags = CL_MEM_READ_WRITE | CL_MEM_COPY_HOST_PTR;
-                this->alloc();
+                this->alloc(host_ptr);
                 if (tmp) {
                     delete tmp;
                 }
@@ -140,51 +225,38 @@ public:
                         this->val.get(), &size, HOST_TO_DEVICE_BUF, CL_TRUE));
                 }
             }
-        } else if (other->get_mem_type() == OCLMem) {
+        } else {
             if (!allocated) {
                 this->alloc();
-            } else {
-                GCLMemDesc srcDesc = ((OclMemory *)other)->get_desc();
-                GCLMemType srcMt = srcDesc.memType;
-                GCLMemType dstMt = this->desc.memType;
-                void *srcPtr = ((OclMemory *)other)->get_ptr();
-                void *dstPtr = this->val.get();
-                if (srcMt == GCL_MEM_BUF && dstMt == GCL_MEM_BUF) {
-                    if (srcDesc.byteSize > this->desc.byteSize) {
-                        CHECK_STATUS(NOT_MATCH);
-                    }
-                    U32 size = srcDesc.byteSize;
-                    CHECK_STATUS(gcl_trans_memory(OCLContext::getInstance().handle.get(), srcPtr,
-                        dstPtr, &size, DEVICE_BUF_TO_BUF, CL_TRUE));
-                } else if (srcMt != GCL_MEM_BUF && dstMt == GCL_MEM_BUF) {
-                    if (srcDesc.byteSize > this->desc.byteSize) {
-                        CHECK_STATUS(NOT_MATCH);
-                    }
-                    U32 region[3] = {srcDesc.stride[0], srcDesc.stride[1], srcDesc.stride[2]};
-                    CHECK_STATUS(gcl_trans_memory(OCLContext::getInstance().handle.get(), srcPtr,
-                        dstPtr, region, DEVICE_IMG_TO_BUF, CL_TRUE));
-                } else if (srcMt == GCL_MEM_BUF && dstMt != GCL_MEM_BUF) {
-                    if (this->desc.byteSize > srcDesc.byteSize) {
-                        CHECK_STATUS(NOT_MATCH);
-                    }
-                    U32 region[3] = {
-                        this->desc.stride[0], this->desc.stride[1], this->desc.stride[2]};
-                    CHECK_STATUS(gcl_trans_memory(OCLContext::getInstance().handle.get(), srcPtr,
-                        dstPtr, region, DEVICE_BUF_TO_IMG, CL_TRUE));
-                } else {
-                    CHECK_STATUS(NOT_SUPPORTED);
-                }
             }
-        } else {
-            CHECK_STATUS(NOT_SUPPORTED);
+            void *srcPtr = ((OclMemory *)other)->get_ptr();
+            void *dstPtr = this->val.get();
+            U32 srcBytes = ((OclMemory *)other)->bytes();
+            if (srcBytes > this->bytes()) {
+                CHECK_STATUS(NOT_MATCH);
+            }
+            if (srcType == OCLMem) {
+                CHECK_STATUS(gcl_trans_memory(OCLContext::getInstance().handle.get(), srcPtr,
+                    dstPtr, &srcBytes, DEVICE_BUF_TO_BUF, CL_TRUE));
+            } else if (srcType == OCLMemImg || srcType == OCLMemImg1D || srcType == OCLMemImg2D) {
+                GCLMemDesc srcDesc = ((OclMemory *)other)->get_desc();
+                U32 region[3] = {srcDesc.stride[0], srcDesc.stride[1], srcDesc.stride[2]};
+                CHECK_STATUS(gcl_trans_memory(OCLContext::getInstance().handle.get(), srcPtr,
+                    dstPtr, region, DEVICE_IMG_TO_BUF, CL_TRUE));
+            } else {
+                CHECK_STATUS(NOT_SUPPORTED);
+            }
         }
         return ret;
     }
 
     void *get_ptr()
     {
-        if (allocated) {
+        if (this->capacitySize[0]) {
             this->val->desc = this->desc;  //TODO DELETE AFTER SPLITE DESC FROM GCLMEM
+        } else {
+            UNI_DEBUG_LOG("Get memory val without allocated, the capacitySize is %d\n",
+                this->capacitySize[0]);
         }
         return this->val.get();
     }
@@ -193,13 +265,16 @@ public:
     {
         this->val = val;
         this->allocated = true;
-        this->capacitySize = this->bytes();
+        this->capacitySize[0] = this->bytes();
     }
 
     std::shared_ptr<GCLMem> get_shared_ptr()
     {
-        if (allocated) {
+        if (this->capacitySize[0]) {
             this->val->desc = this->desc;  //TODO DELETE AFTER SPLITE DESC FROM GCLMEM
+        } else {
+            UNI_DEBUG_LOG("Get memory val without allocated, the capacitySize is %d\n",
+                this->capacitySize[0]);
         }
         return this->val;
     }
@@ -221,27 +296,32 @@ public:
             CHECK_STATUS(NOT_MATCH);
         }
         ocl_map_mem_read(OCLContext::getInstance().handle.get(), this->val.get(), this->desc);
+        if (desc.df == DF_NCHWC4) {
+            desc.df = DF_NCHW;
+        }
         return this->val->mapPtrArray.back();
     }
 
     EE reuse(Memory *other) override
     {
-        EE ret;
-        if (other->get_mem_type() != OCLMem) {
-            ret = this->copy_from(other);
-        } else {
-            U32 size = other->capacity();
+        MemoryType type = other->get_mem_type();
+        if (type == CPUMem) {
+            CHECK_STATUS(this->copy_from(other));
+        } else if (type == OCLMem) {
+            U32 size;
+            other->capacity(&size);
             if (size >= this->bytes()) {
                 this->val = ((OclMemory *)other)->get_shared_ptr();
                 this->allocated = true;
-                this->capacitySize = other->capacity();
-                ret = SUCCESS;
+                other->capacity(this->capacitySize);
             } else {
                 UNI_ERROR_LOG("small OCL memory can not meet big OCL memory demand\n");
-                ret = NOT_SUPPORTED;
+                CHECK_STATUS(NOT_SUPPORTED);
             }
+        } else {
+            CHECK_STATUS(NOT_SUPPORTED);
         }
-        return ret;
+        return SUCCESS;
     }
 
     U32 length() override
@@ -258,14 +338,14 @@ public:
         return this->desc.byteSize;
     }
 
-    U32 capacity() override
+    void capacity(U32 *size) override
     {
-        return this->capacitySize;
+        *size = this->capacitySize[0];
     }
 
     std::string string(U32 num, F32 factor) override
     {
-        std::string line = "desc: " + gclMemDesc2Str(this->desc) + "data: \n";
+        std::string line = "desc: " + gclMemDesc2Str(this->desc) + " data: ";
 #ifdef _DEBUG
         DataType dt = (this->desc.dt == DT_U8) ? DT_F16 : this->desc.dt;
         if (dt == DT_U32) {
@@ -281,14 +361,20 @@ public:
                     OCLContext::getInstance().handle.get(), this->desc, get_ptr(), num, 0, false);
                 break;
             default:
-                UNI_ERROR_LOG("Currently not support to get %d type OCL Memory\n", this->desc.dt);
+                UNI_ERROR_LOG("Currently not support to get %s type OCL Memory\n",
+                    DataTypeName()[this->desc.dt]);
                 break;
         }
 #else
         if (mapped) {
             for (U32 i = 0; i < num; i++) {
-                line += std::to_string(this->element(i) * factor) + " ";
+                line += std::to_string(this->element(i) / factor) + " ";
             }
+            double sum = 0;
+            for (U32 i = 0; i < this->length(); i++) {
+                sum += this->element(i) / factor;
+            }
+            line += " sum: " + std::to_string(sum);
         }
 #endif
         return line;
@@ -321,10 +407,55 @@ public:
         return this->mapped;
     }
 
+    GCLMemType gclMemType()
+    {
+        return this->desc.memType;
+    }
+
 private:
+    void set_shape(TensorDesc cpuDesc)
+    {
+        U32 n, c, t, h, w;
+        tensorSelectGet(cpuDesc, NULL, NULL, &n, &c, &h, &w, &t);
+        if (cpuDesc.nDims > 5) {
+            for (U32 i = 4; i < cpuDesc.nDims; i++) {
+                n = n * cpuDesc.dims[i];
+            }
+        }
+        if (cpuDesc.df == DF_NCHWC4 || cpuDesc.df == DF_NHWC) {
+            this->desc.memFormat = cpuDesc.df;
+        } else {
+            this->desc.memFormat = DF_NCHW;
+        }
+        if (this->desc.memFormat == DF_NCHWC4) {
+            this->desc.stride[0] = w;
+            this->desc.stride[1] = h;
+            this->desc.stride[2] = ((c + 3) / 4) * t * n;
+            this->desc.num = this->desc.stride[0] * this->desc.stride[1] * this->desc.stride[2] * 4;
+        } else if (this->desc.memFormat == DF_NHWC) {
+            this->desc.stride[0] = c * t * n;
+            this->desc.stride[1] = w;
+            this->desc.stride[2] = h;
+            this->desc.num = this->desc.stride[0] * this->desc.stride[1] * this->desc.stride[2];
+        } else {
+            this->desc.stride[0] = w;
+            this->desc.stride[1] = h;
+            this->desc.stride[2] = c * t * n;
+            this->desc.num = this->desc.stride[0] * this->desc.stride[1] * this->desc.stride[2];
+        }
+        for (U32 i = 0; i < 3; i++) {
+            this->desc.offset[i] = 0;
+        }
+        this->desc.byteSize = this->desc.num * bytesOf(this->desc.dt);
+        if (this->desc.byteSize > this->capacitySize[0]) {
+            this->allocated = false;
+        }
+    }
+
+protected:
     GCLMemDesc desc;
     std::shared_ptr<GCLMem> val;
-    U32 capacitySize;
+    U32 capacitySize[3];
     bool allocated;
     bool mapped;
 };

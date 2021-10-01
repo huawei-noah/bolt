@@ -11,28 +11,30 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define MANGLE_NAME_IMPL(base, DT) base##DT
-#define MANGLE_NAME(base, DT) MANGLE_NAME_IMPL(base, DT)
-__kernel void MANGLE_NAME(fill_memory_zero_vec4_, DT)(
-    const int len, const int offset, const int bx, __global T *data)
+#include "kernel_def.h"
+#define MANGLE_NAME_IMPL(base, IOM, DT) base##IOM##DT
+#define MANGLE_NAME(base, IOM, DT) MANGLE_NAME_IMPL(base, IOM, DT)
+
+__kernel void MANGLE_NAME(fill_memory_zero_vec4_, IOM, DT)(
+    const int len, const int offset, const int bx, const int by, KERNEL_MEM data)
 {
+#if defined(USE_OUTPUT_IMG)
+    int idx = get_global_id(0);
+    int idy = get_global_id(1);
+    if (idx >= bx || idy >= by) {
+        return;
+    }
+    int idz = get_global_id(2);
+    T4 val = (T4)0;
+    STORE_MEM_V4(val, (int4)(idx, idy, idz, 0), data);
+#else
     int idx = get_global_id(0);
     if (idx >= bx) {
         return;
     }
     char el = ((idx << 2) + 4 <= len) ? 4 : (len & 3);
     const int off = offset + (idx << 2);
-    if (el == 4) {
-        vstore4((T4)0, 0, data + off);
-    } else {
-        if (el == 1) {
-            data[off] = 0;
-        }
-        if (el == 2) {
-            vstore2((T2)0, 0, data + off);
-        }
-        if (el == 3) {
-            vstore3((T3)0, 0, data + off);
-        }
-    }
+    T4 val = (T4)0;
+    STORE_MEM_V4_C1(val, off, el, data);
+#endif
 }

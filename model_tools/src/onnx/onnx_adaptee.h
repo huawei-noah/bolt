@@ -13,8 +13,6 @@
 
 #ifndef _H_ONNXADAPTEE
 #define _H_ONNXADAPTEE
-
-#include <iostream>
 #include <string>
 #include <fstream>
 #include <google/protobuf/io/coded_stream.h>
@@ -27,9 +25,10 @@
 
 class OnnxAdaptee : public ModelAdaptee {
 public:
-    OnnxAdaptee(int removePreprocessOpNum_outside)
+    OnnxAdaptee(int _removePreprocessOpNum, bool _useBNN)
     {
-        this->removePreprocessOpNum = removePreprocessOpNum_outside;
+        this->removePreprocessOpNum = _removePreprocessOpNum;
+        this->useBNN = _useBNN;
     }
     ~OnnxAdaptee()
     {}
@@ -37,11 +36,6 @@ public:
 protected:
     DataType get_weight_data_type(U32 weightLen, F32 *weight)
     {
-        char *environmentSetting = getenv("BOLT_BNN");
-        bool useBNN =
-            (environmentSetting != NULL && std::string(environmentSetting) == std::string("OFF"))
-            ? false
-            : true;
         if (1 >= weightLen || !useBNN) {
             return DT_F32;
         }
@@ -65,16 +59,15 @@ protected:
         if (val0 == 0) {
             return DT_BIN01;
         }
-        CHECK_REQUIREMENT(0 == val0 + val1);
+        //CHECK_REQUIREMENT(0 == val0 + val1);
         return DT_BIN11;
     }
 
-    std::vector<int> getOperatorWeightInputIndex(int weightOpIndex)
+    std::vector<int> getOperatorWeightInputIndex(const onnx::NodeProto &weightNode)
     {
-        const onnx::NodeProto &weightNode = onnxGraph.node(weightOpIndex);
         std::vector<int> index;
         for (int i = 0; i < weightNode.input_size(); i++) {
-            if (weights.end() != weights.find(weightNode.input(i))) {
+            if (onnxWeights.end() != onnxWeights.find(weightNode.input(i))) {
                 index.push_back(i);
             }
         }
@@ -99,150 +92,205 @@ protected:
         return (ret) ? SUCCESS : NOT_SUPPORTED;
     }
 
-    OperatorType convert_onnx_type(std::string inputType)
+    OperatorType convert_onnx_type(const std::string &onnxNodeType)
     {
-        if (inputType == "Conv") {
+        std::vector<int> indexes = getOperatorWeightInputIndex(this->onnxNode);
+        if (onnxNodeType == "Conv") {
             return OT_Conv;
-        } else if (inputType == "BatchNormalization" || inputType == "BatchNorm") {
+        } else if (onnxNodeType == "BatchNormalization" || onnxNodeType == "BatchNorm") {
             return OT_BatchNorm;
-        } else if (inputType == "Sum" || inputType == "Add" || inputType == "Mul" ||
-            inputType == "Div" || inputType == "Sub") {
-            std::vector<int> indexes = getOperatorWeightInputIndex(this->nodeIndex);
-            if (indexes.size() == 0) {
+        } else if (onnxNodeType == "InstanceNormalization") {
+            return OT_InstanceNorm;
+        } else if (onnxNodeType == "Sum" || onnxNodeType == "Add" || onnxNodeType == "Mul" ||
+            onnxNodeType == "Div" || onnxNodeType == "Sub") {
+            if (indexes.size() == 0 || this->onnxNode.input_size() > 2) {
+                return OT_Eltwise;
+            }
+            for (U32 i = 0; i < indexes.size(); i++) {
+                onnx::TensorProto &weightTp = onnxWeights[this->onnxNode.input(indexes[i])];
+                if (is_multi_dim(weightTp)) {
+                    return OT_Eltwise;
+                }
+            }
+            const onnx::TensorProto &weightTp = onnxWeights[this->onnxNode.input(indexes[0])];
+            int weightNum = get_data_size_from_tensor_proto(weightTp);
+            if (weightNum == 1) {
+                return OT_Power;
+            } else if ((onnxNodeType == "Div" || onnxNodeType == "Sub") && indexes[0] == 0) {
                 return OT_Eltwise;
             } else {
-                CHECK_REQUIREMENT(indexes.size() == 1);
-                const onnx::TensorProto &weightTp = weights[this->node.input(indexes[0])];
-                int weightNum = get_data_size_from_tensor_proto(weightTp);
-                if (weightNum == 1) {
-                    return OT_Power;
+                if (this->onnxWeightReferCount[this->onnxNode.input(indexes[0])] > 1) {
+                    return OT_Eltwise;
                 } else {
                     return OT_Scale;
                 }
             }
-        } else if (inputType == "Gemm" || inputType == "Linear") {
-            return OT_FC;
-        } else if (inputType == "AveragePool" || inputType == "MaxPool" ||
-            inputType == "GlobalAveragePool") {
+        } else if (onnxNodeType == "AveragePool" || onnxNodeType == "MaxPool" ||
+            onnxNodeType == "GlobalAveragePool") {
             return OT_Pooling;
-        } else if (inputType == "ReduceMean" || inputType == "ReduceMax") {
-            std::vector<int> axesInfo = get_node_vector_ints_attribute_by_name(node, "axes");
-            int keepdimsInfo = get_node_single_int_attribute_by_name(node, "keepdims", 0);
+        } else if (onnxNodeType == "ReduceMean" || onnxNodeType == "ReduceMax") {
+            std::vector<int> axesInfo =
+                get_node_vector_ints_attribute_by_name(this->onnxNode, "axes");
+            int keepdimsInfo = get_node_single_int_attribute_by_name(this->onnxNode, "keepdims", 0);
             if (axesInfo.size() == 2 && axesInfo[0] == 2 && axesInfo[1] == 3 && keepdimsInfo == 1) {
                 return OT_Pooling;
             }
             return OT_Reduction;
-        } else if (inputType == "Relu" || inputType == "LeakyRelu") {
+        } else if (onnxNodeType == "Relu" || onnxNodeType == "LeakyRelu") {
             return OT_Relu;
-        } else if (inputType == "Softmax") {
+        } else if (onnxNodeType == "Softmax") {
             return OT_Softmax;
-        } else if (inputType == "Concat") {
+        } else if (onnxNodeType == "Concat") {
             return OT_Concat;
-        } else if (inputType == "Pad") {
+        } else if (onnxNodeType == "Pad") {
             return OT_Pad;
-        } else if (inputType == "Max" || inputType == "Min" || inputType == "Clip") {
+        } else if (onnxNodeType == "Max" || onnxNodeType == "Min" || onnxNodeType == "Clip") {
             return OT_Clip;
-        } else if (inputType == "Reshape") {
+        } else if (onnxNodeType == "Reshape") {
             return OT_Reshape;
-        } else if (inputType == "Squeeze") {
+        } else if (onnxNodeType == "Squeeze") {
             return OT_Squeeze;
-        } else if (inputType == "Transpose") {
+        } else if (onnxNodeType == "Transpose") {
             return OT_Transpose;
-        } else if (inputType == "Gather") {
+        } else if (onnxNodeType == "Gather" || onnxNodeType == "GatherElements" ||
+            onnxNodeType == "GatherND") {
             return OT_Gather;
-        } else if (inputType == "Unsqueeze") {
+        } else if (onnxNodeType == "Unsqueeze") {
             return OT_Unsqueeze;
-        } else if (inputType == "Resize" || inputType == "Upsample") {
+        } else if (onnxNodeType == "Resize" || onnxNodeType == "Upsample") {
             return OT_Resize;
-        } else if (inputType == "Cast") {
+        } else if (onnxNodeType == "Cast") {
             return OT_Cast;
-        } else if (inputType == "Constant") {
+        } else if (onnxNodeType == "Constant") {
             return OT_Constant;
-        } else if (inputType == "MatMul") {
-            return OT_MatMul;
-        } else if (inputType == "Flatten") {
+        } else if (onnxNodeType == "MatMul" || onnxNodeType == "Gemm" || onnxNodeType == "Linear") {
+            if (indexes.size() == 0 || (indexes.size() == 1 && indexes[0] == 2)) {
+                return OT_MatMul;
+            } else {
+                auto weightName = this->onnxNode.input(indexes[0]);
+                onnx::TensorProto &weightTp = onnxWeights[weightName];
+                if (weightTp.dims_size() == 2 && this->onnxWeightReferCount[weightName] == 1) {
+                    return OT_FC;
+                } else {
+                    return OT_MatMul;
+                }
+            }
+        } else if (onnxNodeType == "Flatten") {
             return OT_Reshape;
-        } else if (inputType == "ConvTranspose") {
+        } else if (onnxNodeType == "ConvTranspose") {
             return OT_Deconvolution;
-        } else if (inputType == "Tanh") {
+        } else if (onnxNodeType == "Tanh") {
             return OT_TanH;
-        } else if (inputType == "LogSoftmax") {
+        } else if (onnxNodeType == "LogSoftmax") {
             return OT_LogSoftmax;
-        } else if (inputType == "Shape") {
+        } else if (onnxNodeType == "Shape") {
             return OT_Shape;
-        } else if (inputType == "Erf") {
+        } else if (onnxNodeType == "Erf") {
             return OT_Erf;
-        } else if (inputType == "Pow" || inputType == "Sqrt") {
+        } else if (onnxNodeType == "Pow" || onnxNodeType == "Sqrt") {
             return OT_Power;
-        } else if (inputType == "RNN" || inputType == "GRU" || inputType == "LSTM" ||
-            inputType == "Scan") {
+        } else if (onnxNodeType == "RNN" || onnxNodeType == "GRU" || onnxNodeType == "LSTM" ||
+            onnxNodeType == "Scan") {
             return OT_RNN;
-        } else if (inputType == "ConstantOfShape") {
+        } else if (onnxNodeType == "ConstantOfShape") {
             return OT_ConstantOfShape;
-        } else if (inputType == "SpaceToDepth") {
+        } else if (onnxNodeType == "SpaceToDepth") {
             return OT_Space2Depth;
-        } else if (inputType == "DepthToSpace") {
+        } else if (onnxNodeType == "DepthToSpace") {
             return OT_Depth2Space;
-        } else if (inputType == "PRelu") {
+        } else if (onnxNodeType == "PRelu") {
             return OT_PRelu;
-        } else if (inputType == "ArgMax") {
+        } else if (onnxNodeType == "ArgMax") {
             return OT_ArgMax;
-        } else if (inputType == "Tile") {
+        } else if (onnxNodeType == "Tile") {
             return OT_Tile;
-        } else if (inputType == "Sigmoid") {
+        } else if (onnxNodeType == "Sigmoid") {
             return OT_Sigmoid;
-        } else if (inputType == "Slice") {
+        } else if (onnxNodeType == "Slice") {
             return OT_TfSlice;
-        } else if (inputType == "ReduceSum" || inputType == "ReduceMin") {
+        } else if (onnxNodeType == "ReduceSum" || onnxNodeType == "ReduceMin" ||
+            onnxNodeType == "ReduceL2") {
             return OT_Reduction;
-        } else if (inputType == "Split") {
+        } else if (onnxNodeType == "Split") {
             return OT_Slice;
-        } else if (inputType == "Splice") {
+        } else if (onnxNodeType == "Splice") {
             return OT_Splice;
-        } else if (inputType == "Greater") {
+        } else if (onnxNodeType == "Greater") {
             return OT_Greater;
-        } else if (inputType == "Where") {
+        } else if (onnxNodeType == "Where") {
             return OT_Where;
-        } else if (inputType == "SoftPlus") {
+        } else if (onnxNodeType == "SoftPlus") {
             return OT_SoftPlus;
-        } else if (inputType == "Exp") {
+        } else if (onnxNodeType == "Exp") {
             return OT_Exp;
-        } else if (inputType == "NoOp") {
+        } else if (onnxNodeType == "NoOp") {
             return OT_Split;
-        } else if (inputType == "Tdnn") {
+        } else if (onnxNodeType == "Tdnn") {
             return OT_Tdnn;
-        } else if (inputType == "Dropout") {
+        } else if (onnxNodeType == "Dropout") {
             return OT_Dropout;
-        } else if (inputType == "Scale") {
+        } else if (onnxNodeType == "Scale") {
             return OT_Power;
-        } else if (inputType == "TopK") {
+        } else if (onnxNodeType == "TopK") {
             return OT_TopK;
-        } else if (inputType == "Equal") {
+        } else if (onnxNodeType == "Equal") {
             return OT_Equal;
-        } else if (inputType == "Sign") {
+        } else if (onnxNodeType == "Sign") {
             return OT_Sign;
-        } else if (inputType == "TFL_HARD_SWISH") {
+        } else if (onnxNodeType == "TFL_HARD_SWISH") {
             return OT_HSwish;
+        } else if (onnxNodeType == "Expand") {
+            return OT_Expand;
+        } else if (onnxNodeType == "ScatterND" || onnxNodeType == "ScatterElements") {
+            return OT_Scatter;
+        } else if (onnxNodeType == "Not") {
+            return OT_Not;
+        } else if (onnxNodeType == "Abs") {
+            return OT_Abs;
+        } else if (onnxNodeType == "Reciprocal") {
+            return OT_Reciprocal;
+        } else if (onnxNodeType == "And" || onnxNodeType == "Or" || onnxNodeType == "Xor") {
+            return OT_Eltwise;
+        } else if (onnxNodeType == "Log") {
+            return OT_Log;
+        } else if (onnxNodeType == "Neg") {
+            return OT_Neg;
+        } else if (onnxNodeType == "GenerateProposals") {
+            return OT_GenerateProposals;
+        } else if (onnxNodeType == "RoIAlign") {
+            return OT_RoIAlign;
         } else {
-            UNI_ERROR_LOG("operator name:%s type:%s not supported.\n", this->node.name().c_str(),
-                inputType.c_str());
+            UNI_ERROR_LOG("operator name:%s type:%s not supported.\n",
+                this->onnxNode.name().c_str(), onnxNodeType.c_str());
         }
         return OT_None;
+    }
+
+    int get_attribute_id(const onnx::NodeProto &node, const char *attributeName)
+    {
+        int ret = -1;
+        for (int i = 0; i < node.attribute_size(); i++) {
+            const onnx::AttributeProto &attribute = node.attribute(i);
+            if (attribute.name() == attributeName) {
+                ret = i;
+                break;
+            }
+        }
+        return ret;
     }
 
     std::vector<int> get_node_vector_ints_attribute_by_name(
         const onnx::NodeProto &node, const char *key)
     {
         std::vector<int> result;
-        for (int i = 0; i < node.attribute_size(); i++) {
-            const onnx::AttributeProto &attribute = node.attribute(i);
-            if (attribute.name() == key) {
-                result.resize(attribute.ints_size());
-                for (int j = 0; j < attribute.ints_size(); j++) {
-                    result[j] = UNI_MIN(attribute.ints(j), INT_MAX);
-                }
-                break;
-            }
+        int id = get_attribute_id(node, key);
+        if (id < 0) {
+            return result;
+        }
+        const onnx::AttributeProto &attribute = node.attribute(id);
+        result.resize(attribute.ints_size());
+        for (int j = 0; j < attribute.ints_size(); j++) {
+            result[j] = UNI_MIN(attribute.ints(j), INT_MAX);
         }
         return result;
     }
@@ -251,65 +299,60 @@ protected:
         const onnx::NodeProto &node, const char *key)
     {
         std::vector<F32> result;
-        for (int i = 0; i < node.attribute_size(); i++) {
-            const onnx::AttributeProto &attribute = node.attribute(i);
-            if (attribute.name() == key) {
-                CHECK_REQUIREMENT(4 == attribute.type());
-                const onnx::TensorProto &tp = attribute.t();
-                U8 *value;
-                if (tp.has_raw_data()) {
-                    const std::string &rawData = tp.raw_data();
-                    value = (U8 *)(rawData.data());
-                } else if (tp.data_type() == onnx::TensorProto::FLOAT) {
-                    value = (U8 *)(tp.float_data().data());
-                } else {
-                    UNI_ERROR_LOG("can not process operator name:%s %s type attribute.\n",
-                        this->node.name().c_str(), onnx_data_type_string(tp.data_type()).c_str());
-                }
-
-                result.resize(tp.dims(0));
-                memcpy(result.data(), value, tp.dims(0) * sizeof(float));
-                break;
-            }
+        int id = get_attribute_id(node, key);
+        if (id < 0) {
+            return result;
         }
+        const onnx::AttributeProto &attribute = node.attribute(id);
+        CHECK_REQUIREMENT(4 == attribute.type());
+        const onnx::TensorProto &tp = attribute.t();
+        U8 *value;
+        if (tp.has_raw_data()) {
+            const std::string &rawData = tp.raw_data();
+            value = (U8 *)(rawData.data());
+        } else if (tp.data_type() == onnx::TensorProto::FLOAT) {
+            value = (U8 *)(tp.float_data().data());
+        } else {
+            UNI_ERROR_LOG("can not process operator name:%s tensor:%s %s type attribute.\n",
+                this->onnxNode.name().c_str(), tp.name().c_str(),
+                onnx_data_type_string(tp.data_type()).c_str());
+        }
+
+        result.resize(tp.dims(0));
+        memcpy(result.data(), value, tp.dims(0) * sizeof(float));
         return result;
     }
 
     int get_node_single_int_attribute_by_name(
         const onnx::NodeProto &node, const char *key, int defaultValue = 0)
     {
-        for (int i = 0; i < node.attribute_size(); i++) {
-            const onnx::AttributeProto &attribute = node.attribute(i);
-            if (attribute.name() == key) {
-                return UNI_MIN(attribute.i(), INT_MAX);
-            }
+        int id = get_attribute_id(node, key);
+        if (id < 0) {
+            return defaultValue;
         }
-        return defaultValue;
+        const onnx::AttributeProto &attribute = node.attribute(id);
+        return UNI_MIN(attribute.i(), INT_MAX);
     }
 
     std::string get_node_str_attribute_by_name(const onnx::NodeProto &node,
         const char *key,
         const std::string &defaultValue = std::string())
     {
-        for (int i = 0; i < node.attribute_size(); i++) {
-            const onnx::AttributeProto &attribute = node.attribute(i);
-            if (attribute.name() == key) {
-                return attribute.s();
-            }
+        int id = get_attribute_id(node, key);
+        if (id < 0) {
+            return defaultValue;
         }
-        return defaultValue;
+        return node.attribute(id).s();
     }
 
     float get_node_float_attribute_by_name(
         const onnx::NodeProto &node, const char *key, float defaultValue = 0.f)
     {
-        for (int i = 0; i < node.attribute_size(); i++) {
-            const onnx::AttributeProto &attribute = node.attribute(i);
-            if (attribute.name() == key) {
-                return attribute.f();
-            }
+        int id = get_attribute_id(node, key);
+        if (id < 0) {
+            return defaultValue;
         }
-        return defaultValue;
+        return node.attribute(id).f();
     }
 
     std::string onnx_data_type_string(int num)
@@ -333,15 +376,17 @@ protected:
             } else if (tensorProto.data_type() == onnx::TensorProto::FLOAT) {
                 size = (int)rawData.size() / sizeof(float);
             } else {
-                UNI_ERROR_LOG("can not process onnx converter name:%s %s type raw tensor.\n",
-                    this->node.name().c_str(),
+                UNI_ERROR_LOG("can not process onnx converter name:%s tensor:%s %s type raw "
+                              "tensor.\n",
+                    this->onnxNode.name().c_str(), tensorProto.name().c_str(),
                     onnx_data_type_string(tensorProto.data_type()).c_str());
             }
         } else if (tensorProto.data_type() == onnx::TensorProto::FLOAT) {
             size = tensorProto.float_data_size();
         } else {
-            UNI_ERROR_LOG("can not process operator name:%s %s type tensor.\n",
-                this->node.name().c_str(), onnx_data_type_string(tensorProto.data_type()).c_str());
+            UNI_ERROR_LOG("can not process operator name:%s tensor:%s %s type tensor.\n",
+                this->onnxNode.name().c_str(), tensorProto.name().c_str(),
+                onnx_data_type_string(tensorProto.data_type()).c_str());
         }
         return size;
     }
@@ -358,10 +403,11 @@ protected:
         } else if (onnx::TensorProto::FLOAT16 == tp.data_type()) {
             dt = DT_F16;
         } else {
-            UNI_ERROR_LOG("can not process operator name:%s %s type tensor desc.\n",
-                this->node.name().c_str(), onnx_data_type_string(tp.data_type()).c_str());
+            UNI_ERROR_LOG("can not process operator name:%s tensor:%s %s type tensor desc.\n",
+                this->onnxNode.name().c_str(), tp.name().c_str(),
+                onnx_data_type_string(tp.data_type()).c_str());
         }
-        TensorDesc desc;
+        TensorDesc desc = tensor0d();
         desc.nDims = tp.dims_size();
         desc.dt = dt;
         desc.df = getTensorDefaultDataFormat(desc.nDims);
@@ -378,8 +424,10 @@ protected:
             const std::string &rawData = tensorProto.raw_data();
             ptr = (bool *)rawData.data();
         } else {
-            UNI_ERROR_LOG("can not process operator name:%s %s type non-raw bool tensor.\n",
-                this->node.name().c_str(), onnx_data_type_string(tensorProto.data_type()).c_str());
+            UNI_ERROR_LOG("can not process operator name:%s tensor:%s %s type non-raw bool "
+                          "tensor.\n",
+                this->onnxNode.name().c_str(), tensorProto.name().c_str(),
+                onnx_data_type_string(tensorProto.data_type()).c_str());
         }
         return ptr;
     }
@@ -393,8 +441,9 @@ protected:
         } else if (tensorProto.data_type() == onnx::TensorProto::FLOAT) {
             ptr = (U8 *)tensorProto.float_data().data();
         } else {
-            UNI_ERROR_LOG("can not process operator name:%s %s type weight.\n",
-                this->node.name().c_str(), onnx_data_type_string(tensorProto.data_type()).c_str());
+            UNI_ERROR_LOG("can not process operator name:%s tensor:%s %s type weight.\n",
+                this->onnxNode.name().c_str(), tensorProto.name().c_str(),
+                onnx_data_type_string(tensorProto.data_type()).c_str());
         }
         return ptr;
     }
@@ -432,8 +481,9 @@ protected:
             shape.resize(size);
             memcpy(shape.data(), shapeData, sizeof(int32_t) * size);
         } else {
-            UNI_ERROR_LOG("can not process operator name:%s %s type tensor.\n",
-                this->node.name().c_str(), onnx_data_type_string(tp.data_type()).c_str());
+            UNI_ERROR_LOG("can not process operator name:%s tensor:%s %s type tensor.\n",
+                this->onnxNode.name().c_str(), tp.name().c_str(),
+                onnx_data_type_string(tp.data_type()).c_str());
         }
         return shape;
     }
@@ -441,18 +491,22 @@ protected:
     float getSinFloat_from_tensorProto(const onnx::TensorProto &tp)
     {
         float value = 0;
-        int exponentSize = get_data_size_from_tensor_proto(tp);
-        if (tp.data_type() != onnx::TensorProto::FLOAT || exponentSize != 1) {
-            UNI_ERROR_LOG("can not process operator name:%s %d-%s type tensor.\n",
-                this->node.name().c_str(), exponentSize,
-                onnx_data_type_string(tp.data_type()).c_str());
-        } else {
-            if (tp.has_raw_data()) {
-                const std::string &raw_data = tp.raw_data();
-                memcpy(&value, raw_data.data(), sizeof(float));
+        int size = get_data_size_from_tensor_proto(tp);
+        auto type = tp.data_type();
+        if (size == 1) {
+            if (type == onnx::TensorProto::FLOAT) {
+                memcpy(&value, get_ptr_from_weight_obj(tp), sizeof(float));
+            } else if (type == onnx::TensorProto::INT64 || type == onnx::TensorProto::INT32) {
+                value = get_int_vec_from_tensorProto(tp)[0];
             } else {
-                memcpy(&value, tp.float_data().data(), sizeof(float));
+                UNI_ERROR_LOG("can not process operator name:%s tensor:%s %d-%s type tensor.\n",
+                    this->onnxNode.name().c_str(), tp.name().c_str(), size,
+                    onnx_data_type_string(type).c_str());
             }
+        } else {
+            UNI_ERROR_LOG("can not process operator name:%s tensor:%s %d-%s type tensor.\n",
+                this->onnxNode.name().c_str(), tp.name().c_str(), size,
+                onnx_data_type_string(type).c_str());
         }
         return value;
     }
@@ -474,15 +528,51 @@ protected:
                 ++multidim;
             }
         }
-        return (multidim > 1);
+        bool ret = false;
+        if (multidim > 1) {
+            ret = true;
+        } else if (multidim == 1) {
+            if (wps.dims_size() == 4 && wps.dims(1) == 1) {
+                ret = true;
+            }
+        }
+        return ret;
+    }
+
+    void assign_weight(WeightSpec &ws,
+        std::string opName,
+        std::vector<onnx::TensorProto> weightTp,
+        std::vector<onnx::TensorProto> biasTp)
+    {
+        // basic
+        str_copy(ws.op_name, opName.c_str(), opName.length());
+        ws.mdt = DT_F32;
+        // aasign onnxWeights
+        if (weightTp.size() == 0) {
+            ws.bytes_of_weight = 0;
+            ws.weight = nullptr;
+        } else {
+            U8 *weight_ptr = get_ptr_from_weight_obj(weightTp[0]);
+            ws.bytes_of_weight = get_data_size_from_tensor_proto(weightTp[0]) * sizeof(float);
+            ws.weight = (U8 *)mt_new_storage(ws.bytes_of_weight);
+            memcpy(ws.weight, weight_ptr, ws.bytes_of_weight);
+        }
+        // assign bias
+        if (biasTp.size() == 0) {
+            ws.bytes_of_vec = 0;
+            ws.vec = nullptr;
+        } else {
+            U8 *vec_ptr = get_ptr_from_weight_obj(biasTp[0]);
+            ws.bytes_of_vec = get_data_size_from_tensor_proto(biasTp[0]) * sizeof(float);
+            ws.vec = (U8 *)mt_new_storage(ws.bytes_of_vec);
+            memcpy(ws.vec, vec_ptr, ws.bytes_of_vec);
+        }
     }
 
     EE parse_file(std::string dir, std::string mfn) override
     {
         std::string onnxSuffix = ".onnx";
         std::string onnxPath = dir + "/" + mfn + onnxSuffix;
-
-        this->modelName = mfn;
 
         EE ret = read_from_onnx_file(onnxPath.c_str(), (google::protobuf::Message *)(&onnxModel));
         if (ret != SUCCESS) {
@@ -493,7 +583,12 @@ protected:
 
         for (int i = 0; i < onnxGraph.initializer_size(); i++) {
             const onnx::TensorProto &initializer = onnxGraph.initializer(i);
-            weights[initializer.name()] = initializer;
+            onnxWeights[initializer.name()] = initializer;
+        }
+
+        for (int i = 0; i < onnxGraph.value_info_size(); i++) {
+            const onnx::ValueInfoProto &value = onnxGraph.value_info(i);
+            onnxValues[value.name()] = value;
         }
         return ret;
     }
@@ -503,26 +598,33 @@ protected:
         std::string ret;
         if (name.length() < NAME_LEN) {
             ret = name;
-        } else if (this->croppingNames.find(name) != this->croppingNames.end()) {
-            ret = this->croppingNames[name];
+        } else if (this->nameMap.find(name) != this->nameMap.end()) {
+            ret = this->nameMap[name];
         } else {
-            ret = "brief_" + std::to_string(this->croppingNames.size());
-            this->croppingNames[name] = ret;
+            ret = "brief_" + std::to_string(this->nameMap.size());
+            this->nameMap[name] = ret;
         }
         return ret;
     }
 
+    std::string get_name(const onnx::NodeProto &node)
+    {
+        std::string opName = node.name();
+        if (opName.empty() && node.output_size() > 0) {
+            opName = node.output(0);
+        }
+        return opName;
+    }
+
     EE adapt_operators(ModelSpec *ms) override
     {
-        EE ret = SUCCESS;
-        str_copy(ms->model_name, modelName.c_str(), modelName.length());
+        str_copy(ms->model_name, onnxGraph.name().c_str(), onnxGraph.name().length());
         ms->dt = DT_F32;
 
         ms->num_inputs = 0;
         for (int i = 0; i < onnxGraph.input().size(); i++) {
-            auto input_node = onnxGraph.input(i);
-            auto input_name = input_node.name();
-            if (weights.find(input_name) != weights.end()) {
+            const std::string &input_name = onnxGraph.input(i).name();
+            if (onnxWeights.find(input_name) != onnxWeights.end()) {
                 continue;
             }
             ms->num_inputs++;
@@ -532,12 +634,14 @@ protected:
         for (int i = 0, index = 0; i < onnxGraph.input().size(); i++) {
             auto input_node = onnxGraph.input(i);
             auto input_name = input_node.name();
-            if (weights.find(input_name) != weights.end()) {
+            if (onnxWeights.find(input_name) != onnxWeights.end()) {
                 continue;
             }
             ms->input_names[index] = (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
+            input_name = this->crop_name(input_name);
             str_copy(ms->input_names[index], input_name.c_str(), input_name.length());
 
+            ms->input_dims[index] = tensor0d();
             auto type = input_node.type().tensor_type().elem_type();
             switch (type) {
                 case onnx::TensorProto::INT64:
@@ -576,568 +680,438 @@ protected:
 
         ms->num_outputs = onnxGraph.output().size();
         ms->output_names = (I8 **)mt_new_storage(ms->num_outputs * sizeof(I8 *));
-        for (int k = 0; k < onnxGraph.output().size(); k++) {
-            ms->output_names[k] = (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
-            str_copy(ms->output_names[k], onnxGraph.output(k).name().c_str(),
-                onnxGraph.output(k).name().length());
+        for (int i = 0; i < onnxGraph.output().size(); i++) {
+            std::string output_name = onnxGraph.output(i).name();
+            output_name = this->crop_name(output_name);
+            ms->output_names[i] = (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
+            str_copy(ms->output_names[i], output_name.c_str(), output_name.length());
         }
 
-        int bnOpNum = 0;
-        int constantOpNum = 0;
-        int onnxNodeCount = onnxGraph.node_size();
-        for (int i = 0; i < onnxNodeCount; i++) {
-            const onnx::NodeProto &tmpNode = onnxGraph.node(i);
-            if (tmpNode.op_type() == "BatchNormalization") {
-                bnOpNum++;
-            } else if (tmpNode.op_type() == "Constant") {
-                if (i >= removePreprocessOpNum) {
-                    constantOpNum++;
+        for (int nodeIndex = 0; nodeIndex < onnxGraph.node_size(); nodeIndex++) {
+            this->onnxNode = onnxGraph.node(nodeIndex);
+            const std::string &onnxNodeType = this->onnxNode.op_type();
+            for (int j = 0; j < this->onnxNode.input_size(); j++) {
+                const std::string &input_name = this->onnxNode.input(j);
+                if (this->onnxWeights.find(input_name) != this->onnxWeights.end()) {
+#if 0
+                    this->onnxWeightReferCount[input_name] = 1;
+#else
+                    if (this->onnxWeightReferCount.find(input_name) ==
+                        this->onnxWeightReferCount.end()) {
+                        this->onnxWeightReferCount[input_name] = 1;
+                    } else {
+                        this->onnxWeightReferCount[input_name]++;
+                    }
+                    if (onnxNodeType == "Gemm" && j == 2) {
+                        auto BName = this->onnxNode.input(1);
+                        auto CName = this->onnxNode.input(2);
+                        this->onnxWeightReferCount[CName] = UNI_MAX(
+                            this->onnxWeightReferCount[BName], this->onnxWeightReferCount[CName]);
+                    }
+#endif
                 }
             }
         }
-
-        // appending space for scale op
-        ms->num_operator_specs = onnxNodeCount + bnOpNum - constantOpNum - removePreprocessOpNum;
-        this->operatorSpecVec = std::vector<OperatorSpec>(ms->num_operator_specs);
-
-        // Some models transformed from TF store weight and bias as Constant OP
-        int numUnseenConstants = 0;
-        nodeIndex = 0;
-        for (int i = 0; i < removePreprocessOpNum; i++) {
-            this->node = onnxGraph.node(nodeIndex);
-            this->op = node.op_type();
-            if (op == "Constant") {
-                handle_Constant();
-                numUnseenConstants++;
+        for (auto iter = this->onnxWeightReferCount.begin();
+             iter != this->onnxWeightReferCount.end(); iter++) {
+            if (iter->second > 1) {
+                this->sharedWeights.insert(iter->first);
             }
-            nodeIndex++;
-        }
-        if (0 != numUnseenConstants) {
-            UNI_INFO_LOG("first %d operators are removed, and %d of them are Constant operator.\n",
-                removePreprocessOpNum, numUnseenConstants);
         }
 
-        nodeIndex = removePreprocessOpNum;
-        int opIndex = 0;
-        for (int i = removePreprocessOpNum; i < onnxNodeCount; i++) {
-            this->node = onnxGraph.node(nodeIndex);
-            UNI_DEBUG_LOG("process operator name:%s parameter.\n", this->node.name().c_str());
-            this->op = node.op_type();
-            if (op == "Constant") {
+        std::vector<OperatorSpec> operatorSpecVec;
+        for (int nodeIndex = 0; nodeIndex < onnxGraph.node_size(); nodeIndex++) {
+            this->onnxNode = onnxGraph.node(nodeIndex);
+            std::string opName = get_name(this->onnxNode);
+            const std::string &onnxNodeType = this->onnxNode.op_type();
+            UNI_DEBUG_LOG("process operator name:%s type:%s parameter.\n", opName.c_str(),
+                onnxNodeType.c_str());
+            if (onnxNodeType == "Constant") {
                 handle_Constant();
-                nodeIndex++;
                 continue;
             }
-            std::string opName = node.name();
-            if (opName.empty()) {
-                opName = node.output(0);
+            if (nodeIndex < removePreprocessOpNum) {
+                UNI_INFO_LOG("operator name:%s is removed.\n", opName.c_str());
+                continue;
             }
-            opName = this->crop_name(opName);
 
-            int opInputNum = (int)node.input_size();
-            opFinalInputNum = opInputNum;
-            std::vector<std::string> inputNames;
-            std::vector<std::string> op_weight_objs;
-            for (int j = 0; j < opInputNum; j++) {
-                const std::string &input_name = node.input(j);
-                if (weights.find(input_name) != weights.end()) {
-                    opFinalInputNum--;
-                    op_weight_objs.push_back(input_name);
-                } else if (input_name == "") {
-                    opFinalInputNum--;
+            opName = crop_name(opName);
+            OperatorType opType = convert_onnx_type(onnxNodeType);
+
+            std::vector<std::string> inputNames, outputNames;
+            for (int j = 0; j < this->onnxNode.input_size(); j++) {
+                const std::string &input_name = this->onnxNode.input(j);
+                if (opType == OT_Eltwise || opType == OT_Concat || opType == OT_MatMul) {
+                    inputNames.push_back(input_name);
+                } else if (input_name == "" ||
+                    this->onnxWeights.find(input_name) != this->onnxWeights.end()) {
+                    if (opType == OT_Gather || opType == OT_FC) {
+                        if (this->onnxWeightReferCount[input_name] > 1) {
+                            inputNames.push_back(input_name);
+                        }
+                    }
                 } else {
                     inputNames.push_back(input_name);
-                    if (op == "Max" || op == "Min") {
-                        opFinalInputNum = 1;
+                    if (onnxNodeType == "Max" || onnxNodeType == "Min") {
                         break;
                     }
                 }
             }
-            // op input names correction
-            if (op == "Add" || op == "Mul") {
-                if (weights.find(node.input(1)) != weights.end() &&
-                    is_multi_dim(weights[node.input(1)])) {
-                    opFinalInputNum++;
-                    inputNames.push_back(node.input(1));
-                }
-            }
-
-            if (op == "Concat" &&  node.input_size() > 1 && weights.find(node.input(1)) != weights.end()) {
-                opFinalInputNum++;
-                inputNames.push_back(node.input(1));
-            }
-
-            int opOutputNum = (int)node.output_size();
-            std::vector<std::string> outputNames;
-            for (int j = 0; j < opOutputNum; j++) {
-                const std::string &output_name = node.output(j);
+            for (int j = 0; j < this->onnxNode.output_size(); j++) {
+                const std::string &output_name = this->onnxNode.output(j);
                 outputNames.push_back(output_name);
             }
 
-            str_copy(operatorSpecVec[opIndex].name, opName.c_str(), opName.length());
-            OperatorType opType = convert_onnx_type(op);
-
-            // op type correction
-            if (op == "MatMul" && opFinalInputNum == 1) {
-                opType = OT_FC;
-            } else if ((op == "Add" || op == "Sub" || op == "Mul" || op == "Div")) {
-                if (opFinalInputNum == 1 && node.input_size() == 2) {
-                    onnx::TensorProto tp;
-                    if (weights.find(node.input(0)) != weights.end()) {
-                        tp = weights[node.input(0)];
-                    } else if (weights.find(node.input(1)) != weights.end()) {
-                        tp = weights[node.input(1)];
-                    } else {
-                        UNI_ERROR_LOG("can not map operator name:%s type:%s to Power.\n",
-                            this->node.name().c_str(), op.c_str());
-                    }
-                    if (get_data_size_from_tensor_proto(tp) == 1) {
-                        opType = OT_Power;
-                        operatorSpecVec[opIndex].type = OT_Power;
-                    }
-                } else if (opFinalInputNum == 2 && weights.find(node.input(1)) != weights.end() &&
-                    is_multi_dim(weights[node.input(1)])) {
-                    opType = OT_Eltwise;
-                    operatorSpecVec[opIndex].type = OT_Eltwise;
-                }
-            }
-
             // input names order correction
-            if (op == "Scan" || op == "Gather") {
+            if (onnxNodeType == "Scan") {
                 for (int k = 0; k < (int)(inputNames.size() / 2); k++) {
                     std::string frontStr = inputNames[k];
                     inputNames[k] = inputNames[inputNames.size() - 1 - k];
                     inputNames[inputNames.size() - 1 - k] = frontStr;
                 }
-                if (op == "Scan") {
-                    if (outputNames.size() >= 2) {
-                        std::string firOutput = outputNames[0];
-                        std::string lastOutput = outputNames[outputNames.size() - 1];
-                        outputNames.clear();
-                        outputNames.push_back(lastOutput);
-                        outputNames.push_back(firOutput);
-                    }
-                    opOutputNum = outputNames.size();
+                if (outputNames.size() >= 2) {
+                    std::string firOutput = outputNames[0];
+                    std::string lastOutput = outputNames[outputNames.size() - 1];
+                    outputNames.clear();
+                    outputNames.push_back(lastOutput);
+                    outputNames.push_back(firOutput);
                 }
             }
 
-            operatorSpecVec[opIndex].type = opType;
-            operatorSpecVec[opIndex].num_inputs = opFinalInputNum;
-            operatorSpecVec[opIndex].input_tensors_name =
-                (I8 **)mt_new_storage(operatorSpecVec[opIndex].num_inputs * sizeof(I8 *));
-            for (U32 j = 0; j < operatorSpecVec[opIndex].num_inputs; j++) {
-                inputNames[j] = this->crop_name(inputNames[j]);
-                operatorSpecVec[opIndex].input_tensors_name[j] =
-                    (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
-                str_copy(operatorSpecVec[opIndex].input_tensors_name[j], inputNames[j].c_str(),
+            OperatorSpec operatorSpec;
+            str_copy(operatorSpec.name, opName.c_str(), opName.length());
+            operatorSpec.type = opType;
+            operatorSpec.num_inputs = inputNames.size();
+            operatorSpec.input_tensors_name =
+                (I8 **)mt_new_storage(operatorSpec.num_inputs * sizeof(I8 *));
+            for (U32 j = 0; j < operatorSpec.num_inputs; j++) {
+                inputNames[j] = crop_name(inputNames[j]);
+                operatorSpec.input_tensors_name[j] = (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
+                str_copy(operatorSpec.input_tensors_name[j], inputNames[j].c_str(),
                     inputNames[j].length());
             }
-            operatorSpecVec[opIndex].num_outputs = opOutputNum;
-            operatorSpecVec[opIndex].output_tensors_name =
-                (I8 **)mt_new_storage(operatorSpecVec[opIndex].num_outputs * sizeof(I8 *));
-            for (U32 j = 0; j < operatorSpecVec[opIndex].num_outputs; j++) {
-                outputNames[j] = this->crop_name(outputNames[j]);
-                operatorSpecVec[opIndex].output_tensors_name[j] =
-                    (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
-                str_copy(operatorSpecVec[opIndex].output_tensors_name[j], outputNames[j].c_str(),
+            operatorSpec.num_outputs = outputNames.size();
+            operatorSpec.output_tensors_name =
+                (I8 **)mt_new_storage(operatorSpec.num_outputs * sizeof(I8 *));
+            for (U32 j = 0; j < operatorSpec.num_outputs; j++) {
+                outputNames[j] = crop_name(outputNames[j]);
+                operatorSpec.output_tensors_name[j] = (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
+                str_copy(operatorSpec.output_tensors_name[j], outputNames[j].c_str(),
                     outputNames[j].length());
             }
 
-            if (op == "Equal" || op == "Linear") {
-                weightOpIndexLists.push_back(nodeIndex);
+            CHECK_STATUS(adapt_operator(opType, &(operatorSpec.ps)));
+            operatorSpecVec.push_back(operatorSpec);
+
+            if (onnxNodeType == "BatchNormalization") {
+                OperatorSpec operatorSpec;
+                std::string scaleInputName = outputNames[0];
+                std::string scaleOpName = opName + "_scale";
+                str_copy(operatorSpec.name, scaleOpName.c_str(), scaleOpName.length());
+                operatorSpec.type = OT_Scale;
+                operatorSpec.num_inputs = 1;
+                operatorSpec.input_tensors_name = (I8 **)mt_new_storage(sizeof(I8 *));
+                operatorSpec.input_tensors_name[0] = (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
+                str_copy(operatorSpec.input_tensors_name[0], scaleInputName.c_str(),
+                    scaleInputName.length());
+                operatorSpec.num_outputs = 1;
+                operatorSpec.output_tensors_name = (I8 **)mt_new_storage(sizeof(I8 *));
+                operatorSpec.output_tensors_name[0] = (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
+                str_copy(operatorSpec.output_tensors_name[0], scaleInputName.c_str(),
+                    scaleInputName.length());
+
+                CHECK_STATUS(adapt_operator(operatorSpec.type, &(operatorSpec.ps)));
+                operatorSpecVec.push_back(operatorSpec);
             }
-
-            if ((op == "Add" || op == "Sub" || op == "Mul" || op == "Div") &&
-                opFinalInputNum == 1 && opType != OT_Power) {
-                weightOpIndexLists.push_back(nodeIndex);
-                operatorSpecVec[opIndex].type = OT_Scale;
-                opType = OT_Scale;
-                memset(&(operatorSpecVec[opIndex].ps), 0, sizeof(operatorSpecVec[opIndex].ps));
-                operatorSpecVec[opIndex].ps.scale_spec.axis = 1;
-            }
-
-            if (op == "Transpose" && opFinalInputNum == 0) {
-                weightOpIndexLists.push_back(nodeIndex);
-            } else {
-                if (op == "Gather") {
-                    if (node.input_size() == 2 && weights.find(node.input(0)) == weights.end() &&
-                        weights.find(node.input(1)) == weights.end()) {
-                        operatorSpecVec[opIndex].type = OT_Embedding;
-                        opType = OT_Embedding;
-                    } else if (weights.find(node.input(0)) != weights.end()) {
-                        weightOpIndexLists.push_back(nodeIndex);
-                        if (weights.find(node.input(1)) != weights.end()) {  // both provided
-                            operatorSpecVec[opIndex].type = OT_SharedWeight;
-                            opType = OT_SharedWeight;
-                        } else {
-                            operatorSpecVec[opIndex].type = OT_Embedding;
-                            opType = OT_Embedding;
-                        }
-                    } else if (weights.find(node.input(1)) != weights.end()) {
-                        opType = OT_Slice;
-                        operatorSpecVec[opIndex].type = OT_Slice;
-                        memset(
-                            &(operatorSpecVec[opIndex].ps), 0, sizeof(operatorSpecVec[opIndex].ps));
-                        operatorSpecVec[opIndex].ps.slice_spec.slice_points[0] = 1;
-                        operatorSpecVec[opIndex].ps.slice_spec.slice_size = 1;
-                        operatorSpecVec[opIndex].ps.slice_spec.axis = 1;
-                        operatorSpecVec[opIndex].num_outputs = 2;
-                        free(operatorSpecVec[opIndex].output_tensors_name[0]);
-                        free(operatorSpecVec[opIndex].output_tensors_name);
-                        operatorSpecVec[opIndex].output_tensors_name = (I8 **)mt_new_storage(
-                            operatorSpecVec[opIndex].num_outputs * sizeof(I8 *));
-                        operatorSpecVec[opIndex].output_tensors_name[0] =
-                            (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
-                        str_copy(operatorSpecVec[opIndex].output_tensors_name[0],
-                            outputNames[0].c_str(), outputNames[0].length());
-                        operatorSpecVec[opIndex].output_tensors_name[1] =
-                            (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
-                        std::string reduntStr = "DropOut_Str";
-                        str_copy(operatorSpecVec[opIndex].output_tensors_name[1], reduntStr.c_str(),
-                            reduntStr.length());
-                    }
-                }
-
-                ParameterSpec curPs;
-                CHECK_STATUS(adapt_operator(opType, &curPs));
-                operatorSpecVec[opIndex].ps = curPs;
-
-                if (opType == OT_BatchNorm && this->op == "BatchNormalization") {
-                    std::string scaleInputName = outputNames[0];
-                    std::string scaleOpName = "scale_" + opName;
-                    opIndex++;
-                    str_copy(
-                        operatorSpecVec[opIndex].name, scaleOpName.c_str(), scaleOpName.length());
-                    operatorSpecVec[opIndex].type = OT_Scale;
-                    operatorSpecVec[opIndex].num_inputs = 1;
-                    operatorSpecVec[opIndex].input_tensors_name =
-                        (I8 **)mt_new_storage(sizeof(I8 *));
-                    operatorSpecVec[opIndex].input_tensors_name[0] =
-                        (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
-                    str_copy(operatorSpecVec[opIndex].input_tensors_name[0], scaleInputName.c_str(),
-                        scaleInputName.length());
-                    operatorSpecVec[opIndex].num_outputs = 1;
-                    operatorSpecVec[opIndex].output_tensors_name =
-                        (I8 **)mt_new_storage(sizeof(I8 *));
-                    operatorSpecVec[opIndex].output_tensors_name[0] =
-                        (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
-                    str_copy(operatorSpecVec[opIndex].output_tensors_name[0],
-                        scaleInputName.c_str(), scaleInputName.length());
-
-                    ParameterSpec scalePs;
-                    CHECK_STATUS(adapt_operator(operatorSpecVec[opIndex].type, &scalePs));
-                    operatorSpecVec[opIndex].ps = scalePs;
-                }
-            }
-
-            nodeIndex++;
-            opIndex++;
         }
 
-        // insert sharedWeightOp
-        ms->num_weight_specs = weightOpIndexLists.size() + bnOpNum + insertSharedWeight.size();
-        this->weightSpecVec = std::vector<WeightSpec>(weightOpIndexLists.size() + bnOpNum);
-        for (auto iter = insertSharedWeight.begin(); iter != insertSharedWeight.end(); iter++) {
-            OperatorSpec tmpOps = mt_create_operator(iter->first.c_str(), OT_SharedWeight, 0, 1);
-            str_copy(tmpOps.output_tensors_name[0], iter->first.c_str(), iter->first.length());
-            SharedWeightParamSpec sharedWeightPs;
-            const auto &weightTp = weights[iter->first];
-            std::vector<int> weightShape;
-            for (int k = 0; k < weightTp.dims_size(); k++) {
-                weightShape.push_back(weightTp.dims(k));
+        std::vector<OperatorSpec> sharedWeightOperatorSpecVec;
+        for (auto iter = this->sharedWeights.begin(); iter != this->sharedWeights.end(); iter++) {
+            OperatorSpec tmpOps = mt_create_operator(iter->c_str(), OT_SharedWeight, 0, 1);
+            str_copy(tmpOps.output_tensors_name[0], iter->c_str(), iter->length());
+            const auto &weightTp = onnxWeights[*iter];
+            tmpOps.ps.shared_weight_spec.desc = genDescFromTp(weightTp);
+            int num = get_data_size_from_tensor_proto(weightTp);
+            if (tmpOps.ps.shared_weight_spec.desc.nDims == 0 && num > 0) {
+                tmpOps.ps.shared_weight_spec.desc.nDims = 1;
+                tmpOps.ps.shared_weight_spec.desc.dims[0] = num;
             }
-            sharedWeightPs.desc.dt = DT_F32;
-            sharedWeightPs.desc.nDims = UNI_MAX(1, weightShape.size());
-            sharedWeightPs.desc.df = getTensorDefaultDataFormat(sharedWeightPs.desc.nDims);
-            sharedWeightPs.desc.dims[0] = 1;
-            for (U32 j = 0; j < sharedWeightPs.desc.nDims; j++) {
-                sharedWeightPs.desc.dims[sharedWeightPs.desc.nDims - 1 - j] = weightShape[j];
-            }
-            WeightSpec weightSpec = mt_create_weight(
-                iter->first.c_str(), DT_F32, tensorNumBytes(sharedWeightPs.desc), 0, 0);
-            U8 *weightData = get_ptr_from_weight_obj(weightTp);
-            // memcpy(weightSpec.weight, weightData, tensorNumBytes(sharedWeightPs.desc));
-            if (weightTp.data_type() == onnx::TensorProto::INT64) {
-                std::vector<int> intVec = get_int_vec_from_tensorProto(weightTp);
-                std::vector<float> floatVec;
-                for (U32 k = 0; k < intVec.size(); k++) {
-                    floatVec.push_back(intVec[k] * 1.0);
-                }
-                memcpy(
-                    weightSpec.weight, (U8 *)(&(floatVec[0])), tensorNumBytes(sharedWeightPs.desc));
-            } else {
-                memcpy(weightSpec.weight, weightData, tensorNumBytes(sharedWeightPs.desc));
-            }
-            tmpOps.ps.shared_weight_spec = sharedWeightPs;
-            this->sharedWeightOps.push_back(tmpOps);
-            this->sharedWeightWps.push_back(weightSpec);
+            sharedWeightOperatorSpecVec.push_back(tmpOps);
         }
-        ms->num_operator_specs = this->sharedWeightOps.size() + this->operatorSpecVec.size();
+        ms->num_operator_specs = sharedWeightOperatorSpecVec.size() + operatorSpecVec.size();
         ms->ops = (OperatorSpec *)mt_new_storage(sizeof(OperatorSpec) * ms->num_operator_specs);
-        std::vector<OperatorSpec> combineOpsVec;
-        combineOpsVec.insert(combineOpsVec.end(), sharedWeightOps.begin(), sharedWeightOps.end());
-        combineOpsVec.insert(combineOpsVec.end(), operatorSpecVec.begin(), operatorSpecVec.end());
-        memcpy(ms->ops, combineOpsVec.data(), sizeof(OperatorSpec) * ms->num_operator_specs);
+        memcpy(ms->ops, sharedWeightOperatorSpecVec.data(),
+            sizeof(OperatorSpec) * sharedWeightOperatorSpecVec.size());
+        memcpy(ms->ops + sharedWeightOperatorSpecVec.size(), operatorSpecVec.data(),
+            sizeof(OperatorSpec) * operatorSpecVec.size());
         for (I32 i = 0; i < ms->num_operator_specs; i++) {
             ms->ops[i].tensor_positions = nullptr;
             ms->ops[i].num_quant_feature = 0;
             ms->ops[i].feature_scale = nullptr;
         }
-        return ret;
+        return SUCCESS;
     }
 
     EE adapt_weights(ModelSpec *ms) override
     {
-        EE ret = SUCCESS;
-        // WeightSpec *weightSpecVec = (WeightSpec *)mt_new_storage(sizeof(WeightSpec) * ms->num_weight_specs);
-        int weightOpIndexIndeed = 0;
-        for (U32 i = 0; i < (U32)(ms->num_weight_specs - this->insertSharedWeight.size()); i++) {
-            int weightOpIndex = weightOpIndexLists[weightOpIndexIndeed];
-            this->node = onnxGraph.node(weightOpIndex);
-            UNI_DEBUG_LOG("process operator name:%s weight.\n", this->node.name().c_str());
-            const onnx::NodeProto &weightNode = onnxGraph.node(weightOpIndex);
-            std::string weightOpName = weightNode.name();
-            if (weightOpName.empty()) {
-                weightOpName = weightNode.output(0);
+        std::vector<WeightSpec> weightSpecVec;
+        for (auto iter = this->sharedWeights.begin(); iter != this->sharedWeights.end(); iter++) {
+            const auto &weightTp = onnxWeights[*iter];
+            DataType dt;
+            std::vector<int> intVec;
+            U8 *ptr;
+            switch (weightTp.data_type()) {
+                case onnx::TensorProto::INT64:
+                case onnx::TensorProto::INT32:
+                case onnx::TensorProto::UINT64:
+                case onnx::TensorProto::UINT32:
+                    intVec = get_int_vec_from_tensorProto(weightTp);
+                    ptr = (U8 *)intVec.data();
+                    dt = DT_I32;
+                    break;
+                case onnx::TensorProto::DOUBLE:
+                case onnx::TensorProto::FLOAT:
+                case onnx::TensorProto::FLOAT16:
+                case onnx::TensorProto::BFLOAT16:
+                    ptr = get_ptr_from_weight_obj(weightTp);
+                    dt = DT_F32;
+                    break;
+                default:
+                    UNI_ERROR_LOG("can not process tensor:%s %s type weight.\n",
+                        weightTp.name().c_str(),
+                        onnx_data_type_string(weightTp.data_type()).c_str());
+                    break;
             }
-            if (croppingNames.find(weightOpName) != croppingNames.end()) {
-                weightOpName = croppingNames[weightOpName];
+            U32 bytes = get_data_size_from_tensor_proto(weightTp) * bytesOf(dt);
+            WeightSpec weightSpec = mt_create_weight(iter->c_str(), dt, bytes, 0, 0);
+            memcpy(weightSpec.weight, ptr, bytes);
+            weightSpecVec.push_back(weightSpec);
+        }
+        for (int nodeIndex = 0; nodeIndex < onnxGraph.node_size(); nodeIndex++) {
+            this->onnxNode = onnxGraph.node(nodeIndex);
+            std::string opName = get_name(this->onnxNode);
+            const std::string &onnxNodeType = this->onnxNode.op_type();
+            UNI_DEBUG_LOG(
+                "process operator name:%s type:%s weight.\n", opName.c_str(), onnxNodeType.c_str());
+            if (this->nameMap.find(opName) != this->nameMap.end()) {
+                opName = this->nameMap[opName];
             }
-            const std::string &weightOpType = weightNode.op_type();
-            auto indices = getOperatorWeightInputIndex(weightOpIndex);
+            auto indices = getOperatorWeightInputIndex(this->onnxNode);
 
-            if (weightOpType == "Conv" || weightOpType == "ConvTranspose") {
-                // to check that if any op has bias
-                int convInputNum =
-                    weightNode.input_size();  // if convInputNum == 3, means has bias , otherwise , do not have bias
+            WeightSpec weightSpec;
+            if (onnxNodeType == "Conv" || onnxNodeType == "ConvTranspose") {
+                // if convInputNum == 3, means has bias , otherwise do not have bias
+                int convInputNum = this->onnxNode.input_size();
 
-                const onnx::TensorProto &convWeightTp = weights[weightNode.input(1)];
+                const onnx::TensorProto &convWeightTp = onnxWeights[this->onnxNode.input(1)];
 
                 int convWeightNum = get_data_size_from_tensor_proto(convWeightTp);
                 U8 *convWeightParamPtr = get_ptr_from_weight_obj(convWeightTp);
-                str_copy(weightSpecVec[i].op_name, weightOpName.c_str(), weightOpName.length());
+                str_copy(weightSpec.op_name, opName.c_str(), opName.length());
 
-                weightSpecVec[i].bytes_of_weight =
-                    convWeightNum * sizeof(float);  // Please do not change to bytesOf(mdt)
-                weightSpecVec[i].weight = (U8 *)mt_new_storage(weightSpecVec[i].bytes_of_weight);
-                memcpy(
-                    weightSpecVec[i].weight, convWeightParamPtr, weightSpecVec[i].bytes_of_weight);
+                // Please do not change to bytesOf(mdt)
+                weightSpec.bytes_of_weight = convWeightNum * sizeof(float);
+                weightSpec.weight = (U8 *)mt_new_storage(weightSpec.bytes_of_weight);
+                memcpy(weightSpec.weight, convWeightParamPtr, weightSpec.bytes_of_weight);
                 // traverse weight elements to see whether it is bnn convolution
-                weightSpecVec[i].mdt =
-                    get_weight_data_type(convWeightNum, (F32 *)weightSpecVec[i].weight);
+                weightSpec.mdt = get_weight_data_type(convWeightNum, (F32 *)weightSpec.weight);
 
                 int convBiasNum = 0;
                 U8 *convBiasParamPtr = nullptr;
                 if (convInputNum == 3) {
-                    const onnx::TensorProto &convBiasTp = weights[weightNode.input(2)];
+                    const onnx::TensorProto &convBiasTp = onnxWeights[this->onnxNode.input(2)];
                     convBiasNum = get_data_size_from_tensor_proto(convBiasTp);
                     convBiasParamPtr = get_ptr_from_weight_obj(convBiasTp);
-                    weightSpecVec[i].bytes_of_vec = convBiasNum * sizeof(float);
-                    if (DT_BIN11 == weightSpecVec[i].mdt || DT_BIN01 == weightSpecVec[i].mdt) {
-                        weightSpecVec[i].bytes_of_vec *=
-                            2;  // BNN conv must have a scale vector and a bias vector, so that it can fuse with BN
+                    weightSpec.bytes_of_vec = convBiasNum * sizeof(float);
+                    if (DT_BIN11 == weightSpec.mdt || DT_BIN01 == weightSpec.mdt) {
+                        // BNN conv must have a scale vector and a bias vector, so that it can fuse with BN
+                        weightSpec.bytes_of_vec *= 2;
                     }
-                    weightSpecVec[i].vec = (U8 *)mt_new_storage(weightSpecVec[i].bytes_of_vec);
-                    if (DT_BIN11 == weightSpecVec[i].mdt || DT_BIN01 == weightSpecVec[i].mdt) {
+                    weightSpec.vec = (U8 *)mt_new_storage(weightSpec.bytes_of_vec);
+                    if (DT_BIN11 == weightSpec.mdt || DT_BIN01 == weightSpec.mdt) {
                         U32 vecBytes = convBiasNum * sizeof(float);
-                        F32 *scale = (F32 *)weightSpecVec[i].vec;
+                        F32 *scale = (F32 *)weightSpec.vec;
                         for (I32 j = 0; j < convBiasNum; j++) {
                             scale[j] = 1.0;
                         }
-                        memcpy(weightSpecVec[i].vec + vecBytes, convBiasParamPtr,
-                            vecBytes);  // Copy bias (if any) to the second half for BNN
+                        // Copy bias (if any) to the second half for BNN
+                        memcpy(weightSpec.vec + vecBytes, convBiasParamPtr, vecBytes);
                     } else {
-                        memcpy(
-                            weightSpecVec[i].vec, convBiasParamPtr, weightSpecVec[i].bytes_of_vec);
+                        memcpy(weightSpec.vec, convBiasParamPtr, weightSpec.bytes_of_vec);
                     }
                 } else {
-                    weightSpecVec[i].bytes_of_vec = 0;
-                    weightSpecVec[i].vec = nullptr;
+                    weightSpec.bytes_of_vec = 0;
+                    weightSpec.vec = nullptr;
                 }
-            } else if (weightOpType == "Gemm" || weightOpType == "Linear") {
-                str_copy(weightSpecVec[i].op_name, weightOpName.c_str(), weightOpName.length());
-                weightSpecVec[i].mdt = DT_F32;
+                weightSpecVec.push_back(weightSpec);
+            } else if (onnxNodeType == "Gemm" || onnxNodeType == "Linear") {
+                str_copy(weightSpec.op_name, opName.c_str(), opName.length());
+                weightSpec.mdt = DT_F32;
                 int transB = 1;
-                if (weightOpType == "Gemm") {
-                    const onnx::TensorProto &fcBiasTp = weights[weightNode.input(2)];
+                if (onnxNodeType == "Linear" ||
+                    this->onnxWeightReferCount[this->onnxNode.input(2)] > 1) {
+                    weightSpec.bytes_of_vec = 0;
+                    weightSpec.vec = nullptr;
+                } else {
+                    const onnx::TensorProto &fcBiasTp = onnxWeights[this->onnxNode.input(2)];
                     int fcBiasNum = get_data_size_from_tensor_proto(fcBiasTp);
                     U8 *fcBiasParamPtr = get_ptr_from_weight_obj(fcBiasTp);
-                    weightSpecVec[i].bytes_of_vec = fcBiasNum * sizeof(float);
-                    weightSpecVec[i].vec = (U8 *)mt_new_storage(weightSpecVec[i].bytes_of_vec);
-                    memcpy(weightSpecVec[i].vec, fcBiasParamPtr, weightSpecVec[i].bytes_of_vec);
-                    transB = get_node_single_int_attribute_by_name(weightNode, "transB", 0);
-                } else {
-                    weightSpecVec[i].bytes_of_vec = 0;
-                    weightSpecVec[i].vec = nullptr;
+                    weightSpec.bytes_of_vec = fcBiasNum * sizeof(float);
+                    weightSpec.vec = (U8 *)mt_new_storage(weightSpec.bytes_of_vec);
+                    memcpy(weightSpec.vec, fcBiasParamPtr, weightSpec.bytes_of_vec);
                 }
-                const onnx::TensorProto &fcWeightTp = weights[weightNode.input(1)];
-                int fcWeightNum = get_data_size_from_tensor_proto(fcWeightTp);
-                U8 *fcWeightParamPtr = get_ptr_from_weight_obj(fcWeightTp);
-                weightSpecVec[i].bytes_of_weight = fcWeightNum * sizeof(float);
-                weightSpecVec[i].weight = (U8 *)mt_new_storage(weightSpecVec[i].bytes_of_weight);
-                if (transB) {
-                    memcpy(weightSpecVec[i].weight, fcWeightParamPtr, fcWeightNum * sizeof(float));
-                } else {
-                    memcpy_trans2d(weightSpecVec[i].weight, fcWeightParamPtr,
-                        (int)fcWeightTp.dims(1), (int)fcWeightTp.dims(0));
+                if (onnxNodeType == "Gemm") {
+                    transB = get_node_single_int_attribute_by_name(this->onnxNode, "transB", 0);
                 }
-            } else if (weightOpType == "BatchNormalization") {
-                const onnx::TensorProto &scale = weights[weightNode.input(1)];
-                const onnx::TensorProto &bias = weights[weightNode.input(2)];
-                const onnx::TensorProto &mean = weights[weightNode.input(3)];
-                const onnx::TensorProto &var = weights[weightNode.input(4)];
+                if (this->onnxWeightReferCount[this->onnxNode.input(1)] > 1) {
+                    weightSpec.bytes_of_weight = 0;
+                    weightSpec.weight = nullptr;
+                } else {
+                    const onnx::TensorProto &fcWeightTp = onnxWeights[this->onnxNode.input(1)];
+                    int fcWeightNum = get_data_size_from_tensor_proto(fcWeightTp);
+                    U8 *fcWeightParamPtr = get_ptr_from_weight_obj(fcWeightTp);
+                    weightSpec.bytes_of_weight = fcWeightNum * sizeof(float);
+                    weightSpec.weight = (U8 *)mt_new_storage(weightSpec.bytes_of_weight);
+                    if (transB) {
+                        memcpy(weightSpec.weight, fcWeightParamPtr, fcWeightNum * sizeof(float));
+                    } else {
+                        memcpy_trans2d(weightSpec.weight, fcWeightParamPtr, (int)fcWeightTp.dims(1),
+                            (int)fcWeightTp.dims(0));
+                    }
+                }
+                weightSpecVec.push_back(weightSpec);
+            } else if (onnxNodeType == "BatchNormalization") {
+                const onnx::TensorProto &scale = onnxWeights[this->onnxNode.input(1)];
+                const onnx::TensorProto &bias = onnxWeights[this->onnxNode.input(2)];
+                const onnx::TensorProto &mean = onnxWeights[this->onnxNode.input(3)];
+                const onnx::TensorProto &var = onnxWeights[this->onnxNode.input(4)];
 
                 U8 *meanPtr = get_ptr_from_weight_obj(mean);
                 int bnMeanNum = get_data_size_from_tensor_proto(mean);
                 U8 *varPtr = get_ptr_from_weight_obj(var);
                 int bnVarNum = get_data_size_from_tensor_proto(var);
 
-                str_copy(weightSpecVec[i].op_name, weightOpName.c_str(), weightOpName.length());
-                weightSpecVec[i].mdt = DT_F32;
-                weightSpecVec[i].bytes_of_weight = bnMeanNum * sizeof(float);
-                weightSpecVec[i].bytes_of_vec = bnVarNum * sizeof(float);
+                str_copy(weightSpec.op_name, opName.c_str(), opName.length());
+                weightSpec.mdt = DT_F32;
+                weightSpec.bytes_of_weight = bnMeanNum * sizeof(float);
+                weightSpec.bytes_of_vec = bnVarNum * sizeof(float);
 
-                weightSpecVec[i].weight = (U8 *)mt_new_storage(weightSpecVec[i].bytes_of_weight);
-                memcpy(weightSpecVec[i].weight, meanPtr, weightSpecVec[i].bytes_of_weight);
-                weightSpecVec[i].vec = (U8 *)mt_new_storage(weightSpecVec[i].bytes_of_vec);
-                memcpy(weightSpecVec[i].vec, varPtr, weightSpecVec[i].bytes_of_vec);
+                weightSpec.weight = (U8 *)mt_new_storage(weightSpec.bytes_of_weight);
+                memcpy(weightSpec.weight, meanPtr, weightSpec.bytes_of_weight);
+                weightSpec.vec = (U8 *)mt_new_storage(weightSpec.bytes_of_vec);
+                memcpy(weightSpec.vec, varPtr, weightSpec.bytes_of_vec);
+                weightSpecVec.push_back(weightSpec);
 
                 // for scale
-                std::string scaleWeightOpName = "scale_" + weightOpName;
-                i = i + 1;
+                std::string scaleWeightOpName = opName + "_scale";
                 U8 *scalePtr = get_ptr_from_weight_obj(scale);
                 int scaleWeightNum = get_data_size_from_tensor_proto(scale);
                 U8 *biasPtr = get_ptr_from_weight_obj(bias);
                 int scaleBiasNum = get_data_size_from_tensor_proto(bias);
 
-                str_copy(weightSpecVec[i].op_name, scaleWeightOpName.c_str(),
-                    scaleWeightOpName.length());
-                weightSpecVec[i].mdt = DT_F32;
-                weightSpecVec[i].bytes_of_weight = scaleWeightNum * sizeof(float);
-                weightSpecVec[i].bytes_of_vec = scaleBiasNum * sizeof(float);
+                str_copy(weightSpec.op_name, scaleWeightOpName.c_str(), scaleWeightOpName.length());
+                weightSpec.mdt = DT_F32;
+                weightSpec.bytes_of_weight = scaleWeightNum * sizeof(float);
+                weightSpec.bytes_of_vec = scaleBiasNum * sizeof(float);
 
-                weightSpecVec[i].weight = (U8 *)mt_new_storage(weightSpecVec[i].bytes_of_weight);
-                memcpy(weightSpecVec[i].weight, scalePtr, weightSpecVec[i].bytes_of_weight);
-                weightSpecVec[i].vec = (U8 *)mt_new_storage(weightSpecVec[i].bytes_of_vec);
-                memcpy(weightSpecVec[i].vec, biasPtr, weightSpecVec[i].bytes_of_vec);
-            } else if (weightOpType == "BatchNorm") {
-                const onnx::TensorProto &mean = weights[weightNode.input(1)];
-                const onnx::TensorProto &var = weights[weightNode.input(2)];
-                U8 *meanPtr = get_ptr_from_weight_obj(mean);
-                int bnMeanNum = get_data_size_from_tensor_proto(mean);
-                U8 *varPtr = get_ptr_from_weight_obj(var);
-                int bnVarNum = get_data_size_from_tensor_proto(var);
-                str_copy(weightSpecVec[i].op_name, weightOpName.c_str(), weightOpName.length());
-                weightSpecVec[i].mdt = DT_F32;
-                weightSpecVec[i].bytes_of_weight = bnMeanNum * sizeof(float);
-                weightSpecVec[i].bytes_of_vec = bnVarNum * sizeof(float);
-                weightSpecVec[i].weight = (U8 *)mt_new_storage(weightSpecVec[i].bytes_of_weight);
-                memcpy(weightSpecVec[i].weight, meanPtr, weightSpecVec[i].bytes_of_weight);
-                weightSpecVec[i].vec = (U8 *)mt_new_storage(weightSpecVec[i].bytes_of_vec);
-                memcpy(weightSpecVec[i].vec, varPtr, weightSpecVec[i].bytes_of_vec);
-            } else if (weightOpType == "Tdnn") {
-                const onnx::TensorProto &weight = weights[weightNode.input(2)];
-                const onnx::TensorProto &bias = weights[weightNode.input(3)];
-                U8 *weightPtr = get_ptr_from_weight_obj(weight);
-                int weightNum = get_data_size_from_tensor_proto(weight);
-                U8 *biasPtr = get_ptr_from_weight_obj(bias);
-                int biasNum = get_data_size_from_tensor_proto(bias);
-                str_copy(weightSpecVec[i].op_name, weightOpName.c_str(), weightOpName.length());
-                weightSpecVec[i].mdt = DT_F32;
-                weightSpecVec[i].bytes_of_weight = weightNum * sizeof(float);
-                weightSpecVec[i].bytes_of_vec = biasNum * sizeof(float);
-                weightSpecVec[i].weight = (U8 *)mt_new_storage(weightSpecVec[i].bytes_of_weight);
-                memcpy(weightSpecVec[i].weight, weightPtr, weightSpecVec[i].bytes_of_weight);
-                weightSpecVec[i].vec = (U8 *)mt_new_storage(weightSpecVec[i].bytes_of_vec);
-                memcpy(weightSpecVec[i].vec, biasPtr, weightSpecVec[i].bytes_of_vec);
-            } else if (weightOpType == "Add") {
-                CHECK_REQUIREMENT(0 != indices.size());
-                const onnx::TensorProto &bias = weights[weightNode.input(indices[0])];
-                U8 *bias_ptr = get_ptr_from_weight_obj(bias);
-                int bias_num = get_data_size_from_tensor_proto(bias);
-
-                str_copy(weightSpecVec[i].op_name, weightOpName.c_str(), weightOpName.length());
-                weightSpecVec[i].mdt = DT_F32;
-                weightSpecVec[i].bytes_of_weight = 0;
-                weightSpecVec[i].weight = nullptr;
-                weightSpecVec[i].bytes_of_vec = bias_num * sizeof(float);
-                weightSpecVec[i].vec = (U8 *)mt_new_storage(weightSpecVec[i].bytes_of_vec);
-                memcpy(weightSpecVec[i].vec, bias_ptr, weightSpecVec[i].bytes_of_vec);
-            } else if (weightOpType == "Mul") {
-                CHECK_REQUIREMENT(0 != indices.size());
-                const onnx::TensorProto &weight = weights[weightNode.input(indices[0])];
-                U8 *weight_ptr = get_ptr_from_weight_obj(weight);
-                int weight_num = get_data_size_from_tensor_proto(weight);
-
-                str_copy(weightSpecVec[i].op_name, weightOpName.c_str(), weightOpName.length());
-                weightSpecVec[i].mdt = DT_F32;
-                weightSpecVec[i].bytes_of_weight = weight_num * sizeof(float);
-                weightSpecVec[i].weight = (U8 *)mt_new_storage(weightSpecVec[i].bytes_of_weight);
-                memcpy(weightSpecVec[i].weight, weight_ptr, weightSpecVec[i].bytes_of_weight);
-                weightSpecVec[i].bytes_of_vec = 0;
-                weightSpecVec[i].vec = nullptr;
-            } else if (weightOpType == "MatMul" || weightOpType == "PRelu") {
-                const onnx::TensorProto &weight = weights[weightNode.input(1)];
-                U8 *weight_ptr = get_ptr_from_weight_obj(weight);
-                int weight_num = get_data_size_from_tensor_proto(weight);
-
-                str_copy(weightSpecVec[i].op_name, weightOpName.c_str(), weightOpName.length());
-                weightSpecVec[i].mdt = DT_F32;
-                weightSpecVec[i].bytes_of_weight = weight_num * sizeof(float);
-                weightSpecVec[i].bytes_of_vec = 0;
-                weightSpecVec[i].weight = (U8 *)mt_new_storage(weightSpecVec[i].bytes_of_weight);
-                int row = weight.dims(0);
-                int column = weight.dims(1);
-                for (int m = 0, index = 0; m < column; m++) {
-                    for (int n = 0; n < row; n++, index += sizeof(float)) {
-                        memcpy(weightSpecVec[i].weight + index,
-                            weight_ptr + (n * column + m) * sizeof(float), sizeof(float));
+                weightSpec.weight = (U8 *)mt_new_storage(weightSpec.bytes_of_weight);
+                memcpy(weightSpec.weight, scalePtr, weightSpec.bytes_of_weight);
+                weightSpec.vec = (U8 *)mt_new_storage(weightSpec.bytes_of_vec);
+                memcpy(weightSpec.vec, biasPtr, weightSpec.bytes_of_vec);
+                weightSpecVec.push_back(weightSpec);
+            } else if (onnxNodeType == "BatchNorm" || onnxNodeType == "InstanceNormalization") {
+                std::vector<onnx::TensorProto> weightTp = {onnxWeights[this->onnxNode.input(1)]};
+                std::vector<onnx::TensorProto> biasTp = {onnxWeights[this->onnxNode.input(2)]};
+                assign_weight(weightSpec, opName, weightTp, biasTp);
+                weightSpecVec.push_back(weightSpec);
+            } else if (onnxNodeType == "Tdnn") {
+                std::vector<onnx::TensorProto> weightTp = {onnxWeights[this->onnxNode.input(2)]};
+                std::vector<onnx::TensorProto> biasTp = {onnxWeights[this->onnxNode.input(3)]};
+                assign_weight(weightSpec, opName, weightTp, biasTp);
+                weightSpecVec.push_back(weightSpec);
+            } else if ((onnxNodeType == "MatMul" || onnxNodeType == "PRelu") && indices.size() > 0) {
+                str_copy(weightSpec.op_name, opName.c_str(), opName.length());
+                weightSpec.mdt = DT_F32;
+                std::string weightName = this->onnxNode.input(indices[0]);
+                if (onnxNodeType == "MatMul" &&
+                    (this->onnxWeightReferCount[weightName] > 1 ||
+                        this->sharedWeights.find(weightName) != this->sharedWeights.end())) {
+                    weightSpec.bytes_of_weight = 0;
+                    weightSpec.weight = nullptr;
+                } else {
+                    const onnx::TensorProto &weight = onnxWeights[weightName];
+                    U8 *weight_ptr = get_ptr_from_weight_obj(weight);
+                    int weight_num = get_data_size_from_tensor_proto(weight);
+                    weightSpec.bytes_of_weight = weight_num * sizeof(float);
+                    weightSpec.weight = (U8 *)mt_new_storage(weightSpec.bytes_of_weight);
+                    int row = weight.dims(0);
+                    int column = weight_num / row;
+                    for (int m = 0, index = 0; m < column; m++) {
+                        for (int n = 0; n < row; n++, index += sizeof(float)) {
+                            memcpy(weightSpec.weight + index,
+                                weight_ptr + (n * column + m) * sizeof(float), sizeof(float));
+                        }
                     }
                 }
-                weightSpecVec[i].vec = nullptr;
-            } else if (weightOpType == "Div") {
-                const onnx::TensorProto &weight = weights[weightNode.input(1)];
-                U8 *weight_ptr = get_ptr_from_weight_obj(weight);
-                int weight_num = get_data_size_from_tensor_proto(weight);
-
-                str_copy(weightSpecVec[i].op_name, weightOpName.c_str(), weightOpName.length());
-                weightSpecVec[i].mdt = DT_F32;
-                weightSpecVec[i].bytes_of_weight = weight_num * sizeof(float);
-                weightSpecVec[i].bytes_of_vec = 0;
-                weightSpecVec[i].weight = (U8 *)mt_new_storage(weightSpecVec[i].bytes_of_weight);
-                F32 *scale = (F32 *)weightSpecVec[i].weight;
-                memcpy(scale, weight_ptr, weightSpecVec[i].bytes_of_weight);
-                for (int j = 0; j < weight_num; j++) {
-                    scale[j] = 1 / scale[j];
+                weightSpec.bytes_of_vec = 0;
+                weightSpec.vec = nullptr;
+                weightSpecVec.push_back(weightSpec);
+            } else if (onnxNodeType == "Mul" || onnxNodeType == "Div") {
+                if (indices.size() == 0 ||
+                    get_data_size_from_tensor_proto(
+                        onnxWeights[this->onnxNode.input(indices[0])]) == 1 ||
+                    this->sharedWeights.find(this->onnxNode.input(indices[0])) !=
+                        this->sharedWeights.end()) {
+                    continue;
                 }
-                weightSpecVec[i].vec = nullptr;
-            } else if (weightOpType == "Transpose") {
-                const onnx::TensorProto &weight = weights[weightNode.input(0)];
-                U8 *weight_ptr = get_ptr_from_weight_obj(weight);
-                int weight_num = get_data_size_from_tensor_proto(weight);
-
-                str_copy(weightSpecVec[i].op_name, weightOpName.c_str(), weightOpName.length());
-                weightSpecVec[i].mdt = DT_F32;
-                weightSpecVec[i].bytes_of_weight = weight_num * sizeof(float);
-                // For the time being, use bytes_of_vec to record the horizontal length of weight
-                weightSpecVec[i].bytes_of_vec = weight.dims(0);
-                weightSpecVec[i].weight = (U8 *)mt_new_storage(weightSpecVec[i].bytes_of_weight);
-                memcpy(weightSpecVec[i].weight, weight_ptr, weightSpecVec[i].bytes_of_weight);
-                weightSpecVec[i].vec = nullptr;
-            } else if (weightOpType == "RNN" || weightOpType == "GRU" || weightOpType == "LSTM") {
-                const onnx::TensorProto &W = weights[weightNode.input(1)];
-                const onnx::TensorProto &R = weights[weightNode.input(2)];
-                const onnx::TensorProto &B = weights[weightNode.input(3)];
+                std::vector<onnx::TensorProto> weightTp = {
+                    onnxWeights[this->onnxNode.input(indices[0])]};
+                std::vector<onnx::TensorProto> biasTp;
+                assign_weight(weightSpec, opName, weightTp, biasTp);
+                if (onnxNodeType == "Div") {
+                    F32 *scale = (F32 *)weightSpec.weight;
+                    for (U32 j = 0; j < weightSpec.bytes_of_weight / sizeof(float); j++) {
+                        scale[j] = 1 / scale[j];
+                    }
+                }
+                weightSpecVec.push_back(weightSpec);
+            } else if (onnxNodeType == "Add" || onnxNodeType == "Sub") {
+                if (indices.size() == 0 ||
+                    get_data_size_from_tensor_proto(
+                        onnxWeights[this->onnxNode.input(indices[0])]) == 1 ||
+                    this->sharedWeights.find(this->onnxNode.input(indices[0])) !=
+                        this->sharedWeights.end()) {
+                    continue;
+                }
+                std::vector<onnx::TensorProto> weightTp;
+                std::vector<onnx::TensorProto> biasTp = {
+                    onnxWeights[this->onnxNode.input(indices[0])]};
+                assign_weight(weightSpec, opName, weightTp, biasTp);
+                if (onnxNodeType == "Sub") {
+                    F32 *scale = (F32 *)weightSpec.vec;
+                    for (U32 j = 0; j < weightSpec.bytes_of_vec / sizeof(float); j++) {
+                        scale[j] = (-1) * scale[j];
+                    }
+                }
+                weightSpecVec.push_back(weightSpec);
+            } else if (onnxNodeType == "Transpose" && indices.size() > 0) {
+                std::vector<onnx::TensorProto> weightTp = {onnxWeights[this->onnxNode.input(0)]};
+                std::vector<onnx::TensorProto> biasTp;
+                assign_weight(weightSpec, opName, weightTp, biasTp);
+                weightSpecVec.push_back(weightSpec);
+            } else if (onnxNodeType == "RNN" || onnxNodeType == "GRU" || onnxNodeType == "LSTM") {
+                const onnx::TensorProto &W = onnxWeights[this->onnxNode.input(1)];
+                const onnx::TensorProto &R = onnxWeights[this->onnxNode.input(2)];
+                const onnx::TensorProto &B = onnxWeights[this->onnxNode.input(3)];
                 if (W.dims_size() != 3 || R.dims_size() != 3) {
                     UNI_ERROR_LOG("can not process operator name:%s type:%s W.dims_size() != "
                                   "3 || R.dims_size() != 3.\n",
-                        this->node.name().c_str(), weightOpType.c_str());
+                        this->onnxNode.name().c_str(), onnxNodeType.c_str());
                 }
                 if (W.dims(0) != R.dims(0) || W.dims(1) != R.dims(1)) {
                     UNI_ERROR_LOG("can not process operator name:%s type:%s W.dims(0) != "
-                                  "R.dims(0) || W.dims(1) != "
-                                  "R.dims(1).\n",
-                        this->node.name().c_str(), weightOpType.c_str());
+                                  "R.dims(0) || W.dims(1) != R.dims(1).\n",
+                        this->onnxNode.name().c_str(), onnxNodeType.c_str());
                 }
                 int biasNum = (B.dims_size() == 0) ? 0 : 1;
                 for (int j = 0; j < B.dims_size(); j++) {
@@ -1146,43 +1120,44 @@ protected:
                 // reorganize bias
                 if (biasNum % 2 != 0) {
                     UNI_ERROR_LOG("can not process operator name:%s type:%s bias.\n",
-                        this->node.name().c_str(), weightOpType.c_str());
+                        this->onnxNode.name().c_str(), onnxNodeType.c_str());
                 }
                 biasNum /= 2;
                 int gates = 0;
                 std::vector<int> order;
                 bool gru_lbr = false;
-                if (weightOpType == "RNN") {
+                if (onnxNodeType == "RNN") {
                     gates = 1;
                     order = {0};
-                } else if (weightOpType == "GRU") {
+                } else if (onnxNodeType == "GRU") {
                     gates = 3;
                     order = {0, 1, 2};
                     if (0 !=
-                        get_node_single_int_attribute_by_name(weightNode, "linear_before_reset", 0)) {
+                        get_node_single_int_attribute_by_name(
+                            this->onnxNode, "linear_before_reset", 0)) {
                         gru_lbr = true;
                         biasNum += biasNum / gates;
                     }
-                } else if (weightOpType == "LSTM") {
+                } else if (onnxNodeType == "LSTM") {
                     gates = 4;
                     order = {0, 3, 2, 1};
                 } else {
                     UNI_ERROR_LOG("can not process operator name:%s type:%s.\n",
-                        this->node.name().c_str(), weightOpType.c_str());
+                        this->onnxNode.name().c_str(), onnxNodeType.c_str());
                 }
                 U8 *W_ptr = get_ptr_from_weight_obj(W);
                 U8 *R_ptr = get_ptr_from_weight_obj(R);
                 U8 *B_ptr = get_ptr_from_weight_obj(B);
-                weightSpecVec[i].mdt = DT_F32;
-                str_copy(weightSpecVec[i].op_name, weightOpName.c_str(), weightOpName.length());
-                weightSpecVec[i].bytes_of_weight =
+                weightSpec.mdt = DT_F32;
+                str_copy(weightSpec.op_name, opName.c_str(), opName.length());
+                weightSpec.bytes_of_weight =
                     (W.dims(0) * W.dims(1) * (W.dims(2) + R.dims(2))) * sizeof(float);
-                weightSpecVec[i].weight = (U8 *)mt_new_storage(weightSpecVec[i].bytes_of_weight);
-                weightSpecVec[i].bytes_of_vec = biasNum * sizeof(float);
-                weightSpecVec[i].vec = (U8 *)mt_new_storage(weightSpecVec[i].bytes_of_vec);
+                weightSpec.weight = (U8 *)mt_new_storage(weightSpec.bytes_of_weight);
+                weightSpec.bytes_of_vec = biasNum * sizeof(float);
+                weightSpec.vec = (U8 *)mt_new_storage(weightSpec.bytes_of_vec);
                 int hidden = W.dims(1) / gates;
-                U8 *weightPtr = weightSpecVec[i].weight;
-                F32 *biasPtr = (F32 *)weightSpecVec[i].vec;
+                U8 *weightPtr = weightSpec.weight;
+                F32 *biasPtr = (F32 *)weightSpec.vec;
                 // loop direction
                 for (int j = 0; j < W.dims(0); j++) {
                     // loop LSTM(iofc), GRU(zrh), RNN(g)
@@ -1221,33 +1196,24 @@ protected:
                         biasPtr += hidden;
                     }
                 }
-            } else if (weightOpType == "Gather") {
-                auto weightTp = weights[weightNode.input(0)];
-                int weightNum = get_data_size_from_tensor_proto(weightTp);
-                U8 *weightParamPtr = get_ptr_from_weight_obj(weightTp);
-                str_copy(weightSpecVec[i].op_name, weightOpName.c_str(), weightOpName.length());
-                weightSpecVec[i].mdt = DT_F32;
-                weightSpecVec[i].bytes_of_weight = weightNum * sizeof(float);
-                weightSpecVec[i].weight = (U8 *)mt_new_storage(weightSpecVec[i].bytes_of_weight);
-                memcpy(weightSpecVec[i].weight, weightParamPtr, weightSpecVec[i].bytes_of_weight);
-                weightSpecVec[i].bytes_of_vec = 0;
-                weightSpecVec[i].vec = nullptr;
-            } else if (weightOpType == "Splice") {
+                weightSpecVec.push_back(weightSpec);
+            } else if (onnxNodeType == "Splice") {
                 std::vector<int> indices =
-                    get_node_vector_ints_attribute_by_name(weightNode, "forward_indexes");
-                str_copy(weightSpecVec[i].op_name, weightOpName.c_str(), weightOpName.length());
-                weightSpecVec[i].mdt = DT_U32;
-                weightSpecVec[i].bytes_of_weight = indices.size() * sizeof(U32);
-                weightSpecVec[i].weight = (U8 *)mt_new_storage(weightSpecVec[i].bytes_of_weight);
-                memcpy(weightSpecVec[i].weight, indices.data(), weightSpecVec[i].bytes_of_weight);
-                weightSpecVec[i].bytes_of_vec = 0;
-                weightSpecVec[i].vec = nullptr;
-            } else if (weightOpType == "Where") {
+                    get_node_vector_ints_attribute_by_name(this->onnxNode, "forward_indexes");
+                str_copy(weightSpec.op_name, opName.c_str(), opName.length());
+                weightSpec.mdt = DT_U32;
+                weightSpec.bytes_of_weight = indices.size() * sizeof(U32);
+                weightSpec.weight = (U8 *)mt_new_storage(weightSpec.bytes_of_weight);
+                memcpy(weightSpec.weight, indices.data(), weightSpec.bytes_of_weight);
+                weightSpec.bytes_of_vec = 0;
+                weightSpec.vec = nullptr;
+                weightSpecVec.push_back(weightSpec);
+            } else if (onnxNodeType == "Where") {
                 bool *conditionTpPtr = nullptr;
                 int conditionTpSize = 0;
                 std::vector<float> conditionVec;
-                if (weights.find(weightNode.input(0)) != weights.end()) {
-                    auto conditionTp = weights[weightNode.input(0)];
+                if (onnxWeights.find(this->onnxNode.input(0)) != onnxWeights.end()) {
+                    auto conditionTp = onnxWeights[this->onnxNode.input(0)];
                     conditionTpPtr = (bool *)(get_ptr_from_weight_obj(conditionTp));
                     conditionTpSize = get_data_size_from_tensor_proto(conditionTp);
                     for (int i = 0; i < conditionTpSize; i++) {
@@ -1257,61 +1223,52 @@ protected:
                 }
                 U8 *yPtr = nullptr;
                 int yTpSize = 0;
-                if (weights.find(weightNode.input(2)) != weights.end()) {
-                    auto yTp = weights[weightNode.input(2)];
+                if (onnxWeights.find(this->onnxNode.input(2)) != onnxWeights.end()) {
+                    auto yTp = onnxWeights[this->onnxNode.input(2)];
                     yPtr = get_ptr_from_weight_obj(yTp);
                     yTpSize = get_data_size_from_tensor_proto(yTp);
                 }
-                weightSpecVec[i].mdt = DT_F32;
-                str_copy(weightSpecVec[i].op_name, weightOpName.c_str(), weightOpName.length());
-                weightSpecVec[i].bytes_of_weight = conditionTpSize * sizeof(float);
-                if (weightSpecVec[i].bytes_of_weight == 0) {
-                    weightSpecVec[i].weight = nullptr;
+                weightSpec.mdt = DT_F32;
+                str_copy(weightSpec.op_name, opName.c_str(), opName.length());
+                weightSpec.bytes_of_weight = conditionTpSize * sizeof(float);
+                if (weightSpec.bytes_of_weight == 0) {
+                    weightSpec.weight = nullptr;
                 } else {
-                    weightSpecVec[i].weight = (U8 *)mt_new_storage(weightSpecVec[i].bytes_of_weight);
-                    memcpy(weightSpecVec[i].weight, conditionVec.data(),
-                        weightSpecVec[i].bytes_of_weight);
+                    weightSpec.weight = (U8 *)mt_new_storage(weightSpec.bytes_of_weight);
+                    memcpy(weightSpec.weight, conditionVec.data(), weightSpec.bytes_of_weight);
                 }
-                weightSpecVec[i].bytes_of_vec = yTpSize * sizeof(float);
-                if (weightSpecVec[i].bytes_of_vec == 0) {
-                    weightSpecVec[i].vec = nullptr;
+                weightSpec.bytes_of_vec = yTpSize * sizeof(float);
+                if (weightSpec.bytes_of_vec == 0) {
+                    weightSpec.vec = nullptr;
                 } else {
-                    weightSpecVec[i].vec = (U8 *)mt_new_storage(weightSpecVec[i].bytes_of_vec);
-                    memcpy(weightSpecVec[i].vec, yPtr, weightSpecVec[i].bytes_of_vec);
+                    weightSpec.vec = (U8 *)mt_new_storage(weightSpec.bytes_of_vec);
+                    memcpy(weightSpec.vec, yPtr, weightSpec.bytes_of_vec);
                 }
-            } else if (weightOpType == "Linear") {
-                auto linearWeightTp = weights[node.input(1)];
-                int weightSize = get_data_size_from_tensor_proto(linearWeightTp);
-                U8 *tpPtr = get_ptr_from_weight_obj(linearWeightTp);
-                weightSpecVec[i].mdt = DT_F32;
-                str_copy(weightSpecVec[i].op_name, weightOpName.c_str(), weightOpName.length());
-                weightSpecVec[i].bytes_of_weight = weightSize * sizeof(float);
-                weightSpecVec[i].weight = (U8 *)mt_new_storage(weightSpecVec[i].bytes_of_weight);
-                memcpy(weightSpecVec[i].weight, tpPtr, weightSpecVec[i].bytes_of_weight);
-                weightSpecVec[i].bytes_of_vec = 0;
-                weightSpecVec[i].vec = nullptr;
-            } else if (weightOpType == "Equal") {
-                auto cmpTp = weights[weightNode.input(1)];
+                weightSpecVec.push_back(weightSpec);
+            } else if (onnxNodeType == "Equal") {
+                auto cmpTp = onnxWeights[this->onnxNode.input(1)];
                 int cmpTpSize = get_data_size_from_tensor_proto(cmpTp);
                 if (cmpTp.data_type() == onnx::TensorProto::FLOAT) {
-                    weightSpecVec[i].mdt = DT_F32;
+                    weightSpec.mdt = DT_F32;
                 } else if (cmpTp.data_type() == onnx::TensorProto::INT32) {
-                    weightSpecVec[i].mdt = DT_I32;
+                    weightSpec.mdt = DT_I32;
                 } else {
                     UNI_ERROR_LOG("can not process operator name:%s %s type Equal.\n",
-                        this->node.name().c_str(), onnx_data_type_string(cmpTp.data_type()).c_str());
+                        this->onnxNode.name().c_str(),
+                        onnx_data_type_string(cmpTp.data_type()).c_str());
                 }
                 U8 *cmpPtr = (U8 *)get_ptr_from_weight_obj(cmpTp);
-                str_copy(weightSpecVec[i].op_name, weightOpName.c_str(), weightOpName.length());
-                weightSpecVec[i].bytes_of_weight = cmpTpSize * sizeof(float);
-                weightSpecVec[i].weight = (U8 *)mt_new_storage(weightSpecVec[i].bytes_of_weight);
-                memcpy(weightSpecVec[i].weight, cmpPtr, weightSpecVec[i].bytes_of_weight);
-                weightSpecVec[i].bytes_of_vec = 0;
-                weightSpecVec[i].vec = nullptr;
-            } else if (weightOpType == "Scan") {
+                str_copy(weightSpec.op_name, opName.c_str(), opName.length());
+                weightSpec.bytes_of_weight = cmpTpSize * sizeof(float);
+                weightSpec.weight = (U8 *)mt_new_storage(weightSpec.bytes_of_weight);
+                memcpy(weightSpec.weight, cmpPtr, weightSpec.bytes_of_weight);
+                weightSpec.bytes_of_vec = 0;
+                weightSpec.vec = nullptr;
+                weightSpecVec.push_back(weightSpec);
+            } else if (onnxNodeType == "Scan") {
                 onnx::GraphProto gp;
-                for (int k = 0; k < weightNode.attribute_size(); k++) {
-                    const onnx::AttributeProto &attribute = weightNode.attribute(k);
+                for (int k = 0; k < this->onnxNode.attribute_size(); k++) {
+                    const onnx::AttributeProto &attribute = this->onnxNode.attribute(k);
                     if (attribute.name() == "body") {
                         gp = attribute.g();
                         break;
@@ -1331,8 +1288,8 @@ protected:
                     auto curNode = gp.node(j);
                     if (curNode.op_type() == "Gemm" || curNode.op_type() == "MatMul") {
                         for (int k = 0; k < (int)curNode.input_size(); k++) {
-                            if (weights.find(curNode.input(k)) != weights.end()) {
-                                auto hidWeightTp = weights[curNode.input(k)];
+                            if (onnxWeights.find(curNode.input(k)) != onnxWeights.end()) {
+                                auto hidWeightTp = onnxWeights[curNode.input(k)];
                                 if (get_data_size_from_tensor_proto(hidWeightTp) == 0) {
                                     continue;
                                 } else {
@@ -1347,44 +1304,42 @@ protected:
                 }
 
                 // initial empty desc
-                TensorDesc empDesc;
-                empDesc.nDims = 0;
                 TensorDesc wDesc1 = genDescFromTp(weightMap["Gemm"][0]);
                 TensorDesc bDesc1;
                 if (weightMap["Gemm"].size() > 1) {
                     bDesc1 = genDescFromTp(weightMap["Gemm"][1]);
                 } else {
-                    bDesc1 = empDesc;
+                    bDesc1 = tensor0d();
                 }
                 TensorDesc wDesc2;
                 if (weightMap["MatMul"].size() > 0) {
                     wDesc2 = genDescFromTp(weightMap["MatMul"][0]);
                 } else {
-                    wDesc2 = empDesc;
+                    wDesc2 = tensor0d();
                 }
                 TensorDesc bDesc2;
                 if (weightMap["MatMul"].size() > 1) {
                     bDesc2 = genDescFromTp(weightMap["MatMul"][1]);
                 } else {
-                    bDesc2 = empDesc;
+                    bDesc2 = tensor0d();
                 }
 
-                weightSpecVec[i].mdt = DT_F32;
-                str_copy(weightSpecVec[i].op_name, weightOpName.c_str(), weightOpName.length());
+                weightSpec.mdt = DT_F32;
+                str_copy(weightSpec.op_name, opName.c_str(), opName.length());
                 int wBytes = tensorNumElements(wDesc1) + tensorNumElements(wDesc2);
-                weightSpecVec[i].bytes_of_weight = wBytes * sizeof(float);
-                if (weightSpecVec[i].bytes_of_weight == 0) {
-                    weightSpecVec[i].weight = nullptr;
+                weightSpec.bytes_of_weight = wBytes * sizeof(float);
+                if (weightSpec.bytes_of_weight == 0) {
+                    weightSpec.weight = nullptr;
                 } else {
-                    weightSpecVec[i].weight = (U8 *)mt_new_storage(weightSpecVec[i].bytes_of_weight);
+                    weightSpec.weight = (U8 *)mt_new_storage(weightSpec.bytes_of_weight);
                     int wOffSet = 0;
                     if (tensorNumElements(wDesc1) > 0) {
                         U8 *tmpWPtr1 = get_ptr_from_weight_obj(weightMap["Gemm"][0]);
                         if (transMap["Gemm"][0]) {
-                            memcpy(&((weightSpecVec[i].weight)[wOffSet]), tmpWPtr1,
-                                tensorNumBytes(wDesc1));
+                            memcpy(
+                                &((weightSpec.weight)[wOffSet]), tmpWPtr1, tensorNumBytes(wDesc1));
                         } else {
-                            memcpy_trans2d(&((weightSpecVec[i].weight)[wOffSet]), tmpWPtr1,
+                            memcpy_trans2d(&((weightSpec.weight)[wOffSet]), tmpWPtr1,
                                 (int)weightMap["Gemm"][0].dims(1),
                                 (int)weightMap["Gemm"][0].dims(0));
                         }
@@ -1393,10 +1348,10 @@ protected:
                     if (tensorNumElements(wDesc2) > 0) {
                         U8 *tmpWPtr2 = get_ptr_from_weight_obj(weightMap["MatMul"][0]);
                         if (transMap["MatMul"][0]) {
-                            memcpy(&((weightSpecVec[i].weight)[wOffSet]), tmpWPtr2,
-                                tensorNumBytes(wDesc2));
+                            memcpy(
+                                &((weightSpec.weight)[wOffSet]), tmpWPtr2, tensorNumBytes(wDesc2));
                         } else {
-                            memcpy_trans2d(&((weightSpecVec[i].weight)[wOffSet]), tmpWPtr2,
+                            memcpy_trans2d(&((weightSpec.weight)[wOffSet]), tmpWPtr2,
                                 (int)weightMap["MatMul"][0].dims(1),
                                 (int)weightMap["MatMul"][0].dims(0));
                         }
@@ -1404,44 +1359,83 @@ protected:
                 }
 
                 int bBytes = tensorNumElements(bDesc1) + tensorNumElements(bDesc2);
-                weightSpecVec[i].bytes_of_vec = bBytes * sizeof(float);
-                if (weightSpecVec[i].bytes_of_vec == 0) {
-                    weightSpecVec[i].vec = nullptr;
+                weightSpec.bytes_of_vec = bBytes * sizeof(float);
+                if (weightSpec.bytes_of_vec == 0) {
+                    weightSpec.vec = nullptr;
                 } else {
-                    weightSpecVec[i].vec = (U8 *)mt_new_storage(weightSpecVec[i].bytes_of_vec);
+                    weightSpec.vec = (U8 *)mt_new_storage(weightSpec.bytes_of_vec);
                     int bOffSet = 0;
                     if (tensorNumElements(bDesc1) > 0) {
                         U8 *tmpBPtr1 = get_ptr_from_weight_obj(weightMap["Gemm"][1]);
-                        memcpy(&((weightSpecVec[i].vec)[bOffSet]), tmpBPtr1, tensorNumBytes(bDesc1));
+                        memcpy(&((weightSpec.vec)[bOffSet]), tmpBPtr1, tensorNumBytes(bDesc1));
                         bOffSet += tensorNumBytes(bDesc1);
                     }
                     if (tensorNumElements(bDesc2) > 0) {
                         U8 *tmpBPtr2 = get_ptr_from_weight_obj(weightMap["MatMul"][1]);
-                        memcpy(&((weightSpecVec[i].vec)[bOffSet]), tmpBPtr2, tensorNumBytes(bDesc2));
+                        memcpy(&((weightSpec.vec)[bOffSet]), tmpBPtr2, tensorNumBytes(bDesc2));
                     }
                 }
+                weightSpecVec.push_back(weightSpec);
+            } else if (onnxNodeType == "ScatterND" || onnxNodeType == "ScatterElements" ||
+                onnxNodeType == "Gather" || onnxNodeType == "GatherND" ||
+                onnxNodeType == "GatherElements") {
+                std::vector<onnx::TensorProto> weightTp, biasTp;
+                const std::string &input0 = this->onnxNode.input(0);
+                if (onnxWeights.find(input0) != onnxWeights.end() &&
+                    this->onnxWeightReferCount[input0] == 1) {
+                    weightTp.push_back(onnxWeights[this->onnxNode.input(0)]);
+                }
+                // update tensor
+                if (onnxNodeType == "ScatterND" || onnxNodeType == "ScatterElements") {
+                    const std::string &input2 = this->onnxNode.input(2);
+                    if (onnxWeights.find(input2) != onnxWeights.end() &&
+                        this->onnxWeightReferCount[input2] == 1) {
+                        weightTp.push_back(onnxWeights[this->onnxNode.input(2)]);
+                    }
+                }
+                assign_weight(weightSpec, opName, weightTp, biasTp);
+                const std::string &input1 = this->onnxNode.input(1);
+                if (onnxWeights.find(input1) != onnxWeights.end() &&
+                    this->onnxWeightReferCount[input1] == 1) {
+                    std::vector<int> index = get_int_vec_from_tensorProto(onnxWeights[input1]);
+                    weightSpec.bytes_of_vec = sizeof(int) * index.size();
+                    weightSpec.vec = (U8 *)mt_new_storage(weightSpec.bytes_of_vec);
+                    memcpy(weightSpec.vec, index.data(), weightSpec.bytes_of_vec);
+                }
+                weightSpecVec.push_back(weightSpec);
+            } else if (onnxNodeType == "GenerateProposals") {
+                std::vector<onnx::TensorProto> weightTp = {onnxWeights[this->onnxNode.input(3)]};
+                std::vector<onnx::TensorProto> biasTp;
+                assign_weight(weightSpec, opName, weightTp, biasTp);
+                weightSpecVec.push_back(weightSpec);
             }
-            weightOpIndexIndeed++;
         }
-        ms->num_weight_specs = this->sharedWeightWps.size() + this->weightSpecVec.size();
+        ms->num_weight_specs = weightSpecVec.size();
         ms->ws = (WeightSpec *)mt_new_storage(sizeof(WeightSpec) * ms->num_weight_specs);
-        std::vector<WeightSpec> combineWpsVec;
-        combineWpsVec.insert(combineWpsVec.end(), sharedWeightWps.begin(), sharedWeightWps.end());
-        combineWpsVec.insert(combineWpsVec.end(), weightSpecVec.begin(), weightSpecVec.end());
-        memcpy(ms->ws, combineWpsVec.data(), sizeof(WeightSpec) * ms->num_weight_specs);
+        memcpy(ms->ws, weightSpecVec.data(), sizeof(WeightSpec) * weightSpecVec.size());
         for (I32 i = 0; i < ms->num_weight_specs; i++) {
             ms->ws[i].num_quant_scale = 0;
             ms->ws[i].weight_scale = nullptr;
         }
-        return ret;
+        return SUCCESS;
+    }
+
+    void insert_shared_weight()
+    {
+        for (int i = 0; i < this->onnxNode.input_size(); i++) {
+            const std::string &name = this->onnxNode.input(i);
+            if (onnxWeights.find(name) != onnxWeights.end()) {
+                this->sharedWeights.insert(name);
+            }
+        }
     }
 
     ParameterSpec adapt_SharedWeight() override
     {
         ParameterSpec curPs;
         memset(&curPs, 0, sizeof(curPs));
-        const onnx::TensorProto &data = weights[node.input(0)];
-        const onnx::TensorProto &ind = weights[node.input(1)];
+        const onnx::TensorProto &data = onnxWeights[this->onnxNode.input(0)];
+        const onnx::TensorProto &ind = onnxWeights[this->onnxNode.input(1)];
         SharedWeightParamSpec sharedWeightPs;
         sharedWeightPs.desc.nDims = 3;
         sharedWeightPs.desc.dims[2] = 1;
@@ -1459,19 +1453,19 @@ protected:
         memset(&curPs, 0, sizeof(curPs));
         ReshapeParamSpec reshapePs;
         memset(&reshapePs, 0, sizeof(reshapePs));
+        const std::string &onnxNodeType = this->onnxNode.op_type();
         std::vector<int> reshapeInfo;
-        if (this->op == "Flatten") {
-            int axis = get_node_single_int_attribute_by_name(node, "axis", 1);
+        if (onnxNodeType == "Flatten") {
+            int axis = get_node_single_int_attribute_by_name(this->onnxNode, "axis", 1);
             for (int i = 0; i < axis; i++) {
                 reshapeInfo.push_back(0);
             }
             reshapeInfo.push_back(-1);
         } else {
-            if (node.input_size() == 1) {
-                reshapeInfo = get_node_vector_ints_attribute_by_name(node, "shape");
+            if (this->onnxNode.input_size() == 1) {
+                reshapeInfo = get_node_vector_ints_attribute_by_name(this->onnxNode, "shape");
             } else {
-                reshapeInfo = get_int_vec_from_tensorProto(
-                    weights[node.input(1)]);  // tp:weights[node.input(1)]
+                reshapeInfo = get_int_vec_from_tensorProto(onnxWeights[this->onnxNode.input(1)]);
             }
         }
         reshapePs.shape_size = reshapeInfo.size();
@@ -1492,40 +1486,41 @@ protected:
         resizePs.num_sizes = 0;
         std::string scalesIndex = "";
         std::string sizesIndex = "";
-        if (this->op == "Resize") {
-            for (int i = 0; i < node.input_size(); i++) {
-                if (weights.find(node.input(i)) != weights.end()) {
-                    auto curTp = weights[node.input(i)];
+        const std::string &onnxNodeType = this->onnxNode.op_type();
+        if (onnxNodeType == "Resize") {
+            for (int i = 0; i < this->onnxNode.input_size(); i++) {
+                if (onnxWeights.find(this->onnxNode.input(i)) != onnxWeights.end()) {
+                    auto curTp = onnxWeights[this->onnxNode.input(i)];
                     if (curTp.data_type() == onnx::TensorProto::FLOAT) {
-                        scalesIndex = node.input(i);
+                        scalesIndex = this->onnxNode.input(i);
                     } else if (curTp.data_type() == onnx::TensorProto::INT64) {
-                        sizesIndex = node.input(i);
+                        sizesIndex = this->onnxNode.input(i);
                     } else {
                         UNI_ERROR_LOG("can not process operator name:%s %s type attributes.\n",
-                            this->node.name().c_str(),
+                            this->onnxNode.name().c_str(),
                             onnx_data_type_string(curTp.data_type()).c_str());
                     }
                 }
             }
-        } else if (this->op == "Upsample") {
-            scalesIndex = node.input(1);
+        } else if (onnxNodeType == "Upsample") {
+            scalesIndex = this->onnxNode.input(1);
         } else {
             UNI_ERROR_LOG("can not map operator name:%s type:%s to Resize.\n",
-                this->node.name().c_str(), op.c_str());
+                this->onnxNode.name().c_str(), onnxNodeType.c_str());
         }
         if (scalesIndex != "") {
-            const onnx::TensorProto &scales = weights[scalesIndex];
+            const onnx::TensorProto &scales = onnxWeights[scalesIndex];
             if (scales.dims(0) == 0 || scales.dims(0) == 4) {
                 resizePs.num_scales = scales.dims(0);
                 U8 *ptr = get_ptr_from_weight_obj(scales);
                 memcpy(resizePs.scales, ptr, resizePs.num_scales * bytesOf(DT_F32));
             } else {
                 UNI_ERROR_LOG("can not get scale information from operator name:%s type:%s.\n",
-                    this->node.name().c_str(), op.c_str());
+                    this->onnxNode.name().c_str(), onnxNodeType.c_str());
             }
         }
         if (sizesIndex != "") {
-            const onnx::TensorProto &sizes = weights[sizesIndex];
+            const onnx::TensorProto &sizes = onnxWeights[sizesIndex];
             if (sizes.dims(0) == 0) {
             } else if (sizes.dims(0) == 4) {
                 std::vector<int> ptr = get_int_vec_from_tensorProto(sizes);
@@ -1535,26 +1530,40 @@ protected:
             } else {
                 UNI_ERROR_LOG("can not get resize information from operator name:%s "
                               "type:%s.\n",
-                    this->node.name().c_str(), op.c_str());
+                    this->onnxNode.name().c_str(), onnxNodeType.c_str());
             }
         }
 
-        std::string mode = get_node_str_attribute_by_name(node, "mode", "nearest");
-        std::string coordinate_transformation_mode =
-            get_node_str_attribute_by_name(node, "coordinate_transformation_mode", "half_pixel");
+        std::string mode = get_node_str_attribute_by_name(this->onnxNode, "mode", "nearest");
+        std::string coordinate_transformation_mode = get_node_str_attribute_by_name(
+            this->onnxNode, "coordinate_transformation_mode", "half_pixel");
         std::string nearest_mode =
-            get_node_str_attribute_by_name(node, "nearest_mode", "round_prefer_floor");
+            get_node_str_attribute_by_name(this->onnxNode, "nearest_mode", "round_prefer_floor");
 
         if (mode.compare("linear") == 0) {
             resizePs.mode = LINEAR;
-        } else {
+        } else if (mode.compare("nearest") == 0) {
             resizePs.mode = NEAREST;
+        } else if (mode.compare("cubic") == 0) {
+            resizePs.mode = CUBIC;
+        } else {
+            UNI_ERROR_LOG("can not support mode:%s in operator name:%s type:%s.\n", mode.c_str(),
+                this->onnxNode.name().c_str(), onnxNodeType.c_str());
         }
 
         if (coordinate_transformation_mode.compare("align_corners") == 0) {
             resizePs.trans_mode = ALIGN_CORNERS;
-        } else {
+        } else if (coordinate_transformation_mode.compare("half_pixel") == 0) {
             resizePs.trans_mode = HALF_PIXEL;
+        } else if (coordinate_transformation_mode.compare("pytorch_half_pixel") == 0) {
+            resizePs.trans_mode = PYTORCH_HALF_PIXEL;
+        } else if (coordinate_transformation_mode.compare("asymmetric") == 0) {
+            resizePs.trans_mode = ASYMMETRIC;
+        } else {
+            UNI_ERROR_LOG("can not support coordinate transformation mode:%s in operator name:%s "
+                          "type:%s.\n",
+                coordinate_transformation_mode.c_str(), this->onnxNode.name().c_str(),
+                onnxNodeType.c_str());
         }
 
         if (nearest_mode.compare("round_prefer_floor") == 0) {
@@ -1577,7 +1586,8 @@ protected:
         memset(&curPs, 0, sizeof(curPs));
         TransposeParamSpec transposePs;
         memset(&transposePs, 0, sizeof(transposePs));
-        std::vector<int> transpose_info = get_node_vector_ints_attribute_by_name(node, "perm");
+        std::vector<int> transpose_info =
+            get_node_vector_ints_attribute_by_name(this->onnxNode, "perm");
         transposePs.trans_size = transpose_info.size();
         memcpy(transposePs.trans_dims, transpose_info.data(), transposePs.trans_size * sizeof(U32));
         curPs.transpose_spec = transposePs;
@@ -1590,21 +1600,31 @@ protected:
         memset(&curPs, 0, sizeof(curPs));
         ClipParamSpec clipParam;
         memset(&clipParam, 0, sizeof(clipParam));
-        if (op == "Max") {
+        const std::string &onnxNodeType = this->onnxNode.op_type();
+        if (onnxNodeType == "Max") {
             clipParam.min = 0;
             clipParam.max = UNI_F16_MAX;
-        } else if (op == "Min") {
+        } else if (onnxNodeType == "Min") {
             clipParam.min = -UNI_F16_MAX;
             clipParam.max = 1;
-        } else {  // op == "Clip"
-            if (node.input_size() == 1) {
-                clipParam.min = get_node_float_attribute_by_name(node, "min", -UNI_F16_MAX);
-                clipParam.max = get_node_float_attribute_by_name(node, "max", UNI_F16_MAX);
+        } else {  // onnxNodeType == "Clip"
+            if (this->onnxNode.input_size() == 1) {
+                clipParam.min =
+                    get_node_float_attribute_by_name(this->onnxNode, "min", -UNI_F16_MAX);
+                clipParam.max = get_node_float_attribute_by_name(this->onnxNode, "max", UNI_F16_MAX);
             } else {
-                auto minTp = weights[node.input(1)];
-                auto maxTp = weights[node.input(2)];
-                clipParam.min = getSinFloat_from_tensorProto(minTp);
-                clipParam.max = getSinFloat_from_tensorProto(maxTp);
+                if (this->onnxNode.input(1) == "") {
+                    clipParam.min = -UNI_F16_MAX;
+                } else {
+                    clipParam.min =
+                        getSinFloat_from_tensorProto(onnxWeights[this->onnxNode.input(1)]);
+                }
+                if (this->onnxNode.input(2) == "") {
+                    clipParam.max = UNI_F16_MAX;
+                } else {
+                    clipParam.max =
+                        getSinFloat_from_tensorProto(onnxWeights[this->onnxNode.input(2)]);
+                }
             }
         }
         curPs.clip_spec = clipParam;
@@ -1613,18 +1633,19 @@ protected:
 
     ParameterSpec adapt_Conv() override
     {
-        weightOpIndexLists.push_back(nodeIndex);
         ParameterSpec curPs;
         memset(&curPs, 0, sizeof(curPs));
         ConvolutionParamSpec cps;
         memset(&cps, 0, sizeof(cps));
-        std::vector<int> kernelShape = get_node_vector_ints_attribute_by_name(node, "kernel_shape");
-        std::vector<int> dilations = get_node_vector_ints_attribute_by_name(node, "dilations");
-        std::vector<int> strides = get_node_vector_ints_attribute_by_name(node, "strides");
-        std::vector<int> pads = get_node_vector_ints_attribute_by_name(node, "pads");
-        int group = get_node_single_int_attribute_by_name(node, "group", 1);
+        std::vector<int> kernelShape =
+            get_node_vector_ints_attribute_by_name(this->onnxNode, "kernel_shape");
+        std::vector<int> dilations =
+            get_node_vector_ints_attribute_by_name(this->onnxNode, "dilations");
+        std::vector<int> strides = get_node_vector_ints_attribute_by_name(this->onnxNode, "strides");
+        std::vector<int> pads = get_node_vector_ints_attribute_by_name(this->onnxNode, "pads");
+        int group = get_node_single_int_attribute_by_name(this->onnxNode, "group", 1);
 
-        const onnx::TensorProto &weight = weights[node.input(1)];
+        const onnx::TensorProto &weight = onnxWeights[this->onnxNode.input(1)];
         cps.num_outputs = weight.dims(0);
         cps.num_outputs_origin = cps.num_outputs;
         cps.kernel_t = 1;
@@ -1711,18 +1732,22 @@ protected:
 
     ParameterSpec adapt_Deconvolution() override
     {
-        weightOpIndexLists.push_back(nodeIndex);
+        const std::string &onnxNodeType = this->onnxNode.op_type();
         ParameterSpec curPs;
         memset(&curPs, 0, sizeof(curPs));
         ConvolutionParamSpec cps;
         memset(&cps, 0, sizeof(cps));
-        std::vector<int> kernelShape = get_node_vector_ints_attribute_by_name(node, "kernel_shape");
-        std::vector<int> dilations = get_node_vector_ints_attribute_by_name(node, "dilations");
-        std::vector<int> strides = get_node_vector_ints_attribute_by_name(node, "strides");
-        std::vector<int> pads = get_node_vector_ints_attribute_by_name(node, "pads");
-        int group = get_node_single_int_attribute_by_name(node, "group", 1);
+        std::vector<int> kernelShape =
+            get_node_vector_ints_attribute_by_name(this->onnxNode, "kernel_shape");
+        std::vector<int> dilations =
+            get_node_vector_ints_attribute_by_name(this->onnxNode, "dilations");
+        std::vector<int> strides = get_node_vector_ints_attribute_by_name(this->onnxNode, "strides");
+        std::vector<int> pads = get_node_vector_ints_attribute_by_name(this->onnxNode, "pads");
+        int group = get_node_single_int_attribute_by_name(this->onnxNode, "group", 1);
+        std::vector<int> output_shapes =
+            get_node_vector_ints_attribute_by_name(this->onnxNode, "output_shape");
 
-        const onnx::TensorProto &weight = weights[node.input(1)];
+        const onnx::TensorProto &weight = onnxWeights[this->onnxNode.input(1)];
         cps.num_outputs = weight.dims(1);
         cps.kernel_t = 1;
         cps.kernel_h = 1;
@@ -1732,6 +1757,9 @@ protected:
             cps.kernel_w = kernelShape[1];
         } else if (kernelShape.size() == 1) {
             cps.kernel_h = kernelShape[0];
+        } else {
+            UNI_ERROR_LOG("can not map operator name:%s type:%s to Deconvolution.\n",
+                this->onnxNode.name().c_str(), onnxNodeType.c_str());
         }
 
         cps.dilatedRate_t = 1;
@@ -1761,6 +1789,23 @@ protected:
         cps.padding_left = 0;
         cps.padding_right = 0;
         cps.rm = CEIL;
+        if (onnxValues.find(this->onnxNode.input(0)) != onnxValues.end() &&
+            output_shapes.size() > 0) {
+            auto shape = onnxValues[this->onnxNode.input(0)].type().tensor_type().shape();
+            if (shape.dim().size() > 2) {
+                int ih = shape.dim(2).dim_value();
+                if (output_shapes[0] == (int)cps.stride_h * ih) {
+                    if (output_shapes.size() > 1) {
+                        int iw = shape.dim(2).dim_value();
+                        if (output_shapes[1] == (int)cps.stride_w * iw) {
+                            cps.rm = TF_SAME;
+                        }
+                    } else {
+                        cps.rm = TF_SAME;
+                    }
+                }
+            }
+        }
         if (pads.size() == 4) {
             cps.padding_top = pads[0];
             cps.padding_left = pads[1];
@@ -1793,12 +1838,16 @@ protected:
         memset(&curPs, 0, sizeof(curPs));
         PoolingParamSpec pps;
         memset(&pps, 0, sizeof(pps));
-        std::string autoPad = get_node_str_attribute_by_name(node, "auto_pad");  // deprecated
-        std::vector<int> kernelShape = get_node_vector_ints_attribute_by_name(node, "kernel_shape");
-        std::vector<int> strides = get_node_vector_ints_attribute_by_name(node, "strides");
-        std::vector<int> pads = get_node_vector_ints_attribute_by_name(node, "pads");
+        std::string autoPad =
+            get_node_str_attribute_by_name(this->onnxNode, "auto_pad");  // deprecated
+        std::vector<int> kernelShape =
+            get_node_vector_ints_attribute_by_name(this->onnxNode, "kernel_shape");
+        std::vector<int> strides = get_node_vector_ints_attribute_by_name(this->onnxNode, "strides");
+        std::vector<int> pads = get_node_vector_ints_attribute_by_name(this->onnxNode, "pads");
 
-        if (op == "AveragePool" || op == "ReduceMean" || op == "GlobalAveragePool") {
+        const std::string &onnxNodeType = this->onnxNode.op_type();
+        if (onnxNodeType == "AveragePool" || onnxNodeType == "ReduceMean" ||
+            onnxNodeType == "GlobalAveragePool") {
             pps.mode = POOLING_MEAN;
         } else {
             pps.mode = POOLING_MAX;
@@ -1875,41 +1924,49 @@ protected:
         memset(&matmulPs, 0, sizeof(matmulPs));
         matmulPs.transpose_a = false;
         matmulPs.transpose_b = false;
+        const std::string &onnxNodeType = this->onnxNode.op_type();
+        if (onnxNodeType == "Gemm") {
+            matmulPs.transpose_a =
+                get_node_single_int_attribute_by_name(this->onnxNode, "transA", 0);
+            matmulPs.transpose_b =
+                get_node_single_int_attribute_by_name(this->onnxNode, "transB", 0);
+        }
         curPs.matmul_spec = matmulPs;
+        insert_shared_weight();
         return curPs;
     }
 
     ParameterSpec adapt_Fc() override
     {
-        weightOpIndexLists.push_back(nodeIndex);
         ParameterSpec curPs;
         memset(&curPs, 0, sizeof(curPs));
         FullyConnectedParamSpec fcParamSpec;
         memset(&fcParamSpec, 0, sizeof(fcParamSpec));
         fcParamSpec.num_outputs = -1;
 
-        if (op == "MatMul") {
-            const onnx::TensorProto &matmulTp = weights[node.input(1)];
+        const std::string &onnxNodeType = this->onnxNode.op_type();
+        if (onnxNodeType == "MatMul") {
+            const onnx::TensorProto &matmulTp = onnxWeights[this->onnxNode.input(1)];
             if (matmulTp.dims_size() == 2) {
                 fcParamSpec.num_outputs = matmulTp.dims(1);
             } else {
                 UNI_ERROR_LOG("can not map operator name:%s type:%s to FullyConnected.\n",
-                    this->node.name().c_str(), op.c_str());
+                    this->onnxNode.name().c_str(), onnxNodeType.c_str());
             }
-        } else if (op == "Linear") {
-            const onnx::TensorProto &matmulTp = weights[node.input(1)];
+        } else if (onnxNodeType == "Linear") {
+            const onnx::TensorProto &matmulTp = onnxWeights[this->onnxNode.input(1)];
             if (matmulTp.dims_size() == 2) {
                 fcParamSpec.num_outputs = matmulTp.dims(0);
             } else {
                 UNI_ERROR_LOG("can not map operator name:%s type:%s to FullyConnected.\n",
-                    this->node.name().c_str(), op.c_str());
+                    this->onnxNode.name().c_str(), onnxNodeType.c_str());
             }
         } else {
-            float alpha = get_node_float_attribute_by_name(node, "alpha", 1.f);
-            float beta = get_node_float_attribute_by_name(node, "beta", 1.f);
-            int transA = get_node_single_int_attribute_by_name(node, "transA", 0);
-            int transB = get_node_single_int_attribute_by_name(node, "transB", 0);
-            auto weightTp = weights[node.input(1)];
+            float alpha = get_node_float_attribute_by_name(this->onnxNode, "alpha", 1.f);
+            float beta = get_node_float_attribute_by_name(this->onnxNode, "beta", 1.f);
+            int transA = get_node_single_int_attribute_by_name(this->onnxNode, "transA", 0);
+            int transB = get_node_single_int_attribute_by_name(this->onnxNode, "transB", 0);
+            auto weightTp = onnxWeights[this->onnxNode.input(1)];
             if (transB == 1.0) {
                 fcParamSpec.num_outputs = weightTp.dims(0);
             } else {
@@ -1917,7 +1974,7 @@ protected:
             }
             if (!(alpha == 1.f && beta == 1.f && transA == 0)) {
                 UNI_ERROR_LOG("can not map operator name:%s type:%s to FullyConnected.\n",
-                    this->node.name().c_str(), op.c_str());
+                    this->onnxNode.name().c_str(), onnxNodeType.c_str());
             }
         }
         fcParamSpec.num_slices = 1;
@@ -1928,26 +1985,36 @@ protected:
 
     ParameterSpec adapt_BatchNorm() override
     {
-        if (weightOpIndexLists.size() == 0 ||
-            weightOpIndexLists[weightOpIndexLists.size() - 1] != nodeIndex) {
-            weightOpIndexLists.push_back(nodeIndex);
-        }
         ParameterSpec curPs;
         memset(&curPs, 0, sizeof(curPs));
         BatchNormParamSpec bnPs;
         memset(&bnPs, 0, sizeof(bnPs));
-        bnPs.eps = get_node_float_attribute_by_name(node, "epsilon", 1e-5f);
-        if (op == "BatchNormalization") {
+        bnPs.eps = get_node_float_attribute_by_name(this->onnxNode, "epsilon", 1e-5f);
+        const std::string &onnxNodeType = this->onnxNode.op_type();
+        if (onnxNodeType == "BatchNormalization") {
             bnPs.axis = 1;
-        } else if (op == "BatchNorm") {
+        } else if (onnxNodeType == "BatchNorm") {
             bnPs.axis = -1;
         } else {
             UNI_ERROR_LOG("can not map operator name:%s type:%s to BatchNorm.\n",
-                this->node.name().c_str(), op.c_str());
+                this->onnxNode.name().c_str(), onnxNodeType.c_str());
         }
         bnPs.gama = 1;
-        bnPs.momentum = get_node_float_attribute_by_name(node, "momentum", 0.9);
+        bnPs.momentum = get_node_float_attribute_by_name(this->onnxNode, "momentum", 0.9);
         curPs.bn_spec = bnPs;
+        return curPs;
+    }
+
+    ParameterSpec adapt_InstanceNorm() override
+    {
+        ParameterSpec curPs;
+        memset(&curPs, 0, sizeof(curPs));
+        InstanceNormParamSpec inPs;
+        memset(&inPs, 0, sizeof(inPs));
+        inPs.eps = get_node_float_attribute_by_name(this->onnxNode, "epsilon", 1e-5f);
+        inPs.axis = 1;
+        inPs.axis_dim = -1;
+        curPs.in_spec = inPs;
         return curPs;
     }
 
@@ -1957,52 +2024,46 @@ protected:
         memset(&curPs, 0, sizeof(curPs));
         EltwiseParamSpec eps;
         memset(&eps, 0, sizeof(eps));
-        if (op == "Add" || op == "Sum") {
+        const std::string &onnxNodeType = this->onnxNode.op_type();
+        if (onnxNodeType == "Add" || onnxNodeType == "Sum") {
             eps.elt_mode = ELTWISE_SUM;
             eps.elt_sum_spec.coeff_size = 2;
             for (I32 j = 0; j < eps.elt_sum_spec.coeff_size; j++) {
                 eps.elt_sum_spec.coeff_values[j] = 1.0;
             }
-        } else if (op == "Mul") {
+        } else if (onnxNodeType == "Mul") {
             eps.elt_mode = ELTWISE_PROD;
-        } else if (op == "Sub") {
+        } else if (onnxNodeType == "Sub") {
             eps.elt_mode = ELTWISE_SUB;
-        } else if (op == "Div") {
+        } else if (onnxNodeType == "Div") {
             eps.elt_mode = ELTWISE_DIV;
+        } else if (onnxNodeType == "And") {
+            eps.elt_mode = ELTWISE_AND;
+        } else if (onnxNodeType == "Or") {
+            eps.elt_mode = ELTWISE_OR;
+        } else if (onnxNodeType == "Xor") {
+            eps.elt_mode = ELTWISE_XOR;
         } else {
             UNI_ERROR_LOG("can not map operator name:%s type:%s to Eltwise.\n",
-                this->node.name().c_str(), op.c_str());
-        }
-
-        // insert shared weight
-        std::string insertWeightName = "";
-        std::string insertOpName = "";
-        if (node.name().length() > 0) {
-            insertOpName = node.name();
-        } else {
-            insertOpName = node.output(0);
-        }
-        if (weights.find(node.input(0)) != weights.end()) {
-            insertWeightName = node.input(0);
-        } else if (weights.find(node.input(1)) != weights.end()) {
-            insertWeightName = node.input(1);
-        }
-        if (insertWeightName.length() > 0) {
-            insertSharedWeight[insertWeightName] = insertOpName;
+                this->onnxNode.name().c_str(), onnxNodeType.c_str());
         }
         eps.activation_type = ACTIVATION_NULL;
         curPs.eltwise_spec = eps;
+
+        insert_shared_weight();
         return curPs;
     }
 
     void handle_Constant()
     {
-        for (int i = 0; i < node.attribute_size(); i++) {
-            const onnx::AttributeProto &attribute = node.attribute(i);
+        for (int i = 0; i < this->onnxNode.attribute_size(); i++) {
+            const onnx::AttributeProto &attribute = this->onnxNode.attribute(i);
             if (attribute.name() == "value") {
                 CHECK_REQUIREMENT(4 == attribute.type());
                 const onnx::TensorProto &tp = attribute.t();
-                weights[node.output(0)] = tp;
+                const auto &output_name = this->onnxNode.output(0);
+                this->onnxWeights[output_name] = tp;
+                this->onnxWeightReferCount[output_name] = -INT_MAX;
                 break;
             }
         }
@@ -2014,9 +2075,9 @@ protected:
         memset(&curPs, 0, sizeof(curPs));
         PadParamSpec padPs;
         memset(&padPs, 0, sizeof(padPs));
-        std::string padModeStr = get_node_str_attribute_by_name(node, "mode");
-        std::vector<int> padVec = get_node_vector_ints_attribute_by_name(node, "pads");
-        F32 padValue = get_node_float_attribute_by_name(node, "value", 0.f);
+        std::string padModeStr = get_node_str_attribute_by_name(this->onnxNode, "mode");
+        std::vector<int> padVec = get_node_vector_ints_attribute_by_name(this->onnxNode, "pads");
+        F32 padValue = get_node_float_attribute_by_name(this->onnxNode, "value", 0.f);
         if (padModeStr == "constant" || padModeStr.length() == 0) {
             padPs.pad_mode = Pad_Constant;
         } else if (padModeStr == "edge") {
@@ -2025,19 +2086,21 @@ protected:
             padPs.pad_mode = Pad_Reflect;
         }
 
+        padPs.front = 0;
+        padPs.back = 0;
         padPs.before = 0;
         padPs.after = 0;
         U32 padSize = padVec.size();
         if (padSize == 0) {
-            const onnx::TensorProto &padsTp = weights[node.input(1)];
-            padVec = get_int_vec_from_tensorProto(weights[node.input(1)]);
+            const onnx::TensorProto &padsTp = onnxWeights[this->onnxNode.input(1)];
+            padVec = get_int_vec_from_tensorProto(onnxWeights[this->onnxNode.input(1)]);
             padSize = padVec.size();
         }
         if (padSize == 8) {  // NCHW
             padPs.front = padVec[1];
-            padPs.back = padVec[5];
             padPs.top = padVec[2];
             padPs.left = padVec[3];
+            padPs.back = padVec[5];
             padPs.bottom = padVec[6];
             padPs.right = padVec[7];
         } else if (padSize == 6) {  // NCH
@@ -2052,7 +2115,7 @@ protected:
             padPs.right = padVec[3];
         } else {
             UNI_ERROR_LOG("can not process operator name:%s type:%s attributes.\n",
-                this->node.name().c_str(), op.c_str());
+                this->onnxNode.name().c_str(), this->onnxNode.op_type().c_str());
         }
         padPs.constant_value = padValue;
         curPs.pad_spec = padPs;
@@ -2063,10 +2126,58 @@ protected:
     {
         ParameterSpec curPs;
         memset(&curPs, 0, sizeof(curPs));
-        GatherParamSpec gps;
-        memset(&gps, 0, sizeof(gps));
-        gps.gather_axis = get_node_single_int_attribute_by_name(node, "axis", 0);
-        curPs.gather_spec = gps;
+        GatherParamSpec p;
+        memset(&p, 0, sizeof(p));
+        const std::string &onnxNodeType = this->onnxNode.op_type();
+        if (onnxNodeType == "Gather" || onnxNodeType == "GatherElements") {
+            p.axis = get_node_single_int_attribute_by_name(this->onnxNode, "axis", 0);
+        } else {
+            p.axis = INT_MAX;
+        }
+        if (onnxNodeType == "GatherElements") {
+            p.element_level = true;
+        } else {
+            p.element_level = false;
+        }
+        if (onnxNodeType == "GatherND") {
+            p.batch_dims = get_node_single_int_attribute_by_name(this->onnxNode, "batch_dims", 0);
+        } else {
+            p.batch_dims = 0;
+        }
+        for (int i = 0; i < 2; i++) {
+            TensorDesc *desc;
+            switch (i) {
+                case 0:
+                    desc = &(p.data_desc);
+                    break;
+                case 1:
+                    desc = &(p.index_desc);
+                    break;
+                default:
+                    break;
+            }
+            const std::string &input_name = this->onnxNode.input(i);
+            if (onnxWeights.find(input_name) == onnxWeights.end()) {
+                *desc = tensor0d();
+            } else {
+                const onnx::TensorProto &tp = onnxWeights[input_name];
+                TensorDesc tmp = genDescFromTp(tp);
+                if (onnxNodeType == "Gather" && i == 1 && tmp.nDims == 0) {
+                    p.index_scalar = true;
+                }
+                int num = get_data_size_from_tensor_proto(tp);
+                if (tmp.nDims == 0 && num > 0) {
+                    tmp.nDims = 1;
+                    tmp.dims[0] = num;
+                }
+                if (onnxWeightReferCount[input_name] > 1) {
+                    *desc = tensor0d();
+                } else {
+                    *desc = tmp;
+                }
+            }
+        }
+        curPs.gather_spec = p;
         return curPs;
     }
 
@@ -2081,18 +2192,18 @@ protected:
         std::vector<int> axesInfo;
         std::vector<int> stepInfo;
 
-        if (node.input_size() == 1) {
-            startsInfo = get_node_vector_ints_attribute_by_name(node, "starts");
-            endsInfo = get_node_vector_ints_attribute_by_name(node, "ends");
-            axesInfo = get_node_vector_ints_attribute_by_name(node, "axes");
+        if (this->onnxNode.input_size() == 1) {
+            startsInfo = get_node_vector_ints_attribute_by_name(this->onnxNode, "starts");
+            endsInfo = get_node_vector_ints_attribute_by_name(this->onnxNode, "ends");
+            axesInfo = get_node_vector_ints_attribute_by_name(this->onnxNode, "axes");
         } else {
-            startsInfo = get_int_vec_from_tensorProto(weights[node.input(1)]);
-            endsInfo = get_int_vec_from_tensorProto(weights[node.input(2)]);
-            if (node.input_size() >= 4) {
-                axesInfo = get_int_vec_from_tensorProto(weights[node.input(3)]);
-                if (node.input_size() >= 5) {
-                    stepInfo = get_int_vec_from_tensorProto(weights[node.input(4)]);
-                }
+            startsInfo = get_int_vec_from_tensorProto(onnxWeights[this->onnxNode.input(1)]);
+            endsInfo = get_int_vec_from_tensorProto(onnxWeights[this->onnxNode.input(2)]);
+            if (this->onnxNode.input_size() >= 4) {
+                axesInfo = get_int_vec_from_tensorProto(onnxWeights[this->onnxNode.input(3)]);
+            }
+            if (this->onnxNode.input_size() >= 5) {
+                stepInfo = get_int_vec_from_tensorProto(onnxWeights[this->onnxNode.input(4)]);
             }
         }
         tfSlicePs.dim_size = 8;
@@ -2125,23 +2236,17 @@ protected:
         memset(&curPs, 0, sizeof(curPs));
         SliceParamSpec slice_ps;
         memset(&slice_ps, 0, sizeof(slice_ps));
-        if (op == "Gather") {
-            ParameterSpec gather_ps = adapt_Gather();
-            slice_ps.slice_points[0] = 1;
-            slice_ps.slice_size = 1;
-            slice_ps.axis = gather_ps.gather_spec.gather_axis;
-        } else if (op == "Split") {
-            std::vector<int> splitInfo = get_node_vector_ints_attribute_by_name(node, "split");
-            slice_ps.axis = get_node_single_int_attribute_by_name(node, "axis", 0);
-            if (0 == splitInfo.size()) {  // Split equally by default. Set all slice_points to 0
-                slice_ps.slice_size = (int)node.output_size();
-                memset(slice_ps.slice_points, 0, slice_ps.slice_size * sizeof(I32));
-            } else {
-                slice_ps.slice_size = splitInfo.size();
-                slice_ps.slice_points[0] = splitInfo[0];
-                for (U32 i = 1; i < slice_ps.slice_size; i++) {
-                    slice_ps.slice_points[i] = slice_ps.slice_points[i - 1] + splitInfo[i];
-                }
+        std::vector<int> splitInfo = get_node_vector_ints_attribute_by_name(this->onnxNode, "split");
+        slice_ps.axis = get_node_single_int_attribute_by_name(this->onnxNode, "axis", 0);
+        // Split equally by default. Set all slice_points to 0
+        if (0 == splitInfo.size()) {
+            slice_ps.slice_size = (int)this->onnxNode.output_size();
+            memset(slice_ps.slice_points, 0, slice_ps.slice_size * sizeof(I32));
+        } else {
+            slice_ps.slice_size = splitInfo.size();
+            slice_ps.slice_points[0] = splitInfo[0];
+            for (U32 i = 1; i < slice_ps.slice_size; i++) {
+                slice_ps.slice_points[i] = slice_ps.slice_points[i - 1] + splitInfo[i];
             }
         }
         curPs.slice_spec = slice_ps;
@@ -2154,15 +2259,15 @@ protected:
         memset(&curPs, 0, sizeof(curPs));
         EmbedParamSpec embed_ps;
         memset(&embed_ps, 0, sizeof(embed_ps));
-        std::string embed_weight_name = node.input(0);
-        if (weights.find(node.input(0)) == weights.end()) {
+        std::string embed_weight_name = this->onnxNode.input(0);
+        if (onnxWeights.find(this->onnxNode.input(0)) == onnxWeights.end()) {
             return curPs;
         }
-        auto tensor_proto = weights[embed_weight_name];
+        auto tensor_proto = onnxWeights[embed_weight_name];
         int size_of_dims = tensor_proto.dims_size();
         if (size_of_dims != 2) {
             UNI_ERROR_LOG("can not process operator name:%s type:%s attributes.\n",
-                this->node.name().c_str(), op.c_str());
+                this->onnxNode.name().c_str(), this->onnxNode.op_type().c_str());
         }
         embed_ps.input_dim = tensor_proto.dims(0);
         embed_ps.num_output = tensor_proto.dims(1);
@@ -2178,7 +2283,12 @@ protected:
         memset(&curPs, 0, sizeof(curPs));
         SqueezeParamSpec squeezePs;
         memset(&squeezePs, 0, sizeof(squeezePs));
-        std::vector<int> squeezeAxes = get_node_vector_ints_attribute_by_name(node, "axes");
+        std::vector<int> squeezeAxes;
+        if (this->onnxNode.input_size() > 1) {
+            squeezeAxes = get_int_vec_from_tensorProto(onnxWeights[this->onnxNode.input(1)]);
+        } else {
+            squeezeAxes = get_node_vector_ints_attribute_by_name(this->onnxNode, "axes");
+        }
         squeezePs.axes_num = squeezeAxes.size();
         for (int squeeze_i = 0; squeeze_i < (int)squeezeAxes.size(); squeeze_i++) {
             squeezePs.axes[squeeze_i] = squeezeAxes[squeeze_i];
@@ -2193,7 +2303,12 @@ protected:
         memset(&curPs, 0, sizeof(curPs));
         UnsqueezeParamSpec unsqueezePs;
         memset(&unsqueezePs, 0, sizeof(unsqueezePs));
-        std::vector<int> unsqueezeAxes = get_node_vector_ints_attribute_by_name(node, "axes");
+        std::vector<int> unsqueezeAxes;
+        if (this->onnxNode.input_size() > 1) {
+            unsqueezeAxes = get_int_vec_from_tensorProto(onnxWeights[this->onnxNode.input(1)]);
+        } else {
+            unsqueezeAxes = get_node_vector_ints_attribute_by_name(this->onnxNode, "axes");
+        }
         unsqueezePs.axes_num = unsqueezeAxes.size();
         for (int unsqueeze_i = 0; unsqueeze_i < (int)unsqueezeAxes.size(); unsqueeze_i++) {
             unsqueezePs.axes[unsqueeze_i] = unsqueezeAxes[unsqueeze_i];
@@ -2210,10 +2325,11 @@ protected:
         memset(&castPs, 0, sizeof(castPs));
 
         int cast_to;
-        if (node.input_size() == 2 && weights.find(node.input(1)) != weights.end()) {
-            cast_to = (get_int_vec_from_tensorProto(weights[node.input(1)]))[0];
+        if (this->onnxNode.input_size() == 2 &&
+            onnxWeights.find(this->onnxNode.input(1)) != onnxWeights.end()) {
+            cast_to = (get_int_vec_from_tensorProto(onnxWeights[this->onnxNode.input(1)]))[0];
         } else {
-            cast_to = get_node_single_int_attribute_by_name(node, "to", 0);
+            cast_to = get_node_single_int_attribute_by_name(this->onnxNode, "to", 0);
         }
 
         if (cast_to == onnx::TensorProto::FLOAT) {
@@ -2223,6 +2339,8 @@ protected:
         } else if (cast_to == onnx::TensorProto::INT16 || cast_to == onnx::TensorProto::INT32 ||
             cast_to == onnx::TensorProto::INT64) {
             castPs.targetDt = DT_I32;
+        } else if (cast_to == onnx::TensorProto::BOOL) {
+            castPs.targetDt = DT_U8;
         } else {
             castPs.targetDt = DT_F32;  // default
         }
@@ -2236,24 +2354,10 @@ protected:
         memset(&curPs, 0, sizeof(curPs));
         ConcatParamSpec concatPs;
         memset(&concatPs, 0, sizeof(concatPs));
-        concatPs.axis = get_node_single_int_attribute_by_name(node, "axis", 1);
+        concatPs.axis = get_node_single_int_attribute_by_name(this->onnxNode, "axis", 1);
         curPs.concat_spec = concatPs;
 
-        std::string insertWeightName = "";
-        std::string insertOpName = "";
-        if (node.name().length() > 0) {
-            insertOpName = node.name();
-        } else {
-            insertOpName = node.output(0);
-        }
-        if (weights.find(node.input(0)) != weights.end()) {
-            insertWeightName = node.input(0);
-        } else if (node.input_size() > 1 && weights.find(node.input(1)) != weights.end()) {
-            insertWeightName = node.input(1);
-        }
-        if (insertWeightName.length() > 0) {
-            insertSharedWeight[insertWeightName] = insertOpName;
-        }
+        insert_shared_weight();
         return curPs;
     }
 
@@ -2263,7 +2367,7 @@ protected:
         memset(&curPs, 0, sizeof(curPs));
         SoftmaxParamSpec softmaxPs;
         memset(&softmaxPs, 0, sizeof(softmaxPs));
-        softmaxPs.axis = get_node_single_int_attribute_by_name(node, "axis", 1);
+        softmaxPs.axis = get_node_single_int_attribute_by_name(this->onnxNode, "axis", -1);
         curPs.softmax_spec = softmaxPs;
         return curPs;
     }
@@ -2274,28 +2378,28 @@ protected:
         memset(&curPs, 0, sizeof(curPs));
         ReLUParamSpec reluPs;
         memset(&reluPs, 0, sizeof(reluPs));
-        reluPs.neg_slope = get_node_float_attribute_by_name(node, "alpha", 0.0);
+        reluPs.neg_slope = get_node_float_attribute_by_name(this->onnxNode, "alpha", 0.0);
         curPs.relu_spec = reluPs;
         return curPs;
     }
 
     ParameterSpec adapt_RNN() override
     {
-        weightOpIndexLists.push_back(nodeIndex);
-        if (this->op == "Scan") {
+        const std::string &onnxNodeType = this->onnxNode.op_type();
+        if (onnxNodeType == "Scan") {
             return adapt_Scan();
         }
         ParameterSpec curPs;
         memset(&curPs, 0, sizeof(curPs));
         RNNParamSpec rnnPs;
         memset(&rnnPs, 0, sizeof(rnnPs));
-        if (this->op == "RNN") {
+        if (onnxNodeType == "RNN") {
             rnnPs.mode = RNN_RNN;
-        } else if (this->op == "LSTM") {
+        } else if (onnxNodeType == "LSTM") {
             rnnPs.mode = RNN_LSTM;
-        } else if (this->op == "GRU") {
+        } else if (onnxNodeType == "GRU") {
             int linear_before_reset =
-                get_node_single_int_attribute_by_name(node, "linear_before_reset", 0);
+                get_node_single_int_attribute_by_name(this->onnxNode, "linear_before_reset", 0);
             if (linear_before_reset == 0) {
                 rnnPs.mode = RNN_GRU;
             } else {
@@ -2303,12 +2407,13 @@ protected:
             }
         } else {
             UNI_ERROR_LOG("can not map operator name:%s type:%s to RNN.\n",
-                this->node.name().c_str(), this->op.c_str());
+                this->onnxNode.name().c_str(), onnxNodeType.c_str());
         }
-        rnnPs.numOutput = get_node_single_int_attribute_by_name(node, "hidden_size", 1);
-        rnnPs.biDirection =
-            get_node_str_attribute_by_name(node, "direction", "forward") == "bidirectional" ? true
-                                                                                            : false;
+        rnnPs.numOutput = get_node_single_int_attribute_by_name(this->onnxNode, "hidden_size", 1);
+        rnnPs.biDirection = get_node_str_attribute_by_name(
+                                this->onnxNode, "direction", "forward") == "bidirectional"
+            ? true
+            : false;
         rnnPs.steps = 0;
         rnnPs.numProjection = 0;
         rnnPs.zoneoutCell = 0;
@@ -2331,39 +2436,40 @@ protected:
         powerPs.power = 1;
         int index = 0;
         float value = 0;
-        if (this->op == "Pow" || this->op == "Mul" || this->op == "Div" || this->op == "Add" ||
-            this->op == "Sub") {
-            std::vector<int> indexes = getOperatorWeightInputIndex(this->nodeIndex);
+        const std::string &onnxNodeType = this->onnxNode.op_type();
+        if (onnxNodeType == "Pow" || onnxNodeType == "Mul" || onnxNodeType == "Div" ||
+            onnxNodeType == "Add" || onnxNodeType == "Sub") {
+            std::vector<int> indexes = getOperatorWeightInputIndex(this->onnxNode);
             CHECK_REQUIREMENT(indexes.size() == 1);
             index = indexes[0];
-            const onnx::TensorProto &tp = weights[this->node.input(index)];
+            const onnx::TensorProto &tp = onnxWeights[this->onnxNode.input(index)];
             value = getSinFloat_from_tensorProto(tp);
         }
-        if (this->op == "Pow") {
+        if (onnxNodeType == "Pow") {
             powerPs.power = value;
-        } else if (this->op == "Mul") {
+        } else if (onnxNodeType == "Mul") {
             powerPs.scale = value;
-        } else if (this->op == "Div") {
+        } else if (onnxNodeType == "Div") {
             powerPs.scale = 1 / value;
             if (index == 0) {
                 powerPs.power = -1;
             }
-        } else if (this->op == "Add") {
+        } else if (onnxNodeType == "Add") {
             powerPs.shift = value;
-        } else if (this->op == "Sub") {
+        } else if (onnxNodeType == "Sub") {
             if (index == 0) {
                 powerPs.scale = -1;
                 powerPs.shift = value;
             } else {
                 powerPs.shift = -1 * value;
             }
-        } else if (this->op == "Sqrt") {
+        } else if (onnxNodeType == "Sqrt") {
             powerPs.power = 0.5;
-        } else if (this->op == "Scale") {
-            powerPs.scale = get_node_float_attribute_by_name(node, "scale", 1.0);
+        } else if (onnxNodeType == "Scale") {
+            powerPs.scale = get_node_float_attribute_by_name(this->onnxNode, "scale", 1.0);
         } else {
             UNI_ERROR_LOG("can not map operator name:%s type:%s to Power.\n",
-                this->node.name().c_str(), this->op.c_str());
+                this->onnxNode.name().c_str(), onnxNodeType.c_str());
         }
         curPs.power_spec = powerPs;
         return curPs;
@@ -2371,15 +2477,27 @@ protected:
 
     ParameterSpec adapt_Scale() override
     {
-        if (weightOpIndexLists.size() == 0 ||
-            weightOpIndexLists[weightOpIndexLists.size() - 1] != nodeIndex) {
-            weightOpIndexLists.push_back(nodeIndex);
-        }
         ParameterSpec curPs;
         memset(&curPs, 0, sizeof(curPs));
         ScaleParamSpec scale_ps;
         memset(&scale_ps, 0, sizeof(scale_ps));
-        scale_ps.axis = 1;
+        const std::string &onnxNodeType = this->onnxNode.op_type();
+        if (onnxNodeType == "Add" || onnxNodeType == "Sub" || onnxNodeType == "Mul" ||
+            onnxNodeType == "Div") {
+            const auto &tensor = onnxWeights[this->onnxNode.input(1)];
+            if (tensor.dims_size() > 1) {
+                for (int idx = 0; idx < tensor.dims_size(); ++idx) {
+                    if (tensor.dims(idx) > 1) {
+                        scale_ps.axis = idx;
+                        break;
+                    }
+                }
+            } else {
+                scale_ps.axis = -1;
+            }
+        } else {
+            scale_ps.axis = 1;
+        }
         curPs.scale_spec = scale_ps;
         return curPs;
     }
@@ -2390,7 +2508,7 @@ protected:
         memset(&curPs, 0, sizeof(curPs));
         Space2DepthParamSpec s2dPs;
         memset(&s2dPs, 0, sizeof(s2dPs));
-        s2dPs.blockSize = get_node_single_int_attribute_by_name(node, "blocksize", 1);
+        s2dPs.blockSize = get_node_single_int_attribute_by_name(this->onnxNode, "blocksize", 1);
         curPs.space2depth_spec = s2dPs;
         return curPs;
     }
@@ -2401,8 +2519,8 @@ protected:
         memset(&curPs, 0, sizeof(curPs));
         Depth2SpaceParamSpec d2sPs;
         memset(&d2sPs, 0, sizeof(d2sPs));
-        d2sPs.blockSize = get_node_single_int_attribute_by_name(node, "blocksize", 1);
-        std::string d2s_mode = get_node_str_attribute_by_name(node, "mode", "DCR");
+        d2sPs.blockSize = get_node_single_int_attribute_by_name(this->onnxNode, "blocksize", 1);
+        std::string d2s_mode = get_node_str_attribute_by_name(this->onnxNode, "mode", "DCR");
         str_copy(d2sPs.reMode, d2s_mode.c_str(), d2s_mode.length(), 8);
         curPs.depth2space_spec = d2sPs;
         return curPs;
@@ -2414,25 +2532,31 @@ protected:
         memset(&curPs, 0, sizeof(curPs));
         ReductionParamSpec rsPs;
         memset(&rsPs, 0, sizeof(rsPs));
-        std::vector<int> axesInfo = get_node_vector_ints_attribute_by_name(node, "axes");
-        int keepdimsInfo = get_node_single_int_attribute_by_name(node, "keepdims", 0);
+        std::vector<int> axesInfo = get_node_vector_ints_attribute_by_name(this->onnxNode, "axes");
+        if (axesInfo.size() == 0 && this->onnxNode.input_size() > 1) {
+            axesInfo = get_int_vec_from_tensorProto(onnxWeights[this->onnxNode.input(1)]);
+        }
+        int keepdimsInfo = get_node_single_int_attribute_by_name(this->onnxNode, "keepdims", 1);
         rsPs.axes_num = axesInfo.size();
         for (int i = 0; i < rsPs.axes_num; i++) {
             rsPs.axes[i] = axesInfo[i];
         }
         rsPs.keep_dim = keepdimsInfo == 0 ? false : true;
         rsPs.coeff = 1.0;
-        if (op == "ReduceSum") {
+        const std::string &onnxNodeType = this->onnxNode.op_type();
+        if (onnxNodeType == "ReduceSum") {
             rsPs.reduction_mode = REDUCTION_SUM;
-        } else if (op == "ReduceMean") {
+        } else if (onnxNodeType == "ReduceMean") {
             rsPs.reduction_mode = REDUCTION_MEAN;
-        } else if (op == "ReduceMax") {
+        } else if (onnxNodeType == "ReduceMax") {
             rsPs.reduction_mode = REDUCTION_MAX;
-        } else if (op == "ReduceMin") {
+        } else if (onnxNodeType == "ReduceMin") {
             rsPs.reduction_mode = REDUCTION_MIN;
+        } else if (onnxNodeType == "ReduceL2") {
+            rsPs.reduction_mode = REDUCTION_L2;
         } else {
             UNI_ERROR_LOG("can not map operator name:%s type:%s to Reduction.\n",
-                this->node.name().c_str(), this->op.c_str());
+                this->onnxNode.name().c_str(), onnxNodeType.c_str());
         }
         curPs.reduction_spec = rsPs;
         return curPs;
@@ -2444,14 +2568,13 @@ protected:
         memset(&curPs, 0, sizeof(curPs));
         ArgMaxParamSpec amPs;
         memset(&amPs, 0, sizeof(amPs));
-        amPs.axis = get_node_single_int_attribute_by_name(node, "axis", -1);
+        amPs.axis = get_node_single_int_attribute_by_name(this->onnxNode, "axis", -1);
         curPs.argmax_spec = amPs;
         return curPs;
     }
 
     ParameterSpec adapt_PRelu() override
     {
-        weightOpIndexLists.push_back(nodeIndex);
         ParameterSpec curPs;
         memset(&curPs, 0, sizeof(curPs));
         return curPs;
@@ -2463,12 +2586,14 @@ protected:
         memset(&curPs, 0, sizeof(curPs));
         TileParamSpec tilePs;
         memset(&tilePs, 0, sizeof(tilePs));
-        std::vector<int> tileInfo = get_int_vec_from_tensorProto(weights[node.input(1)]);
+        std::vector<int> tileInfo =
+            get_int_vec_from_tensorProto(onnxWeights[this->onnxNode.input(1)]);
+        const std::string &onnxNodeType = this->onnxNode.op_type();
         if (tileInfo.size() > 0 && tileInfo.size() <= 8) {
             tilePs.dimsSize = tileInfo.size();
         } else {
             UNI_ERROR_LOG("can not process operator name:%s type:%s attributes.\n",
-                this->node.name().c_str(), this->op.c_str());
+                this->onnxNode.name().c_str(), onnxNodeType.c_str());
         }
         for (U32 i = 0; i < tileInfo.size(); i++) {
             tilePs.repeatsInfo[i] = tileInfo[i];
@@ -2479,17 +2604,18 @@ protected:
 
     ParameterSpec adapt_Splice() override
     {
-        weightOpIndexLists.push_back(nodeIndex);
         ParameterSpec curPs;
         memset(&curPs, 0, sizeof(curPs));
         SpliceParamSpec splicePs;
         memset(&splicePs, 0, sizeof(splicePs));
-        std::vector<int> context = get_node_vector_ints_attribute_by_name(node, "context");
-        std::vector<int> indexes = get_node_vector_ints_attribute_by_name(node, "forward_indexes");
+        std::vector<int> context = get_node_vector_ints_attribute_by_name(this->onnxNode, "context");
+        std::vector<int> indexes =
+            get_node_vector_ints_attribute_by_name(this->onnxNode, "forward_indexes");
         splicePs.num_context = context.size();
+        const std::string &onnxNodeType = this->onnxNode.op_type();
         if (splicePs.num_context == 0) {
             UNI_ERROR_LOG("can not process operator name:%s type:%s attributes.\n",
-                this->node.name().c_str(), this->op.c_str());
+                this->onnxNode.name().c_str(), onnxNodeType.c_str());
         }
         for (int i = 0; i < splicePs.num_context; i++) {
             splicePs.context[i] = context[i];
@@ -2507,13 +2633,12 @@ protected:
 
     ParameterSpec adapt_Tdnn() override
     {
-        weightOpIndexLists.push_back(nodeIndex);
         ParameterSpec curPs;
         memset(&curPs, 0, sizeof(curPs));
         TdnnParamSpec tdnnPs;
         memset(&tdnnPs, 0, sizeof(tdnnPs));
-        const onnx::TensorProto &context = weights[node.input(1)];
-        const onnx::TensorProto &params = weights[node.input(2)];
+        const onnx::TensorProto &context = onnxWeights[this->onnxNode.input(1)];
+        const onnx::TensorProto &params = onnxWeights[this->onnxNode.input(2)];
         tdnnPs.num_context = get_data_size_from_tensor_proto(context);
         U8 *ptr = (U8 *)get_ptr_from_weight_obj(context);
         for (int i = 0; i < tdnnPs.num_context; i++) {
@@ -2533,35 +2658,39 @@ protected:
         memset(&curPs, 0, sizeof(curPs));
         TopKParamSpec p;
         memset(&p, 0, sizeof(p));
-        p.axis = get_node_single_int_attribute_by_name(node, "axis", -1);
-        p.largest = get_node_single_int_attribute_by_name(node, "largest", 1);
-        p.sorted = get_node_single_int_attribute_by_name(node, "sorted", 1);
-        p.topk = get_node_single_int_attribute_by_name(node, "k", 1);
+        p.axis = get_node_single_int_attribute_by_name(this->onnxNode, "axis", -1);
+        p.largest = get_node_single_int_attribute_by_name(this->onnxNode, "largest", 1);
+        p.sorted = get_node_single_int_attribute_by_name(this->onnxNode, "sorted", 1);
+        if (this->onnxNode.input_size() == 1) {
+            p.topk = get_node_single_int_attribute_by_name(this->onnxNode, "k", 1);
+        } else {
+            p.topk = get_int_vec_from_tensorProto(onnxWeights[this->onnxNode.input(1)])[0];
+        }
         curPs.topk_spec = p;
         return curPs;
     }
 
     ParameterSpec adapt_Where() override
     {
-        weightOpIndexLists.push_back(nodeIndex);
         ParameterSpec curPs;
         memset(&curPs, 0, sizeof(curPs));
         WhereParamSpec wherePs;
         memset(&wherePs, 0, sizeof(wherePs));
-        if (weights.find(node.input(0)) == weights.end()) {
+        const std::string &onnxNodeType = this->onnxNode.op_type();
+        if (onnxWeights.find(this->onnxNode.input(0)) == onnxWeights.end()) {
             UNI_WARNING_LOG("not find condition initializer in operator name:%s type:%s "
                             "attributes.\n",
-                this->node.name().c_str(), this->op.c_str());
+                this->onnxNode.name().c_str(), onnxNodeType.c_str());
         } else {
-            const onnx::TensorProto &conditionTp = weights[node.input(0)];
+            const onnx::TensorProto &conditionTp = onnxWeights[this->onnxNode.input(0)];
             wherePs.conditionDesc = genDescFromTp(conditionTp);
         }
 
-        if (weights.find(node.input(2)) == weights.end()) {
+        if (onnxWeights.find(this->onnxNode.input(2)) == onnxWeights.end()) {
             UNI_WARNING_LOG("not find y initializer in operator name:%s type:%s attributes.\n",
-                this->node.name().c_str(), this->op.c_str());
+                this->onnxNode.name().c_str(), onnxNodeType.c_str());
         } else {
-            const onnx::TensorProto &yTp = weights[node.input(2)];
+            const onnx::TensorProto &yTp = onnxWeights[this->onnxNode.input(2)];
             wherePs.yDesc = genDescFromTp(yTp);
         }
 
@@ -2576,8 +2705,8 @@ protected:
         RNNParamSpec rnnPs;
         memset(&rnnPs, 0, sizeof(rnnPs));
         onnx::GraphProto curGraph;
-        for (int i = 0; i < node.attribute_size(); i++) {
-            const onnx::AttributeProto &attribute = node.attribute(i);
+        for (int i = 0; i < this->onnxNode.attribute_size(); i++) {
+            const onnx::AttributeProto &attribute = this->onnxNode.attribute(i);
             if (attribute.name() == "body") {
                 curGraph = attribute.g();
                 break;
@@ -2593,8 +2722,8 @@ protected:
             bool stopTag = false;
             if (curNode.op_type() == "MatMul") {
                 for (int j = 0; j < input_size; j++) {
-                    if (weights.find(curNode.input(j)) != weights.end()) {
-                        auto hidWeightTp = weights[curNode.input(j)];
+                    if (onnxWeights.find(curNode.input(j)) != onnxWeights.end()) {
+                        auto hidWeightTp = onnxWeights[curNode.input(j)];
                         int hidWeightSize = get_data_size_from_tensor_proto(hidWeightTp);
                         if (hidWeightSize > 0) {
                             matmulTps.push_back(hidWeightTp);
@@ -2624,24 +2753,148 @@ protected:
         return curPs;
     }
 
+    ParameterSpec adapt_Expand() override
+    {
+        ParameterSpec curPs;
+        memset(&curPs, 0, sizeof(curPs));
+        ExpandParamSpec expandPs;
+        memset(&expandPs, 0, sizeof(expandPs));
+        std::vector<int> expandInfo;
+        if (this->onnxNode.input_size() == 1) {
+            expandInfo = get_node_vector_ints_attribute_by_name(this->onnxNode, "shape");
+        } else {
+            expandInfo = get_int_vec_from_tensorProto(onnxWeights[this->onnxNode.input(1)]);
+        }
+        expandPs.shape_size = expandInfo.size();
+        memcpy(expandPs.shape_dims, expandInfo.data(), expandPs.shape_size * sizeof(I32));
+        curPs.expand_spec = expandPs;
+        return curPs;
+    }
+
+    ParameterSpec adapt_Scatter() override
+    {
+        ParameterSpec curPs;
+        memset(&curPs, 0, sizeof(curPs));
+        ScatterParamSpec p;
+        memset(&p, 0, sizeof(p));
+        const std::string &onnxNodeType = this->onnxNode.op_type();
+        if (onnxNodeType == "ScatterElements") {
+            p.axis = get_node_single_int_attribute_by_name(this->onnxNode, "axis", 0);
+        } else {
+            p.axis = INT_MAX;
+        }
+        for (int i = 0; i < 3; i++) {
+            TensorDesc *desc;
+            switch (i) {
+                case 0:
+                    desc = &(p.data_desc);
+                    break;
+                case 1:
+                    desc = &(p.index_desc);
+                    break;
+                case 2:
+                    desc = &(p.update_desc);
+                    break;
+                default:
+                    break;
+            }
+            if (onnxWeights.find(this->onnxNode.input(i)) == onnxWeights.end()) {
+                *desc = tensor0d();
+            } else {
+                const onnx::TensorProto &tp = onnxWeights[this->onnxNode.input(i)];
+                *desc = genDescFromTp(tp);
+            }
+        }
+        curPs.scatter_spec = p;
+        return curPs;
+    }
+
+    ParameterSpec adapt_RoIAlign() override
+    {
+        ParameterSpec curPs;
+        memset(&curPs, 0, sizeof(curPs));
+        RoIAlignParamSpec rps;
+        memset(&rps, 0, sizeof(rps));
+        std::string coordinateTransformationMode = get_node_str_attribute_by_name(
+            this->onnxNode, "coordinate_transformation_mode", "NO_SET");
+        if (coordinateTransformationMode == "NO_SET") {
+            int aligned = get_node_single_int_attribute_by_name(this->onnxNode, "aligned", 1);
+            if (aligned <= 0) {
+                coordinateTransformationMode = "output_half_pixel";
+            } else {
+                coordinateTransformationMode = "half_pixel";
+            }
+        }
+        if (coordinateTransformationMode == "half_pixel") {
+            rps.coordinateTransformationMode = ROIALIGN_HALF_PIXEL;
+        } else if (coordinateTransformationMode == "output_half_pixel") {
+            rps.coordinateTransformationMode = ROIALIGN_OUTPUT_HALF_PIXEL;
+        } else {
+            CHECK_STATUS(NOT_SUPPORTED);
+        }
+
+        std::string poolingMode = get_node_str_attribute_by_name(this->onnxNode, "mode", "avg");
+        if (poolingMode == "avg") {
+            rps.mode = POOLING_MEAN;
+        } else if (poolingMode == "max") {
+            rps.mode = POOLING_MAX;
+        } else {
+            CHECK_STATUS(NOT_SUPPORTED);
+        }
+        rps.output_w = get_node_single_int_attribute_by_name(this->onnxNode, "pooled_w", 1);
+        rps.output_h = get_node_single_int_attribute_by_name(this->onnxNode, "pooled_h", 1);
+        if (rps.output_w == 1) {
+            rps.output_w = get_node_single_int_attribute_by_name(this->onnxNode, "output_width", 1);
+        }
+        if (rps.output_h == 1) {
+            rps.output_h = get_node_single_int_attribute_by_name(this->onnxNode, "output_height", 1);
+        }
+        rps.sampling_ratio =
+            get_node_single_int_attribute_by_name(this->onnxNode, "sampling_ratio", 0);
+        rps.spatial_scale = get_node_float_attribute_by_name(this->onnxNode, "spatial_scale", 1.0);
+        curPs.roialign_spec = rps;
+        return curPs;
+    }
+
+    ParameterSpec adapt_GenerateProposals() override
+    {
+        ParameterSpec curPs;
+        memset(&curPs, 0, sizeof(curPs));
+        GenerateProposalsParamSpec gpps;
+        memset(&gpps, 0, sizeof(gpps));
+        gpps.angle_bound_hi =
+            get_node_single_int_attribute_by_name(this->onnxNode, "angle_bound_hi", 0);
+        gpps.angle_bound_lo =
+            get_node_single_int_attribute_by_name(this->onnxNode, "angle_bound_lo", 0);
+        gpps.angle_bound_on =
+            get_node_single_int_attribute_by_name(this->onnxNode, "angle_bound_on", 0);
+        gpps.clip_angle_thresh =
+            get_node_float_attribute_by_name(this->onnxNode, "clip_angle_thresh", 0.0);
+        gpps.legacy_plus_one =
+            get_node_single_int_attribute_by_name(this->onnxNode, "legacy_plus_one", 0);
+        gpps.min_size = get_node_float_attribute_by_name(this->onnxNode, "min_size", 0.0);
+        gpps.nms_thresh = get_node_float_attribute_by_name(this->onnxNode, "nms_thresh", 0.0);
+        gpps.post_nms_topN =
+            get_node_single_int_attribute_by_name(this->onnxNode, "post_nms_topN", 0);
+        gpps.pre_nms_topN = get_node_single_int_attribute_by_name(this->onnxNode, "pre_nms_topN", 0);
+        gpps.spatial_scale = get_node_float_attribute_by_name(this->onnxNode, "spatial_scale", 0.0);
+        curPs.generate_proposals_spec = gpps;
+        return curPs;
+    }
+
 private:
-    std::string op;
-    std::string modelName;
     int removePreprocessOpNum;
+    bool useBNN;
+
     onnx::ModelProto onnxModel;
     onnx::GraphProto onnxGraph;
-    onnx::NodeProto node;
-    std::map<std::string, onnx::TensorProto> weights;
-    int nodeIndex;
-    std::vector<int> weightOpIndexLists;
-    int opFinalInputNum;
+    onnx::NodeProto onnxNode;
+    std::map<std::string, onnx::TensorProto> onnxWeights;
+    std::map<std::string, int> onnxWeightReferCount;
+    std::map<std::string, onnx::ValueInfoProto> onnxValues;
 
-    std::map<std::string, std::string> insertSharedWeight;  // weight->op
-    std::vector<OperatorSpec> operatorSpecVec;
-    std::vector<WeightSpec> weightSpecVec;
-    std::vector<OperatorSpec> sharedWeightOps;
-    std::vector<WeightSpec> sharedWeightWps;
+    std::set<std::string> sharedWeights;
 
-    std::map<std::string, std::string> croppingNames;
+    std::map<std::string, std::string> nameMap;
 };
 #endif

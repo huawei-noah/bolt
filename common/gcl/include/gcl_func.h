@@ -58,8 +58,9 @@ inline EE gcl_regist_binMap(GCLHandle_t handle)
         handle->useBinMap = true;
         handle->kernel_binmap_handle = dvm_handle;
     } else {
+        err = dlerror();
         UNI_DEBUG_LOG("try to dlopen %s failed, %s, create kernel from source code\n",
-            libKernelBinName.c_str(), dlerror());
+            libKernelBinName.c_str(), err);
     }
     return SUCCESS;
 }
@@ -174,6 +175,37 @@ inline EE gcl_get_device_name(GCLHandle_t handle)
     }
     free(data);
     handle->deviceName = devName;
+    return SUCCESS;
+}
+inline bool gcl_check_device_qualcomm(GCLHandle_t handle)
+{
+    std::string deviceName = handle->deviceName;
+    bool qualCommDev = false;
+    if (deviceName.find("QUALCOMM") != std::string::npos) {
+        qualCommDev = true;
+    }
+    return qualCommDev;
+}
+
+inline bool gcl_check_meet_device_image3d_limits(
+    GCLHandle_t handle, U32 width, U32 height, U32 depth)
+{
+    if (!handle->useQualcommDev) {
+        return false;
+    }
+    if (width <= 0 || height <= 0 || depth <= 0) {
+        return false;
+    }
+    if (width > handle->device_max_image3d_size[0] || height > handle->device_max_image3d_size[1] ||
+        depth > handle->device_max_image3d_size[2]) {
+        return false;
+    }
+    return true;
+}
+
+inline EE gcl_get_device_max_image3d_size(GCLHandle_t handle, U32 *size)
+{
+    CHECK_STATUS(get_device_max_image3d_sizes(handle->devices[handle->deviceId], size));
     return SUCCESS;
 }
 
@@ -351,7 +383,7 @@ inline GCLMem_t gcl_create_gclmem()
     ret->mem = NULL;
     U32 str[3] = {0, 0, 0};
     U32 off[3] = {0, 0, 0};
-    ret->desc = gcl_mem_desc(str, off, DT_U8, DF_NCWHC4);
+    ret->desc = gcl_mem_desc(str, off, DT_U8, DF_NCHWC4);
     return ret;
 }
 
@@ -488,25 +520,31 @@ inline EE gcl_create_kernel_with_source_map(
         CI8 *sourceName;
         std::string option;
         std::string optionName = kernelName;
-        bool use_common_opt;
+        bool use_common_opt = false;
         if (!kernel_source->get_option(optionName, &option_ptr)) {
             if (opt) {
                 sourceName = opt->sourceName;
                 option = (const char *)opt->option;
-                use_common_opt = (opt->kernelDataType == DT_F16) ? true : false;
-                if (opt->kernelDataType == DT_F32) {
-                    std::string common_opt = "-cl-std=CL2.0 -D T=float -D T2=float2 -D T3=float3 "
-                                             "-D T4=float4 -D T8=float8 -D T16=float16";
-                    option = common_opt + " " + option;
+                std::string common_opt;
+                if (opt->kernelDataType == DT_F16) {
+                    common_opt = "-cl-std=CL2.0 -D T=half -D T2=half2 -D T3=half3 "
+                                 "-D T4=half4 -D T8=half8 -D T16=half16 -DUSE_HALF";
+                } else if (opt->kernelDataType == DT_F32) {
+                    common_opt = "-cl-std=CL2.0 -D T=float -D T2=float2 -D T3=float3 "
+                                 "-D T4=float4 -D T8=float8 -D T16=float16";
                 } else if (opt->kernelDataType == DT_I32) {
-                    std::string common_opt = "-cl-std=CL2.0 -D T=int -D T2=int2 -D T3=int3 -D "
-                                             "T4=int4 -D T8=int8 -D T16=int16";
-                    option = common_opt + " " + option;
+                    common_opt = "-cl-std=CL2.0 -D T=int -D T2=int2 -D T3=int3 -D "
+                                 "T4=int4 -D T8=int8 -D T16=int16";
                 } else if (opt->kernelDataType == DT_U32) {
-                    std::string common_opt = "-cl-std=CL2.0 -D T=uint -D T2=uint2 -D T3=uint3 -D "
-                                             "T4=uint4 -D T8=uint8 -D T16=uint16";
-                    option = common_opt + " " + option;
+                    common_opt = "-cl-std=CL2.0 -D T=uint -D T2=uint2 -D T3=uint3 -D "
+                                 "T4=uint4 -D T8=uint8 -D T16=uint16";
                 }
+                if (option.size() > 1) {
+                    option = option + " ";
+                } else {
+                    option = "";
+                }
+                option += common_opt;
             } else {
                 sourceName = kernelName;
                 option = "";
@@ -557,12 +595,13 @@ inline EE gcl_create_kernel(
     return SUCCESS;
 }
 
-inline EE gcl_get_kernel_from_map(GCLHandle_t handle, CI8 *kernelName, Kernel *kernel)
+inline EE gcl_get_kernel_from_map(
+    GCLHandle_t handle, CI8 *kernelName, Kernel *kernel, KernelOpt *opt = NULL)
 {
     std::string binmapname = handle->deviceName;
     std::string binmap_kernelname = binmapname + "_" + std::string(kernelName);
     if (handle->kernelMap.find(binmap_kernelname) == handle->kernelMap.end()) {
-        CHECK_STATUS(gcl_create_kernel(handle, kernelName, kernel));
+        CHECK_STATUS(gcl_create_kernel(handle, kernelName, kernel, opt));
         CHECK_STATUS(gcl_kernelmap_put(handle, binmap_kernelname, *kernel));
     } else {
         *kernel = gcl_kernelmap_get(handle, binmap_kernelname);
@@ -670,8 +709,8 @@ inline EE gcl_run_kernelVec(GCLHandle_t handle, U32 *index = NULL)
         auto kernelInfo = (*handle->kernelVec)[i];
         for (U32 j = 0; j < kernelInfo.dim; j++) {
             if (kernelInfo.ls[j] != 0) {
-                kernelInfo.gs[j] = (kernelInfo.gs[j] + kernelInfo.ls[j] - 1) 
-                    / kernelInfo.ls[j] * kernelInfo.ls[j];
+                kernelInfo.gs[j] =
+                    (kernelInfo.gs[j] + kernelInfo.ls[j] - 1) / kernelInfo.ls[j] * kernelInfo.ls[j];
             }
         }
         CHECK_STATUS(enqueue_ndrange_kernel(queue, kernelInfo.kernel, kernelInfo.dim, NULL,
@@ -859,15 +898,15 @@ inline EE gcl_run_kernel_select_ls(GCLHandle_t handle, GCLKernelInfo *kernelInfo
     U32 gs_y = (work_dim > 1) ? 256 : 1;
     U32 gs_z = (work_dim > 2) ? gs[2] : 1;
     for (U32 z = 1; z <= gs_z; z = get_next_ls_size(z)) {
-        if (0 != gs_z % z) {
+        if (0 != gs_z % z || z > maxSize) {
             continue;
         }
         for (U32 y = 1; y <= gs_y; y = get_next_ls_size(y)) {
-            if (0 != gs_y % y) {
+            if (0 != gs_y % y || y > maxSize) {
                 continue;
             }
             for (U32 x = 1; x <= gs_x; x = get_next_ls_size(x)) {
-                if (0 != gs_x % x) {
+                if (0 != gs_x % x || x > maxSize) {
                     continue;
                 }
                 U32 total = x * y * z;
@@ -929,6 +968,16 @@ inline EE gcl_run_kernelVec_select_ls(GCLHandle_t handle, std::vector<U32> kerne
     CHECK_STATUS(gcl_enable_queue_profiling(handle));
     for (auto index : kernelIndex) {
         auto kernelInfo = (*handle->kernelVec)[index];
+        bool needSelectLs = false;
+        for (U32 i = 0; i < kernelInfo.dim; i++) {
+            if (kernelInfo.ls[i] == 0) {
+                needSelectLs = true;
+                break;
+            }
+        }
+        if (!needSelectLs) {
+            continue;
+        }
         CHECK_STATUS(gcl_run_kernel_select_ls(handle, &kernelInfo));
         (*handle->kernelVec)[index].gs[0] = kernelInfo.gs[0];
         (*handle->kernelVec)[index].gs[1] = kernelInfo.gs[1];
@@ -1302,7 +1351,7 @@ inline EE gcl_create_sub_buffer(U32 size, U32 *offset, GCLMem_t src, Mem *subbuf
 {
     CHECK_STATUS(create_sub_buffer(src->mem, CL_MEM_READ_WRITE, *offset, size, subbuf));
     src->subMem.push_back(*subbuf);
-    *offset += (size + 1023) / 1024 * 1024;
+    *offset += (size + 127) / 128 * 128;
     return SUCCESS;
 }
 #ifdef __cplusplus
@@ -1338,7 +1387,8 @@ inline EE gcl_set_kernelArgs(Kernel kernel, Args... args)
 inline std::string gclMemDesc2Str(GCLMemDesc desc)
 {
     char buff[128];
-    snprintf(buff, sizeof(buff), "memFormat: %d, ", desc.memFormat);
+    snprintf(buff, sizeof(buff), "dt:%s memFormat:%s ", DataTypeName()[desc.dt],
+        DataFormatName()[desc.memFormat]);
     std::string descStr = buff;
     descStr += "stride(";
     for (U32 i = 0; i < 3; i++) {
@@ -1347,7 +1397,7 @@ inline std::string gclMemDesc2Str(GCLMemDesc desc)
             descStr += ",";
         }
     }
-    descStr += "), ";
+    descStr += ") ";
     descStr += "offset(";
     for (U32 i = 0; i < 3; i++) {
         descStr += std::to_string(desc.offset[i]);
@@ -1357,6 +1407,12 @@ inline std::string gclMemDesc2Str(GCLMemDesc desc)
     }
     descStr += ")";
     return descStr;
+}
+
+inline EE gcl_get_image_size(GCLMem_t gclMem, U32 *width, U32 *height, U32 *depth)
+{
+    CHECK_STATUS(get_image_size(gclMem->mem, width, height, depth));
+    return SUCCESS;
 }
 #ifdef _DEBUG
 template <typename T>
@@ -1378,13 +1434,32 @@ inline EE gcl_print_buffer(GCLHandle_t handle, Mem buf, U32 num, CI8 *bufferName
 }
 
 template <typename T>
-inline EE gcl_check_buf(GCLHandle_t handle, Mem buf, U32 size, bool write2bin, CI8 *dataName = NULL)
+inline EE gcl_check_mem(GCLHandle_t handle,
+    Mem mem,
+    U32 *elementsNum,
+    GCLMemType type,
+    bool write2bin,
+    CI8 *dataName = NULL)
 {
-    U32 num = size / sizeof(T);
-    U8 *hostPtr = new U8[size];
-    F32 *hostPtrTran = new F32[num];
-    CHECK_STATUS(enqueue_read_buffer(handle->queue, buf, CL_TRUE, 0, size, hostPtr,
-        handle->numWaitEvents, handle->waitEvents, handle->eventPtr));
+    U32 num;
+    U8 *hostPtr;
+    F32 *hostPtrTran;
+    if (type == GCL_MEM_BUF) {
+        num = *elementsNum;
+        U32 size = num * sizeof(T);
+        hostPtr = new U8[size];
+        hostPtrTran = new F32[num];
+        CHECK_STATUS(enqueue_read_buffer(handle->queue, mem, CL_TRUE, 0, size, hostPtr,
+            handle->numWaitEvents, handle->waitEvents, handle->eventPtr));
+    } else {
+        num = elementsNum[0] * elementsNum[1] * elementsNum[2] * 4;
+        U32 size = num * sizeof(T);
+        hostPtr = new U8[size];
+        hostPtrTran = new F32[num];
+        U32 origin[3] = {0, 0, 0};
+        CHECK_STATUS(enqueue_read_image(handle->queue, mem, CL_TRUE, origin, elementsNum, 0, 0,
+            hostPtr, handle->numWaitEvents, handle->waitEvents, handle->eventPtr));
+    }
     T *val = (T *)hostPtr;
     for (U32 i = 0; i < num; i++) {
         hostPtrTran[i] = (F32)val[i];
@@ -1443,6 +1518,7 @@ inline std::string gcl_check_data(GCLHandle_t handle,
     DataType tdt;
     U32 tn, tc, th, tw, tt;
     U32 dims;
+    std::string line = "GPU result nchw: ";
     tn = 1;
     tc = 1;
     th = 1;
@@ -1468,11 +1544,11 @@ inline std::string gcl_check_data(GCLHandle_t handle,
             tn = memDesc.dims[3];
         }
         if (dims > 4) {
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_DEBUG_LOG("Not supported data dims in check data\n");
+            return line;
         }
     }
 
-    std::string line = "GPU result nchw: ";
     U32 num = tn * tc * th * tw * tt;
     if (num == 0) {
         line += "tensor number element is 0\n";
@@ -1499,32 +1575,23 @@ inline std::string gcl_check_data(GCLHandle_t handle,
 
         GCLMemTransType tranType = DEVICE_BUF_TO_HOST;
         U32 size[3] = {byteSize, 1, 1};
-        if (type == GCL_MEM_IMG_1D) {
+        if (type != GCL_MEM_BUF) {
             tranType = DEVICE_IMG_TO_HOST;
             size[0] = s0;
+            size[1] = s1;
+            size[2] = desc.stride[2];
         }
         gcl_trans_memory(handle, (void *)mem, (void *)hostPtr, size, tranType, CL_TRUE);
 
         T *val = (T *)hostPtr;
-        if (df == DF_NCWHC4) {
-            if (tdf == DF_NCHW) {
+        if (df == DF_NCHWC4) {
+            if (dims >= 4) {
                 for (U32 i = 0; i < num; i++) {
                     U32 iw = i % tw;
                     U32 ih = (i / tw) % th;
                     U32 ic = i / (tw * th);
                     hostPtrTran[i] =
-                        (float)(val[((ic / 4) * s1 + iw + off1) * s0 * 4 + (ih + off0) * 4 + (ic & 3)]);
-                }
-            } else if (tdf == DF_MKT || tdf == DF_MTK) {
-                for (U32 i = 0; i < num; i++) {
-                    U32 ih = i % tw;
-                    U32 ic = i / tw;
-                    U32 in_off = ((ic / 4) * s1 + off1) * s0 * 4 + (ih + off0) * 4 + (ic & 3);
-                    hostPtrTran[i] = (float)val[in_off];
-                }
-            } else if (tdf == DF_NORMAL && s0 == 1 && s1 == 1) {
-                for (U32 i = 0; i < num; i++) {
-                    hostPtrTran[i] = (float)val[i];
+                        (float)(val[((ic / 4) * s1 + ih + off1) * s0 * 4 + (iw + off0) * 4 + (ic & 3)]);
                 }
             } else {
                 UNI_DEBUG_LOG("Not supported data format in check data\n");
@@ -1581,6 +1648,8 @@ inline std::string gcl_check_data(GCLHandle_t handle,
         replace(fileName.begin(), fileName.end(), '/', '_');
         replace(fileName.begin(), fileName.end(), '.', '_');
         replace(fileName.begin(), fileName.end(), ' ', '_');
+        replace(fileName.begin(), fileName.end(), ':', '_');
+        UNI_DEBUG_LOG("%s\n", fileName.c_str());
         if (ptrType == 0) {
             fileName += "_gpu";
         }
@@ -1606,6 +1675,11 @@ inline std::string gcl_check_data(GCLHandle_t handle,
         }
         line = line + std::to_string(hostPtrTran[i]) + " ";
     }
+    double sum = 0;
+    for (U32 i = 0; i < num; i++) {
+        sum += hostPtrTran[i];
+    }
+    line += " sum: " + std::to_string(sum);
     delete[] hostPtrTran;
     return line;
 }

@@ -13,4 +13,4 @@ jobs:
           echo 'export PATH="/usr/local/opt/gnu-getopt/bin:$PATH"' >> /Users/runner/.bash_profile
           echo 'export FLAGS_GETOPT_CMD="$(brew --prefix gnu-getopt)/bin/getopt"' >> /Users/runner/.bash_profile
           source /Users/runner/.bash_profile
-          ./install.sh --target=macos-x86_64
+          chmod +x install.sh && ./install.sh --target=macos-x86_64

@@ -121,7 +121,7 @@ int main(int argc, char *argv[])
 
     std::map<int, int> categoryNum;
     double totalTime = 0;
-    double max_time = -DBL_MAX;
+    double max_time = 0;
     double min_time = DBL_MAX;
     U32 imageIndex = 0;
     std::cout << "[RESULT]:" << std::endl;
@@ -136,7 +136,7 @@ int main(int argc, char *argv[])
         }
         cnn->run();
     }
-#ifdef _USE_MALI
+#ifdef _USE_GPU
     if (strcmp(affinityPolicyName, "GPU") == 0) {
         gcl_finish(OCLContext::getInstance().handle.get());
     }
@@ -145,7 +145,7 @@ int main(int argc, char *argv[])
     for (imageIndex = 0; imageIndex < imagePaths.size();) {
         // stage3: set input
         std::map<std::string, std::shared_ptr<Tensor>> outMap;
-        double loop_max_time = -DBL_MAX;
+        double loop_max_time = 0;
         double loop_min_time = DBL_MAX;
         double loop_total_time = 0;
 
@@ -166,7 +166,7 @@ int main(int argc, char *argv[])
             Tensor result = *(outMap.begin()->second);
             auto mem = result.get_memory();
             if (mem->get_mem_type() == OCLMem) {
-#ifdef _USE_MALI
+#ifdef _USE_GPU
                 res = (U8 *)((OclMemory *)mem)->get_mapped_ptr();
 #endif
             } else {
@@ -176,12 +176,8 @@ int main(int argc, char *argv[])
             timeEnd = ut_time_ms();
             double time = (timeEnd - timeBegin);
             loop_total_time += time;
-            if (time < loop_min_time) {
-                loop_min_time = time;
-            }
-            if (time > loop_max_time) {
-                loop_max_time = time;
-            }
+            loop_min_time = UNI_MIN(loop_min_time, time);
+            loop_max_time = UNI_MAX(loop_max_time, time);
         }
         totalTime += (loop_total_time) / loopTime;
         if (loopTime > 1) {
@@ -217,13 +213,9 @@ int main(int argc, char *argv[])
             std::cout << std::endl;
         }
 
-        if ((timeEnd - timeBegin) >= max_time) {
-            max_time = (timeEnd - timeBegin);
-        }
-
-        if ((timeEnd - timeBegin) <= min_time) {
-            min_time = (timeEnd - timeBegin);
-        }
+        double time = timeEnd - timeBegin;
+        min_time = UNI_MIN(min_time, time);
+        max_time = UNI_MAX(max_time, time);
         if (categoryNum.count(top1Index) == 0) {
             categoryNum[top1Index] = 1;
         } else {

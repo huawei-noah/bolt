@@ -33,15 +33,43 @@ public:
     {
         Tensor weightTensor = (this->weightTensors.size()) ? this->weightTensors[0]
                                                            : this->inputTensors[1];
-        CHECK_STATUS(embedding(
-            this->inputTensors[0], weightTensor, this->p, this->outputTensors[0], &this->archInfo));
+        CHECK_STATUS(embedding(this->inputTensors[0], weightTensor, this->p, this->temp,
+            this->outputTensors[0], &this->archInfo));
+    }
+
+    U32 infer_tmp_memory_size() override
+    {
+        U32 bytes = 0;
+#ifdef _USE_INT8
+        if (featureScale.size() > 0 && -1 == (featureScale.back())[0]) {
+            Tensor weightTensor = (this->weightTensors.size()) ? this->weightTensors[0]
+                                                               : this->inputTensors[1];
+            TensorDesc outputDesc = this->outputTensors[0].get_desc();
+            if (weightTensor.get_desc().dt != outputDesc.dt) {
+                bytes = bytesOf(this->dt) * tensorNumElements(outputDesc);
+            }
+        }
+#endif
+        return bytes;
     }
 
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
+        DataType useDt = (inTensors.size() > 1) ? inTensors[1]->get_desc().dt : this->dt;
         CHECK_STATUS(embedding_infer_output_size(
-            inTensors[0], this->p, this->dt, outTensors[0], &this->archInfo));
+            inTensors[0], this->p, useDt, outTensors[0], &this->archInfo));
+#ifdef _USE_INT8
+        if (featureScale.size() > 0 && -1 == (featureScale.back())[0]) {
+            TensorDesc outputDesc = outTensors[0]->get_desc();
+#ifdef _USE_X86
+            outputDesc.dt = DT_U8_Q;
+#else
+            outputDesc.dt = DT_I8;
+#endif
+            outTensors[0]->resize(outputDesc);
+        }
+#endif
         return SUCCESS;
     }
 

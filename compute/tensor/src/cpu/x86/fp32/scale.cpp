@@ -13,6 +13,30 @@
 
 #include "cpu/x86/fp32/tensor_computing_fp32.h"
 
+#ifdef _USE_INT8
+EE scale_nchwc16_fp32(
+    F32 *input, F32 *alpha, F32 *beta, I32 in, I32 ic, I32 elements_per_channel, F32 *output)
+{
+    __m512 in_vec, out_vec;
+    __m512 one = _mm512_set1_ps(1.);
+    __m512 zero = _mm512_set1_ps(0.);
+    U32 index = 0;
+    for (I32 n = 0; n < in; n++) {
+        for (I32 c = 0; c < ic; c += 16) {
+            __m512 alpha_vec = (alpha == nullptr) ? one : _mm512_loadu_ps(alpha + c);
+            __m512 beta_vec = (beta == nullptr) ? zero : _mm512_loadu_ps(beta + c);
+            for (I32 i = 0; i < elements_per_channel; i++) {
+                in_vec = _mm512_loadu_ps(input + index);
+                out_vec = _mm512_fmadd_ps(alpha_vec, in_vec, beta_vec);
+                _mm512_storeu_ps(output + index, out_vec);
+                index += 16;
+            }
+        }
+    }
+    return SUCCESS;
+}
+#endif
+
 EE scale_nchwc8_fp32(
     F32 *input, F32 *alpha, F32 *beta, I32 in, I32 ic, I32 elements_per_channel, F32 *output)
 {
@@ -63,28 +87,40 @@ EE scale_nchw_fp32(
     return SUCCESS;
 }
 
+template <bool icoc_equal>
 EE scale_nhwc_fp32(
     F32 *input, F32 *alpha, F32 *beta, I32 in, I32 ic, I32 elements_per_channel, F32 *output)
 {
     __m256 one = _mm256_set1_ps(1.);
     __m256 zero = _mm256_set1_ps(0.);
-    U32 index = 0;
+    __m256 in_vec;
+    float in_s;
+    U32 dst = 0, src = 0;
     for (I32 n = 0; n < in; n++) {
-        for (I32 i = 0; i < elements_per_channel; i++) {
+        for (I32 i = 0; i < elements_per_channel; i++, src++) {
             I32 c = 0;
             for (; c < ic - 7; c += 8) {
                 __m256 alpha_vec = (alpha == nullptr) ? one : _mm256_loadu_ps(alpha + c);
                 __m256 beta_vec = (beta == nullptr) ? zero : _mm256_loadu_ps(beta + c);
-                __m256 in_vec = _mm256_loadu_ps(input + index);
+                if (icoc_equal) {
+                    in_vec = _mm256_loadu_ps(input + dst);
+                } else {
+                    in_vec = _mm256_set1_ps(input[src]);
+                }
                 __m256 out_vec = _mm256_fmadd_ps(alpha_vec, in_vec, beta_vec);
-                _mm256_storeu_ps(output + index, out_vec);
-                index += 8;
+                _mm256_storeu_ps(output + dst, out_vec);
+                dst += 8;
             }
             for (; c < ic; c++) {
                 float alpha_s = (alpha == nullptr) ? 1 : alpha[c];
                 float beta_s = (beta == nullptr) ? 0 : beta[c];
-                output[index] = alpha_s * input[index] + beta_s;
-                index++;
+                if (icoc_equal) {
+                    in_s = input[dst];
+                } else {
+                    in_s = input[src];
+                }
+                output[dst] = alpha_s * in_s + beta_s;
+                dst++;
             }
         }
     }
@@ -96,22 +132,31 @@ EE scale_fp32(F32 *input,
     I32 nDims,
     F32 *alpha,
     F32 *beta,
-    I32 in,
-    I32 ic,
+    I32 on,
+    I32 oc,
     I32 elements_per_channel,
+    I32 ic,
     F32 *output)
 {
     if (nullptr == input || nullptr == output) {
         CHECK_STATUS(NULL_POINTER);
     }
     EE ret = SUCCESS;
-    // If ic is 1, it means that weights/vectors have only one param, so we need use the calculation logic of nchw.
-    if (axis == 1 || axis == 0 || ic == 1) {
-        ret = scale_nchw_fp32(input, alpha, beta, in, ic, elements_per_channel, output);
+    // If oc is 1, it means that weights/vectors have only one param, so we need use the calculation logic of nchw.
+    if (axis == 1 || axis == 0 || oc == 1) {
+        ret = scale_nchw_fp32(input, alpha, beta, on, oc, elements_per_channel, output);
     } else if (axis == nDims - 1) {
-        ret = scale_nhwc_fp32(input, alpha, beta, in, ic, elements_per_channel, output);
+        if (ic == oc) {
+            ret = scale_nhwc_fp32<true>(input, alpha, beta, on, oc, elements_per_channel, output);
+        } else {
+            ret = scale_nhwc_fp32<false>(input, alpha, beta, on, oc, elements_per_channel, output);
+        }
     } else if (axis == nDims) {
-        ret = scale_nchwc8_fp32(input, alpha, beta, in, ic, elements_per_channel, output);
+        ret = scale_nchwc8_fp32(input, alpha, beta, on, oc, elements_per_channel, output);
+#ifdef _USE_INT8
+    } else if (axis == nDims + 1) {
+        ret = scale_nchwc16_fp32(input, alpha, beta, on, oc, elements_per_channel, output);
+#endif
     } else {
         CHECK_STATUS(NOT_SUPPORTED);
     }

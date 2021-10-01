@@ -16,7 +16,7 @@
 #ifdef _USE_CPU
 #include "cpu/tensor_computing_cpu.h"
 #endif
-#ifdef _USE_MALI
+#ifdef _USE_GPU
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
 
@@ -113,14 +113,14 @@ EE concat_infer_output_size(
     std::vector<TensorDesc> inputDesc = get_desc_from_tensor_ptrs(inputTensor);
     TensorDesc outputDesc = outputTensor->get_desc();
     EE ret = NOT_SUPPORTED;
-    if (IS_MALI_GPU(archInfo->arch)) {
-#ifdef _USE_MALI
-        std::vector<GCLMemDesc> gclmemInputDescs = ocl_get_descs_ptr(inputTensor);
-        GCLMemDesc gclmemOutputDesc = ocl_get_desc(*outputTensor);
-        ret = concat_infer_output_size_mali(
-            inputDesc, p, &outputDesc, gclmemInputDescs.data(), &gclmemOutputDesc);
-        ocl_set_descs(inputTensor, gclmemInputDescs);
-        ocl_set_desc(outputTensor, gclmemOutputDesc);
+    if (IS_GPU(archInfo->arch)) {
+#ifdef _USE_GPU
+        std::vector<OclMemory *> inputMems;
+        for (U32 i = 0; i < inputTensor.size(); i++) {
+            inputMems.push_back((OclMemory *)inputTensor[i]->get_memory());
+        }
+        OclMemory *outputMem = (OclMemory *)outputTensor->get_memory();
+        ret = concat_padding_input_mali(inputDesc, p, &outputDesc, inputMems, outputMem);
 #endif
     } else {
         processInputDescs(&inputDesc, p.axis);
@@ -134,8 +134,8 @@ EE concat_infer_forward_tmp_bytes(std::vector<Tensor> inputTensor, U32 *bytes, A
 {
     std::vector<TensorDesc> inputDesc = get_desc_from_tensors(inputTensor);
     EE ret = NOT_SUPPORTED;
-    if (IS_MALI_GPU(archInfo->arch)) {
-#ifdef _USE_MALI
+    if (IS_GPU(archInfo->arch)) {
+#ifdef _USE_GPU
         std::vector<GCLMemDesc> gclmemInputDescs = ocl_get_descs(inputTensor);
         ret = concat_infer_forward_tmp_bytes_mali(inputDesc, gclmemInputDescs, bytes);
 #endif
@@ -170,8 +170,8 @@ EE concat(std::vector<Tensor> inputTensor,
         ret = concat_cpu(
             inputDesc, input, inputScale.data(), p, tmp, outputDesc, output, &outputScale);
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
         ret = concat_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc, input, NULL, p,
             (GCLMem_t)tmp, outputDesc, (GCLMem_t)output, NULL);
 #endif

@@ -4,51 +4,56 @@
 inline EE set_concat_opt_mali(U32 concatDim,
     U32 inputNum,
     bool useNchwFormat,
-    bool axisCAligned,
+    bool axisAligned,
     DataType dt,
-    char* kernelName,
-    KernelOpt* kernelOpt)
+    GCLMemType *inputMemType,
+    GCLMemType outputMemType,
+    char *kernelName,
+    KernelOpt *kernelOpt)
 {
-    U32 len = 0;
-    char* opt = kernelOpt->option;
-    std::string formatName= "";
+    char *opt = kernelOpt->option;
+    std::string formatName = "";
     if (useNchwFormat) {
         formatName = "nchw_";
     }
     std::string dimName;
     switch (concatDim) {
         case 0:
-            dimName = "w_";
-            CHECK_STATUS(set_chars_define_opt("AXIS_W", opt, &len));
-            opt += len;
+            if (useNchwFormat && !axisAligned) {
+                dimName = "non_align_w_";
+                CHECK_STATUS(set_chars_define_opt("NON_ALIGN_AXIS_W", opt));
+            } else {
+                dimName = "w_";
+                CHECK_STATUS(set_chars_define_opt("AXIS_W", opt));
+            }
             break;
         case 1:
             dimName = "h_";
-            CHECK_STATUS(set_chars_define_opt("AXIS_H", opt, &len));
-            opt += len;
+            CHECK_STATUS(set_chars_define_opt("AXIS_H", opt));
             break;
         case 2:
-            if (!useNchwFormat && !axisCAligned) {
+            if (!useNchwFormat && !axisAligned) {
                 dimName = "non_align_c_";
-                CHECK_STATUS(set_chars_define_opt("NON_ALIGN_AXIS_C", opt, &len));
+                CHECK_STATUS(set_chars_define_opt("NON_ALIGN_AXIS_C", opt));
             } else {
                 dimName = "c_";
-                CHECK_STATUS(set_chars_define_opt("AXIS_C", opt, &len));
+                CHECK_STATUS(set_chars_define_opt("AXIS_C", opt));
             }
-            opt += len;
             break;
         default:
             CHECK_STATUS(NOT_SUPPORTED);
     }
-    sprintf(kernelName, "concat_%s%s%d", formatName.c_str(), dimName.c_str(), inputNum);
+    char iomName[128] = "";
+    CHECK_STATUS(
+        set_io_mems_name_and_define_opts(inputMemType, &outputMemType, inputNum, 1, iomName, opt));
+    sprintf(kernelName, "concat_%s%s%s%d", formatName.c_str(), iomName, dimName.c_str(), inputNum);
     if (useNchwFormat) {
         sprintf(kernelOpt->sourceName, "concat_nchw");
     } else {
         sprintf(kernelOpt->sourceName, "concat");
     }
     kernelOpt->kernelDataType = dt;
-    CHECK_STATUS(set_value_define_opt(inputNum, "N", opt, &len));
+    CHECK_STATUS(set_value_define_opt(inputNum, "N", opt));
     return SUCCESS;
 }
 #endif
-

@@ -70,83 +70,35 @@ inline EE bilateral_slice_apply_checkpara_mali_common(GCLHandle_t handle,
     return SUCCESS;
 }
 
-EE bilateral_slice_apply_infer_output_size_mali(TensorDesc inputDesc,
+EE bilateral_slice_padding_input_mali(TensorDesc inputDesc,
     TensorDesc guideDesc,
     TensorDesc gridDesc,
     BilateralSliceApplyParamSpec bilateralSliceApplyParamSpec,
     TensorDesc *outputDesc,
-    GCLMemDesc_t gclmemInputDesc,
-    GCLMemDesc_t gclmemGuideDesc,
-    GCLMemDesc_t gclmemGridDesc,
-    GCLMemDesc_t gclmemOutputDesc)
+    OclMemory *inputMem,
+    OclMemory *guideMem,
+    OclMemory *gridMem,
+    OclMemory *outputMem)
 {
-    UNUSED(bilateralSliceApplyParamSpec);
-    DataType idt, gdt, guide_dt;
-    DataFormat idf, gdf;
+    if (outputDesc == nullptr || inputMem == nullptr || guideMem == nullptr || gridMem == nullptr ||
+        outputMem == nullptr) {
+        CHECK_STATUS(NULL_POINTER);
+    }
+    DataType idt, guide_dt;
+    DataFormat idf, guide_df;
     U32 guide_w, guide_h, guide_c, guide_n;
     U32 iw, ih, ic, in;
     U32 ow, oh, oc, on;
-    U32 gw, gh, gc, gn;
-
     if (inputDesc.df != DF_NHWC || guideDesc.df != DF_NHWC) {
         return NOT_MATCH;
     }
     tensorSelectGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw);
-    tensorSelectGet(guideDesc, &guide_dt, &gdf, &guide_n, &guide_c, &guide_h, &guide_w);
-    tensorSelectGet(gridDesc, &gdt, &gdf, &gn, &gc, &gh, &gw);
+    tensorSelectGet(guideDesc, &guide_dt, &guide_df, &guide_n, &guide_c, &guide_h, &guide_w);
     ow = guide_w;
     oh = guide_h;
     oc = ic;
     on = guide_n;
-    if (outputDesc) {
-        *outputDesc = tensor4df(idt, idf, on, oc, oh, ow);
-    }
-    CHECK_STATUS(infer_gclmem_desc_nhwc(
-        iw, ih, ic, 0, 0, ow, oh, oc, idt, idt, gclmemInputDesc, gclmemOutputDesc));
-
-    if (gclmemGridDesc && gclmemGuideDesc) {
-        U32 s0, s1, s2;
-        U32 num, byteSize;
-        s0 = gc;
-        s1 = gw;
-        s2 = gh;
-        num = s0 * s1 * s2;
-        byteSize = s0 * s1 * s2 * bytesOf(gdt);
-        gclmemGridDesc->stride[0] = s0;
-        gclmemGridDesc->stride[1] = s1;
-        gclmemGridDesc->stride[2] = s2;
-        gclmemGridDesc->offset[0] = 0;
-        gclmemGridDesc->offset[1] = 0;
-        gclmemGridDesc->offset[2] = 0;
-        gclmemGridDesc->num = num;
-        gclmemGridDesc->byteSize = byteSize;
-        gclmemGridDesc->memType = GCL_MEM_BUF;
-        gclmemGridDesc->memFormat = DF_NHWC;
-        gclmemGridDesc->flags = CL_MEM_READ_WRITE;
-        gclmemGridDesc->host_ptr = NULL;
-        gclmemGridDesc->need_pad = false;
-
-        if (bilateralSliceApplyParamSpec.mode == BSliceApply_NULL) {
-            s0 = guide_c;
-            s1 = guide_w;
-            s2 = guide_h;
-            num = s0 * s1 * s2;
-            byteSize = s0 * s1 * s2 * bytesOf(guide_dt);
-            gclmemGuideDesc->stride[0] = s0;
-            gclmemGuideDesc->stride[1] = s1;
-            gclmemGuideDesc->stride[2] = s2;
-            gclmemGuideDesc->offset[0] = 0;
-            gclmemGuideDesc->offset[1] = 0;
-            gclmemGuideDesc->offset[2] = 0;
-            gclmemGuideDesc->num = num;
-            gclmemGuideDesc->byteSize = byteSize;
-            gclmemGuideDesc->memType = GCL_MEM_BUF;
-            gclmemGuideDesc->memFormat = DF_NHWC;
-            gclmemGuideDesc->flags = CL_MEM_READ_WRITE;
-            gclmemGuideDesc->host_ptr = NULL;
-            gclmemGuideDesc->need_pad = false;
-        }
-    }
+    *outputDesc = tensor4df(idt, idf, on, oc, oh, ow);
     return SUCCESS;
 }
 

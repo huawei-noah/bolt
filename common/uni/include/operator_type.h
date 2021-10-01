@@ -90,19 +90,30 @@ typedef enum {
     OT_Greater = 67,
     OT_Where = 68,
     OT_SoftPlus = 69,
+
     OT_Exp = 70,
     OT_Split = 71,
     OT_Tdnn = 72,
     OT_Dropout = 73,
     OT_TopK = 74,
-
     OT_SpaceToBatchNd = 75,
     OT_BatchToSpaceNd = 76,
     OT_Abs = 77,
     OT_Equal = 78,
     OT_Sign = 79,
 
-    OT_HSwishNoDiv = 80
+    OT_HSwishNoDiv = 80,
+    OT_InstanceNorm = 81,
+    OT_Expand = 82,
+    OT_Scatter = 83,
+    OT_Select = 84,
+    OT_Not = 85,
+    OT_Reciprocal = 86,
+    OT_Log = 87,
+    OT_GenerateProposals = 88,
+    OT_RoIAlign = 89,
+
+    OT_GAT = 90
 } OperatorType;
 
 inline const char *const *OperatorTypeName()
@@ -127,10 +138,15 @@ inline const char *const *OperatorTypeName()
         "OT_AttentionMask", "OT_RelativePositionEmbedding", "OT_RelativeShift", "OT_PriorBox",
 
         "OT_DetectionOutput", "OT_Yolov3DetectionOutput", "OT_MultiHeadAttention", "OT_SqDiff",
-        "OT_Tile", "OT_Splice", "OT_Neg", "OT_Greater", "OT_Where", "OT_SoftPlus",
+        "OT_Tile", "OT_Splice", "OT_Neg", "OT_Greater", "OT_Where", "OT_SoftPlus", "OT_Exp",
 
-        "OT_Exp", "OT_Split", "OT_Tdnn", "OT_Dropout", "OT_TopK", "OT_SpaceToBatchNd",
-        "OT_BatchToSpaceNd", "OT_Abs", "OT_Equal", "OT_Sign", "OT_HSwishNoDiv"};
+        "OT_Split", "OT_Tdnn", "OT_Dropout", "OT_TopK", "OT_SpaceToBatchNd", "OT_BatchToSpaceNd",
+        "OT_Abs", "OT_Equal", "OT_Sign", "OT_HSwishNoDiv",
+
+        "OT_InstanceNorm", "OT_Expand", "OT_Scatter", "OT_Select", "OT_Not", "OT_Reciprocal",
+        "OT_Log", "OT_GenerateProposals", "OT_RoIAlign",
+
+        "OT_GAT"};
     return names;
 }
 #endif

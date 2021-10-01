@@ -12,7 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "tensor_computing.h"
-#ifdef _USE_MALI
+#ifdef _USE_GPU
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
 
@@ -22,16 +22,8 @@ EE preallocated_memory_infer_output_size(Tensor *outputTensor, ArchInfo_t archIn
         CHECK_STATUS(NULL_POINTER);
     }
     TensorDesc outputDesc = outputTensor->get_desc();
-    EE ret = NOT_SUPPORTED;
-    if (IS_MALI_GPU(archInfo->arch)) {
-#ifdef _USE_MALI
-        GCLMemDesc gclmemOutputDesc = ocl_get_desc(*outputTensor);
-        ret = preallocated_memory_infer_output_size_mali(&outputDesc, &gclmemOutputDesc);
-        ocl_set_desc(outputTensor, gclmemOutputDesc);
-#endif
-    }
     outputTensor->resize(outputDesc);
-    return ret;
+    return SUCCESS;
 }
 
 EE preallocated_memory(Tensor outputTensor, ArchInfo_t archInfo)
@@ -41,8 +33,8 @@ EE preallocated_memory(Tensor outputTensor, ArchInfo_t archInfo)
     void *output = get_ptr_from_tensor(outputTensor, arch);
 
     EE ret = NOT_SUPPORTED;
-    if (IS_MALI_GPU(arch)) {
-#ifdef _USE_MALI
+    if (IS_GPU(arch)) {
+#ifdef _USE_GPU
         ret = preallocated_memory_mali(
             ((MaliPara_t)(archInfo->archPara))->handle, outputDesc, (GCLMem_t)output);
 #endif

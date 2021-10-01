@@ -15,7 +15,7 @@
 #ifdef _USE_CPU
 #include "cpu/tensor_computing_cpu.h"
 #endif
-#ifdef _USE_MALI
+#ifdef _USE_GPU
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
 
@@ -83,17 +83,16 @@ EE slice_infer_output_size(
     }
     TensorDesc inputDesc = inputTensor->get_desc();
     std::vector<TensorDesc> outputDesc = get_desc_from_tensor_ptrs(outputTensor);
-    if (IS_MALI_GPU(archInfo->arch)) {
-#ifdef _USE_MALI
-        GCLMemDesc gclmemInputDesc = ocl_get_desc(*inputTensor);
-        std::vector<GCLMemDesc> gclmemOutputDescs = ocl_get_descs_ptr(outputTensor);
-        CHECK_STATUS(slice_infer_output_size_mali(
-            inputDesc, p, &outputDesc, &gclmemInputDesc, gclmemOutputDescs.data()));
-        ocl_set_desc(inputTensor, gclmemInputDesc);
-        ocl_set_descs(outputTensor, gclmemOutputDescs);
+    CHECK_STATUS(slice_infer_output_size_cpu(inputDesc, p, &outputDesc));
+    if (IS_GPU(archInfo->arch)) {
+#ifdef _USE_GPU
+        OclMemory *inputMem = (OclMemory *)inputTensor->get_memory();
+        std::vector<OclMemory *> outputMems;
+        for (U32 i = 0; i < outputTensor.size(); i++) {
+            outputMems.push_back((OclMemory *)outputTensor[i]->get_memory());
+        }
+        CHECK_STATUS(slice_padding_input_mali(inputDesc, p, &outputDesc, inputMem, outputMems));
 #endif
-    } else {
-        CHECK_STATUS(slice_infer_output_size_cpu(inputDesc, p, &outputDesc));
     }
     for (U32 i = 0; i < outputTensor.size(); i++) {
         outputTensor[i]->resize(outputDesc[i]);
@@ -115,8 +114,8 @@ EE slice_infer_forward_tmp_bytes(Tensor inputTensor,
     if (IS_CPU(arch)) {
         *bytes = 0;
         ret = SUCCESS;
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
         TensorDesc inputDesc = inputTensor.get_desc();
         std::vector<TensorDesc> outputDesc = get_desc_from_tensors(outputTensor);
         GCLMemDesc gclmemInputDesc = ocl_get_desc(inputTensor);
@@ -142,8 +141,8 @@ EE slice(Tensor inputTensor,
 #ifdef _USE_CPU
         ret = slice_cpu(inputDesc, input, p, outputDesc, &output);
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
         void *tmpbuf = get_ptr_from_tensor(tmpTensor, arch);
         ret = slice_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc, (GCLMem_t)input, p,
             (GCLMem_t)tmpbuf, outputDesc, &output);

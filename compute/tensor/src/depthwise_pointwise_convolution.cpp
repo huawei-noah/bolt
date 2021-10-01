@@ -18,7 +18,7 @@
 #ifdef _USE_NEON
 #include "cpu/arm/tensor_computing_arm.h"
 #endif
-#ifdef _USE_MALI
+#ifdef _USE_GPU
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
 #ifdef _USE_X86
@@ -62,9 +62,8 @@ inline EE depthwise_pointwise_convolution_infer_output_size_cpu(TensorDesc input
 
     oh = (ih + paddingT + paddingB - fhDilated) / strideH + 1;
     ow = (iw + paddingL + paddingR - fwDilated) / strideW + 1;
-
-    if (fn2 % 8 != 0) {
-        CHECK_STATUS(NOT_SUPPORTED);
+    if (ow <= 0 || oh <= 0) {
+        CHECK_STATUS(NOT_MATCH);
     }
 
     *outputDesc = tensor4df(targetDataType, DF_NCHWC8, in, fn2, oh, ow);
@@ -90,22 +89,23 @@ EE depthwise_pointwise_convolution_infer_output_size(Tensor *inputTensor,
     TensorDesc dwFilterDesc = dwFilterTensor.get_desc();
     TensorDesc pwFilterDesc = pwFilterTensor.get_desc();
 
-    EE ret = NOT_SUPPORTED;
-    if (IS_MALI_GPU(archInfo->arch)) {
-#ifdef _USE_MALI
-        GCLMemDesc gclmemInputDesc = ocl_get_desc(*inputTensor);
-        GCLMemDesc gclmemOutputDesc = ocl_get_desc(*outputTensor);
-        ret = depthwise_pointwise_convolution_infer_output_size_mali(inputDesc, dwFilterDesc,
-            pwFilterDesc, convParamSpec, &outputDesc, &gclmemInputDesc, &gclmemOutputDesc);
-        ocl_set_desc(inputTensor, gclmemInputDesc);
-        ocl_set_desc(outputTensor, gclmemOutputDesc);
+    CHECK_STATUS(depthwise_pointwise_convolution_infer_output_size_cpu(
+        inputDesc, dwFilterDesc, pwFilterDesc, convParamSpec, &outputDesc, targetDataType));
+    if (IS_GPU(archInfo->arch)) {
+#ifdef _USE_GPU
+        OclMemory *inputMem = (OclMemory *)inputTensor->get_memory();
+        OclMemory *outputMem = (OclMemory *)outputTensor->get_memory();
+        CHECK_STATUS(depthwise_pointwise_convolution_padding_input_mali(inputDesc, dwFilterDesc,
+            pwFilterDesc, convParamSpec, &outputDesc, inputMem, outputMem));
 #endif
     } else {
-        ret = depthwise_pointwise_convolution_infer_output_size_cpu(
-            inputDesc, dwFilterDesc, pwFilterDesc, convParamSpec, &outputDesc, targetDataType);
+        U32 fn = pwFilterDesc.dims[pwFilterDesc.nDims - 1];
+        if (fn % 8 != 0) {
+            CHECK_STATUS(NOT_SUPPORTED);
+        }
     }
     outputTensor->resize(outputDesc);
-    return ret;
+    return SUCCESS;
 }
 
 EE depthwise_pointwise_convolution_infer_forward_algorithm(Tensor inputTensor,
@@ -120,7 +120,7 @@ EE depthwise_pointwise_convolution_infer_forward_algorithm(Tensor inputTensor,
     ActivationParamSpec pointwiseActivationParamSpec,
     ArchInfo_t archInfo)
 {
-#if defined(_USE_NEON) || defined(_USE_MALI)
+#if defined(_USE_NEON) || defined(_USE_GPU)
     TensorDesc inputDesc = inputTensor.get_desc();
     TensorDesc outputDesc = outputTensor.get_desc();
     TensorDesc dwFilterDesc = dwFilterTensor.get_desc();
@@ -133,7 +133,7 @@ EE depthwise_pointwise_convolution_infer_forward_algorithm(Tensor inputTensor,
         ret = SUCCESS;
 #endif
 #ifdef _USE_X86
-    } else if (IS_X86_AVX2(arch)) {
+    } else if (IS_X86(arch)) {
         *algorithm = DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_DIRECT;
         ret = SUCCESS;
 #endif
@@ -142,12 +142,15 @@ EE depthwise_pointwise_convolution_infer_forward_algorithm(Tensor inputTensor,
         ret = depthwise_pointwise_convolution_infer_forward_algorithm_arm(inputDesc, dwFilterDesc,
             pwFilterDesc, outputDesc, convParamSpec, policy, algorithm, targetDataType);
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
+        GCLMemDesc gclmemInputDesc = ocl_get_desc(inputTensor);
+        GCLMemDesc gclmemOutputDesc = ocl_get_desc(outputTensor);
         ret = depthwise_pointwise_convolution_infer_forward_algorithm_mali(
             ((MaliPara_t)(archInfo->archPara))->handle, inputDesc, dwFilterDesc, pwFilterDesc,
-            outputDesc, convParamSpec, policy, depthwiseActivationParamSpec.mode,
-            pointwiseActivationParamSpec.mode, ((MaliPara_t)(archInfo->archPara))->forwardRunInfo);
+            outputDesc, gclmemInputDesc, gclmemOutputDesc, convParamSpec, policy,
+            depthwiseActivationParamSpec.mode, pointwiseActivationParamSpec.mode,
+            ((MaliPara_t)(archInfo->archPara))->forwardRunInfo);
 #endif
     }
     return ret;
@@ -157,8 +160,8 @@ EE depthwise_pointwise_convolution_transform_filter_bytes(Tensor dwFilterTensor,
     Tensor pwFilterTensor,
     ConvolutionParamSpec convParamSpec,
     DepthwiseConvolutionForwardAlgorithm algorithm,
-    U32 *dwBytes,
-    U32 *pwBytes,
+    void *dwBytes,
+    void *pwBytes,
     ArchInfo_t archInfo)
 {
     TensorDesc dwFilterDesc = dwFilterTensor.get_desc();
@@ -168,31 +171,34 @@ EE depthwise_pointwise_convolution_transform_filter_bytes(Tensor dwFilterTensor,
     auto arch = archInfo->arch;
     if (IS_GENERAL(arch)) {
 #ifdef _USE_GENERAL
-        *dwBytes = tensorNumBytes(dwFilterDesc);
-        *pwBytes = tensorNumBytes(pwFilterDesc);
+        U32 *size = (U32 *)dwBytes;
+        *size = tensorNumBytes(dwFilterDesc);
+        size = (U32 *)pwBytes;
+        *size = tensorNumBytes(pwFilterDesc);
         ret = SUCCESS;
 #endif
 #ifdef _USE_X86
-    } else if (IS_X86_AVX2(arch)) {
-        *dwBytes = tensorNumBytes(dwFilterDesc) + 32;
-        *pwBytes = tensorNumBytes(pwFilterDesc) + 32;
+    } else if (IS_X86(arch)) {
+        U32 *size = (U32 *)dwBytes;
+        *size = tensorNumBytes(dwFilterDesc) + 32;
+        size = (U32 *)pwBytes;
+        *size = tensorNumBytes(pwFilterDesc) + 32;
         ret = SUCCESS;
 #endif
 #ifdef _USE_NEON
     } else if (IS_ARM(arch)) {
-        *dwBytes = tensorNumBytes(dwFilterDesc) + 32;
-        *pwBytes = tensorNumBytes(pwFilterDesc) + 32;
+        U32 *size = (U32 *)dwBytes;
+        *size = tensorNumBytes(dwFilterDesc) + 32;
+        size = (U32 *)pwBytes;
+        *size = tensorNumBytes(pwFilterDesc) + 32;
         ret = SUCCESS;
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
         GCLMemDesc_t gclmemFilterDesc = ((MaliPara_t)(archInfo->archPara))->gclmemFilterDesc;
-        GCLMemDesc_t gclmemDwFilterDesc = &gclmemFilterDesc[0];
-        GCLMemDesc_t gclmemPwFilterDesc = &gclmemFilterDesc[1];
         ret = depthwise_pointwise_convolution_transform_filter_bytes_mali(dwFilterDesc,
-            pwFilterDesc, ((MaliPara_t)(archInfo->archPara))->forwardRunInfo, gclmemDwFilterDesc,
-            gclmemPwFilterDesc, dwBytes);
-        *pwBytes = 0;
+            pwFilterDesc, ((MaliPara_t)(archInfo->archPara))->forwardRunInfo, (TensorDesc *)dwBytes,
+            (TensorDesc *)pwBytes);
 #endif
     }
     return ret;
@@ -226,7 +232,7 @@ EE depthwise_pointwise_convolution_transform_filter(Tensor dwFilterTensor,
         ret = SUCCESS;
 #endif
 #ifdef _USE_X86
-    } else if (IS_X86_AVX2(arch)) {
+    } else if (IS_X86(arch)) {
         ret = depthwise_pointwise_convolution_transform_filter_x86(dwFilterDesc, dwFilter,
             pwFilterDesc, pwFilter, algorithm, &dwFtmDesc, dwFilterTransformed, &pwFtmDesc,
             pwFilterTransformed);
@@ -237,8 +243,8 @@ EE depthwise_pointwise_convolution_transform_filter(Tensor dwFilterTensor,
             pwFilterDesc, pwFilter, convParamSpec, algorithm, &dwFtmDesc, dwFilterTransformed,
             &pwFtmDesc, pwFilterTransformed);
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
         ret = depthwise_pointwise_convolution_transform_filter_mali(
             ((MaliPara_t)(archInfo->archPara))->handle, dwFilterDesc, pwFilterDesc,
             (GCLMem_t)dwFilter, (GCLMem_t)pwFilter,
@@ -273,7 +279,7 @@ EE depthwise_pointwise_convolution_infer_forward_tmp_bytes(Tensor inputTensor,
             inputDesc, dwFilterDesc, pwFilterDesc, outputDesc, convParamSpec, algorithm, bytes);
 #endif
 #ifdef _USE_X86
-    } else if (IS_X86_AVX2(arch)) {
+    } else if (IS_X86(arch)) {
         ret = depthwise_convolution_infer_forward_tmp_bytes_x86(
             inputDesc, outputDesc, convParamSpec, algorithm, bytes);
 #endif
@@ -282,8 +288,8 @@ EE depthwise_pointwise_convolution_infer_forward_tmp_bytes(Tensor inputTensor,
         ret = depthwise_pointwise_convolution_infer_forward_tmp_bytes_arm(
             inputDesc, dwFilterDesc, pwFilterDesc, outputDesc, convParamSpec, algorithm, bytes);
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
         ret = depthwise_pointwise_convolution_infer_forward_tmp_bytes_mali(inputDesc, dwFilterDesc,
             pwFilterDesc, outputDesc, convParamSpec,
             ((MaliPara_t)(archInfo->archPara))->forwardRunInfo, bytes);
@@ -292,24 +298,24 @@ EE depthwise_pointwise_convolution_infer_forward_tmp_bytes(Tensor inputTensor,
     return ret;
 }
 
-EE depthwise_pointwise_convolution(Tensor inputTensor,
+EE depthwise_pointwise_convolution(std::vector<Tensor> inputTensors,
     Tensor dwFilterTensor,
     Tensor pwFilterTensor,
     ConvolutionParamSpec convParamSpec,
     DepthwiseConvolutionForwardAlgorithm algorithm,
     Tensor dwBiasTensor,
     Tensor pwBiasTensor,
-    Tensor tmpTensor,
+    std::vector<Tensor> tmpTensors,
     Tensor outputTensor,
     ActivationParamSpec depthwiseActivationParamSpec,
     ActivationParamSpec pointwiseActivationParamSpec,
     ArchInfo_t archInfo)
 {
     auto arch = archInfo->arch;
-    TensorDesc inputDesc = inputTensor.get_desc();
-    void *input = get_ptr_from_tensor(inputTensor, arch);
-    U32 tmpBytes = tmpTensor.bytes();
-    void *tmp = get_ptr_from_tensor(tmpTensor, arch);
+    TensorDesc inputDesc = inputTensors[0].get_desc();
+    void *input = get_ptr_from_tensor(inputTensors[0], arch);
+    U32 tmpBytes = tmpTensors[0].bytes();
+    void *tmp = get_ptr_from_tensor(tmpTensors[0], arch);
     TensorDesc outputDesc = outputTensor.get_desc();
     void *output = get_ptr_from_tensor(outputTensor, arch);
     TensorDesc dwFilterDesc = dwFilterTensor.get_desc();
@@ -321,18 +327,39 @@ EE depthwise_pointwise_convolution(Tensor inputTensor,
     TensorDesc pwBiasDesc = pwBiasTensor.get_desc();
     void *pwBias = get_ptr_from_tensor(pwBiasTensor, arch);
 
+    // process fused-add
+    ActivationParamSpec eltwiseActDesc = pointwiseActivationParamSpec;
+    void *eltwiseInput = nullptr;
+    bool isEltwiseSeperate = true;
+    TensorDesc eltwiseInputDesc;
+    if (inputTensors.size() > 1) {
+        eltwiseInput = get_ptr_from_tensor(inputTensors[1], arch);
+        eltwiseInputDesc = inputTensors[1].get_desc();
+        pointwiseActivationParamSpec.mode = ACTIVATION_NULL;
+    }
+#if defined(_USE_GENERAL) || defined(_USE_X86)
+    if (tensorNumElements(eltwiseInputDesc) == tensorNumElements(outputDesc) &&
+        eltwiseInputDesc.df == outputDesc.df) {
+        isEltwiseSeperate = false;
+        pointwiseActivationParamSpec = eltwiseActDesc;
+    } else {
+        eltwiseInput = nullptr;
+    }
+#endif
+
     EE ret = NOT_SUPPORTED;
     if (IS_GENERAL(arch)) {
 #ifdef _USE_GENERAL
-        ret = depthwise_pointwise_convolution_general(inputDesc, input, dwFilterDesc, dwFilter,
-            pwFilterDesc, pwFilter, convParamSpec, dwBiasDesc, dwBias, pwBiasDesc, pwBias, tmpBytes,
-            tmp, outputDesc, output, depthwiseActivationParamSpec, pointwiseActivationParamSpec);
+        ret = depthwise_pointwise_convolution_general(inputDesc, input, eltwiseInput, dwFilterDesc,
+            dwFilter, pwFilterDesc, pwFilter, convParamSpec, dwBiasDesc, dwBias, pwBiasDesc, pwBias,
+            tmpBytes, tmp, outputDesc, output, depthwiseActivationParamSpec,
+            pointwiseActivationParamSpec);
 #endif
 #ifdef _USE_X86
-    } else if (IS_X86_AVX2(arch)) {
-        ret = depthwise_pointwise_convolution_x86(inputDesc, input, dwFilterDesc, dwFilter,
-            pwFilterDesc, pwFilter, convParamSpec, algorithm, dwBiasDesc, dwBias, pwBiasDesc,
-            pwBias, tmpBytes, tmp, outputDesc, output, depthwiseActivationParamSpec,
+    } else if (IS_X86(arch)) {
+        ret = depthwise_pointwise_convolution_x86(inputDesc, input, eltwiseInput, dwFilterDesc,
+            dwFilter, pwFilterDesc, pwFilter, convParamSpec, algorithm, dwBiasDesc, dwBias,
+            pwBiasDesc, pwBias, tmpBytes, tmp, outputDesc, output, depthwiseActivationParamSpec,
             pointwiseActivationParamSpec, archInfo->arch);
 #endif
 #ifdef _USE_NEON
@@ -342,15 +369,31 @@ EE depthwise_pointwise_convolution(Tensor inputTensor,
             pwBias, tmpBytes, tmp, outputDesc, output, depthwiseActivationParamSpec,
             pointwiseActivationParamSpec, archInfo->arch);
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
+        std::vector<GCLMem_t> tmpVec(3, NULL);
+        for (U32 i = 0; i < tmpTensors.size(); i++) {
+            tmpVec[i] = (GCLMem_t)get_ptr_from_tensor(tmpTensors[i], arch);
+        }
         ret = depthwise_pointwise_convolution_mali(((MaliPara_t)(archInfo->archPara))->handle,
             inputDesc, (GCLMem_t)input, dwFilterDesc, pwFilterDesc, (GCLMem_t)dwFilter,
             (GCLMem_t)pwFilter, convParamSpec, ((MaliPara_t)(archInfo->archPara))->forwardRunInfo,
-            dwBiasDesc, pwBiasDesc, (GCLMem_t)dwBias, (GCLMem_t)pwBias, tmpBytes, (GCLMem_t)tmp,
-            outputDesc, (GCLMem_t)output, depthwiseActivationParamSpec.mode,
-            pointwiseActivationParamSpec.mode);
+            dwBiasDesc, pwBiasDesc, (GCLMem_t)dwBias, (GCLMem_t)pwBias, tmpBytes, tmpVec, outputDesc,
+            (GCLMem_t)output, depthwiseActivationParamSpec.mode, pointwiseActivationParamSpec.mode);
 #endif
     }
+
+    // process fused-add
+#ifdef _USE_CPU
+    if (inputTensors.size() > 1 && isEltwiseSeperate) {
+        std::vector<Tensor> eltwiseInputTensors = {outputTensor, inputTensors[1]};
+        EltwiseParamSpec eltwiseDesc;
+        eltwiseDesc.elt_mode = ELTWISE_SUM;
+        eltwiseDesc.activation_type = eltwiseActDesc.mode;
+        eltwiseDesc.activation_spec = convParamSpec.activation_spec;
+        ret = eltwise(eltwiseInputTensors, eltwiseDesc, tmpTensors[0], outputTensor, archInfo);
+    }
+#endif
+
     return ret;
 }

@@ -10,8 +10,14 @@
 // WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
 #include "kernel_def.h"
+#define MANGLE_NAME_IMPL(base, IOM, AM, AN) base##IOM##AM##AN
+#define MANGLE_NAME(base, IOM, AM, AN) MANGLE_NAME_IMPL(base, IOM, AM, AN)
+#define AN
+#if defined(USE_ALIGN)
+#define AN align
+#endif
+
 #define loadR(val, str, off, in)    \
     {                               \
         val[0] = in[off];           \
@@ -34,47 +40,89 @@
         tmp[3] = t.z + (T)(8.0) * t.w + s[5]; \
     }
 
-#if defined(ALIGN)
-#if defined(USE_RELU)
-__kernel void conv_wino_trans_outbuf_relu_align
+#if defined(USE_OUTPUT_IMG)
+#if defined(USE_ALIGN)
+#define STORE_OUT(v0, v1, v2, v3, out)                                                   \
+    {                                                                                    \
+        WRITE_IMAGE(out, (int4)(x_off, y_off, idz, 0), (T4)(v0.x, v1.x, v2.x, v3.x));    \
+        WRITE_IMAGE(out, (int4)(x_off + 1, y_off, idz, 0), (T4)(v0.y, v1.y, v2.y, v3.y));\
+        WRITE_IMAGE(out, (int4)(x_off + 2, y_off, idz, 0), (T4)(v0.z, v1.z, v2.z, v3.z));\
+        WRITE_IMAGE(out, (int4)(x_off + 3, y_off, idz, 0), (T4)(v0.w, v1.w, v2.w, v3.w));\
+        y_off += 1;                                                                      \
+    }
 #else
-__kernel void conv_wino_trans_outbuf_align
+#define STORE_OUT(v0, v1, v2, v3, x_off, y_off, ow, out)                                     \
+    {                                                                                        \
+        WRITE_IMAGE(out, (int4)(x_off, y_off, idz, 0), (T4)(v0.x, v1.x, v2.x, v3.x));        \
+        if (x_off + 1 < ow) {                                                                \
+            WRITE_IMAGE(out, (int4)(x_off + 1, y_off, idz, 0), (T4)(v0.y, v1.y, v2.y, v3.y));\
+        }                                                                                    \
+        if (x_off + 2 < ow) {                                                                \
+            WRITE_IMAGE(out, (int4)(x_off + 2, y_off, idz, 0), (T4)(v0.z, v1.z, v2.z, v3.z));\
+        }                                                                                    \
+        if (x_off + 3 < ow) {                                                                \
+            WRITE_IMAGE(out, (int4)(x_off + 3, y_off, idz, 0), (T4)(v0.w, v1.w, v2.w, v3.w));\
+        }                                                                                    \
+    }
 #endif
 #else
-#if defined(USE_RELU)
-__kernel void conv_wino_trans_outbuf_relu
+#if defined(USE_ALIGN)
+#define STORE_OUT(v0, v1, v2, v3, out)                 \
+    {                                                  \
+        vstore16((T16)(                                \
+            v0.x, v1.x, v2.x, v3.x,                    \ 
+            v0.y, v1.y, v2.y, v3.y,                    \
+            v0.z, v1.z, v2.z, v3.z,                    \
+            v0.w, v1.w, v2.w, v3.w), 0, out + out_off);\
+        out_off += (ow_str << 2);                      \
+    }
 #else
-__kernel void conv_wino_trans_outbuf
+#define STORE_OUT(v0, v1, v2, v3, x_off, y_off, ow, out)                 \
+    {                                                                    \
+        vstore4((T4)(v0.x, v1.x, v2.x, v3.x), 0, out + out_off);         \
+        if (x_off + 1 < ow) {                                            \
+            vstore4((T4)(v0.y, v1.y, v2.y, v3.y), 0, out + out_off + 4); \
+        }                                                                \
+        if (x_off + 2 < ow) {                                            \
+            vstore4((T4)(v0.z, v1.z, v2.z, v3.z), 0, out + out_off + 8); \
+        }                                                                \
+        if (x_off + 3 < ow) {                                            \
+            vstore4((T4)(v0.w, v1.w, v2.w, v3.w), 0, out + out_off + 12);\
+        }                                                                \
+        out_off += (ow_str << 2);                                        \
+    }
 #endif
 #endif
-    (const int wino_h,
-        const int wino_w,
-        const int pw_str,
-        const int pwh_str,
-        const int oh_str,
-        const int ow_str,
-        const int oh_off,
-        const int ow_off,
-        const int oh,
-        const int ow,
-        __read_only image1d_t bias,
-        __global const T *in,
-        __global T *out)
+
+__kernel void MANGLE_NAME(conv_wino_trans_outbuf_, IOM, AM, AN)(const int wino_w,
+    const int wino_h,
+    const int pw_str,
+    const int pwh_str,
+    const int ow_str,
+    const int oh_str,
+    const int o_off,
+    const int ow,
+    const int oh,
+    const int oc,
+    __read_only image1d_t bias,
+    __global const T *in,
+    KERNEL_MEM out)
 {
     const int idx = get_global_id(0);
     const int idy = get_global_id(1);
     const int idz = get_global_id(2);
-    if (idx >= wino_h || idy >= wino_w) {
+    if (idx >= wino_w || idy >= wino_h) {
         return;
     }
 
-    T4 r0, r1, r2, r3;
-    T4 r4, r5, r6, r7;
-    T4 r8, r9, ra, rb;
-    T4 rc, rd, re, rf;
+    T4 r0, r1, r2, r3;  //channel 0   r0~3 -> row 0~3 for 16 res
+    T4 r4, r5, r6, r7;  //        1
+    T4 r8, r9, ra, rb;  //        2
+    T4 rc, rd, re, rf;  //        3
     T4 bias_v4 = READ_IMAGE(bias, sampler, idz);
 
-    int in_off = (idz << 2) * pw_str + idy * wino_h + idx;
+    int iz = idz << 2;
+    int in_off = iz * pw_str + idy * wino_w + idx;
     for (uchar ii = 0; ii < 4; ii++) {
         r0 = r4;
         r1 = r5;
@@ -90,6 +138,13 @@ __kernel void conv_wino_trans_outbuf
         r9 = rd;
         ra = re;
         rb = rf;
+        if (iz + ii >= oc) {
+            rc = 0;
+            rd = 0;
+            re = 0;
+            rf = 0;
+            continue;
+        }
 
         T s[6];
         T4 t;
@@ -121,16 +176,16 @@ __kernel void conv_wino_trans_outbuf
                 rf.z = rf.w;
                 rf.w = bias_val;
                 if (j == 0) {
-                    rf.w += s[0] + s[1] + s[2] + s[3] + s[4];
+                    rf.w += (0.111111) * (s[0] + s[1] + s[2] + s[3] + s[4]);
                 }
                 if (j == 1) {
-                    rf.w += s[1] - s[2] + (T)2 * (s[3] - s[4]);
+                    rf.w += (0.111111) * (s[1] - s[2] + (T)2 * (s[3] - s[4]));
                 }
                 if (j == 2) {
-                    rf.w += s[1] + s[2] + (T)4 * (s[3] + s[4]);
+                    rf.w += (0.111111) * (s[1] + s[2] + (T)4 * (s[3] + s[4]));
                 }
                 if (j == 3) {
-                    rf.w += s[1] - s[2] + (T)8 * (s[3] - s[4]) + s[5];
+                    rf.w += (0.111111) * (s[1] - s[2] + (T)8 * (s[3] - s[4]) + s[5]);
                 }
             }
         }
@@ -142,16 +197,16 @@ __kernel void conv_wino_trans_outbuf
                 t.y = t.z;
                 t.z = t.w;
                 if (j == 0) {
-                    t.w = s[0] + s[1] + s[2] + s[3] + s[4];
+                    t.w = (0.111111) * (s[0] + s[1] + s[2] + s[3] + s[4]);
                 }
                 if (j == 1) {
-                    t.w = s[1] - s[2] + (T)2 * (s[3] - s[4]);
+                    t.w = (0.111111) * (s[1] - s[2] + (T)2 * (s[3] - s[4]));
                 }
                 if (j == 2) {
-                    t.w = s[1] + s[2] + (T)4 * (s[3] + s[4]);
+                    t.w = (0.111111) * (s[1] + s[2] + (T)4 * (s[3] + s[4]));
                 }
                 if (j == 3) {
-                    t.w = s[1] - s[2] + (T)8 * (s[3] - s[4]) + s[5];
+                    t.w = (0.111111) * (s[1] - s[2] + (T)8 * (s[3] - s[4]) + s[5]);
                 }
             }
             if (i == 0) {
@@ -186,77 +241,26 @@ __kernel void conv_wino_trans_outbuf
         in_off += pw_str;
     }
 
-    const int x_off = idx << 2;
-    const int y_off = idy << 2;
-    int out_off = (idz * ow_str + y_off + ow_off) * (oh_str << 2) + (x_off << 2) + (oh_off << 2);
-#if defined(ALIGN)
-    vstore16((T16)(r0.x, r4.x, r8.x, rc.x, r1.x, r5.x, r9.x, rd.x, r2.x, r6.x, ra.x, re.x, r3.x,
-                 r7.x, rb.x, rf.x),
-        0, out + out_off);
-    out_off += (oh_str << 2);
-    vstore16((T16)(r0.y, r4.y, r8.y, rc.y, r1.y, r5.y, r9.y, rd.y, r2.y, r6.y, ra.y, re.y, r3.y,
-                 r7.y, rb.y, rf.y),
-        0, out + out_off);
-    out_off += (oh_str << 2);
-    vstore16((T16)(r0.z, r4.z, r8.z, rc.z, r1.z, r5.z, r9.z, rd.z, r2.z, r6.z, ra.z, re.z, r3.z,
-                 r7.z, rb.z, rf.z),
-        0, out + out_off);
-    out_off += (oh_str << 2);
-    vstore16((T16)(r0.w, r4.w, r8.w, rc.w, r1.w, r5.w, r9.w, rd.w, r2.w, r6.w, ra.w, re.w, r3.w,
-                 r7.w, rb.w, rf.w),
-        0, out + out_off);
+    int x_off = idx << 2;
+    int y_off = idy << 2;
+#if !defined(USE_OUTPUT_IMG)
+    int out_off = (idz * oh_str + y_off) * (ow_str << 2) + (x_off << 2) + (o_off << 2);
+#endif
+#if defined(USE_ALIGN)
+    STORE_OUT(r0, r4, r8, rc, out);
+    STORE_OUT(r1, r5, r9, rd, out);
+    STORE_OUT(r2, r6, ra, re, out);
+    STORE_OUT(r3, r7, rb, rf, out);
 #else
-    vstore4((T4)(r0.x, r4.x, r8.x, rc.x), 0, out + out_off);
-    if (x_off + 1 < oh) {
-        vstore4((T4)(r1.x, r5.x, r9.x, rd.x), 0, out + out_off + 4);
+    STORE_OUT(r0, r4, r8, rc, x_off, y_off, ow, out);
+    if (y_off + 1 < oh) {
+        STORE_OUT(r1, r5, r9, rd, x_off, y_off + 1, ow, out);
     }
-    if (x_off + 2 < oh) {
-        vstore4((T4)(r2.x, r6.x, ra.x, re.x), 0, out + out_off + 8);
+    if (y_off + 2 < oh) {
+        STORE_OUT(r2, r6, ra, re, x_off, y_off + 2, ow, out);
     }
-    if (x_off + 3 < oh) {
-        vstore4((T4)(r3.x, r7.x, rb.x, rf.x), 0, out + out_off + 12);
-    }
-
-    if (y_off + 1 < ow) {
-        out_off += (oh_str << 2);
-        vstore4((T4)(r0.y, r4.y, r8.y, rc.y), 0, out + out_off);
-        if (x_off + 1 < oh) {
-            vstore4((T4)(r1.y, r5.y, r9.y, rd.y), 0, out + out_off + 4);
-        }
-        if (x_off + 2 < oh) {
-            vstore4((T4)(r2.y, r6.y, ra.y, re.y), 0, out + out_off + 8);
-        }
-        if (x_off + 3 < oh) {
-            vstore4((T4)(r3.y, r7.y, rb.y, rf.y), 0, out + out_off + 12);
-        }
-    }
-
-    if (y_off + 2 < ow) {
-        out_off += (oh_str << 2);
-        vstore4((T4)(r0.z, r4.z, r8.z, rc.z), 0, out + out_off);
-        if (x_off + 1 < oh) {
-            vstore4((T4)(r1.z, r5.z, r9.z, rd.z), 0, out + out_off + 4);
-        }
-        if (x_off + 2 < oh) {
-            vstore4((T4)(r2.z, r6.z, ra.z, re.z), 0, out + out_off + 8);
-        }
-        if (x_off + 3 < oh) {
-            vstore4((T4)(r3.z, r7.z, rb.z, rf.z), 0, out + out_off + 12);
-        }
-    }
-
-    if (y_off + 3 < ow) {
-        out_off += (oh_str << 2);
-        vstore4((T4)(r0.w, r4.w, r8.w, rc.w), 0, out + out_off);
-        if (x_off + 1 < oh) {
-            vstore4((T4)(r1.w, r5.w, r9.w, rd.w), 0, out + out_off + 4);
-        }
-        if (x_off + 2 < oh) {
-            vstore4((T4)(r2.w, r6.w, ra.w, re.w), 0, out + out_off + 8);
-        }
-        if (x_off + 3 < oh) {
-            vstore4((T4)(r3.w, r7.w, rb.w, rf.w), 0, out + out_off + 12);
-        }
+    if (y_off + 3 < oh) {
+        STORE_OUT(r3, r7, rb, rf, x_off, y_off + 3, ow, out);
     }
 #endif
 }

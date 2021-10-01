@@ -12,7 +12,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include <vector>
-#include <string.h>
 
 #include "tensor_computing.h"
 #include "ut_util.h"
@@ -31,10 +30,6 @@ int eltwiseTest(int argc, char **argv, DataType dt)
     EltwiseParamSpec eltwiseDesc;
     eltwiseDesc.elt_mode = eltwiseMode;
     eltwiseDesc.activation_type = ACTIVATION_NULL;
-    ArchInfo archInfo;
-    archInfo.arch = UT_ARCH;
-    ArchInfo archInfo_org;
-    archInfo_org.arch = CPU_GENERAL;
 
     std::vector<void *> input(num);
     std::vector<Tensor> inTensors(num);
@@ -45,11 +40,11 @@ int eltwiseTest(int argc, char **argv, DataType dt)
         input[i] = (void *)ut_input_v(len, dt, UT_INIT_RANDOM);
         inTensors[i].resize(inDesc);
         inTensors[i].alloc();
-        memcpy(get_ptr_from_tensor(inTensors[i], UT_ARCH), input[i], tensorNumBytes(inDesc));
+        memcpy(get_ptr_from_tensor(inTensors[i], CPU_GENERAL), input[i], tensorNumBytes(inDesc));
         inTensorPtr[i] = &inTensors[i];
     }
 
-    CHECK_STATUS(eltwise_infer_output_size(inTensorPtr, &outTensor, &archInfo));
+    CHECK_STATUS(eltwise_infer_output_size(inTensorPtr, &outTensor, &UT_CPU_ARCHINFO));
     CHECK_REQUIREMENT(len == outTensor.length());
     outTensor.alloc();
     Tensor outTensorRef;
@@ -57,25 +52,25 @@ int eltwiseTest(int argc, char **argv, DataType dt)
     outTensorRef.alloc();
 
     U32 tmpBytes;
-    CHECK_STATUS(eltwise_infer_forward_tmp_bytes(inTensors, outTensor, &tmpBytes, &archInfo));
+    CHECK_STATUS(eltwise_infer_forward_tmp_bytes(inTensors, outTensor, &tmpBytes, &UT_CPU_ARCHINFO));
     Tensor tmpTensor;
     tmpTensor.resize(tensor1d(DT_U8, tmpBytes));
     tmpTensor.alloc();
 
     if (UT_CHECK) {
-        CHECK_STATUS(eltwise(inTensors, eltwiseDesc, tmpTensor, outTensor, &archInfo));
+        CHECK_STATUS(eltwise(inTensors, eltwiseDesc, tmpTensor, outTensor, &UT_CPU_ARCHINFO));
 
-        CHECK_STATUS(eltwise(inTensors, eltwiseDesc, tmpTensor, outTensorRef, &archInfo_org));
+        CHECK_STATUS(eltwise(inTensors, eltwiseDesc, tmpTensor, outTensorRef, &UT_SERIAL_ARCHINFO));
 
         // check
-        ut_check_v(get_ptr_from_tensor(outTensor, UT_ARCH),
-            get_ptr_from_tensor(outTensorRef, UT_ARCH), len, dt, 1, __FILE__, __LINE__);
+        ut_check_v(get_ptr_from_tensor(outTensor, CPU_GENERAL),
+            get_ptr_from_tensor(outTensorRef, CPU_GENERAL), len, dt, 1, __FILE__, __LINE__);
     }
 
     // benchmark
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        CHECK_STATUS(eltwise(inTensors, eltwiseDesc, tmpTensor, outTensor, &archInfo));
+        CHECK_STATUS(eltwise(inTensors, eltwiseDesc, tmpTensor, outTensor, &UT_CPU_ARCHINFO));
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;

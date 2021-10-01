@@ -28,6 +28,11 @@ class SwapTransposeEltOptimizer : public OPOptimizer {
                     continue;
                 }
                 int next = tmpVec[0].first;
+                tmpVec = searchOperatorIndexByInput(spec, spec->ops[next].output_tensors_name[0],
+                    next + 1, spec->num_operator_specs);
+                if (tmpVec.size() != 1) {
+                    continue;
+                }
                 if (spec->ops[next].type == OT_Power || spec->ops[next].type == OT_Relu ||
                     spec->ops[next].type == OT_HSwish || spec->ops[next].type == OT_HSwishNoDiv) {
                     auto ps1 = spec->ops[i].ps;
@@ -38,8 +43,8 @@ class SwapTransposeEltOptimizer : public OPOptimizer {
 
                     std::string opName1 = spec->ops[i].name;
                     std::string opName2 = spec->ops[next].name;
-                    str_copy(spec->ops[i].name, opName2.c_str(), NAME_LEN);
-                    str_copy(spec->ops[next].name, opName1.c_str(), NAME_LEN);
+                    strcpy(spec->ops[i].name, opName2.c_str());
+                    strcpy(spec->ops[next].name, opName1.c_str());
                     spec->ops[i].type = opType2;
                     spec->ops[next].type = opType1;
                     spec->ops[i].ps = ps2;

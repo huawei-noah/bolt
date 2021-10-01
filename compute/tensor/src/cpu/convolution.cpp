@@ -30,7 +30,7 @@ EE convolution_cpu(TensorDesc inputDesc,
     ConvolutionParamSpec convParamSpec,
     ConvolutionForwardAlgorithm algorithm,
     TensorDesc scaleDesc,
-    const void *scale,
+    void *scale,
     TensorDesc biasDesc,
     const void *bias,
     U32 tmpBytes,
@@ -51,10 +51,10 @@ EE convolution_cpu(TensorDesc inputDesc,
     if (IS_GENERAL(arch)) {
 #ifdef _USE_GENERAL
         ret = convolution_general(inputDesc, input, nullptr, filterDesc, filter, convParamSpec,
-            scaleDesc, scale, biasDesc, bias, outputDesc, output, activationDesc);
+            scaleDesc, scale, biasDesc, bias, tmpBytes, tmp, outputDesc, output, activationDesc);
 #endif
 #ifdef _USE_X86
-    } else if (IS_X86_AVX2(arch)) {
+    } else if (IS_X86(arch)) {
         ret = convolution_x86(inputDesc, input, nullptr, filterDesc, filter, convParamSpec,
             algorithm, scaleDesc, scale, biasDesc, bias, tmpBytes, tmp, outputDesc, output,
             activationDesc, arch);

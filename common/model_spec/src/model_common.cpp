@@ -100,6 +100,9 @@ bool isDeprecatedOpWeight(const ModelSpec *spec, int index)
 
 EE str_copy(I8 *dst, const I8 *src, I32 srcLen, I32 dstLen)
 {
+    //memset(dst, 0, dstLen);
+    //I32 copyLen = UNI_MIN(srcLen, dstLen);
+    //memcpy(dst, src, copyLen);
     memset(dst, 0, dstLen);
     I32 copyLen = NAME_LEN - 1;
     if (copyLen > srcLen) {

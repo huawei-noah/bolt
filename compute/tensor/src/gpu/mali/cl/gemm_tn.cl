@@ -12,14 +12,16 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "kernel_def.h"
-#define MANGLE_NAME_LMPL(base, AM, FM, BM, LM, LN) base##AM##FM##BM##LM##LN
-#define MANGLE_NAME(base, AM, FM, BM, LM, LN) MANGLE_NAME_LMPL(base, AM, FM, BM, LM, LN)
+#define MANGLE_NAME_LMPL(base, IAM, IBM, OM, AM, FM, BM, LM, LN) \
+    base##IAM##IBM##OM##AM##FM##BM##LM##LN
+#define MANGLE_NAME(base, IAM, IBM, OM, AM, FM, BM, LM, LN) \
+    MANGLE_NAME_LMPL(base, IAM, IBM, OM, AM, FM, BM, LM, LN)
 
 #define BM
 #define FM
 
-#if defined(USE_POINTWISE_NCWHC4)
-#define FM pointwise_ncwhc4_
+#if defined(USE_POINTWISE_NCHWC4)
+#define FM pointwise_nchwc4_
 #endif
 
 #if defined(NO_BIAS)
@@ -30,63 +32,115 @@
 #define BM biasB_
 #endif
 
-#if defined(USE_POINTWISE_NCWHC4)
-#define STORE_REG_V4(c0, c1, c2, c3, off, buf) \
-    {                                          \
-        T4 tmp;                                \
-        tmp.x = c0[0];                         \
-        tmp.y = c1[0];                         \
-        tmp.z = c2[0];                         \
-        tmp.w = c3[0];                         \
-        ACTIVATION_V4(tmp);                    \
-        vstore4(tmp, c_off, buf);              \
-        UPDATE_REG(c0);                        \
-        UPDATE_REG(c1);                        \
-        UPDATE_REG(c2);                        \
-        UPDATE_REG(c3);                        \
-    }
-
-#if (LM == 4)
-#define STORE_REG(iy, oc, c, str, off, buf)             \
-    {                                                   \
-        STORE_REG_V4(c[0], c[1], c[2], c[3], off, buf); \
-    }
-#elif (LM == 8)
-#define STORE_REG(iy, oc, c, str, off, buf)             \
-    {                                                   \
-        STORE_REG_V4(c[0], c[1], c[2], c[3], off, buf); \
-        if (iy + 4 >= oc) {                             \
-            continue;                                   \
-        }                                               \
-        off += str;                                     \
-        STORE_REG_V4(c[4], c[5], c[6], c[7], off, buf); \
-    }
+#if defined(USE_INPUT_A_IMG)
+#define IAM am_
+#define READ_ONLY_A_MEM __read_only image3d_t
+#else
+#define IAM
+#define READ_ONLY_A_MEM __global const T *
 #endif
 
+#if defined(USE_INPUT_B_IMG)
+#define IBM bm_
+#define READ_ONLY_B_MEM __read_only image3d_t
+#else
+#define IBM
+#define READ_ONLY_B_MEM __global const T *
+#endif
+
+#if defined(USE_OUTPUT_IMG)
+#define OM cm_
+#else
+#define OM
+#endif
+
+#if defined(USE_POINTWISE_NCHWC4)
+#define STORE_REG_V4(c0, c1, c2, c3, off, mem)     \
+    {                                              \
+        T4 tmp = (T4)(c0[0], c1[0], c2[0], c3[0]); \
+        ACTIVATION_V4(tmp);                        \
+        STORE_MEM_V4(tmp, off, mem);               \
+        UPDATE_REG(c0);                            \
+        UPDATE_REG(c1);                            \
+        UPDATE_REG(c2);                            \
+        UPDATE_REG(c3);                            \
+    }
+#if (LM == 4)
+#define STORE_REG(c, off, mem)                          \
+    {                                                   \
+        STORE_REG_V4(c[0], c[1], c[2], c[3], off, mem); \
+    }
+#elif (LM == 8)
+#if defined(USE_OUTPUT_IMG)
+#define ADD_C_OFF(off) \
+    {                  \
+        \ 
+    off.z += 1;        \
+    }
+#else
+#define ADD_C_OFF(off) \
+    {                  \
+        off += C_str;  \
+    }
+#endif
+#define STORE_REG(c, off, mem)                              \
+    {                                                       \
+        STORE_REG_V4(c[0], c[1], c[2], c[3], off, mem);     \
+        if (iy + 4 < oc) {                                  \
+            ADD_C_OFF(off);                                 \
+            STORE_REG_V4(c[4], c[5], c[6], c[7], off, mem); \
+        }                                                   \
+    }
+#endif
+#if defined(USE_OUTPUT_IMG)
+#define STORE_C()                                     \
+    {                                                 \
+        int z_off = idz * by * (LM >> 2) + (iy >> 2); \
+        for (uchar i = 0; i < LN; ++i) {              \
+            int oxw = (ix + i) % ow;                  \
+            int oxh = (ix + i) / ow;                  \
+            if (oxh >= oh) {                          \
+                break;                                \
+            }                                         \
+            int4 c_off = (int4)(oxw, oxh, z_off, 0);  \
+            STORE_REG(c, c_off, C);                   \
+        }                                             \
+    }
+#else
 #define STORE_C()                                                        \
     {                                                                    \
         int c_base = (idz * by * (LM >> 2) + (iy >> 2)) * C_str + C_off; \
         for (uchar i = 0; i < LN; ++i) {                                 \
-            int oxh = (ix + i) % oh;                                     \
-            int oxw = (ix + i) / oh;                                     \
-            if (oxw >= ow) {                                             \
+            int oxw = (ix + i) % ow;                                     \
+            int oxh = (ix + i) / ow;                                     \
+            if (oxh >= oh) {                                             \
                 break;                                                   \
             }                                                            \
-            int c_off = c_base + oxw * ow_str + oxh;                     \
-            STORE_REG(iy, oc, c, C_str, c_off, C)                        \
+            int c_off = c_base + oxh * ow_str + oxw;                     \
+            STORE_REG(c, c_off, C);                                      \
         }                                                                \
+    }
+#endif
+#else
+#if defined(USE_OUTPUT_IMG)
+#define STORE_C()                                   \
+    {                                               \
+        char ey = (iy + LM <= oh) ? LM : (oh % LM); \
+        int4 c_off = (int4)(ix >> 2, iy, idz, 0);   \
+        GEMM_STORE_C(c, c_off, 0, 0, ey, C);        \
     }
 #else
 #define STORE_C()                                           \
     {                                                       \
-        int c_off = idz * C_str + iy * ow_str + ix + C_off; \
         char ex = (ix + LN <= ow) ? LN : (ow % LN);         \
         char ey = (iy + LM <= oh) ? LM : (oh % LM);         \
+        int c_off = idz * C_str + iy * ow_str + ix + C_off; \
         GEMM_STORE_C(c, c_off, ow_str, ex, ey, C);          \
     }
 #endif
+#endif
 
-__kernel void MANGLE_NAME(gemm_tn_, AM, FM, BM, LM, LN)(const int M,
+__kernel void MANGLE_NAME(gemm_tn_, IAM, IBM, OM, AM, FM, BM, LM, LN)(const int M,
     const int N,
     const int K,
     const int A_str,
@@ -101,12 +155,10 @@ __kernel void MANGLE_NAME(gemm_tn_, AM, FM, BM, LM, LN)(const int M,
     const int oc,
     const int bx,
     const int by,
-    __global const T *A,
-    __global const T *B,
-#if !defined(NO_BIAS)
+    READ_ONLY_A_MEM A,
+    READ_ONLY_B_MEM B,
     __global const T *bias,
-#endif
-    __global T *C)
+    KERNEL_MEM C)
 {
     const int idx = get_global_id(0);
     const int idy = get_global_id(1);
@@ -121,14 +173,23 @@ __kernel void MANGLE_NAME(gemm_tn_, AM, FM, BM, LM, LN)(const int M,
     T a[LM];
     T b[LN];
     T c[LM][LN];
+#if defined(USE_INPUT_A_IMG)
+    int4 a_off = (int4)(iy >> 2, 0, idz, 0);
+#else
     int a_off = idz * A_str + iy + A_off;
+#endif
+
+#if defined(USE_INPUT_B_IMG)
+    int4 b_off = (int4)(ix >> 2, 0, idz, 0);
+#else
     int b_off = idz * B_str + ix + B_off;
+#endif
 
 #if defined(USE_BIAS_MATCH_A)
-    GEMM_LOAD_A(a, iy, bias);
+    GEMM_LOAD_BIAS_MATCH_A(a, iy, bias);
     GEMM_SET_C_BIAS_A(a, c);
 #elif defined(USE_BIAS_MATCH_B)
-    GEMM_LOAD_B(b, ix, bias);
+    GEMM_LOAD_BIAS_MATCH_B(b, ix, bias);
     GEMM_SET_C_BIAS_B(b, c);
 #else
     GEMM_SET_C_ZERO(c);
@@ -137,8 +198,16 @@ __kernel void MANGLE_NAME(gemm_tn_, AM, FM, BM, LM, LN)(const int M,
         GEMM_LOAD_A(a, a_off, A);
         GEMM_LOAD_B(b, b_off, B);
         GEMM_CALCORE(a, b, c);
+#if defined(USE_INPUT_A_IMG)
+        a_off.y += 1;
+#else
         a_off += M;
+#endif
+#if defined(USE_INPUT_B_IMG)
+        b_off.y += 1;
+#else
         b_off += N;
+#endif
     }
     STORE_C();
 }

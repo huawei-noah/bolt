@@ -43,10 +43,10 @@ inline EE unsqueeze_core_mali_fp16(GCLHandle_t handle,
 
     bool needTransIn = false;
     bool needPadOut = false;
-    if (iw != iw_str || ih != ih_str) {
+    if (iw != iw_str || ih != ih_str || input->desc.memType != GCL_MEM_BUF) {
         needTransIn = true;
     }
-    if (ow != ow_str || oh != oh_str) {
+    if (ow != ow_str || oh != oh_str || output->desc.memType != GCL_MEM_BUF) {
         needPadOut = true;
     }
     GCLMem tMem;
@@ -66,25 +66,20 @@ inline EE unsqueeze_core_mali_fp16(GCLHandle_t handle,
 
     if (needTransIn) {
         desc = input->desc;
-        desc.stride[0] = iw;
-        desc.stride[1] = ih;
-        desc.stride[2] = ic * in;
-        desc.offset[0] = 0;
-        desc.offset[1] = 0;
-        desc.offset[2] = 0;
-        desc.memFormat = DF_NCHW;
+        U32 str[3] = {iw, ih, ic * in};
+        U32 off[3] = {0, 0, 0};
+        MemFlags flag = CL_MEM_READ_WRITE;
+        CHECK_STATUS(gclmem_set_desc_padding(&desc, str, off, DT_F16, DF_NCHW, GCL_MEM_BUF, flag));
         tMem.desc = desc;
         CHECK_STATUS(ocl_data_trans_form(handle, input, &tMem, 0, 0, NCHW_TO_NCHW));
     }
 
     if (needPadOut) {
         desc = output->desc;
-        desc.stride[0] = ow;
-        desc.stride[1] = oh;
-        desc.stride[2] = oc * on;
-        desc.offset[0] = 0;
-        desc.offset[1] = 0;
-        desc.offset[2] = 0;
+        U32 str[3] = {ow, oh, oc * on};
+        U32 off[3] = {0, 0, 0};
+        MemFlags flag = CL_MEM_READ_WRITE;
+        CHECK_STATUS(gclmem_set_desc_padding(&desc, str, off, DT_F16, DF_NCHW, GCL_MEM_BUF, flag));
         tMem.desc = desc;
         CHECK_STATUS(ocl_data_trans_form(handle, &tMem, output, 0, 0, NCHW_TO_NCHW));
     }
@@ -104,7 +99,11 @@ EE unsqueeze_infer_forward_tmp_bytes_mali_fp16(TensorDesc inputDesc,
     CHECK_STATUS(gclmem_get_desc_dim(gclmemOutputDesc, NULL, NULL, NULL, NULL, &oh, &ow));
     CHECK_STATUS(gclmem_get_desc_padding(gclmemInputDesc, &iw_str, &ih_str, NULL, NULL, NULL));
     CHECK_STATUS(gclmem_get_desc_padding(gclmemOutputDesc, &ow_str, &oh_str, NULL, NULL, NULL));
-    if ((ih != ih_str || iw != iw_str) && (oh != oh_str || ow != ow_str)) {
+    if (ih != ih_str || iw != iw_str || gclmemInputDesc.memFormat == DF_NCHWC4 ||
+        gclmemInputDesc.memType != GCL_MEM_BUF) {
+        size = tensorNumBytes(inputDesc);
+    }
+    if (oh != oh_str || ow != ow_str || gclmemOutputDesc.memType != GCL_MEM_BUF) {
         size = tensorNumBytes(inputDesc);
     }
     *bytes = size;

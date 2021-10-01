@@ -472,7 +472,7 @@ public final class InferenceTest {
         int length = (int)melganResultDimension[0][2];
         float[] resultSum = {180.595139f};
         if (DataType.FP16 == dataType) {
-            resultSum[0] = 222.57361f;
+            resultSum[0] = 202.79335f;
         }
         float[] sum = {0};
         for (int i = 0; i < length; i++) {
@@ -622,16 +622,8 @@ public final class InferenceTest {
         classification(outputPrefix, affinity,
             prefix + "/caffe_models/fingerprint_resnet18/fingerprint_resnet18" + modelSuffix,
             "Data", dt, image_2x188x188, 1, 0);
-        int ghostnetTopIndex = 623;
-        if (dt == DataType.FP16) {
-            ghostnetTopIndex = 512;
-            if (affinity == AffinityType.GPU) {
-                // TODO: verify this data, classification top1 accuracy 0.90
-                ghostnetTopIndex = 549;
-            }
-        }
         classification(outputPrefix, affinity, prefix + "/onnx_models/ghostnet/ghostnet" + modelSuffix,
-            "input:0", dt, image_3x224x224, 255, ghostnetTopIndex);
+            "input:0", dt, image_3x224x224, 255, 623);
         tinybertIntentSlot(
             outputPrefix, affinity, prefix + "/caffe_models/tinybert384/tinybert384" + modelSuffix);
         if (affinity == AffinityType.GPU) {

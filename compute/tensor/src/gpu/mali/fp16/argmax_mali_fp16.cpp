@@ -23,7 +23,7 @@ inline EE argmax_checkpara_mali_fp16(TensorDesc inputDesc, TensorDesc outputDesc
     if (inputDesc.dt != DT_F16) {
         return NOT_SUPPORTED;
     }
-    if (outputDesc.dt != DT_U32) {
+    if (outputDesc.dt != DT_U32 && outputDesc.dt != DT_I32) {
         return NOT_SUPPORTED;
     }
     return SUCCESS;
@@ -181,8 +181,8 @@ EE argmax_infer_forward_tmp_bytes_mali_fp16(
     ic = (inDims > 2) ? inputDesc.dims[2] : 1;
     U32 size = 1024 * ih * ic * bytesOf(dt);
     size += 1024 * ih * ic * bytesOf(DT_U32);
-    size += (128 * ih * ic * bytesOf(dt) + 1023) / 1024 * 1024;
-    size += (128 * ih * ic * bytesOf(DT_U32) + 1023) / 1024 * 1024;
+    size += ALIGN(128 * ih * ic * bytesOf(dt), BUFFER_ALIGN_BASE);
+    size += ALIGN(128 * ih * ic * bytesOf(DT_U32), BUFFER_ALIGN_BASE);
     *bytes = size;
     return SUCCESS;
 }

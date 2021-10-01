@@ -31,8 +31,6 @@ int transposeTest(int argc, char **argv, DataType dt)
         p.trans_dims[i] = value;
         p_inv.trans_dims[value] = i;
     }
-    ArchInfo archInfo;
-    archInfo.arch = UT_ARCH;
 
     DataFormat df = DF_NCHW;
     TensorDesc inDesc = tensor4df(dt, df, in, ic, ih, iw);
@@ -41,29 +39,30 @@ int transposeTest(int argc, char **argv, DataType dt)
     Tensor inputTensor;
     inputTensor.resize(inDesc);
     inputTensor.alloc();
-    memcpy(get_ptr_from_tensor(inputTensor, UT_ARCH), input, tensorNumBytes(inDesc));
+    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inDesc));
 
     Tensor outputTensor1;
     Tensor outputTensor2;
-    CHECK_STATUS(transpose_infer_output_size(&inputTensor, p, &outputTensor1, &archInfo));
-    CHECK_STATUS(transpose_infer_output_size(&outputTensor1, p_inv, &outputTensor2, &archInfo));
+    CHECK_STATUS(transpose_infer_output_size(&inputTensor, p, &outputTensor1, &UT_CPU_ARCHINFO));
+    CHECK_STATUS(
+        transpose_infer_output_size(&outputTensor1, p_inv, &outputTensor2, &UT_CPU_ARCHINFO));
     outputTensor1.alloc();
     outputTensor2.alloc();
     Tensor blankTensor;
 
     if (UT_CHECK) {
-        CHECK_STATUS(transpose(inputTensor, p, blankTensor, outputTensor1, &archInfo));
+        CHECK_STATUS(transpose(inputTensor, p, blankTensor, outputTensor1, &UT_CPU_ARCHINFO));
 
-        CHECK_STATUS(transpose(outputTensor1, p_inv, blankTensor, outputTensor2, &archInfo));
+        CHECK_STATUS(transpose(outputTensor1, p_inv, blankTensor, outputTensor2, &UT_CPU_ARCHINFO));
 
         // check
-        ut_check_v(input, get_ptr_from_tensor(outputTensor2, UT_ARCH), len, dt, 0.0001, __FILE__,
-            __LINE__);
+        ut_check_v(input, get_ptr_from_tensor(outputTensor2, CPU_GENERAL), len, dt, 0.0001,
+            __FILE__, __LINE__);
     }
 
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        CHECK_STATUS(transpose(inputTensor, p, blankTensor, outputTensor1, &archInfo));
+        CHECK_STATUS(transpose(inputTensor, p, blankTensor, outputTensor1, &UT_CPU_ARCHINFO));
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;

@@ -21,41 +21,37 @@ int clipTest(int argc, char **argv, DataType dt)
     ClipParamSpec p;
     p.min = atof(argv[2]);
     p.max = atof(argv[3]);
-    ArchInfo archInfo;
-    archInfo.arch = UT_ARCH;
-    ArchInfo archInfo_org;
-    archInfo_org.arch = CPU_GENERAL;
 
     TensorDesc inDesc = tensor1d(dt, len);
     U8 *input = ut_input_v(len, dt, UT_INIT_RANDOM);
     Tensor inputTensor;
     inputTensor.resize(inDesc);
     inputTensor.alloc();
-    memcpy(get_ptr_from_tensor(inputTensor, UT_ARCH), input, tensorNumBytes(inDesc));
+    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inDesc));
 
     Tensor outputTensor;
     Tensor outputTensorRef;
-    CHECK_STATUS(clip_infer_output_size(&inputTensor, &outputTensor, &archInfo));
+    CHECK_STATUS(clip_infer_output_size(&inputTensor, &outputTensor, &UT_CPU_ARCHINFO));
     outputTensor.alloc();
     outputTensorRef.resize(outputTensor.get_desc());
     outputTensorRef.alloc();
 
     if (UT_CHECK) {
-        CHECK_STATUS(clip(inputTensor, p, outputTensor, &archInfo));
+        CHECK_STATUS(clip(inputTensor, p, outputTensor, &UT_CPU_ARCHINFO));
 
         // naive implement
-        CHECK_STATUS(clip(inputTensor, p, outputTensorRef, &archInfo_org));
+        CHECK_STATUS(clip(inputTensor, p, outputTensorRef, &UT_SERIAL_ARCHINFO));
 
         // check
-        ut_check_v(get_ptr_from_tensor(outputTensor, UT_ARCH),
-            get_ptr_from_tensor(outputTensorRef, UT_ARCH), outputTensor.length(), dt, 0, __FILE__,
-            __LINE__);
+        ut_check_v(get_ptr_from_tensor(outputTensor, CPU_GENERAL),
+            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), outputTensor.length(), dt, 0,
+            __FILE__, __LINE__);
     }
 
     // benchmark
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        CHECK_STATUS(clip(inputTensor, p, outputTensor, &archInfo));
+        CHECK_STATUS(clip(inputTensor, p, outputTensor, &UT_CPU_ARCHINFO));
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;

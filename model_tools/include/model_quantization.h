@@ -18,7 +18,5 @@
 #include <string>
 #include "model_spec.h"
 
-std::vector<std::string> SplitScale(const std::string &s, char delim);
-
 void add_scale_from_file(ModelSpec *spec, const char *scaleFile);
 #endif

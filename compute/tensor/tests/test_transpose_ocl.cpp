@@ -12,85 +12,38 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include <vector>
-#include <string.h>
 #include "tensor_computing.h"
-#include "ut_util.h"
-#include "gcl.h"
-#include "libkernelsource.h"
-inline GCLMem_t alloc(Tensor tensor)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    mem->alloc();
-    return (GCLMem_t)mem->get_ptr();
-}
-
-inline GCLMem_t alloc_map(Tensor tensor)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    mem->mapped_alloc();
-    return (GCLMem_t)mem->get_ptr();
-}
-
-inline GCLMem_t alloc_bytes(Tensor tensor, U32 size)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    GCLMem_t ptr = NULL;
-    if (size > 0) {
-        mem->resize(tensor1d(DT_U8, size));
-        mem->alloc();
-        ptr = (GCLMem_t)mem->get_ptr();
-    }
-    return ptr;
-}
+#include "ut_util_ocl.h"
 
 int transposeTest(int argc, char **argv, DataType dt)
 {
-    CHECK_REQUIREMENT(argc == 9 || argc == 11);
-    U32 in = 1;
-    U32 ic = 1;
-    U32 ih = 1;
-    U32 iw = 1;
-    U32 it = 1;
     TransposeParamSpec p, p_inv;
-    TensorDesc inDesc;
     DataFormat df = DF_NCHW;
     TensorDesc inputDesc_cpu, inputDesc_gpu;
-
-    if (argc == 9) {
-        in = atoi(argv[1]);
-        ic = atoi(argv[2]);
-        ih = atoi(argv[3]);
-        iw = atoi(argv[4]);
-        p.trans_size = 4;
-        p_inv.trans_size = 4;
-        for (int i = 0; i < 4; i++) {
-            I32 value = atoi(argv[5 + i]);
-            p.trans_dims[i] = value;
-            p_inv.trans_dims[value] = i;
-        }
-        inputDesc_cpu = tensor4df(dt, DF_NCHW, in, ic, ih, iw);
-        inputDesc_gpu = tensor4df(dt, DF_NCHW, in, ic, ih, iw);
+    U32 nDims = atoi(argv[1]);
+    inputDesc_cpu.nDims = nDims;
+    inputDesc_cpu.dt = dt;
+    if (nDims < 3) {
+        inputDesc_cpu.df = DF_NORMAL;
+    } else if (nDims == 3) {
+        inputDesc_cpu.df = DF_MTK;
     } else {
-        in = atoi(argv[1]);
-        ic = atoi(argv[2]);
-        it = atoi(argv[3]);
-        ih = atoi(argv[4]);
-        iw = atoi(argv[5]);
-        p.trans_size = 5;
-        p_inv.trans_size = 5;
-        for (int i = 0; i < 5; i++) {
-            I32 value = atoi(argv[6 + i]);
-            p.trans_dims[i] = value;
-            p_inv.trans_dims[value] = i;
-        }
-        inputDesc_cpu = tensor5df(dt, DF_NCHW, in, ic, it, ih, iw);
-        inputDesc_gpu = tensor5df(dt, DF_NCHW, in, ic, it, ih, iw);
+        inputDesc_cpu.df = DF_NCHW;
     }
+    CHECK_REQUIREMENT(argc == (int)(nDims * 2 + 2));
+    p.trans_size = nDims;
+    p_inv.trans_size = nDims;
+    for (U32 i = 0; i < nDims; i++) {
+        inputDesc_cpu.dims[nDims - 1 - i] = atoi(argv[2 + i]);
+        I32 value = atoi(argv[2 + nDims + i]);
+        p.trans_dims[i] = value;
+        p_inv.trans_dims[value] = i;
+    }
+    inputDesc_gpu = inputDesc_cpu;
 
     ArchInfo archInfo;
-    ArchInfo archInfo_org;
+
     archInfo.arch = MALI;
-    archInfo_org.arch = CPU_GENERAL;
 
     TensorDesc outputDesc;
     U32 len = tensorNumElements(inputDesc_cpu);
@@ -99,13 +52,15 @@ int transposeTest(int argc, char **argv, DataType dt)
     Tensor inputTensorCpu;
     inputTensorCpu.resize(inputDesc_cpu);
     inputTensorCpu.alloc();
-    memcpy(get_ptr_from_tensor(inputTensorCpu, UT_ARCH), input_cpu, tensorNumBytes(inputDesc_cpu));
+    memcpy(
+        get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), input_cpu, tensorNumBytes(inputDesc_cpu));
     Tensor outputTensorCpu;
     Tensor tmpTensorCpu;
     //run on cpu
-    CHECK_STATUS(transpose_infer_output_size(&inputTensorCpu, p, &outputTensorCpu, &archInfo_org));
+    CHECK_STATUS(
+        transpose_infer_output_size(&inputTensorCpu, p, &outputTensorCpu, &UT_SERIAL_ARCHINFO));
     outputTensorCpu.alloc();
-    CHECK_STATUS(transpose(inputTensorCpu, p, tmpTensorCpu, outputTensorCpu, &archInfo_org));
+    CHECK_STATUS(transpose(inputTensorCpu, p, tmpTensorCpu, outputTensorCpu, &UT_SERIAL_ARCHINFO));
     //run on gpu
     std::shared_ptr<GCLHandle> handleSharedPtr = OCLContext::getInstance().handle;
     GCLHandle_t handle = handleSharedPtr.get();
@@ -121,17 +76,21 @@ int transposeTest(int argc, char **argv, DataType dt)
     archInfo.archPara = &maliPara;
 
     CHECK_STATUS(transpose_infer_output_size(&inputTensor, p, &outputTensor, &archInfo));
+    outputDesc = outputTensor.get_desc();
+    output_gpu = ut_input_v(tensorNumElements(outputDesc), dt, UT_INIT_RANDOM);
 
     U32 maxBytes = 0;
     U32 tmpBytes;
     CHECK_STATUS(transpose_infer_forward_tmp_bytes(inputTensor, outputTensor, &tmpBytes, &archInfo))
     maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
 
-    GCLMem_t output = alloc_map(outputTensor);
+    GCLMem_t output = alloc(outputTensor);
     GCLMem_t input = alloc(inputTensor);
     CHECK_STATUS(gcl_fill_memory_zero(handle, input));
 
     tmpBytes = tensorNumBytes(inputDesc_gpu);
+    maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
+    tmpBytes = tensorNumBytes(outputDesc);
     maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
     GCLMem_t tmpbuf = alloc_bytes(tmpTensor, maxBytes);
 
@@ -150,25 +109,47 @@ int transposeTest(int argc, char **argv, DataType dt)
 #else
     CHECK_STATUS(gcl_run_kernelVec(handle));
 #endif
-    outputDesc = outputTensor.get_desc();
-    CHECK_STATUS(ocl_get_output(handle, output, outputDesc, true));
-    output_gpu = output->mapPtrArray.back();
+    CHECK_STATUS(ocl_get_output(handle, output, outputDesc, output_gpu, tmpbuf, true));
 
     char buffer[150];
     char params[120];
-    U32 on, oc, ot, oh, ow;
-    tensorSelectGet(outputDesc, NULL, NULL, &on, &oc, &oh, &ow, &ot);
-    sprintf(params, "(%u %u %u %u %u)=(%u %u %u %u %u)", in, ic, it, ih, iw, on, oc, ot, oh, ow);
+    sprintf(params, "(");
+    I32 index = 0;
+    for (U32 i = 0; i < nDims; i++) {
+        for (; index < 120; index++) {
+            if (params[index] == '\0') {
+                break;
+            }
+        }
+        if (i == nDims - 1) {
+            sprintf(params + index, "%d)=(", inputDesc_cpu.dims[nDims - 1 - i]);
+        } else {
+            sprintf(params + index, "%d ", inputDesc_cpu.dims[nDims - 1 - i]);
+        }
+    }
+    for (U32 i = 0; i < nDims; i++) {
+        for (; index < 120; index++) {
+            if (params[index] == '\0') {
+                break;
+            }
+        }
+        if (i == nDims - 1) {
+            sprintf(params + index, "%d)", outputDesc.dims[nDims - 1 - i]);
+        } else {
+            sprintf(params + index, "%d ", outputDesc.dims[nDims - 1 - i]);
+        }
+    }
     sprintf(buffer, "%20s, %80s", "Transpose", params);
 #ifdef _DEBUG
     double ops = len;
     ut_log(dt, buffer, ops, time);
 #endif
-    ut_check_a(output_gpu, get_ptr_from_tensor(outputTensorCpu, UT_ARCH), len, dt);
+    ut_check_a(output_gpu, get_ptr_from_tensor(outputTensorCpu, CPU_GENERAL), len, dt);
 
     CHECK_STATUS(gcl_finish(handle));
     CHECK_STATUS(gcl_clean_kernelVec(handle));
     free(input_cpu);
+    free(output_gpu);
     return 0;
 }
 

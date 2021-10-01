@@ -24,11 +24,14 @@ class RNNOptimizer : public OPOptimizer {
         bool hasOptimized = false;
         hasOptimized |= simplifyONNXRNN(spec);
 
+        bool usePadding = true;
         char *environmentSetting = getenv("BOLT_PADDING");
-        bool usePadding =
-            (environmentSetting != NULL && std::string(environmentSetting) == std::string("ON"))
-            ? true
-            : false;
+        if (environmentSetting != NULL) {
+            if (std::string(environmentSetting) == std::string("OFF") ||
+                std::string(environmentSetting) == std::string("Off")) {
+                usePadding = false;
+            }
+        }
         if (usePadding) {
             hasOptimized |= padding(spec);
         }
@@ -37,21 +40,53 @@ class RNNOptimizer : public OPOptimizer {
 
     bool padding(ModelSpec *spec)
     {
-        int align = 32;
+        int alignBase = 32;
         bool hasOptimized = false;
         OperatorType constantOfShape[1] = {OT_ConstantOfShape};
         for (int i = 0; i < spec->num_operator_specs; i++) {
             if (spec->ops[i].type == OT_RNN) {
                 RNNParamSpec param = spec->ops[i].ps.rnn_spec;
-                if (param.numOutput % align == 0) {
+                int gates = 0, paddingOutput = 0;
+                U32 NPadding = 0;
+                switch (param.mode) {
+                    case RNN_LSTM: {
+                        gates = 4;
+                        int align = gates * alignBase;
+                        NPadding = (param.numOutput * gates + alignBase - 1) / alignBase *
+                            alignBase / gates;
+                        paddingOutput =
+                            (param.numOutput * gates + align - 1) / align * align / gates;
+                        break;
+                    }
+                    case RNN_GRU: {
+                        gates = 3;
+                        int align = gates * alignBase;
+                        NPadding = (param.numOutput * gates + alignBase - 1) / alignBase *
+                            alignBase / gates;
+                        paddingOutput =
+                            (param.numOutput * gates + align - 1) / align * align / gates;
+                        break;
+                    }
+                    case RNN_GRU_LBR: {
+                        gates = 3;
+                        int align = alignBase;
+                        NPadding = paddingOutput = (param.numOutput + align - 1) / align * align;
+                        break;
+                    }
+                    default:
+                        UNI_ERROR_LOG("RNN hidden size padding not support this mode.");
+                }
+                if (param.numOutput == NPadding) {
                     continue;
                 }
                 // currently not support to padding PLSTM
-                if (param.numProjection > 0 && param.numProjection % align != 0) {
+                if (param.numProjection > 0) {
                     continue;
                 }
-                UNI_INFO_LOG("padding RNN/GRU/LSTM operator %s's hidden states to 32 times.\n",
-                    spec->ops[i].name);
+                UNI_WARNING_LOG("padding RNN/GRU/LSTM operator %s's hidden states to 32 "
+                                "times(%d->%d). If you don't want to use it, please set shell "
+                                "environment variable BOLT_PADDING to OFF.\n",
+                    spec->ops[i].name, param.numOutput, paddingOutput);
                 int weightIndex = searchWeightIndex(spec, spec->ops[i].name);
                 CHECK_REQUIREMENT(weightIndex >= 0);
                 int directions;
@@ -60,19 +95,6 @@ class RNNOptimizer : public OPOptimizer {
                 } else {
                     directions = 1;
                 }
-                int gates = 0;
-                switch (param.mode) {
-                    case RNN_LSTM:
-                        gates = 4;
-                        break;
-                    case RNN_GRU:
-                    case RNN_GRU_LBR:
-                        gates = 3;
-                        break;
-                    default:
-                        continue;
-                }
-                int paddingOutput = (param.numOutput + align - 1) / align * align;
                 U32 oldNum =
                     directions * gates * param.numOutput * bytesOf(spec->ws[weightIndex].mdt);
                 U32 newNum = directions * gates * paddingOutput * bytesOf(spec->ws[weightIndex].mdt);
@@ -170,11 +192,25 @@ class RNNOptimizer : public OPOptimizer {
         return hasOptimized;
     }
 
+    template <typename T>
+    bool transpose(int length, T *input, int *trans, int *output)
+    {
+        bool same = true;
+        for (int j = 0; j < length; j++) {
+            output[j] = input[trans[j]];
+            if (output[j] != j) {
+                same = false;
+            }
+        }
+        return same;
+    }
+
     bool simplifyONNXRNN(ModelSpec *spec)
     {
         bool hasOptimized = false;
         OperatorType constantOfShape[1] = {OT_ConstantOfShape};
         int lastConstantOfShapeId = -1;
+        std::set<int> prevTransposeSet;
         for (int i = 0; i < spec->num_operator_specs; i++) {
             if (spec->ops[i].type == OT_RNN && spec->ops[i].num_inputs >= 1 &&
                 spec->ops[i].ps.rnn_spec.steps >= 0) {
@@ -184,28 +220,55 @@ class RNNOptimizer : public OPOptimizer {
                 int rnnInputId = i;
                 if (prevOpIndexes.size() == 1) {
                     int prevOpIndex = prevOpIndexes[0].first;
+                    std::vector<std::pair<int, int>> nextOpIndexes = searchOperatorIndexByInput(
+                        spec, spec->ops[prevOpIndex].output_tensors_name[0], prevOpIndex,
+                        spec->num_operator_specs);
+                    // 1 -> N
+                    bool remove = true;
+                    for (U32 j = 0; j < nextOpIndexes.size(); j++) {
+                        if (spec->ops[nextOpIndexes[j].first].type != OT_RNN) {
+                            remove = false;
+                            break;
+                        }
+                    }
+                    int dims[3] = {1, 0, 2};
                     if (spec->ops[prevOpIndex].type == OT_Transpose &&
-                        spec->ops[prevOpIndex].ps.transpose_spec.trans_size == 3 &&
-                        spec->ops[prevOpIndex].ps.transpose_spec.trans_dims[0] == 1 &&
-                        spec->ops[prevOpIndex].ps.transpose_spec.trans_dims[1] == 0 &&
-                        spec->ops[prevOpIndex].ps.transpose_spec.trans_dims[2] == 2) {
-                        std::vector<std::pair<int, int>> nextOpIndexes = searchOperatorIndexByInput(
-                            spec, spec->ops[prevOpIndex].output_tensors_name[0], prevOpIndex,
-                            spec->num_operator_specs);
-                        // 1 -> N
-                        if (nextOpIndexes.size() != 1) {
+                        spec->ops[prevOpIndex].ps.transpose_spec.trans_size == 3) {
+                        if (!remove) {
                             UNI_ERROR_LOG("RNNOptimizer can not process Transpose before RNN, "
                                           "1->N\n");
                         }
-                        str_copy(spec->ops[i].input_tensors_name[0],
-                            spec->ops[prevOpIndex].input_tensors_name[0], NAME_LEN);
-                        setOperatorInvalid(spec, prevOpIndex);
-                        std::vector<std::pair<int, int>> prevOpIndexes1 =
-                            searchOperatorIndexByOutput(
-                                spec, spec->ops[prevOpIndex].input_tensors_name[0], 0, prevOpIndex);
-                        if (prevOpIndexes1.size() > 0) {
-                            rnnInputId = prevOpIndexes1[0].first;
+                        remove = this->transpose<unsigned int>(
+                            3, spec->ops[prevOpIndex].ps.transpose_spec.trans_dims, dims, dims);
+                        if (remove) {
+                            setOperatorInvalid(spec, prevOpIndex, true);
+                            std::vector<std::pair<int, int>> prevOpIndexes1 =
+                                searchOperatorIndexByOutput(spec,
+                                    spec->ops[prevOpIndex].input_tensors_name[0], 0, prevOpIndex);
+                            if (prevOpIndexes1.size() > 0) {
+                                rnnInputId = prevOpIndexes1[0].first;
+                            }
+                        } else {
+                            if (prevTransposeSet.find(prevOpIndex) == prevTransposeSet.end()) {
+                                prevTransposeSet.insert(prevOpIndex);
+                                memcpy(spec->ops[prevOpIndex].ps.transpose_spec.trans_dims, dims,
+                                    sizeof(int) * 3);
+                            }
+                            rnnInputId = prevOpIndex;
                         }
+                    }
+                    if (spec->ops[prevOpIndex].type == OT_Reshape &&
+                        spec->ops[prevOpIndex].ps.reshape_spec.shape_size == 3 &&
+                        spec->ops[prevOpIndex].ps.reshape_spec.shape_dims[0] != 1) {
+                        if (!remove) {
+                            UNI_ERROR_LOG("RNNOptimizer can not process Reshape before RNN, "
+                                          "1->N\n");
+                        }
+                        this->transpose<int>(
+                            3, spec->ops[prevOpIndex].ps.reshape_spec.shape_dims, dims, dims);
+                        memcpy(spec->ops[prevOpIndex].ps.reshape_spec.shape_dims, dims,
+                            sizeof(int) * 3);
+                        rnnInputId = prevOpIndex;
                     }
                 }
                 int constantOfShapeId;
@@ -341,13 +404,18 @@ class RNNOptimizer : public OPOptimizer {
                             spec->ops[nextOpIndex1].output_tensors_name[0], NAME_LEN);
                         setOperatorInvalid(spec, nextOpIndex1);
                         if (spec->ops[nextOpIndex2].type == OT_Transpose &&
-                            spec->ops[nextOpIndex2].ps.transpose_spec.trans_size == 3 &&
-                            spec->ops[nextOpIndex2].ps.transpose_spec.trans_dims[0] == 1 &&
-                            spec->ops[nextOpIndex2].ps.transpose_spec.trans_dims[1] == 0 &&
-                            spec->ops[nextOpIndex2].ps.transpose_spec.trans_dims[2] == 2) {
-                            str_copy(spec->ops[i].output_tensors_name[0],
-                                spec->ops[nextOpIndex2].output_tensors_name[0], NAME_LEN);
-                            setOperatorInvalid(spec, nextOpIndex2);
+                            spec->ops[nextOpIndex2].ps.transpose_spec.trans_size == 3) {
+                            int dims[3] = {1, 0, 2};
+                            bool remove = this->transpose<unsigned int>(3,
+                                spec->ops[nextOpIndex2].ps.transpose_spec.trans_dims, dims, dims);
+                            if (remove) {
+                                str_copy(spec->ops[i].output_tensors_name[0],
+                                    spec->ops[nextOpIndex2].output_tensors_name[0], NAME_LEN);
+                                setOperatorInvalid(spec, nextOpIndex2);
+                            } else {
+                                memcpy(spec->ops[nextOpIndex2].ps.transpose_spec.trans_dims, dims,
+                                    sizeof(int) * 3);
+                            }
                         }
                     }
                     // onnx-rnn + transpose(2,0,1,3) + reshape(0,0,-1)
@@ -384,13 +452,18 @@ class RNNOptimizer : public OPOptimizer {
                         }
                         int nextOpIndex3 = nextOpIndexes3[0].first;
                         if (spec->ops[nextOpIndex3].type == OT_Transpose &&
-                            spec->ops[nextOpIndex3].ps.transpose_spec.trans_size == 3 &&
-                            spec->ops[nextOpIndex3].ps.transpose_spec.trans_dims[0] == 1 &&
-                            spec->ops[nextOpIndex3].ps.transpose_spec.trans_dims[1] == 0 &&
-                            spec->ops[nextOpIndex3].ps.transpose_spec.trans_dims[2] == 2) {
-                            str_copy(spec->ops[i].output_tensors_name[0],
-                                spec->ops[nextOpIndex3].output_tensors_name[0], NAME_LEN);
-                            setOperatorInvalid(spec, nextOpIndex3);
+                            spec->ops[nextOpIndex3].ps.transpose_spec.trans_size == 3) {
+                            int dims[3] = {1, 0, 2};
+                            bool remove = this->transpose<unsigned int>(3,
+                                spec->ops[nextOpIndex3].ps.transpose_spec.trans_dims, dims, dims);
+                            if (remove) {
+                                str_copy(spec->ops[i].output_tensors_name[0],
+                                    spec->ops[nextOpIndex3].output_tensors_name[0], NAME_LEN);
+                                setOperatorInvalid(spec, nextOpIndex3);
+                            } else {
+                                memcpy(spec->ops[nextOpIndex3].ps.transpose_spec.trans_dims, dims,
+                                    sizeof(int) * 3);
+                            }
                         }
                     }
                 }

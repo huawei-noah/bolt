@@ -36,7 +36,7 @@ EE attention(Tensor inputTensor, Tensor outputTensor, ArchInfo_t archInfo)
         ret = attention_general(inputDesc, input, outputDesc, output);
 #endif
 #ifdef _USE_X86
-    } else if (IS_X86_AVX2(arch)) {
+    } else if (IS_X86(arch)) {
         ret = attention_x86(inputDesc, input, outputDesc, output);
 #endif
 #ifdef _USE_NEON

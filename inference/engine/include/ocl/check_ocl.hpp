@@ -20,8 +20,7 @@ class CheckOCL : public Check {
 public:
     CheckOCL(DataType dt, CheckParamSpec p) : Check(dt, p)
     {
-        setMALIArchInfo(
-            &(this->archInfo), nullptr, &this->needSetKernelVec, &this->needSelectKernelLS);
+        INIT_GPU_INFO(nullptr)
     }
 
     ~CheckOCL(){DESTROY_OCL_KERNEL}

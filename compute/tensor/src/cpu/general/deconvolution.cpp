@@ -53,7 +53,7 @@ inline EE deconvolution(TensorDesc inputDesc,
                 for (U32 h = 0; h < ih; h++) {
                     for (U32 w = 0; w < iw; w++) {
                         U32 i_off;
-                        if (idf == DF_NCHW) {
+                        if (idf != DF_NCHWC8) {
                             i_off = ((n * ic + c) * ih + h) * iw + w;
                         } else {
                             i_off = (((n * ic8 + (c / 8)) * ih + h) * iw + w) * 8 + c % 8;
@@ -65,7 +65,7 @@ inline EE deconvolution(TensorDesc inputDesc,
                                 if (oh_idx >= 0 && oh_idx < (I32)oh && ow_idx >= 0 &&
                                     ow_idx < (I32)ow) {
                                     U32 o_off;
-                                    if (odf == DF_NCHW) {
+                                    if (odf != DF_NCHWC8) {
                                         o_off = ((n * oc + o) * oh + oh_idx) * ow + ow_idx;
                                     } else {
                                         o_off =
@@ -87,7 +87,7 @@ inline EE deconvolution(TensorDesc inputDesc,
     U32 ohow = oh * ow;
     for (U32 i = 0; i < tensorNumElements(outputDesc); i++) {
         U32 o;
-        if (odf == DF_NCHW) {
+        if (odf != DF_NCHWC8) {
             o = (i / ohow) % oc;
         } else {
             o = (i / (ohow * 8)) % oc8 * 8 + i % 8;

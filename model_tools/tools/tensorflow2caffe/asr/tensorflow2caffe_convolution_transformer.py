@@ -6,22 +6,26 @@ import numpy as np
 import sys
 sys.path.append("../")
 from tensorflow2caffe import Tensorflow2Caffe
-from convolution_transformer_params import base_params
 
 class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
     def __init__(self,
+            params,
             tensorflow_model_path, caffe_model_path_prefix, caffe_model_name,
             nchwc8=True, first_frame=True,
-            check=False, calc=False, quantization=False):
+            check=False, calc=False,
+            quantization=False,
+            FFN_decomposition=False):
         Tensorflow2Caffe.__init__(self, tensorflow_model_path,
             caffe_model_path_prefix, caffe_model_name, check, calc, quantization)
-        self.base_params = base_params
+        self.base_params = params
         self.params = {}
         self.mode = "infer"
         self.nchwc8 = nchwc8
         self.first_frame = first_frame
         self.state_data_path = "./"
         self.save_state = True
+        self.FFN_decomposition = FFN_decomposition
+        self.encoder_FFN_decomposition = False
 
     def layer_normed_fc(self, input_name, activation_fn, output_name_prefix, scope_id):
         fc_name = output_name_prefix + "_fc"
@@ -48,11 +52,25 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
                          layer_names=["batch_normalization", "moving_mean", "moving_variance"])
         elif norm_type == 'pre_ln':
             output = self.extract_layer_norm(output, output_name_prefix+"_FF_ln", scope_id+1, ["LayerNorm", "gamma", "beta"])
-        self.add_quantization(scope_id+1, "quant_ffn_input", output)
-        output = self.extract_dense(output, output_name_prefix+"_FF_fc1", scope_id+1, scope_name="layer_1")
-        output = self.add_relu(output, output+"_FF_relu")
-        self.add_quantization(scope_id+1, "quant_ffn_middle", output)
-        output = self.extract_dense(output, output_name_prefix+"_FF_fc2", scope_id+1, scope_name="layer_2")
+        # add quantization scale here
+        self.add_quantization(scope_id + 1, "quant_ffn_input", output)
+        if (self.encoder_FFN_decomposition):
+            output = self.extract_dense(output, output_name_prefix+"_FF_fc1_proj_down", scope_id+1, scope_name="layer_1_proj_down")
+            self.add_quantization(scope_id + 1, "quant_ffn_input", output)
+            output = self.extract_dense(output, output_name_prefix+"_FF_fc1_proj_up", scope_id+1, scope_name="layer_1_proj_up")
+
+            output = self.add_relu(output, output+"_FF_relu")
+            # add quantization scale here
+            self.add_quantization(scope_id + 1, "quant_ffn_middle", output)
+            output = self.extract_dense(output, output_name_prefix+"_FF_fc2_proj_down", scope_id+1, scope_name="layer_2_proj_down")
+            self.add_quantization(scope_id + 1, "quant_ffn_input", output)
+            output = self.extract_dense(output, output_name_prefix+"_FF_fc2_proj_up", scope_id+1, scope_name="layer_2_proj_up")
+        else:
+            output = self.extract_dense(output, output_name_prefix + "_FF_fc1", scope_id + 1, scope_name="layer_1")
+            output = self.add_relu(output, output + "_FF_relu")
+            # add quantization scale here
+            self.add_quantization(scope_id + 1, "quant_ffn_middle", output)
+            output = self.extract_dense(output, output_name_prefix + "_FF_fc2", scope_id + 1, scope_name="layer_2")
         output = self.add_sum([output, input], output_name=output_name_prefix+"_FF_sum")
         if norm_type == 'ln':
             output = self.extract_layer_norm(output, output_name_prefix+"_FF_ln", scope_id+1, ["LayerNorm", "gamma", "beta"])
@@ -61,10 +79,10 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
             output = output
         return output
 
-    def group_norm(x, scop_id, data_format, group_num=32):
+    def group_norm(self, x, scop_id, data_format, group_num=32):
         if data_format == 'channels_last':
             x = self.add_transpose(x, x+"_t1", [0, 3, 1, 2])
-        x = self.extract_group_norm(x, group_num, x+"_gn", scope_id, data_format="NCHW", layer_names=None)
+        x = self.extract_group_norm(x, group_num, x+"_gn", srel_multihead_attncope_id, data_format="NCHW", layer_names=None)
         output = self.add_transpose(x, x+"_t2", [0, 2, 3, 1])
         return output
 
@@ -73,6 +91,20 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
         output_name = output_name_prefix + "_neg_slice"
         self.add_slice(input_name, [other_name, output_name], axis=axis, slice_point=[-length])
         return output_name
+
+    def create_pos_emb_cache(self, d_model, max_klen=1023, min_qlen=-1, clamp_len=-1):
+        pos_seq = np.arange(max_klen, min_qlen, -1)
+        if clamp_len > 0:
+            pos_seq = np.minimum(pos_seq, clamp_len)
+        inv_freq = 1 / (10000 ** (np.arange(0, d_model, 2) / d_model))
+        a = pos_seq.shape[0]
+        b = inv_freq.shape[0]
+        sinusoid_inp = np.zeros([a, b])
+        for i in range(a):
+            for j in range(b):
+                sinusoid_inp[i][j] = pos_seq[i] * inv_freq[j]
+        pos_emb = np.concatenate([np.sin(sinusoid_inp), np.cos(sinusoid_inp)], axis=-1)
+        return pos_emb
 
     def row_conv(self, name, input_layer, batch, channels, width, activation_fn,
                  data_format, norm_type='batch_norm', gn_group_num=0,
@@ -90,7 +122,7 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
             x = self.add_reshape(x, [batch, channels, -1, 1], output_name_prefix+"_row_conv_r")
         y = self.extract_convolution(x, output_name_prefix+"_row_conv", scope_id+1,
                             channels, [width, 1], [1, 1], [(width-1)//2, (width-1)//2, 0, 0],
-                            data_format="NCHW",
+                            data_format="NCHW", weight_format="HWCN",
                             dilation=1, groups=channels, layer_names=None)
         if norm_type != 'batch_norm':
             y = self.add_nchwc8_nchw(y, output_name_prefix+"_nchwc8_nchw")
@@ -128,7 +160,7 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
         assert activation_fn is not None
         output = self.extract_convolution(output, output_name_prefix+"_row_conv", scope_id+1,
                             kernel_size[0], kernel_size[2:4], strides, padding,
-                            data_format="NCHW",
+                            data_format="NCHW", weight_format="HWCN",
                             dilation=dilation, groups=1, layer_names=None)
         if (activation_fn == "relu"):
             relu_name = output_name_prefix + "_relu"
@@ -140,7 +172,7 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
             1, 1, output_name_prefix+"_conv")
         output = self.extract_convolution(output, output_name_prefix+"_row_conv", scope_id+1,
                             proj_filters, [1, 1], [1, 1], padding,
-                            data_format="NCHW",
+                            data_format="NCHW", weight_format="HWCN",
                             dilation=1, groups=1, layer_names=None)
         output = self.add_nchwc8_nchw(output)
         output = self.add_sum([output, inputs], output_name_prefix+"_conv_proj_res")
@@ -149,16 +181,20 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
     def conv_bn_actv(self, layer_type, name, inputs, filters, kernel_size, activation_fn,
                      strides, padding, data_format,
                      dilation=1, norm_type='batch_norm', gn_group_num=0,
+                     residual_type='none',
                      scope_id=-1, output_name_prefix=""):
         groups = 1
         if layer_type == 'sep_conv1d':
             groups = filters
         if data_format == "channels_last":
             inputs = self.add_transpose(inputs, output_name_prefix+"_pre_t", [0, 3, 1, 2])
-        self.add_quantization(scope_id, "quant_"+name, inputs)
+        self.add_quantization(scope_id, "quant_" + name, inputs)
+        input_shape = self.get_tensor_shape(inputs)
+        proj_filters = input_shape[1]
+        # add quantization scale here
         conv = self.extract_convolution(inputs, output_name_prefix+"_conv", scope_id,
                             filters, kernel_size, strides, padding,
-                            data_format="NCHW",
+                            data_format="NCHW", weight_format="HWCN",
                             dilation=dilation, groups=groups, layer_names=[name, "kernel", "bias"])
         if norm_type != 'batch_norm':
             conv = self.add_nchwc8_nchw(conv, output_name_prefix+"_nchwc8_nchw")
@@ -196,6 +232,21 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
         else:
             print("[ERROR] unsupported activation function %s" % (activation_fn))
             exit(1)
+
+        if residual_type == 'proj_res':
+            assert 'conv1d' in layer_type
+            conv = self.extract_convolution(output, output_name_prefix + "_proj_conv", scope_id + 1,
+                                              proj_filters, [1, 1], [1, 1], [0, 0, 0, 0],
+                                              data_format="NCHW", weight_format="HWCN",
+                                              dilation=1, groups=1, layer_names=None)
+            conv = self.transpose_nchwc8_nchw(conv)
+            output = self.add_sum([inputs, conv], output_name_prefix + "_res")
+            if norm_type == 'post_layer_norm':
+                output = self.transpose_nchw_nhwc(output)
+                output = self.extract_layer_norm(output, output_name_prefix+"_ln", scope_id+1, ["LayerNorm", "gamma", "beta"])
+        else:
+            assert residual_type == 'none'
+
         return output
 
     def conv_layer_wrapper(self, inputs, conv_type, conv_layer_params,
@@ -207,6 +258,7 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
         kernel_size = conv_layer_params['kernel_size']  # [T,F] format
         strides = conv_layer_params['stride']  # [T,F] format
         padding = conv_layer_params['padding']
+        residual_type = conv_layer_params.get('residual_type', 'none')
         new_mems = None
         if is_decoding and kernel_size[0] > 1:
             assert decode_state is not None
@@ -284,6 +336,7 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
                 norm_type=norm_type,
                 gn_group_num=gn_group_num,
                 data_format=data_format,
+                residual_type=residual_type,
                 scope_id=scope_id,
                 output_name_prefix=output_name_prefix
             )
@@ -293,31 +346,32 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
             strides, padding, data_format,
             dilation=1, norm_type='batch_norm', gn_group_num=0,
             layer_id=0, layer_num=1,
+            residual_type='none',
             scope_id=-1, output_name_prefix=""):
         groups = 1
         if layer_type == 'sep_conv1d':
             groups = filters
         if data_format == "channels_last" and layer_id == 0:
             inputs = self.add_transpose(inputs, output_name_prefix+"_pre_t", [0, 3, 1, 2])
-        self.add_quantization(scope_id, "quant_"+name, inputs)
+        self.add_quantization(scope_id, "quant_" + name, inputs)
+        input_shape = self.get_tensor_shape(inputs)
+        proj_filters = input_shape[1]
+        # add quantization scale here
         conv = self.extract_convolution(inputs, output_name_prefix+"_conv", scope_id,
                    filters, kernel_size, strides, padding,
-                   data_format="NCHW",
+                   data_format="NCHW", weight_format="HWCN",
                    dilation=dilation, groups=groups, layer_names=[name, "kernel", "bias"])
-        if norm_type != 'batch_norm' and norm_type != 'skip':
-            print("[ERROR] currently not support %s in conv_bn_actv" % (norm_type))
-            exit(1)
         squeeze = False
-        if "conv1d" in layer_type and norm_type == 'batch_norm':
+        if "conv1d" in layer_type and (norm_type == 'batch_norm' or norm_type == 'layer_norm'):
             squeeze = True
-        if norm_type == 'skip':
+        if norm_type == 'skip' or norm_type == 'post_layer_norm':
             bn = conv
         elif norm_type == 'group_norm':
             print("[ERROR] currently not support online group norm")
             exit(1)
         elif norm_type == 'layer_norm':
-            print("[ERROR] currently not support layer norm")
-            exit(1)
+            x = self.transpose_nchwc8_nhwc(conv)
+            bn = self.extract_layer_norm(x, output_name_prefix + "_ln", scope_id + 1)
         elif norm_type == 'online_batch_norm':
             print("[ERROR] currently not support online batch norm")
             exit(1)
@@ -331,15 +385,49 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
         else:
             print("[ERROR] unsupported activation function %s" % (activation_fn))
             exit(1)
-        if (layer_id == layer_num - 1):
-            output = self.add_transpose(output, output_name_prefix+"_nchwc8_nchw_t", [0, 2, 3, 1, 4])
-            output_shape = self.get_tensor_shape(output)
-            if squeeze:
-                #output = self.add_reshape(output, output_name_prefix+"_nchwc8_nchw_r", [0, 0, 0, -1])
-                #output = self.add_squeeze(output, axis=2, output_name=bn+"_squeeze")
-                output = self.add_reshape(output, output_name_prefix+"_nchwc8_nchw_r", [self.batch, -1, output_shape[2]*output_shape[3]*output_shape[4]])
+
+        if residual_type == 'proj_res':
+            assert 'conv1d' in layer_type
+            conv = self.extract_convolution(output, output_name_prefix + "_proj_conv", scope_id,
+                                              proj_filters, [1, 1], [1, 1], [0, 0, 0, 0],
+                                              data_format="NCHW", weight_format="HWCN",
+                                              dilation=1, groups=1, layer_names=['{}_proj'.format(name), "kernel", "bias"])
+
+            conv = self.transpose_nchwc8_nchw(conv)
+            assert kernel_size[0] % 2 == 1
+            pad_num = kernel_size[0] // 2
+
+            #def add_slice(self, input_name, output_names, axis, slice_point):
+            valid_inputs = output_name_prefix + "_slice"
+            self.add_slice(inputs, [output_name_prefix+"_left", valid_inputs, output_name_prefix+"_right"], 2, [pad_num, -pad_num])
+            output = self.add_sum([valid_inputs, conv], output_name_prefix + "_res")
+            if norm_type == 'post_layer_norm':
+                output = self.transpose_nchw_nhwc(output)
+                self.scopes[scope_id] = name
+                output = self.extract_layer_norm(output, output_name_prefix+"_ln", scope_id+1, ["LayerNorm", "gamma", "beta"])
+        else:
+            assert residual_type == 'none'
+
+        if (norm_type == 'layer_norm' or norm_type == 'post_layer_norm'):
+            if (layer_id == layer_num - 1):
+                if (squeeze):
+                    # output = self.add_squeeze(output, output_name_prefix + '_squeeze', axis=2)
+                    output_shape = self.get_tensor_shape(output)
+                    output = self.add_reshape(output, output_name_prefix+"_nchwc8_nchw_r", [self.batch, -1, output_shape[2]*output_shape[3]])
             else:
-                output = self.add_reshape(output, output_name_prefix+"_nchwc8_nchw_r", [self.batch, -1, output_shape[2], output_shape[3]*output_shape[4]])
+                output = self.transpose_nhwc_nchw(output)
+        else:
+            if (layer_id == layer_num - 1):
+                output = self.add_transpose(output, output_name_prefix+"_nchwc8_nchw_t", [0, 2, 3, 1, 4])
+                output_shape = self.get_tensor_shape(output)
+                if squeeze:
+                    output = self.add_reshape(output, output_name_prefix+"_nchwc8_nchw_r", [self.batch, -1, output_shape[2]*output_shape[3]*output_shape[4]])
+                else:
+                    output = self.add_reshape(output, output_name_prefix+"_nchwc8_nchw_r", [self.batch, -1, output_shape[2], output_shape[3]*output_shape[4]])
+
+
+
+
         return output
 
     def conv_layer_wrapper_nchwc8(self, inputs, conv_type, conv_layer_params,
@@ -347,11 +435,13 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
             decode_state=None, is_decoding=False,
             layer_id=0, layer_num=1,
             scope_id=-1, output_name_prefix=""):
+        norm_type = conv_layer_params.get('norm_type', 'batch_norm')
         self.scopes[scope_id] = name
         ch_out = conv_layer_params['num_channels']
         kernel_size = conv_layer_params['kernel_size']  # [T,F] format
         strides = conv_layer_params['stride']  # [T,F] format
         padding = conv_layer_params['padding']
+        residual_type = conv_layer_params.get('residual_type', 'none')
         new_mems = None
         if is_decoding and kernel_size[0] > 1:
             assert decode_state is not None
@@ -360,7 +450,7 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
             else:
                 axis = 2
                 decode_state_shape = self.get_tensor_shape(decode_state)
-                if (len(decode_state_shape) == 4):
+                if ((len(decode_state_shape) == 4) and (norm_type != 'layer_norm') and (norm_type != 'post_layer_norm')):
                     self.data_dict[decode_state] = self.data_dict[decode_state].reshape(
                         [self.batch, decode_state_shape[1]//8, -1, decode_state_shape[3], 8])
                     assert(decode_state_shape[1]//8 != 0)
@@ -394,7 +484,6 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
                 assert len(kernel_size) == 1
             new_mems = None
         act = conv_layer_params['activation_fn']
-        norm_type = conv_layer_params.get('norm_type', 'batch_norm')
 
         if mask is not None and not is_decoding:
             use_2d_conv = conv_type == 'conv2d'
@@ -430,25 +519,23 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
                 data_format=data_format,
                 layer_id=layer_id,
                 layer_num=layer_num,
+                residual_type=residual_type,
                 scope_id=scope_id,
                 output_name_prefix=output_name_prefix
             )
         return inputs, new_mems
 
-    def rel_shift(self, x):
-        x = self.add_relative_shift(x, x+"_rel_shift", axis=3, shift_length=1)
-        #x_size = self.get_tensor_shape(x)
-        #x = self.add_pad(x, x+"_pad", [[0, 0], [0, 0], [0, 0], [1, 0]])
-        #x = self.add_reshape(x, x+"_r", [x_size[0], x_size[1], x_size[3] + 1, x_size[2]])
-        #result_name = x + "_slice"
-        #self.add_slice(x, [x+"_other", result_name], axis=2, slice_point=[1])
-        #x = self.add_reshape(result_name, x+"_rel_shif", x_size)
+    def rel_shift(self, x, ref=None):
+        x = self.add_relative_shift(x, x+"_rel_shift", axis=3, shift_length=1, ref_name=ref)
         return x
 
     def rel_multihead_attn(self, w, r, r_w_bias, r_r_bias, attn_mask, mems, d_model,
                            n_head, d_head, dropout, dropatt, is_training,
                            kernel_initializer, scope='rel_attn', norm_type='ln',
                            use_mq_attn=False, use_xl_pos_enc=True,
+                           attn_type='uni', n_talk_head=0,
+                           slice_mem=False,
+                           memory=None,
                            attn_mask_parameters=None,
                            pos_emb_parameters=None,
                            scope_id=-1, output_name_prefix=""):
@@ -458,107 +545,153 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
         scale = 1 / (d_head ** 0.5)
         self.scopes[scope_id] = scope
         query_depth = n_head * d_head
-        key_depth = n_head * d_head
-        value_depth = n_head * d_head
+
         if norm_type == 'bn':
-            #w_t = self.add_transpose(w, output_name_prefix+"_bn_pre_t", [0, 2, 1])
-            #w_t = self.add_expand_dims(w_t, axis=3, output_name=output_name_prefix+"_bn_expand")
-            #w_norm = self.extract_batch_norm(w_t, output_name_prefix+"_bn", scope_id+1,
-            #             data_format="NCHW", layer_names=["batch_normalization", "moving_mean", "moving_variance"])
-            #w_norm = self.add_squeeze(w_norm, axis=3, output_name=output_name_prefix+"_bn_squeeze")
-            #w_norm = self.add_transpose(w_norm, output_name_prefix+"_bn_post_t", [0, 2, 1])
             w_norm = self.extract_batch_norm(w, output_name_prefix+"_bn", scope_id+1,
                          data_format="NCHW", axis=-1, layer_names=["batch_normalization", "moving_mean", "moving_variance"])
+            if memory is not None:
+                ms_norm = self.extract_batch_norm(memory, output_name_prefix+"_ms_bn", scope_id+1,
+                             data_format="NCHW", axis=-1, layer_names=["batch_normalization_1", "moving_mean", "moving_variance"])
         elif norm_type == 'pre_ln':
             w_norm = self.extract_layer_norm(w, output_name_prefix+"_ln", scope_id+1, ["LayerNorm", "gamma", "beta"])
+            if memory is not None:
+                ms_norm = self.extract_layer_norm(memory, output_name_prefix+"_ms_ln", scope_id+1, ["LayerNorm_1", "gamma", "beta"])
         else:
             assert norm_type == 'ln'
             w_norm = w
-        self.add_quantization(scope_id+1, "quant_attn_input", w_norm)
+            ms_norm = memory
+        # add quantization scale here
+        self.add_quantization(scope_id + 1, "quant_attn_input", w_norm)
+        if memory is not None:
+            self.add_quantization(scope_id + 1, "quant_attn_input", ms_norm)
+
+        w_head_q = output_name_prefix + "_multihead_q"
+        w_head_k = output_name_prefix + "_multihead_k"
+        w_head_v = output_name_prefix + "_multihead_v"
         if use_mq_attn:
-            w_head_q = output_name_prefix + "_multihead_q"
-            w_head_k = output_name_prefix + "_multihead_k"
-            w_head_v = output_name_prefix + "_multihead_v"
-            self.extract_dense(w_norm, scope_id+1, "mhead_q")
-            self.extract_denses(w_norm, [w_head_k, w_head_v], [key_depth, value_depth], scope_id+1, "shead_kv")
-            self.add_quantization(scope_id+1, "quant_heads_q", w_head_q)
-            self.add_quantization(scope_id+1, "quant_heads_kv", w_head_k)
-            self.add_quantization(scope_id+1, "quant_heads_kv", w_head_v)
+            key_depth = 1 * d_head
+            value_depth = 1 * d_head
+
+            self.extract_dense(w_norm, w_head_q, scope_id+1, "mhead_q")
+            if memory is not None:
+                a = ms_norm
+            else:
+                a = w_norm
+            self.extract_denses(a, [w_head_k, w_head_v], [key_depth, value_depth], scope_id+1, "shead_kv")
+            # add quantization scale here
+            self.add_quantization(scope_id + 1, "quant_heads_q", w_head_q)
+            self.add_quantization(scope_id + 1, "quant_heads_kv", w_head_k)
+            self.add_quantization(scope_id + 1, "quant_heads_kv", w_head_v)
             w_head_q = self.add_reshape(w_head_q, w_head_q+"_r", [self.batch, -1, n_head, d_head])
-            w_head_k = self.add_reshape(w_head_k, w_head_k+"_r", [self.batch, -1, d_head, 1])
-            w_head_v = self.add_reshape(w_head_v, w_head_v+"_r", [self.batch, -1, d_head])
+            w_head_k = self.add_reshape(w_head_k, w_head_k+"_r", [self.batch, -1, 1, d_head])
+            w_head_v = self.add_reshape(w_head_v, w_head_v+"_r", [self.batch, -1, 1, d_head])
         else:
-            w_head_q = output_name_prefix + "_multihead_q"
-            w_head_k = output_name_prefix + "_multihead_k"
-            w_head_v = output_name_prefix + "_multihead_v"
-            self.extract_denses(w_norm, [w_head_q, w_head_k, w_head_v], [key_depth, key_depth, value_depth], scope_id+1, "qkv")
-            self.add_quantization(scope_id+1, "quant_heads_qkv", w_head_q)
-            self.add_quantization(scope_id+1, "quant_heads_qkv", w_head_k)
-            self.add_quantization(scope_id+1, "quant_heads_qkv", w_head_v)
+            w_head_qv = output_name_prefix + "_multihead_qv"
+            key_depth = n_head * d_head
+            value_depth = n_head * d_head
+
+            if memory is not None:
+                #self.extract_dense(w_norm, w_head_q, scope_id+1, "mhead_q")
+                self.extract_denses(w_norm, [w_head_q, w_head_qv], [key_depth, key_depth], scope_id+1, "q")
+                self.extract_denses(ms_norm, [w_head_k, w_head_v], [key_depth, value_depth], scope_id+1, "kv")
+            else:
+                self.extract_denses(w_norm, [w_head_q, w_head_k, w_head_v], [key_depth, key_depth, value_depth], scope_id+1, "qkv")
+            # add quantization scale here
+            self.add_quantization(scope_id + 1, "quant_heads_qkv", w_head_q)
+            self.add_quantization(scope_id + 1, "quant_heads_qkv", w_head_k)
+            self.add_quantization(scope_id + 1, "quant_heads_qkv", w_head_v)
             w_head_q = self.add_reshape(w_head_q, w_head_q+"_r", [self.batch, -1, n_head, d_head])
             w_head_k = self.add_reshape(w_head_k, w_head_k+"_r", [self.batch, -1, n_head, d_head])
             w_head_v = self.add_reshape(w_head_v, w_head_v+"_r", [self.batch, -1, n_head, d_head])
         if mems is not None:
             k_mems, v_mems = mems
+            if (slice_mem):
+                print("[ERROR] not support to slice transformer memory")
+                exit(1)
             w_head_k = self.add_concat([k_mems, w_head_k], w_head_k+"_concat", axis=1)
             w_head_v = self.add_concat([v_mems, w_head_v], w_head_v+"_concat", axis=1)
             new_mems = w_head_k, w_head_v
         else:
             new_mems = None
 
-        if (r is None):
-            r = self.add_relative_position_embedding(w_head_k, pos_emb_parameters, axis=1, output_name=output_name_prefix+"_rel_pos_emb")
-        if use_xl_pos_enc:
-            r_head_k = self.extract_dense(r, output_name_prefix+"_multihead_r", scope_id+1, scope_name="r")
-        else:
-            r_head_k = r
-        r_head_k = self.add_reshape(r_head_k, r_head_k+"_r", [self.batch, -1, n_head, d_head])
-        if use_xl_pos_enc:
-            rw_head_q = self.add_sum([w_head_q, r_w_bias], w_head_q+"_rw")
-            rr_head_q = self.add_sum([w_head_q, r_r_bias], w_head_q+"_rr")
+        if memory is None:
+            if attn_type == 'bi':
+                r = pos_emb_parameters
+            elif (r is None):
+                r = self.add_relative_position_embedding(w_head_k, pos_emb_parameters, axis=1, output_name=output_name_prefix+"_rel_pos_emb")
+            if use_xl_pos_enc:
+                r_head_k = self.extract_dense(r, output_name_prefix+"_multihead_r", scope_id+1, scope_name="r")
+            else:
+                r_head_k = r
+            r_head_k = self.add_reshape(r_head_k, r_head_k+"_r", [self.batch, -1, n_head, d_head])
+            if use_xl_pos_enc:
+                rw_head_q = self.add_sum([w_head_q, r_w_bias], w_head_q+"_rw")
+                rr_head_q = self.add_sum([w_head_q, r_r_bias], w_head_q+"_rr")
+            else:
+                rw_head_q = w_head_q
+                rr_head_q = w_head_q
         else:
             rw_head_q = w_head_q
             rr_head_q = w_head_q
 
         if use_mq_attn:
             rw_head_qt = self.add_transpose(rw_head_q, rw_head_q+"_t", [0, 2, 1, 3])
+            rw_head_qtr = self.add_reshape(rw_head_qt, rw_head_qt+"_r", [self.batch, 1, -1, d_head])
             w_head_kt = self.add_transpose(w_head_k, w_head_k+"_t", [0, 2, 3, 1])
-            AC = self.add_matmul(rw_head_qt, w_head_kt, output_name_prefix+"_AC")
+            AC = self.add_matmul(rw_head_qtr, w_head_kt, output_name_prefix+"_AC")
+            AC = self.add_reshape(AC, AC+"_r", [self.batch, n_head, -1, 0])
         else:
             rw_head_qt = self.add_transpose(rw_head_q, rw_head_q+"_t", [0, 2, 1, 3])
             w_head_kt = self.add_transpose(w_head_k, w_head_k+"_t", [0, 2, 3, 1])
             AC = self.add_matmul(rw_head_qt, w_head_kt, output_name_prefix+"_AC")
-        if use_xl_pos_enc:
-            rr_head_qt = self.add_transpose(rr_head_q, rr_head_q+"_t", [0, 2, 1, 3])
+        if memory is None:
+            if use_xl_pos_enc:
+                rr_head_qt = self.add_transpose(rr_head_q, rr_head_q+"_t", [0, 2, 1, 3])
+            else:
+                rr_head_qt = rw_head_qt
+            r_head_kt = self.add_transpose(r_head_k, r_head_k+"_t", [0, 2, 3, 1])
+            BD = self.add_matmul(rr_head_qt, r_head_kt, output_name_prefix+"_BD")
+            if attn_type == 'uni':
+                BD = self.rel_shift(BD)
+            else:
+                assert attn_type == 'bi'
+                BD = self.rel_shift(BD, AC)
+            attn_score = self.add_sum([AC, BD], output_name_prefix+"_ACBD")
         else:
-            rr_head_qt = rw_head_qt
-        r_head_kt = self.add_transpose(r_head_k, r_head_k+"_t", [0, 2, 3, 1])
-        BD = self.add_matmul(rr_head_qt, r_head_kt, output_name_prefix+"_BD")
-        BD = self.rel_shift(BD)
-
-        attn_score = self.add_sum([AC, BD], output_name_prefix+"_ACBD")
+            attn_score = AC
         attn_score = self.add_power(attn_score, output_name_prefix+"_ACBD_s", scale=scale)
-        if (attn_mask is None):
-            attn_trunc_len, same_length = attn_mask_parameters
-            if attn_trunc_len is not None:
-                attn_score = self.add_attention_mask(attn_score, attn_score+"_mask", attn_trunc_len, same_length, 1e30)
+        if n_talk_head > 0:
+            name = output_name_prefix + "_talk_head_logits_proj"
+            attn_score = self.extract_dense(attn_score, name, scope_id+1, "talk_head_logits_proj")
+        if memory is None and attn_type != 'bi':
+            if (attn_mask is None):
+                attn_trunc_len, same_length = attn_mask_parameters
+                if attn_trunc_len is not None:
+                    attn_score = self.add_attention_mask(attn_score, attn_score+"_mask", attn_trunc_len, same_length, 1e30)
         attn_prob = self.add_softmax(attn_score, attn_score+"_softmax", 3)
-        self.add_quantization(scope_id+1, "quant_attn_prob", attn_prob)
+        if n_talk_head > 0:
+            name = output_name_prefix + "_talk_head_prob_proj"
+            attn_prob = self.extract_dense(attn_prob, name, scope_id+1, "talk_head_prob_proj")
+        # add quantization scale here
+        self.add_quantization(scope_id + 1, "quant_attn_prob", attn_prob)
 
         if use_mq_attn:
             w_head_vt = self.add_transpose(w_head_v, w_head_v+"_t", [0, 2, 1, 3])
+            attn_prob = self.add_reshape(attn_prob, attn_prob+"_r", [self.batch, 1, -1, 0])
             attn_vec = self.add_matmul(attn_prob, w_head_vt, output_name_prefix+"_cont")
+            attn_vec = self.add_reshape(attn_vec, attn_vec+"_r", [self.batch, n_head, -1, 0])
         else:
             w_head_vt = self.add_transpose(w_head_v, w_head_v+"_t", [0, 2, 1, 3])
             attn_vec = self.add_matmul(attn_prob, w_head_vt, output_name_prefix+"_cont")
 
         attn_vec = self.add_transpose(attn_vec,  output_name_prefix+"_cont_t", [0, 2, 1, 3])
-        attn_vec = self.add_reshape(attn_vec, output_name_prefix+"_cont_r", [self.batch, -1, n_head*d_head])
-        self.add_quantization(scope_id+1, "quant_attn_vec", attn_vec)
+        attn_vec = self.add_reshape(attn_vec, output_name_prefix+"_cont_rr", [self.batch, -1, n_head*d_head])
+        # add quantization scale here
+        self.add_quantization(scope_id + 1, "quant_attn_vec", attn_vec)
         attn_out = self.extract_dense(attn_vec, attn_vec+"_fc", scope_id+1, scope_name="o")
         output = self.add_sum([attn_out, w], output_name_prefix+"_rel_multihead_sum")
         if norm_type == 'ln':
-            output = self.extract_layer_norm(output, output+"_ln2", scope_id+1, ["LayerNorm", "gamma", "beta"])
+            output = self.extract_layer_norm(output, output_name_prefix+"_ln2", scope_id+1, ["LayerNorm", "gamma", "beta"])
         else:
             assert norm_type in ['bn', 'pre_ln']
             output = output
@@ -569,8 +702,8 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
         assert mem_len >= 0
         k_mem, v_mem = curr_kv
         k_prev_mem, v_prev_mem = prev_mem
-        new_k_mem = k_mem #self.add_concat([k_prev_mem, k_mem], output_name_prefix+"_concat_k", 1)
-        new_v_mem = v_mem #self.add_concat([v_prev_mem, v_mem], output_name_prefix+"_concat_v", 1)
+        new_k_mem = k_mem
+        new_v_mem = v_mem
         if mem_len > 0:
             assert mem_len > 0
             new_k_mem = self.neg_slice(new_k_mem, axis=1, length=mem_len, output_name_prefix=output_name_prefix+"_k")
@@ -580,31 +713,23 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
     def transformer_block(self, input, n_layer, d_model, n_head, d_head, d_inner, dropout, dropatt, dropinp, initializer, mode,
                           mems=None, att_trunc_len=0, pos_emb_cache=None, same_length=False, clamp_len=-1, untie_r=False,
                           scope='transformer', norm_type='ln', output_norm_type='', use_mq_attn=False, pre_compute=False,
-                          use_xl_pos_enc=True, mult_query_decode=False,
-                          scope_id=-1, output_name_prefix=""):
+                          use_xl_pos_enc=True, mult_query_decode=False, attn_type='uni', jump_attn=None,
+                          scope_id=-1, output_name_prefix="", memory=None):
         print('[INFO] transformer block params: n_layer: {}, d_model: {}, n_head: {}, d_head: {}, d_inner: {}, dropout: {}, dropatt: {}, dropinp: {}'\
             .format(n_layer, d_model, n_head, d_head, d_inner, dropout, dropatt, dropinp))
-        assert mode in ['train', 'eval', 'infer']
-        is_training = mode == 'train'
         is_decoding = mems is not None
-        if is_decoding:
-            assert mode == 'infer'
+        is_training = mode == 'train'
+        assert mode == 'infer'
         if isinstance(d_inner, int):
             d_inner = [d_inner] * n_layer
         self.scopes[scope_id] = scope
-        if use_xl_pos_enc:
-            print("[ERROR] currently not support xl pos encoding")
-            exit(1)
-            #if untie_r:
-            #    r_w_bias = tf.get_variable('r_w_bias', [n_layer, n_head, d_head],
-            #                             initializer=initializer)
-            #    r_r_bias = tf.get_variable('r_r_bias', [n_layer, n_head, d_head],
-            #                               initializer=initializer)
-            #else:
-            #    r_w_bias = tf.get_variable('r_w_bias', [n_head, d_head],
-            #                               initializer=initializer)
-            #    r_r_bias = tf.get_variable('r_r_bias', [n_head, d_head],
-            #                               initializer=initializer)
+        if use_xl_pos_enc and memory is None:
+            self.scopes[scope_id+1] = "r_w_bias"
+            r_w_bias = output_name_prefix + self.scopes[scope_id+1]
+            self.add_weight(r_w_bias, scope_id=scope_id+2, weight_name=None, weight=None, transpose=None, data_type="FLOAT32")
+            self.scopes[scope_id+1] = "r_r_bias"
+            r_r_bias = output_name_prefix + self.scopes[scope_id+1]
+            self.add_weight(r_r_bias, scope_id=scope_id+2, weight_name=None, weight=None, transpose=None, data_type="FLOAT32")
         else:
             if untie_r:
                 r_w_bias = [None] * n_layer
@@ -613,80 +738,70 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
                 r_w_bias = None
                 r_r_bias = None
         is_decoding_var_att_trunc = is_decoding and not isinstance(att_trunc_len, int)
-        #qlen = self.get_tensor_shape(input)[0]
-        #if is_decoding_var_att_trunc:
-        #    mlen = [self.get_tensor_shape(mems[l_i][0])[0] for l_i in range(n_layer)]
-        #    klen = [mlen[l_i] + qlen for l_i in range(n_layer)]
-        #else:
-        #    mlen = self.get_tensor_shape(mems[0][0])[0] if mems is not None else 0
-        #    klen = mlen + qlen
+        qlen = self.get_tensor_shape(input)[1]
+        if is_decoding_var_att_trunc and mems is not None:
+            mlen = [self.get_tensor_shape(mems[l_i][0])[1] for l_i in range(n_layer)]
+            klen = [mlen[l_i] + qlen for l_i in range(n_layer)]
+        else:
+            mlen = self.get_tensor_shape(mems[0][0])[1] if mems is not None else 0
+            klen = mlen + qlen
         if not is_decoding:
             assert mems is None
-            #assert mlen == 0
             assert not same_length
 
         attn_mask = [None] * n_layer
-        if is_decoding_var_att_trunc:
-            #if pre_compute and mode == 'infer':
-            #    if mult_query_decode:
-            #        print('precompute multi query attn mask for decoding var att')
-            #        attn_mask_caches = [tf.constant(mask_cache(8, 32, trunc_len), dtype=tf.float32) for trunc_len in att_trunc_len]
-            #        attn_mask = [neg_slice_m(attn_mask_cache, [qlen, qlen+mlen[l_i]]) for l_i, attn_mask_cache in enumerate(attn_mask_caches)]
-            #    else:
-            #        print('precompute attn mask for decoding var att')
-            #        # todo remove unnecessary mask
-            #        attn_mask = [tf.zeros([qlen, qlen + mlen[l_i]]) for l_i in range(n_layer)]
-            #else:
-            #    attn_mask = [_create_mask(qlen, mlen[l_i], att_trunc_len=att_trunc_len[l_i], same_length=same_length) for l_i in range(n_layer)]
-            attn_mask_parameters = []
-            for l_i in range(n_layer):
-                trunc_len = att_trunc_len[l_i]
+        attn_mask_parameters = [None] * n_layer
+        if memory is None:
+            if attn_type == 'bi':
+                attn_mask = [None] * n_layer
+                #assert input_mask is not None
+                #attn_mask = _create_key_padding_mask(input_mask)
+                #attn_mask = [attn_mask] * n_layer
+            elif is_decoding_var_att_trunc:
+                attn_mask_parameters = []
+                for l_i in range(n_layer):
+                    trunc_len = att_trunc_len[l_i]
+                    if pre_compute and mode == 'infer':
+                        if not mult_query_decode:
+                            trunc_len = None #-1
+                    attn_mask_parameters.append((trunc_len, same_length))
+            elif not isinstance(att_trunc_len, int) or jump_attn is not None:
+                assert len(att_trunc_len) == n_layer
+                assert not is_decoding
                 if pre_compute and mode == 'infer':
-                    if not mult_query_decode:
-                        trunc_len = None #-1
-                attn_mask_parameters.append((trunc_len, same_length))
-        elif not isinstance(att_trunc_len, int):
-            assert len(att_trunc_len) == n_layer
-            assert not is_decoding
-            #if pre_compute and mode == 'infer':
-            #    print('precompute attn mask')
-            #    attn_mask_caches = [tf.constant(mask_cache(1024, 0, trunc_len), dtype=tf.float32) for trunc_len in att_trunc_len]
-            #    attn_mask = [attn_mask_cache[:qlen, :qlen] for attn_mask_cache in attn_mask_caches]
-            #else:
-            #    attn_mask = [_create_mask(qlen, mlen, att_trunc_len=trunc_len, same_length=same_length) for trunc_len in att_trunc_len]
-            attn_mask_parameters = []
-            for l_i in range(n_layer):
-                trunc_len = att_trunc_len[l_i]
-                attn_mask_parameters.append((trunc_len, same_length))
-        else:
-            #attn_mask = _create_mask(qlen, mlen, att_trunc_len=att_trunc_len, same_length=same_length)
-            #attn_mask = [attn_mask] * n_layer
-            att_trunc_len = [att_trunc_len] * n_layer
-            attn_mask_parameters = [(att_trunc_len, same_length)] * n_layer
+                    assert jump_attn is None
+                    print('precompute attn mask')
+                    attn_mask_caches = [tf.constant(mask_cache(1024, 0, trunc_len), dtype=tf.float32) for trunc_len in att_trunc_len]
+                    attn_mask = [attn_mask_cache[:qlen, :qlen] for attn_mask_cache in attn_mask_caches]
+                else:
+                    assert not is_decoding
+                    if jump_attn is None:
+                        jump_attn = [None] * n_layer
+                    attn_mask = [_create_mask(qlen, mlen, att_trunc_len=trunc_len, same_length=same_length, jump_attn=jump_attn_i) for trunc_len, jump_attn_i in zip(att_trunc_len, jump_attn)]
+            else:
+                assert jump_attn is None
+                if is_decoding:
+                    assert not mult_query_decode
+                    # when decoding, mem contains only history, so mask is not needed
+                    attn_mask = tf.zeros([qlen, qlen + mlen])
+                else:
+                    attn_mask = _create_mask(qlen, mlen, att_trunc_len=att_trunc_len, same_length=same_length)
+                attn_mask = [attn_mask] * n_layer
+                att_trunc_len = [att_trunc_len] * n_layer
         if use_xl_pos_enc:
-            #if is_decoding_var_att_trunc:
-            #    pos_emb = [neg_slice(pos_emb_cache, klen[l_i]) for l_i in range(n_layer)]
-            #else:
-            #    if pos_emb_cache is None:
-            #        pos_seq = tf.range(klen - 1, -1, -1.0)
-            #        if clamp_len > 0:
-            #            pos_seq = tf.minimum(pos_seq, clamp_len)
-            #        inv_freq = 1 / (10000 ** (tf.range(0, d_model, 2.0) / d_model))
-            #        pos_emb = positional_embedding(pos_seq, inv_freq)
-            #    else:
-            #        pos_emb = neg_slice(pos_emb_cache, klen)
-            pos_emb_parameters = [pos_emb_cache] * n_layer
-            pos_emb = [None] * n_layers
+            if (attn_type == 'uni'):
+                pos_emb_cache = self.create_pos_emb_cache(d_model)
+                weight_name = output_name_prefix + "_rel_pos_emb_cache"
+                self.add_weight(weight_name, weight=pos_emb_cache, transpose=None, data_type="FLOAT32")
+                pos_emb_parameters = [weight_name] * n_layer
+                pos_emb = [None] * n_layer
+            else:
+                pos_emb_cache = self.create_pos_emb_cache(d_model, klen, -qlen)
+                weight_name = output_name_prefix + "_rel_pos_emb_cache"
+                self.add_weight(weight_name, weight=pos_emb_cache, transpose=None, data_type="FLOAT32")
+                pos_emb_parameters = [weight_name] * n_layer
+                pos_emb = [None] * n_layer
         else:
-            #if not isinstance(att_trunc_len, int):
-            #    max_relative_position = [att_trunc_len[i] + 1 for i in range(n_layer)]
-            #else:
-            #    max_relative_position = [(att_trunc_len + 1) if att_trunc_len > 0 else 16] * n_layer
-            #pos_emb = [get_shaw_relative_embeddings_left(max_relative_position[i],
-            #                                             klen[i] if is_decoding_var_att_trunc else klen,
-            #                                             d_model,
-            #                                             'rel_pos_emb_{}'.format(i))
-            #           for i in range(n_layer)]
             pos_emb_parameters = []
             for i in range(n_layer):
                 self.scopes[scope_id+1] = "rel_pos_emb_" + str(i)
@@ -703,7 +818,7 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
             self.scopes[scope_id+1] = "layer_" + str(i)
             output, kv_mems = self.rel_multihead_attn(
                 w=output,
-                r=pos_emb[i] if (is_decoding_var_att_trunc or not use_xl_pos_enc) else pos_emb,
+                r=pos_emb[i],
                 r_w_bias=r_w_bias if not untie_r else r_w_bias[i],
                 r_r_bias=r_r_bias if not untie_r else r_r_bias[i],
                 attn_mask=attn_mask[i],
@@ -718,10 +833,12 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
                 norm_type=norm_type,
                 use_mq_attn=use_mq_attn,
                 use_xl_pos_enc=use_xl_pos_enc,
+                attn_type=attn_type,
                 attn_mask_parameters=attn_mask_parameters[i],
                 pos_emb_parameters=pos_emb_parameters[i],
                 scope_id=scope_id+2,
-                output_name_prefix=output_name_prefix+"_layer"+str(i))
+                output_name_prefix=output_name_prefix+"_layer"+str(i),
+                memory=memory)
 
             # cache new mems
             if is_decoding:
@@ -757,7 +874,8 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
 
     def proj_transformer_block(self, input, n_layer, d_model, n_head, d_head, d_inner, dropout, dropatt, dropinp, initializer, mode,
                                input_project=False, decode_state=None, att_trunc_len=0, pos_emb_cache=None, norm_type='ln', output_norm_type='',
-                               use_mq_attn=False, pre_compute=False, use_xl_pos_enc=True, mult_query_decode=False, scope_id=-1, output_name_prefix=""):
+                               use_mq_attn=False, pre_compute=False, use_xl_pos_enc=True, mult_query_decode=False, attn_type='uni', jump_attn=None,
+                               scope_id=-1, output_name_prefix="", memory=None):
         self.scopes[scope_id] = 'transformer_block'
         orig_input_dim = self.get_tensor_shape(input)[-1]
         if input_project:
@@ -773,14 +891,15 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
                                                      mems=decode_state, att_trunc_len=att_trunc_len, pos_emb_cache=pos_emb_cache,
                                                      norm_type=norm_type, output_norm_type=output_norm_type, use_mq_attn=use_mq_attn,
                                                      pre_compute=pre_compute, use_xl_pos_enc=use_xl_pos_enc, mult_query_decode=mult_query_decode,
-                                                     scope_id=scope_id+1, output_name_prefix=output_name_prefix)
+                                                     attn_type=attn_type, jump_attn=jump_attn,
+                                                     scope_id=scope_id+1, output_name_prefix=output_name_prefix, memory=memory)
         # [T, B, C] --> [B, T, C]
         #output = self.add_transpose(output, output_name_prefix+"_post_t", [1, 0, 2])
         return output, new_decode_state
 
     def transformer_block_wrapper(self, input, initializer, mode, transformer_block_params, decode_state=None, pos_emb_cache=None,
                               pre_compute=False, mult_query_decode=False,
-                              scope_id=-1, output_name_prefix=""):
+                              scope_id=-1, output_name_prefix="", memory=None):
         n_layer = transformer_block_params['n_layer']
         d_model = transformer_block_params['d_model']
         n_head = transformer_block_params['n_head']
@@ -790,15 +909,17 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
         input_keep_prob = transformer_block_params.get('input_keep_prob', dropout_keep_prob)
         att_keep_prob = transformer_block_params.get('att_keep_prob', dropout_keep_prob)
         input_project = transformer_block_params.get('input_project', False)
-        att_trunc_len = transformer_block_params.get('att_trunc_len', 0)
+        att_trunc_len = transformer_block_params.get('att_trunc_len', -1)
         norm_type = transformer_block_params.get('norm_type', 'ln')
         output_norm_type = transformer_block_params.get('output_norm_type', '')
         use_mq_attn = transformer_block_params.get('use_mq_attn', False)
         use_xl_pos_enc = transformer_block_params.get('use_xl_pos_enc', True)
+        attn_type = transformer_block_params.get('attn_type', 'uni')
+        jump_attn = transformer_block_params.get('jump_attn', None)
     
         valid_params = {'n_layer', 'd_model', 'n_head', 'd_head', 'd_inner', 'dropout_keep_prob', 'input_keep_prob',
                         'att_keep_prob', 'input_project', 'att_trunc_len', 'norm_type', 'output_norm_type', 'use_mq_attn',
-                        'use_xl_pos_enc'}
+                        'use_xl_pos_enc', 'attn_type', 'jump_attn'}
         for k in transformer_block_params.keys():
             if k not in valid_params:
                 raise ValueError('unknown transformer parameter: {}'.format(k))
@@ -814,11 +935,15 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
                                         pre_compute=pre_compute,
                                         use_xl_pos_enc=use_xl_pos_enc,
                                         mult_query_decode=mult_query_decode,
+                                        attn_type=attn_type,
+                                        jump_attn=jump_attn,
                                         scope_id=scope_id,
-                                        output_name_prefix=output_name_prefix)
+                                        output_name_prefix=output_name_prefix,
+                                        memory=memory)
         return output, new_decode_state
 
-    def _transformer_block(self, input, transformer_block_params, initializer, pos_emb_cache=None, decode_state=None, scope_id=-1, output_name_prefix=""):
+    def _transformer_block(self, input, transformer_block_params, initializer, pos_emb_cache=None, decode_state=None, scope_id=-1, output_name_prefix="",
+                           memory=None):
         output, new_decode_state = self.transformer_block_wrapper(input,
                                               initializer=initializer,
                                               mode=self.mode,
@@ -826,9 +951,10 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
                                               pos_emb_cache=pos_emb_cache,
                                               pre_compute=None,
                                               decode_state=decode_state,
-                                              mult_query_decode=True,
+#                                             mult_query_decode=True,
                                               scope_id=scope_id,
-                                              output_name_prefix=output_name_prefix)
+                                              output_name_prefix=output_name_prefix,
+                                              memory=memory)
         return output, new_decode_state
 
     def prepare_convolution_states(self, conv_layers, output_name_prefix, init_with_none=False):
@@ -860,7 +986,6 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
                     file_data = np.load(self.state_data_path + "/" + state_name + ".npy")
                     data = {state_name: file_data}
                     state_shape = file_data.shape
-                #self.add_memory(state_name, state_shape, data_type="FLOAT32")
                 self.add_input(state_name, state_shape)
                 self.set_input(data)
                 conv_states.append(state_name)
@@ -894,8 +1019,6 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
                             vmem_name: file_data_v}
                     state_shape_k = file_data_k.shape
                     state_shape_v = file_data_v.shape
-                #self.add_memory(kmem_name, state_shape, data_type="FLOAT32")
-                #self.add_memory(vmem_name, state_shape, data_type="FLOAT32")
                 self.add_input(kmem_name, state_shape_k)
                 self.add_input(vmem_name, state_shape_v)
                 self.set_input(data)
@@ -951,16 +1074,6 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
         if self.params['rnn_type'] not in ['wd_cudnn_lstm']:
             assert residual_type is None
 
-        #max_len = tf.reduce_max(src_length) + self._get_additional_pad_num(src_length)
-
-        #if self.params['use_conv_mask']:
-        #    mask = tf.sequence_mask(
-        #      lengths=src_length, maxlen=max_len,
-        #      dtype=source_sequence.dtype
-        #    )
-        #    mask = tf.expand_dims(mask, 2)
-        #else:
-        #    mask = None
         mask = None
 
         # BTF -> BCTF
@@ -1002,6 +1115,8 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
         for block_i in range(block_id_start, block_id_end):
             block_local_id = block_i - block_id_start
             block_params = self.params['net_blocks'][block_i]
+            if (block_i == (len(self.params['net_blocks']) - 1)) and (self.FFN_decomposition == True):
+                self.encoder_FFN_decomposition = True
             self.scopes[scope_id+1] = "block_" + str(block_i)
             output_name_prefix = "encoder_block" + str(block_i)
             new_block_decode_states = []
@@ -1061,7 +1176,6 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
             # convert layout --> BTFC
             if data_format == 'channels_first':
                 top_layer = self.add_transpose(top_layer, output_name_prefix+"_t", [0, 2, 3, 1])
-
             if   layout == 'BCTF': # BCTF --> BTFC
                 top_layer = self.add_transpose(top_layer, output_name_prefix+"_t", [0, 2, 3, 1])
             elif layout == 'BFTC': # BFTC --> BTFC
@@ -1081,7 +1195,6 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
                 c = self.get_tensor_shape(top_layer)[3]
                 fc = f * c
                 top_layer = self.add_reshape(top_layer, output_name_prefix+"_r", [self.batch, -1, fc])
-
             if self.params.get('ln_fc_after_conv', False):
                 assert not use_group_dense
                 top_layer = self.layer_normed_fc(top_layer, "relu", output_name_prefix, scope_id+1)
@@ -1179,11 +1292,13 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
         encoder_output = input_dict["encoder"]
         prediction_net_output = input_dict["prediction_net"]
         fc0_name = "joint_encoder_fc"
+        # add quantization scale here
         self.add_quantization(scope_id, "quant_enc_joint_input", encoder_output)
         self.extract_dense(encoder_output, fc0_name, scope_id, scope_name="joint_encoder_fc")
         #ep0_name = "joint_net_expand0"
         #self.add_expand_dims(fc0_name, axis=2, output_name=ep0_name)
         fc1_name = "joint_pred_net_fc"
+        # add quantization scale here
         self.add_quantization(scope_id, "quant_pred_joint_input", prediction_net_output)
         self.extract_dense(prediction_net_output, fc1_name, scope_id, scope_name="joint_pred_net_fc")
         #ep1_name = "joint_net_expand1"
@@ -1203,6 +1318,25 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
         argmax_name = self.add_argmax(result_name, axis=-1, output_name="output_argmax")
         return argmax_name
 
+    def generate_reference(self, input=None):
+        ref_input_name = "reference"
+        ref_input_shape = [self.batch, 26]
+        self.add_input(ref_input_name, ref_input_shape)
+        ref_params = self.base_params["encoder_params"]["reference"]
+        self.set_input(input)
+        self.save_input()
+        self.scopes[0] = "ds2_encoder"
+        ref_emb = self.extract_embedding(ref_input_name, 1, "RefEmbeddingMatrix", "ref_emb")
+        self.scopes[1] = "refEncoder"
+        self.scopes[2] = "transformer"
+        output, _ = self._transformer_block(ref_emb, ref_params["encoder"]['net_blocks'][0]["transformer_block_params"],
+                                                initializer=None,
+                                                pos_emb_cache=None, decode_state=None,
+                                                scope_id=3,
+                                                output_name_prefix="re_encoder")
+        self.save_caffe_model()
+        return output
+
     def generate_encoder(self, input=None, block_id_start=0, block_id_end=-1):
         sounds_input_name = "sounds"
         if (block_id_start == 0):
@@ -1210,23 +1344,43 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
         else:
             sounds_input_shape = input[sounds_input_name].shape
         self.add_input(sounds_input_name, sounds_input_shape)
+        ref_input_name = "reference"
+        if ("reference" in input):
+            ref_input_shape = [self.batch, 26, self.base_params["encoder_params"]["n_hidden"]]
+            self.add_input(ref_input_name, ref_input_shape)
+            je_params = self.base_params["encoder_params"]["reference"]
+            post_state = self.prepare_states(je_params["je-post"], "je-post", False, True)[0][0]
         self.set_input(input)
 
         input_dict = {'source_tensors': sounds_input_name,
-                      'decoding_states': self.prepare_states(self.base_params["encoder_params"],
-                           "encoder", False, True, block_id_start, block_id_end)
-                     }
+                      'decoding_states': self.prepare_states(self.base_params["encoder_params"], "encoder", False, True)}
         self.save_input()
-        output = self.extract_encoder(input_dict, 0, block_id_start, block_id_end)
+        encoder_output = self.extract_encoder(input_dict, 0)
+        output = encoder_output['outputs']
+        if ("reference" in input):
+            self.scopes[0] = "ds2_encoder"
+            self.scopes[1] = "refDecoder"
+            self.scopes[2] = "transformer-joint"
+            joint, _ = self._transformer_block(output, je_params["je-joint"]['net_blocks'][0]["transformer_block_params"],
+                                                    initializer=None,
+                                                    pos_emb_cache=None, decode_state=None,
+                                                    scope_id=3,
+                                                    output_name_prefix="je_joint",
+                                                    memory=ref_input_name)
+            self.scopes[2] = "transformer-post"
+            output, post_state = self._transformer_block(joint, je_params["je-post"]['net_blocks'][0]["transformer_block_params"],
+                                                    initializer=None,
+                                                    pos_emb_cache=None, decode_state=post_state,
+                                                    scope_id=3,
+                                                    output_name_prefix="je_post")
         self.save_caffe_model()
         if (self.save_state and self.calculate):
-            for index in range(len(output['decode_state'])):
-                block_i = block_id_start + index
+            for block_i in range(len(encoder_output['decode_state'])):
                 file_path_prefix_block = self.state_data_path + "/encoder_block" + str(block_i)
-                for trunk_i in range(len(output['decode_state'][index])):
+                for trunk_i in range(len(encoder_output['decode_state'][block_i])):
                     file_path_prefix_trunk = file_path_prefix_block + "_trunk" + str(trunk_i)
-                    for layer_i in range(len(output['decode_state'][index][trunk_i])):
-                        data = output['decode_state'][index][trunk_i][layer_i]
+                    for layer_i in range(len(encoder_output['decode_state'][block_i][trunk_i])):
+                        data = encoder_output['decode_state'][block_i][trunk_i][layer_i]
                         if (data is None):
                             continue
                         if (isinstance(data, str)):
@@ -1244,6 +1398,27 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
                         else:
                             print("[ERROR] unrecognized state array type")
                             exit(1)
+            if ("reference" in input):
+                for layer_i in range(len(post_state)):
+                    file_path_prefix_trunk = self.state_data_path + "/je_post"
+                    data = post_state[layer_i]
+                    if (data is None):
+                        continue
+                    if (isinstance(data, str)):
+                        file_path = file_path_prefix_trunk + "_layer" + str(layer_i) + "_mem.npy"
+                        np.save(file_path, self.get_tensor(data))
+                        print("[INFO] save je-post layer %d state to %s" % (layer_i, file_path))
+                    elif (isinstance(data, tuple)):
+                        file_k_path = file_path_prefix_trunk + "_layer" + str(layer_i) + "_kmem.npy"
+                        file_v_path = file_path_prefix_trunk + "_layer" + str(layer_i) + "_vmem.npy"
+                        state_k_data, state_v_data = data
+                        np.save(file_k_path, self.get_tensor(state_k_data))
+                        np.save(file_v_path, self.get_tensor(state_v_data))
+                        print("[INFO] save je-post layer %d k state to %s" % (layer_i, file_k_path))
+                        print("[INFO] save je-post layer %d v state to %s" % (layer_i, file_v_path))
+                    else:
+                        print("[ERROR] unrecognized state array type")
+                        exit(1)
 
     def generate_prediction_net(self, input=None):
         label_input_name = "label"

@@ -18,11 +18,11 @@ set_test_c_cxx_flags()
 include_flow()
 
 engine_test(benchmark benchmark/benchmark.cpp)
-engine_test(test_api_c c_api/test_api_c.c)
 install(TARGETS benchmark
-                test_api_c
         RUNTIME DESTINATION examples)
 if (BUILD_TEST)
+    engine_test(c_image_classifification "c_api/c_image_classifification.c;c_api/c_common.c;c_api/c_test.c")
+    engine_test(c_input_method "c_api/c_input_method.c;c_api/c_common.c;c_api/c_test.c")
     engine_test(bert bert/bert.cpp)
     engine_test(tinybert bert/tinybert.cpp)
     engine_test(classification image_classification/classification.cpp)
@@ -36,6 +36,13 @@ if (BUILD_TEST)
     engine_test(tinybert_onnx bert/tinybert_onnx.cpp)
     engine_test(tinyGPT tinyGPT/tinyGPT.cpp)
     engine_test(slide_tdnn voice_wake_up/slide_tdnn.cpp)
+    if (EXISTS ${OpenCV_CMAKE_PATH})
+        engine_test(ultra_face ultra_face/ultra_face.cpp)
+        engine_test(u2net image_matting/u2net.cpp)
+        install(TARGETS ultra_face
+                        u2net
+                RUNTIME DESTINATION examples)
+    endif()
     install(TARGETS classification
                     tinybert
                     tinybert_onnx
@@ -44,7 +51,8 @@ if (BUILD_TEST)
                     asr_convolution_transformer
                     tts
                     vad
-		    tinyGPT
+                    c_image_classifification
+                    c_input_method
             RUNTIME DESTINATION examples)
 
     if (USE_FLOW)

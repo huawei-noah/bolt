@@ -11,11 +11,8 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifdef _USE_FP16
 #include "tensor_computing.h"
-#include "ut_util.h"
-#include "gcl.h"
-#include "libkernelsource.h"
+#include "ut_util_ocl.h"
 
 inline void topk_cpu_max(F16 *input, U32 len, U32 topk, F16 *output, I32 *outputId)
 {
@@ -68,32 +65,6 @@ inline void sort_gpu_result(
     }
 }
 
-inline GCLMem_t alloc(Tensor tensor)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    mem->alloc();
-    return (GCLMem_t)mem->get_ptr();
-}
-
-inline GCLMem_t alloc_map(Tensor tensor)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    mem->mapped_alloc();
-    return (GCLMem_t)mem->get_ptr();
-}
-
-inline GCLMem_t alloc_bytes(Tensor tensor, U32 size)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    GCLMem_t ptr = NULL;
-    if (size > 0) {
-        mem->resize(tensor1d(DT_U8, size));
-        mem->alloc();
-        ptr = (GCLMem_t)mem->get_ptr();
-    }
-    return ptr;
-}
-
 int topkTest(int argc, char **argv, DataType dt)
 {
     U32 in = 1;
@@ -119,8 +90,7 @@ int topkTest(int argc, char **argv, DataType dt)
 
     ArchInfo archInfo;
     archInfo.arch = MALI;
-    ArchInfo archInfo_org;
-    archInfo_org.arch = CPU_GENERAL;
+
     U32 len = in * ic * ih * iw;
 
     TensorDesc input_desc_cpu = tensor1d(dt, len);
@@ -148,15 +118,24 @@ int topkTest(int argc, char **argv, DataType dt)
     archInfo.archPara = &maliPara;
     CHECK_STATUS(
         topk_infer_output_size(&inputTensor, p, &outputTensor, &outputIndicesTensor, &archInfo));
+    output_desc_gpu = outputTensor.get_desc();
+    output_indices_desc_gpu = outputIndicesTensor.get_desc();
+    output_gpu = ut_input_v(tensorNumElements(output_desc_gpu), dt, UT_INIT_RANDOM);
+    output_indices_gpu =
+        ut_input_v(tensorNumElements(output_indices_desc_gpu), DT_I32, UT_INIT_RANDOM);
 
-    GCLMem_t output = alloc_map(outputTensor);
-    GCLMem_t outputIndices = alloc_map(outputIndicesTensor);
+    GCLMem_t output = alloc(outputTensor);
+    GCLMem_t outputIndices = alloc(outputIndicesTensor);
     GCLMem_t input = alloc(inputTensor);
     CHECK_STATUS(gcl_fill_memory_zero(handle, input));
 
     U32 maxBytes = 0;
     U32 tmpBytes = 0;
     tmpBytes = tensorNumBytes(input_desc_gpu);
+    maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
+    tmpBytes = tensorNumBytes(output_desc_gpu);
+    maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
+    tmpBytes = tensorNumBytes(output_indices_desc_gpu);
     maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
     CHECK_STATUS(topk_infer_forward_tmp_bytes(inputTensor, p, outputTensor, &tmpBytes, &archInfo));
     maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
@@ -178,18 +157,14 @@ int topkTest(int argc, char **argv, DataType dt)
     CHECK_STATUS(gcl_run_kernelVec(handle));
 #endif
 
-    output_desc_gpu = outputTensor.get_desc();
-    output_indices_desc_gpu = outputIndicesTensor.get_desc();
-    CHECK_STATUS(ocl_get_output(handle, output, output_desc_gpu, true));
-    CHECK_STATUS(ocl_get_output(handle, outputIndices, output_indices_desc_gpu, true));
-    output_gpu = output->mapPtrArray.back();
-    output_indices_gpu = outputIndices->mapPtrArray.back();
+    CHECK_STATUS(ocl_get_output(handle, output, output_desc_gpu, output_gpu, tmpbuf, true));
+    CHECK_STATUS(ocl_get_output(
+        handle, outputIndices, output_indices_desc_gpu, output_indices_gpu, tmpbuf, true));
     tensorSelectGet(output_desc_gpu, NULL, NULL, &on, &oc, &oh, &ow);
     char buffer[150];
     char params[120];
     sprintf(params, "(%u %u %u %u) = (%u %u %u %u)", in, ic, ih, iw, on, oc, oh, ow);
     sprintf(buffer, "16bit%20s, %80s", "topk", params);
-    std::cout << buffer << std::endl;
 
     F16 *output_cpu = (F16 *)malloc(sizeof(F16) * p.topk);
     I32 *output_id_cpu = (I32 *)malloc(sizeof(I32) * p.topk);
@@ -209,6 +184,8 @@ int topkTest(int argc, char **argv, DataType dt)
     free(res_gpu_sort);
     free(res_id_gpu_sort);
     free(input_cpu);
+    free(output_gpu);
+    free(output_indices_gpu);
     return 0;
 }
 
@@ -217,4 +194,3 @@ int main(int argc, char **argv)
     topkTest(argc, argv, DT_F16);
     return 0;
 }
-#endif

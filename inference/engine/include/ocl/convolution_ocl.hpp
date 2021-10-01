@@ -26,8 +26,7 @@ public:
         ActivationParamSpec pwActivationParamSpec)
         : Convolution(dt, p, dwActivationParamSpec, pwActivationParamSpec)
     {
-        setMALIArchInfo(&(this->archInfo), &(this->runInfo), &this->needSetKernelVec,
-            &this->needSelectKernelLS);
+        INIT_GPU_INFO(&this->runInfo)
     }
 
     ~ConvolutionOCL(){DESTROY_OCL_KERNEL}
@@ -89,48 +88,9 @@ public:
 
         for (U32 i = 0; i < filterNum; i++) {
             Tensor modelWeightTensor = Tensor(OCLMem);
-            Tensor modelVectorTensor = Tensor(OCLMem);
-            auto weightMem = (OclMemory *)modelWeightTensor.get_memory();
-            auto vectorMem = (OclMemory *)modelVectorTensor.get_memory();
+            Tensor modelVectorTensor = Tensor(OCLMemImg1D);
             modelWeightTensor.resize(wDesc[i]);
             modelVectorTensor.resize(vDesc[i]);
-
-            U32 ww, wh, wc, wn, wt;
-            DataFormat df;
-            DataType dt;
-            tensorSelectGet(wDesc[i], &dt, &df, &wn, &wc, &wh, &ww, &wt);
-            U32 stride[3] = {ww * wh * wt, wc, wn};
-            U32 offset[3] = {0, 0, 0};
-            GCLMemType mt = GCL_MEM_BUF;
-            MemFlags flags = CL_MEM_READ_WRITE;
-            GCLMemDesc desc = gclmem_build_desc();
-            CHECK_STATUS(gclmem_set_desc_padding(&desc, stride, offset, dt, df, mt, flags));
-            weightMem->padding(desc);
-
-            mt = GCL_MEM_IMG_1D;
-            U32 vecLen = vDesc[i].dims[0];
-            U32 vecAlign = 4;
-            stride[0] = (vecLen + vecAlign - 1) / vecAlign;
-            if (i == 0) {
-                U32 iw, ih;
-                TensorDesc inputDesc = this->inputTensors[0].get_desc();
-                tensorSelectGet(inputDesc, NULL, NULL, NULL, NULL, &ih, &iw);
-                if (this->p.convolution_type == Convolution_Pointwise) {
-                    U32 sw = this->p.stride_w;
-                    U32 wn_org = this->p.num_outputs_origin;
-                    if ((wn_org * sw * wt == 1 && (ww == wh) &&
-                            (ww == 1 || ww == 3 || ww == 5 || ww == 7)) ||
-                        (ww * wh * wt * iw * ih == 1)) {
-                        mt = GCL_MEM_BUF;
-                        vecAlign = 8;
-                        stride[0] = (vecLen + vecAlign - 1) / vecAlign * vecAlign;
-                    }
-                }
-            }
-            stride[1] = 1;
-            stride[2] = 1;
-            gclmem_set_desc_padding(&desc, stride, offset, dt, DF_NHWC, mt, flags);
-            vectorMem->padding(desc);
             this->weightTensors.push_back(modelWeightTensor);
             this->biasTensors.push_back(modelVectorTensor);
         }
@@ -142,21 +102,31 @@ public:
         OCLContext::getInstance().handle.get()->curOpName = this->get_name();
         Tensor inputTensor = this->inputTensors[0];
         Tensor filterTensor = this->weightTensors[0];
-        filterTensor.resize(this->filterDesc);
         U8 *scalePtr = nullptr;
         Tensor biasTensor = this->biasTensors[0];
         Tensor outputTensor = this->outputTensors[0];
         switch (this->p.convolution_type) {
             case Convolution_Pointwise: {
+                Tensor tmpTensor = Tensor(OCLMem);
+                std::vector<Tensor> tmpTensors(3, tmpTensor);
+                tmpTensors[0] = this->temp;
+                if (this->pwAlg == CONVOLUTION_ALGORITHM_WINOGRAD) {
+                    get_tmp_image(0, bytes + 1, &tmpTensors[1]);
+                    get_tmp_image(1, bytes + 4, &tmpTensors[2]);
+                } else {
+                    get_tmp_image(0, bytes + 1, &tmpTensors[0]);
+                }
                 CHECK_STATUS(convolution(this->inputTensors, filterTensor, p, this->pwAlg, scalePtr,
-                    biasTensor, this->temp, outputTensor, this->pwActivationParamSpec,
+                    biasTensor, tmpTensors, outputTensor, this->pwActivationParamSpec,
                     &this->archInfo));
                 break;
             }
             case Convolution_Depthwise: {
+                Tensor tmpTensor = this->temp;
+                get_tmp_image(0, bytes + 1, &tmpTensor);
                 CHECK_STATUS(
                     depthwise_convolution(inputTensor, filterTensor, p, this->dwAlg, biasTensor,
-                        this->temp, outputTensor, this->dwActivationParamSpec, &this->archInfo));
+                        tmpTensor, outputTensor, this->dwActivationParamSpec, &this->archInfo));
                 break;
             }
             case Convolution_Depthwise_Pointwise: {
@@ -164,10 +134,15 @@ public:
                 auto pwFilterTensor = this->weightTensors[1];
                 auto dwBiasTensor = biasTensor;
                 auto pwBiasTensor = this->biasTensors[1];
-                CHECK_STATUS(
-                    depthwise_pointwise_convolution(inputTensor, dwFilterTensor, pwFilterTensor, p,
-                        this->dwAlg, dwBiasTensor, pwBiasTensor, this->temp, outputTensor,
-                        this->dwActivationParamSpec, this->pwActivationParamSpec, &this->archInfo));
+                Tensor tmpTensor = Tensor(OCLMem);
+                std::vector<Tensor> tmpTensors(3, tmpTensor);
+                tmpTensors[0] = this->temp;
+                get_tmp_image(0, bytes + 1, &tmpTensors[1]);
+                get_tmp_image(1, bytes + 4, &tmpTensors[2]);
+                CHECK_STATUS(depthwise_pointwise_convolution(this->inputTensors, dwFilterTensor,
+                    pwFilterTensor, p, this->dwAlg, dwBiasTensor, pwBiasTensor, tmpTensors,
+                    outputTensor, this->dwActivationParamSpec, this->pwActivationParamSpec,
+                    &this->archInfo));
                 break;
             }
             case Convolution_Dilation: {
@@ -175,7 +150,7 @@ public:
                 break;
             }
             default: {
-                UNI_ERROR_LOG("[ERROR] unsupported convolution type %d\n", this->p.convolution_type);
+                UNI_ERROR_LOG("unsupported convolution type %d\n", this->p.convolution_type);
             }
         }
     }
@@ -183,21 +158,22 @@ public:
     EE infer_forward_algorithm(std::shared_ptr<AlgorithmMap> algorithmMap) override
     {
         OCLContext::getInstance().handle.get()->kernelVec = &this->opKernelVec;
+        this->weightTensors[0].resize(this->filterDesc);
         auto inputTensor = this->inputTensors[0];
         auto filterTensor = this->weightTensors[0];
         auto outputTensor = this->outputTensors[0];
-        filterTensor.resize(this->filterDesc);
         ConvolutionPolicy policy = CONVOLUTION_TUNNING;
         DataType targetType = DT_F16;
         I32 algo[7];
+        std::string name = this->name + std::to_string(get_type()) + std::to_string(this->p.convolution_type); 
         switch (this->p.convolution_type) {
             case Convolution_Pointwise: {
                 if (this->dt == DT_F16_8Q) {
                     targetType = DT_I8;
                 }
-                if (algorithmMap->getAlgorithmInfoFromMap(this->name, algo, 4)) {
+                if (algorithmMap->getAlgorithmInfoFromMap(name, algo, 4)) {
                     this->runInfo.algorithm = (ConvolutionForwardAlgorithm)algo[0];
-                    this->runInfo.best_w[0] = algo[1];
+                    this->runInfo.best_h[0] = algo[1];
                     this->runInfo.best_c[0] = algo[2];
                     this->runInfo.best_k[0] = algo[3];
                     this->pwAlg = (ConvolutionForwardAlgorithm)algo[0];
@@ -206,18 +182,18 @@ public:
                         outputTensor, p, policy, &(this->pwAlg), targetType,
                         this->pwActivationParamSpec, &this->archInfo));
                     algo[0] = this->runInfo.algorithm;
-                    algo[1] = this->runInfo.best_w[0];
+                    algo[1] = this->runInfo.best_h[0];
                     algo[2] = this->runInfo.best_c[0];
                     algo[3] = this->runInfo.best_k[0];
                     this->pwAlg = (ConvolutionForwardAlgorithm)algo[0];
-                    algorithmMap->setAlgorithmInfoToMap(this->name, algo, 4);
+                    algorithmMap->setAlgorithmInfoToMap(name, algo, 4);
                 }
                 break;
             }
             case Convolution_Depthwise: {
-                if (algorithmMap->getAlgorithmInfoFromMap(this->name, algo, 4)) {
+                if (algorithmMap->getAlgorithmInfoFromMap(name, algo, 4)) {
                     this->runInfo.algorithm = (ConvolutionForwardAlgorithm)algo[0];
-                    this->runInfo.best_w[0] = algo[1];
+                    this->runInfo.best_h[0] = algo[1];
                     this->runInfo.best_c[0] = algo[2];
                     this->runInfo.best_k[0] = algo[3];
                     this->dwAlg = (DepthwiseConvolutionForwardAlgorithm)algo[0];
@@ -226,21 +202,21 @@ public:
                         filterTensor, outputTensor, p, policy, &(this->dwAlg), targetType,
                         this->dwActivationParamSpec, &this->archInfo));
                     algo[0] = this->runInfo.algorithm;
-                    algo[1] = this->runInfo.best_w[0];
+                    algo[1] = this->runInfo.best_h[0];
                     algo[2] = this->runInfo.best_c[0];
                     algo[3] = this->runInfo.best_k[0];
                     this->dwAlg = (DepthwiseConvolutionForwardAlgorithm)algo[0];
-                    algorithmMap->setAlgorithmInfoToMap(this->name, algo, 4);
+                    algorithmMap->setAlgorithmInfoToMap(name, algo, 4);
                 }
                 break;
             }
             case Convolution_Depthwise_Pointwise: {
-                if (algorithmMap->getAlgorithmInfoFromMap(this->name, algo, 7)) {
+                if (algorithmMap->getAlgorithmInfoFromMap(name, algo, 7)) {
                     this->runInfo.algorithm = (ConvolutionForwardAlgorithm)algo[0];
-                    this->runInfo.best_w[0] = algo[1];
+                    this->runInfo.best_h[0] = algo[1];
                     this->runInfo.best_c[0] = algo[2];
                     this->runInfo.best_k[0] = algo[3];
-                    this->runInfo.best_w[1] = algo[4];
+                    this->runInfo.best_h[1] = algo[4];
                     this->runInfo.best_c[1] = algo[5];
                     this->runInfo.best_k[1] = algo[6];
                     this->dwAlg = (DepthwiseConvolutionForwardAlgorithm)algo[0];
@@ -252,14 +228,14 @@ public:
                         &(this->dwAlg), targetType, this->dwActivationParamSpec,
                         this->pwActivationParamSpec, &this->archInfo));
                     algo[0] = this->runInfo.algorithm;
-                    algo[1] = this->runInfo.best_w[0];
+                    algo[1] = this->runInfo.best_h[0];
                     algo[2] = this->runInfo.best_c[0];
                     algo[3] = this->runInfo.best_k[0];
-                    algo[4] = this->runInfo.best_w[1];
+                    algo[4] = this->runInfo.best_h[1];
                     algo[5] = this->runInfo.best_c[1];
                     algo[6] = this->runInfo.best_k[1];
                     this->dwAlg = (DepthwiseConvolutionForwardAlgorithm)algo[0];
-                    algorithmMap->setAlgorithmInfoToMap(this->name, algo, 7);
+                    algorithmMap->setAlgorithmInfoToMap(name, algo, 7);
                 }
                 break;
             }
@@ -271,6 +247,30 @@ public:
                 CHECK_STATUS(NOT_SUPPORTED);
         }
         return SUCCESS;
+    }
+
+    inline bool use_output_tensor_image(U32 numFiltersOcl, Tensor *inputTensor)
+    {
+        if (!IS_QUALCOMM_GPU(this->archInfo.arch)) {
+            return false;
+        }
+        if (numFiltersOcl == 1) {
+            return false;
+        }
+        TensorDesc inDim = inputTensor->get_desc();
+        U32 iw, ih, it, ic;
+        U32 kw, kh, kt;
+        CHECK_STATUS(tensorSelectGet(inDim, NULL, NULL, NULL, &ic, &ih, &iw, &it));
+        kw = this->p.kernel_w;
+        kh = this->p.kernel_h;
+        kt = this->p.kernel_t;
+        if (iw == 1 && ih == 1 && it == 1 && kw == 1 && kh == 1 && kt == 1) {
+            return false;
+        }
+        if (ic == 1 && inDim.df == DF_NCHW) {
+            return false;
+        }
+        return true;
     }
 
     EE infer_output_tensors_size(
@@ -286,16 +286,13 @@ public:
         U32 nDims;
         CHECK_STATUS(tensorSelectGet(inDim, &idt, &idf, &in, &ic, &ih, &iw, &it));
         this->numChannels = ic;
+
         U32 numFiltersOcl = this->p.num_outputs;
-        GCLMemDesc inputGclDesc = ocl_get_desc(*inputTensor);
-        if (this->p.num_outputs_origin == 1 && inputGclDesc.byteSize > 0) {
-            numFiltersOcl = this->p.num_outputs_origin;
+        if (this->p.num_outputs_origin == 1 && this->tensorPos[0] != -2) {
+            numFiltersOcl = 1;  // spe case for output channel = 1
         }
         DataType targetType = DT_F16;  // Default DT_F16
 
-        auto inputMem = (OclMemory *)inputTensor->get_memory();
-        GCLMemDesc gclDesc = inputMem->get_desc();
-        this->needTransInput = (gclDesc.byteSize == 0) ? true : false;
         if (this->p.convolution_type == Convolution_Dilation) {
             this->p.convolution_type = Convolution_Pointwise;
         }
@@ -340,6 +337,9 @@ public:
             default:
                 CHECK_STATUS(NOT_SUPPORTED);
         }
+        if (use_output_tensor_image(numFiltersOcl, inputTensor)) {
+            CHECK_STATUS(set_tensors_image(outTensors, inTensors.size()));
+        }
         return SUCCESS;
     }
 
@@ -348,22 +348,23 @@ public:
         auto inputTensor = this->inputTensors[0];
         auto filterTensor = this->weightTensors[0];
         auto outputTensor = this->outputTensors[0];
-
-        U32 bytes = 0;
+        for (U32 i = 0; i < 7; i++) {
+            bytes[i] = 0;
+        }
         switch (this->p.convolution_type) {
             case Convolution_Pointwise: {
                 CHECK_STATUS(convolution_infer_forward_tmp_bytes(inputTensor, filterTensor,
-                    outputTensor, p, this->pwAlg, &bytes, &this->archInfo));
+                    outputTensor, p, this->pwAlg, bytes, &this->archInfo));
                 break;
             }
             case Convolution_Depthwise: {
                 CHECK_STATUS(depthwise_convolution_infer_forward_tmp_bytes(inputTensor,
-                    filterTensor, outputTensor, p, this->dwAlg, &bytes, &this->archInfo));
+                    filterTensor, outputTensor, p, this->dwAlg, bytes, &this->archInfo));
                 break;
             }
             case Convolution_Depthwise_Pointwise: {
                 CHECK_STATUS(depthwise_pointwise_convolution_infer_forward_tmp_bytes(inputTensor,
-                    filterTensor, this->weightTensors[1], outputTensor, p, this->dwAlg, &bytes,
+                    filterTensor, this->weightTensors[1], outputTensor, p, this->dwAlg, bytes,
                     &this->archInfo));
                 break;
             }
@@ -374,50 +375,40 @@ public:
             default:
                 CHECK_STATUS(NOT_SUPPORTED);
         }
-        if (this->needTransInput) {
-            auto mem = (OclMemory *)inputTensor.get_memory();
-            U32 size = mem->get_desc().byteSize;
-            if (bytes < size) {
-                bytes = size;
-            }
-        }
-        return bytes;
+        add_tmp_image(0, bytes + 1);
+        add_tmp_image(1, bytes + 4);
+        return bytes[0];
     }
 
-    GCLMemDesc infer_wtm_memory_size_mali() override
+    EE alloc_wtm_memory() override
     {
         auto filterTensor = this->weightTensors[0];
-        filterTensor.resize(this->filterDesc);
-        U32 stride[3] = {0, 0, 0};
-        U32 offset[3] = {0, 0, 0};
-        GCLMemDesc tmpDesc = gcl_mem_desc(stride, offset, DT_U8, DF_NCWHC4);
-        GCLMemDesc gclmemWtmDesc[2];
-        gclmemWtmDesc[0] = tmpDesc;
-        gclmemWtmDesc[1] = tmpDesc;
-        U32 bytes = 0;
-        ((MaliPara_t)(this->archInfo.archPara))->gclmemFilterDesc = gclmemWtmDesc;
         bool needTransBiasImgToBuf = false;
         U32 biasNum = 0;
+        TensorDesc desc[2];
         switch (this->p.convolution_type) {
             case Convolution_Pointwise: {
                 CHECK_STATUS(convolution_transform_filter_bytes(
-                    filterTensor, this->p, this->pwAlg, &bytes, &this->archInfo));
+                    filterTensor, this->p, this->pwAlg, desc, &this->archInfo));
+                if (this->runInfo.best_k[0] <= 1 && 
+                    this->pwAlg == CONVOLUTION_ALGORITHM_DIRECT) {
+                    needTransBiasImgToBuf = true;
+                    biasNum = 0;
+                }
                 break;
             }
             case Convolution_Depthwise: {
                 CHECK_STATUS(depthwise_convolution_transform_filter_bytes(
-                    filterTensor, this->p, this->dwAlg, &bytes, &this->archInfo));
+                    filterTensor, this->p, this->dwAlg, desc, &this->archInfo));
                 break;
             }
             case Convolution_Depthwise_Pointwise: {
-                U32 bytesExt = 0;
                 CHECK_STATUS(depthwise_pointwise_convolution_transform_filter_bytes(filterTensor,
-                    this->weightTensors[1], this->p, this->dwAlg, &bytes, &bytesExt,
+                    this->weightTensors[1], this->p, this->dwAlg, &desc[0], &desc[1],
                     &this->archInfo));
                 wtm_dp = Tensor(OCLMem);
-                OclMemory *wtmMem = (OclMemory *)wtm_dp.get_memory();
-                wtmMem->padding(gclmemWtmDesc[1]);
-                wtmMem->alloc();
+                wtm_dp.resize(desc[1]);
+                wtm_dp.alloc();
                 if (this->dwAlg == DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_GEMM) {
                     needTransBiasImgToBuf = true;
                     biasNum = 1;
@@ -431,37 +422,32 @@ public:
             default:
                 CHECK_STATUS(NOT_SUPPORTED);
         }
+        this->wtm = std::shared_ptr<Tensor>(new Tensor(OCLMem));
+        this->wtm->resize(desc[0]);
+        if (CONVOLUTION_ALGORITHM_WINOGRAD == this->pwAlg) {
+            CHECK_STATUS(set_wtm_image(desc[0]));
+        }
+        this->wtm->alloc();
         if (needTransBiasImgToBuf) {
             Tensor biasTensorBuf = Tensor(OCLMem);
-            auto biasMemImg = (OclMemory *)(this->biasTensors[biasNum].get_memory());
+            TensorDesc desc = this->biasTensors[biasNum].get_desc();
+            Memory *biasMemImg = this->biasTensors[biasNum].get_memory();
             auto biasMemBuf = (OclMemory *)(biasTensorBuf.get_memory());
-            GCLMemDesc descImg = biasMemImg->get_desc();
-            TensorDesc desc = tensor4df(descImg.dt, descImg.df, descImg.dims[3], descImg.dims[2],
-                descImg.dims[1], descImg.dims[0]);
             biasTensorBuf.resize(desc);
-            GCLMemDesc descBuf = gclmem_build_desc();
-            U32 stride[3] = {descImg.stride[0] * 4 + 8, descImg.stride[1], descImg.stride[2]};
-            U32 offset[3] = {0, 0, 0};
-            GCLMemType mt = GCL_MEM_BUF;
-            MemFlags flags = CL_MEM_READ_WRITE;
-            CHECK_STATUS(
-                gclmem_set_desc_padding(&descBuf, stride, offset, desc.dt, DF_NCHW, mt, flags));
-            biasMemBuf->padding(descBuf);
+            biasMemBuf->padding(0, 8, 0, 0);
             biasMemBuf->alloc();
             void *bufPtr = biasMemBuf->get_ptr();
             CHECK_STATUS(
                 gcl_fill_memory_zero(OCLContext::getInstance().handle.get(), (GCLMem_t)bufPtr));
-            biasMemBuf->copy_from((Memory *)biasMemImg);
+            CHECK_STATUS(biasMemBuf->copy_from(biasMemImg));
             this->biasTensors[biasNum] = biasTensorBuf;
         }
-        return gclmemWtmDesc[0];
+        return SUCCESS;
     }
 
     EE transform_filter() override
     {
         auto filterTensor = this->weightTensors[0];
-        filterTensor.resize(this->filterDesc);
-
         if (DT_F16_8Q == this->dt && Convolution_Pointwise == this->p.convolution_type &&
             CONVOLUTION_ALGORITHM_WINOGRAD == this->pwAlg) {  // int8 winograd
             return NOT_SUPPORTED;
@@ -469,12 +455,7 @@ public:
             Convolution_Pointwise == this->p.convolution_type) {  // int8 tilegemm
             return NOT_SUPPORTED;
         } else {  // All other cases
-            auto wtmDesc = this->infer_wtm_memory_size_mali();
-            this->wtm = std::shared_ptr<Tensor>(new Tensor(OCLMem));
-            OclMemory *wtmMem = (OclMemory *)this->wtm->get_memory();
-            wtmMem->padding(wtmDesc);
-            wtmMem->alloc();
-
+            CHECK_STATUS(alloc_wtm_memory());
             switch (this->p.convolution_type) {
                 case Convolution_Pointwise: {
                     CHECK_STATUS(convolution_transform_filter(filterTensor, this->p, this->pwAlg,
@@ -511,8 +492,8 @@ private:
     Tensor wtm_dp;
     TensorDesc filterDesc;
     TensorDesc filterDescExt;
-    bool needTransInput;
     U32 numChannels;
+    U32 bytes[7];
 
 protected:
     ForwardRunInfoMali runInfo;

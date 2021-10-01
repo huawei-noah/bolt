@@ -11,11 +11,12 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifdef _USE_INT8
-#include "cpu/arm/blas_arm.h"
 #include "cpu/arm/int8/blas_int8.h"
-#include "cpu/arm/int8/mvm.h"
-#include "cpu/arm/int8/mmm_common.h"
+#include "cpu/arm/blas_arm.h"
+#include "cpu/arm/int8/blas_matrix_transpose.h"
+#include "arm_neon_expand.h"
+
+#define ALIGN 32
 
 EE matrix_vector_multiply_transform_weight_int8(TensorDesc desc, INT8 *src, INT8 *dst)
 {
@@ -27,9 +28,13 @@ EE matrix_vector_multiply_transform_weight_int8(TensorDesc desc, INT8 *src, INT8
     switch (desc.df) {
         case DF_NORMAL: {
             CHECK_STATUS(tensor2dGet(desc, &dt, &df, &N, &K));
+#ifdef __aarch64__
             U32 K4 = pad_to_4_multiple(K);
-            for (; i < (int)N - 31; i += 32) {
-                matrix1_trans_int8(32, K, K, src + i * K, dst + i * K4);
+#else
+            U32 K4 = K;
+#endif
+            for (; i < (int)N - ALIGN + 1; i += ALIGN) {
+                matrix1_trans_int8(ALIGN, K, K, src + i * K, dst + i * K4);
             }
             if (i < (int)N) {
                 memcpy(dst + i * K4, src + i * K, (N - i) * K * bytesOf(DT_I8));
@@ -38,9 +43,13 @@ EE matrix_vector_multiply_transform_weight_int8(TensorDesc desc, INT8 *src, INT8
         }
         case DF_TRANSPOSE: {
             CHECK_STATUS(tensor2dGet(desc, &dt, &df, &K, &N));
+#ifdef __aarch64__
             U32 K4 = pad_to_4_multiple(K);
-            for (; i < (int)N - 31; i += 32) {
-                matrix2_trans_int8(32, K, N, src + i, dst + i * K4);
+#else
+            U32 K4 = K;
+#endif
+            for (; i < (int)N - ALIGN + 1; i += ALIGN) {
+                matrix2_trans_int8(ALIGN, K, N, src + i, dst + i * K4);
             }
             if (i < (int)N) {
                 int base = i;
@@ -60,6 +69,69 @@ EE matrix_vector_multiply_transform_weight_int8(TensorDesc desc, INT8 *src, INT8
     return ret;
 }
 
+#ifndef __aarch64__
+#if 1
+void mvm_row_pack(U32 Nbatch, U32 K, INT8 *matrix, INT8 *vector, I32 *result)
+{
+    U32 N = Nbatch * ALIGN;
+    const int unroll = ALIGN / 4;
+    int16x4_t mat[unroll];
+    int32x4_t res[unroll];
+    int align = ALIGN;
+    for (U32 n = 0; n < N; n += align) {
+        INT8 *bufMov = matrix + n * K;
+        for (int i = 0; i < unroll; i++) {
+            res[i] = vld1q_s32(result + n + i * 4);
+        }
+        for (U32 k = 0; k < K; k++) {
+            int16x4_t v = vdup_n_s16(vector[k]);
+            for (int i = 0; i < unroll / 2; i++) {
+                int16x8_t tmp = vmovl_s8(vld1_s8(bufMov + i * 8));
+                mat[i * 2] = vget_low_s16(tmp);
+                mat[i * 2 + 1] = vget_high_s16(tmp);
+            }
+            for (int i = 0; i < unroll; i++) {
+                res[i] = vmlal_s16(res[i], mat[i], v);
+            }
+            bufMov += align;
+        }
+        for (int i = 0; i < unroll; i++) {
+            vst1q_s32(result + n + i * 4, res[i]);
+        }
+    }
+}
+#else
+void mvm_row_pack(U32 Nbatch, U32 K, INT8 *matrix, INT8 *vector, I32 *result)
+{
+    U32 N = Nbatch * ALIGN;
+    const int unroll = ALIGN / 8;
+    int16x8_t res[unroll];
+    int align = ALIGN;
+    for (U32 n = 0; n < N; n += align) {
+        INT8 *bufMov = matrix + n * K;
+        for (int i = 0; i < unroll; i++) {
+            res[i] = vdupq_n_s16(0);
+        }
+        for (U32 k = 0; k < K; k++) {
+            int8x8_t v = vdup_n_s8(vector[k]);
+            for (int i = 0; i < unroll; i++) {
+                int8x8_t tmp = vld1_s8(bufMov + i * 8);
+                res[i] = vmlal_s8(res[i], tmp, v);
+            }
+            bufMov += align;
+        }
+        for (int i = 0; i < unroll; i++) {
+            int32x4_t a = vld1q_s32(result + n + i * 8);
+            int32x4_t b = vld1q_s32(result + n + i * 8 + 4);
+            a = vaddw_s16(a, vget_low_s16(res[i]));
+            b = vaddw_s16(b, vget_high_s16(res[i]));
+            vst1q_s32(result + n + i * 8, a);
+            vst1q_s32(result + n + i * 8 + 4, b);
+        }
+    }
+}
+#endif
+#else
 void mvm_row_pack(U32 Nbatch, U32 K, INT8 *matrix, INT8 *vector, I32 *result)
 {
     U32 N = Nbatch * 32;
@@ -120,6 +192,88 @@ void mvm_row_pack(U32 Nbatch, U32 K, INT8 *matrix, INT8 *vector, I32 *result)
         }
     }
 }
+#endif
+
+inline void mvm_row_unpack(U32 Nbatch, U32 K, INT8 *matrix, INT8 *vector, I32 *result)
+{
+    U32 N = Nbatch * 8;
+#ifdef __aarch64__
+    int8x16_t mat[8];
+#else
+    int16x4_t mat[8][2];
+#endif
+    U32 K_tail = K % 16;
+    U32 K_inner = K - K_tail;
+    INT8 *w[8];
+    for (U32 n = 0; n < N; n += 8) {
+        for (int i = 0; i < 8; i++) {
+            w[i] = matrix + (n + i) * K;
+        }
+
+        int32x4_t bias0 = vld1q_s32(result + n);
+        int32x4_t bias1 = vld1q_s32(result + n + 4);
+        int32x4_t res[8] = {0};
+#ifdef __aarch64__
+        for (U32 k = 0; k < K_inner; k += 16) {
+            int8x16_t v = vld1q_s8(vector + k);
+            for (int i = 0; i < 8; i++) {
+                mat[i] = vld1q_s8(w[i + k]);
+            }
+            for (int i = 0; i < 8; i++) {
+                res[i] = vdotq_s32(res[i], mat[i], v);
+            }
+        }
+#else
+        for (U32 k = 0; k < K_inner; k += 8) {
+            int16x8_t v = vmovl_s8(vld1_s8(vector + k));
+            int16x4_t v_l = vget_low_s16(v);
+            int16x4_t v_h = vget_high_s16(v);
+            for (int i = 0; i < 8; i++) {
+                int16x8_t v = vmovl_s8(vld1_s8(w[i + k]));
+                mat[i][0] = vget_low_s16(v);
+                mat[i][1] = vget_high_s16(v);
+            }
+            for (int i = 0; i < 8; i++) {
+                res[i] = vmlal_s16(res[i], mat[i][0], v_l);
+                res[i] = vmlal_s16(res[i], mat[i][1], v_h);
+            }
+        }
+#endif
+        res[0] = vpaddq_s32(res[0], res[1]);
+        res[4] = vpaddq_s32(res[4], res[5]);
+        res[2] = vpaddq_s32(res[2], res[3]);
+        res[6] = vpaddq_s32(res[6], res[7]);
+        res[0] = vpaddq_s32(res[0], res[2]);
+        res[4] = vpaddq_s32(res[4], res[6]);
+        res[0] = vaddq_s32(res[0], bias0);
+        res[4] = vaddq_s32(res[4], bias1);
+        vst1q_s32(result + n, res[0]);
+        vst1q_s32(result + n + 4, res[4]);
+
+        if (K_tail != 0) {
+            for (int i = 0; i < 8; i++) {
+                I32 tmp = 0;
+                for (U32 p = K_inner; p < K; p++) {
+                    tmp += vector[p] * w[i][p];
+                }
+                result[n + i] += tmp;
+            }
+        }
+    }
+}
+
+inline void mvm_row_tail(U32 N, U32 K, INT8 *matrix, INT8 *vector, I32 *result)
+{
+    INT8 *cur_row = matrix;
+    for (U32 n = 0; n < N; n++) {
+        I32 tmp = 0;
+        for (U32 k = 0; k < K; k++) {
+            tmp += vector[k] * cur_row[k];
+        }
+        result[n] += tmp;
+        cur_row += K;
+    }
+}
 
 void mvm_row(U32 numRows, U32 numColumns, DataFormat df, INT8 *matrix, INT8 *vector, I32 *result)
 {
@@ -139,8 +293,8 @@ void mvm_row(U32 numRows, U32 numColumns, DataFormat df, INT8 *matrix, INT8 *vec
             break;
         }
         case DF_NKN32K4: {
-            U32 Nbatch = N / 32;
-            U32 NTail = N % 32;
+            U32 Nbatch = N / ALIGN;
+            U32 NTail = N % ALIGN;
 
             mvm_row_pack(Nbatch, K, matrix, vector, result);
 
@@ -156,6 +310,38 @@ void mvm_row(U32 numRows, U32 numColumns, DataFormat df, INT8 *matrix, INT8 *vec
     }
 }
 
+inline void mvm_col(U32 numRows, U32 numColumns, INT8 *matrix, INT8 *vector, I32 *tmp, I32 *result)
+{
+    // Actual layout is KN, and vector is K
+    U32 N = numRows;
+    U32 K = numColumns;
+    U32 NTail = N % 64;
+    U32 NInner = N - NTail;
+
+    for (U32 n = 0; n < NInner; n += 64) {
+        memset(tmp, 0, sizeof(I32) * 64);
+        for (U32 k = 0; k < K; k++) {
+            for (U32 i = 0; i < 64; i++) {
+                tmp[i] += vector[k] * matrix[k * N + n + i];
+            }
+        }
+
+        for (U32 i = 0; i < 64; i++) {
+            result[n + i] += tmp[i];
+        }
+    }
+
+    memset(tmp, 0, sizeof(I32) * 64);
+    for (U32 k = 0; k < K; k++) {
+        for (U32 i = 0; i < NTail; i++) {
+            tmp[i] += vector[k] * matrix[k * N + NInner + i];
+        }
+        for (U32 i = 0; i < NTail; i++) {
+            result[NInner + i] += tmp[i];
+        }
+    }
+}
+
 EE mvm_int8(U32 row, U32 col, DataFormat df, INT8 *matrix, INT8 *vector, I32 *tmp, I32 *result)
 {
     if (DF_TRANSPOSE == df) {
@@ -165,4 +351,3 @@ EE mvm_int8(U32 row, U32 col, DataFormat df, INT8 *matrix, INT8 *vector, I32 *tm
     }
     return SUCCESS;
 }
-#endif

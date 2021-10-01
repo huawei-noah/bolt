@@ -16,19 +16,6 @@
 #include "tensor.hpp"
 #include "memory_ocl.hpp"
 #include "gcl_common.h"
-inline void ocl_set_desc(Tensor *tensor, GCLMemDesc desc)
-{
-    OclMemory *mem = (OclMemory *)tensor->get_memory();
-    mem->padding(desc);
-}
-
-inline void ocl_set_descs(std::vector<Tensor *> tensors, std::vector<GCLMemDesc> descs)
-{
-    for (U32 i = 0; i < tensors.size(); i++) {
-        ocl_set_desc(tensors[i], descs[i]);
-    }
-}
-
 inline GCLMemDesc ocl_get_desc(Tensor tensor)
 {
     OclMemory *mem = (OclMemory *)tensor.get_memory();

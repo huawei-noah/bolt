@@ -26,6 +26,12 @@
 #endif
 #include "tensor_transpose.h"
 #include "ut_util.h"
+#include "cpu/arm/transform_functions.h"
+#include "thread_affinity.h"
+
+#ifdef _USE_CACHE
+std::map<std::string, std::vector<U32>> arm_cache;
+#endif
 
 EE convolution_infer_forward_algorithm_arm(TensorDesc inputDesc,
     TensorDesc filterDesc,
@@ -85,12 +91,14 @@ EE convolution_infer_forward_algorithm_arm(TensorDesc inputDesc,
                 *algorithm = CONVOLUTION_ALGORITHM_BNN;
                 break;
             }
+#ifndef _USE_INT8_WINOGRAD
             case DT_I8: {
                 if (*algorithm == CONVOLUTION_ALGORITHM_WINOGRAD) {
                     *algorithm = CONVOLUTION_ALGORITHM_GEMM;
                 }
                 break;
             }
+#endif
             default:
                 break;
         }
@@ -249,12 +257,9 @@ EE convolution_transform_filter_arm(TensorDesc filterDesc,
         }
 #endif
 #ifdef _USE_INT8
+        case DT_F32_8Q:
+        case DT_F16_8Q:
         case DT_I8: {
-            ret = convolution_transform_filter_int8(
-                filterDesc, filter, convParamSpec, algorithm, ftmDesc, filterTransformed);
-            break;
-        }
-        case DT_F16_8Q: {
             ret = convolution_transform_filter_int8(
                 filterDesc, filter, convParamSpec, algorithm, ftmDesc, filterTransformed);
             break;
@@ -365,7 +370,7 @@ EE convolution_infer_forward_tmp_bytes_arm(TensorDesc inputDesc,
             if (fdt == DT_F32) {
                 *bytes += (ic + 8) * 6 * 6 * 12 * element_size * OMP_NUM_THREADS;
             } else if (fdt == DT_F16) {
-                *bytes += (ic + oc) * 6 * 6 * 8 * element_size * OMP_NUM_THREADS;
+                *bytes += (ic + 8 + oc) * 6 * 6 * 8 * element_size * OMP_NUM_THREADS;
             } else if (fdt == DT_I8) {
                 // itm (int16 for int8 inputs) and otm (otm just contains o8 each time)
                 *bytes += (ic + 8) * 6 * 6 * 12 * bytesOf(DT_F16);
@@ -391,8 +396,7 @@ EE convolution_infer_forward_tmp_bytes_arm(TensorDesc inputDesc,
             ret = NOT_MATCH;
             break;
     }
-    if (DT_I8 == fdt && DF_NCHW == idf) {
-        CHECK_REQUIREMENT(ic % 8 == 0);
+    if (DT_I8 == fdt && DF_NCHWC8 != idf) {
         *bytes += tensorNumBytes(inputDesc);
     }
     *bytes += 32;
@@ -480,18 +484,13 @@ EE convolution_arm(TensorDesc inputDesc,
 #ifdef _USE_INT8
             case DT_I8: {
                 ret = convolution_int8(tmpInputDesc, (INT8 *)tmpInput, tmpFilterDesc,
-                    (INT8 *)tmpFilter, (F16 *)scale, p, algorithm, tmpBiasDesc, (F16 *)tmpBias,
-                    tmpBytes, tmp, tmpOutputDesc, tmpOutput, activationDesc, arch);
+                    (INT8 *)tmpFilter, (F32 *)scale, p, algorithm, tmpBiasDesc, tmpBias, tmpBytes,
+                    tmp, tmpOutputDesc, tmpOutput, activationDesc, arch);
                 break;
             }
 #endif
 #ifdef _USE_FP16
-            case DT_BIN01: {
-                ret = convolution_bnn(tmpInputDesc, (F16 *)tmpInput, tmpFilterDesc,
-                    (BIN8 *)tmpFilter, p, scaleDesc, (F16 *)scale, tmpBiasDesc, (F16 *)tmpBias,
-                    tmpBytes, tmp, tmpOutputDesc, (F16 *)tmpOutput, activationDesc, arch);
-                break;
-            }
+            case DT_BIN01:
             case DT_BIN11: {
                 ret = convolution_bnn(tmpInputDesc, (F16 *)tmpInput, tmpFilterDesc,
                     (BIN8 *)tmpFilter, p, scaleDesc, (F16 *)scale, tmpBiasDesc, (F16 *)tmpBias,

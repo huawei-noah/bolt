@@ -18,31 +18,6 @@
 #include "gpu/mali/tensor_computing_mali.h"
 #include "gpu/mali/fp16/normalization_mali_fp16.h"
 
-EE normalization_infer_output_size_mali(TensorDesc inputDesc,
-    TensorDesc *outputDesc,
-    GCLMemDesc_t gclmemInputDesc,
-    GCLMemDesc_t gclmemOutputDesc)
-{
-    if (outputDesc == nullptr || gclmemInputDesc == nullptr || gclmemOutputDesc == nullptr) {
-        CHECK_STATUS(NULL_POINTER);
-    }
-    *outputDesc = inputDesc;
-
-    DataType idt;
-    DataFormat idf;
-    U32 iw, ih, ic, in;
-    tensorSelectGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw);
-
-    if (gclmemInputDesc->byteSize == 0 || gclmemInputDesc->memFormat == DF_NCHW) {
-        CHECK_STATUS(infer_gclmem_desc_nchw(
-            iw, ih, ic, 0, 0, iw, ih, ic, idt, idt, gclmemInputDesc, gclmemOutputDesc));
-    } else {
-        CHECK_STATUS(infer_gclmem_desc_ncwhc4(
-            iw, ih, ic, 0, 0, iw, ih, ic, idt, idt, gclmemInputDesc, gclmemOutputDesc));
-    }
-    return SUCCESS;
-}
-
 inline EE normalization_checkpara_mali(GCLHandle_t handle,
     GCLMem_t alpha,
     GCLMem_t beta,
@@ -57,9 +32,6 @@ inline EE normalization_checkpara_mali(GCLHandle_t handle,
     }
     if (inputDesc.df != outputDesc.df) {
         CHECK_STATUS(NOT_MATCH);
-    }
-    if (input->desc.memFormat != output->desc.memFormat) {
-        CHECK_STATUS(NOT_SUPPORTED);
     }
     return SUCCESS;
 }

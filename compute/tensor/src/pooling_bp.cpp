@@ -38,7 +38,7 @@ EE pooling_bp(
         ret = pooling_bp_general(inputDesc, input, poolingParamSpec, outputDesc, output);
 #endif
 #ifdef _USE_X86
-    } else if (IS_X86_AVX2(arch)) {
+    } else if (IS_X86(arch)) {
         ret = pooling_bp_x86(inputDesc, input, poolingParamSpec, outputDesc, output);
 #endif
 #ifdef _USE_NEON

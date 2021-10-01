@@ -68,7 +68,8 @@ EE Node::inferOutputSize()
         for (auto iter : inferenceOutputDescs) {
             std::string name = iter.first;
             if (this->outputs.find(name) == this->outputs.end()) {
-                this->outputs[name] = std::shared_ptr<Tensor>(new Tensor());
+                //this->outputs[name] = std::shared_ptr<Tensor>(new Tensor());
+                continue;
             }
             this->outputs[name]->resize(iter.second);
         }
@@ -99,7 +100,7 @@ void Node::initInference(AffinityPolicy affinityPolicy)
         return;
     }
     std::string modelPath = this->inferenceParameter[0];
-    const char *algorithmMapPath = "./";
+    const char *algorithmMapPath = nullptr;
     if (this->inferenceParameter.size() > 1) {
         algorithmMapPath = this->inferenceParameter[1].c_str();
     }
@@ -115,7 +116,8 @@ void Node::initInference(AffinityPolicy affinityPolicy)
     std::map<std::string, TensorDesc> inputDescMap = extractInputDims(&ms);
     cnn.ready(inputDescMap);
     CHECK_STATUS(cnn.mark_input_output());
-    cnn.saveAlgorithmMapToFile(algorithmMapPath);
+    if (algorithmMapPath != nullptr)
+        cnn.saveAlgorithmMapToFile(algorithmMapPath);
     CHECK_STATUS(mt_destroy_model(&ms));
     this->boltModel = cnn;
     UNI_DEBUG_LOG("node %s init inference engine end\n", this->nodeParameter.name().c_str());
@@ -208,11 +210,7 @@ EE Node::run()
                 ((CpuMemory *)preprocessOutputs[iter.first]->get_memory())->get_shared_ptr();
         }
         this->boltModel.set_input_by_assign(inputs);
-        double timeStart = ut_time_ms();
         this->boltModel.run();
-        double timeEnd = ut_time_ms();
-        UNI_PROFILE_INFO(this->nodeParameter.name().c_str(), "run", timeStart * 1000,
-            (timeEnd - timeStart) * 1000);
         std::map<std::string, std::shared_ptr<Tensor>> inferenceResult =
             this->boltModel.get_output();
         for (auto &iter : inferenceResult) {

@@ -40,13 +40,15 @@ typedef enum {
 
 /** heterogeneous device type */
 typedef enum {
-    CPU_SERIAL = 0,    ///< CPU serial
-    CPU_ARM_V7 = 1,    ///< ARMv7 CPU
-    CPU_ARM_V8 = 2,    ///< ARMv8 CPU
-    CPU_ARM_A55 = 3,   ///< ARM A55 CPU
-    CPU_ARM_A76 = 4,   ///< ARM A76 CPU
-    CPU_X86_AVX2 = 5,  ///< X86_64 AVX2 CPU
-    GPU_MALI = 10      ///< ARM MALI GPU
+    CPU_SERIAL = 0,      ///< CPU serial
+    CPU_ARM_V7 = 1,      ///< ARMv7 CPU
+    CPU_ARM_V8 = 2,      ///< ARMv8 CPU
+    CPU_ARM_A55 = 3,     ///< ARM A55 CPU
+    CPU_ARM_A76 = 4,     ///< ARM A76 CPU
+    CPU_X86_AVX2 = 5,    ///< X86_64 AVX2 CPU
+    CPU_X86_AVX512 = 6,  ///< X86_64 AVX512 CPU
+    GPU_MALI = 10,       ///< ARM MALI GPU
+    GPU_QUALCOMM = 11    ///< ARM MALI GPU
 } DEVICE_TYPE;
 
 /** data precision */
@@ -57,14 +59,29 @@ typedef enum {
     UINT_32 = 3  ///< 32 bit unsigned integer
 } DATA_TYPE;
 
+/** Get DATA_TYPE String */
+inline const char *const *GetDataTypeString()
+{
+    static const char *const names[] = {"FP_32", "FP_16", "INT_32", "UINT_32"};
+    return names;
+}
+
 /** multi-dimension data format */
 typedef enum {
     NCHW = 0,    ///< batch->channel->high->width data order
     NHWC = 1,    ///< batch->high->width->channel data order
     NCHWC8 = 2,  ///< batch->channel/8->high->width->channel four element data order
     MTK = 3,     ///< batch->time->unit data order
-    NORMAL = 4   ///< batch->unit data order
+    NORMAL = 4,  ///< batch->unit data order
+    NCHWC4 = 5   ///< batch->channel/4->width->high->channel four element data order
 } DATA_FORMAT;
+
+/** Get DATA_FORMAT String */
+inline const char *const *GetDataFormatString()
+{
+    static const char *const names[] = {"NCHW", "NHWC", "NCHWC8", "MTK", "NORMAL"};
+    return names;
+}
 
 /**
  * @brief create model from file
@@ -372,6 +389,16 @@ void SetRuntimeDevice(ModelHandle ih, int cpu_id, DEVICE_TYPE device);
  */
 void SetRuntimeDeviceDynamic(ModelHandle ih);
 
+/**
+ * @brief set parallel threads num
+ * @param  threads       number of threads
+ *
+ * @note
+ * This can only be used before RunModel. If you use it before PrepareModel, this will affect tmp buffer allocation. Then you are limited that next setting can not greater than before one.
+ * This setting is global to each inference threads.
+ * @return
+ */
+void SetNumThreads(int threads);
 #ifdef __cplusplus
 }
 #endif

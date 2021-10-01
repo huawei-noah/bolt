@@ -16,6 +16,39 @@
 
 #include "string.h"
 
+template <int branch, typename T>
+static inline void inner_transpose_template(unsigned int tileSize,
+    unsigned int *inputDims,
+    const T *input,
+    unsigned int *outputDims,
+    T *output,
+    unsigned int *transposeDims,
+    int inputDimsNum,
+    int outputDimsNum,
+    unsigned int outputSize,
+    int sizeInnerIndex,
+    unsigned int *inputLocalIndex)
+{
+    for (unsigned int i = 0; i < outputSize; i++) {
+        unsigned int outputIndex = i;
+        for (int j = sizeInnerIndex; j < outputDimsNum; j++) {
+            unsigned int value = outputIndex % outputDims[j];
+            outputIndex /= outputDims[j];
+            inputLocalIndex[inputDimsNum - 1 - transposeDims[outputDimsNum - 1 - j]] = value;
+        }
+        unsigned int inputIndex = 0;
+        for (int j = inputDimsNum - 1; j > sizeInnerIndex; j--) {
+            inputIndex = (inputIndex + inputLocalIndex[j]) * inputDims[j - 1];
+        }
+        inputIndex += inputLocalIndex[sizeInnerIndex];
+        if (branch == 0) {
+            *(output + i) = *(input + inputIndex);
+        } else {
+            memcpy(output + i * tileSize, input + inputIndex * tileSize, tileSize);
+        }
+    }
+}
+
 inline void array_transpose(unsigned int elementSize,
     unsigned int *inputDims,
     const void *input,
@@ -49,20 +82,18 @@ inline void array_transpose(unsigned int elementSize,
     std::vector<unsigned int> inputLocalIndex(inputDimsNum, 0);
     const char *inputPtr = (const char *)input;
     char *outputPtr = (char *)output;
-    unsigned int tileSize = sizeInner * elementSize;
-    for (unsigned int i = 0; i < outputSize; i++) {
-        unsigned int outputIndex = i;
-        for (int j = sizeInnerIndex; j < outputDimsNum; j++) {
-            unsigned int value = outputIndex % outputDims[j];
-            outputIndex /= outputDims[j];
-            inputLocalIndex[inputDimsNum - 1 - transposeDims[outputDimsNum - 1 - j]] = value;
-        }
-        unsigned int inputIndex = 0;
-        for (int j = inputDimsNum - 1; j > sizeInnerIndex; j--) {
-            inputIndex = (inputIndex + inputLocalIndex[j]) * inputDims[j - 1];
-        }
-        inputIndex += inputLocalIndex[sizeInnerIndex];
-        memcpy(outputPtr + i * tileSize, inputPtr + inputIndex * tileSize, tileSize);
+    if (sizeInner == 1 && elementSize == 4) {
+        inner_transpose_template<0, int>(elementSize, inputDims, (const int *)input, outputDims,
+            (int *)output, transposeDims, inputDimsNum, outputDimsNum, outputSize, sizeInnerIndex,
+            inputLocalIndex.data());
+    } else if (sizeInner == 1 && elementSize == 2) {
+        inner_transpose_template<0, short>(elementSize, inputDims, (const short *)input, outputDims,
+            (short *)output, transposeDims, inputDimsNum, outputDimsNum, outputSize, sizeInnerIndex,
+            inputLocalIndex.data());
+    } else {
+        inner_transpose_template<1, char>(sizeInner * elementSize, inputDims, (const char *)input,
+            outputDims, (char *)output, transposeDims, inputDimsNum, outputDimsNum, outputSize,
+            sizeInnerIndex, inputLocalIndex.data());
     }
 }
 

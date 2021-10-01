@@ -16,186 +16,109 @@
 #include "error.h"
 #include "gpu/mali/tensor_computing_mali.h"
 #include "gpu/mali/fp16/depthwise_pointwise_convolution_mali_fp16.h"
-inline void depthwise_pointwise_convolution_produce_algos_paras(U32 oh,
+#include "gpu/mali/cl/kernel_option/conv_depthwise_opt.h"
+#include "gpu/mali/cl/kernel_option/conv_direct_opt.h"
+#include "gpu/mali/cl/kernel_option/gemm_tn_opt.h"
+
+inline void depthwise_pointwise_convolution_produce_algos_paras(U32 ow,
     U32 pointwiseFilterNum,
     U32 dw,
+    U32 dh,
+    U32 in,
+    GCLMemType inputMemType,
+    GCLMemType outputMemType,
     std::vector<DepthwiseConvolutionForwardAlgorithm> *depthwisePointwiseConvAlgorithms,
     std::vector<U32> *algoNumIndexD,
-    std::vector<U32> *vecWD,
+    std::vector<U32> *vecHD,
     std::vector<U32> *vecCD,
     std::vector<U32> *vecKD,
     std::vector<U32> *algoNumIndexP,
-    std::vector<U32> *vecWP,
+    std::vector<U32> *vecHP,
     std::vector<U32> *vecCP,
     std::vector<U32> *vecKP)
 {
-    U32 algoNum = 2;
-    DepthwiseConvolutionForwardAlgorithm algo[2];
-    algo[0] = DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_DIRECT;
-    algo[1] = DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_GEMM;
-    U32 configNumsD[2];
-    U32 configNumsP[2];
-    U32 configNumD = 0;
-    U32 configNumP = 0;
-    U32 configInfo[3][128];
-    for (U32 ii = 0; ii < algoNum; ii++) {
-        U32 j = (dw == 2) ? 2 : 0;
-        for (U32 i = j; i < 3; i++) {
-            if (vecWD) {
-                (*vecWD).push_back(i + 1);
-            }
-            if (vecCD) {
-                (*vecCD).push_back(1);
-            }
-            if (vecKD) {
-                (*vecKD).push_back(4);
-            }
-            configNumD++;
-        }
-        configNumsD[ii] = configNumD;
-        U32 c = (algo[ii] == DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_DIRECT) ? 4 : 1;
-        U32 k = 4;
-        U32 nj = 8;
-        for (U32 i = 0; i < 2; i++) {
-            for (U32 j = 0; j < nj; j++) {
-                configInfo[0][configNumP] = j + 1;
-                configInfo[1][configNumP] = c;
-                configInfo[2][configNumP] = k;
-                configNumP++;
-            }
-            k = k << 1;
-            if (pointwiseFilterNum % k != 0) {
-                break;
-            }
-            if (algo[ii] == DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_DIRECT) {
-                nj = 4;
-            }
-        }
-        if (algo[ii] == DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_DIRECT) {
-            if (pointwiseFilterNum % 16 == 0) {
-                for (U32 i = 0; i < 3; i++) {
-                    configInfo[0][configNumP] = i + 1;
-                    configInfo[1][configNumP] = 4;
-                    configInfo[2][configNumP] = 16;
-                    configNumP++;
-                }
-            }
-            U32 k = 4;
-            U32 nj = 2;
-            for (U32 i = 0; i < 3; i++) {
-                U32 w = 2;
-                if (i == 2) {
-                    nj = 1;
-                }
-                for (U32 j = 0; j < nj; j++) {
-                    if (oh % w != 0) {
-                        continue;
-                    }
-                    configInfo[0][configNumP] = w << 8;
-                    configInfo[1][configNumP] = 4;
-                    configInfo[2][configNumP] = k;
-                    configNumP++;
-                    w = w << 1;
-                }
-                k = k << 1;
-                if (pointwiseFilterNum % k != 0) {
-                    break;
-                }
-            }
-        }
-        configNumsP[ii] = configNumP;
+    depthwisePointwiseConvAlgorithms->push_back(DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_DIRECT);
+    if (!check_qualcomm_device()) {
+        depthwisePointwiseConvAlgorithms->push_back(DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_GEMM);
     }
-
-    for (U32 i = 0; i < algoNum; i++) {
-        if (depthwisePointwiseConvAlgorithms) {
-            (*depthwisePointwiseConvAlgorithms).push_back(algo[i]);
+    for (auto algo : (*depthwisePointwiseConvAlgorithms)) {
+        if (dw == 1 && dh == 1) {
+            CHECK_STATUS(get_conv_depthwise_cal_scheme(vecHD, vecCD, vecKD));
+        } else {
+            CHECK_STATUS(get_conv_depthwise_dila_cal_scheme(dh, vecHD, vecCD, vecKD));
         }
-        if (algoNumIndexD) {
-            (*algoNumIndexD).push_back(configNumsD[i]);
+        algoNumIndexD->push_back(vecHD->size());
+        if (algo == DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_DIRECT) {
+            CHECK_STATUS(get_conv_direct_cal_scheme(vecHP, vecCP, vecKP, 1, 1, pointwiseFilterNum));
+            if (!check_qualcomm_device()) {
+                CHECK_STATUS(get_conv_direct_reuse_w_cal_scheme(
+                    vecHP, vecCP, vecKP, ow, pointwiseFilterNum, inputMemType));
+            }
+        } else if (algo == DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_GEMM) {
+            CHECK_STATUS(get_gemm_tn_pointwise_cal_scheme(
+                vecHP, vecCP, vecKP, pointwiseFilterNum, outputMemType));
         }
-        if (algoNumIndexP) {
-            (*algoNumIndexP).push_back(configNumsP[i]);
-        }
-    }
-    for (U32 i = 0; i < configNumP; i++) {
-        if (vecWP) {
-            (*vecWP).push_back(configInfo[0][i]);
-        }
-        if (vecCP) {
-            (*vecCP).push_back(configInfo[1][i]);
-        }
-        if (vecKP) {
-            (*vecKP).push_back(configInfo[2][i]);
-        }
+        algoNumIndexP->push_back(vecHP->size());
     }
 }
 
-EE depthwise_pointwise_convolution_infer_output_size_mali(TensorDesc inputDesc,
+EE depthwise_pointwise_convolution_padding_input_mali(TensorDesc inputDesc,
     TensorDesc dwFilterDesc,
     TensorDesc pwFilterDesc,
     ConvolutionParamSpec convParamSpec,
     TensorDesc *outputDesc,
-    GCLMemDesc_t gclmemInputDesc,
-    GCLMemDesc_t gclmemOutputDesc)
+    OclMemory *inputMem,
+    OclMemory *outputMem)
 {
-    DataType idt;
-    DataFormat idf;
-    U32 iw, ih, ic, in;
-    U32 fw, fh;
-    U32 pfn;
-    int ow, oh;
-    U32 sw, sh, pl, pt, dw, dh, pr, pb;
-    tensorSelectGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw);
-    tensorSelectGet(dwFilterDesc, NULL, NULL, NULL, NULL, &fh, &fw);
-    tensorSelectGet(pwFilterDesc, NULL, NULL, &pfn, NULL, NULL, NULL);
-    pl = convParamSpec.padding_left;
-    pr = convParamSpec.padding_right;
-    pt = convParamSpec.padding_top;
-    pb = convParamSpec.padding_bottom;
-    sw = convParamSpec.stride_w;
-    sh = convParamSpec.stride_h;
-    dw = convParamSpec.dilatedRate_w;
-    dh = convParamSpec.dilatedRate_h;
-    if (fw < 1 || fh < 1) {
-        return NOT_SUPPORTED;
+    if (inputMem == nullptr || outputMem == nullptr || outputDesc == nullptr) {
+        CHECK_STATUS(NULL_POINTER);
     }
+    U32 sh = convParamSpec.stride_h;
+    U32 dw = convParamSpec.dilatedRate_w;
+    U32 dh = convParamSpec.dilatedRate_h;
+    U32 ih = inputDesc.dims[1];
+    U32 in = inputDesc.dims[inputDesc.nDims - 1];
+    U32 fh = dwFilterDesc.dims[1];
+    U32 ow = (*outputDesc).dims[0];
+    U32 oh = (*outputDesc).dims[1];
+    U32 pfn = pwFilterDesc.dims[pwFilterDesc.nDims - 1];
+    (*outputDesc).df = DF_NCHWC4;
     if ((pfn & 3) != 0) {
         return NOT_SUPPORTED;
     }
-    U32 fwd = (fw - 1) * dw + 1;
-    U32 fhd = (fh - 1) * dh + 1;
-    ow = (iw + pl + pr - fwd) / sw + 1;
-    oh = (ih + pt + pb - fhd) / sh + 1;
-    if (ow <= 0 || oh <= 0) {
-        CHECK_STATUS(NOT_MATCH);
-    }
-    if (outputDesc) {
-        *outputDesc = tensor4df(idt, idf, in, pfn, oh, ow);
-    }
-    bool need_pad = false;
 
-    std::vector<U32> vecW;
-    depthwise_pointwise_convolution_produce_algos_paras(
-        oh, pfn, dw, NULL, NULL, &vecW, NULL, NULL, NULL, NULL, NULL, NULL);
-    U32 iw_align = ow;
-    for (auto item_w : vecW) {
-        U32 i = ALIGN(ow, item_w);
-        iw_align = (iw_align < i) ? i : iw_align;
+    if (inputDesc.df == DF_NCHWC4) {
+        std::vector<DepthwiseConvolutionForwardAlgorithm> depthwisePointwiseConvAlgorithms;
+        std::vector<U32> algoNumIndexD;
+        std::vector<U32> vecHD;
+        std::vector<U32> vecCD;
+        std::vector<U32> vecKD;
+        std::vector<U32> algoNumIndexP;
+        std::vector<U32> vecHP;
+        std::vector<U32> vecCP;
+        std::vector<U32> vecKP;
+        GCLMemType imt = inputMem->gclMemType();
+        GCLMemType omt = outputMem->gclMemType();
+        depthwise_pointwise_convolution_produce_algos_paras(ow, pfn, dw, dh, in, imt, omt,
+            &depthwisePointwiseConvAlgorithms, &algoNumIndexD, &vecHD, &vecCD, &vecKD,
+            &algoNumIndexP, &vecHP, &vecCP, &vecKP);
+
+        U32 ih_align = oh;
+        for (auto item_h : vecHD) {
+            U32 i = ALIGN(oh, item_h);
+            ih_align = (ih_align < i) ? i : ih_align;
+        }
+        ih_align *= sh;
+        U32 fhd = (fh - 1) * dh + 1;
+        U32 pl = convParamSpec.padding_left;
+        U32 pr = convParamSpec.padding_right;
+        U32 pt = convParamSpec.padding_top;
+        U32 pb = ih_align + (fhd / 2 * 2) - pt - ih;
+        if (pb < convParamSpec.padding_bottom) {
+            pb = convParamSpec.padding_bottom;
+        }
+        inputMem->padding(pl, pr, pt, pb);
     }
-    U32 ext_w = (fwd / 2 < pl) ? pl : fwd / 2;
-    iw_align = iw_align * sw;
-    if (pl < ext_w) {
-        iw_align = iw_align + 2 * (ext_w - pl);
-        ext_w = pl;
-    }
-    if (iw_align != iw) {
-        need_pad = true;
-    }
-    if (ext_w != 0 || pt != 0) {
-        need_pad = true;
-    }
-    CHECK_STATUS(infer_gclmem_desc_ncwhc4(iw_align, ih, ic, ext_w, pt, ow, oh, pfn, idt, idt,
-        gclmemInputDesc, gclmemOutputDesc, need_pad));
     return SUCCESS;
 }
 
@@ -204,6 +127,8 @@ EE depthwise_pointwise_convolution_infer_forward_algorithm_mali(GCLHandle_t hand
     TensorDesc dwFilterDesc,
     TensorDesc pwFilterDesc,
     TensorDesc outputDesc,
+    GCLMemDesc inputMemDesc,
+    GCLMemDesc outputMemDesc,
     ConvolutionParamSpec convParamSpec,
     ConvolutionPolicy policy,
     ActivationMode depthwiseActivationMode,
@@ -226,22 +151,23 @@ EE depthwise_pointwise_convolution_infer_forward_algorithm_mali(GCLHandle_t hand
     }
     std::vector<DepthwiseConvolutionForwardAlgorithm> depthwisePointwiseConvAlgorithms;
     std::vector<U32> algoNumIndexD;
-    std::vector<U32> vecWD;
+    std::vector<U32> vecHD;
     std::vector<U32> vecCD;
     std::vector<U32> vecKD;
     std::vector<U32> algoNumIndexP;
-    std::vector<U32> vecWP;
+    std::vector<U32> vecHP;
     std::vector<U32> vecCP;
     std::vector<U32> vecKP;
     DataType dt;
-    U32 ic, oh, pfn, dw;
-    tensorSelectGet(inputDesc, NULL, NULL, NULL, &ic, NULL, NULL);
-    tensorSelectGet(outputDesc, NULL, NULL, NULL, NULL, &oh, NULL);
+    U32 in, ic, ow, pfn, dw, dh;
+    tensorSelectGet(inputDesc, NULL, NULL, &in, &ic, NULL, NULL);
+    tensorSelectGet(outputDesc, NULL, NULL, NULL, NULL, NULL, &ow);
     tensorSelectGet(pwFilterDesc, &dt, NULL, &pfn, NULL, NULL, NULL);
     dw = convParamSpec.dilatedRate_w;
-    depthwise_pointwise_convolution_produce_algos_paras(oh, pfn, dw,
-        &depthwisePointwiseConvAlgorithms, &algoNumIndexD, &vecWD, &vecCD, &vecKD, &algoNumIndexP,
-        &vecWP, &vecCP, &vecKP);
+    dh = convParamSpec.dilatedRate_h;
+    depthwise_pointwise_convolution_produce_algos_paras(ow, pfn, dw, dh, in, inputMemDesc.memType,
+        outputMemDesc.memType, &depthwisePointwiseConvAlgorithms, &algoNumIndexD, &vecHD, &vecCD,
+        &vecKD, &algoNumIndexP, &vecHP, &vecCP, &vecKP);
 
     if (policy == CONVOLUTION_TUNNING) {
         CHECK_STATUS(gcl_clean_kernelVec(handle));
@@ -251,22 +177,16 @@ EE depthwise_pointwise_convolution_infer_forward_algorithm_mali(GCLHandle_t hand
         GCLMem_t pwFilter = gcl_create_gclmem();
         GCLMem_t output = gcl_create_gclmem();
         GCLMem_t tmpbuf = gcl_create_gclmem();
+        GCLMem_t tmpImgA = gcl_create_gclmem();
+        GCLMem_t tmpImgB = gcl_create_gclmem();
         GCLMem_t dwBias = gcl_create_gclmem();
         GCLMem_t pwBiasBuf = gcl_create_gclmem();
         GCLMem_t pwBiasImg = gcl_create_gclmem();
         U32 maxDwFilterSize = 0;
         U32 maxPwFilterSize = 0;
-        U32 maxBytes = 0;
+        U32 maxBytes[7] = {0};
         U32 algosNum = 0;
         std::vector<ForwardRunInfoMali> runInfos;
-        U32 stride[3] = {0, 0, 0};
-        U32 offset[3] = {0, 0, 0};
-        GCLMemDesc inputMemDesc = gcl_mem_desc(stride, offset, DT_U8, DF_NCWHC4);
-        GCLMemDesc outputMemDesc = gcl_mem_desc(stride, offset, DT_U8, DF_NCWHC4);
-        CHECK_STATUS(depthwise_pointwise_convolution_infer_output_size_mali(inputDesc, dwFilterDesc,
-            pwFilterDesc, convParamSpec, NULL, &inputMemDesc, &outputMemDesc));
-        std::vector<GCLMemDesc> dwFilterMemDescs;
-        std::vector<GCLMemDesc> pwFilterMemDescs;
         if (algoNumIndexD.size() != algoNumIndexP.size()) {
             CHECK_STATUS(NOT_MATCH);
         }
@@ -274,8 +194,12 @@ EE depthwise_pointwise_convolution_infer_forward_algorithm_mali(GCLHandle_t hand
         U32 runInfoBe[2][2];
         U32 runInfoEnd[2][2];
         U32 runInfoCount = 0;
+        U32 stride[3] = {0, 0, 0};
+        U32 offset[3] = {0, 0, 0};
+        TensorDesc dwFtmDesc;
+        TensorDesc pwFtmDesc;
         for (U32 i = 0; i < algoNumIndexD.size(); i++) {
-            U32 bytes = 0;
+            U32 bytes[7] = {0};
             ForwardRunInfoMali runInfo;
             U32 be = (i == 0) ? 0 : algoNumIndexD[i - 1];
             U32 end = algoNumIndexD[i];
@@ -285,41 +209,42 @@ EE depthwise_pointwise_convolution_infer_forward_algorithm_mali(GCLHandle_t hand
                 U32 depthwiseIndex = 0;
                 U32 pointwiseIndex = 0;
                 for (U32 k = be; k < end; k++) {
-                    GCLMemDesc dwFilterMemDesc = gcl_mem_desc(stride, offset, DT_U8, DF_NCWHC4);
-                    GCLMemDesc pwFilterMemDesc = gcl_mem_desc(stride, offset, DT_U8, DF_NCWHC4);
+                    GCLMemDesc dwFilterMemDesc = gcl_mem_desc(stride, offset, DT_U8, DF_NCHWC4);
+                    GCLMemDesc pwFilterMemDesc = gcl_mem_desc(stride, offset, DT_U8, DF_NCHWC4);
                     if (j == 0) {
                         depthwiseIndex = k;
                     }
                     if (j == 1) {
                         pointwiseIndex = k;
                     }
-                    runInfo.best_w[0] = vecWD[depthwiseIndex];
+                    runInfo.best_h[0] = vecHD[depthwiseIndex];
                     runInfo.best_c[0] = vecCD[depthwiseIndex];
                     runInfo.best_k[0] = vecKD[depthwiseIndex];
-                    runInfo.best_w[1] = vecWP[pointwiseIndex];
+                    runInfo.best_h[1] = vecHP[pointwiseIndex];
                     runInfo.best_c[1] = vecCP[pointwiseIndex];
                     runInfo.best_k[1] = vecKP[pointwiseIndex];
                     runInfoCount++;
-                    if (depthwise_pointwise_convolution_transform_filter_bytes_mali(dwFilterDesc,
-                            pwFilterDesc, &runInfo, &dwFilterMemDesc, &pwFilterMemDesc,
-                            &bytes) != SUCCESS) {
+                    TensorDesc dwDesc, pwDesc;
+                    if (depthwise_pointwise_convolution_transform_filter_bytes_mali(
+                            dwFilterDesc, pwFilterDesc, &runInfo, &dwDesc, &pwDesc) != SUCCESS) {
                         continue;
                     }
-                    maxBytes = (maxBytes < bytes) ? bytes : maxBytes;
                     if (depthwise_pointwise_convolution_infer_forward_tmp_bytes_mali(inputDesc,
                             dwFilterDesc, pwFilterDesc, outputDesc, convParamSpec, &runInfo,
-                            &bytes) != SUCCESS) {
+                            bytes) != SUCCESS) {
                         continue;
                     }
-                    maxBytes = (maxBytes < bytes) ? bytes : maxBytes;
-                    maxDwFilterSize = (maxDwFilterSize < dwFilterMemDesc.byteSize)
-                        ? dwFilterMemDesc.byteSize
-                        : maxDwFilterSize;
-                    maxPwFilterSize = (maxPwFilterSize < pwFilterMemDesc.byteSize)
-                        ? pwFilterMemDesc.byteSize
-                        : maxPwFilterSize;
-                    dwFilterMemDescs.push_back(dwFilterMemDesc);
-                    pwFilterMemDescs.push_back(pwFilterMemDesc);
+                    for (U32 i = 0; i < 7; i++) {
+                        maxBytes[i] = (maxBytes[i] < bytes[i]) ? bytes[i] : maxBytes[i];
+                    }
+                    if (maxDwFilterSize < tensorNumBytes(dwDesc)) {
+                        dwFtmDesc = dwDesc;
+                        maxDwFilterSize = tensorNumBytes(dwDesc);
+                    }
+                    if (maxPwFilterSize < tensorNumBytes(pwDesc)) {
+                        pwFtmDesc = pwDesc;
+                        maxPwFilterSize = tensorNumBytes(pwDesc);
+                    }
                     runInfos.push_back(runInfo);
                 }
                 runInfoEnd[i][j] = runInfoCount;
@@ -340,17 +265,25 @@ EE depthwise_pointwise_convolution_infer_forward_algorithm_mali(GCLHandle_t hand
         CHECK_STATUS(gclmem_set_desc_padding(
             &pwBiasBuf->desc, pwStride, offset, dt, DF_NHWC, GCL_MEM_BUF, CL_MEM_READ_WRITE));
 
+        stride[0] = dwFtmDesc.dims[0];
+        stride[1] = dwFtmDesc.dims[1];
+        stride[2] = dwFtmDesc.dims[2];
+        CHECK_STATUS(gclmem_set_desc_padding(
+            &dwFilter->desc, stride, offset, dt, DF_NCHW, GCL_MEM_BUF, CL_MEM_READ_WRITE));
+
+        stride[0] = pwFtmDesc.dims[0];
+        stride[1] = pwFtmDesc.dims[1];
+        stride[2] = pwFtmDesc.dims[2];
+        CHECK_STATUS(gclmem_set_desc_padding(
+            &pwFilter->desc, stride, offset, dt, DF_NCHW, GCL_MEM_BUF, CL_MEM_READ_WRITE));
+
         algosNum = runInfos.size();
         if (algosNum == 0) {
             CHECK_STATUS(NOT_SUPPORTED);
         }
-        dwFilterMemDescs[0].byteSize = maxDwFilterSize;
-        pwFilterMemDescs[0].byteSize = maxPwFilterSize;
+        outputMemDesc.need_pad = false;
         input->desc = inputMemDesc;
         output->desc = outputMemDesc;
-        dwFilter->desc = dwFilterMemDescs[0];
-        pwFilter->desc = pwFilterMemDescs[0];
-        tmpbuf->desc.byteSize = maxBytes;
         gcl_create_memory(handle, input);
         gcl_create_memory(handle, output);
         gcl_create_memory(handle, dwFilter);
@@ -358,54 +291,73 @@ EE depthwise_pointwise_convolution_infer_forward_algorithm_mali(GCLHandle_t hand
         gcl_create_memory(handle, dwBias);
         gcl_create_memory(handle, pwBiasImg);
         gcl_create_memory(handle, pwBiasBuf);
-        if (maxBytes) {
+        std::vector<GCLMem_t> tmp(3, NULL);
+        if (maxBytes[0]) {
+            tmpbuf->desc.byteSize = maxBytes[0];
             gcl_create_memory(handle, tmpbuf);
+            tmp[0] = tmpbuf;
+        }
+        if (check_qualcomm_device() && maxBytes[1] > 0 && maxBytes[2] > 0 && maxBytes[3] > 0) {
+            tmpImgA->desc.memType = GCL_MEM_IMG_3D;
+            tmpImgA->desc.stride[0] = maxBytes[1];
+            tmpImgA->desc.stride[1] = maxBytes[2];
+            tmpImgA->desc.stride[2] = maxBytes[3];
+            gcl_create_memory(handle, tmpImgA);
+            tmp[1] = tmpImgA;
+        }
+        if (check_qualcomm_device() && maxBytes[4] > 0 && maxBytes[5] > 0 && maxBytes[6] > 0) {
+            tmpImgB->desc.memType = GCL_MEM_IMG_3D;
+            tmpImgB->desc.stride[0] = maxBytes[4];
+            tmpImgB->desc.stride[1] = maxBytes[5];
+            tmpImgB->desc.stride[2] = maxBytes[6];
+            gcl_create_memory(handle, tmpImgB);
+            tmp[2] = tmpImgB;
         }
 
         double minTimeDepthwise[2] = {DBL_MAX, DBL_MAX};
         double minTimePointwise[2] = {DBL_MAX, DBL_MAX};
         ForwardRunInfoMali bestRunInfo[2];
-        U32 runKernelBe = 0;
-        U32 runKernelEnd = 0;
 
-        for (U32 i = 0; i < 2; i++) {
+        for (U32 i = 0; i < depthwisePointwiseConvAlgorithms.size(); i++) {
             U32 depthwiseBe = runInfoBe[i][0];
             U32 depthwiseEnd = runInfoEnd[i][0];
             U32 pointwiseBe = runInfoBe[i][1];
             U32 pointwiseEnd = runInfoEnd[i][1];
-            GCLMem_t pwBias = (i == 0) ? pwBiasImg : pwBiasBuf;
+            GCLMem_t pwBias = pwBiasBuf;
+            if (depthwisePointwiseConvAlgorithms[i] ==
+                DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_DIRECT) {
+                pwBias = pwBiasImg;
+            }
             for (U32 j = depthwiseBe; j < depthwiseEnd; j++) {
                 if (depthwise_pointwise_convolution_mali(handle, inputDesc, input, dwFilterDesc,
                         pwFilterDesc, dwFilter, pwFilter, convParamSpec, &runInfos[j], dwBiasDesc,
-                        pwBiasDesc, dwBias, pwBias, maxBytes, tmpbuf, outputDesc, output,
+                        pwBiasDesc, dwBias, pwBias, maxBytes[0], tmp, outputDesc, output,
                         depthwiseActivationMode, pointwiseActivationMode) == SUCCESS) {
-                    runKernelEnd = handle->kernelVec->size();
-                    gcl_run_kernelVec_timing(handle, runKernelBe, runKernelBe + 1);
+                    U32 kernelVecSize = handle->kernelVec->size();
+                    gcl_run_kernelVec_timing(handle, kernelVecSize - 2, kernelVecSize - 1);
                     if (minTimeDepthwise[i] > handle->t_execute) {
                         minTimeDepthwise[i] = handle->t_execute;
                         bestRunInfo[i].algorithm = runInfos[j].algorithm;
-                        bestRunInfo[i].best_w[0] = runInfos[j].best_w[0];
+                        bestRunInfo[i].best_h[0] = runInfos[j].best_h[0];
                         bestRunInfo[i].best_c[0] = runInfos[j].best_c[0];
                         bestRunInfo[i].best_k[0] = runInfos[j].best_k[0];
                     }
-                    runKernelBe = runKernelEnd;
                 }
             }
             for (U32 j = pointwiseBe; j < pointwiseEnd; j++) {
                 if (depthwise_pointwise_convolution_mali(handle, inputDesc, input, dwFilterDesc,
                         pwFilterDesc, dwFilter, pwFilter, convParamSpec, &runInfos[j], dwBiasDesc,
-                        pwBiasDesc, dwBias, pwBias, maxBytes, tmpbuf, outputDesc, output,
+                        pwBiasDesc, dwBias, pwBias, maxBytes[0], tmp, outputDesc, output,
                         depthwiseActivationMode, pointwiseActivationMode) == SUCCESS) {
-                    runKernelEnd = handle->kernelVec->size();
-                    gcl_run_kernelVec_timing(handle, runKernelEnd - 1, runKernelEnd);
+                    U32 kernelVecSize = handle->kernelVec->size();
+                    gcl_run_kernelVec_timing(handle, kernelVecSize - 1, kernelVecSize);
                     if (minTimePointwise[i] > handle->t_execute) {
                         minTimePointwise[i] = handle->t_execute;
                         bestRunInfo[i].algorithm = runInfos[j].algorithm;
-                        bestRunInfo[i].best_w[1] = runInfos[j].best_w[1];
+                        bestRunInfo[i].best_h[1] = runInfos[j].best_h[1];
                         bestRunInfo[i].best_c[1] = runInfos[j].best_c[1];
                         bestRunInfo[i].best_k[1] = runInfos[j].best_k[1];
                     }
-                    runKernelBe = runKernelEnd;
                 }
             }
         }
@@ -429,9 +381,9 @@ EE depthwise_pointwise_convolution_infer_forward_algorithm_mali(GCLHandle_t hand
         gcl_destroy_gclmem(pwBiasImg);
         gcl_destroy_gclmem(pwBiasBuf);
         gcl_destroy_gclmem(tmpbuf);
+        gcl_destroy_gclmem(tmpImgA);
+        gcl_destroy_gclmem(tmpImgB);
         runInfos.clear();
-        dwFilterMemDescs.clear();
-        pwFilterMemDescs.clear();
         CHECK_STATUS(gcl_clean_kernelVec(handle));
         CHECK_STATUS(gcl_clean_programMap(handle));
         CHECK_STATUS(gcl_off_queue_profiling(handle));
@@ -443,15 +395,14 @@ EE depthwise_pointwise_convolution_infer_forward_algorithm_mali(GCLHandle_t hand
 EE depthwise_pointwise_convolution_transform_filter_bytes_mali(TensorDesc dwFilterDesc,
     TensorDesc pwFilterDesc,
     ForwardRunInfoMali_t forwardRunInfo,
-    GCLMemDesc_t gclmemDwFilterDesc,
-    GCLMemDesc_t gclmemPwFilterDesc,
-    U32 *bytes)
+    TensorDesc *dwFtmDesc,
+    TensorDesc *pwFtmDesc)
 {
     EE ret = SUCCESS;
     switch (dwFilterDesc.dt) {
         case DT_F16: {
-            ret = depthwise_pointwise_convolution_transform_filter_bytes_mali_fp16(dwFilterDesc,
-                pwFilterDesc, forwardRunInfo, gclmemDwFilterDesc, gclmemPwFilterDesc, bytes);
+            ret = depthwise_pointwise_convolution_transform_filter_bytes_mali_fp16(
+                dwFilterDesc, pwFilterDesc, forwardRunInfo, dwFtmDesc, pwFtmDesc);
             break;
         }
         case DT_I8: {
@@ -531,7 +482,7 @@ EE depthwise_pointwise_convolution_mali(GCLHandle_t handle,
     const GCLMem_t dwBias,
     const GCLMem_t pwBias,
     U32 tmpBytes,
-    GCLMem_t tmpBuf,
+    std::vector<GCLMem_t> tmp,
     TensorDesc outputDesc,
     GCLMem_t output,
     ActivationMode depthwiseActivationMode,
@@ -542,7 +493,7 @@ EE depthwise_pointwise_convolution_mali(GCLHandle_t handle,
         case DT_F16: {
             ret = depthwise_pointwise_convolution_mali_fp16(handle, inputDesc, input, dwFilterDesc,
                 pwFilterDesc, dwFilter, pwFilter, convParamSpec, forwardRunInfo, dwBiasDesc,
-                pwBiasDesc, dwBias, pwBias, tmpBytes, tmpBuf, outputDesc, output,
+                pwBiasDesc, dwBias, pwBias, tmpBytes, tmp, outputDesc, output,
                 depthwiseActivationMode, pointwiseActivationMode);
             break;
         }

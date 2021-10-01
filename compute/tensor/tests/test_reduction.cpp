@@ -11,7 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string.h>
 #include "tensor_computing.h"
 #include "ut_util.h"
 
@@ -33,51 +32,50 @@ int reductionTest(int argc, char **argv, DataType dt)
     DataFormat df = DF_NCHW;
     TensorDesc maskDesc;
     maskDesc.nDims = 0;
-    ArchInfo archInfo;
-    archInfo.arch = UT_ARCH;
-    ArchInfo archInfo_org;
-    archInfo_org.arch = CPU_GENERAL;
 
     TensorDesc inDesc = tensor4df(dt, df, in, ic, ih, iw);
     U8 *input = ut_input_v(tensorNumElements(inDesc), dt, UT_INIT_RANDOM);
     Tensor inputTensor;
     inputTensor.resize(inDesc);
     inputTensor.alloc();
-    memcpy(get_ptr_from_tensor(inputTensor, UT_ARCH), input, tensorNumBytes(inDesc));
+    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inDesc));
 
     Tensor maskTensor;
     maskTensor.resize(maskDesc);
     Tensor outputTensor;
     Tensor outputTensorRef;
-    CHECK_STATUS(reduction_infer_output_size(&inputTensor, maskTensor, p, &outputTensor, &archInfo));
+    CHECK_STATUS(
+        reduction_infer_output_size(&inputTensor, maskTensor, p, &outputTensor, &UT_CPU_ARCHINFO));
     outputTensor.alloc();
     outputTensorRef.resize(outputTensor.get_desc());
     outputTensorRef.alloc();
 
     U32 tmpBytes;
-    CHECK_STATUS(
-        reduction_infer_forward_tmp_bytes(inputTensor, p, outputTensor, &tmpBytes, &archInfo));
+    CHECK_STATUS(reduction_infer_forward_tmp_bytes(
+        inputTensor, p, outputTensor, &tmpBytes, &UT_CPU_ARCHINFO));
     Tensor tmpTensor;
     tmpTensor.resize(tensor1d(dt, tmpBytes));
     tmpTensor.alloc();
 
     if (UT_CHECK) {
-        CHECK_STATUS(reduction(inputTensor, maskTensor, p, tmpTensor, outputTensor, &archInfo));
+        CHECK_STATUS(
+            reduction(inputTensor, maskTensor, p, tmpTensor, outputTensor, &UT_CPU_ARCHINFO));
 
         // naive implement
         CHECK_STATUS(
-            reduction(inputTensor, maskTensor, p, tmpTensor, outputTensorRef, &archInfo_org));
+            reduction(inputTensor, maskTensor, p, tmpTensor, outputTensorRef, &UT_SERIAL_ARCHINFO));
 
         // check
-        ut_check_v(get_ptr_from_tensor(outputTensor, UT_ARCH),
-            get_ptr_from_tensor(outputTensorRef, UT_ARCH), outputTensor.length(), dt, 1, __FILE__,
-            __LINE__);
+        ut_check_v(get_ptr_from_tensor(outputTensor, CPU_GENERAL),
+            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), outputTensor.length(), dt, 1,
+            __FILE__, __LINE__);
     }
 
     // benchmark
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        CHECK_STATUS(reduction(inputTensor, maskTensor, p, tmpTensor, outputTensor, &archInfo));
+        CHECK_STATUS(
+            reduction(inputTensor, maskTensor, p, tmpTensor, outputTensor, &UT_CPU_ARCHINFO));
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;

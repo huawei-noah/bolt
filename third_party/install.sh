@@ -27,6 +27,10 @@ EOF
     exit 1;
 }
 TEMP=`getopt -o "ht:" -al target:,threads:,help,clean -- "$@"`
+if [[ $? != 0 ]]; then
+    echo "[ERROR] ${script_name} terminating..." >&2
+    exit 1
+fi
 if [[ ${TEMP} != *-- ]]; then
     echo "[ERROR] ${script_name} can not recognize ${TEMP##*-- }"
     echo "maybe it contains invalid character(such as Chinese)."
@@ -205,7 +209,7 @@ cmake_env_options=\"\${cmake_env_options} -DFlatBuffers_ROOT=\${FlatBuffers_ROOT
         mkdir -p ${TFLite_ROOT}
         cd ${TFLite_ROOT}
         if [ ! -d "${script_dir}/sources/tflite" ]; then
-            wget --no-check-certificate https://raw.githubusercontent.com/tensorflow/tensorflow/v1.15.0/tensorflow/lite/schema/schema_generated.h > ${log_file} || exit 1
+            wget --no-check-certificate https://raw.githubusercontent.com/tensorflow/tensorflow/master/tensorflow/lite/schema/schema_generated.h > ${log_file} || exit 1
             mkdir include
             mkdir include/tensorflow
             mkdir include/tensorflow/lite
@@ -226,7 +230,7 @@ cmake_env_options=\"\${cmake_env_options} -DTFLite_ROOT=\${TFLite_ROOT}\"
 " >> ${env_file}
 fi
 
-if [[ ${cmake_options} =~ USE_MALI=ON ]]; then
+if [[ ${cmake_options} =~ USE_GPU=ON ]]; then
     OpenCL_ROOT=${work_dir}/opencl
     # download and install OpenCL
     if [ ! -d "${OpenCL_ROOT}/lib" ]; then
@@ -385,6 +389,71 @@ if [[ ! -d \"\${FFTS_ROOT}/lib\" ]]; then
     exit 1
 fi
 cmake_env_options=\"\${cmake_env_options} -DFFTS_ROOT=\${FFTS_ROOT}\"
+" >> ${env_file}
+fi
+
+if [[ ${cmake_options} =~ BUILD_TEST=ON && "${CC}" != "arm-apple-darwin11-clang" ]]; then
+    OpenCV_ROOT=${work_dir}/opencv
+    search_opencv_cmake=""
+    if [[ -d ${OpenCV_ROOT} ]]; then
+        search_opencv_cmake=`find ${OpenCV_ROOT} -name "OpenCVConfig.cmake"`
+    fi
+    # download and build opencv
+    if [[ "${search_opencv_cmake}" == "" ]]; then
+        echo "[INFO] build opencv in ${OpenCV_ROOT}..."
+        mkdir -p ${OpenCV_ROOT}
+        cd ${OpenCV_ROOT}
+        if [ ! -d "./opencv-4.5.2" ]; then
+            if [ ! -f "${script_dir}/sources/opencv-4.5.2.zip" ]; then
+                if [ -f "/data/bolt/packages/opencv-4.5.2.zip" ]; then
+                    cp /data/bolt/packages/opencv-4.5.2.zip ${script_dir}/sources/
+                fi
+            fi
+            if [ ! -f "${script_dir}/sources/opencv-4.5.2.zip" ]; then
+                wget --no-check-certificate https://github.com/opencv/opencv/archive/refs/tags/4.5.2.zip > ${log_file} || exit 1
+                mv 4.5.2.zip opencv-4.5.2.zip || exit 1
+                cp opencv-4.5.2.zip ${script_dir}/sources/
+            else
+                cp ${script_dir}/sources/opencv-4.5.2.zip .
+            fi
+            unzip opencv-4.5.2.zip > ${log_file} || exit 1
+        fi
+        cd opencv-4.5.2
+        if [[ "${CMAKE_OPTIONS}" =~ "USE_DYNAMIC_LIBRARY=ON" ]]; then
+            OpenCV_SHARED_LIB=ON
+        else
+            OpenCV_SHARED_LIB=OFF
+        fi
+        opencv_cmake_options="-DBUILD_LIST=core,highgui,improc,videoio,video,dnn,objdetect -DBUILD_PROTOBUF=ON  -DWITH_PROTOBUF=ON -DBUILD_opencv_apps=OFF -DBUILD_JAVA=OFF -DBUILD_EXAMPLES=OFF -DBUILD_ANDROID_EXAMPLES=OFF -DBUILD_ANDROID_PROJECTS=OFF -DANDROID_STL=c++_shared -DBUILD_SHARED_LIBS=${OpenCV_SHARED_LIB} -DBUILD_TESTS=OFF -DBUILD_PERF_TESTS=OFF -DCMAKE_CXX_FLAGS_RELEASE=-g0 ${CMAKE_OPTIONS}"
+        if [[ ${target} =~ linux-arm_musleab || ${target} =~ linux-arm_himix100 || ${target} =~ linux-armv7_blank ]]; then
+            opencv_cmake_options="${opencv_cmake_options} -DBUILD_ZLIB=ON"
+        fi
+        if [[ ${target} =~ linux-arm_himix100  ]]; then
+            sed -i "s/std::cbrt/cbrt/g" `grep "std::cbrt" -rl ./`
+            sed -i "s/std::copysign/copysign/g" `grep "std::copysign" -rl ./`
+        fi
+        rm -rf build
+        mkdir -p build
+        cd build
+        cmake -G"${CMAKE_GENERATOR}" .. -DCMAKE_INSTALL_PREFIX=${OpenCV_ROOT} ${opencv_cmake_options} > ${log_file} || exit 1
+        ${MAKE} -j ${build_threads} >> ${log_file} || exit 1
+        ${MAKE} install >> ${log_file} || exit 1
+        cd ../../
+        rm -rf opencv-4.5.2*
+    fi
+    echo "
+search_opencv_cmake=\"\"
+if [[ -d ${OpenCV_ROOT} ]]; then
+    search_opencv_cmake=\`find ${OpenCV_ROOT} -name \"OpenCVConfig.cmake\"\`
+fi
+if [[ \"\${search_opencv_cmake}\" == \"\" ]]; then
+    echo \"[ERROR] OpenCV not install success\"
+    exit 1
+fi
+array=(\${search_opencv_cmake// / })
+echo \$array
+export OpenCV_CMAKE_PATH=\${array[\${#array[@]}-1]}
+cmake_env_options=\"\${cmake_env_options} -DOpenCV_CMAKE_PATH=\${OpenCV_CMAKE_PATH}\"
 " >> ${env_file}
 fi
 

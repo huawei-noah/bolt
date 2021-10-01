@@ -15,7 +15,7 @@
 #include "../api/c/bolt.h"
 
 #define NAME_VALUE_PAIR(x) #x, x
-const int DataDescMaxDims = 6;
+const int DataDescMaxDims = 8;
 
 struct ModelHandleInner {
     void *ms;
@@ -25,7 +25,7 @@ struct ModelHandleInner {
     bool useFileStream;
 };
 
-typedef struct {
+typedef struct DataDesc {
     U32 dims[DataDescMaxDims] = {0};
     char name[NAME_LEN] = {0};
     DataType dt;
@@ -58,7 +58,7 @@ inline DataType DATA_TYPE2DataType(DATA_TYPE dt_user)
             ret = DT_U32;
             break;
         default:
-            UNI_ERROR_LOG("C API can not recognize DATA_TYPE %d\n", dt_user);
+            UNI_ERROR_LOG("C API can not recognize enum DATA_TYPE %d.\n", dt_user);
             break;
     }
     return ret;
@@ -83,7 +83,7 @@ inline DATA_TYPE DataType2DATA_TYPE(DataType dt_bolt)
             ret = UINT_32;
             break;
         default:
-            UNI_ERROR_LOG("C API can not process inner DataType %d\n", dt_bolt);
+            UNI_ERROR_LOG("C API can not process inner DataType %s.\n", DataTypeName()[dt_bolt]);
             break;
     }
     return ret;
@@ -109,7 +109,7 @@ inline DataFormat DATA_FORMAT2DataFormat(DATA_FORMAT df_user)
             ret = DF_NORMAL;
             break;
         default: {
-            UNI_ERROR_LOG("C API can not recognize DATA_FORMAT %d\n", df_user);
+            UNI_ERROR_LOG("C API can not recognize enum DATA_FORMAT %d.\n", df_user);
             break;
         }
     }
@@ -129,6 +129,9 @@ inline DATA_FORMAT DataFormat2DATA_FORMAT(DataFormat df_bolt)
         case DF_NCHWC8:
             ret = NCHWC8;
             break;
+        case DF_NCHWC4:
+            ret = NCHWC4;
+            break;
         case DF_MTK:
             ret = MTK;
             break;
@@ -136,7 +139,7 @@ inline DATA_FORMAT DataFormat2DATA_FORMAT(DataFormat df_bolt)
             ret = NORMAL;
             break;
         default: {
-            UNI_ERROR_LOG("C API can not process inner DataFormat %d\n", df_bolt);
+            UNI_ERROR_LOG("C API can not process inner DataFormat %s.\n", DataFormatName()[df_bolt]);
             break;
         }
     }
@@ -157,7 +160,7 @@ inline AffinityPolicy AFFINITY_TYPE2AffinityPolicy(AFFINITY_TYPE affinity)
             ret = AFFINITY_GPU;
             break;
         default: {
-            UNI_ERROR_LOG("C API can not recognize AFFINITY_TYPE %d\n", affinity);
+            UNI_ERROR_LOG("C API can not recognize enum AFFINITY_TYPE %d.\n", affinity);
             break;
         }
     }
@@ -183,6 +186,9 @@ inline Arch DEVICE_TYPE2Arch(DEVICE_TYPE device)
         case GPU_MALI:
             ret = MALI;
             break;
+        case GPU_QUALCOMM:
+            ret = QUALCOMM;
+            break;
         case CPU_X86_AVX2:
             ret = X86_AVX2;
             break;
@@ -190,7 +196,7 @@ inline Arch DEVICE_TYPE2Arch(DEVICE_TYPE device)
             ret = CPU_GENERAL;
             break;
         default: {
-            UNI_ERROR_LOG("C API can not recognize DEVICE_TYPE %d\n", device);
+            UNI_ERROR_LOG("C API can not recognize enum DEVICE_TYPE %d.\n", device);
             break;
         }
     }
@@ -216,14 +222,20 @@ inline DEVICE_TYPE Arch2DEVICE_TYPE(Arch arch)
         case MALI:
             ret = GPU_MALI;
             break;
+        case QUALCOMM:
+            ret = GPU_QUALCOMM;
+            break;
         case X86_AVX2:
             ret = CPU_X86_AVX2;
             break;
         case CPU_GENERAL:
             ret = CPU_SERIAL;
             break;
+        case X86_AVX512:
+            ret = CPU_X86_AVX512;
+            break;
         default: {
-            UNI_ERROR_LOG("C API can not process inner Arch %d\n", arch);
+            UNI_ERROR_LOG("C API can not process inner Arch %s.\n", ArchName()[arch]);
             break;
         }
     }
@@ -236,7 +248,7 @@ void TensorDesc2DataDesc(TensorDesc srcDesc, DataDesc *dstDesc)
     dstDesc->df = srcDesc.df;
     if (srcDesc.nDims > DataDescMaxDims) {
         UNI_ERROR_LOG(
-            "C API DataDesc only support %d dimensions, not %d\n", DataDescMaxDims, srcDesc.nDims);
+            "C API DataDesc only support %d dimensions, not %d.\n", DataDescMaxDims, srcDesc.nDims);
     }
     for (U32 i = 0; i < srcDesc.nDims; i++) {
         dstDesc->dims[i] = srcDesc.dims[srcDesc.nDims - 1 - i];
@@ -249,26 +261,29 @@ void TensorDesc2DataDesc(TensorDesc srcDesc, DataDesc *dstDesc)
 void assert_not_nullptr(const char *funcName, const char *ptrName, const void *ptr)
 {
     if (ptr == NULL) {
-        UNI_ERROR_LOG("C API %s received null ptr %s\n", funcName, ptrName);
+        UNI_ERROR_LOG("C API %s received null ptr %s.\n", funcName, ptrName);
     }
 }
 
 void GetGpuDeviceName(char *gpuDeviceName)
 {
+    UNI_DEBUG_LOG("C API %s...\n", __FUNCTION__);
     std::string deviceName = "unKnown";
-#ifdef _USE_MALI
+#ifdef _USE_GPU
     deviceName = OCLContext::getInstance().handle->deviceName;
 #endif
     strcpy(gpuDeviceName, deviceName.c_str());
+    UNI_DEBUG_LOG("C API %s end.\n", __FUNCTION__);
 }
 
 ModelHandle CreateModel(const char *modelPath, AFFINITY_TYPE affinity, const char *algorithmMapPath)
 {
+    UNI_DEBUG_LOG("C API %s...\n", __FUNCTION__);
     assert_not_nullptr(__FUNCTION__, NAME_VALUE_PAIR(modelPath));
     ModelHandleInner *handle = new ModelHandleInner();
     ModelSpec *ms = new ModelSpec();
     if (SUCCESS != deserialize_model_from_file(modelPath, ms)) {
-        UNI_ERROR_LOG("C API %s failed\n", __FUNCTION__);
+        UNI_ERROR_LOG("C API %s failed to load model %s.\n", __FUNCTION__, modelPath);
         delete ms;
         handle->cnn = nullptr;
         return (ModelHandle)handle;
@@ -282,11 +297,13 @@ ModelHandle CreateModel(const char *modelPath, AFFINITY_TYPE affinity, const cha
     handle->deviceType = Arch2DEVICE_TYPE(cnn->get_runtime_device());
     handle->algoPath = (void *)algorithmMapPath;
     handle->useFileStream = false;
+    UNI_DEBUG_LOG("C API %s end.\n", __FUNCTION__);
     return (ModelHandle)handle;
 }
 
 ModelHandle CloneModel(ModelHandle ih)
 {
+    UNI_DEBUG_LOG("C API %s...\n", __FUNCTION__);
     ModelHandleInner *handle = (ModelHandleInner *)ih;
     assert_not_nullptr(__FUNCTION__, "ModelHandle", handle);
     CNN *cnn = (CNN *)handle->cnn;
@@ -296,17 +313,19 @@ ModelHandle CloneModel(ModelHandle ih)
     CNN *cloneCnn = new CNN();
     *cloneCnn = cnn->clone();
     cloneHandle->cnn = cloneCnn;
+    UNI_DEBUG_LOG("C API %s end.\n", __FUNCTION__);
     return (ModelHandle)cloneHandle;
 }
 
 ModelHandle CreateModelWithFileStream(
     const char *modelFileStream, AFFINITY_TYPE affinity, const char *algorithmMapFileStream)
 {
+    UNI_DEBUG_LOG("C API %s...\n", __FUNCTION__);
     assert_not_nullptr(__FUNCTION__, NAME_VALUE_PAIR(modelFileStream));
     ModelHandleInner *handle = new ModelHandleInner();
     ModelSpec *ms = new ModelSpec();
     if (SUCCESS != deserialize_model_from_file(modelFileStream, ms, true)) {
-        UNI_ERROR_LOG("C API %s failed\n", __FUNCTION__);
+        UNI_ERROR_LOG("C API %s failed to parse model.\n", __FUNCTION__);
         delete ms;
         handle->cnn = nullptr;
         return (ModelHandle)handle;
@@ -320,16 +339,19 @@ ModelHandle CreateModelWithFileStream(
     handle->deviceType = Arch2DEVICE_TYPE(cnn->get_runtime_device());
     handle->algoPath = (void *)algorithmMapFileStream;
     handle->useFileStream = true;
+    UNI_DEBUG_LOG("C API %s end.\n", __FUNCTION__);
     return (ModelHandle)handle;
 }
 
 int GetNumInputsFromModel(ModelHandle ih)
 {
+    UNI_DEBUG_LOG("C API %s...\n", __FUNCTION__);
     ModelHandleInner *ihInfo = (ModelHandleInner *)ih;
     assert_not_nullptr(__FUNCTION__, "ModelHandle", ihInfo);
 
     CNN *cnn = (CNN *)ihInfo->cnn;
     assert_not_nullptr(__FUNCTION__, "ModelHandle.cnn", cnn);
+    UNI_DEBUG_LOG("C API %s end.\n", __FUNCTION__);
 
     return (cnn->get_input_desc()).size();
 }
@@ -344,7 +366,9 @@ void GetInputDataInfoFromModel(ModelHandle ih,
     DATA_TYPE *dt,
     DATA_FORMAT *df)
 {
+    UNI_DEBUG_LOG("C API %s...\n", __FUNCTION__);
     GetInputDataInfoFromModel5D(ih, num_inputs, name, n, c, NULL, h, w, dt, df);
+    UNI_DEBUG_LOG("C API %s end.\n", __FUNCTION__);
 }
 
 void GetInputDataInfoFromModel5D(ModelHandle handle,
@@ -358,6 +382,7 @@ void GetInputDataInfoFromModel5D(ModelHandle handle,
     DATA_TYPE *dt,
     DATA_FORMAT *df)
 {
+    UNI_DEBUG_LOG("C API %s...\n", __FUNCTION__);
     ModelHandleInner *ihInfo = (ModelHandleInner *)handle;
     assert_not_nullptr(__FUNCTION__, "ModelHandle", ihInfo);
 
@@ -366,8 +391,9 @@ void GetInputDataInfoFromModel5D(ModelHandle handle,
 
     std::map<std::string, TensorDesc> inputTensorDescs = cnn->get_input_desc();
     if (num_inputs != (int)inputTensorDescs.size()) {
-        UNI_ERROR_LOG("GetInputDataInfoFromModel: number of inputs is not match, "
-                      "please use GetNumInputsFromModel to get the right value\n");
+        UNI_ERROR_LOG("C API %s: number of inputs is not match, please use GetNumInputsFromModel "
+                      "to get the right value.\n",
+            __FUNCTION__);
     }
     assert_not_nullptr(__FUNCTION__, NAME_VALUE_PAIR(name));
     for (int i = 0; i < num_inputs; i++) {
@@ -401,7 +427,7 @@ void GetInputDataInfoFromModel5D(ModelHandle handle,
             assert_not_nullptr(__FUNCTION__, NAME_VALUE_PAIR(t));
             t[i] = it;
         } else {
-            UNI_ERROR_LOG("C API only support 1d,2d,3d,4d,5d query\n");
+            UNI_ERROR_LOG("C API only support 1d,2d,3d,4d,5d query.\n");
         }
         dt[i] = DataType2DATA_TYPE(idt);
         df[i] = DataFormat2DATA_FORMAT(idf);
@@ -411,6 +437,7 @@ void GetInputDataInfoFromModel5D(ModelHandle handle,
         w[i] = iw;
         ++i;
     }
+    UNI_DEBUG_LOG("C API %s end.\n", __FUNCTION__);
 }
 
 std::map<std::string, TensorDesc> getInputDataFormatFromUser(ModelHandle ih,
@@ -424,6 +451,7 @@ std::map<std::string, TensorDesc> getInputDataFormatFromUser(ModelHandle ih,
     const DATA_TYPE *dt,
     const DATA_FORMAT *df)
 {
+    UNI_DEBUG_LOG("C API %s...\n", __FUNCTION__);
     ModelHandleInner *ihInfo = (ModelHandleInner *)ih;
     assert_not_nullptr(__FUNCTION__, "ModelHandle", ihInfo);
 
@@ -433,7 +461,7 @@ std::map<std::string, TensorDesc> getInputDataFormatFromUser(ModelHandle ih,
     std::map<std::string, TensorDesc> inputTensorDescs = cnn->get_input_desc();
     int num = inputTensorDescs.size();
     if (num != num_inputs) {
-        UNI_ERROR_LOG("C API failed. model has %d inputs, not %d\n", num, num_inputs);
+        UNI_ERROR_LOG("C API failed. model has %d inputs, not %d.\n", num, num_inputs);
     }
     assert_not_nullptr(__FUNCTION__, NAME_VALUE_PAIR(name));
     for (int i = 0; i < num_inputs; i++) {
@@ -472,11 +500,12 @@ std::map<std::string, TensorDesc> getInputDataFormatFromUser(ModelHandle ih,
                 }
                 break;
             default:
-                UNI_ERROR_LOG(
-                    "C API inner function %s can not process DataFormat %d\n", __FUNCTION__, idf);
+                UNI_ERROR_LOG("C API inner function %s can not process DataFormat %s.\n",
+                    __FUNCTION__, DataFormatName()[idf]);
                 break;
         }
     }
+    UNI_DEBUG_LOG("C API %s end.\n", __FUNCTION__);
     return modelInputDims;
 }
 
@@ -490,7 +519,9 @@ void PrepareModel(ModelHandle ih,
     const DATA_TYPE *dt,
     const DATA_FORMAT *df)
 {
+    UNI_DEBUG_LOG("C API %s...\n", __FUNCTION__);
     PrepareModel5D(ih, num_inputs, name, n, c, NULL, h, w, dt, df);
+    UNI_DEBUG_LOG("C API %s end.\n", __FUNCTION__);
 }
 
 void PrepareModel5D(ModelHandle ih,
@@ -504,6 +535,7 @@ void PrepareModel5D(ModelHandle ih,
     const DATA_TYPE *dt,
     const DATA_FORMAT *df)
 {
+    UNI_DEBUG_LOG("C API %s...\n", __FUNCTION__);
     ModelHandleInner *ihInfo = (ModelHandleInner *)ih;
     assert_not_nullptr(__FUNCTION__, "ModelHandle", ihInfo);
 
@@ -519,6 +551,7 @@ void PrepareModel5D(ModelHandle ih,
     ModelSpec *ms = (ModelSpec *)ihInfo->ms;
     CHECK_STATUS(mt_destroy_model(ms));
     delete ms;
+    UNI_DEBUG_LOG("C API %s end.\n", __FUNCTION__);
 }
 
 void ResizeModelInput(ModelHandle ih,
@@ -531,6 +564,7 @@ void ResizeModelInput(ModelHandle ih,
     const DATA_TYPE *dt,
     const DATA_FORMAT *df)
 {
+    UNI_DEBUG_LOG("C API %s...\n", __FUNCTION__);
     ModelHandleInner *ihInfo = (ModelHandleInner *)ih;
     assert_not_nullptr(__FUNCTION__, "ModelHandle", ihInfo);
     CNN *cnn = (CNN *)ihInfo->cnn;
@@ -539,10 +573,12 @@ void ResizeModelInput(ModelHandle ih,
     std::map<std::string, TensorDesc> modelInputDims =
         getInputDataFormatFromUser(ih, num_inputs, name, n, c, NULL, h, w, dt, df);
     cnn->reready(modelInputDims);
+    UNI_DEBUG_LOG("C API %s end.\n", __FUNCTION__);
 }
 
 ResultHandle AllocAllResultHandle(ModelHandle ih)
 {
+    UNI_DEBUG_LOG("C API %s...\n", __FUNCTION__);
     ModelHandleInner *ihInfo = (ModelHandleInner *)ih;
     assert_not_nullptr(__FUNCTION__, "ModelHandle", ihInfo);
     CNN *cnn = (CNN *)ihInfo->cnn;
@@ -567,11 +603,13 @@ ResultHandle AllocAllResultHandle(ModelHandle ih)
     model_result_ptr->num_outputs = num_outputs;
     model_result_ptr->outputArr = outputArrPtr;
     model_result_ptr->deviceType = ihInfo->deviceType;
+    UNI_DEBUG_LOG("C API %s end.\n", __FUNCTION__);
     return (void *)model_result_ptr;
 }
 
 ResultHandle AllocSpecificResultHandle(ModelHandle ih, int num_outputs, const char **name)
 {
+    UNI_DEBUG_LOG("C API %s...\n", __FUNCTION__);
     ModelHandleInner *ihInfo = (ModelHandleInner *)ih;
     assert_not_nullptr(__FUNCTION__, "ModelHandle", ihInfo);
     CNN *cnn = (CNN *)ihInfo->cnn;
@@ -592,31 +630,44 @@ ResultHandle AllocSpecificResultHandle(ModelHandle ih, int num_outputs, const ch
     model_result_ptr->num_outputs = model_num_outputs;
     model_result_ptr->outputArr = outputArrPtr;
     model_result_ptr->deviceType = ihInfo->deviceType;
+    UNI_DEBUG_LOG("C API %s end.\n", __FUNCTION__);
     return (void *)model_result_ptr;
 }
 
 void SetRuntimeDevice(ModelHandle ih, int cpu_id, DEVICE_TYPE device)
 {
+    UNI_DEBUG_LOG("C API %s...\n", __FUNCTION__);
     ModelHandleInner *ihInfo = (ModelHandleInner *)ih;
     assert_not_nullptr(__FUNCTION__, "ModelHandle", ihInfo);
     CNN *cnn = (CNN *)ihInfo->cnn;
     assert_not_nullptr(__FUNCTION__, "ModelHandle.cnn", cnn);
     cnn->set_runtime_device(cpu_id, DEVICE_TYPE2Arch(device));
     ihInfo->deviceType = device;
+    UNI_DEBUG_LOG("C API %s end.\n", __FUNCTION__);
 }
 
 void SetRuntimeDeviceDynamic(ModelHandle ih)
 {
+    UNI_DEBUG_LOG("C API %s...\n", __FUNCTION__);
     ModelHandleInner *ihInfo = (ModelHandleInner *)ih;
     assert_not_nullptr(__FUNCTION__, "ModelHandle", ihInfo);
     CNN *cnn = (CNN *)ihInfo->cnn;
     assert_not_nullptr(__FUNCTION__, "ModelHandle.cnn", cnn);
     cnn->set_runtime_device_dynamic();
     ihInfo->deviceType = Arch2DEVICE_TYPE(cnn->get_runtime_device());
+    UNI_DEBUG_LOG("C API %s end.\n", __FUNCTION__);
+}
+
+void SetNumThreads(int threadNum)
+{
+    UNI_DEBUG_LOG("C API %s...\n", __FUNCTION__);
+    set_cpu_num_threads(threadNum);
+    UNI_DEBUG_LOG("C API %s end.\n", __FUNCTION__);
 }
 
 void RunModel(ModelHandle ih, ResultHandle ir, int num_inputs, const char **name, void **data)
 {
+    UNI_DEBUG_LOG("C API %s...\n", __FUNCTION__);
     ModelHandleInner *ihInfo = (ModelHandleInner *)ih;
     assert_not_nullptr(__FUNCTION__, "ModelHandle", ihInfo);
     CNN *cnn = (CNN *)ihInfo->cnn;
@@ -628,12 +679,22 @@ void RunModel(ModelHandle ih, ResultHandle ir, int num_inputs, const char **name
         assert_not_nullptr(__FUNCTION__, NAME_VALUE_PAIR(data));
     }
 
+#if 0
     std::map<std::string, U8 *> input;
     for (int index = 0; index < num_inputs; index++) {
         assert_not_nullptr(__FUNCTION__, NAME_VALUE_PAIR(data[index]));
         input[name[index]] = (U8 *)data[index];
     }
     cnn->set_input_by_copy(input);
+#else
+    std::map<std::string, std::shared_ptr<U8>> input;
+    for (int index = 0; index < num_inputs; index++) {
+        assert_not_nullptr(__FUNCTION__, NAME_VALUE_PAIR(data[index]));
+        std::shared_ptr<U8> shared_data((U8 *)data[index], [](U8 *ptr) {});
+        input[name[index]] = shared_data;
+    }
+    cnn->set_input_by_assign(input);
+#endif
     cnn->run();
 
     DataDesc *outputArrPtr = ir_inner->outputArr;
@@ -641,25 +702,28 @@ void RunModel(ModelHandle ih, ResultHandle ir, int num_inputs, const char **name
     DEVICE_TYPE device = ihInfo->deviceType;
     for (U32 curIndex = 0; curIndex < ir_inner->num_outputs; curIndex++) {
         Tensor output_tensor = cnn->get_tensor_by_name(outputArrPtr[curIndex].name);
-        TensorDesc2DataDesc(output_tensor.get_desc(), &(outputArrPtr[curIndex]));
-        if (device == GPU_MALI) {
-#ifdef _USE_MALI
+        if (device == GPU_MALI || device == GPU_QUALCOMM) {
+#ifdef _USE_GPU
             auto mem = (OclMemory *)output_tensor.get_memory();
             outputArrPtr[curIndex].dataPtr = mem->get_mapped_ptr();
 #else
             UNI_WARNING_LOG("this binary not support GPU, please recompile project with GPU "
-                            "compile options\n");
+                            "compile options.\n");
 #endif
         } else {
             outputArrPtr[curIndex].dataPtr = ((CpuMemory *)(output_tensor.get_memory()))->get_ptr();
         }
+        TensorDesc2DataDesc(output_tensor.get_desc(), &(outputArrPtr[curIndex]));
     }
+    UNI_DEBUG_LOG("C API %s end.\n", __FUNCTION__);
 }
 
 int GetNumOutputsFromResultHandle(ResultHandle ir)
 {
+    UNI_DEBUG_LOG("C API %s...\n", __FUNCTION__);
     ResultHandleInner *ir_inner = (ResultHandleInner *)ir;
     assert_not_nullptr(__FUNCTION__, "ResultHandle", ir_inner);
+    UNI_DEBUG_LOG("C API %s end.\n", __FUNCTION__);
     return ir_inner->num_outputs;
 }
 
@@ -673,6 +737,7 @@ void GetOutputDataInfoFromResultHandle(ResultHandle ir,
     DATA_TYPE *dt,
     DATA_FORMAT *df)
 {
+    UNI_DEBUG_LOG("C API %s...\n", __FUNCTION__);
     if (num_outputs <= 0) {
         UNI_WARNING_LOG("C API %s received num_outputs = 0.\n", __FUNCTION__);
         return;
@@ -702,10 +767,12 @@ void GetOutputDataInfoFromResultHandle(ResultHandle ir,
         h[i] = outputArrPtr[i].dims[2];
         w[i] = outputArrPtr[i].dims[3];
     }
+    UNI_DEBUG_LOG("C API %s end.\n", __FUNCTION__);
 }
 
 void GetOutputDataFromResultHandle(ResultHandle ir, int num_outputs, void **data)
 {
+    UNI_DEBUG_LOG("C API %s...\n", __FUNCTION__);
     if (num_outputs <= 0) {
         UNI_WARNING_LOG("C API %s received num_outputs = 0.\n", __FUNCTION__);
         return;
@@ -723,10 +790,12 @@ void GetOutputDataFromResultHandle(ResultHandle ir, int num_outputs, void **data
     for (int i = 0; i < num_outputs; i++) {
         data[i] = outputArrPtr[i].dataPtr;
     }
+    UNI_DEBUG_LOG("C API %s end.\n", __FUNCTION__);
 }
 
 ResultHandle CloneResultHandle(ResultHandle ir)
 {
+    UNI_DEBUG_LOG("C API %s...\n", __FUNCTION__);
     ResultHandleInner *ir_inner = (ResultHandleInner *)ir;
     assert_not_nullptr(__FUNCTION__, "ResultHandle", ir_inner);
     ResultHandleInner *clone_ir_inner = new ResultHandleInner();
@@ -740,11 +809,13 @@ ResultHandle CloneResultHandle(ResultHandle ir)
     } else {
         clone_ir_inner->outputArr = nullptr;
     }
+    UNI_DEBUG_LOG("C API %s end.\n", __FUNCTION__);
     return (ResultHandle)clone_ir_inner;
 }
 
 void FreeResultHandle(ResultHandle ir)
 {
+    UNI_DEBUG_LOG("C API %s...\n", __FUNCTION__);
     ResultHandleInner *ir_inner = (ResultHandleInner *)ir;
     assert_not_nullptr(__FUNCTION__, "ResultHandle", ir_inner);
     DataDesc *outputArrPtr = ir_inner->outputArr;
@@ -755,17 +826,19 @@ void FreeResultHandle(ResultHandle ir)
     }
     (*ir_inner).outputArr = nullptr;
     free(ir_inner);
+    UNI_DEBUG_LOG("C API %s end.\n", __FUNCTION__);
 }
 
 void DestroyModel(ModelHandle ih)
 {
+    UNI_DEBUG_LOG("C API %s...\n", __FUNCTION__);
     ModelHandleInner *ihInfo = (ModelHandleInner *)ih;
     assert_not_nullptr(__FUNCTION__, "ModelHandle", ihInfo);
 
     CNN *cnn = (CNN *)ihInfo->cnn;
     assert_not_nullptr(__FUNCTION__, "ModelHandle.cnn", cnn);
 
-    if (nullptr != ihInfo->algoPath) {
+    if (nullptr != ihInfo->algoPath && !ihInfo->useFileStream) {
         const char *algoPath = (const char *)ihInfo->algoPath;
         UNI_THREAD_SAFE(cnn->saveAlgorithmMapToFile(algoPath));
     }
@@ -773,6 +846,7 @@ void DestroyModel(ModelHandle ih)
     delete cnn;
     ihInfo->cnn = nullptr;
     delete ihInfo;
+    UNI_DEBUG_LOG("C API %s end.\n", __FUNCTION__);
 }
 
 #undef NAME_VALUE_PAIR

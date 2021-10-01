@@ -27,7 +27,6 @@ public final class TaskFlow {
     {
         loadLibrary("c++_shared", true);
         loadLibrary("OpenCL", true);
-        loadLibrary("kernelsource", true);
         loadLibrary("BoltModel", false);
         loadLibrary("protobuf", false);
         loadLibrary("flow", false);

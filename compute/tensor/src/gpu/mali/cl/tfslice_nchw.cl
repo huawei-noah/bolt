@@ -13,18 +13,20 @@
 
 __kernel void tfslice_nchw(const int iw_str,
     const int ih_str,
-    const int iw_off,
-    const int ih_off,
     const int ow_str,
     const int oh_str,
-    const int ow_off,
-    const int oh_off,
+    const int i_off,
+    const int o_off,
+    const int ic,
+    const int oc,
     const int w_be,
     const int h_be,
     const int c_be,
+    const int n_be,
     const int sw,
     const int sh,
     const int sc,
+    const int sn,
     const int bx,
     const int by,
     __global T *input,
@@ -33,14 +35,20 @@ __kernel void tfslice_nchw(const int iw_str,
     int idx = get_global_id(0);
     int idy = get_global_id(1);
     int idz = get_global_id(2);
+    int idc = idz % oc;
+    int idn = idz / oc;
     if (idx >= bx || idy >= by) {
         return;
     }
 
     T val;
-    int in_off =
-        ((idz * sc + c_be) * ih_str + idy * sh + ih_off + h_be) * iw_str + idx * sw + iw_off + w_be;
+    int idn_off = idn * sn + n_be;
+    int idc_off = idc * sc + c_be;
+    int idh_off = idy * sh + h_be;
+    int idw_off = idx * sw + w_be + i_off;
+    int in_off = ((idn_off * ic + idc_off) * ih_str + idh_off) * iw_str + idw_off;
     val = input[in_off];
-    int out_off = (idz * oh_str + idy + oh_off) * ow_str + idx + ow_off;
+
+    int out_off = (idz * oh_str + idy) * ow_str + idx + o_off;
     output[out_off] = val;
 }

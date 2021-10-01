@@ -27,6 +27,7 @@ public enum DeviceType {
     CPU_ARM_A55,  ///< ARM A55 CPU
     CPU_ARM_A76,  ///< ARM A76 CPU
     GPU_MALI,     ///< ARM MALI GPU
+    GPU_QUALCOMM, ///< ARM MALI GPU
     CPU_X86_AVX2, ///< X86_64 AVX2 CPU
     CPU_SERIAL    ///< CPU serial
 }

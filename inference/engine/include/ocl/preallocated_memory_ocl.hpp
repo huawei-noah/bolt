@@ -20,8 +20,7 @@ class PreAllocatedMemoryOCL : public PreAllocatedMemory {
 public:
     PreAllocatedMemoryOCL(DataType dt, TensorDesc desc) : PreAllocatedMemory(dt, desc)
     {
-        setMALIArchInfo(
-            &(this->archInfo), nullptr, &this->needSetKernelVec, &this->needSelectKernelLS);
+        INIT_GPU_INFO(nullptr)
     }
 
     ~PreAllocatedMemoryOCL(){DESTROY_OCL_KERNEL}

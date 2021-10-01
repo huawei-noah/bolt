@@ -258,7 +258,7 @@ void mvm_pack_fp32(U32 numRows, U32 numColumns, F32 *packB, F32 *vector, F32 *re
     I32 blockNum = numRows / 64;
     I32 edgeblockNSizeArray[6] = {0};
     for (U32 i = 0; resN > 0; ++i) {
-        U32 value = UNI_MIN(unrollSize[UNI_MIN(resN >> 4, 2)], resN);
+        U32 value = UNI_MIN(unrollSize[UNI_MIN(resN >> 4, 2)], (U32)resN);
         edgeblockNSizeArray[i] += value;
         edgeblockNSizeArray[i + 1] = edgeblockNSizeArray[i];
         resN -= value;

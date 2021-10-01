@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shape xmlns:android="http://schemas.android.com/apk/res/android">
+<!--    这里是Linearlayout布局的背景颜色-->
+   <solid android:color="#FFFFFF"/>
+<!--    这里是设置边框线的粗细和颜色-->
+   <stroke
+       android:width="0.5dp"
+       android:color="#A29FA6" />
+
+    <padding
+        android:bottom="1dp"
+        android:left="1dp"
+        android:right="1dp"
+        android:top="1dp"/>
+    <corners android:radius="5dp"/>
+</shape>

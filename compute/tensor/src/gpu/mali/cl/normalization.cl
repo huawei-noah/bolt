@@ -14,11 +14,8 @@
 #define MANGLE_NAME_IMPL(base, FM) base##FM
 #define MANGLE_NAME(base, FM) MANGLE_NAME_IMPL(base, FM)
 
-#define FM
 #if defined(USE_NCHW)
 #define FM _nchw
-#endif
-
 #define REDUCE_VEC16(vec, res)                    \
     {                                             \
         res += vec.s0 + vec.s1 + vec.s2 + vec.s3; \
@@ -26,14 +23,16 @@
         res += vec.s8 + vec.s9 + vec.sa + vec.sb; \
         res += vec.sc + vec.sd + vec.se + vec.sf; \
     }
+#else
+#define FM
+#endif
+
 __kernel void MANGLE_NAME(normalization, FM)(const int iw_str,
     const int ih_str,
-    const int iw_off,
-    const int ih_off,
     const int ow_str,
     const int oh_str,
-    const int ow_off,
-    const int oh_off,
+    const int i_off,
+    const int o_off,
     const int axis_len,
     const int bx,
     const int by,
@@ -50,16 +49,15 @@ __kernel void MANGLE_NAME(normalization, FM)(const int iw_str,
     if (idx >= bx || idy >= by) {
         return;
     }
+#if defined(USE_NCHW)
     float mean = 0;
     float var = 0;
     float std_val;
-#if defined(USE_NCHW)
     float16 tv;
-    int in_off = (idz * ih_str + idy + ih_off) * iw_str + iw_off;
-    int out_off = (idz * oh_str + idy + oh_off) * ow_str + ow_off;
+    int in_off = (idz * ih_str + idy) * iw_str + i_off;
+    int out_off = (idz * oh_str + idy) * ow_str + o_off;
     for (int i = idx; i < axis_len; i += 16) {
         T val = in[i + in_off];
-        float valf = val;
         mean += val;
     }
     int tmp_off = (idz * by + idy) * bx;
@@ -94,45 +92,66 @@ __kernel void MANGLE_NAME(normalization, FM)(const int iw_str,
         out[i + out_off] = val;
     }
 #else
-    int in_off = (idz * iw_str + iw_off) * ih_str + idx + ih_off;
-    for (int i = 0; i < axis_len; ++i) {
-        T4 tmp = vload4(in_off + i * ih_str, in);
-        float4 tmpf;
-        tmpf.x = tmp.x;
-        tmpf.y = tmp.y;
-        tmpf.z = tmp.z;
-        tmpf.w = tmp.w;
-        mean += (float)(tmpf.x + tmpf.y + tmpf.z + tmpf.w);
+    float4 mean = 0;
+    float4 var = 0;
+    float4 std_val;
+    int in_off = (idz * ih_str + idy) * iw_str + i_off;
+    int out_off = (idz * oh_str + idy) * ow_str + o_off;
+    for (int i = idx; i < axis_len; i += 16) {
+        T4 tmp = vload4(in_off + i, in);
+        mean.x += tmp.x;
+        mean.y += tmp.y;
+        mean.z += tmp.z;
+        mean.w += tmp.w;
     }
-    mean = mean * para;
-
-    for (int i = 0; i < axis_len; ++i) {
-        T4 tmp = vload4(in_off + i * ih_str, in);
-        float4 tmpf;
-        tmpf.x = tmp.x;
-        tmpf.y = tmp.y;
-        tmpf.z = tmp.z;
-        tmpf.w = tmp.w;
-        tmpf.x = tmpf.x - mean;
-        tmpf.y = tmpf.y - mean;
-        tmpf.z = tmpf.z - mean;
-        tmpf.w = tmpf.w - mean;
-        var += tmpf.x * tmpf.x + tmpf.y * tmpf.y + tmpf.z * tmpf.z + tmpf.w * tmpf.w;
+    int tmp_off = (idz * by + idy) * bx;
+    vstore4(mean, tmp_off + idx, tmp);
+    work_group_barrier(CLK_GLOBAL_MEM_FENCE);
+    mean = 0;
+    for (int i = 0; i < 16; i++) {
+        mean += vload4(i, tmp + tmp_off);
     }
-    var = var * para;
+    mean.x = mean.x * para;
+    mean.y = mean.y * para;
+    mean.z = mean.z * para;
+    mean.w = mean.w * para;
 
-    float std_val = sqrt(var + 1e-6);
-    std_val = 1.0 / std_val;
-    int out_off = (idz * ow_str + ow_off) * oh_str + idx + oh_off;
-    for (int i = 0; i < axis_len; ++i) {
-        T4 out_val = vload4(in_off + i * ih_str, in);
+    for (int i = idx; i < axis_len; i += 16) {
+        T4 tmp = vload4(in_off + i, in);
+        float4 tmpf;
+        tmpf.x = tmp.x - mean.x;
+        tmpf.y = tmp.y - mean.y;
+        tmpf.z = tmp.z - mean.z;
+        tmpf.w = tmp.w - mean.w;
+        var.x = tmpf.x * tmpf.x;
+        var.y = tmpf.y * tmpf.y;
+        var.z = tmpf.z * tmpf.z;
+        var.w = tmpf.w * tmpf.w;
+    }
+    tmp_off += bx * by;
+    vstore4(var, tmp_off + idx, tmp);
+    work_group_barrier(CLK_GLOBAL_MEM_FENCE);
+    var = 0;
+    for (int i = 0; i < 16; i++) {
+        var += vload4(i, tmp + tmp_off);
+    }
+    var.x = var.x * para;
+    var.y = var.y * para;
+    var.z = var.z * para;
+    var.w = var.w * para;
+    std_val.x = 1.0 / sqrt(var.x + 1e-6);
+    std_val.y = 1.0 / sqrt(var.y + 1e-6);
+    std_val.z = 1.0 / sqrt(var.z + 1e-6);
+    std_val.w = 1.0 / sqrt(var.w + 1e-6);
+    for (int i = idx; i < axis_len; i += 16) {
+        T4 val = vload4(in_off + i, in);
         T alp = alpha[i];
         T bet = beta[i];
-        out_val.x = alp * (out_val.x - mean) * std_val + bet;
-        out_val.y = alp * (out_val.y - mean) * std_val + bet;
-        out_val.z = alp * (out_val.z - mean) * std_val + bet;
-        out_val.w = alp * (out_val.w - mean) * std_val + bet;
-        vstore4(out_val, out_off + i * oh_str, out);
+        val.x = alp * (val.x - mean.x) * std_val.x + bet;
+        val.y = alp * (val.y - mean.y) * std_val.y + bet;
+        val.z = alp * (val.z - mean.z) * std_val.z + bet;
+        val.w = alp * (val.w - mean.w) * std_val.w + bet;
+        vstore4(val, out_off + i, out);
     }
 #endif
 }

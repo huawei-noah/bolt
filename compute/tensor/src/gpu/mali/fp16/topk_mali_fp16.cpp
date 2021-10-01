@@ -180,13 +180,13 @@ EE topk_infer_forward_tmp_bytes_mali_fp16(
 
     U32 tmpBytes = 0;
     U32 num = ALIGN(len, 16);
-    tmpBytes += ALIGN(num * bytesOf(DT_F16), 1024) * 2;
+    tmpBytes += ALIGN(num * bytesOf(DT_F16), BUFFER_ALIGN_BASE) * 2;
     num = ((len + 15) / 16 + 1) / 2 * 16;
-    tmpBytes += ALIGN(num * bytesOf(DT_F16), 1024) * 2;
+    tmpBytes += ALIGN(num * bytesOf(DT_F16), BUFFER_ALIGN_BASE) * 2;
     num = (num / 16 + 1) / 2 * 16;
-    tmpBytes += ALIGN(num * bytesOf(DT_F16), 1024) * 2;
+    tmpBytes += ALIGN(num * bytesOf(DT_F16), BUFFER_ALIGN_BASE) * 2;
     num = (num / 16 + 1) / 2 * 16;
-    tmpBytes += ALIGN(num * bytesOf(DT_F16), 1024) * 2;
+    tmpBytes += ALIGN(num * bytesOf(DT_F16), BUFFER_ALIGN_BASE) * 2;
 
     tmpBytes *= (totalNum / len);
     *bytes = tmpBytes;

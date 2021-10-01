@@ -20,8 +20,7 @@ class ChannelResizeOCL : public ChannelResize {
 public:
     ChannelResizeOCL(DataType dt, ChannelResizeParamSpec p) : ChannelResize(dt, p)
     {
-        setMALIArchInfo(
-            &(this->archInfo), nullptr, &this->needSetKernelVec, &this->needSelectKernelLS);
+        INIT_GPU_INFO(nullptr)
     }
 
     ~ChannelResizeOCL(){DESTROY_OCL_KERNEL}
@@ -63,6 +62,9 @@ public:
         }
         CHECK_STATUS(
             channel_resize_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo));
+        if (check_tensors_image(inTensors)) {
+            CHECK_STATUS(set_tensors_image(outTensors, inTensors.size()));
+        }
         return SUCCESS;
     }
 

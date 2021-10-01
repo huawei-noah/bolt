@@ -87,7 +87,7 @@ std::string DataFormat2str(DataFormat data_format)
             ret = "NORMAL";
             break;
         default:
-            UNI_ERROR_LOG("unsupported JNI data format setting %d\n", data_format);
+            UNI_ERROR_LOG("unsupported JNI data format setting %s\n", DataFormatName()[data_format]);
     }
     return ret;
 }
@@ -285,7 +285,7 @@ JNIEXPORT jlong JNICALL BOLT_JNI_PREFIX(TaskFlow_createTask)(JNIEnv *env,
         } else if (data_format == DF_MTK) {
             inputDesc = tensor3df(data_type, data_format, input_n[i], input_c[i], input_h[i]);
         } else {
-            UNI_ERROR_LOG("unsupported JNI input data format %d\n", data_format);
+            UNI_ERROR_LOG("unsupported JNI input data format %s\n", DataFormatName()[data_format]);
             return 0;
         }
         tensors[input_name]->resize(inputDesc);
@@ -332,7 +332,7 @@ JNIEXPORT jlong JNICALL BOLT_JNI_PREFIX(TaskFlow_createTask)(JNIEnv *env,
         } else if (data_format == DF_MTK) {
             outputDesc = tensor3df(data_type, data_format, output_n[i], output_c[i], output_h[i]);
         } else {
-            UNI_ERROR_LOG("unsupported JNI output data format %d\n", data_format);
+            UNI_ERROR_LOG("unsupported JNI output data format %s\n", DataFormatName()[data_format]);
             return 0;
         }
         tensors[output_name]->resize(outputDesc);

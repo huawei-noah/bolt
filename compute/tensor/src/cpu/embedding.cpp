@@ -17,13 +17,14 @@ EE embedding_cpu(TensorDesc inputDesc,
     void *input,
     void *weight,
     EmbedParamSpec p,
+    TensorDesc weightDesc,
     TensorDesc outputDesc,
     void *output)
 {
     U8 *weightPtr = (U8 *)weight;
     U8 *outputPtr = (U8 *)output;
     U32 len = tensorNumElements(inputDesc);
-    U32 elementBytes = bytesOf(outputDesc.dt);
+    U32 elementBytes = bytesOf(weightDesc.dt);
     U32 wordEmbeddingCPUBytes = elementBytes * p.num_output;
     U32 transposeStride = elementBytes * p.input_dim;
     EE ret = SUCCESS;

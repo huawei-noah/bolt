@@ -71,13 +71,15 @@ protected:
             *ps = adapt_PRelu();
         } else if (type == OT_BatchNorm) {
             *ps = adapt_BatchNorm();
+        } else if (type == OT_InstanceNorm) {
+            *ps = adapt_InstanceNorm();
         } else if (type == OT_LayerNorm) {
             *ps = adapt_LayerNorm();
         } else if (type == OT_Reduction) {
             *ps = adapt_Reduction();
         } else if (type == OT_ArgMax) {
             *ps = adapt_ArgMax();
-        } else if (type == OT_Softmax) {
+        } else if (type == OT_Softmax || type == OT_LogSoftmax) {
             *ps = adapt_Softmax();
         } else if (type == OT_Clip) {
             *ps = adapt_Clip();
@@ -155,6 +157,18 @@ protected:
             *ps = adapt_BatchToSpaceNd();
         } else if (type == OT_Where) {
             *ps = adapt_Where();
+        } else if (type == OT_Expand) {
+            *ps = adapt_Expand();
+        } else if (type == OT_Scatter) {
+            *ps = adapt_Scatter();
+        } else if (type == OT_Equal) {
+            *ps = adapt_Equal();
+        } else if (type == OT_Select) {
+            *ps = adapt_Select();
+        } else if (type == OT_RoIAlign) {
+            *ps = adapt_RoIAlign();
+        } else if (type == OT_GenerateProposals) {
+            *ps = adapt_GenerateProposals();
         } else {
             memset(ps, 0, sizeof(ParameterSpec));
         }
@@ -171,6 +185,7 @@ protected:
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Scale)
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_PRelu)
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_BatchNorm)
+    REGISTER_EMPTY_ADAPT_OPERATOR(adapt_InstanceNorm)
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_LayerNorm)
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Reduction)
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_ArgMax)
@@ -237,5 +252,11 @@ protected:
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_SpaceToBatchNd)
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_BatchToSpaceNd)
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Where)
+    REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Expand)
+    REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Scatter)
+    REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Equal)
+    REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Select)
+    REGISTER_EMPTY_ADAPT_OPERATOR(adapt_RoIAlign)
+    REGISTER_EMPTY_ADAPT_OPERATOR(adapt_GenerateProposals)
 };
 #endif

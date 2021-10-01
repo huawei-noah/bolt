@@ -384,8 +384,10 @@ int main()
         boltPath += "/";
     }
     std::string tensorComputingClPath = "compute/tensor/src/gpu/mali/cl/";
+    std::string tensorComputingClPathQc = "compute/tensor/src/gpu/mali/cl/qualcomm/";
     std::string imageClPath = "compute/image/src/gpu/mali/cl/";
     tensorComputingClPath = boltPath + tensorComputingClPath;
+    tensorComputingClPathQc = boltPath + tensorComputingClPathQc;
     imageClPath = boltPath + imageClPath;
 
     std::string clOptionPath = "common/gcl/tools/kernel_lib_compile/sh/compile/";
@@ -393,6 +395,7 @@ int main()
 
     std::vector<std::string> clPath;
     clPath.push_back(tensorComputingClPath);
+    clPath.push_back(tensorComputingClPathQc);
     clPath.push_back(imageClPath);
 
     std::vector<std::string> clNames;

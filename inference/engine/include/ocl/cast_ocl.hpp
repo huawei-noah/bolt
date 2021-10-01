@@ -20,8 +20,7 @@ class CastOCL : public Cast {
 public:
     CastOCL(DataType dt, CastParamSpec p) : Cast(dt, p)
     {
-        setMALIArchInfo(
-            &(this->archInfo), nullptr, &this->needSetKernelVec, &this->needSelectKernelLS);
+        INIT_GPU_INFO(nullptr)
     }
 
     ~CastOCL(){DESTROY_OCL_KERNEL}

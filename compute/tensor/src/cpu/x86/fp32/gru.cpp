@@ -57,6 +57,8 @@ EE grucell_fp32(TensorDesc xDesc,
     I32 hDim = rnnParamSpec.numOutput;
     I32 column = (rnnParamSpec.numProjection > 0) ? rnnParamSpec.numProjection
                                                   : rnnParamSpec.numOutput;
+    int num1 = rnnParamSpec.biDirection ? 2 : 1;
+    U32 steps = batchStrideH / hDim / num1;
     if (!(idt == DT_F32 && fdt == DT_F32 && odt == DT_F32)) {
         CHECK_STATUS(NOT_MATCH);
     }
@@ -91,8 +93,9 @@ EE grucell_fp32(TensorDesc xDesc,
             memcpy(currentOutput, lastBatchH, hDim * sizeof(F32));
         }
 
-        mvm_nkn32_with_bias(column * 2 / 32, fk, (const F32 *)filter[0], xhArray, intermediateH,
-            (const F32 *)bias[0]);
+        const F32 *mBias = (const F32 *)bias[0] + m * steps * column * 3;
+        mvm_nkn32_with_bias(
+            column * 2 / 32, fk, (const F32 *)filter[0], xhArray, intermediateH, mBias);
         F32 *out_z = intermediateH;
         F32 *out_r = out_z + column;
         F32 *out_h = out_r + column;
@@ -107,7 +110,7 @@ EE grucell_fp32(TensorDesc xDesc,
         }
 
         if (rnnParamSpec.mode == RNN_GRU_LBR) {
-            F32 *h_x_b = (F32 *)bias[0] + column * 2;
+            F32 *h_x_b = (F32 *)mBias + column * 2;
             F32 *h_h_b = (F32 *)bias[1];
             mvm_nkn32_with_bias(column / 32, hDim,
                 (const F32 *)filter[0] + column * 2 * fk + column * xDim, xhArray + xDim, out_h,
@@ -122,7 +125,7 @@ EE grucell_fp32(TensorDesc xDesc,
         } else {
             array_mul_f32(out_r, xhArray + xDim, xhArray + xDim, hDim);
             mvm_nkn32_with_bias(column / 32, fk, (const F32 *)filter[0] + column * 2 * fk, xhArray,
-                out_h, (const F32 *)bias[0] + column * 2);
+                out_h, mBias + column * 2);
         }
         for (h = 0; h < column - 7; h += 8) {
             __m256 out_z_v = _mm256_loadu_ps(out_z + h);

@@ -67,19 +67,32 @@ public:
         U8 *dstPtr = outputPtr;
         for (U32 i = 0; i < outerLength; i++) {
             U8 *srcPtr = inputPtr + i * loops * chunkSize;
-            U32 num =
-                loops * length - (loops - this->p.shift_length) * (this->p.shift_length + length);
-            U32 start = this->p.shift_length * length - num;
-            U32 srcIndex = start * tileSize;
-            memcpy(dstPtr, srcPtr + srcIndex, num * tileSize);
-            dstPtr += num * tileSize;
-            srcIndex += num * tileSize;
-            for (U32 j = this->p.shift_length; j < loops; j++) {
-                memset(dstPtr, 0, this->p.shift_length * tileSize);
-                dstPtr += this->p.shift_length * tileSize;
-                memcpy(dstPtr, srcPtr + srcIndex, chunkSize);
-                dstPtr += chunkSize;
-                srcIndex += chunkSize;
+            if (this->inputTensors.size() == 1) {
+                U32 num = loops * length -
+                    (loops - this->p.shift_length) * (this->p.shift_length + length);
+                U32 start = this->p.shift_length * length - num;
+                U32 srcIndex = start * tileSize;
+                memcpy(dstPtr, srcPtr + srcIndex, num * tileSize);
+                dstPtr += num * tileSize;
+                srcIndex += num * tileSize;
+                for (U32 j = this->p.shift_length; j < loops; j++) {
+                    memset(dstPtr, 0, this->p.shift_length * tileSize);
+                    dstPtr += this->p.shift_length * tileSize;
+                    memcpy(dstPtr, srcPtr + srcIndex, chunkSize);
+                    dstPtr += chunkSize;
+                    srcIndex += chunkSize;
+                }
+            } else {
+                U32 klen = outputTensor.get_desc().dims[tmpAxis];
+                srcPtr += this->p.shift_length * loops * tileSize;
+                for (U32 j = 0; j < loops; j++) {
+                    for (U32 k = 0; k < klen; k++) {
+                        memcpy(dstPtr, srcPtr, tileSize);
+                        srcPtr += tileSize;
+                        dstPtr += tileSize;
+                    }
+                    srcPtr += (length - this->p.shift_length - klen) * tileSize;
+                }
             }
         }
     }
@@ -87,7 +100,14 @@ public:
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
-        outTensors[0]->resize(inTensors[0]->get_desc());
+        TensorDesc outputDesc = inTensors[0]->get_desc();
+        if (inTensors.size() > 1) {
+            TensorDesc refDesc = inTensors[1]->get_desc();
+            I32 tmpAxis = (this->p.axis + refDesc.nDims) % refDesc.nDims;
+            tmpAxis = (I32)refDesc.nDims - 1 - tmpAxis;
+            outputDesc.dims[tmpAxis] = refDesc.dims[tmpAxis];
+        }
+        outTensors[0]->resize(outputDesc);
         return SUCCESS;
     }
 

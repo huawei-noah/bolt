@@ -13,10 +13,8 @@
 
 #include "cpu/arm/fp16/convolution_winograd_transform.h"
 #include "cpu/arm/fp16/convolution_winograd.h"
+#include "cpu/arm/transform_functions.h"
 #include "thread_affinity.h"
-#ifdef _USE_OPENMP
-#include <omp.h>
-#endif
 
 EE convolution_winograd_A55(TensorDesc inputDesc,
     F16 *inArray,
@@ -72,391 +70,325 @@ EE convolution_winograd_A55(TensorDesc inputDesc,
     // in_pad: ic*ih_pad*iw_pad*8
     // itm: 6*6*ic*8*8
     // otm: oc*6*6*8*8
-    F16 *inArray_pad = (F16 *)tmp;
-    F16 *itmArray = inArray_pad + ic * ih_pad * iw_pad * 8;
-    F16 *otmArray = itmArray + 6 * 6 * ic * 8 * 8 * OMP_NUM_THREADS;
+    F16 *itmArray = (F16 *)tmp + ic * ih_pad * iw_pad * 8;
+    F16 *otmArray = itmArray + 6 * 6 * (ic + 1) * 8 * 8 * OMP_NUM_THREADS;
 
     EE ret = SUCCESS;
     int oc_1 = oc - 1;
     // copy input into a input with padding
     for (U32 n = 0; n < in; n++) {
-        F16 *inArray_pad_mov = inArray_pad;
-        F16 *inArray_mov = inArray + n * ic * ih * iw * 8;
-        for (U32 c = 0; c < ic; c++) {
-            memset(inArray_pad_mov, 0, pad_top * iw_pad * 8 * bytesOf(idt));
-            inArray_pad_mov += pad_top * iw_pad * 8;
-            for (U32 h = pad_top; h < ih_pad - pad_bottom; h++) {
-                memset(inArray_pad_mov, 0, pad_left * 8 * bytesOf(idt));
-                inArray_pad_mov += pad_left * 8;
-                memcpy(inArray_pad_mov, inArray_mov, iw * 8 * bytesOf(idt));
-                inArray_pad_mov += iw * 8;
-                inArray_mov += iw * 8;
-                memset(inArray_pad_mov, 0, pad_right * 8 * bytesOf(idt));
-                inArray_pad_mov += pad_right * 8;
-            }
-            memset(inArray_pad_mov, 0, pad_bottom * iw_pad * 8 * bytesOf(idt));
-            inArray_pad_mov += pad_bottom * iw_pad * 8;
-        }
+        convParamSpec.padding_bottom = pad_bottom;
+        convParamSpec.padding_right = pad_right;
+        F16 *inArray_pad = convolution_input_padding_per_channel<F16, 8>(
+            n, ic, 1, ih, iw, convParamSpec, inArray, (F16 *)tmp);
 
         // tiles / 8
 #ifdef _USE_OPENMP
-#pragma omp parallel for num_threads(OMP_NUM_THREADS)
-#endif
-        for (I32 hw = 0; hw < tiles - 7; hw += 8) {
-#ifdef _USE_OPENMP
-            F16 *thread_itmArray = itmArray + ic * 6 * 6 * 8 * 8 * omp_get_thread_num();
+#pragma omp parallel num_threads(OMP_NUM_THREADS)
+        {
+            F16 *thread_itmArray = itmArray + (1 + ic) * 6 * 6 * 8 * 8 * omp_get_thread_num();
             F16 *thread_otmArray = otmArray + oc * 6 * 6 * 8 * 8 * omp_get_thread_num();
 #else
+        {
             F16 *thread_itmArray = itmArray;
             F16 *thread_otmArray = otmArray;
 #endif
-            const F16 *ftm_0 = filterArray;
-            F16 *otm_0 = thread_otmArray;
-            // in trans
-            // NCHWc8 => (6*6)*C*c8*hw8
-            for (U32 c = 0; c < ic; c++) {
-                F16 *inArray_pad_mov = inArray_pad + c * ih_pad * iw_pad * 8;
-                F16 *Iw_ptr[36];
-                F16 Iw0[36][8];
-                F16 *I0[36];
-                F16 Iw1[36][8];
-                F16 *I1[36];
-                F16 Iw2[36][8];
-                F16 *I2[36];
-                F16 Iw3[36][8];
-                F16 *I3[36];
-                F16 Iw4[36][8];
-                F16 *I4[36];
-                F16 Iw5[36][8];
-                F16 *I5[36];
-                F16 Iw6[36][8];
-                F16 *I6[36];
-                F16 Iw7[36][8];
-                F16 *I7[36];
-                U32 h0 = (hw / tile_w) * 4;
-                U32 w0 = (hw % tile_w) * 4;
-                U32 h1 = ((hw + 1) / tile_w) * 4;
-                U32 w1 = ((hw + 1) % tile_w) * 4;
-                U32 h2 = ((hw + 2) / tile_w) * 4;
-                U32 w2 = ((hw + 2) % tile_w) * 4;
-                U32 h3 = ((hw + 3) / tile_w) * 4;
-                U32 w3 = ((hw + 3) % tile_w) * 4;
-                U32 h4 = ((hw + 4) / tile_w) * 4;
-                U32 w4 = ((hw + 4) % tile_w) * 4;
-                U32 h5 = ((hw + 5) / tile_w) * 4;
-                U32 w5 = ((hw + 5) % tile_w) * 4;
-                U32 h6 = ((hw + 6) / tile_w) * 4;
-                U32 w6 = ((hw + 6) % tile_w) * 4;
-                U32 h7 = ((hw + 7) / tile_w) * 4;
-                U32 w7 = ((hw + 7) % tile_w) * 4;
-                for (U32 i = 0; i < 6; i++) {
-                    for (U32 j = 0; j < 6; j++) {
-                        I0[i * 6 + j] = inArray_pad_mov + (h0 + i) * iw_pad * 8 + (w0 + j) * 8;
-                        I1[i * 6 + j] = inArray_pad_mov + (h1 + i) * iw_pad * 8 + (w1 + j) * 8;
-                        I2[i * 6 + j] = inArray_pad_mov + (h2 + i) * iw_pad * 8 + (w2 + j) * 8;
-                        I3[i * 6 + j] = inArray_pad_mov + (h3 + i) * iw_pad * 8 + (w3 + j) * 8;
-                        I4[i * 6 + j] = inArray_pad_mov + (h4 + i) * iw_pad * 8 + (w4 + j) * 8;
-                        I5[i * 6 + j] = inArray_pad_mov + (h5 + i) * iw_pad * 8 + (w5 + j) * 8;
-                        I6[i * 6 + j] = inArray_pad_mov + (h6 + i) * iw_pad * 8 + (w6 + j) * 8;
-                        I7[i * 6 + j] = inArray_pad_mov + (h7 + i) * iw_pad * 8 + (w7 + j) * 8;
-                    }
-                }
-                for (U32 i = 0; i < 36; i++) {
-                    Iw_ptr[i] = Iw0[i];
-                }
-                trans_I_4x4_3x3(Iw_ptr, I0);
-                for (U32 i = 0; i < 36; i++) {
-                    Iw_ptr[i] = Iw1[i];
-                }
-                trans_I_4x4_3x3(Iw_ptr, I1);
-                for (U32 i = 0; i < 36; i++) {
-                    Iw_ptr[i] = Iw2[i];
-                }
-                trans_I_4x4_3x3(Iw_ptr, I2);
-                for (U32 i = 0; i < 36; i++) {
-                    Iw_ptr[i] = Iw3[i];
-                }
-                trans_I_4x4_3x3(Iw_ptr, I3);
-                for (U32 i = 0; i < 36; i++) {
-                    Iw_ptr[i] = Iw4[i];
-                }
-                trans_I_4x4_3x3(Iw_ptr, I4);
-                for (U32 i = 0; i < 36; i++) {
-                    Iw_ptr[i] = Iw5[i];
-                }
-                trans_I_4x4_3x3(Iw_ptr, I5);
-                for (U32 i = 0; i < 36; i++) {
-                    Iw_ptr[i] = Iw6[i];
-                }
-                trans_I_4x4_3x3(Iw_ptr, I6);
-                for (U32 i = 0; i < 36; i++) {
-                    Iw_ptr[i] = Iw7[i];
-                }
-                trans_I_4x4_3x3(Iw_ptr, I7);
-                for (U32 i = 0; i < 36; i++) {
-                    F16 *itm = thread_itmArray + (i * ic + c) * 8 * 8;
-
-                    // for (U32 c8 = 0; c8 < 8; c8++) {
-                    //     itm[c8*8] = Iw0[i][c8];
-                    //     itm[c8*8 + 1] = Iw1[i][c8];
-                    //     itm[c8*8 + 2] = Iw2[i][c8];
-                    //     itm[c8*8 + 3] = Iw3[i][c8];
-                    //     itm[c8*8 + 4] = Iw4[i][c8];
-                    //     itm[c8*8 + 5] = Iw5[i][c8];
-                    //     itm[c8*8 + 6] = Iw6[i][c8];
-                    //     itm[c8*8 + 7] = Iw7[i][c8];
-                    // }
-
-                    float16x8_t v0 = vld1q_f16(Iw0[i]);
-                    float16x8_t v1 = vld1q_f16(Iw1[i]);
-                    float16x8_t v2 = vld1q_f16(Iw2[i]);
-                    float16x8_t v3 = vld1q_f16(Iw3[i]);
-                    float16x8_t v4 = vld1q_f16(Iw4[i]);
-                    float16x8_t v5 = vld1q_f16(Iw5[i]);
-                    float16x8_t v6 = vld1q_f16(Iw6[i]);
-                    float16x8_t v7 = vld1q_f16(Iw7[i]);
-                    vst1q_f16(itm,
-                        vzip1q_f16(vzip1q_f16(vzip1q_f16(v0, v4), vzip1q_f16(v2, v6)),
-                            vzip1q_f16(vzip1q_f16(v1, v5), vzip1q_f16(v3, v7))));
-                    vst1q_f16(itm + 8,
-                        vzip2q_f16(vzip1q_f16(vzip1q_f16(v0, v4), vzip1q_f16(v2, v6)),
-                            vzip1q_f16(vzip1q_f16(v1, v5), vzip1q_f16(v3, v7))));
-                    vst1q_f16(itm + 8 * 2,
-                        vzip1q_f16(vzip2q_f16(vzip1q_f16(v0, v4), vzip1q_f16(v2, v6)),
-                            vzip2q_f16(vzip1q_f16(v1, v5), vzip1q_f16(v3, v7))));
-                    vst1q_f16(itm + 8 * 3,
-                        vzip2q_f16(vzip2q_f16(vzip1q_f16(v0, v4), vzip1q_f16(v2, v6)),
-                            vzip2q_f16(vzip1q_f16(v1, v5), vzip1q_f16(v3, v7))));
-                    vst1q_f16(itm + 8 * 4,
-                        vzip1q_f16(vzip1q_f16(vzip2q_f16(v0, v4), vzip2q_f16(v2, v6)),
-                            vzip1q_f16(vzip2q_f16(v1, v5), vzip2q_f16(v3, v7))));
-                    vst1q_f16(itm + 8 * 5,
-                        vzip2q_f16(vzip1q_f16(vzip2q_f16(v0, v4), vzip2q_f16(v2, v6)),
-                            vzip1q_f16(vzip2q_f16(v1, v5), vzip2q_f16(v3, v7))));
-                    vst1q_f16(itm + 8 * 6,
-                        vzip1q_f16(vzip2q_f16(vzip2q_f16(v0, v4), vzip2q_f16(v2, v6)),
-                            vzip2q_f16(vzip2q_f16(v1, v5), vzip2q_f16(v3, v7))));
-                    vst1q_f16(itm + 8 * 7,
-                        vzip2q_f16(vzip2q_f16(vzip2q_f16(v0, v4), vzip2q_f16(v2, v6)),
-                            vzip2q_f16(vzip2q_f16(v1, v5), vzip2q_f16(v3, v7))));
+            F16 *Iw_buffer = thread_itmArray + ic * 6 * 6 * 8 * 8;
+            F16 *Iw[8][36];
+            F16 *I[36];
+            U32 h[8];
+            U32 w[8];
+            for (U32 j = 0, id = 0; j < 8; j++) {
+                for (U32 i = 0; i < 36; i++, id++) {
+                    Iw[j][i] = Iw_buffer + id * 8;
                 }
             }
-            for (I32 o = 0; o < oc_1; o += 2) {
-                const F16 *b_0 = biasArray + o * 8;
-                const F16 *b_1 = b_0 + 8;
-                F16 *itm_0 = thread_itmArray;
-                // dot prod
-                // (6*6)*C*c8*hw8 times O*(6*6)*C*c8*o16 = O*(6*6)*hw8*o16
-                for (U32 idx = 0; idx < 36; idx++) {
-                    __asm__ __volatile__("mov  x0, %[ic]\n"                 // ic_blk
-                                         "eor  v2.16b,  v2.16b,  v2.16b\n"  // out_o0hw0
-                                         "ldr  d0, [%[in]]\n"               // in_hw0
-                                         "eor  v4.16b,  v4.16b,  v4.16b\n"  // out_o0hw1
-                                         "ldr  x1, [%[in], #8]\n"
-                                         "eor  v6.16b,  v6.16b,  v6.16b\n"  // out_o0hw2
-                                         "ins  v0.d[1], x1\n"
-                                         "eor  v8.16b,  v8.16b,  v8.16b\n"  // out_o0hw3
-                                         "ldr d18, [%[f]]\n"                // f_o0c0
-                                         "eor v10.16b, v10.16b, v10.16b\n"  // out_o0hw4
-                                         "ldr  x2, [%[f], #8]\n"
-                                         "eor v12.16b, v12.16b, v12.16b\n"  // out_o0hw5
-                                         "ins v18.d[1], x2\n"
-                                         "eor v14.16b, v14.16b, v14.16b\n"  // out_o0hw6
-                                         "ldr d19, [%[f], #16]\n"           // f_o1c0
-                                         "eor v16.16b, v16.16b, v16.16b\n"  // out_o0hw7
-                                         "ldr  x3, [%[f], #24]\n"
-                                         "eor  v3.16b,  v3.16b,  v3.16b\n"  // out_o1hw0
-                                         "ins v19.d[1], x3\n"
-                                         "eor  v5.16b,  v5.16b,  v5.16b\n"  // out_o1hw1
-                                         "eor  v7.16b,  v7.16b,  v7.16b\n"  // out_o1hw2
-                                         "eor  v9.16b,  v9.16b,  v9.16b\n"  // out_o1hw3
-                                         "eor v11.16b, v11.16b, v11.16b\n"  // out_o1hw4
-                                         "eor v13.16b, v13.16b, v13.16b\n"  // out_o1hw5
-                                         "eor v15.16b, v15.16b, v15.16b\n"  // out_o1hw6
-                                         "eor v17.16b, v17.16b, v17.16b\n"  // out_o1hw7
-                                         "0:\n"
-                                         "ldr  d1, [%[in], #16]\n"  // in_hw0
-                                         "fmla  v2.8h, v18.8h, v0.h[0]\n"
-                                         "ldr  x1, [%[in], #24]\n"
-                                         "fmla  v4.8h, v18.8h, v0.h[1]\n"
-                                         "ins  v1.d[1], x1\n"
-                                         "fmla  v6.8h, v18.8h, v0.h[2]\n"
-                                         "ldr d20, [%[f], #32]\n"  // f_o0c0
-                                         "fmla  v8.8h, v18.8h, v0.h[3]\n"
-                                         "ldr  x2, [%[f], #40]\n"
-                                         "fmla v10.8h, v18.8h, v0.h[4]\n"
-                                         "ins v20.d[1], x2\n"
-                                         "fmla v12.8h, v18.8h, v0.h[5]\n"
-                                         "ldr d21, [%[f], #48]\n"  // f_o1c0
-                                         "fmla v14.8h, v18.8h, v0.h[6]\n"
-                                         "ldr  x3, [%[f], #56]\n"
-                                         "fmla v16.8h, v18.8h, v0.h[7]\n"
-                                         "ins v21.d[1], x3\n"
-                                         "fmla  v3.8h, v19.8h, v0.h[0]\n"
-                                         "fmla  v5.8h, v19.8h, v0.h[1]\n"
-                                         "fmla  v7.8h, v19.8h, v0.h[2]\n"
-                                         "fmla v9.8h, v19.8h, v0.h[3]\n"
-                                         "fmla v11.8h, v19.8h, v0.h[4]\n"
-                                         "fmla v13.8h, v19.8h, v0.h[5]\n"
-                                         "fmla v15.8h, v19.8h, v0.h[6]\n"
-                                         "fmla v17.8h, v19.8h, v0.h[7]\n"
-
-                                         "ldr  d0, [%[in], #32]\n"  // in_hw0
-                                         "fmla  v2.8h, v20.8h, v1.h[0]\n"
-                                         "ldr  x1, [%[in], #40]\n"
-                                         "fmla  v4.8h, v20.8h, v1.h[1]\n"
-                                         "ins  v0.d[1], x1\n"
-                                         "fmla  v6.8h, v20.8h, v1.h[2]\n"
-                                         "ldr d18, [%[f], #64]\n"  // f_o0c0
-                                         "fmla  v8.8h, v20.8h, v1.h[3]\n"
-                                         "ldr  x2, [%[f], #72]\n"
-                                         "fmla v10.8h, v20.8h, v1.h[4]\n"
-                                         "ins v18.d[1], x2\n"
-                                         "fmla v12.8h, v20.8h, v1.h[5]\n"
-                                         "ldr d19, [%[f], #80]\n"  // f_o1c0
-                                         "fmla v14.8h, v20.8h, v1.h[6]\n"
-                                         "ldr  x3, [%[f], #88]\n"
-                                         "fmla v16.8h, v20.8h, v1.h[7]\n"
-                                         "ins v19.d[1], x3\n"
-                                         "fmla  v3.8h, v21.8h, v1.h[0]\n"
-                                         "add %[in], %[in], #32\n"
-                                         "fmla  v5.8h, v21.8h, v1.h[1]\n"
-                                         "add %[f], %[f], #64\n"
-                                         "fmla  v7.8h, v21.8h, v1.h[2]\n"
-                                         "subs x0, x0, #2\n"
-                                         "fmla  v9.8h, v21.8h, v1.h[3]\n"
-                                         "fmla v11.8h, v21.8h, v1.h[4]\n"
-                                         "fmla v13.8h, v21.8h, v1.h[5]\n"
-                                         "fmla v15.8h, v21.8h, v1.h[6]\n"
-                                         "fmla v17.8h, v21.8h, v1.h[7]\n"
-                                         "bne 0b\n"
-                                         "st1 { v2.8h,  v3.8h,  v4.8h,  v5.8h}, [%[out]], #64\n"
-                                         "st1 { v6.8h,  v7.8h,  v8.8h,  v9.8h}, [%[out]], #64\n"
-                                         "st1 {v10.8h, v11.8h, v12.8h, v13.8h}, [%[out]], #64\n"
-                                         "st1 {v14.8h, v15.8h, v16.8h, v17.8h}, [%[out]], #64\n"
-                                         : [out] "+r"(otm_0), [in] "+r"(itm_0), [f] "+r"(ftm_0)
-                                         : [ic] "r"((I64)ic * 8)
-                                         : "memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6",
-                                         "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15",
-                                         "v16", "v17", "v18", "v19", "v20", "v21", "x0", "x1", "x2",
-                                         "x3");
-                }
-                // out trans
-                // O*(6*6)*hw8*o16 => NOHWo8
-                for (U32 hw8 = 0; hw8 < 8; hw8++) {
-                    U32 h = (hw + hw8) / tile_w;
-                    U32 w = (hw + hw8) % tile_w;
-                    F16 *out_0 = outArray + n * oc * oh * ow * 8 + o * oh * ow * 8 +
-                        h * 4 * ow * 8 + w * 4 * 8;
-                    F16 *out_1 = out_0 + oh * ow * 8;
-                    U32 otm_off_0 = o * 8 * 36 * 8 + hw8 * 16;
-                    U32 otm_off_1 = otm_off_0 + 8;
-
-                    F16 *Ow_0[36];
-                    F16 *Ow_1[36];
-                    F16 *O_0[16];
-                    F16 *O_1[16];
-                    for (U32 idx = 0; idx < 36; idx++) {
-                        Ow_0[idx] = thread_otmArray + otm_off_0 + idx * 8 * 16;
-                        Ow_1[idx] = thread_otmArray + otm_off_1 + idx * 8 * 16;
+#ifdef _USE_OPENMP
+#pragma omp for
+#endif
+            for (I32 hw = 0; hw < tiles - 7; hw += 8) {
+                const F16 *ftm_0 = filterArray;
+                F16 *otm_0 = thread_otmArray;
+                // in trans
+                // NCHWc8 => (6*6)*C*c8*hw8
+                for (U32 c = 0; c < ic; c++) {
+                    F16 *inArray_pad_mov = inArray_pad + c * ih_pad * iw_pad * 8;
+                    for (U32 index = 0; index < 8; index++) {
+                        h[index] = ((hw + index) / tile_w) * 4;
+                        w[index] = ((hw + index) % tile_w) * 4;
                     }
-                    for (U32 i = 0; i < 4; ++i) {
-                        for (U32 j = 0; j < 4; ++j) {
-                            O_0[i * 4 + j] = out_0 + i * ow * 8 + j * 8;
-                            O_1[i * 4 + j] = out_1 + i * ow * 8 + j * 8;
+                    for (U32 index = 0; index < 8; index++) {
+                        for (U32 i = 0; i < 6; i++) {
+                            for (U32 j = 0; j < 6; j++) {
+                                I[i * 6 + j] = inArray_pad_mov + (h[index] + i) * iw_pad * 8 +
+                                    (w[index] + j) * 8;
+                            }
                         }
+                        trans_I_4x4_3x3<false>(Iw[index], I);
                     }
-                    CHECK_STATUS(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4,
-                        tile_h - 1, tile_w - 1, activationDesc));
-                    CHECK_STATUS(trans_O_4x4_3x3(Ow_1, O_1, b_1, h, w, pad_h_mod_4, pad_w_mod_4,
-                        tile_h - 1, tile_w - 1, activationDesc));
+                    for (U32 i = 0; i < 36; i++) {
+                        F16 *itm = thread_itmArray + (i * ic + c) * 8 * 8;
+                        // for (U32 c8 = 0; c8 < 8; c8++) {
+                        //     itm[c8*8] = Iw0[i][c8];
+                        //     itm[c8*8 + 1] = Iw1[i][c8];
+                        //     itm[c8*8 + 2] = Iw2[i][c8];
+                        //     itm[c8*8 + 3] = Iw3[i][c8];
+                        //     itm[c8*8 + 4] = Iw4[i][c8];
+                        //     itm[c8*8 + 5] = Iw5[i][c8];
+                        //     itm[c8*8 + 6] = Iw6[i][c8];
+                        //     itm[c8*8 + 7] = Iw7[i][c8];
+                        // }
+                        float16x8_t v0 = vld1q_f16(Iw[0][i]);
+                        float16x8_t v1 = vld1q_f16(Iw[1][i]);
+                        float16x8_t v2 = vld1q_f16(Iw[2][i]);
+                        float16x8_t v3 = vld1q_f16(Iw[3][i]);
+                        float16x8_t v4 = vld1q_f16(Iw[4][i]);
+                        float16x8_t v5 = vld1q_f16(Iw[5][i]);
+                        float16x8_t v6 = vld1q_f16(Iw[6][i]);
+                        float16x8_t v7 = vld1q_f16(Iw[7][i]);
+                        vst1q_f16(itm,
+                            vzip1q_f16(vzip1q_f16(vzip1q_f16(v0, v4), vzip1q_f16(v2, v6)),
+                                vzip1q_f16(vzip1q_f16(v1, v5), vzip1q_f16(v3, v7))));
+                        vst1q_f16(itm + 8,
+                            vzip2q_f16(vzip1q_f16(vzip1q_f16(v0, v4), vzip1q_f16(v2, v6)),
+                                vzip1q_f16(vzip1q_f16(v1, v5), vzip1q_f16(v3, v7))));
+                        vst1q_f16(itm + 8 * 2,
+                            vzip1q_f16(vzip2q_f16(vzip1q_f16(v0, v4), vzip1q_f16(v2, v6)),
+                                vzip2q_f16(vzip1q_f16(v1, v5), vzip1q_f16(v3, v7))));
+                        vst1q_f16(itm + 8 * 3,
+                            vzip2q_f16(vzip2q_f16(vzip1q_f16(v0, v4), vzip1q_f16(v2, v6)),
+                                vzip2q_f16(vzip1q_f16(v1, v5), vzip1q_f16(v3, v7))));
+                        vst1q_f16(itm + 8 * 4,
+                            vzip1q_f16(vzip1q_f16(vzip2q_f16(v0, v4), vzip2q_f16(v2, v6)),
+                                vzip1q_f16(vzip2q_f16(v1, v5), vzip2q_f16(v3, v7))));
+                        vst1q_f16(itm + 8 * 5,
+                            vzip2q_f16(vzip1q_f16(vzip2q_f16(v0, v4), vzip2q_f16(v2, v6)),
+                                vzip1q_f16(vzip2q_f16(v1, v5), vzip2q_f16(v3, v7))));
+                        vst1q_f16(itm + 8 * 6,
+                            vzip1q_f16(vzip2q_f16(vzip2q_f16(v0, v4), vzip2q_f16(v2, v6)),
+                                vzip2q_f16(vzip2q_f16(v1, v5), vzip2q_f16(v3, v7))));
+                        vst1q_f16(itm + 8 * 7,
+                            vzip2q_f16(vzip2q_f16(vzip2q_f16(v0, v4), vzip2q_f16(v2, v6)),
+                                vzip2q_f16(vzip2q_f16(v1, v5), vzip2q_f16(v3, v7))));
+                    }
                 }
-            }
-            if (oc & 1) {
-                F16 *itm_0 = thread_itmArray;
-                const F16 *ftm_0 = filterArray + oc_1 * 36 * ic * 8 * 8;
-                F16 *otm_0 = thread_otmArray + oc_1 * 36 * 8 * 8;
-                const F16 *b_0 = biasArray + oc_1 * 8;
-                // dot prod
-                // (6*6)*C*c8*hw8 times O*(6*6)*C*c8*o8 = O*(6*6)*hw8*o8
-                for (U32 idx = 0; idx < 36; idx++) {
-                    __asm__ __volatile__("mov x0, %[ic]\n"               // ic_blk
-                                         "eor v2.16b, v2.16b, v2.16b\n"  // out_o0hw0
-                                         "ldr d0, [%[in]]\n"             // in_hw0
-                                         "eor v3.16b, v3.16b, v3.16b\n"  // out_o0hw1
-                                         "ldr x1, [%[in], #8]\n"
-                                         "eor v4.16b, v4.16b, v4.16b\n"  // out_o0hw2
-                                         "ins v0.d[1], x1\n"
-                                         "eor v5.16b, v5.16b, v5.16b\n"  // out_o0hw3
-                                         "ldr d18, [%[f]]\n"             // f_o0c0
-                                         "eor v6.16b, v6.16b, v6.16b\n"  // out_o0hw4
-                                         "ldr x2, [%[f], #8]\n"
-                                         "eor v7.16b, v7.16b, v7.16b\n"  // out_o0hw5
-                                         "ins v18.d[1], x2\n"
-                                         "eor v8.16b, v8.16b, v8.16b\n"  // out_o0hw6
-                                         "eor v9.16b, v9.16b, v9.16b\n"  // out_o0hw7
-                                         "0:\n"
-                                         "ldr  d1, [%[in], #16]\n"  // in_hw0
-                                         "fmla  v2.8h, v18.8h, v0.h[0]\n"
-                                         "ldr  x1, [%[in], #24]\n"
-                                         "fmla  v3.8h, v18.8h, v0.h[1]\n"
-                                         "ins  v1.d[1], x1\n"
-                                         "fmla  v4.8h, v18.8h, v0.h[2]\n"
-                                         "ldr d20, [%[f], #16]\n"  // f_o0c0
-                                         "fmla  v5.8h, v18.8h, v0.h[3]\n"
-                                         "ldr  x2, [%[f], #24]\n"
-                                         "fmla  v6.8h, v18.8h, v0.h[4]\n"
-                                         "ins v20.d[1], x2\n"
-                                         "fmla  v7.8h, v18.8h, v0.h[5]\n"
-                                         "fmla  v8.8h, v18.8h, v0.h[6]\n"
-                                         "subs x0, x0, #2\n"
-                                         "fmla  v9.8h, v18.8h, v0.h[7]\n"
-
-                                         "ldr  d0, [%[in], #32]\n"  // in_hw0
-                                         "fmla  v2.8h, v20.8h, v1.h[0]\n"
-                                         "ldr  x1, [%[in], #40]\n"
-                                         "fmla  v3.8h, v20.8h, v1.h[1]\n"
-                                         "ins  v0.d[1], x1\n"
-                                         "fmla  v4.8h, v20.8h, v1.h[2]\n"
-                                         "ldr d18, [%[f], #32]\n"  // f_o0c0
-                                         "fmla  v5.8h, v20.8h, v1.h[3]\n"
-                                         "ldr  x2, [%[f], #40]\n"
-                                         "fmla  v6.8h, v20.8h, v1.h[4]\n"
-                                         "ins v18.d[1], x2\n"
-                                         "fmla  v7.8h, v20.8h, v1.h[5]\n"
-                                         "add %[in], %[in], #32\n"
-                                         "fmla  v8.8h, v20.8h, v1.h[6]\n"
-                                         "add %[f], %[f], #32\n"
-                                         "fmla  v9.8h, v20.8h, v1.h[7]\n"
-                                         "bne 0b\n"
-                                         "st1 {v2.8h, v3.8h, v4.8h, v5.8h}, [%[out]], #64\n"
-                                         "st1 {v6.8h, v7.8h, v8.8h, v9.8h}, [%[out]], #64\n"
-                                         : [out] "+r"(otm_0), [in] "+r"(itm_0), [f] "+r"(ftm_0)
-                                         : [ic] "r"((I64)ic * 8)
-                                         : "memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6",
-                                         "v7", "v8", "v9", "v18", "v20", "x0", "x1", "x2");
-                }
-                // out trans
-                // O*(6*6)*hw8*o8 => NOWHo8
-                for (U32 hw8 = 0; hw8 < 8; hw8++) {
-                    U32 h = (hw + hw8) / tile_w;
-                    U32 w = (hw + hw8) % tile_w;
-                    F16 *out_0 = outArray + n * oc * oh * ow * 8 + oc_1 * oh * ow * 8 +
-                        h * 4 * ow * 8 + w * 4 * 8;
-                    U32 otm_off_0 = oc_1 * 8 * 36 * 8 + hw8 * 8;
-
-                    F16 *Ow_0[36];
-                    F16 *O_0[16];
+                for (I32 o = 0; o < oc_1; o += 2) {
+                    const F16 *b_0 = biasArray + o * 8;
+                    const F16 *b_1 = b_0 + 8;
+                    F16 *itm_0 = thread_itmArray;
+                    // dot prod
+                    // (6*6)*C*c8*hw8 times O*(6*6)*C*c8*o16 = O*(6*6)*hw8*o16
                     for (U32 idx = 0; idx < 36; idx++) {
-                        Ow_0[idx] = thread_otmArray + otm_off_0 + idx * 8 * 8;
+                        __asm__ __volatile__("mov  x0, %[ic]\n"                 // ic_blk
+                                             "eor  v2.16b,  v2.16b,  v2.16b\n"  // out_o0hw0
+                                             "ldr  d0, [%[in]]\n"               // in_hw0
+                                             "eor  v4.16b,  v4.16b,  v4.16b\n"  // out_o0hw1
+                                             "ldr  x1, [%[in], #8]\n"
+                                             "eor  v6.16b,  v6.16b,  v6.16b\n"  // out_o0hw2
+                                             "ins  v0.d[1], x1\n"
+                                             "eor  v8.16b,  v8.16b,  v8.16b\n"  // out_o0hw3
+                                             "ldr d18, [%[f]]\n"                // f_o0c0
+                                             "eor v10.16b, v10.16b, v10.16b\n"  // out_o0hw4
+                                             "ldr  x2, [%[f], #8]\n"
+                                             "eor v12.16b, v12.16b, v12.16b\n"  // out_o0hw5
+                                             "ins v18.d[1], x2\n"
+                                             "eor v14.16b, v14.16b, v14.16b\n"  // out_o0hw6
+                                             "ldr d19, [%[f], #16]\n"           // f_o1c0
+                                             "eor v16.16b, v16.16b, v16.16b\n"  // out_o0hw7
+                                             "ldr  x3, [%[f], #24]\n"
+                                             "eor  v3.16b,  v3.16b,  v3.16b\n"  // out_o1hw0
+                                             "ins v19.d[1], x3\n"
+                                             "eor  v5.16b,  v5.16b,  v5.16b\n"  // out_o1hw1
+                                             "eor  v7.16b,  v7.16b,  v7.16b\n"  // out_o1hw2
+                                             "eor  v9.16b,  v9.16b,  v9.16b\n"  // out_o1hw3
+                                             "eor v11.16b, v11.16b, v11.16b\n"  // out_o1hw4
+                                             "eor v13.16b, v13.16b, v13.16b\n"  // out_o1hw5
+                                             "eor v15.16b, v15.16b, v15.16b\n"  // out_o1hw6
+                                             "eor v17.16b, v17.16b, v17.16b\n"  // out_o1hw7
+                                             "0:\n"
+                                             "ldr  d1, [%[in], #16]\n"  // in_hw0
+                                             "fmla  v2.8h, v18.8h, v0.h[0]\n"
+                                             "ldr  x1, [%[in], #24]\n"
+                                             "fmla  v4.8h, v18.8h, v0.h[1]\n"
+                                             "ins  v1.d[1], x1\n"
+                                             "fmla  v6.8h, v18.8h, v0.h[2]\n"
+                                             "ldr d20, [%[f], #32]\n"  // f_o0c0
+                                             "fmla  v8.8h, v18.8h, v0.h[3]\n"
+                                             "ldr  x2, [%[f], #40]\n"
+                                             "fmla v10.8h, v18.8h, v0.h[4]\n"
+                                             "ins v20.d[1], x2\n"
+                                             "fmla v12.8h, v18.8h, v0.h[5]\n"
+                                             "ldr d21, [%[f], #48]\n"  // f_o1c0
+                                             "fmla v14.8h, v18.8h, v0.h[6]\n"
+                                             "ldr  x3, [%[f], #56]\n"
+                                             "fmla v16.8h, v18.8h, v0.h[7]\n"
+                                             "ins v21.d[1], x3\n"
+                                             "fmla  v3.8h, v19.8h, v0.h[0]\n"
+                                             "fmla  v5.8h, v19.8h, v0.h[1]\n"
+                                             "fmla  v7.8h, v19.8h, v0.h[2]\n"
+                                             "fmla v9.8h, v19.8h, v0.h[3]\n"
+                                             "fmla v11.8h, v19.8h, v0.h[4]\n"
+                                             "fmla v13.8h, v19.8h, v0.h[5]\n"
+                                             "fmla v15.8h, v19.8h, v0.h[6]\n"
+                                             "fmla v17.8h, v19.8h, v0.h[7]\n"
+
+                                             "ldr  d0, [%[in], #32]\n"  // in_hw0
+                                             "fmla  v2.8h, v20.8h, v1.h[0]\n"
+                                             "ldr  x1, [%[in], #40]\n"
+                                             "fmla  v4.8h, v20.8h, v1.h[1]\n"
+                                             "ins  v0.d[1], x1\n"
+                                             "fmla  v6.8h, v20.8h, v1.h[2]\n"
+                                             "ldr d18, [%[f], #64]\n"  // f_o0c0
+                                             "fmla  v8.8h, v20.8h, v1.h[3]\n"
+                                             "ldr  x2, [%[f], #72]\n"
+                                             "fmla v10.8h, v20.8h, v1.h[4]\n"
+                                             "ins v18.d[1], x2\n"
+                                             "fmla v12.8h, v20.8h, v1.h[5]\n"
+                                             "ldr d19, [%[f], #80]\n"  // f_o1c0
+                                             "fmla v14.8h, v20.8h, v1.h[6]\n"
+                                             "ldr  x3, [%[f], #88]\n"
+                                             "fmla v16.8h, v20.8h, v1.h[7]\n"
+                                             "ins v19.d[1], x3\n"
+                                             "fmla  v3.8h, v21.8h, v1.h[0]\n"
+                                             "add %[in], %[in], #32\n"
+                                             "fmla  v5.8h, v21.8h, v1.h[1]\n"
+                                             "add %[f], %[f], #64\n"
+                                             "fmla  v7.8h, v21.8h, v1.h[2]\n"
+                                             "subs x0, x0, #2\n"
+                                             "fmla  v9.8h, v21.8h, v1.h[3]\n"
+                                             "fmla v11.8h, v21.8h, v1.h[4]\n"
+                                             "fmla v13.8h, v21.8h, v1.h[5]\n"
+                                             "fmla v15.8h, v21.8h, v1.h[6]\n"
+                                             "fmla v17.8h, v21.8h, v1.h[7]\n"
+                                             "bne 0b\n"
+                                             "st1 { v2.8h,  v3.8h,  v4.8h,  v5.8h}, [%[out]], #64\n"
+                                             "st1 { v6.8h,  v7.8h,  v8.8h,  v9.8h}, [%[out]], #64\n"
+                                             "st1 {v10.8h, v11.8h, v12.8h, v13.8h}, [%[out]], #64\n"
+                                             "st1 {v14.8h, v15.8h, v16.8h, v17.8h}, [%[out]], #64\n"
+                                             : [out] "+r"(otm_0), [in] "+r"(itm_0), [f] "+r"(ftm_0)
+                                             : [ic] "r"((I64)ic * 8)
+                                             : "memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5",
+                                             "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13",
+                                             "v14", "v15", "v16", "v17", "v18", "v19", "v20", "v21",
+                                             "x0", "x1", "x2", "x3");
                     }
-                    for (U32 i = 0; i < 4; ++i) {
-                        for (U32 j = 0; j < 4; ++j) {
-                            O_0[i * 4 + j] = out_0 + i * ow * 8 + j * 8;
+                    // out trans
+                    // O*(6*6)*hw8*o16 => NOHWo8
+                    for (U32 hw8 = 0; hw8 < 8; hw8++) {
+                        U32 h = (hw + hw8) / tile_w;
+                        U32 w = (hw + hw8) % tile_w;
+                        F16 *out_0 = outArray + n * oc * oh * ow * 8 + o * oh * ow * 8 +
+                            h * 4 * ow * 8 + w * 4 * 8;
+                        F16 *out_1 = out_0 + oh * ow * 8;
+                        U32 otm_off_0 = o * 8 * 36 * 8 + hw8 * 16;
+                        U32 otm_off_1 = otm_off_0 + 8;
+
+                        F16 *Ow_0[36];
+                        F16 *Ow_1[36];
+                        F16 *O_0[16];
+                        F16 *O_1[16];
+                        for (U32 idx = 0; idx < 36; idx++) {
+                            Ow_0[idx] = thread_otmArray + otm_off_0 + idx * 8 * 16;
+                            Ow_1[idx] = thread_otmArray + otm_off_1 + idx * 8 * 16;
                         }
+                        for (U32 i = 0; i < 4; ++i) {
+                            for (U32 j = 0; j < 4; ++j) {
+                                O_0[i * 4 + j] = out_0 + i * ow * 8 + j * 8;
+                                O_1[i * 4 + j] = out_1 + i * ow * 8 + j * 8;
+                            }
+                        }
+                        CHECK_STATUS(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4,
+                            tile_h - 1, tile_w - 1, activationDesc));
+                        CHECK_STATUS(trans_O_4x4_3x3(Ow_1, O_1, b_1, h, w, pad_h_mod_4, pad_w_mod_4,
+                            tile_h - 1, tile_w - 1, activationDesc));
                     }
-                    CHECK_STATUS(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4,
-                        tile_h - 1, tile_w - 1, activationDesc));
+                }
+                if (oc & 1) {
+                    F16 *itm_0 = thread_itmArray;
+                    const F16 *ftm_0 = filterArray + oc_1 * 36 * ic * 8 * 8;
+                    F16 *otm_0 = thread_otmArray + oc_1 * 36 * 8 * 8;
+                    const F16 *b_0 = biasArray + oc_1 * 8;
+                    // dot prod
+                    // (6*6)*C*c8*hw8 times O*(6*6)*C*c8*o8 = O*(6*6)*hw8*o8
+                    for (U32 idx = 0; idx < 36; idx++) {
+                        __asm__ __volatile__("mov x0, %[ic]\n"               // ic_blk
+                                             "eor v2.16b, v2.16b, v2.16b\n"  // out_o0hw0
+                                             "ldr d0, [%[in]]\n"             // in_hw0
+                                             "eor v3.16b, v3.16b, v3.16b\n"  // out_o0hw1
+                                             "ldr x1, [%[in], #8]\n"
+                                             "eor v4.16b, v4.16b, v4.16b\n"  // out_o0hw2
+                                             "ins v0.d[1], x1\n"
+                                             "eor v5.16b, v5.16b, v5.16b\n"  // out_o0hw3
+                                             "ldr d18, [%[f]]\n"             // f_o0c0
+                                             "eor v6.16b, v6.16b, v6.16b\n"  // out_o0hw4
+                                             "ldr x2, [%[f], #8]\n"
+                                             "eor v7.16b, v7.16b, v7.16b\n"  // out_o0hw5
+                                             "ins v18.d[1], x2\n"
+                                             "eor v8.16b, v8.16b, v8.16b\n"  // out_o0hw6
+                                             "eor v9.16b, v9.16b, v9.16b\n"  // out_o0hw7
+                                             "0:\n"
+                                             "ldr  d1, [%[in], #16]\n"  // in_hw0
+                                             "fmla  v2.8h, v18.8h, v0.h[0]\n"
+                                             "ldr  x1, [%[in], #24]\n"
+                                             "fmla  v3.8h, v18.8h, v0.h[1]\n"
+                                             "ins  v1.d[1], x1\n"
+                                             "fmla  v4.8h, v18.8h, v0.h[2]\n"
+                                             "ldr d20, [%[f], #16]\n"  // f_o0c0
+                                             "fmla  v5.8h, v18.8h, v0.h[3]\n"
+                                             "ldr  x2, [%[f], #24]\n"
+                                             "fmla  v6.8h, v18.8h, v0.h[4]\n"
+                                             "ins v20.d[1], x2\n"
+                                             "fmla  v7.8h, v18.8h, v0.h[5]\n"
+                                             "fmla  v8.8h, v18.8h, v0.h[6]\n"
+                                             "subs x0, x0, #2\n"
+                                             "fmla  v9.8h, v18.8h, v0.h[7]\n"
+
+                                             "ldr  d0, [%[in], #32]\n"  // in_hw0
+                                             "fmla  v2.8h, v20.8h, v1.h[0]\n"
+                                             "ldr  x1, [%[in], #40]\n"
+                                             "fmla  v3.8h, v20.8h, v1.h[1]\n"
+                                             "ins  v0.d[1], x1\n"
+                                             "fmla  v4.8h, v20.8h, v1.h[2]\n"
+                                             "ldr d18, [%[f], #32]\n"  // f_o0c0
+                                             "fmla  v5.8h, v20.8h, v1.h[3]\n"
+                                             "ldr  x2, [%[f], #40]\n"
+                                             "fmla  v6.8h, v20.8h, v1.h[4]\n"
+                                             "ins v18.d[1], x2\n"
+                                             "fmla  v7.8h, v20.8h, v1.h[5]\n"
+                                             "add %[in], %[in], #32\n"
+                                             "fmla  v8.8h, v20.8h, v1.h[6]\n"
+                                             "add %[f], %[f], #32\n"
+                                             "fmla  v9.8h, v20.8h, v1.h[7]\n"
+                                             "bne 0b\n"
+                                             "st1 {v2.8h, v3.8h, v4.8h, v5.8h}, [%[out]], #64\n"
+                                             "st1 {v6.8h, v7.8h, v8.8h, v9.8h}, [%[out]], #64\n"
+                                             : [out] "+r"(otm_0), [in] "+r"(itm_0), [f] "+r"(ftm_0)
+                                             : [ic] "r"((I64)ic * 8)
+                                             : "memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5",
+                                             "v6", "v7", "v8", "v9", "v18", "v20", "x0", "x1", "x2");
+                    }
+                    // out trans
+                    // O*(6*6)*hw8*o8 => NOWHo8
+                    for (U32 hw8 = 0; hw8 < 8; hw8++) {
+                        U32 h = (hw + hw8) / tile_w;
+                        U32 w = (hw + hw8) % tile_w;
+                        F16 *out_0 = outArray + n * oc * oh * ow * 8 + oc_1 * oh * ow * 8 +
+                            h * 4 * ow * 8 + w * 4 * 8;
+                        U32 otm_off_0 = oc_1 * 8 * 36 * 8 + hw8 * 8;
+
+                        F16 *Ow_0[36];
+                        F16 *O_0[16];
+                        for (U32 idx = 0; idx < 36; idx++) {
+                            Ow_0[idx] = thread_otmArray + otm_off_0 + idx * 8 * 8;
+                        }
+                        for (U32 i = 0; i < 4; ++i) {
+                            for (U32 j = 0; j < 4; ++j) {
+                                O_0[i * 4 + j] = out_0 + i * ow * 8 + j * 8;
+                            }
+                        }
+                        CHECK_STATUS(trans_O_4x4_3x3(Ow_0, O_0, b_0, h, w, pad_h_mod_4, pad_w_mod_4,
+                            tile_h - 1, tile_w - 1, activationDesc));
+                    }
                 }
             }
         }
@@ -499,19 +431,19 @@ EE convolution_winograd_A55(TensorDesc inputDesc,
                 for (U32 i = 0; i < 36; i++) {
                     Iw_ptr[i] = Iw0[i];
                 }
-                trans_I_4x4_3x3(Iw_ptr, I0);
+                trans_I_4x4_3x3<false>(Iw_ptr, I0);
                 for (U32 i = 0; i < 36; i++) {
                     Iw_ptr[i] = Iw1[i];
                 }
-                trans_I_4x4_3x3(Iw_ptr, I1);
+                trans_I_4x4_3x3<false>(Iw_ptr, I1);
                 for (U32 i = 0; i < 36; i++) {
                     Iw_ptr[i] = Iw2[i];
                 }
-                trans_I_4x4_3x3(Iw_ptr, I2);
+                trans_I_4x4_3x3<false>(Iw_ptr, I2);
                 for (U32 i = 0; i < 36; i++) {
                     Iw_ptr[i] = Iw3[i];
                 }
-                trans_I_4x4_3x3(Iw_ptr, I3);
+                trans_I_4x4_3x3<false>(Iw_ptr, I3);
                 for (U32 i = 0; i < 36; i++) {
                     F16 *itm = itmArray_mov + i * ic * 8 * 4;
 
@@ -724,7 +656,7 @@ EE convolution_winograd_A55(TensorDesc inputDesc,
                 for (U32 i = 0; i < 36; i++) {
                     Iw_ptr[i] = Iw0[i];
                 }
-                trans_I_4x4_3x3(Iw_ptr, I0);
+                trans_I_4x4_3x3<false>(Iw_ptr, I0);
                 for (U32 i = 0; i < 36; i++) {
                     F16 *itm = itmArray_mov + i * ic * 8;
 

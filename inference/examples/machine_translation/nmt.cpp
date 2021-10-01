@@ -67,7 +67,6 @@ int main(int argc, char *argv[])
     std::vector<std::string> resultPaths =
         load_data(sequenceDirectory + std::string("/result"), resultDescs, &results);
 
-    pipeline->saveAlgorithmMapToFile(algorithmMapPath);
     double totalTime = 0;
     U32 sequenceIndex = 0;
     U32 falseResult = 0;
@@ -86,7 +85,7 @@ int main(int argc, char *argv[])
 
         double timeBegin = ut_time_ms();
         pipeline->run();
-#ifdef _USE_MALI
+#ifdef _USE_GPU
         if (useGPU) {
             gcl_finish(OCLContext::getInstance().handle.get());
         }
@@ -95,16 +94,12 @@ int main(int argc, char *argv[])
         totalTime += (timeEnd - timeBegin);
 
         Tensor output = pipeline->get_tensor_by_name("decoder_output");
-#ifdef _USE_MALI
+#ifdef _USE_GPU
         if (useGPU) {
             auto mem = (OclMemory *)output.get_memory();
             if (!mem->check_mapped()) {
-                Tensor outputMap = Tensor(OCLMem);
-                TensorDesc desc = output.get_desc();
-                outputMap.resize(desc);
-                GCLMemDesc gclDesc = mem->get_desc();
+                Tensor outputMap = output.clone(false);
                 auto memMap = (OclMemory *)outputMap.get_memory();
-                memMap->padding(gclDesc);
                 memMap->mapped_alloc();
                 memMap->copy_from(mem);
                 output = outputMap;
@@ -129,6 +124,7 @@ int main(int argc, char *argv[])
     }
 
     UNI_TIME_STATISTICS
+    pipeline->saveAlgorithmMapToFile(algorithmMapPath);
 
     std::cout << "[SUMMARY]:" << std::endl;
     UNI_CI_LOG(
