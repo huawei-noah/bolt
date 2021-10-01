@@ -21,4 +21,5 @@ jobs:
           gcc -v
           g++ -v
           cd $BOLT_PATH
+          chmod +x install.sh
           ./install.sh --target=macos-x86_64_avx2 -t 32
