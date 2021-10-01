@@ -20,4 +20,4 @@ jobs:
           export PATH=${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/darwin-x86_64/bin:$PATH
           cd ..
           chmod +x install.sh
-          ./install.sh --target=android-aarch64 --mali
+          ./install.sh --target=android-aarch64 --gpu
