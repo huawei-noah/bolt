@@ -14,4 +14,5 @@ jobs:
           echo 'export FLAGS_GETOPT_CMD="$(brew --prefix gnu-getopt)/bin/getopt"' >> /Users/runner/.bash_profile
           source /Users/runner/.bash_profile        
           export IOS_SDK_ROOT=/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk
+          chmod +x install.sh
           ./install.sh --target=ios-armv7 
