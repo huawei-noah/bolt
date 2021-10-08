@@ -33,5 +33,5 @@ jobs:
         export PATH=${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/windows-x86_64/bin:$PATH
         export PATH=$PATH:/d/a/bolt/bolt/software/wget
         cd /d/a/bolt/bolt
-        ./install.sh --target=android-aarch64 
+        ./install.sh --target=android-aarch64 --gpu 
       shell: bash
