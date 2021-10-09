@@ -304,7 +304,7 @@ __kernel void MANGLE_NAME(conv_direct_sh1_fn_spe_, IOM, AM, FM, FW, FH, ON)(cons
         flt_val = vload4(flt_off, flt);
         CALCORE(in_val, flt_val, out_val);
         flt_off += 1;
-        in_off += ihw_str;
+        ADD_IN_OFF;
     }
 #else
     for (int i = 0; i < ic_str; ++i) {
