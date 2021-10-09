@@ -209,7 +209,7 @@ cmake_env_options=\"\${cmake_env_options} -DFlatBuffers_ROOT=\${FlatBuffers_ROOT
         mkdir -p ${TFLite_ROOT}
         cd ${TFLite_ROOT}
         if [ ! -d "${script_dir}/sources/tflite" ]; then
-            wget --no-check-certificate https://raw.githubusercontent.com/tensorflow/tensorflow/master/tensorflow/lite/schema/schema_generated.h > ${log_file} || exit 1
+            wget --no-check-certificate https://raw.githubusercontent.com/tensorflow/tensorflow/v1.15.0/tensorflow/lite/schema/schema_generated.h > ${log_file} || exit 1
             mkdir include
             mkdir include/tensorflow
             mkdir include/tensorflow/lite
