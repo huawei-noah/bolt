@@ -90,15 +90,11 @@ $(document).ready(function(){initNavTree('classcom_1_1huawei_1_1noah_1_1BoltMode
 Inheritance diagram for com.huawei.noah.BoltModel:</div>
 <div class="dyncontent">
 <div class="center"><img src="classcom_1_1huawei_1_1noah_1_1BoltModel__inherit__graph.png" border="0" usemap="#com_8huawei_8noah_8BoltModel_inherit__map" alt="Inheritance graph"/></div>
-<map name="com_8huawei_8noah_8BoltModel_inherit__map" id="com_8huawei_8noah_8BoltModel_inherit__map">
-</map>
 <center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <div class="dynheader">
 Collaboration diagram for com.huawei.noah.BoltModel:</div>
 <div class="dyncontent">
 <div class="center"><img src="classcom_1_1huawei_1_1noah_1_1BoltModel__coll__graph.png" border="0" usemap="#com_8huawei_8noah_8BoltModel_coll__map" alt="Collaboration graph"/></div>
-<map name="com_8huawei_8noah_8BoltModel_coll__map" id="com_8huawei_8noah_8BoltModel_coll__map">
-</map>
 <center><span class="legend">[<a target="top" href="graph_legend.html">legend</a>]</span></center></div>
 <table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a name="pub-methods"></a>
@@ -115,6 +111,9 @@ Public Member Functions</h2></td></tr>
 <tr class="memitem:a2357b20473f15131f1908af4f8d094fd"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classcom_1_1huawei_1_1noah_1_1BoltModel.html#a2357b20473f15131f1908af4f8d094fd">setRuntimeDeviceDynamic</a> ()  throws FileNotFoundException     </td></tr>
 <tr class="memdesc:a2357b20473f15131f1908af4f8d094fd"><td class="mdescLeft">&#160;</td><td class="mdescRight">set process cpu affinity according cpu average occupy  <a href="#a2357b20473f15131f1908af4f8d094fd">More...</a><br /></td></tr>
 <tr class="separator:a2357b20473f15131f1908af4f8d094fd"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a2593baf96d01947ea7fd5b2b968aac42"><td class="memItemLeft" align="right" valign="top">native void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classcom_1_1huawei_1_1noah_1_1BoltModel.html#a2593baf96d01947ea7fd5b2b968aac42">setNumThreads</a> (int threads)</td></tr>
+<tr class="memdesc:a2593baf96d01947ea7fd5b2b968aac42"><td class="mdescLeft">&#160;</td><td class="mdescRight">set parallel threads num  <a href="#a2593baf96d01947ea7fd5b2b968aac42">More...</a><br /></td></tr>
+<tr class="separator:a2593baf96d01947ea7fd5b2b968aac42"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a1c8fc537392804956a8e9c8e5f68ed0f"><td class="memItemLeft" align="right" valign="top"><a class="el" href="classcom_1_1huawei_1_1noah_1_1BoltResult.html">BoltResult</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="classcom_1_1huawei_1_1noah_1_1BoltModel.html#a1c8fc537392804956a8e9c8e5f68ed0f">run</a> (int inputNum, String[] inputName, float[][] inputData)</td></tr>
 <tr class="memdesc:a1c8fc537392804956a8e9c8e5f68ed0f"><td class="mdescLeft">&#160;</td><td class="mdescRight">inference result from input  <a href="#a1c8fc537392804956a8e9c8e5f68ed0f">More...</a><br /></td></tr>
 <tr class="separator:a1c8fc537392804956a8e9c8e5f68ed0f"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -392,7 +391,7 @@ Protected Member Functions</h2></td></tr>
 <p>recycle memory and destroy model </p>
 <dl class="section return"><dt>Returns</dt><dd></dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="BoltModel_8java_source.html#l00262">262</a> of file <a class="el" href="BoltModel_8java_source.html">BoltModel.java</a>.</p>
+<p class="definition">Definition at line <a class="el" href="BoltModel_8java_source.html#l00273">273</a> of file <a class="el" href="BoltModel_8java_source.html">BoltModel.java</a>.</p>
 
 </div>
 </div>
@@ -439,7 +438,7 @@ Protected Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><a class="el" href="classcom_1_1huawei_1_1noah_1_1BoltResult.html">BoltResult</a> : the result class of bolt model after inference </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="BoltModel_8java_source.html#l00204">204</a> of file <a class="el" href="BoltModel_8java_source.html">BoltModel.java</a>.</p>
+<p class="definition">Definition at line <a class="el" href="BoltModel_8java_source.html#l00215">215</a> of file <a class="el" href="BoltModel_8java_source.html">BoltModel.java</a>.</p>
 
 </div>
 </div>
@@ -528,7 +527,37 @@ Protected Member Functions</h2></td></tr>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd><a class="el" href="classcom_1_1huawei_1_1noah_1_1BoltResult.html">BoltResult</a> : the result class of bolt model after inference </dd></dl>
 
-<p class="definition">Definition at line <a class="el" href="BoltModel_8java_source.html#l00229">229</a> of file <a class="el" href="BoltModel_8java_source.html">BoltModel.java</a>.</p>
+<p class="definition">Definition at line <a class="el" href="BoltModel_8java_source.html#l00240">240</a> of file <a class="el" href="BoltModel_8java_source.html">BoltModel.java</a>.</p>
+
+</div>
+</div>
+<a id="a2593baf96d01947ea7fd5b2b968aac42"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a2593baf96d01947ea7fd5b2b968aac42">&#9670;&nbsp;</a></span>setNumThreads()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">native void com.huawei.noah.BoltModel.setNumThreads </td>
+          <td>(</td>
+          <td class="paramtype">int&#160;</td>
+          <td class="paramname"><em>threads</em></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>set parallel threads num </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">threads</td><td>number of threads</td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section note"><dt>Note</dt><dd>This can only be used before run. This setting is global to each inference threads. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd></dd></dl>
+
+<p class="reference">Referenced by <a class="el" href="BoltModel_8java_source.html#l00188">com.huawei.noah.BoltModel.setRuntimeDeviceDynamic()</a>.</p>
 
 </div>
 </div>
@@ -592,6 +621,8 @@ Protected Member Functions</h2></td></tr>
 
 <p class="definition">Definition at line <a class="el" href="BoltModel_8java_source.html#l00188">188</a> of file <a class="el" href="BoltModel_8java_source.html">BoltModel.java</a>.</p>
 
+<p class="reference">References <a class="el" href="classcom_1_1huawei_1_1noah_1_1BoltModel.html#a2593baf96d01947ea7fd5b2b968aac42">com.huawei.noah.BoltModel.setNumThreads()</a>.</p>
+
 </div>
 </div>
 <hr/>The documentation for this class was generated from the following file:<ul>
@@ -603,7 +634,7 @@ Protected Member Functions</h2></td></tr>
 <div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
   <ul>
     <li class="navelem"><b>com</b></li><li class="navelem"><b>huawei</b></li><li class="navelem"><b>noah</b></li><li class="navelem"><a class="el" href="classcom_1_1huawei_1_1noah_1_1BoltModel.html">BoltModel</a></li>
-    <li class="footer">Generated on Sat Apr 10 2021 01:55:53 for Bolt by
+    <li class="footer">Generated on Thu Sep 30 2021 09:49:52 for Bolt by
     <a href="http://www.doxygen.org/index.html">
     <img class="footer" src="doxygen.png" alt="doxygen"/></a> 1.8.13 </li>
   </ul>

@@ -1,5 +1,7 @@
 var searchData=
 [
+  ['getdataformatstring',['GetDataFormatString',['../bolt_8h.html#a7e40bd2f5237bbc4418cb871aca09055',1,'bolt.h']]],
+  ['getdatatypestring',['GetDataTypeString',['../bolt_8h.html#a1bc822406d4f3d43a6ce35845e79dfcf',1,'bolt.h']]],
   ['getgpudevicename',['GetGpuDeviceName',['../bolt_8h.html#a84d02faef7e39f9e2faa12fe711a094a',1,'bolt.h']]],
   ['getinputdatainfofrommodel',['GetInputDataInfoFromModel',['../bolt_8h.html#a34255c9a19f441f3e0264fad070a6793',1,'bolt.h']]],
   ['getinputdatainfofrommodel5d',['GetInputDataInfoFromModel5D',['../bolt_8h.html#a4599b450ed046d62d3d28bc03b54a5f7',1,'bolt.h']]],

@@ -115,7 +115,10 @@ Enumerations</h2></td></tr>
 <br />
 &#160;&#160;<a class="el" href="bolt_8h.html#add57988c892c423bff906e04292510dfa23d2e88c7202a761560b789e40ea28f0">CPU_ARM_A76</a> = 4, 
 <a class="el" href="bolt_8h.html#add57988c892c423bff906e04292510dfab543f12ae00134fd0fb8b42919b73526">CPU_X86_AVX2</a> = 5, 
-<a class="el" href="bolt_8h.html#add57988c892c423bff906e04292510dfa66155f5157e143d652cf6fbfa987096c">GPU_MALI</a> = 10
+<a class="el" href="bolt_8h.html#add57988c892c423bff906e04292510dfaac1939bbc4f6f5f24f395dd7464f7e92">CPU_X86_AVX512</a> = 6, 
+<a class="el" href="bolt_8h.html#add57988c892c423bff906e04292510dfa66155f5157e143d652cf6fbfa987096c">GPU_MALI</a> = 10, 
+<br />
+&#160;&#160;<a class="el" href="bolt_8h.html#add57988c892c423bff906e04292510dfa041caf05596c4d1ad818e3830dd57318">GPU_QUALCOMM</a> = 11
 <br />
  }</td></tr>
 <tr class="separator:add57988c892c423bff906e04292510df"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -131,13 +134,18 @@ Enumerations</h2></td></tr>
 <a class="el" href="bolt_8h.html#aa0e166c7e8b775d1768ec53805bb3911a4d0fc87140a59749ba6aa0d20c073e64">NCHWC8</a> = 2, 
 <a class="el" href="bolt_8h.html#aa0e166c7e8b775d1768ec53805bb3911a5762dd6d3f183cc15e66305b1859a6cd">MTK</a> = 3, 
 <br />
-&#160;&#160;<a class="el" href="bolt_8h.html#aa0e166c7e8b775d1768ec53805bb3911a50d1448013c6f17125caee18aa418af7">NORMAL</a> = 4
+&#160;&#160;<a class="el" href="bolt_8h.html#aa0e166c7e8b775d1768ec53805bb3911a50d1448013c6f17125caee18aa418af7">NORMAL</a> = 4, 
+<a class="el" href="bolt_8h.html#aa0e166c7e8b775d1768ec53805bb3911aad295e659748e8359d4d517a7424d70e">NCHWC4</a> = 5
 <br />
  }</td></tr>
 <tr class="separator:aa0e166c7e8b775d1768ec53805bb3911"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table><table class="memberdecls">
 <tr class="heading"><td colspan="2"><h2 class="groupheader"><a name="func-members"></a>
 Functions</h2></td></tr>
+<tr class="memitem:a1bc822406d4f3d43a6ce35845e79dfcf"><td class="memItemLeft" align="right" valign="top">const char *const  *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="bolt_8h.html#a1bc822406d4f3d43a6ce35845e79dfcf">GetDataTypeString</a> ()</td></tr>
+<tr class="separator:a1bc822406d4f3d43a6ce35845e79dfcf"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a7e40bd2f5237bbc4418cb871aca09055"><td class="memItemLeft" align="right" valign="top">const char *const  *&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="bolt_8h.html#a7e40bd2f5237bbc4418cb871aca09055">GetDataFormatString</a> ()</td></tr>
+<tr class="separator:a7e40bd2f5237bbc4418cb871aca09055"><td class="memSeparator" colspan="2">&#160;</td></tr>
 <tr class="memitem:a2cccae5fa6178256ccdf018cda4adfc8"><td class="memItemLeft" align="right" valign="top"><a class="el" href="bolt_8h.html#af55d689ab3378ed1dd2e821b3650672a">ModelHandle</a>&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="bolt_8h.html#a2cccae5fa6178256ccdf018cda4adfc8">CreateModel</a> (const char *modelPath, <a class="el" href="bolt_8h.html#a13cba8f7d540198469c048961dfa9fee">AFFINITY_TYPE</a> affinity, const char *algorithmMapPath)</td></tr>
 <tr class="memdesc:a2cccae5fa6178256ccdf018cda4adfc8"><td class="mdescLeft">&#160;</td><td class="mdescRight">create model from file  <a href="#a2cccae5fa6178256ccdf018cda4adfc8">More...</a><br /></td></tr>
 <tr class="separator:a2cccae5fa6178256ccdf018cda4adfc8"><td class="memSeparator" colspan="2">&#160;</td></tr>
@@ -203,6 +211,9 @@ void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="bolt
 <tr class="memitem:ac541b88f8846a8827674426627b9758a"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="bolt_8h.html#ac541b88f8846a8827674426627b9758a">SetRuntimeDeviceDynamic</a> (<a class="el" href="bolt_8h.html#af55d689ab3378ed1dd2e821b3650672a">ModelHandle</a> ih)</td></tr>
 <tr class="memdesc:ac541b88f8846a8827674426627b9758a"><td class="mdescLeft">&#160;</td><td class="mdescRight">set process cpu affinity according cpu average occupy  <a href="#ac541b88f8846a8827674426627b9758a">More...</a><br /></td></tr>
 <tr class="separator:ac541b88f8846a8827674426627b9758a"><td class="memSeparator" colspan="2">&#160;</td></tr>
+<tr class="memitem:a11b58672489ecc0a3b01abc0029b1360"><td class="memItemLeft" align="right" valign="top">void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="bolt_8h.html#a11b58672489ecc0a3b01abc0029b1360">SetNumThreads</a> (int threads)</td></tr>
+<tr class="memdesc:a11b58672489ecc0a3b01abc0029b1360"><td class="mdescLeft">&#160;</td><td class="mdescRight">set parallel threads num  <a href="#a11b58672489ecc0a3b01abc0029b1360">More...</a><br /></td></tr>
+<tr class="separator:a11b58672489ecc0a3b01abc0029b1360"><td class="memSeparator" colspan="2">&#160;</td></tr>
 </table>
 <a name="details" id="details"></a><h2 class="groupheader">Detailed Description</h2>
 <div class="textblock"><p>C API Document. </p>
@@ -293,9 +304,11 @@ void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="bolt
 </td></tr>
 <tr><td class="fieldname"><a id="aa0e166c7e8b775d1768ec53805bb3911a50d1448013c6f17125caee18aa418af7"></a>NORMAL&#160;</td><td class="fielddoc"><p>batch-&gt;unit data order </p>
 </td></tr>
+<tr><td class="fieldname"><a id="aa0e166c7e8b775d1768ec53805bb3911aad295e659748e8359d4d517a7424d70e"></a>NCHWC4&#160;</td><td class="fielddoc"><p>batch-&gt;channel/4-&gt;width-&gt;high-&gt;channel four element data order </p>
+</td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="bolt_8h_source.html#l00061">61</a> of file <a class="el" href="bolt_8h_source.html">bolt.h</a>.</p>
+<p class="definition">Definition at line <a class="el" href="bolt_8h_source.html#l00070">70</a> of file <a class="el" href="bolt_8h_source.html">bolt.h</a>.</p>
 
 </div>
 </div>
@@ -322,7 +335,7 @@ void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="bolt
 </td></tr>
 </table>
 
-<p class="definition">Definition at line <a class="el" href="bolt_8h_source.html#l00053">53</a> of file <a class="el" href="bolt_8h_source.html">bolt.h</a>.</p>
+<p class="definition">Definition at line <a class="el" href="bolt_8h_source.html#l00055">55</a> of file <a class="el" href="bolt_8h_source.html">bolt.h</a>.</p>
 
 </div>
 </div>
@@ -351,7 +364,11 @@ void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="bolt
 </td></tr>
 <tr><td class="fieldname"><a id="add57988c892c423bff906e04292510dfab543f12ae00134fd0fb8b42919b73526"></a>CPU_X86_AVX2&#160;</td><td class="fielddoc"><p>X86_64 AVX2 CPU. </p>
 </td></tr>
+<tr><td class="fieldname"><a id="add57988c892c423bff906e04292510dfaac1939bbc4f6f5f24f395dd7464f7e92"></a>CPU_X86_AVX512&#160;</td><td class="fielddoc"><p>X86_64 AVX512 CPU. </p>
+</td></tr>
 <tr><td class="fieldname"><a id="add57988c892c423bff906e04292510dfa66155f5157e143d652cf6fbfa987096c"></a>GPU_MALI&#160;</td><td class="fielddoc"><p>ARM MALI GPU. </p>
+</td></tr>
+<tr><td class="fieldname"><a id="add57988c892c423bff906e04292510dfa041caf05596c4d1ad818e3830dd57318"></a>GPU_QUALCOMM&#160;</td><td class="fielddoc"><p>ARM MALI GPU. </p>
 </td></tr>
 </table>
 
@@ -384,6 +401,8 @@ void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="bolt
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>result data memory handle </dd></dl>
+
+<p class="reference">Referenced by <a class="el" href="bolt_8h_source.html#l00080">GetDataFormatString()</a>.</p>
 
 </div>
 </div>
@@ -430,6 +449,8 @@ void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="bolt
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>result data memory handle </dd></dl>
 
+<p class="reference">Referenced by <a class="el" href="bolt_8h_source.html#l00080">GetDataFormatString()</a>.</p>
+
 </div>
 </div>
 <a id="a3b32cf658036c9f72bdf430d64f71e93"></a>
@@ -458,6 +479,8 @@ void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="bolt
 <dl class="section return"><dt>Returns</dt><dd>inference pipeline handle </dd></dl>
 <dl class="section note"><dt>Note</dt><dd>This function can not be called before PrepareModel. The model that being cloned can not be changed before all threads complete clone function. <div class="fragment"><div class="line"><a class="code" href="bolt_8h.html#af55d689ab3378ed1dd2e821b3650672a">ModelHandle</a> handle = <a class="code" href="bolt_8h.html#a2cccae5fa6178256ccdf018cda4adfc8">CreateModel</a>(...);</div><div class="line"><a class="code" href="bolt_8h.html#a36edc3a7ec707739b353ea5631ba65f3">PrepareModel</a>(handle);</div><div class="line"><a class="code" href="bolt_8h.html#af55d689ab3378ed1dd2e821b3650672a">ModelHandle</a> clone_handle = <a class="code" href="bolt_8h.html#a3b32cf658036c9f72bdf430d64f71e93">CloneModel</a>(handle);</div><div class="line">...</div><div class="line">DestroyModel(handle);</div><div class="line"><a class="code" href="bolt_8h.html#a01e64633ab6307c8977935a3152ec7e2">DestroyModel</a>(clone_handle);</div></div><!-- fragment --> </dd></dl>
 
+<p class="reference">Referenced by <a class="el" href="bolt_8h_source.html#l00080">GetDataFormatString()</a>.</p>
+
 </div>
 </div>
 <a id="a696d75ffd8b5f7856bd540ec5ee42b0f"></a>
@@ -485,6 +508,8 @@ void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="bolt
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>result data memory handle </dd></dl>
 <dl class="section note"><dt>Note</dt><dd>The result handle that being cloned can not be changed before all threads complete clone function. </dd></dl>
+
+<p class="reference">Referenced by <a class="el" href="bolt_8h_source.html#l00080">GetDataFormatString()</a>.</p>
 
 </div>
 </div>
@@ -534,6 +559,8 @@ void&#160;</td><td class="memItemRight" valign="bottom"><a class="el" href="bolt
 <dd>
 If your input tensor size or model is changed, please delete the old algorithm map file. If any unexpected error happen, you can try to delete algorithm file and run it again. </dd></dl>
 
+<p class="reference">Referenced by <a class="el" href="bolt_8h_source.html#l00080">GetDataFormatString()</a>.</p>
+
 </div>
 </div>
 <a id="a01e64633ab6307c8977935a3152ec7e2"></a>
@@ -560,6 +587,8 @@ If your input tensor size or model is changed, please delete the old algorithm m
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd></dd></dl>
+
+<p class="reference">Referenced by <a class="el" href="bolt_8h_source.html#l00080">GetDataFormatString()</a>.</p>
 
 </div>
 </div>
@@ -588,6 +617,50 @@ If your input tensor size or model is changed, please delete the old algorithm m
 </dl>
 <dl class="section return"><dt>Returns</dt><dd></dd></dl>
 
+<p class="reference">Referenced by <a class="el" href="bolt_8h_source.html#l00080">GetDataFormatString()</a>.</p>
+
+</div>
+</div>
+<a id="a7e40bd2f5237bbc4418cb871aca09055"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a7e40bd2f5237bbc4418cb871aca09055">&#9670;&nbsp;</a></span>GetDataFormatString()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">const char* const* GetDataFormatString </td>
+          <td>(</td>
+          <td class="paramname"></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Get DATA_FORMAT String </p>
+
+<p class="definition">Definition at line <a class="el" href="bolt_8h_source.html#l00080">80</a> of file <a class="el" href="bolt_8h_source.html">bolt.h</a>.</p>
+
+<p class="reference">References <a class="el" href="bolt_8h.html#aa43703f58a7d84ede82f537d959f4fcf">AllocAllResultHandle()</a>, <a class="el" href="bolt_8h.html#ace9a55152f2737853ff89821b983da08">AllocSpecificResultHandle()</a>, <a class="el" href="bolt_8h.html#a3b32cf658036c9f72bdf430d64f71e93">CloneModel()</a>, <a class="el" href="bolt_8h.html#a696d75ffd8b5f7856bd540ec5ee42b0f">CloneResultHandle()</a>, <a class="el" href="bolt_8h.html#a2cccae5fa6178256ccdf018cda4adfc8">CreateModel()</a>, <a class="el" href="bolt_8h.html#ab90b19b037a36011a82c1b8e1e6c68be">CreateModelWithFileStream()</a>, <a class="el" href="bolt_8h.html#a01e64633ab6307c8977935a3152ec7e2">DestroyModel()</a>, <a class="el" href="bolt_8h.html#ac9c41e4ff40212ca2fc8c4ef3b130a97">FreeResultHandle()</a>, <a class="el" href="bolt_8h.html#a84d02faef7e39f9e2faa12fe711a094a">GetGpuDeviceName()</a>, <a class="el" href="bolt_8h.html#a34255c9a19f441f3e0264fad070a6793">GetInputDataInfoFromModel()</a>, <a class="el" href="bolt_8h.html#a4599b450ed046d62d3d28bc03b54a5f7">GetInputDataInfoFromModel5D()</a>, <a class="el" href="bolt_8h.html#ac4e7a232453dadcc5c29ea5ef53d35ae">GetNumInputsFromModel()</a>, <a class="el" href="bolt_8h.html#ae0ad3ed44d8ba508130975578bf1a106">GetNumOutputsFromResultHandle()</a>, <a class="el" href="bolt_8h.html#a5c18757d032facda7adbaace04fc5bd6">GetOutputDataFromResultHandle()</a>, <a class="el" href="bolt_8h.html#a8d8fdd66744474d66e6cdc9873a11331">GetOutputDataInfoFromResultHandle()</a>, <a class="el" href="bolt_8h.html#a36edc3a7ec707739b353ea5631ba65f3">PrepareModel()</a>, <a class="el" href="bolt_8h.html#a12f30348d026385da1ac4b69bc84cb83">PrepareModel5D()</a>, <a class="el" href="bolt_8h.html#a9d707f86ec537f5d768217f1610e3501">ResizeModelInput()</a>, <a class="el" href="bolt_8h.html#a1ea62e699ead088443db64cf5834c2a7">RunModel()</a>, <a class="el" href="bolt_8h.html#a11b58672489ecc0a3b01abc0029b1360">SetNumThreads()</a>, <a class="el" href="bolt_8h.html#a15d859b24f9fed52a4269c5eb094f37f">SetRuntimeDevice()</a>, and <a class="el" href="bolt_8h.html#ac541b88f8846a8827674426627b9758a">SetRuntimeDeviceDynamic()</a>.</p>
+
+</div>
+</div>
+<a id="a1bc822406d4f3d43a6ce35845e79dfcf"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a1bc822406d4f3d43a6ce35845e79dfcf">&#9670;&nbsp;</a></span>GetDataTypeString()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">const char* const* GetDataTypeString </td>
+          <td>(</td>
+          <td class="paramname"></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+<p>Get DATA_TYPE String </p>
+
+<p class="definition">Definition at line <a class="el" href="bolt_8h_source.html#l00063">63</a> of file <a class="el" href="bolt_8h_source.html">bolt.h</a>.</p>
+
 </div>
 </div>
 <a id="a84d02faef7e39f9e2faa12fe711a094a"></a>
@@ -606,6 +679,8 @@ If your input tensor size or model is changed, please delete the old algorithm m
       </table>
 </div><div class="memdoc">
 <p>Copy current GPU device name to gpuDeviceName User need to alloc memory of gpuDeviceName used with CreateModelWithFileStream to help user choose algoFile </p>
+
+<p class="reference">Referenced by <a class="el" href="bolt_8h_source.html#l00080">GetDataFormatString()</a>.</p>
 
 </div>
 </div>
@@ -695,6 +770,8 @@ If your input tensor size or model is changed, please delete the old algorithm m
 <dl class="section return"><dt>Returns</dt><dd></dd></dl>
 <dl class="section note"><dt>Note</dt><dd>name/n/c/h/w/dt/df array space must be allocated before calling, the array length must be equal to num_inputs. each element of name must be allocated, the array length must be equal to 128. </dd></dl>
 
+<p class="reference">Referenced by <a class="el" href="bolt_8h_source.html#l00080">GetDataFormatString()</a>.</p>
+
 </div>
 </div>
 <a id="ac4e7a232453dadcc5c29ea5ef53d35ae"></a>
@@ -722,6 +799,8 @@ If your input tensor size or model is changed, please delete the old algorithm m
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>the number of input </dd></dl>
 
+<p class="reference">Referenced by <a class="el" href="bolt_8h_source.html#l00080">GetDataFormatString()</a>.</p>
+
 </div>
 </div>
 <a id="ae0ad3ed44d8ba508130975578bf1a106"></a>
@@ -748,6 +827,8 @@ If your input tensor size or model is changed, please delete the old algorithm m
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd>the number of output </dd></dl>
+
+<p class="reference">Referenced by <a class="el" href="bolt_8h_source.html#l00080">GetDataFormatString()</a>.</p>
 
 </div>
 </div>
@@ -793,6 +874,8 @@ If your input tensor size or model is changed, please delete the old algorithm m
   </dd>
 </dl>
 <dl class="section return"><dt>Returns</dt><dd></dd></dl>
+
+<p class="reference">Referenced by <a class="el" href="bolt_8h_source.html#l00080">GetDataFormatString()</a>.</p>
 
 </div>
 </div>
@@ -882,6 +965,8 @@ If your input tensor size or model is changed, please delete the old algorithm m
 <dl class="section return"><dt>Returns</dt><dd></dd></dl>
 <dl class="section note"><dt>Note</dt><dd>name/n/c/h/w/dt/df array space must be allocated before calling, the array length must be equal to num_inputs. each element of name must be allocated, the array length must be equal to 128. </dd></dl>
 
+<p class="reference">Referenced by <a class="el" href="bolt_8h_source.html#l00080">GetDataFormatString()</a>.</p>
+
 </div>
 </div>
 <a id="a36edc3a7ec707739b353ea5631ba65f3"></a>
@@ -969,6 +1054,8 @@ If your input tensor size or model is changed, please delete the old algorithm m
 </dl>
 <dl class="section return"><dt>Returns</dt><dd></dd></dl>
 <dl class="section note"><dt>Note</dt><dd>name/n/c/h/w/dt/df array space must be allocated before calling, the array length must be equal to num_inputs. each element of name must be allocated, the array length must be equal to 128. </dd></dl>
+
+<p class="reference">Referenced by <a class="el" href="bolt_8h_source.html#l00080">GetDataFormatString()</a>.</p>
 
 </div>
 </div>
@@ -1058,6 +1145,8 @@ If your input tensor size or model is changed, please delete the old algorithm m
 <dl class="section return"><dt>Returns</dt><dd></dd></dl>
 <dl class="section note"><dt>Note</dt><dd>name/n/c/h/w/dt/df array space must be allocated before calling, the array length must be equal to num_inputs. each element of name must be allocated, the array length must be equal to 128.</dd></dl>
 <div class="fragment"><div class="line"><span class="comment">// model_resize must behind PrepareModel;</span></div><div class="line"><a class="code" href="bolt_8h.html#a36edc3a7ec707739b353ea5631ba65f3">PrepareModel</a>(...);</div><div class="line"><a class="code" href="bolt_8h.html#a9d707f86ec537f5d768217f1610e3501">ResizeModelInput</a>(...);</div><div class="line"><a class="code" href="bolt_8h.html#a1ea62e699ead088443db64cf5834c2a7">RunModel</a>(...);</div></div><!-- fragment --> 
+<p class="reference">Referenced by <a class="el" href="bolt_8h_source.html#l00080">GetDataFormatString()</a>.</p>
+
 </div>
 </div>
 <a id="a1ea62e699ead088443db64cf5834c2a7"></a>
@@ -1117,6 +1206,38 @@ If your input tensor size or model is changed, please delete the old algorithm m
 </dl>
 <dl class="section return"><dt>Returns</dt><dd></dd></dl>
 
+<p class="reference">Referenced by <a class="el" href="bolt_8h_source.html#l00080">GetDataFormatString()</a>.</p>
+
+</div>
+</div>
+<a id="a11b58672489ecc0a3b01abc0029b1360"></a>
+<h2 class="memtitle"><span class="permalink"><a href="#a11b58672489ecc0a3b01abc0029b1360">&#9670;&nbsp;</a></span>SetNumThreads()</h2>
+
+<div class="memitem">
+<div class="memproto">
+      <table class="memname">
+        <tr>
+          <td class="memname">void SetNumThreads </td>
+          <td>(</td>
+          <td class="paramtype">int&#160;</td>
+          <td class="paramname"><em>threads</em></td><td>)</td>
+          <td></td>
+        </tr>
+      </table>
+</div><div class="memdoc">
+
+<p>set parallel threads num </p>
+<dl class="params"><dt>Parameters</dt><dd>
+  <table class="params">
+    <tr><td class="paramname">threads</td><td>number of threads</td></tr>
+  </table>
+  </dd>
+</dl>
+<dl class="section note"><dt>Note</dt><dd>This can only be used before RunModel. If you use it before PrepareModel, this will affect tmp buffer allocation. Then you are limited that next setting can not greater than before one. This setting is global to each inference threads. </dd></dl>
+<dl class="section return"><dt>Returns</dt><dd></dd></dl>
+
+<p class="reference">Referenced by <a class="el" href="bolt_8h_source.html#l00080">GetDataFormatString()</a>.</p>
+
 </div>
 </div>
 <a id="a15d859b24f9fed52a4269c5eb094f37f"></a>
@@ -1162,6 +1283,8 @@ If your input tensor size or model is changed, please delete the old algorithm m
 </dl>
 <dl class="section return"><dt>Returns</dt><dd></dd></dl>
 
+<p class="reference">Referenced by <a class="el" href="bolt_8h_source.html#l00080">GetDataFormatString()</a>.</p>
+
 </div>
 </div>
 <a id="ac541b88f8846a8827674426627b9758a"></a>
@@ -1189,6 +1312,8 @@ If your input tensor size or model is changed, please delete the old algorithm m
 </dl>
 <dl class="section return"><dt>Returns</dt><dd></dd></dl>
 
+<p class="reference">Referenced by <a class="el" href="bolt_8h_source.html#l00080">GetDataFormatString()</a>.</p>
+
 </div>
 </div>
 </div><!-- contents -->
@@ -1197,7 +1322,7 @@ If your input tensor size or model is changed, please delete the old algorithm m
 <div id="nav-path" class="navpath"><!-- id is needed for treeview function! -->
   <ul>
     <li class="navelem"><a class="el" href="dir_ffa8eb026e43c8506ed537c22995d347.html">inference</a></li><li class="navelem"><a class="el" href="dir_4d1df7083999756a89e3e1171454ef33.html">engine</a></li><li class="navelem"><a class="el" href="dir_aa4d49d31d7196e73eedd4e7d895dca9.html">api</a></li><li class="navelem"><a class="el" href="dir_9d485ed04f768d9c915b5286331ee014.html">c</a></li><li class="navelem"><a class="el" href="bolt_8h.html">bolt.h</a></li>
-    <li class="footer">Generated on Sat Apr 10 2021 01:55:53 for Bolt by
+    <li class="footer">Generated on Thu Sep 30 2021 09:49:52 for Bolt by
     <a href="http://www.doxygen.org/index.html">
     <img class="footer" src="doxygen.png" alt="doxygen"/></a> 1.8.13 </li>
   </ul>

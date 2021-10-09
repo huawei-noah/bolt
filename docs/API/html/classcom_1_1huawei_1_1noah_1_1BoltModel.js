@@ -7,6 +7,7 @@ var classcom_1_1huawei_1_1noah_1_1BoltModel =
     [ "destructor", "classcom_1_1huawei_1_1noah_1_1BoltModel.html#acdd7430f78f6b40cd2886999a52f4976", null ],
     [ "run", "classcom_1_1huawei_1_1noah_1_1BoltModel.html#a1c8fc537392804956a8e9c8e5f68ed0f", null ],
     [ "run", "classcom_1_1huawei_1_1noah_1_1BoltModel.html#ad539f472f28065161ca85f33e2f3273d", null ],
+    [ "setNumThreads", "classcom_1_1huawei_1_1noah_1_1BoltModel.html#a2593baf96d01947ea7fd5b2b968aac42", null ],
     [ "setRuntimeDevice", "classcom_1_1huawei_1_1noah_1_1BoltModel.html#a8392572c3e6a584af6a6f5e5c3bdc46b", null ],
     [ "setRuntimeDeviceDynamic", "classcom_1_1huawei_1_1noah_1_1BoltModel.html#a2357b20473f15131f1908af4f8d094fd", null ]
 ];

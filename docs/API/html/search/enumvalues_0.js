@@ -7,5 +7,6 @@ var searchData=
   ['cpu_5fhigh_5fperformance',['CPU_HIGH_PERFORMANCE',['../bolt_8h.html#a13cba8f7d540198469c048961dfa9feea81148f782691feaf6951e6b103b645d1',1,'bolt.h']]],
   ['cpu_5flow_5fpower',['CPU_LOW_POWER',['../bolt_8h.html#a13cba8f7d540198469c048961dfa9feeacb16057372715665eead14fa28589a74',1,'bolt.h']]],
   ['cpu_5fserial',['CPU_SERIAL',['../bolt_8h.html#add57988c892c423bff906e04292510dfa2691bc8930a9c3b54c6ba5d06ed257d1',1,'bolt.h']]],
-  ['cpu_5fx86_5favx2',['CPU_X86_AVX2',['../bolt_8h.html#add57988c892c423bff906e04292510dfab543f12ae00134fd0fb8b42919b73526',1,'bolt.h']]]
+  ['cpu_5fx86_5favx2',['CPU_X86_AVX2',['../bolt_8h.html#add57988c892c423bff906e04292510dfab543f12ae00134fd0fb8b42919b73526',1,'bolt.h']]],
+  ['cpu_5fx86_5favx512',['CPU_X86_AVX512',['../bolt_8h.html#add57988c892c423bff906e04292510dfaac1939bbc4f6f5f24f395dd7464f7e92',1,'bolt.h']]]
 ];

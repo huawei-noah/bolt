@@ -12,6 +12,7 @@ var searchData=
   ['cpu_5flow_5fpower',['CPU_LOW_POWER',['../enumcom_1_1huawei_1_1noah_1_1AffinityType.html#a5de3f27e206ba2a49735af5425644b98',1,'com.huawei.noah.AffinityType.CPU_LOW_POWER()'],['../bolt_8h.html#a13cba8f7d540198469c048961dfa9feeacb16057372715665eead14fa28589a74',1,'CPU_LOW_POWER():&#160;bolt.h']]],
   ['cpu_5fserial',['CPU_SERIAL',['../enumcom_1_1huawei_1_1noah_1_1DeviceType.html#af3dc943eb9e0ec49928bfa475f9a9f53',1,'com.huawei.noah.DeviceType.CPU_SERIAL()'],['../bolt_8h.html#add57988c892c423bff906e04292510dfa2691bc8930a9c3b54c6ba5d06ed257d1',1,'CPU_SERIAL():&#160;bolt.h']]],
   ['cpu_5fx86_5favx2',['CPU_X86_AVX2',['../enumcom_1_1huawei_1_1noah_1_1DeviceType.html#a6aac6417407fdf415526e398cb2214d0',1,'com.huawei.noah.DeviceType.CPU_X86_AVX2()'],['../bolt_8h.html#add57988c892c423bff906e04292510dfab543f12ae00134fd0fb8b42919b73526',1,'CPU_X86_AVX2():&#160;bolt.h']]],
+  ['cpu_5fx86_5favx512',['CPU_X86_AVX512',['../bolt_8h.html#add57988c892c423bff906e04292510dfaac1939bbc4f6f5f24f395dd7464f7e92',1,'bolt.h']]],
   ['createmodel',['CreateModel',['../bolt_8h.html#a2cccae5fa6178256ccdf018cda4adfc8',1,'bolt.h']]],
   ['createmodelwithfilestream',['CreateModelWithFileStream',['../bolt_8h.html#ab90b19b037a36011a82c1b8e1e6c68be',1,'bolt.h']]]
 ];

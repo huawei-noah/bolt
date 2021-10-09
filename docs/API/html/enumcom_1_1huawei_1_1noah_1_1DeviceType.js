@@ -6,5 +6,6 @@ var enumcom_1_1huawei_1_1noah_1_1DeviceType =
     [ "CPU_ARM_V8", "enumcom_1_1huawei_1_1noah_1_1DeviceType.html#a7a26668ac5895f58f0950a292b8d60bd", null ],
     [ "CPU_SERIAL", "enumcom_1_1huawei_1_1noah_1_1DeviceType.html#af3dc943eb9e0ec49928bfa475f9a9f53", null ],
     [ "CPU_X86_AVX2", "enumcom_1_1huawei_1_1noah_1_1DeviceType.html#a6aac6417407fdf415526e398cb2214d0", null ],
-    [ "GPU_MALI", "enumcom_1_1huawei_1_1noah_1_1DeviceType.html#aafbea87f8f289cb74110b55958087530", null ]
+    [ "GPU_MALI", "enumcom_1_1huawei_1_1noah_1_1DeviceType.html#aafbea87f8f289cb74110b55958087530", null ],
+    [ "GPU_QUALCOMM", "enumcom_1_1huawei_1_1noah_1_1DeviceType.html#a0ce39a1695df5b39e7bdfa3dd14f1c1d", null ]
 ];
