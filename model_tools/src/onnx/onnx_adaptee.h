@@ -915,6 +915,17 @@ protected:
                 memcpy(weightSpec.weight, convWeightParamPtr, weightSpec.bytes_of_weight);
                 // traverse weight elements to see whether it is bnn convolution
                 weightSpec.mdt = get_weight_data_type(convWeightNum, (F32 *)weightSpec.weight);
+                int oc = convWeightTp.dims(0);
+                int ic = convWeightTp.dims(1);
+                int fhfw = 1;
+                std::vector<int> kernel =
+                    get_node_vector_ints_attribute_by_name(this->onnxNode, "kernel_shape");
+                for (U32 i = 0; i < kernel.size(); i++) {
+                    fhfw *= kernel[i];
+                }
+                if (oc % 16 != 0 || ic % 32 != 0 || fhfw % 8 != 1) {
+                    weightSpec.mdt = DT_F32;
+                }
 
                 int convBiasNum = 0;
                 U8 *convBiasParamPtr = nullptr;
