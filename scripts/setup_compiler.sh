@@ -65,6 +65,9 @@ fi
 if [[ ${system_info} =~ "aarch64" ]]; then
     host_hardware="aarch64"
 fi
+if [[ ${system_info} =~ "armv7" ]]; then
+    host_hardware="armv7"
+fi
 if [[ "${host_hardware}" == "" ]]; then
     echo "[ERROR] can not recognize host hardware information(${system_info}), we currently support x86_64/aarch64."
     exit 1
@@ -79,13 +82,22 @@ fi
 
 CONFIGURE_OPTIONS=""
 CCFLAGS=""
-if [[ ! ${target} =~ blank ]]; then
+if [[ "${CC}" == "" ]]; then
     CC=gcc
+fi
+if [[ "${CXX}" == "" ]]; then
     CXX=g++
+fi
+if [[ "${STRIP}" == "" ]]; then
     STRIP=strip
+fi
+if [[ "${AR}" == "" ]]; then
     AR=ar
+fi
+if [[ "${RANLIB}" == "" ]]; then
     RANLIB=ranlib
 fi
+
 if [[ "${target}" == "android-aarch64" ]]; then
     CC="clang --target=aarch64-linux-android21"
     CXX="clang++ --target=aarch64-linux-android21"
@@ -247,7 +259,7 @@ if [[ "${host}" != "${target}" ]]; then
         CMAKE_OPTIONS="${CMAKE_OPTIONS} -DCMAKE_SYSTEM_PROCESSOR=x86_64"
     fi
 fi
-if [[ ${target} =~ blank ]]; then
+if [[ ${target} =~ blank && ${CC} =~ " " ]]; then
     CCFLAGS=`echo ${CC#* }`
 fi
 
