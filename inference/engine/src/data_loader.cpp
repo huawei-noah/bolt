@@ -11,13 +11,13 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <algorithm>
-#include <string>
 #include <dirent.h>
 #include <sys/stat.h>
 #include <stddef.h>
 #include <stdlib.h>
 #include "data_loader.hpp"
+#include <algorithm>
+#include <string>
 
 #ifdef _BUILD_TEST
 #include <jpeglib.h>
