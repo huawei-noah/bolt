@@ -11,8 +11,8 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <algorithm>
 #include "result_format.hpp"
+#include <algorithm>
 
 std::vector<int> topK_index(U8 *res, TensorDesc desc, U32 topK)
 {
