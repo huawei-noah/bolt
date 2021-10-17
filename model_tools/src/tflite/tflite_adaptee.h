@@ -13,13 +13,14 @@
 
 #ifndef _H_TFLITEADAPTEE
 #define _H_TFLITEADAPTEE
+#include "model_adaptee.h"
+
 #include <fstream>
 #include <string>
 #include <vector>
 #include <map>
 #include <tensorflow/lite/schema/schema_generated.h>
 
-#include "model_adaptee.h"
 #include "tensor_transpose.h"
 #include "array_transpose.h"
 
