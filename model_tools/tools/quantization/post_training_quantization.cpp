@@ -13,13 +13,13 @@
 
 #include <iostream>
 #include <getopt.h>
-#include <algorithm>
 #include "model_spec.h"
 #include "model_quantization.h"
 #include "model_calibration.hpp"
 #include "model_data_type_converter.h"
 #include "model_optimizer.hpp"
 #include "model_print.h"
+#include <algorithm>
 
 void print_quantization_usage()
 {
