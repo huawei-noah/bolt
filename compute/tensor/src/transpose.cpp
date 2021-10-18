@@ -11,7 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <algorithm>
 #include "tensor_computing.h"
 #ifdef _USE_GENERAL
 #include "cpu/general/tensor_computing_general.h"
@@ -22,6 +21,7 @@
 #ifdef _USE_GPU
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
+#include <algorithm>
 
 EE transpose(Tensor inputTensor,
     TransposeParamSpec p,

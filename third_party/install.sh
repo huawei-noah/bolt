@@ -304,7 +304,7 @@ cmake_env_options=\"\${cmake_env_options} -DJPEG_ROOT=\${JPEG_ROOT}\"
 " >> ${env_file}
 fi
 
-if [[ ${cmake_options} =~ USE_TENSORFLOW=ON ]]; then
+if [[ ${cmake_options} =~ USE_CAFFE=ON || ${cmake_options} =~ USE_ONNX=ON || ${cmake_options} =~ USE_TFLITE=ON || ${cmake_options} =~ USE_TENSORFLOW=ON ]]; then
     JSONCPP_ROOT=${work_dir}/jsoncpp
     # download and build jsoncpp
     if [ ! -d "${JSONCPP_ROOT}/lib" ]; then

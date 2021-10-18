@@ -14,8 +14,8 @@
 #ifndef _H_INPLACEOPTIMIZER
 #define _H_INPLACEOPTIMIZER
 
-#include <algorithm>
 #include "OPOptimizer.hpp"
+#include <algorithm>
 
 class InPlaceOptimizer : public OPOptimizer {
     bool optimize(ModelSpec *spec) override
