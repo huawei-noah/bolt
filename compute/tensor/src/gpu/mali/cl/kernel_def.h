@@ -244,35 +244,37 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
 
 #define LOAD_BUF_ARRAY5(v, off, buf)   \
     {                                  \
-        T8 tmp = vload8(0, buf + off); \
+        T4 tmp = vload4(0, buf + off); \
         v[0] = tmp.s0;                 \
         v[1] = tmp.s1;                 \
         v[2] = tmp.s2;                 \
         v[3] = tmp.s3;                 \
-        v[4] = tmp.s4;                 \
+        v[4] = buf[off + 4];           \
     }
 
-#define LOAD_BUF_ARRAY6(v, off, buf)   \
-    {                                  \
-        T8 tmp = vload8(0, buf + off); \
-        v[0] = tmp.s0;                 \
-        v[1] = tmp.s1;                 \
-        v[2] = tmp.s2;                 \
-        v[3] = tmp.s3;                 \
-        v[4] = tmp.s4;                 \
-        v[5] = tmp.s5;                 \
+#define LOAD_BUF_ARRAY6(v, off, buf)         \
+    {                                        \ 
+        T4 tmp = vload4(0, buf + off);       \
+        T2 tmpex = vload2(0, buf + off + 4); \
+        v[0] = tmp.s0;                       \
+        v[1] = tmp.s1;                       \
+        v[2] = tmp.s2;                       \
+        v[3] = tmp.s3;                       \
+        v[4] = tmpex.s0;                     \
+        v[5] = tmpex.s1;                     \
     }
 
-#define LOAD_BUF_ARRAY7(v, off, buf)   \
-    {                                  \
-        T8 tmp = vload8(0, buf + off); \
-        v[0] = tmp.s0;                 \
-        v[1] = tmp.s1;                 \
-        v[2] = tmp.s2;                 \
-        v[3] = tmp.s3;                 \
-        v[4] = tmp.s4;                 \
-        v[5] = tmp.s5;                 \
-        v[6] = tmp.s6;                 \
+#define LOAD_BUF_ARRAY7(v, off, buf)         \
+    {                                        \
+        T4 tmp = vload4(0, buf + off);       \
+        T3 tmpex = vload3(0, buf + off + 4); \
+        v[0] = tmp.s0;                       \
+        v[1] = tmp.s1;                       \
+        v[2] = tmp.s2;                       \
+        v[3] = tmp.s3;                       \
+        v[4] = tmpex.s0;                     \
+        v[5] = tmpex.s1;                     \
+        v[6] = tmpex.s2;                     \
     }
 
 #define LOAD_BUF_ARRAY8(v, off, buf)   \
