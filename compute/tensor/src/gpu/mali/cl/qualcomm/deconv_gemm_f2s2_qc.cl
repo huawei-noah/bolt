@@ -92,7 +92,7 @@
         uchar k = 0;                                                                   \
         for (uchar i = 0; i < ON; ++i) {                                               \
             for (uchar j = 0; j < 4; j += 2) {                                         \
-                if (iy + k) {                                                          \
+                if (iy + k < oh) {                                                     \
                     VSTORE_VEC(out_val[j][i], out_val[j + 1][i], ix, iy + k, iz, out); \
                     k++;                                                               \
                 }                                                                      \
@@ -133,7 +133,7 @@
         uchar k = 0;                                                                                \
         for (uchar i = 0; i < ON; ++i) {                                                            \
             for (uchar j = 0; j < 4; j += 2) {                                                      \
-                if (index_y + k) {                                                                  \
+                if (index_y + k < oh) {                                                             \
                     VSTORE_VEC(out_val[j][i], out_val[j + 1][i], out_off + ow_str * (k << 2), out); \
                     k++;                                                                            \
                 }                                                                                   \
