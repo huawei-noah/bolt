@@ -19,27 +19,29 @@ exeIsValid(){
     fi
 }
 
+setAndroidNDK() {
+     if [[ "${ANDROID_NDK_ROOT}" != "" ]]; then
+         INNER_ANDROID_NDK_ROOT=${ANDROID_NDK_ROOT}
+     fi
+     if [[ "${ANDROID_NDK_HOME}" != "" ]]; then
+         INNER_ANDROID_NDK_ROOT=${ANDROID_NDK_HOME}
+     fi
+     if [[ "${INNER_ANDROID_NDK_ROOT}" != "" ]]; then
+        if [[ ${host} =~ macos ]]; then
+            export PATH=$PATH:${INNER_ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/darwin-x86_64/bin
+        elif [[ ${host} =~ windows ]]; then
+            export PATH=$PATH:${INNER_ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/windows-x86_64/bin
+        else
+            export PATH=$PATH:${INNER_ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin
+        fi
+     fi
+}
+
 androidNDKIsValid(){
     checkExe $1
     if [[ $? == 0 ]]; then
-        if [[ "${ANDROID_NDK_ROOT}" != "" ]]; then
-            INNER_ANDROID_NDK_ROOT=${ANDROID_NDK_ROOT}
-        fi
-        if [[ "${ANDROID_NDK_HOME}" != "" ]]; then
-            INNER_ANDROID_NDK_ROOT=${ANDROID_NDK_HOME}
-        fi
-        if [[ ${host} =~ macos ]]; then
-            export PATH=${INNER_ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/darwin-x86_64/bin:$PATH
-        elif [[ ${host} =~ windows ]]; then
-            export PATH=${INNER_ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/windows-x86_64/bin:$PATH
-        else
-            export PATH=${INNER_ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH
-        fi
-        checkExe $1
-        if [[ $? == 0 ]]; then
-            echo "[ERROR] please install Android NDK, and set shell environment ANDROID_NDK_ROOT or ANDROID_NDK_HOME to find it"
-            exit 1
-        fi
+        echo "[ERROR] please install Android NDK, and set shell environment ANDROID_NDK_ROOT or ANDROID_NDK_HOME to find it"
+        exit 1
     fi
 }
 
@@ -98,6 +100,9 @@ if [[ "${RANLIB}" == "" ]]; then
     RANLIB=ranlib
 fi
 
+if [[ "${target}" =~ "android" ]]; then
+    setAndroidNDK
+fi
 if [[ "${target}" == "android-aarch64" ]]; then
     CC="clang --target=aarch64-linux-android21"
     CXX="clang++ --target=aarch64-linux-android21"
