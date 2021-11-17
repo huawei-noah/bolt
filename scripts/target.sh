@@ -51,3 +51,16 @@ check_getopt() {
         exit 1
     fi
 }
+
+check_sed() {
+    out=`sed --version | head -1`
+    if [[ ! ${out} =~ "GNU" ]]; then
+        echo -e "[ERROR] you are using Mac sed, not GNU sed. If you are runing on Mac, please use this command to install gnu-sed.\n    brew install gnu-sed && alias sed=gsed"
+        exit 1
+    fi
+}
+
+check_shell_tools() {
+    check_getopt
+    check_sed
+}
