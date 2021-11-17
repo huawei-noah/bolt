@@ -10,7 +10,7 @@ build_threads="8"
 clean="off"
 source ${script_dir}/../scripts/target.sh
 
-check_shell_tools
+check_getopt
 
 print_help() {
     cat <<EOF
@@ -361,6 +361,7 @@ if [[ ${cmake_options} =~ USE_FLOW=ON && ${cmake_options} =~ BUILD_TEST=ON ]]; t
         mkdir -p ffts-master/build
         cd ffts-master/build
         # change static library name on windows
+	check_sed
         sed '509c if (ON)' ../CMakeLists.txt > CMakeLists.txt.new
         mv CMakeLists.txt.new ../CMakeLists.txt
         sed '512c endif ()' ../CMakeLists.txt > CMakeLists.txt.new
@@ -430,6 +431,7 @@ if [[ ${cmake_options} =~ BUILD_TEST=ON && "${CC}" != "arm-apple-darwin11-clang"
             opencv_cmake_options="${opencv_cmake_options} -DBUILD_ZLIB=ON"
         fi
         if [[ ${target} =~ linux-arm_himix100  ]]; then
+	    check_sed
             sed -i "s/std::cbrt/cbrt/g" `grep "std::cbrt" -rl ./`
             sed -i "s/std::copysign/copysign/g" `grep "std::copysign" -rl ./`
         fi
