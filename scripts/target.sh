@@ -2,7 +2,7 @@
 
 targets=("android-aarch64" "android-armv7" "android-x86_64" \
     "ios-aarch64" "ios-armv7" \
-    "linux-x86_64" "linux-x86_64_avx2" "linux-x86_64_avx512" "linux-x86_64_avx512_vnni" "linux-aarch64" "linux-arm_himix100" "linux-armv7_blank" "linux-arm_musleabi" \
+    "linux-x86_64" "linux-x86_64_avx2" "linux-x86_64_avx512" "linux-x86_64_avx512_vnni" "linux-aarch64" "linux-aarch64_blank" "linux-arm_himix100" "linux-armv7_blank" "linux-arm_musleabi" \
     "windows-x86_64" "windows-x86_64_avx2" "windows-x86_64_avx512" \
     "macos-x86_64" "macos-x86_64_avx2")
 

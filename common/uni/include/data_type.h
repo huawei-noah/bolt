@@ -17,11 +17,9 @@
 #include <bitset>
 #include <string.h>
 #include <math.h>
-#if defined(_USE_NEON) || defined(_USE_GPU)
-#include <arm_neon.h>
 #ifdef __aarch64__
+#include <arm_neon.h>
 typedef __fp16 F16;
-#endif
 #endif
 #ifdef _USE_X86
 #include <immintrin.h>

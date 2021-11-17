@@ -64,7 +64,7 @@ host_hardware=""
 if [[ ${system_info} =~ "x86_64" ]]; then
     host_hardware="x86_64"
 fi
-if [[ ${system_info} =~ "aarch64" ]]; then
+if [[ ${system_info} =~ "aarch64" || ${system_info} =~ "arm64" ]]; then
     host_hardware="aarch64"
 fi
 if [[ ${system_info} =~ "armv7" ]]; then
