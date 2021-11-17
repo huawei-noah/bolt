@@ -59,8 +59,3 @@ check_sed() {
         exit 1
     fi
 }
-
-check_shell_tools() {
-    check_getopt
-    check_sed
-}
