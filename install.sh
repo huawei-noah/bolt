@@ -17,7 +17,7 @@ find . -name "*.sh" | xargs chmod +x
 
 source ${script_dir}/scripts/target.sh
 
-check_getopt
+check_shell_tools
 
 print_help() {
     cat <<EOF
