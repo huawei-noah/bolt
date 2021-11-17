@@ -351,6 +351,7 @@ if [[ ${cmake_options} =~ USE_FLOW=ON && ${cmake_options} =~ BUILD_TEST=ON ]]; t
         if [ ! -d "./ffts-master" ]; then
             if [ ! -f "${script_dir}/sources/ffts-master.zip" ]; then
                 wget --no-check-certificate https://codeload.github.com/anthonix/ffts/zip/master > ${log_file} || exit 1
+		mv master ffts-master.zip || exit 1
                 cp ffts-master.zip ${script_dir}/sources/
             else
                 cp -r ${script_dir}/sources/ffts-master.zip .
@@ -360,6 +361,7 @@ if [[ ${cmake_options} =~ USE_FLOW=ON && ${cmake_options} =~ BUILD_TEST=ON ]]; t
         mkdir -p ffts-master/build
         cd ffts-master/build
         # change static library name on windows
+	check_sed
         sed '509c if (ON)' ../CMakeLists.txt > CMakeLists.txt.new
         mv CMakeLists.txt.new ../CMakeLists.txt
         sed '512c endif ()' ../CMakeLists.txt > CMakeLists.txt.new
@@ -429,6 +431,7 @@ if [[ ${cmake_options} =~ BUILD_TEST=ON && "${CC}" != "arm-apple-darwin11-clang"
             opencv_cmake_options="${opencv_cmake_options} -DBUILD_ZLIB=ON"
         fi
         if [[ ${target} =~ linux-arm_himix100  ]]; then
+	    check_sed
             sed -i "s/std::cbrt/cbrt/g" `grep "std::cbrt" -rl ./`
             sed -i "s/std::copysign/copysign/g" `grep "std::copysign" -rl ./`
         fi

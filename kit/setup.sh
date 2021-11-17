@@ -64,6 +64,7 @@ for((i=0; i<${#demos[@]}; i++)) do
     if [[ ${CXX} =~ android ]]; then
         project_dir="${BOLT_ROOT}/kit/Android/${demo}/app/src/main/cpp/libbolt"
         mkdir -p ${project_dir}
+        mkdir -p ${BOLT_ROOT}/kit/Android/${demo}/app/src/main/assets
         cp ${BOLT_ROOT}/kit/assets/${demo}/* ${BOLT_ROOT}/kit/Android/${demo}/app/src/main/assets/ || exit 1
         kit_flags_h=${BOLT_ROOT}/kit/assets/headers/android_kit_flags.h
     fi
