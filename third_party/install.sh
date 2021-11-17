@@ -10,7 +10,7 @@ build_threads="8"
 clean="off"
 source ${script_dir}/../scripts/target.sh
 
-check_getopt
+check_shell_tools
 
 print_help() {
     cat <<EOF
@@ -351,6 +351,7 @@ if [[ ${cmake_options} =~ USE_FLOW=ON && ${cmake_options} =~ BUILD_TEST=ON ]]; t
         if [ ! -d "./ffts-master" ]; then
             if [ ! -f "${script_dir}/sources/ffts-master.zip" ]; then
                 wget --no-check-certificate https://codeload.github.com/anthonix/ffts/zip/master > ${log_file} || exit 1
+		mv master ffts-master.zip || exit 1
                 cp ffts-master.zip ${script_dir}/sources/
             else
                 cp -r ${script_dir}/sources/ffts-master.zip .
