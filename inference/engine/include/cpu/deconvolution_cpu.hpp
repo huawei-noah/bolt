@@ -57,20 +57,32 @@ public:
     void run() override
     {
         Tensor inputTensor = this->inputTensors[0];
-        Tensor filterTensor = this->weightTensors[0];
-        U8 *scalePtr = nullptr;
-        Tensor biasTensor = this->biasTensors[0];
+        TensorDesc oriInputDesc = inputTensor.get_desc();
+        inputTensor.resize(transformDescTo4d(oriInputDesc));
         Tensor outputTensor = this->outputTensors[0];
+        TensorDesc oriOutputDesc = outputTensor.get_desc();
+        outputTensor.resize(transformDescTo4d(oriOutputDesc));
+
+        Tensor filterTensor = this->weightTensors[0];
+        Tensor biasTensor = this->biasTensors[0];
         auto filterDesc = filterTensor.get_desc();
         if (filterDesc.dt == DT_BIN01 || filterDesc.dt == DT_BIN11) {
             CHECK_STATUS(NOT_SUPPORTED);
         }
-        CHECK_STATUS(deconvolution(inputTensor, filterTensor, p, this->alg, scalePtr, biasTensor,
+        CHECK_STATUS(deconvolution(inputTensor, filterTensor, p, this->alg, nullptr, biasTensor,
             this->temp, outputTensor, this->activationDesc, &this->archInfo));
+        inputTensor.resize(oriInputDesc);
+        outputTensor.resize(oriOutputDesc);
     }
 
     EE infer_forward_algorithm(std::shared_ptr<AlgorithmMap> algorithmMap) override
     {
+        Tensor inputTensor = this->inputTensors[0];
+        TensorDesc oriInputDesc = inputTensor.get_desc();
+        inputTensor.resize(transformDescTo4d(oriInputDesc));
+        Tensor outputTensor = this->outputTensors[0];
+        TensorDesc oriOutputDesc = outputTensor.get_desc();
+        outputTensor.resize(transformDescTo4d(oriOutputDesc));
         ConvolutionPolicy policy = CONVOLUTION_FASTEST;
         auto filterDesc = this->weightTensors[0].get_desc();
         DataType targetType = filterDesc.dt;
@@ -78,20 +90,24 @@ public:
         if (algorithmMap->getAlgorithmInfoFromMap(this->name, &algo, 1)) {
             this->alg = (ConvolutionForwardAlgorithm)algo;
         } else {
-            CHECK_STATUS(deconvolution_infer_forward_algorithm(this->inputTensors[0],
-                this->weightTensors[0], this->outputTensors[0], p, policy, &(this->alg), targetType,
-                this->activationDesc, &this->archInfo));
+            CHECK_STATUS(deconvolution_infer_forward_algorithm(inputTensor, this->weightTensors[0],
+                outputTensor, p, policy, &(this->alg), targetType, this->activationDesc,
+                &this->archInfo));
             algo = this->alg;
             algorithmMap->setAlgorithmInfoToMap(this->name, &algo, 1);
         }
+        inputTensor.resize(oriInputDesc);
+        outputTensor.resize(oriOutputDesc);
         return SUCCESS;
     }
 
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
-        auto inputTensor = inTensors[0];
-        TensorDesc inDim = inputTensor->get_desc();
+        TensorDesc inDim = transformDescTo4d(inTensors[0]->get_desc());
+        Tensor tmpTensor;
+        tmpTensor.resize(inDim);
+        auto inputTensor = &tmpTensor;
         DataType idt;
         DataFormat idf;
         U32 in, ic, ih, iw;
@@ -110,14 +126,30 @@ public:
 
         CHECK_STATUS(deconvolution_infer_output_size(
             inputTensor, filterTensor, p, outTensors[0], targetType, &this->archInfo));
+
+        if (tensorIs3d(inTensors[0]->get_desc()) && tensorIs4d(outTensors[0]->get_desc())) {
+            DataType odt;
+            DataFormat odf;
+            U32 on, oc, oh, ow;
+            CHECK_STATUS(tensor4dGet(outTensors[0]->get_desc(), &odt, &odf, &on, &oc, &oh, &ow));
+            outTensors[0]->resize(tensor3df(odt, odf, on, oc, oh));
+        }
         return SUCCESS;
     }
 
     U32 infer_tmp_memory_size() override
     {
+        Tensor inputTensor = this->inputTensors[0];
+        TensorDesc oriInputDesc = inputTensor.get_desc();
+        inputTensor.resize(transformDescTo4d(oriInputDesc));
+        Tensor outputTensor = this->outputTensors[0];
+        TensorDesc oriOutputDesc = outputTensor.get_desc();
+        outputTensor.resize(transformDescTo4d(oriOutputDesc));
         U32 bytes = 0;
-        CHECK_STATUS(deconvolution_infer_forward_tmp_bytes(this->inputTensors[0],
-            this->weightTensors[0], this->outputTensors[0], p, this->alg, &bytes, &this->archInfo));
+        CHECK_STATUS(deconvolution_infer_forward_tmp_bytes(inputTensor, this->weightTensors[0],
+            outputTensor, p, this->alg, &bytes, &this->archInfo));
+        inputTensor.resize(oriInputDesc);
+        outputTensor.resize(oriOutputDesc);
         return bytes;
     }
 

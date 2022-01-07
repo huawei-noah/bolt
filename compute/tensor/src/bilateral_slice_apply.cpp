@@ -12,7 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "tensor_computing.h"
-#ifdef _USE_MALI
+#ifdef _USE_GPU
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
 
@@ -40,27 +40,22 @@ EE bilateral_slice_apply_infer_output_size(Tensor *inputTensor,
     if (outputTensor == nullptr) {
         CHECK_STATUS(NULL_POINTER);
     }
-    TensorDesc inputDesc = inputTensor->get_desc();
-    TensorDesc outputDesc = outputTensor->get_desc();
-    TensorDesc guideDesc = guideTensor->get_desc();
-    TensorDesc gridDesc = gridTensor->get_desc();
-
     EE ret = NOT_SUPPORTED;
-    if (IS_MALI_GPU(archInfo->arch)) {
-#ifdef _USE_MALI
-        GCLMemDesc gclmemInputDesc = ocl_get_desc(*inputTensor);
-        GCLMemDesc gclmemGuideDesc = ocl_get_desc(*guideTensor);
-        GCLMemDesc gclmemGridDesc = ocl_get_desc(*gridTensor);
-        GCLMemDesc gclmemOutputDesc = ocl_get_desc(*outputTensor);
-        ret = bilateral_slice_apply_infer_output_size_mali(inputDesc, guideDesc, gridDesc, p,
-            &outputDesc, &gclmemInputDesc, &gclmemGuideDesc, &gclmemGridDesc, &gclmemOutputDesc);
-        ocl_set_desc(inputTensor, gclmemInputDesc);
-        ocl_set_desc(guideTensor, gclmemGuideDesc);
-        ocl_set_desc(gridTensor, gclmemGridDesc);
-        ocl_set_desc(outputTensor, gclmemOutputDesc);
+    if (IS_GPU(archInfo->arch)) {
+#ifdef _USE_GPU
+        TensorDesc inputDesc = inputTensor->get_desc();
+        TensorDesc outputDesc = outputTensor->get_desc();
+        TensorDesc guideDesc = guideTensor->get_desc();
+        TensorDesc gridDesc = gridTensor->get_desc();
+        OclMemory *inputMem = (OclMemory *)inputTensor->get_memory();
+        OclMemory *guideMem = (OclMemory *)guideTensor->get_memory();
+        OclMemory *gridMem = (OclMemory *)gridTensor->get_memory();
+        OclMemory *outputMem = (OclMemory *)outputTensor->get_memory();
+        ret = bilateral_slice_padding_input_mali(
+            inputDesc, guideDesc, gridDesc, p, &outputDesc, inputMem, guideMem, gridMem, outputMem);
+        outputTensor->resize(outputDesc);
 #endif
     }
-    outputTensor->resize(outputDesc);
     return ret;
 }
 
@@ -71,13 +66,13 @@ EE bilateral_slice_apply_infer_forward_tmp_bytes(Tensor inputTensor,
     U32 *bytes,
     ArchInfo_t archInfo)
 {
-    TensorDesc inputDesc = inputTensor.get_desc();
-    TensorDesc guideDesc = guideTensor.get_desc();
-    TensorDesc gridDesc = gridTensor.get_desc();
-
     EE ret = NOT_SUPPORTED;
-    if (IS_MALI_GPU(archInfo->arch)) {
-#ifdef _USE_MALI
+    if (IS_GPU(archInfo->arch)) {
+#ifdef _USE_GPU
+        TensorDesc inputDesc = inputTensor.get_desc();
+        TensorDesc guideDesc = guideTensor.get_desc();
+        TensorDesc gridDesc = gridTensor.get_desc();
+
         ret = bilateral_slice_apply_infer_forward_tmp_bytes_mali(inputDesc, guideDesc, gridDesc, p,
             ((MaliPara_t)(archInfo->archPara))->forwardRunInfo, bytes);
 #endif
@@ -94,20 +89,20 @@ EE bilateral_slice_apply(Tensor inputTensor,
     ArchInfo_t archInfo)
 {
     auto arch = archInfo->arch;
-    TensorDesc inputDesc = inputTensor.get_desc();
-    void *input = get_ptr_from_tensor(inputTensor, arch);
-    U32 tmpBytes = tmpTensor.bytes();
-    void *tmp = get_ptr_from_tensor(tmpTensor, arch);
-    TensorDesc outputDesc = outputTensor.get_desc();
-    void *output = get_ptr_from_tensor(outputTensor, arch);
-    TensorDesc guideDesc = guideTensor.get_desc();
-    void *guide = get_ptr_from_tensor(guideTensor, arch);
-    TensorDesc gridDesc = gridTensor.get_desc();
-    void *grid = get_ptr_from_tensor(gridTensor, arch);
-
     EE ret = NOT_SUPPORTED;
-    if (IS_MALI_GPU(arch)) {
-#ifdef _USE_MALI
+    if (IS_GPU(arch)) {
+#ifdef _USE_GPU
+        TensorDesc inputDesc = inputTensor.get_desc();
+        void *input = get_ptr_from_tensor(inputTensor, arch);
+        U32 tmpBytes = tmpTensor.bytes();
+        void *tmp = get_ptr_from_tensor(tmpTensor, arch);
+        TensorDesc outputDesc = outputTensor.get_desc();
+        void *output = get_ptr_from_tensor(outputTensor, arch);
+        TensorDesc guideDesc = guideTensor.get_desc();
+        void *guide = get_ptr_from_tensor(guideTensor, arch);
+        TensorDesc gridDesc = gridTensor.get_desc();
+        void *grid = get_ptr_from_tensor(gridTensor, arch);
+
         ret = bilateral_slice_apply_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc,
             (GCLMem_t)input, guideDesc, (GCLMem_t)guide, gridDesc, (GCLMem_t)grid, p,
             ((MaliPara_t)(archInfo->archPara))->forwardRunInfo, tmpBytes, (GCLMem_t)tmp, outputDesc,

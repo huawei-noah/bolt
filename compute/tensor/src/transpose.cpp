@@ -11,7 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <algorithm>
 #include "tensor_computing.h"
 #ifdef _USE_GENERAL
 #include "cpu/general/tensor_computing_general.h"
@@ -19,9 +18,10 @@
 #if defined(_USE_X86) || defined(_USE_NEON)
 #include "cpu/tensor_computing_cpu.h"
 #endif
-#ifdef _USE_MALI
+#ifdef _USE_GPU
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
+#include <algorithm>
 
 EE transpose(Tensor inputTensor,
     TransposeParamSpec p,
@@ -37,26 +37,36 @@ EE transpose(Tensor inputTensor,
     std::vector<U32> tmpDims(p.trans_dims, p.trans_dims + p.trans_size);
     if (IS_CPU(arch)) {
         // Keep transDims unchanged so that input resize does not lead to error
-        if (DF_NCHWC8 == inputDesc.df) {
-            if (4 == p.trans_size) {
+        if (inputDesc.nDims == 4 && p.trans_size == 3 && inputDesc.dims[0] == 1) {
+            inputDesc = tensor3df(inputDesc.dt, inputDesc.df, inputDesc.dims[3], inputDesc.dims[2],
+                inputDesc.dims[1]);
+        }
+
+        if (DF_NCHWC8 == inputDesc.df || DF_NCHWC16 == inputDesc.df) {
+            U32 cx = 8;
+            if (DF_NCHWC16 == inputDesc.df) {
+                cx = 16;
+                CHECK_REQUIREMENT(inputDesc.dims[inputDesc.nDims - 2] % 16 == 0);
+            }
+            if (inputDesc.nDims == p.trans_size) {
                 auto ptr = std::find(tmpDims.begin(), tmpDims.end(), 1);
-                tmpDims.insert(ptr + 1, 4);
+                tmpDims.insert(ptr + 1, inputDesc.nDims);
             }
-            inputDesc.nDims = 5;
-            for (int i = 3; i >= 0; i--) {
-                inputDesc.dims[i + 1] = inputDesc.dims[i];
+            inputDesc.nDims = inputDesc.nDims + 1;
+            for (int i = inputDesc.nDims - 1; i > 0; i--) {
+                inputDesc.dims[i] = inputDesc.dims[i - 1];
             }
-            inputDesc.dims[3] /= 8;
-            inputDesc.dims[0] = 8;
+            inputDesc.dims[0] = cx;
+            inputDesc.dims[inputDesc.nDims - 2] /= cx;
 
             TensorDesc desc = outputDesc;
-            desc.nDims = 5;
-            U32 idx = 4;
-            for (int i = 3; i >= 0; i--) {
-                if (1 == tmpDims[3 - i]) {  // C
-                    desc.dims[idx] = outputDesc.dims[i] / 8;
+            desc.nDims = inputDesc.nDims;
+            U32 idx = inputDesc.nDims - 1;
+            for (int i = inputDesc.nDims - 2; i >= 0; i--) {
+                if (1 == tmpDims[inputDesc.nDims - 2 - i]) {  // C
+                    desc.dims[idx] = outputDesc.dims[i] / cx;
                     idx--;
-                    desc.dims[idx] = 8;
+                    desc.dims[idx] = cx;
                     idx--;
                 } else {
                     desc.dims[idx] = outputDesc.dims[i];
@@ -75,8 +85,8 @@ EE transpose(Tensor inputTensor,
     } else if (IS_CPU(arch)) {
         ret = transpose_cpu(inputDesc, input, tmpDims.data(), outputDesc, output);
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
         void *tmp = get_ptr_from_tensor(tmpTensor, arch);
         ret = transpose_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc,
             (const GCLMem_t)input, p, (GCLMem_t)tmp, outputDesc, (GCLMem_t)output);
@@ -99,16 +109,21 @@ inline EE transpose_infer_output_size_cpu(
         (*outputDesc).df = DF_NCHW;
     }
     U32 outputDim = (*outputDesc).nDims;
-    for (U32 i = 0; i < inputDim; i++) {
-        CHECK_REQUIREMENT(dim[i] < inputDim);
+    U32 index = 0;
+    for (U32 i = 0; i < p.trans_size; i++) {
+        // use 5-dim array to transpose a NCHWC8 tensor. skip c8 axis
+        if (dim[i] >= inputDim) {
+            continue;
+        }
         // NOTE: TensorDesc.dims array is in [W H C N] order.
         // so if you want to transpose [N C H W] format data, we use (dims - 1 - *)
         // [5 6 7 8] + [0 3 2 1] = [5 8 7 6]
         // [8 7 6 5] + [0 3 2 1] = [6 7 8 5]
-        (*outputDesc).dims[outputDim - 1 - i] = inputDesc.dims[inputDim - 1 - dim[i]];
+        (*outputDesc).dims[outputDim - 1 - index] = inputDesc.dims[inputDim - 1 - dim[i]];
+        index++;
     }
-    if ((*outputDesc).nDims >= 4) {
-        (*outputDesc).df = DF_NCHW;
+    if (outputDesc->nDims >= 4 || inputDesc.df == DF_NCHWC8) {
+        outputDesc->df = DF_NCHW;
     }
     if ((*outputDesc).nDims == 4 && p.trans_size == 3 && (*outputDesc).dims[0] == 1) {
         (*outputDesc) = tensor3df(inputDesc.dt, DF_NCHW, (*outputDesc).dims[3],
@@ -130,14 +145,11 @@ EE transpose_infer_output_size(
     TensorDesc outputDesc = outputTensor->get_desc();
 
     EE ret = NOT_SUPPORTED;
-    if (IS_MALI_GPU(archInfo->arch)) {
-#ifdef _USE_MALI
-        GCLMemDesc gclmemInputDesc = ocl_get_desc(*inputTensor);
-        GCLMemDesc gclmemOutputDesc = ocl_get_desc(*outputTensor);
-        ret = transpose_infer_output_size_mali(
-            inputDesc, p, &outputDesc, &gclmemInputDesc, &gclmemOutputDesc);
-        ocl_set_desc(inputTensor, gclmemInputDesc);
-        ocl_set_desc(outputTensor, gclmemOutputDesc);
+    if (IS_GPU(archInfo->arch)) {
+#ifdef _USE_GPU
+        OclMemory *inputMem = (OclMemory *)inputTensor->get_memory();
+        OclMemory *outputMem = (OclMemory *)outputTensor->get_memory();
+        ret = transpose_padding_input_mali(inputDesc, p, &outputDesc, inputMem, outputMem);
 #endif
     } else {
         ret = transpose_infer_output_size_cpu(inputDesc, p, &outputDesc);
@@ -150,8 +162,8 @@ EE transpose_infer_forward_tmp_bytes(
     Tensor inputTensor, Tensor outputTensor, U32 *bytes, ArchInfo_t archInfo)
 {
     EE ret = NOT_SUPPORTED;
-    if (IS_MALI_GPU(archInfo->arch)) {
-#ifdef _USE_MALI
+    if (IS_GPU(archInfo->arch)) {
+#ifdef _USE_GPU
         GCLMemDesc gclmemInputDesc = ocl_get_desc(inputTensor);
         GCLMemDesc gclmemOutputDesc = ocl_get_desc(outputTensor);
         TensorDesc inputDesc = inputTensor.get_desc();

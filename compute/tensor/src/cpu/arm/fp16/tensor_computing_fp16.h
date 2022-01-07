@@ -16,8 +16,8 @@
 #include <vector>
 
 #include "sys.h"
-#include "error.h"
-#include "types.h"
+#include "tensor_desc.h"
+#include "parameter_spec.h"
 #include "cpu/arm/fp16/arm_functions_fp16.h"
 
 EE convolution_transform_filter_fp16(TensorDesc filterDesc,
@@ -48,17 +48,21 @@ EE deconvolution_transform_filter_fp16(TensorDesc filterDesc,
     TensorDesc *ftmDesc,
     F16 *filterTransformed);
 
-EE pooling_c8_fp16(const F16 *input,
-    U32 stride,
-    int hstart,
-    int hend,
-    int wstart,
-    int wend,
-    F16 *output,
-    PoolingParamSpec poolingParamSpec);
-
-EE pooling_c8_big_fp16(
-    const F16 *input, U32 stride, int hstart, int hend, int wstart, int wend, F16 *output, int poolSize);
+template <PoolingMode pm>
+EE pooling_c8_fp16(const I32 &tstart,
+    const I32 &tend,
+    const I32 &hstart,
+    const I32 &hend,
+    const I32 &wstart,
+    const I32 &wend,
+    const I32 &poolSize,
+    const I32 &kernelSize,
+    const U8 *input,
+    const I32 &it,
+    const I32 &ih,
+    const I32 &iw,
+    U8 *output,
+    void *scale);
 
 EE softmax_fp16(
     TensorDesc inputDesc, const F16 *input, int axis, TensorDesc outputDesc, F16 *output);
@@ -123,6 +127,38 @@ EE rnncell_fp16(TensorDesc xDesc,
     void *output,
     Arch arch);
 
+EE lstmcell_fp16(TensorDesc xDesc,
+    const void *currentX,
+    const TensorDesc *filterDesc,
+    const void **filter,
+    const TensorDesc *biasDesc,
+    const void **bias,
+    void *state,
+    U32 tmpBytes,
+    void *tmp,
+    RNNParamSpec rnnParamSpec,
+    U32 batchStrideX,
+    U32 batchStrideH,
+    TensorDesc hDesc,
+    void *output,
+    Arch arch);
+
+EE grucell_fp16(TensorDesc xDesc,
+    const void *currentX,
+    const TensorDesc *filterDesc,
+    const void **filter,
+    const TensorDesc *biasDesc,
+    const void **bias,
+    void *state,
+    U32 tmpBytes,
+    void *tmp,
+    RNNParamSpec rnnParamSpec,
+    U32 batchStrideX,
+    U32 batchStrideH,
+    TensorDesc hDesc,
+    void *output,
+    Arch arch);
+
 EE power_fp16(TensorDesc inputDesc,
     F16 *input,
     F32 scale,
@@ -139,9 +175,10 @@ EE scale_fp16(F16 *input,
     I32 nDims,
     F16 *alpha,
     F16 *beta,
-    I32 in,
-    I32 ic,
+    I32 on,
+    I32 oc,
     I32 elements_per_channel,
+    I32 ic,
     F16 *output);
 
 EE softmax_fp16(TensorDesc inputDesc, const F16 *input, TensorDesc outputDesc, F16 *output);
@@ -153,9 +190,6 @@ EE check_fp16(TensorDesc inputDescA,
     CheckMode checkMode,
     TensorDesc outputDesc,
     I32 *output);
-
-EE quantize_tensor_fp16(
-    TensorDesc dDesc, const void *data, TensorDesc *qDesc, void *qData, F16 *scale);
 
 EE attention_mask_fp16(TensorDesc inputDesc,
     const F16 *input,
@@ -169,4 +203,12 @@ EE prelu_fp16(TensorDesc inputDesc,
     PReLUParamSpec preluDesc,
     TensorDesc outputDesc,
     F16 *output);
+
+EE dequantize_to_f16(TensorDesc qDesc,
+    void *qData,
+    const F32 *scale,
+    TensorDesc bDesc,
+    void *bData,
+    TensorDesc dDesc,
+    void *data);
 #endif

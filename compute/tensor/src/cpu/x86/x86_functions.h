@@ -14,8 +14,12 @@
 #ifndef _H_X86_FUNCTIONS
 #define _H_X86_FUNCTIONS
 #include "cpu/cpu_functions_template.h"
+#include "cpu/general/general_functions.h"
 #ifdef _USE_FP32
 #include "cpu/x86/fp32/x86_functions_fp32.h"
+#endif
+#ifdef _USE_INT8
+#include "cpu/x86/int8/x86_functions_int8.h"
 #endif
 
 inline void array_add_x86(DataType dt, const void *inputA, const void *inputB, void *output, I32 len)
@@ -32,13 +36,28 @@ inline void array_add_x86(DataType dt, const void *inputA, const void *inputB, v
     }
 }
 
-inline void array_square_and_add_x86(
-    DataType dt, const void *inputA, const void *inputB, void *output, I32 len)
+inline void array_mul_x86(DataType dt, const void *inputA, const void *inputB, void *output, I32 len)
 {
     switch (dt) {
 #ifdef _USE_FP32
         case DT_F32:
-            array_square_and_add_f32((const F32 *)inputA, (const F32 *)inputB, (F32 *)output, len);
+            array_mul_f32((const F32 *)inputA, (const F32 *)inputB, (F32 *)output, len);
+            break;
+#endif
+        default:
+            CHECK_STATUS(NOT_SUPPORTED);
+            break;
+    }
+}
+
+inline void array_mul_and_add_x86(
+    DataType dt, const void *inputA, const void *inputB, const void *inputC, void *output, I32 len)
+{
+    switch (dt) {
+#ifdef _USE_FP32
+        case DT_F32:
+            array_mul_and_add_f32(
+                (const F32 *)inputA, (const F32 *)inputB, (const F32 *)inputC, (F32 *)output, len);
             break;
 #endif
         default:
@@ -148,27 +167,35 @@ inline EE array_activation_x86(
             result = activation_fp32((F32 *)input, len, activationDesc, (F32 *)output);
             break;
 #endif
+#ifdef _USE_INT8
+        case DT_U8_Q:
+            result = activation_offset_int8((UINT8 *)input, len, activationDesc, (UINT8 *)output);
+            break;
+#endif
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            result = array_activation_general(dt, input, len, activationDesc, output);
             break;
     }
     return result;
 }
 
-inline F32 array_max_value_x86(DataType dt, const void *data, I32 len)
+inline EE array_minmax_value_x86(DataType dt, const void *data, I32 len, int mode, F32 *result)
 {
-    F32 result = 0;
+    EE ret = SUCCESS;
     switch (dt) {
 #ifdef _USE_FP32
         case DT_F32:
-            result = array_max_value_f32((const F32 *)data, len);
+            ret = array_minmax_value_f32((const F32 *)data, len, mode, result);
             break;
 #endif
+        case DT_I32:
+            ret = array_minmax_value_i32((const I32 *)data, len, mode, result);
+            break;
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            ret = NOT_SUPPORTED;
             break;
     }
-    return result;
+    return ret;
 }
 
 inline void array_max_x86(DataType dt, const void *inputA, const void *inputB, void *output, I32 len)
@@ -184,4 +211,21 @@ inline void array_max_x86(DataType dt, const void *inputA, const void *inputB, v
             break;
     }
 }
+
+inline void array_norm_scalar_scale_x86(
+    DataType dt, void *input, void *output, I32 len, F32 mean, F32 var, void *alpha, void *beta)
+{
+    switch (dt) {
+#ifdef _USE_FP32
+        case DT_F32:
+            array_norm_scalar_scale_fp32(
+                (F32 *)input, (F32 *)output, len, mean, var, (F32 *)alpha, (F32 *)beta);
+            break;
+#endif
+        default:
+            CHECK_STATUS(NOT_SUPPORTED);
+            break;
+    }
+}
+
 #endif  // _H_X86_FUNCTIONS

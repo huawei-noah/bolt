@@ -18,11 +18,12 @@
 #include "sys.h"
 #include "tensor.hpp"
 #include "algorithm_map.h"
-#ifdef _USE_MALI
+#ifdef _USE_GPU
 #include "gcl.h"
 #include "gcl_engine.h"
+#include "image_container.hpp"
 #endif
-// Include headers cautiously because this header is included in C++ API
+#include "parameter_spec.h"
 
 class Operator {
 public:
@@ -32,23 +33,18 @@ public:
         this->name = "";
         this->lenOfTemp = 0;
         this->archInfo.archPara = nullptr;
+#ifdef _USE_GPU
+        this->tempImages = nullptr;
+#endif
     }
 
-    Operator(std::string name)
+    Operator(std::string opName) : Operator()
     {
-        this->dt = DT_F32;
-        this->name = name;
-        this->lenOfTemp = 0;
-        this->archInfo.archPara = nullptr;
+        this->set_name(opName);
     }
 
     virtual ~Operator()
-    {
-        if (this->archInfo.archPara != nullptr) {
-            free(this->archInfo.archPara);
-            this->archInfo.archPara = nullptr;
-        }
-    }
+    {}
 
     virtual std::shared_ptr<Operator> clone() = 0;
 
@@ -70,11 +66,11 @@ public:
 
     virtual void set_input_output_tensors(std::vector<Tensor> it, std::vector<Tensor> ot)
     {
-        this->inputTensors = it;
-        this->outputTensors = ot;
+        set_input_tensors(it);
+        set_output_tensors(ot);
     }
 
-    virtual void set_input_tensors(std::vector<Tensor> it)
+    virtual void set_input_tensors(std::vector<Tensor> &it)
     {
         this->inputTensors = it;
     }
@@ -84,7 +80,7 @@ public:
         return this->inputTensors;
     }
 
-    virtual void set_output_tensors(std::vector<Tensor> ot)
+    virtual void set_output_tensors(std::vector<Tensor> &ot)
     {
         this->outputTensors = ot;
     }
@@ -151,6 +147,9 @@ public:
             if (DT_F16_8Q == this->dt) {
                 this->dt = DT_F16;
             }
+            if (DT_F32_8Q == this->dt) {
+                this->dt = DT_F32;
+            }
             return;
         }
         featureScale.resize(num);
@@ -170,37 +169,38 @@ public:
     virtual bool is_dynamic_scale()
     {
         OperatorType ot = this->get_type();
-        if (OT_Conv != ot) {
+        if (OT_Conv != ot && OT_FC != ot && OT_MatMul != ot) {
             return false;
         }
 
         U32 numScale = featureScale.size();
-        U32 numQuant = (DT_F16_8Q == this->dt) ? inputTensors.size() : 0;
+        U32 numQuant = (DT_F16_8Q == this->dt || DT_F32_8Q == this->dt) ? inputTensors.size() : 0;
 
         if (0 != numScale && 0 == featureScale[0][0]) {  // OP is labelled as no-quantization
             return false;
         }
 
-        if (0 != numScale && -2 == (featureScale.back())[0]) {  // OP is labelled as fp-output
-            numScale = 0;
-            numQuant += 1;
-        }
+        // if (0 != numScale && -2 == (featureScale.back())[0]) {  // OP is labelled as fp-output
+        //     numScale = 0;
+        //     numQuant += 1;
+        // }
 
-        for (auto tensor : outputTensors) {
-            if (DT_I8 == tensor.get_desc().dt) {
-                numQuant++;
-            }
-        }
-        if (0 == numQuant) {
-            return false;
-        }
+        // for (auto tensor : outputTensors) {
+        //     if (DT_I8 == tensor.get_desc().dt) {
+        //         numQuant++;
+        //     }
+        // }
 
-        if (0 == numScale) {
-            return true;
-        }
+        // if (0 == numQuant) {
+        //     return false;
+        // }
 
-        CHECK_REQUIREMENT(numQuant == numScale);
-        return false;
+        // if (0 == numScale) {
+        //     return true;
+        // }
+
+        // CHECK_REQUIREMENT(numQuant == numScale);
+        return true;
     }
 #endif
 
@@ -232,6 +232,76 @@ public:
         this->algorithmMap = algorithmMap;
     }
 
+#ifdef _USE_GPU
+    virtual void set_tmp_images(ImageContainer *tmpImageContainer)
+    {
+        this->tempImages = tmpImageContainer;
+    }
+    virtual void add_tmp_image(U32 slot, U32 *size)
+    {
+        if (IS_QUALCOMM_GPU(this->archInfo.arch)) {
+            this->tempImages->add(slot, size[0], size[1], size[2]);
+        }
+    }
+
+    virtual bool get_tmp_image(U32 slot, U32 *size, Tensor *tensor)
+    {
+        bool findMatchImage = false;
+        if (IS_QUALCOMM_GPU(this->archInfo.arch)) {
+            if (size[0] == 0 && size[1] == 0 && size[2] == 0) {
+                return false;
+            } else if (size[0] == 0 || size[1] == 0 || size[2] == 0) {
+                CHECK_STATUS(NOT_MATCH);
+            }
+            *tensor = this->tempImages->get(slot, size[0], size[1], size[2]);
+            findMatchImage = true;
+        }
+        return findMatchImage;
+    }
+
+    virtual bool check_tensors_image(std::vector<Tensor *> tensors, I32 tensorId = -1)
+    {
+        if (IS_QUALCOMM_GPU(this->archInfo.arch)) {
+            bool isImage = true;
+            U32 be = (tensorId >= 0) ? tensorId : 0;
+            U32 end = (tensorId >= 0) ? tensorId + 1 : tensors.size();
+            for (U32 i = be; i < end; i++) {
+                if (tensors[i]->get_mem_type() == OCLMem) {
+                    isImage = false;
+                    break;
+                }
+            }
+            return isImage;
+        }
+        return false;
+    }
+
+    virtual EE set_tensors_image(std::vector<Tensor *> tensors, U32 tensorPosOff, I32 tensorId = -1)
+    {
+        if (IS_QUALCOMM_GPU(this->archInfo.arch)) {
+            U32 be = (tensorId >= 0) ? tensorId : 0;
+            U32 end = (tensorId >= 0) ? tensorId + 1 : tensors.size();
+            if (tensorPosOff + end - be > tensorPos.size()) {
+                return NOT_MATCH;
+            }
+            for (U32 i = be; i < end; i++) {
+                if (this->tensorPos[tensorPosOff + i] != -2) {
+                    auto mem = std::shared_ptr<OclMemoryImg>(new OclMemoryImg());
+                    TensorDesc desc = tensors[i]->get_desc();
+                    mem->resize(desc);
+                    U32 str[3] = {0};
+                    mem->stride(str);
+                    if (gcl_check_meet_device_image3d_limits(
+                            OCLContext::getInstance().handle.get(), str[0], str[1], str[2])) {
+                        tensors[i]->set_shared_memory(mem);
+                    }
+                }
+            }
+        }
+        return SUCCESS;
+    }
+#endif
+
 protected:
     ArchInfo archInfo;
     DataType dt;
@@ -246,6 +316,9 @@ protected:
     std::string name;
     std::vector<std::vector<F32>> featureScale;
     std::shared_ptr<AlgorithmMap> algorithmMap;
+#ifdef _USE_GPU
+    ImageContainer *tempImages;
+#endif
 };
 
 #endif  // _OPERATOR_H

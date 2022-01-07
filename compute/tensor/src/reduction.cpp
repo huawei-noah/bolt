@@ -15,6 +15,9 @@
 #ifdef _USE_CPU
 #include "cpu/tensor_computing_cpu.h"
 #endif
+#ifdef _USE_GPU
+#include "gpu/mali/tensor_computing_mali.h"
+#endif
 
 EE reduction(Tensor inputTensor,
     Tensor maskTensor,
@@ -39,6 +42,11 @@ EE reduction(Tensor inputTensor,
         ret = reduction_cpu(
             inputDesc, input, maskDesc, mask, p, tmpBytes, tmp, outputDesc, output, arch);
 #endif
+    } else if (IS_GPU(arch)) {
+#ifdef _USE_GPU
+        ret = reduction_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc, (GCLMem_t)input,
+            maskDesc, (GCLMem_t)mask, p, (GCLMem_t)tmp, outputDesc, (GCLMem_t)output);
+#endif
     }
     return ret;
 }
@@ -47,11 +55,21 @@ EE reduction_infer_forward_tmp_bytes(
     Tensor inputTensor, ReductionParamSpec p, Tensor outputTensor, U32 *bytes, ArchInfo_t archInfo)
 {
     TensorDesc inputDesc = inputTensor.get_desc();
+    if (IS_GPU(archInfo->arch)) {
+#ifdef _USE_GPU
+        TensorDesc outputDesc = outputTensor.get_desc();
+        GCLMemDesc gclmemInputDesc = ocl_get_desc(inputTensor);
+        GCLMemDesc gclmemOutputDesc = ocl_get_desc(outputTensor);
+        CHECK_STATUS(reduction_infer_forward_tmp_bytes_mali(
+            inputDesc, p, outputDesc, gclmemInputDesc, gclmemOutputDesc, bytes));
+        return SUCCESS;
+#endif
+    }
     int factor = 0;
     if (p.axes_num > 1) {
         factor = 2;
     }
-    if (inputDesc.df == DF_NCHWC8) {
+    if (inputDesc.df == DF_NCHWC8 || inputDesc.df == DF_NCHWC16) {
         for (int i = 0; i < p.axes_num; i++) {
             // channel dimension
             if (p.axes[i] == 1 || p.axes[i] == -3) {
@@ -64,8 +82,11 @@ EE reduction_infer_forward_tmp_bytes(
     return SUCCESS;
 }
 
-EE reduction_infer_output_size(
-    Tensor *inputTensor, Tensor maskTensor, ReductionParamSpec p, Tensor *outputTensor)
+EE reduction_infer_output_size(Tensor *inputTensor,
+    Tensor maskTensor,
+    ReductionParamSpec p,
+    Tensor *outputTensor,
+    ArchInfo_t archInfo)
 {
     if (inputTensor == nullptr) {
         CHECK_STATUS(NULL_POINTER);
@@ -76,67 +97,87 @@ EE reduction_infer_output_size(
     TensorDesc inputDesc = inputTensor->get_desc();
     TensorDesc maskDesc = maskTensor.get_desc();
     TensorDesc outputDesc = outputTensor->get_desc();
-    int start = 0;
-    TensorDesc tmpDesc = inputDesc;
-    if (inputDesc.df == DF_NCHWC8) {
-        for (int i = 0; i < p.axes_num; i++) {
-            // channel dimension
-            if (p.axes[i] == 1 || p.axes[i] == -3) {
-                start = -1;
-                break;
-            }
-        }
-        for (int i = (int)tmpDesc.nDims - 1; i >= 0; i--) {
-            tmpDesc.dims[i + 1] = tmpDesc.dims[i];
-        }
-        tmpDesc.dims[3] /= 8;
-        tmpDesc.dims[0] = 8;
-        tmpDesc.nDims += 1;
-    }
-    outputDesc = tmpDesc;
-    for (int i = start; i < p.axes_num; i++) {
-        int axis;
-        if (i == -1) {
-            axis = 4;
-        } else {
-            axis = p.axes[i];
-        }
-        if (axis < 0) {
-            axis = tmpDesc.nDims + axis;
-        }
-        axis = tmpDesc.nDims - 1 - axis;
-        if (tensorNumElements(maskDesc) == 0) {
-            outputDesc.dims[axis] = 0;
-        } else {
-            int num = maskDesc.dims[1] > 1 ? maskDesc.dims[1] : 0;
-            outputDesc.dims[axis] = num;
-        }
-    }
-    if (p.keep_dim) {
-        for (U32 i = 0; i < tmpDesc.nDims; i++) {
-            if (outputDesc.dims[i] == 0) {
-                outputDesc.dims[i] = 1;
-            }
-        }
-        outputDesc.nDims = tmpDesc.nDims;
+    if (IS_GPU(archInfo->arch)) {
+#ifdef _USE_GPU
+        OclMemory *inputMem = (OclMemory *)inputTensor->get_memory();
+        OclMemory *outputMem = (OclMemory *)outputTensor->get_memory();
+        CHECK_STATUS(
+            reduction_padding_input_mali(inputDesc, maskDesc, p, &outputDesc, inputMem, outputMem));
+#endif
     } else {
-        int index = 0;
-        for (U32 i = 0; i < tmpDesc.nDims; i++) {
-            if (outputDesc.dims[i] != 0) {
-                outputDesc.dims[index++] = outputDesc.dims[i];
+        int start = 0;
+        TensorDesc tmpDesc = inputDesc;
+        U32 cx = (inputDesc.df == DF_NCHWC8) ? 8 : 16;
+        if (inputDesc.df == DF_NCHWC8 || inputDesc.df == DF_NCHWC16) {
+            for (int i = 0; i < p.axes_num; i++) {
+                // channel dimension
+                if (p.axes[i] == 1 || p.axes[i] == -3) {
+                    start = -1;
+                    break;
+                }
+            }
+            for (int i = (int)tmpDesc.nDims - 1; i >= 0; i--) {
+                tmpDesc.dims[i + 1] = tmpDesc.dims[i];
+            }
+            tmpDesc.dims[tmpDesc.nDims - 1] /= cx;
+            tmpDesc.dims[0] = cx;
+            tmpDesc.nDims += 1;
+        }
+        outputDesc = tmpDesc;
+        for (int i = start; i < p.axes_num; i++) {
+            int axis;
+            if (i == -1) {
+                axis = 4;
+            } else {
+                axis = p.axes[i];
+            }
+            if (axis < 0) {
+                axis = tmpDesc.nDims + axis;
+            }
+            axis = tmpDesc.nDims - 1 - axis;
+            if (tensorNumElements(maskDesc) == 0) {
+                outputDesc.dims[axis] = 0;
+            } else {
+                int num = maskDesc.dims[1] > 1 ? maskDesc.dims[1] : 0;
+                outputDesc.dims[axis] = num;
             }
         }
-        outputDesc.nDims = index;
-    }
-    outputDesc.df = getTensorDefaultDataFormat(outputDesc.nDims);
-    if (inputDesc.df == DF_NCHWC8) {
-        if (start == 0) {
-            outputDesc.df = DF_NCHWC8;
-            for (int i = 0; i < (int)outputDesc.nDims - 1; i++) {
-                outputDesc.dims[i] = outputDesc.dims[i + 1];
+        if (p.keep_dim) {
+            for (U32 i = 0; i < tmpDesc.nDims; i++) {
+                if (outputDesc.dims[i] == 0) {
+                    outputDesc.dims[i] = 1;
+                }
             }
-            outputDesc.nDims -= 1;
-            outputDesc.dims[outputDesc.nDims - 2] *= 8;
+            outputDesc.nDims = tmpDesc.nDims;
+        } else {
+            int index = 0;
+            for (U32 i = 0; i < tmpDesc.nDims; i++) {
+                if (outputDesc.dims[i] != 0) {
+                    outputDesc.dims[index++] = outputDesc.dims[i];
+                }
+            }
+            outputDesc.nDims = index;
+            if (index == 0) {
+                outputDesc.nDims = 1;
+                outputDesc.dims[0] = 1;
+            }
+        }
+        outputDesc.df = getTensorDefaultDataFormat(outputDesc.nDims);
+        if (inputDesc.df == DF_NCHWC8 || inputDesc.df == DF_NCHWC16) {
+            if (start == 0) {
+                outputDesc.df = inputDesc.df;
+                for (int i = 0; i < (int)outputDesc.nDims - 1; i++) {
+                    outputDesc.dims[i] = outputDesc.dims[i + 1];
+                }
+                outputDesc.nDims -= 1;
+                outputDesc.dims[outputDesc.nDims - 2] *= cx;
+            }
+            if (start == -1 && p.keep_dim) {
+                outputDesc.nDims -= 1;
+                for (U32 i = 0; i < outputDesc.nDims - 1; ++i) {
+                    outputDesc.dims[i] = outputDesc.dims[i + 1];
+                }
+            }
         }
     }
     outputTensor->resize(outputDesc);

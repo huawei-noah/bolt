@@ -12,43 +12,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "sys.h"
-#include "types.h"
+
 #include "tensor_desc.h"
 #include "error.h"
 #include "gpu/mali/tensor_computing_mali.h"
 #include "gpu/mali/fp16/unsqueeze_mali_fp16.h"
-
-EE unsqueeze_infer_output_size_mali(TensorDesc inputDesc,
-    TensorDesc *outputDesc,
-    GCLMemDesc_t gclmemInputDesc,
-    GCLMemDesc_t gclmemOutputDesc)
-{
-    /*tensorDesc record cpu org data format info*/
-    /*gclmemDesc record gpu trans data format info*/
-    if (outputDesc) {
-        *outputDesc = inputDesc;
-    }
-
-    DataType idt;
-    DataFormat idf;
-    U32 iw, ih, ic, in;
-    if (inputDesc.df == DF_NCHW) {
-        tensorSelectGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw);
-    } else if (inputDesc.df == DF_MKT) {
-        U32 m, k, t;
-        get_nlp_mkt_val(inputDesc, &idt, &m, &k, &t);
-        map_nlp_mkt_to_ncwhc4(m, k, t, &iw, &ih, &ic);
-        ic = ic * 4;
-        in = 1;
-        idf = DF_MKT;
-    } else {
-        return NOT_SUPPORTED;
-    }
-
-    CHECK_STATUS(infer_gclmem_desc_ncwhc4(
-        iw, ih, ic, 0, 0, iw, ih, ic, idt, idt, gclmemInputDesc, gclmemOutputDesc));
-    return SUCCESS;
-}
 
 inline EE unsqueeze_checkpara_mali(
     GCLHandle_t handle, TensorDesc inputDesc, GCLMem_t input, TensorDesc outputDesc, GCLMem_t output)
@@ -59,35 +27,45 @@ inline EE unsqueeze_checkpara_mali(
     if (input->desc.memFormat != output->desc.memFormat) {
         return NOT_SUPPORTED;
     }
-    if (inputDesc.df != outputDesc.df) {
-        return NOT_SUPPORTED;
-    }
-    if (inputDesc.dims[0] != outputDesc.dims[0]) {
-        return NOT_SUPPORTED;
-    }
-    if (inputDesc.dims[1] != outputDesc.dims[1]) {
-        return NOT_SUPPORTED;
-    }
-    if (inputDesc.dims[2] != outputDesc.dims[2]) {
-        return NOT_SUPPORTED;
-    }
-    if (inputDesc.dims[3] != outputDesc.dims[3]) {
-        return NOT_SUPPORTED;
-    }
-    if (output->desc.memFormat != DF_NCWHC4) {
-        return NOT_SUPPORTED;
-    }
     return SUCCESS;
 }
 
-EE unsqueeze_mali(
-    GCLHandle_t handle, TensorDesc inputDesc, GCLMem_t input, TensorDesc outputDesc, GCLMem_t output)
+EE unsqueeze_infer_forward_tmp_bytes_mali(TensorDesc inputDesc,
+    GCLMemDesc gclmemInputDesc,
+    TensorDesc outputDesc,
+    GCLMemDesc gclmemOutputDesc,
+    U32 *bytes)
+{
+    EE ret = SUCCESS;
+    switch (inputDesc.dt) {
+        case DT_F16: {
+            ret = unsqueeze_infer_forward_tmp_bytes_mali_fp16(
+                inputDesc, gclmemInputDesc, outputDesc, gclmemOutputDesc, bytes);
+            break;
+        }
+        case DT_I8: {
+            ret = NOT_SUPPORTED;
+            break;
+        }
+        default:
+            ret = NOT_SUPPORTED;
+            break;
+    }
+    return ret;
+}
+
+EE unsqueeze_mali(GCLHandle_t handle,
+    TensorDesc inputDesc,
+    GCLMem_t input,
+    GCLMem_t tmpbuf,
+    TensorDesc outputDesc,
+    GCLMem_t output)
 {
     EE ret = SUCCESS;
     CHECK_STATUS(unsqueeze_checkpara_mali(handle, inputDesc, input, outputDesc, output));
     switch (inputDesc.dt) {
         case DT_F16: {
-            ret = unsqueeze_mali_fp16(handle, inputDesc, input, outputDesc, output);
+            ret = unsqueeze_mali_fp16(handle, inputDesc, input, tmpbuf, outputDesc, output);
             break;
         }
         case DT_I8: {

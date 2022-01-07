@@ -16,7 +16,10 @@
 #include "inference.hpp"
 #include "tensor.hpp"
 
+const int DataDescMaxDims = 8;
+
 struct ModelHandleInfo {
+    void *ms;
     void *cnn;
     DEVICE_TYPE deviceType;
     void *algoPath;
@@ -28,8 +31,8 @@ struct DLLiteInfo {
     bool isReady;
 };
 
-typedef struct {
-    U32 dims[4] = {0};
+typedef struct DataDesc {
+    U32 dims[DataDescMaxDims] = {0};
     char name[NAME_LEN] = {0};
     DataType dt;
     DataFormat df;
@@ -168,8 +171,8 @@ std::map<std::string, TensorDesc> GetInputInfoFromDLLite(
     DLLiteInfo *handle = (DLLiteInfo *)ih;
     ModelHandleInfo *ihInfo = (ModelHandleInfo *)handle->modelHandle;
     CNN *cnn = (CNN *)ihInfo->cnn;
-    std::vector<std::string> inputTensorNames = cnn->get_model_input_tensor_names();
-    int num = inputTensorNames.size();
+    std::map<std::string, TensorDesc> inputTensorDescs = cnn->get_input_desc();
+    int num = inputTensorDescs.size();
     if (num != (int)inputs.size()) {
         UNI_ERROR_LOG(
             "GetInputInfoFromDLLite: model has %d inputs, not %d\n", num, (int)inputs.size());
@@ -178,44 +181,28 @@ std::map<std::string, TensorDesc> GetInputInfoFromDLLite(
     std::map<std::string, TensorDesc> modelInputDims;
     for (int i = 0; i < num; ++i) {
         std::string inputName = inputs[i].name;
-        bool findTensorName = false;
-        for (int j = 0; j < num; ++j) {
-            std::string modelName = inputTensorNames[j];
-            if (modelName == inputName) {
-                DataType dt = TypeMapDLLite2bolt(inputs[i].type);
-                DataFormat df = LayoutMapDLLite2bolt(inputs[i].layout);
-                switch (df) {
-                    case DF_NORMAL:
-                        modelInputDims[inputName] =
-                            tensor2df(dt, df, inputs[i].shape[0], inputs[i].shape[1]);
-                        break;
-                    case DF_NCHW:
-                        modelInputDims[inputName] = tensor4df(dt, df, inputs[i].shape[0],
-                            inputs[i].shape[1], inputs[i].shape[2], inputs[i].shape[3]);
-                        break;
-                    case DF_MTK:
-                        modelInputDims[inputName] = tensor3df(
-                            dt, df, inputs[i].shape[0], inputs[i].shape[1], inputs[i].shape[2]);
-                        break;
-                    default:
-                        UNI_ERROR_LOG("unsupported data format in %s\n", __func__);
-                }
-                findTensorName = true;
-                break;
-            }
+        if (inputTensorDescs.find(inputName) == inputTensorDescs.end()) {
+            UNI_ERROR_LOG(
+                "Bolt DLLite API received input %s is not model input.\n", inputName.c_str());
         }
-
-        if (!findTensorName) {
-            std::string errorLog = "(";
-            for (int j = 0; j < num; ++j) {
-                errorLog.append(inputTensorNames[j]);
-                if (j != num - 1) {
-                    errorLog.append(", ");
-                }
-            }
-            errorLog.append(")");
-            UNI_ERROR_LOG("[ERROR] input data %s is not a valid model input %s\n",
-                inputName.c_str(), errorLog.c_str());
+        DataType dt = TypeMapDLLite2bolt(inputs[i].type);
+        DataFormat df = LayoutMapDLLite2bolt(inputs[i].layout);
+        switch (df) {
+            case DF_NORMAL:
+                modelInputDims[inputName] =
+                    tensor2df(dt, df, inputs[i].shape[0], inputs[i].shape[1]);
+                break;
+            case DF_NCHW:
+                modelInputDims[inputName] = tensor4df(dt, df, inputs[i].shape[0],
+                    inputs[i].shape[1], inputs[i].shape[2], inputs[i].shape[3]);
+                break;
+            case DF_MTK:
+                modelInputDims[inputName] =
+                    tensor3df(dt, df, inputs[i].shape[0], inputs[i].shape[1], inputs[i].shape[2]);
+                break;
+            default:
+                UNI_ERROR_LOG("unsupported data format in %s\n", __FUNCTION__);
+                break;
         }
     }
     return modelInputDims;
@@ -263,26 +250,21 @@ bolt::ReturnStatus bolt::GetIOFormats(bolt::ModelHandle modelHandle,
         return bolt::ReturnStatus::NULLPTR;
     }
     CNN *cnn = (CNN *)ihInfo->cnn;
-    std::vector<std::string> inputTensorNames = cnn->get_model_input_tensor_names();
-    std::vector<TensorDesc> inputTensorDescs = cnn->get_model_input_tensor_descs();
+    std::map<std::string, TensorDesc> inputDescMap = cnn->get_input_desc();
 
-    std::map<std::string, TensorDesc> inputDescMap;
-    for (size_t i = 0; i < inputTensorNames.size(); i++) {
-        inputDescMap[inputTensorNames[i]] = inputTensorDescs[i];
-    }
     if (ihInfo->algoPath) {
         const char *algoPath = (const char *)ihInfo->algoPath;
-        cnn->loadAlgorithmMapFromText(algoPath);
+        cnn->loadAlgorithmMap(algoPath);
     }
     cnn->ready(inputDescMap);
     cnn->mark_input_output();
     if (ihInfo->algoPath) {
         const char *algoPath = (const char *)ihInfo->algoPath;
-        cnn->saveAlgorithmMapToText(algoPath);
+        cnn->saveAlgorithmMapToFile(algoPath);
     }
     handle->isReady = true;
 
-    std::map<std::string, std::shared_ptr<Tensor>> inMap = cnn->get_inputs();
+    std::map<std::string, std::shared_ptr<Tensor>> inMap = cnn->get_input();
     inputs.clear();
 
     for (auto iter : inMap) {
@@ -298,7 +280,7 @@ bolt::ReturnStatus bolt::GetIOFormats(bolt::ModelHandle modelHandle,
         inputs.push_back(in);
     }
 
-    std::map<std::string, std::shared_ptr<Tensor>> outMap = cnn->get_outputs();
+    std::map<std::string, std::shared_ptr<Tensor>> outMap = cnn->get_output();
     outputs.clear();
     for (auto iter : outMap) {
         IOTensor out;
@@ -332,14 +314,19 @@ bolt::ReturnStatus bolt::PrepareModel(
     std::map<std::string, TensorDesc> modelInputDims = GetInputInfoFromDLLite(modelHandle, inputs);
     if (ihInfo->algoPath) {
         const char *algoPath = (const char *)ihInfo->algoPath;
-        cnn->loadAlgorithmMapFromText(algoPath);
+        cnn->loadAlgorithmMap(algoPath);
     }
     cnn->ready(modelInputDims);
     cnn->mark_input_output();
     if (ihInfo->algoPath) {
         const char *algoPath = (const char *)ihInfo->algoPath;
-        cnn->saveAlgorithmMapToText(algoPath);
+        cnn->saveAlgorithmMapToFile(algoPath);
     }
+
+    ModelSpec *ms = (ModelSpec *)ihInfo->ms;
+    CHECK_STATUS(mt_destroy_model(ms));
+    delete ms;
+
     return bolt::ReturnStatus::SUCCESS;
 }
 
@@ -353,7 +340,7 @@ bolt::ReturnStatus bolt::GetInputTensors(
     }
     CNN *cnn = (CNN *)ihInfo->cnn;
 
-    std::map<std::string, std::shared_ptr<Tensor>> inMap = cnn->get_inputs();
+    std::map<std::string, std::shared_ptr<Tensor>> inMap = cnn->get_input();
 
     for (U32 i = 0; i < inputs.size(); i++) {
         auto tensorPtr = inMap[inputs[i].name];
@@ -393,7 +380,7 @@ bolt::ResultHandle bolt::AllocResult(
         outputNames[i][length] = '\0';
     }
     bolt::ResultHandle rh = (bolt::ResultHandle)AllocSpecificResultHandle(
-        handle->modelHandle, outputs.size(), outputNames);
+        handle->modelHandle, outputs.size(), (const char **)outputNames);
     for (size_t i = 0; i < outputs.size(); i++) {
         free(outputNames[i]);
     }
@@ -414,17 +401,19 @@ bolt::ReturnStatus bolt::RunModel(bolt::ModelHandle modelHandle,
     DEVICE_TYPE device = ihInfo->deviceType;
     ResultHandleInner *ir_inner = (ResultHandleInner *)resultHandle;
 
+    std::map<std::string, U8 *> input;
     for (size_t index = 0; index < inputs.size(); index++) {
-        cnn->copy_to_named_input(inputs[index].name, (U8 *)(inputs[index].buffer.first));
+        input[inputs[index].name] = (U8 *)(inputs[index].buffer.first);
     }
+    cnn->set_input_by_copy(input);
     cnn->run();
 
     DataDesc *outputArrPtr = ir_inner->outputArr;
     for (U32 curIndex = 0; curIndex < ir_inner->num_outputs; curIndex++) {
         Tensor output_tensor = cnn->get_tensor_by_name(outputArrPtr[curIndex].name);
         UpdateDataDesc(output_tensor.get_desc(), &(outputArrPtr[curIndex]));
-        if (device == GPU_MALI) {
-#ifdef _USE_MALI
+        if (device == GPU_MALI || device == GPU_QUALCOMM) {
+#ifdef _USE_GPU
             auto mem = (OclMemory *)output_tensor.get_memory();
             outputArrPtr[curIndex].dataPtr = mem->get_mapped_ptr();
 #else

@@ -13,15 +13,13 @@
 
 #ifndef _RESHAPE_MALI_FP16
 #define _RESHAPE_MALI_FP16
-#include "sys.h"
-#include "error.h"
-#include "types.h"
-#include "tensor_computing_type.h"
+
+#include "gpu/mali/fp16/tensor_computing_fp16.h"
 
 EE reshape_infer_forward_tmp_bytes_mali_fp16(TensorDesc inputDesc,
     TensorDesc outputDesc,
-    GCLMemDesc_t gclmemInputDesc,
-    GCLMemDesc_t gclmemOutputDesc,
+    GCLMemDesc gclmemInputDesc,
+    GCLMemDesc gclmemOutputDesc,
     U32 *bytes);
 
 EE reshape_mali_fp16(GCLHandle_t handle,

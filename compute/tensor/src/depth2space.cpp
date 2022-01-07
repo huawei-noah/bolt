@@ -12,7 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "tensor_computing.h"
-#ifdef _USE_MALI
+#ifdef _USE_GPU
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
 
@@ -25,17 +25,14 @@ EE depth2space_infer_output_size(
     if (outputTensor == nullptr) {
         CHECK_STATUS(NULL_POINTER);
     }
+    TensorDesc inputDesc = inputTensor->get_desc();
     TensorDesc outputDesc = outputTensor->get_desc();
     EE ret = NOT_SUPPORTED;
-    if (IS_MALI_GPU(archInfo->arch)) {
-#ifdef _USE_MALI
-        TensorDesc inputDesc = inputTensor->get_desc();
-        GCLMemDesc gclmemInputDesc = ocl_get_desc(*inputTensor);
-        GCLMemDesc gclmemOutputDesc = ocl_get_desc(*outputTensor);
-        ret = depth2space_infer_output_size_mali(
-            inputDesc, p, &outputDesc, &gclmemInputDesc, &gclmemOutputDesc);
-        ocl_set_desc(inputTensor, gclmemInputDesc);
-        ocl_set_desc(outputTensor, gclmemOutputDesc);
+    if (IS_GPU(archInfo->arch)) {
+#ifdef _USE_GPU
+        OclMemory *inputMem = (OclMemory *)inputTensor->get_memory();
+        OclMemory *outputMem = (OclMemory *)outputTensor->get_memory();
+        ret = depth2space_padding_input_mali(inputDesc, p, &outputDesc, inputMem, outputMem);
 #endif
     }
     outputTensor->resize(outputDesc);
@@ -46,8 +43,8 @@ EE depth2space_infer_forward_tmp_bytes(
     Tensor inputTensor, Depth2SpaceParamSpec p, Tensor outputTensor, U32 *bytes, ArchInfo_t archInfo)
 {
     EE ret = NOT_SUPPORTED;
-    if (IS_MALI_GPU(archInfo->arch)) {
-#ifdef _USE_MALI
+    if (IS_GPU(archInfo->arch)) {
+#ifdef _USE_GPU
         TensorDesc inputDesc = inputTensor.get_desc();
         TensorDesc outputDesc = outputTensor.get_desc();
         ret = depth2space_infer_tmpBuf_size_mali(inputDesc, p, outputDesc, bytes);
@@ -64,8 +61,8 @@ EE depth2space(Tensor inputTensor,
 {
     auto arch = archInfo->arch;
     EE ret = NOT_SUPPORTED;
-    if (IS_MALI_GPU(arch)) {
-#ifdef _USE_MALI
+    if (IS_GPU(arch)) {
+#ifdef _USE_GPU
         TensorDesc inputDesc = inputTensor.get_desc();
         void *input = get_ptr_from_tensor(inputTensor, arch);
         void *tmp = get_ptr_from_tensor(tmpTensor, arch);

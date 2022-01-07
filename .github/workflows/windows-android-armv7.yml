@@ -1,0 +1,37 @@
+name: windows-android-armv7
+on: [push, pull_request]
+jobs:
+  windows-android-armv7:
+    runs-on: windows-latest
+    steps:
+    - name: cancel-previous-runs
+      uses: styfle/cancel-workflow-action@0.7.0
+      with:
+        access_token: ${{ secrets.GITHUB_TOKEN }}
+    - uses: actions/checkout@v2
+      with:
+        submodules: true
+    - name: cache-wget
+      id: cache-wget
+      uses: actions/cache@v1
+      with:
+        path: "wget-install"
+        key: wget-windows-install
+    - name: download wget
+      run: |
+        mkdir software && cd software
+        mkdir wget && cd wget
+        Invoke-WebRequest -Uri https://eternallybored.org/misc/wget/1.21.1/64/wget.exe -OutFile wget.exe > log.txt
+        cd .. && mkdir android_ndk && cd android_ndk
+        Invoke-WebRequest -Uri https://dl.google.com/android/repository/android-ndk-r20b-windows-x86_64.zip -OutFile android-ndk-r20b-windows-x86_64.zip > log.txt
+       
+    - name: compile android armv7 on windows
+      run: |
+        cd /d/a/bolt/bolt/software/android_ndk
+        unzip -o android-ndk-r20b-windows-x86_64.zip > /dev/null
+        export ANDROID_NDK_ROOT=${PWD}/android-ndk-r20b
+        export PATH=${ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/windows-x86_64/bin:$PATH
+        export PATH=$PATH:/d/a/bolt/bolt/software/wget
+        cd /d/a/bolt/bolt
+        ./install.sh --target=android-armv7
+      shell: bash

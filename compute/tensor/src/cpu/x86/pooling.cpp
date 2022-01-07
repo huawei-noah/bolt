@@ -28,7 +28,36 @@ EE pooling_x86(TensorDesc inputDesc,
 #ifdef _USE_FP32
         case DT_F32: {
             UNUSED(scale);
-            ret = pooling_fp32(
+            if (inputDesc.df == DF_NCHWC8) {
+                ret = pooling_fp32(
+                    inputDesc, (const F32 *)input, poolingParamSpec, outputDesc, (F32 *)output);
+            } else if (inputDesc.df == DF_NCHWC16) {
+                ret = pooling_c16_fp32(
+                    inputDesc, (const F32 *)input, poolingParamSpec, outputDesc, (F32 *)output);
+            } else {
+                ret = NOT_SUPPORTED;
+            }
+            break;
+        }
+#endif
+        default:
+            ret = NOT_SUPPORTED;
+            break;
+    }
+    return ret;
+}
+
+EE pooling_bp_x86(TensorDesc inputDesc,
+    const void *input,
+    PoolingParamSpec poolingParamSpec,
+    TensorDesc outputDesc,
+    void *output)
+{
+    EE ret = SUCCESS;
+    switch (inputDesc.dt) {
+#ifdef _USE_FP32
+        case DT_F32: {
+            ret = pooling_bp_fp32(
                 inputDesc, (const F32 *)input, poolingParamSpec, outputDesc, (F32 *)output);
             break;
         }

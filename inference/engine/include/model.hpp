@@ -14,44 +14,38 @@
 #ifndef _MODEL_H
 #define _MODEL_H
 
-#include "thread_affinity.h"
 #include "operator.hpp"
-#include "algorithm_map.h"
 #include "tensor_desc.h"
-#ifdef _USE_MALI
+#include "algorithm_map.h"
+#include "thread_affinity.h"
+#ifdef _USE_GPU
 #include "gcl.h"
 #endif
-#include "profiling.h"
 
 class Model {
 public:
     Model()
     {}
+
     Model(AffinityPolicy affinityPolicy, DataType dt, std::string name)
     {
         this->set_device_info(affinityPolicy);
         this->dt = dt;
         this->name = name;
         std::string deviceName = "";
-#ifdef _USE_MALI
-        if (this->deviceInfo.schedule == MALI) {
-            this->handle = OCLContext::getInstance().handle;
-            deviceName = this->handle->deviceName;
-        }
+        if (IS_GPU(this->deviceInfo.schedule)) {
+#ifdef _USE_GPU
+            if (OCLContext::getInstance().handle->useQualcommDev) {
+                this->deviceInfo.schedule = QUALCOMM;
+            }
+#else
+            UNI_ERROR_LOG("This library not support ARM MALI/Qualcomm GPU, please rebuild library "
+                          "with --gpu option.\n");
+            exit(1);
 #endif
+        }
         algorithmMap = std::shared_ptr<AlgorithmMap>(
             new AlgorithmMap(this->deviceInfo.schedule, name, deviceName, dt));
-    }
-
-    void set_device_info(AffinityPolicy affinityPolicy)
-    {
-#ifndef _USE_IOS
-        this->deviceInfo = get_cpu_info(affinityPolicy);
-        this->set_runtime_device_dynamic();
-#else
-        this->deviceInfo.affinityPolicy = affinityPolicy;
-        this->deviceInfo.schedule = ARM_A76;
-#endif
     }
 
     void set_runtime_device(int cpuId, int threadId = 0)
@@ -62,6 +56,7 @@ public:
     void set_runtime_device(int cpuId, Arch arch, int threadId = 0)
     {
         this->deviceInfo.schedule = arch;
+        UNI_DEBUG_LOG("Inference use %s.\n", ArchName()[this->deviceInfo.schedule])
         if (cpuId >= 0 && cpuId < this->deviceInfo.cpuNum) {
             set_thread_affinity(threadId, &cpuId, 1);
             for (auto op : ops) {
@@ -79,11 +74,6 @@ public:
     {
         return this->deviceInfo.schedule;
     }
-
-    virtual EE infer_output_tensors_size(std::map<std::string, TensorDesc>) = 0;
-    virtual void assign_output_tensor() = 0;
-    virtual void infer_tmp_memory_size() = 0;
-    virtual void assign_tmp_tensor() = 0;
 
     virtual void ready(std::map<std::string, TensorDesc> inputDescMap)
     {
@@ -132,7 +122,7 @@ public:
 
     virtual void run_till_breakpoint(U32 opIdx)
     {
-        CHECK_REQUIREMENT(MALI != this->deviceInfo.schedule);
+        CHECK_REQUIREMENT(IS_CPU(this->deviceInfo.schedule));
         for (U32 i = 0; i < this->ops.size();) {
             auto op = this->ops[i];
             if (op->get_type() == OT_Repeat || op->get_type() == OT_Jump) {
@@ -151,6 +141,46 @@ public:
     }
 #endif
 
+    std::string get_name()
+    {
+        return this->name;
+    }
+
+    void loadAlgorithmMap(CI8 *path, bool useFileStream = false)
+    {
+        std::string algoName = this->algorithmMap->getAlgorithmFileName();
+        CI8 *algoInfo = nullptr;
+        if (IS_GPU(this->deviceInfo.schedule)) {
+#ifdef _USE_GPU
+            algoInfo = gcl_get_algorithm_info(OCLContext::getInstance().handle.get(), algoName);
+#endif
+        }
+        if (!algoInfo && useFileStream) {
+            algoInfo = path;
+        }
+        if (algoInfo) {
+            this->algorithmMap->loadAlgorithmMapFromFileStream(algoInfo);
+        } else if (path) {
+            this->algorithmMap->loadAlgorithmMapFromFile(path);
+        }
+    }
+
+    void saveAlgorithmMapToFile(std::string algorithmMapPath)
+    {
+        this->algorithmMap->saveAlgorithmMapToFile(algorithmMapPath);
+    }
+
+protected:
+    std::vector<std::shared_ptr<Operator>> ops;
+    DeviceInfo deviceInfo;
+    DataType dt;
+    std::shared_ptr<AlgorithmMap> algorithmMap;
+
+    virtual EE infer_output_tensors_size(std::map<std::string, TensorDesc>) = 0;
+    virtual void assign_output_tensor() = 0;
+    virtual void infer_tmp_memory_size() = 0;
+    virtual void assign_tmp_tensor() = 0;
+
     virtual bool checkOperator()
     {
         for (auto op : this->ops) {
@@ -161,36 +191,19 @@ public:
         return true;
     }
 
-    std::string get_name()
-    {
-        return this->name;
-    }
-
-    void loadAlgorithmMapFromFileStream(const char *algoFileStream)
-    {
-        this->algorithmMap->loadAlgorithmMapFromFileStream(algoFileStream);
-    }
-
-    void loadAlgorithmMapFromText(std::string algorithmMapPath)
-    {
-        this->algorithmMap->loadAlgorithmMapFromText(algorithmMapPath);
-    }
-
-    void saveAlgorithmMapToText(std::string algorithmMapPath)
-    {
-        this->algorithmMap->saveAlgorithmMapToText(algorithmMapPath);
-    }
-
-protected:
-    std::vector<std::shared_ptr<Operator>> ops;
-    DeviceInfo deviceInfo;
-    DataType dt;
-#ifdef _USE_MALI
-    std::shared_ptr<GCLHandle> handle;
-#endif
-    std::shared_ptr<AlgorithmMap> algorithmMap;
-
 private:
     std::string name;
+
+    void set_device_info(AffinityPolicy affinityPolicy)
+    {
+#ifndef _USE_IOS
+        this->deviceInfo = get_cpu_info(affinityPolicy);
+        this->set_runtime_device_dynamic();
+#else
+        this->deviceInfo.affinityPolicy = affinityPolicy;
+        this->deviceInfo.schedule = ARM_A76;
+#endif
+        UNI_DEBUG_LOG("Inference use %s.\n", ArchName()[this->deviceInfo.schedule])
+    }
 };
 #endif

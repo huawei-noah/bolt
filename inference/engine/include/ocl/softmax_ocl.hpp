@@ -20,8 +20,7 @@ class SoftmaxOCL : public Softmax {
 public:
     SoftmaxOCL(DataType dt, SoftmaxParamSpec p) : Softmax(dt, p)
     {
-        setMALIArchInfo(
-            &(this->archInfo), nullptr, &this->needSetKernelVec, &this->needSelectKernelLS);
+        INIT_GPU_INFO(nullptr)
     }
 
     ~SoftmaxOCL(){DESTROY_OCL_KERNEL}
@@ -45,15 +44,16 @@ public:
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
         this->needSetKernelVec = true;
-        CHECK_STATUS(softmax_infer_output_size(inTensors[0], outTensors[0], &this->archInfo));
+        CHECK_STATUS(
+            softmax_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo));
         return SUCCESS;
     }
 
     U32 infer_tmp_memory_size() override
     {
         U32 bytes = 0;
-        CHECK_STATUS(
-            softmax_infer_forward_tmp_bytes(this->inputTensors[0], &bytes, &this->archInfo));
+        CHECK_STATUS(softmax_infer_forward_tmp_bytes(
+            this->inputTensors[0], this->p, &bytes, &this->archInfo));
         return bytes;
     }
 

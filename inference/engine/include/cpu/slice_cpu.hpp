@@ -30,7 +30,10 @@ public:
 
     void run() override
     {
-        CHECK_STATUS(slice(inputTensors[0], this->p, outputTensors, &this->archInfo));
+        CHECK_STATUS(slice(inputTensors[0], this->p, this->temp, outputTensors, &this->archInfo));
+        for (Tensor &outTensor : outputTensors) {
+            outTensor.set_scale(inputTensors[0].get_scale());
+        }
     }
 
     EE infer_output_tensors_size(

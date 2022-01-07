@@ -11,13 +11,9 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <math.h>
-#include <string.h>
-#include "types.h"
-#include "tensor_desc.h"
-#include "error.h"
-#include "image.h"
 #include "cpu/arm/image_arm.h"
+#include "arm_neon_expand.h"
+#include "uni.h"
 
 #ifdef _USE_FP16
 EE resize_bilinear_fp16(TensorDesc inputDesc, F16 *inArray, TensorDesc outputDesc, F16 *outArray)
@@ -32,76 +28,47 @@ EE resize_bilinear_fp16(TensorDesc inputDesc, F16 *inArray, TensorDesc outputDes
     if (idf != DF_NCHWC8 || odf != DF_NCHWC8) {
         CHECK_STATUS(NOT_MATCH);
     }
-
-    F32 strideH = (F32)(ih - 1) / (F32)(oh - 1);
-    F32 strideW = (F32)(iw - 1) / (F32)(ow - 1);
-
-    oc /= 8;
-
-    for (U32 n = 0; n < on; n++) {
+    F32 strideH = ((F32)ih) / oh;
+    F32 strideW = ((F32)iw) / ow;
+    U32 ic_align = 8, oc_align = 8;
+    ic /= ic_align;
+    oc /= oc_align;
+    for (U32 n = 0, dst = 0; n < on; n++) {
         for (U32 c = 0; c < oc; c++) {
-            I32 outBase = n * oc * oh * ow + c * oh * ow * 8;
-            I32 inBase = n * oc * ih * iw + c * ih * iw * 8;
             for (U32 h = 0; h < oh; h++) {
-                for (U32 w = 0; w < ow; w++) {
-                    if (h == 0 && w == 0) {
-                        memcpy(outArray + outBase, inArray + inBase, 8 * bytesOf(DT_F16));
-                        continue;
-                    }
-                    if (h == 0 && w == ow - 1) {
-                        memcpy(outArray + outBase + w * 8, inArray + inBase + (iw - 1) * 8,
-                            8 * bytesOf(DT_F16));
-                        continue;
-                    }
-                    if (h == oh - 1 && w == 0) {
-                        memcpy(outArray + outBase + h * ow * 8,
-                            inArray + inBase + (ih - 1) * iw * 8, 8 * bytesOf(DT_F16));
-                        continue;
-                    }
-                    if (h == oh - 1 && w == ow - 1) {
-                        memcpy(outArray + outBase + h * ow * 8 + w * 8,
-                            inArray + inBase + (ih - 1) * iw * 8 + (iw - 1) * 8,
-                            8 * bytesOf(DT_F16));
-                        continue;
-                    }
-
-                    F32 hC = strideH * h;
+                F32 hC = strideH * h;
+                U32 hT = floor(hC);
+                U32 hB = ceil(hC);
+                if (hB == hT) {
+                    hB = hT + 1;
+                }
+                U32 hBB = UNI_MIN(hB, ih - 1);
+                for (U32 w = 0; w < ow; w++, dst += 8) {
                     F32 wC = strideW * w;
-
-                    I32 hT = floor(hC);
-                    I32 hB = ceil(hC);
-                    I32 wL = floor(wC);
-                    I32 wR = ceil(wC);
-
-                    if (hT == hB && wL == wR) {
-                        memcpy(outArray + outBase + h * ow * 8 + w * 8,
-                            inArray + inBase + hT * iw * 8 + wL * 8, 8 * bytesOf(DT_F16));
-                    } else if (hT == hB) {
-                        float16x8_t res = {0};
-                        float16x8_t vecL = vld1q_f16(inArray + inBase + hT * iw * 8 + wL * 8);
-                        float16x8_t vecR = vld1q_f16(inArray + inBase + hT * iw * 8 + wR * 8);
-                        res = vfmaq_n_f16(res, vecL, wR - wC);
-                        res = vfmaq_n_f16(res, vecR, wC - wL);
-                        vst1q_f16(outArray + outBase + h * ow * 8 + w * 8, res);
-                    } else if (wL == wR) {
-                        float16x8_t res = {0};
-                        float16x8_t vecT = vld1q_f16(inArray + inBase + hT * iw * 8 + wL * 8);
-                        float16x8_t vecB = vld1q_f16(inArray + inBase + hB * iw * 8 + wL * 8);
-                        res = vfmaq_n_f16(res, vecT, hB - hC);
-                        res = vfmaq_n_f16(res, vecB, hC - hT);
-                        vst1q_f16(outArray + outBase + h * ow * 8 + w * 8, res);
-                    } else {
-                        float16x8_t res = {0};
-                        float16x8_t vecTL = vld1q_f16(inArray + inBase + hT * iw * 8 + wL * 8);
-                        float16x8_t vecTR = vld1q_f16(inArray + inBase + hT * iw * 8 + wR * 8);
-                        float16x8_t vecBL = vld1q_f16(inArray + inBase + hB * iw * 8 + wL * 8);
-                        float16x8_t vecBR = vld1q_f16(inArray + inBase + hB * iw * 8 + wR * 8);
-                        res = vfmaq_n_f16(res, vecTL, (hB - hC) * (wR - wC));
-                        res = vfmaq_n_f16(res, vecTR, (hB - hC) * (wC - wL));
-                        res = vfmaq_n_f16(res, vecBL, (hC - hT) * (wR - wC));
-                        res = vfmaq_n_f16(res, vecBR, (hC - hT) * (wC - wL));
-                        vst1q_f16(outArray + outBase + h * ow * 8 + w * 8, res);
+                    U32 wL = floor(wC);
+                    U32 wR = ceil(wC);
+                    if (wL == wR) {
+                        wR = wL + 1;
                     }
+                    U32 wRR = UNI_MIN(wR, iw - 1);
+                    F32 factorTL = (hB - hC) * (wR - wC);
+                    F32 factorTR = (hB - hC) * (wC - wL);
+                    F32 factorBL = (hC - hT) * (wR - wC);
+                    F32 factorBR = (hC - hT) * (wC - wL);
+
+                    U32 srcTL = (((n * ic + c) * ih + hT) * iw + wL) * ic_align;
+                    U32 srcTR = (((n * ic + c) * ih + hT) * iw + wRR) * ic_align;
+                    U32 srcBL = (((n * ic + c) * ih + hBB) * iw + wL) * ic_align;
+                    U32 srcBR = (((n * ic + c) * ih + hBB) * iw + wRR) * ic_align;
+                    float16x8_t a0 = vld1q_f16(inArray + srcTL);
+                    float16x8_t a1 = vld1q_f16(inArray + srcTR);
+                    float16x8_t a2 = vld1q_f16(inArray + srcBL);
+                    float16x8_t a3 = vld1q_f16(inArray + srcBR);
+                    float16x8_t res = vmulq_n_f16(a0, factorTL);
+                    res = vfmaq_n_f16(res, a1, factorTR);
+                    res = vfmaq_n_f16(res, a2, factorBL);
+                    res = vfmaq_n_f16(res, a3, factorBR);
+                    vst1q_f16(outArray + dst, res);
                 }
             }
         }
@@ -123,95 +90,56 @@ EE resize_bilinear_fp32(TensorDesc inputDesc, F32 *inArray, TensorDesc outputDes
     if (idf != DF_NCHWC8 || odf != DF_NCHWC8) {
         CHECK_STATUS(NOT_MATCH);
     }
-
-    F32 strideH = (F32)(ih - 1) / (F32)(oh - 1);
-    F32 strideW = (F32)(iw - 1) / (F32)(ow - 1);
-
-    oc /= 8;
-
-    for (U32 n = 0; n < on; n++) {
+    F32 strideH = ((F32)ih) / oh;
+    F32 strideW = ((F32)iw) / ow;
+    U32 ic_align = 8, oc_align = 8;
+    ic /= ic_align;
+    oc /= oc_align;
+    for (U32 n = 0, dst = 0; n < on; n++) {
         for (U32 c = 0; c < oc; c++) {
-            I32 outBase = n * oc * oh * ow + c * oh * ow * 8;
-            I32 inBase = n * oc * ih * iw + c * ih * iw * 8;
             for (U32 h = 0; h < oh; h++) {
-                for (U32 w = 0; w < ow; w++) {
-                    if (h == 0 && w == 0) {
-                        memcpy(outArray + outBase, inArray + inBase, 8 * bytesOf(DT_F32));
-                        continue;
-                    }
-                    if (h == 0 && w == ow - 1) {
-                        memcpy(outArray + outBase + w * 8, inArray + inBase + (iw - 1) * 8,
-                            8 * bytesOf(DT_F32));
-                        continue;
-                    }
-                    if (h == oh - 1 && w == 0) {
-                        memcpy(outArray + outBase + h * ow * 8,
-                            inArray + inBase + (ih - 1) * iw * 8, 8 * bytesOf(DT_F32));
-                        continue;
-                    }
-                    if (h == oh - 1 && w == ow - 1) {
-                        memcpy(outArray + outBase + h * ow * 8 + w * 8,
-                            inArray + inBase + (ih - 1) * iw * 8 + (iw - 1) * 8,
-                            8 * bytesOf(DT_F32));
-                        continue;
-                    }
-
-                    F32 hC = strideH * h;
+                F32 hC = strideH * h;
+                U32 hT = floor(hC);
+                U32 hB = ceil(hC);
+                if (hB == hT) {
+                    hB = hT + 1;
+                }
+                U32 hBB = UNI_MIN(hB, ih - 1);
+                for (U32 w = 0; w < ow; w++, dst += 8) {
                     F32 wC = strideW * w;
-
-                    I32 hT = floor(hC);
-                    I32 hB = ceil(hC);
-                    I32 wL = floor(wC);
-                    I32 wR = ceil(wC);
-
-                    if (hT == hB && wL == wR) {
-                        memcpy(outArray + outBase + h * ow * 8 + w * 8,
-                            inArray + inBase + hT * iw * 8 + wL * 8, 8 * bytesOf(DT_F32));
-                    } else if (hT == hB) {
-                        float32x4_t res[2] = {0};
-                        float32x4_t vecL = vld1q_f32(inArray + inBase + hT * iw * 8 + wL * 8);
-                        float32x4_t vecL1 = vld1q_f32(inArray + inBase + hT * iw * 8 + wL * 8 + 4);
-                        float32x4_t vecR = vld1q_f32(inArray + inBase + hT * iw * 8 + wR * 8);
-                        float32x4_t vecR1 = vld1q_f32(inArray + inBase + hT * iw * 8 + wR * 8 + 4);
-                        res[0] = vfmaq_n_f32(res[0], vecL, wR - wC);
-                        res[1] = vfmaq_n_f32(res[1], vecL1, wR - wC);
-                        res[0] = vfmaq_n_f32(res[0], vecR, wC - wL);
-                        res[1] = vfmaq_n_f32(res[1], vecR1, wC - wL);
-                        vst1q_f32(outArray + outBase + h * ow * 8 + w * 8, res[0]);
-                        vst1q_f32(outArray + outBase + h * ow * 8 + w * 8 + 4, res[1]);
-                    } else if (wL == wR) {
-                        float32x4_t res[2] = {0};
-                        float32x4_t vecT = vld1q_f32(inArray + inBase + hT * iw * 8 + wL * 8);
-                        float32x4_t vecT1 = vld1q_f32(inArray + inBase + hT * iw * 8 + wL * 8 + 4);
-                        float32x4_t vecB = vld1q_f32(inArray + inBase + hB * iw * 8 + wL * 8);
-                        float32x4_t vecB1 = vld1q_f32(inArray + inBase + hB * iw * 8 + wL * 8 + 4);
-                        res[0] = vfmaq_n_f32(res[0], vecT, hB - hC);
-                        res[1] = vfmaq_n_f32(res[1], vecT1, hB - hC);
-                        res[0] = vfmaq_n_f32(res[0], vecB, hC - hT);
-                        res[1] = vfmaq_n_f32(res[1], vecB1, hC - hT);
-                        vst1q_f32(outArray + outBase + h * ow * 8 + w * 8, res[0]);
-                        vst1q_f32(outArray + outBase + h * ow * 8 + w * 8 + 4, res[1]);
-                    } else {
-                        float32x4_t res[2] = {0};
-                        float32x4_t vecTL = vld1q_f32(inArray + inBase + hT * iw * 8 + wL * 8);
-                        float32x4_t vecTL1 = vld1q_f32(inArray + inBase + hT * iw * 8 + wL * 8 + 4);
-                        float32x4_t vecTR = vld1q_f32(inArray + inBase + hT * iw * 8 + wR * 8);
-                        float32x4_t vecTR1 = vld1q_f32(inArray + inBase + hT * iw * 8 + wR * 8 + 4);
-                        float32x4_t vecBL = vld1q_f32(inArray + inBase + hB * iw * 8 + wL * 8);
-                        float32x4_t vecBL1 = vld1q_f32(inArray + inBase + hB * iw * 8 + wL * 8 + 4);
-                        float32x4_t vecBR = vld1q_f32(inArray + inBase + hB * iw * 8 + wR * 8);
-                        float32x4_t vecBR1 = vld1q_f32(inArray + inBase + hB * iw * 8 + wR * 8 + 4);
-                        res[0] = vfmaq_n_f32(res[0], vecTL, (hB - hC) * (wR - wC));
-                        res[1] = vfmaq_n_f32(res[1], vecTL1, (hB - hC) * (wR - wC));
-                        res[0] = vfmaq_n_f32(res[0], vecTR, (hB - hC) * (wC - wL));
-                        res[1] = vfmaq_n_f32(res[1], vecTR1, (hB - hC) * (wC - wL));
-                        res[0] = vfmaq_n_f32(res[0], vecBL, (hC - hT) * (wR - wC));
-                        res[1] = vfmaq_n_f32(res[1], vecBL1, (hC - hT) * (wR - wC));
-                        res[0] = vfmaq_n_f32(res[0], vecBR, (hC - hT) * (wC - wL));
-                        res[1] = vfmaq_n_f32(res[1], vecBR1, (hC - hT) * (wC - wL));
-                        vst1q_f32(outArray + outBase + h * ow * 8 + w * 8, res[0]);
-                        vst1q_f32(outArray + outBase + h * ow * 8 + w * 8 + 4, res[1]);
+                    U32 wL = floor(wC);
+                    U32 wR = ceil(wC);
+                    if (wL == wR) {
+                        wR = wL + 1;
                     }
+                    U32 wRR = UNI_MIN(wR, iw - 1);
+                    F32 factorTL = (hB - hC) * (wR - wC);
+                    F32 factorTR = (hB - hC) * (wC - wL);
+                    F32 factorBL = (hC - hT) * (wR - wC);
+                    F32 factorBR = (hC - hT) * (wC - wL);
+
+                    U32 srcTL = (((n * ic + c) * ih + hT) * iw + wL) * ic_align;
+                    U32 srcTR = (((n * ic + c) * ih + hT) * iw + wRR) * ic_align;
+                    U32 srcBL = (((n * ic + c) * ih + hBB) * iw + wL) * ic_align;
+                    U32 srcBR = (((n * ic + c) * ih + hBB) * iw + wRR) * ic_align;
+                    float32x4_t a00 = vld1q_f32(inArray + srcTL);
+                    float32x4_t a01 = vld1q_f32(inArray + srcTL + 4);
+                    float32x4_t a10 = vld1q_f32(inArray + srcTR);
+                    float32x4_t a11 = vld1q_f32(inArray + srcTR + 4);
+                    float32x4_t a20 = vld1q_f32(inArray + srcBL);
+                    float32x4_t a21 = vld1q_f32(inArray + srcBL + 4);
+                    float32x4_t a30 = vld1q_f32(inArray + srcBR);
+                    float32x4_t a31 = vld1q_f32(inArray + srcBR + 4);
+                    float32x4_t res0 = vmulq_n_f32(a00, factorTL);
+                    float32x4_t res1 = vmulq_n_f32(a01, factorTL);
+                    res0 = vfmaq_n_f32(res0, a10, factorTR);
+                    res1 = vfmaq_n_f32(res1, a11, factorTR);
+                    res0 = vfmaq_n_f32(res0, a20, factorBL);
+                    res1 = vfmaq_n_f32(res1, a21, factorBL);
+                    res0 = vfmaq_n_f32(res0, a30, factorBR);
+                    res1 = vfmaq_n_f32(res1, a31, factorBR);
+                    vst1q_f32(outArray + dst, res0);
+                    vst1q_f32(outArray + dst + 4, res1);
                 }
             }
         }

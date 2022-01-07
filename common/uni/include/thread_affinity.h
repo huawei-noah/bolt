@@ -14,13 +14,18 @@
 #ifndef _H_THREAD_AFFINITY
 #define _H_THREAD_AFFINITY
 
+#ifndef _WIN32
 #include <sys/syscall.h>
+#include <sched.h>
+#endif
+#ifdef _USE_OPENMP
+#include <omp.h>
+#endif
 #include <unistd.h>
 #include <string.h>
-#include <sched.h>
 #include "sys.h"
 #include "error.h"
-#include "tensor_desc.h"
+#include "data_type.h"
 
 #ifdef _USE_X86
 #define __cpuid(data, eaxIn, ecxIn)                                                   \
@@ -29,12 +34,14 @@
                          : "0"(eaxIn), "2"(ecxIn))
 #endif
 
-const int CPU_MAX_NUMBER = 64;
+const int CPU_MAX_NUMBER = 128;
 #ifdef _USE_OPENMP
-const int OMP_NUM_THREADS = 2;
+#define OMP_MAX_NUM_THREADS \
+    (getenv("OMP_NUM_THREADS") == NULL ? omp_get_num_procs() : atoi(getenv("OMP_NUM_THREADS")))
 #else
-const int OMP_NUM_THREADS = 1;
+#define OMP_MAX_NUM_THREADS 1
 #endif
+extern int OMP_NUM_THREADS;
 
 typedef enum {
     AFFINITY_CPU_LOW_POWER = 0,
@@ -76,57 +83,46 @@ inline const AffinityPolicy *AffinityPolicies()
 
 inline int get_cpus_num()
 {
-#ifdef _USE_IOS
-    return 6;
-#else
-    const int bufferSize = 1024;
-    char buffer[bufferSize];
-    FILE *fp = fopen("/proc/cpuinfo", "rb");
-    if (!fp) {
-        return 1;
-    }
-
     int cpuNum = 0;
-    while (!feof(fp)) {
-        char *status = fgets(buffer, bufferSize, fp);
-        if (!status) {
-            break;
-        }
-
-        if (memcmp(buffer, "processor", 9) == 0) {
-            cpuNum++;
-        }
+#if defined(__APPLE__)
+    cpuNum = 6;
+#elif defined(_WIN32)
+    cpuNum = atoi(getenv("NUMBER_OF_PROCESSORS"));
+#else
+    cpuNum = sysconf(_SC_NPROCESSORS_ONLN);
+#endif
+    if (cpuNum == 0) {
+        UNI_ERROR_LOG("can not get cpu processor number.\n");
     }
-    fclose(fp);
     if (cpuNum > CPU_MAX_NUMBER) {
         cpuNum = CPU_MAX_NUMBER;
     }
     return cpuNum;
-#endif
 }
 
 inline void get_cpus_arch(Arch *archs, int cpuNum)
 {
-#ifdef _USE_IOS
+#ifdef __APPLE__
     for (int cpuid = 0; cpuid < cpuNum; cpuid++) {
         archs[cpuid] = ARM_A76;
     }
     return;
 #endif
-    FILE *fp = fopen("/proc/cpuinfo", "rb");
     *archs = CPU_GENERAL;
-    if (!fp) {
-        return;
-    }
 
-#if defined(_USE_FP32) && defined(_USE_X86)
+#ifdef _USE_X86
+    _MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
+    _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
     U32 data[4] = {};
     const U32 &ebx = data[1];
     const U32 &ecx = data[2];
 
     const U32 osxsave = 1U << 0;
     const U32 avx = 1U << 1;
-    const U32 avx2 = 1U << 2;
+    const U32 fma = 1U << 2;
+    const U32 avx2_fma = 1U << 3;
+    const U32 avx512f = 1U << 4;
+    const U32 avx512_vnni = 1U << 5;
 
     U32 cpuArch = 0;
     __cpuid(data, 0, 0);
@@ -138,21 +134,36 @@ inline void get_cpus_arch(Arch *archs, int cpuNum)
         if (ecx & (1U << 28)) {
             cpuArch |= avx;
         }
-    }
-    __cpuid(data, 7, 0);
-    if ((cpuArch & avx) && (ebx & (1U << 5))) {
-        cpuArch |= avx2;
+        if (ecx & (1U << 12)) {
+            cpuArch |= fma;
+        }
+        __cpuid(data, 7, 0);
+        if ((cpuArch & avx) && (ebx & (1U << 5))) {
+            cpuArch |= avx2_fma;
+        }
+        if (ebx & (1U << 16)) {
+            cpuArch |= avx512f;
+        }
+        if ((cpuArch & avx512f) && (ebx & (1U << 11))) {
+            cpuArch |= avx512_vnni;
+        }
     }
 
-    if (cpuArch & avx2) {
+    if (cpuArch & avx512_vnni) {
+        archs[0] = X86_AVX512;
+    } else if (cpuArch & avx2_fma) {
         archs[0] = X86_AVX2;
     } else {
-        UNI_WARNING_LOG("AVX2 is not available, use general implementation.");
+        UNI_WARNING_LOG("The least arch AVX2-FMA is not available, use general implementation.\n");
     }
 #endif
 
     int cpuid = 0;
 #ifdef _USE_NEON
+    FILE *fp = fopen("/proc/cpuinfo", "rb");
+    if (!fp) {
+        return;
+    }
     const int bufferSize = 1024;
     char buffer[bufferSize];
     while (!feof(fp)) {
@@ -177,6 +188,9 @@ inline void get_cpus_arch(Arch *archs, int cpuNum)
                     break;
                 case 0xd03:
                     arch = ARM_V8;
+                    break;
+                case 0xd04:
+                    arch = ARM_V7;
                     break;
                 case 0xd05:
                     arch = ARM_A55;
@@ -236,15 +250,17 @@ inline void get_cpus_arch(Arch *archs, int cpuNum)
             archs[cpuid++] = arch;
         }
     }
+    fclose(fp);
 #endif
     for (; cpuid < cpuNum; cpuid++) {
         archs[cpuid] = archs[0];
     }
-    fclose(fp);
 }
 
 inline long get_cpu_freq(int cpuid)
 {
+    long maxFrequency = -1;
+#ifndef _USE_X86
     char path[256];
     FILE *fp = NULL;
     if (fp == NULL) {
@@ -262,14 +278,13 @@ inline long get_cpu_freq(int cpuid)
             path, sizeof(path), "/sys/devices/system/cpu/cpu%d/cpufreq/cpuinfo_max_freq", cpuid);
         fp = fopen(path, "rb");
     }
-
-    long maxFrequency = -1;
     if (fp == NULL) {
-        printf("[WARNING] can not get CPU max frequency\n");
+        UNI_WARNING_LOG("can not get CPU max frequency\n");
     } else {
         fscanf(fp, "%ld", &maxFrequency);
         fclose(fp);
     }
+#endif
     return maxFrequency;
 }
 
@@ -371,12 +386,8 @@ inline void sort_cpus_by_arch_freq_occupy(
 
 inline int set_thread_affinity(int threadid, const int *cpuids, int num)
 {
-#ifndef _USE_IOS
-#ifdef __GLIBC__
-    pid_t tid = syscall(SYS_gettid);
-#else
-    pid_t tid = gettid();
-#endif
+#if !(defined(__APPLE__) || defined(_WIN32))
+    UNI_THREADID;
     cpu_set_t mask;
     CPU_ZERO(&mask);
     for (int i = 0; i < num; i++) {
@@ -522,14 +533,34 @@ inline DeviceInfo get_cpu_info(AffinityPolicy affinityPolicy)
 
 inline void set_cpu_dynamic(DeviceInfo *deviceInfo, int threadId)
 {
-    if (deviceInfo->affinityPolicy == AFFINITY_GPU) {
-        deviceInfo->schedule = MALI;
-        return;
-    }
     get_cpus_occupy(deviceInfo->cpuStats, deviceInfo->occupys, deviceInfo->cpuNum);
     sort_cpus_by_arch_freq_occupy(deviceInfo->archs, deviceInfo->freqs, deviceInfo->occupys,
         deviceInfo->cpuids, deviceInfo->cpuNum, deviceInfo->maxOccupy);
-    deviceInfo->schedule = thread_affinity_set_by_policy(deviceInfo->archs, deviceInfo->cpuids,
-        deviceInfo->cpuNum, deviceInfo->affinityPolicy, threadId);
+    AffinityPolicy policy = deviceInfo->affinityPolicy;
+    if (policy == AFFINITY_GPU) {
+        policy = AFFINITY_CPU_HIGH_PERFORMANCE;
+    }
+    deviceInfo->schedule = thread_affinity_set_by_policy(
+        deviceInfo->archs, deviceInfo->cpuids, deviceInfo->cpuNum, policy, threadId);
+    if (deviceInfo->affinityPolicy == AFFINITY_GPU) {
+        deviceInfo->schedule = MALI;
+    }
+}
+
+inline void set_cpu_num_threads(int threadNum)
+{
+#ifndef _USE_OPENMP
+    if (threadNum > 1) {
+        UNI_WARNING_LOG("this library not support multi-threads parallel, please rebuild with "
+                        "--openmp option.\n");
+    }
+#endif
+    if (threadNum < 0) {
+        threadNum = 1;
+    }
+    if (threadNum > OMP_MAX_NUM_THREADS) {
+        threadNum = OMP_MAX_NUM_THREADS;
+    }
+    OMP_NUM_THREADS = threadNum;
 }
 #endif

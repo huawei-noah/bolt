@@ -11,21 +11,24 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifdef _USE_INT8
-#include "types.h"
 #include "cpu/arm/int8/tensor_computing_int8.h"
-#include "cpu/arm/int8/convolution_winograd.h"
-#include "cpu/arm/int8/convolution_gemm.h"
+#ifdef __aarch64__
+#include "cpu/arm/int8/v8/convolution_winograd.h"
+#include "cpu/arm/int8/v8/convolution_gemm.h"
+#else
+#include "cpu/arm/int8/v7/convolution_gemm.h"
+#endif
+#include "tensor_transpose.h"
 
 EE convolution_int8(TensorDesc inputDesc,
     const INT8 *input,
     TensorDesc filterDesc,
     const INT8 *filter,
-    F16 *scales,
+    F32 *scales,
     ConvolutionParamSpec convParamSpec,
     ConvolutionForwardAlgorithm algorithm,
     TensorDesc biasDesc,
-    const F16 *bias,
+    const void *bias,
     U32 tmpBytes,
     void *tmp,
     TensorDesc outputDesc,
@@ -46,13 +49,13 @@ EE convolution_int8(TensorDesc inputDesc,
     CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
     CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
 
-    if (idt != DT_I8 && idt != DT_F16) {
+    if (idt != DT_I8 && idt != DT_F16 && idt != DT_F32) {
         CHECK_STATUS(NOT_MATCH);
     }
     if (fdt != DT_I8) {
         CHECK_STATUS(NOT_MATCH);
     }
-    if (odt != DT_F16 && odt != DT_I8) {
+    if (odt != DT_F32 && odt != DT_F16 && odt != DT_I8) {
         CHECK_STATUS(NOT_MATCH);
     }
     if (odf != DF_NCHWC8) {
@@ -64,22 +67,25 @@ EE convolution_int8(TensorDesc inputDesc,
 
     const INT8 *inputPtr = input;
     INT8 *tmpPtr = (INT8 *)tmp;
-    if (idf == DF_NCHW) {
+    if (idf != DF_NCHWC8) {
         TensorDesc prevDesc = inputDesc;
         inputDesc.df = DF_NCHWC8;
         CHECK_STATUS(transformNCHWToNCHWC8(prevDesc, input, inputDesc, tmpPtr));
         inputPtr = tmpPtr;
         tmpPtr += tensorNumBytes(inputDesc);
         tmpBytes -= tensorNumBytes(inputDesc);
+        algorithm = CONVOLUTION_ALGORITHM_GEMM;
     }
 
     EE ret = SUCCESS;
     switch (algorithm) {
+#ifdef __aarch64__
         case CONVOLUTION_ALGORITHM_WINOGRAD:
             ret = convolution_winograd(inputDesc, inputPtr, scales, filterDesc, filter, scales + 2,
                 convParamSpec, biasDesc, bias, tmpBytes, tmpPtr, outputDesc, output, scales + 1,
                 activationDesc, arch);
             break;
+#endif
         case CONVOLUTION_ALGORITHM_GEMM:
             ret = convolution_gemm(inputDesc, inputPtr, scales, filterDesc, filter, scales + 2,
                 convParamSpec, biasDesc, bias, tmpBytes, tmpPtr, outputDesc, output, scales + 1,
@@ -91,4 +97,3 @@ EE convolution_int8(TensorDesc inputDesc,
     }
     return ret;
 }
-#endif

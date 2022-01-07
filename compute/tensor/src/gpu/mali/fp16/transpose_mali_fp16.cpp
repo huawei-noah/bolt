@@ -11,10 +11,8 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "sys.h"
-#include "types.h"
-#include "error.h"
 #include "gpu/mali/fp16/transpose_mali_fp16.h"
+#include "gpu/mali/cl/kernel_option/transpose_opt.h"
 
 inline EE transpose_checkpara_mali_fp16(TensorDesc inputDesc, TensorDesc outputDesc)
 {
@@ -32,168 +30,151 @@ inline EE transpose_core_mali_fp16(GCLHandle_t handle,
     GCLMem_t tmpbuf,
     U32 *dims)
 {
-    DataFormat df;
-    U32 nDims;
     U32 in, ic, ih, iw, it;
     U32 on, oc, oh, ow, ot;
-    nDims = inputDesc.nDims;
-    tensorSelectGet(inputDesc, NULL, &df, &in, &ic, &ih, &iw, &it);
+    tensorSelectGet(inputDesc, NULL, NULL, &in, &ic, &ih, &iw, &it);
     tensorSelectGet(outputDesc, NULL, NULL, &on, &oc, &oh, &ow, &ot);
-    DataFormat imf = input->desc.memFormat;
-    DataFormat omf = output->desc.memFormat;
-    U32 iw_str, ih_str, iw_off, ih_off;
-    U32 ow_str, oh_str, ow_off, oh_off;
+    U32 iDims = inputDesc.nDims;
+    U32 oDims = outputDesc.nDims;
+    if (iDims > 8 || oDims > 8) {
+        CHECK_STATUS(NOT_SUPPORTED);
+    }
+    if (iDims != oDims) {
+        CHECK_STATUS(NOT_MATCH);
+    }
+    I32 dimTran[8] = {0, 1, 2, 3, 4, 5, 6, 7};
+    for (U32 i = 0; i < iDims; i++) {
+        dimTran[iDims - 1 - i] = iDims - 1 - dims[i];
+    }
+    U32 iDim[8] = {1, 1, 1, 1, 1, 1, 1, 1};
+    U32 oDim[8] = {1, 1, 1, 1, 1, 1, 1, 1};
+    for (U32 i = 0; i < iDims; i++) {
+        iDim[i] = inputDesc.dims[i];
+    }
+    for (U32 i = 0; i < oDims; i++) {
+        oDim[i] = outputDesc.dims[i];
+    }
+    U32 iw_str, ih_str, iw_off, ih_off, i_off;
+    U32 ow_str, oh_str, ow_off, oh_off, o_off;
     get_gclmem_dim(input->desc, &iw_str, &ih_str, NULL, &iw_off, &ih_off);
     get_gclmem_dim(output->desc, &ow_str, &oh_str, NULL, &ow_off, &oh_off);
+    i_off = ih_off * iw_str + iw_off;
+    o_off = oh_off * ow_str + ow_off;
+
+    DataFormat imf = input->desc.memFormat;
+    GCLMemType inputMemType = input->desc.memType;
+    bool use3dMode = (iDims == 5 && imf == DF_NCHWC4) ? true : false;
     cl_mem inbuf = input->mem;
     cl_mem outbuf = output->mem;
-    cl_mem tmp = tmpbuf->mem;
-    I32 dimTran[6] = {0, 1, 2, 3, 4, 5};
-    for (U32 i = 0; i < nDims; i++) {
-        dimTran[nDims - 1 - i] = nDims - 1 - dims[i];
+    U32 rDim = 1;
+    for (U32 i = 2; i < iDims; i++) {
+        rDim = rDim * iDim[i];
     }
+    U32 subMemOff = 0;
+    if (imf == DF_NCHWC4) {
+        GCLMem tMem;
+        GCLMemDesc desc;
+        desc = input->desc;
+        U32 str[3] = {iDim[0], iDim[1], rDim};
+        U32 off[3] = {0, 0, 0};
+        MemFlags flag = CL_MEM_READ_WRITE;
+        CHECK_STATUS(gclmem_set_desc_padding(&desc, str, off, DT_F16, DF_NCHW, GCL_MEM_BUF, flag));
+        tMem.desc = desc;
+        U32 size = tensorNumBytes(inputDesc);
+        CHECK_STATUS(gcl_create_sub_buffer(size, &subMemOff, tmpbuf, &(tMem.mem)));
+        if (use3dMode) {
+            CHECK_STATUS(ocl_data_trans_form_3d(handle, input, &tMem, 0, 0, NCHWC4_TO_NCHW));
+        } else {
+            CHECK_STATUS(ocl_data_trans_form(handle, input, &tMem, 0, 0, NCHWC4_TO_NCHW));
+        }
+        iw_str = iDim[0];
+        ih_str = iDim[1];
+        iw_off = 0;
+        ih_off = 0;
+        i_off = 0;
+        inbuf = tMem.mem;
+        inputMemType = GCL_MEM_BUF;
+    }
+
     char kernelName[128];
     Kernel kernel;
+    KernelOpt kernelOpt;
     U32 gs[3];
     U32 ls[3] = {0, 0, 0};
     U32 dim = 3;
-    if (dimTran[2] == 2 && dimTran[3] == 3 && nDims == 4) {
-        bool matchCase = false;
-        if (imf == DF_NCWHC4 && omf == DF_NCWHC4) {
-            if (dimTran[0] == 0 && dimTran[1] == 1) {
-                sprintf(kernelName, "mem_trans_ncwhc4_to_ncwhc4");
-                gs[0] = oh;
-                gs[1] = ow;
-                gs[2] = (oc + 3) / 4;
-                matchCase = true;
-            } else if (dimTran[0] == 1 && dimTran[1] == 0) {
-                sprintf(kernelName, "mem_trans_ncwhc4_to_ncwhc4_output_tran");
-                gs[0] = ow;
-                gs[1] = oh;
-                gs[2] = (oc + 3) / 4;
-                matchCase = true;
-            } else {
-                return NOT_SUPPORTED;
-            }
-        }
-        if (imf == DF_NCWHC4 && omf == DF_NCHW) {
-            if (dimTran[0] == 0 && dimTran[1] == 1) {
-                sprintf(kernelName, "mem_trans_ncwhc4_to_nchw");
-                gs[0] = oh;
-                gs[1] = (ow + 3) / 4;
-                gs[2] = (oc + 3) / 4;
-                matchCase = true;
-            } else if (dimTran[0] == 1 && dimTran[1] == 0) {
-                sprintf(kernelName, "mem_trans_ncwhc4_to_nchw_output_tran");
-                gs[0] = (ow + 3) / 4;
-                gs[1] = oh;
-                gs[2] = (oc + 3) / 4;
-                matchCase = true;
-            } else {
-                return NOT_SUPPORTED;
-            }
-        }
-        if (imf == DF_NCHW && omf == DF_NCWHC4) {
-            if (dimTran[0] == 0 && dimTran[1] == 1) {
-                sprintf(kernelName, "mem_trans_nchw_to_ncwhc4");
-                gs[0] = (ow + 3) / 4;
-                gs[1] = oh;
-                gs[2] = (oc + 3) / 4;
-                matchCase = true;
-            } else if (dimTran[0] == 1 && dimTran[1] == 0) {
-                sprintf(kernelName, "mem_trans_nchw_to_ncwhc4_output_tran");
-                gs[0] = (oh + 3) / 4;
-                gs[1] = ow;
-                gs[2] = (oc + 3) / 4;
-                matchCase = true;
-            } else {
-                return NOT_SUPPORTED;
-            }
-        }
-        if (matchCase) {
-            CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel));
-            CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, iw_off, ih_off, ow_str, oh_str,
-                ow_off, oh_off, iw, ih, ic, ow, oh, oc, 0, 0, inbuf, outbuf));
-            gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
-#ifdef _DEBUG
-            CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
-#endif
-            return SUCCESS;
-        }
-    }
-
-    if (imf == DF_NCWHC4) {
-        gs[0] = ih;
-        gs[1] = (iw + 3) / 4;
-        gs[2] = (ic + 3) / 4 * it;
-        if (df == DF_NCTHW) {
-            sprintf(kernelName, "mem_trans_3d_ncwhc4_to_nchw");
-            CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel));
-            CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, iw_off, ih_off, iw, ih, 0, 0,
-                iw, ih, ic, iw, ih, ic, 0, 0, inbuf, tmp));
-        } else {
-            sprintf(kernelName, "mem_trans_ncwhc4_to_nchw");
-            CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel));
-            CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, iw_off, ih_off, iw, ih, 0, 0,
-                iw, ih, ic, it, iw, ih, ic, it, 0, 0, inbuf, tmp));
-        }
-        gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
-#ifdef _DEBUG
-        CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
-#endif
-        inbuf = tmp;
-    }
-    U32 ow_str_val = ow_str;
-    U32 oh_str_val = oh_str;
-    U32 ow_off_val = ow_off;
-    U32 oh_off_val = ow_off;
-
-    if (omf == DF_NCWHC4) {
-        U32 offset = tensorNumBytes(inputDesc);
-        offset = ALIGN(offset, 1024);
+    if (output->desc.memType != GCL_MEM_BUF || output->desc.memFormat != DF_NCHW) {
         U32 size = tensorNumBytes(outputDesc);
-        gcl_create_sub_buffer(size, &offset, tmpbuf, &outbuf);
-        ow_str_val = ow;
-        oh_str_val = oh;
-        ow_off_val = 0;
-        oh_off_val = 0;
+        CHECK_STATUS(gcl_create_sub_buffer(size, &subMemOff, tmpbuf, &outbuf));
+        ow_str = oDim[0];
+        oh_str = oDim[1];
+        ow_off = 0;
+        oh_off = 0;
+        o_off = 0;
     }
-
-    gs[0] = (iw + 3) / 4;
-    gs[1] = ih;
-    gs[2] = ic * it;
-    if (df == DF_NCTHW) {
-        sprintf(kernelName, "transpose_3d_nchw");
-        CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel));
-        CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, iw_off, ih_off, ow_str_val,
-            oh_str_val, ow_off_val, oh_off_val, dimTran[0], dimTran[1], dimTran[2], dimTran[3], iw,
-            it, ot, gs[0], gs[1], inbuf, outbuf));
+    CHECK_STATUS(
+        set_transpose_opt_mali(iDims, DT_F16, inputMemType, GCL_MEM_BUF, kernelName, &kernelOpt));
+    CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
+    gs[0] = (iDim[0] + 3) / 4;
+    gs[1] = iDim[1];
+    gs[2] = rDim;
+    if (iDims < 4) {
+        CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, ow_str, oh_str, i_off, o_off,
+            dimTran[0], dimTran[1], dimTran[2], iDim[0], gs[0], gs[1], inbuf, outbuf));
     } else {
-        sprintf(kernelName, "transpose_nchw");
-        CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel));
-        CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, iw_off, ih_off, ow_str_val,
-            oh_str_val, ow_off_val, oh_off_val, dimTran[0], dimTran[1], dimTran[2], iw, gs[0],
-            gs[1], inbuf, outbuf));
+        switch (iDims) {
+            case 4:
+                CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, ow_str, oh_str, i_off,
+                    o_off, dimTran[0], dimTran[1], dimTran[2], dimTran[3], iDim[2], oDim[2],
+                    iDim[0], gs[0], gs[1], inbuf, outbuf));
+                break;
+            case 5:
+                CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, ow_str, oh_str, i_off,
+                    o_off, dimTran[0], dimTran[1], dimTran[2], dimTran[3], iDim[2], oDim[2],
+                    dimTran[4], iDim[3], oDim[3], iDim[0], gs[0], gs[1], inbuf, outbuf));
+                break;
+            case 6:
+                CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, ow_str, oh_str, i_off,
+                    o_off, dimTran[0], dimTran[1], dimTran[2], dimTran[3], iDim[2], oDim[2],
+                    dimTran[4], iDim[3], oDim[3], dimTran[5], iDim[4], oDim[4], iDim[0], gs[0],
+                    gs[1], inbuf, outbuf));
+                break;
+            case 7:
+                CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, ow_str, oh_str, i_off,
+                    o_off, dimTran[0], dimTran[1], dimTran[2], dimTran[3], iDim[2], oDim[2],
+                    dimTran[4], iDim[3], oDim[3], dimTran[5], iDim[4], oDim[4], dimTran[6], iDim[5],
+                    oDim[5], iDim[0], gs[0], gs[1], inbuf, outbuf));
+                break;
+            case 8:
+                CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, ow_str, oh_str, i_off,
+                    o_off, dimTran[0], dimTran[1], dimTran[2], dimTran[3], iDim[2], oDim[2],
+                    dimTran[4], iDim[3], oDim[3], dimTran[5], iDim[4], oDim[4], dimTran[6], iDim[5],
+                    oDim[5], dimTran[7], iDim[6], oDim[6], iDim[0], gs[0], gs[1], inbuf, outbuf));
+                break;
+            default:
+                CHECK_STATUS(NOT_SUPPORTED);
+        }
     }
     gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
 #ifdef _DEBUG
     CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
+    handle->t_total += handle->t_execute;
 #endif
-    if (omf == DF_NCWHC4) {
-        if (df == DF_NCTHW) {
-            CHECK_STATUS(NOT_SUPPORTED);
+    if (output->desc.memType != GCL_MEM_BUF || output->desc.memFormat != DF_NCHW) {
+        GCLMem tMem;
+        GCLMemDesc desc;
+        desc = output->desc;
+        rDim = 1;
+        for (U32 i = 2; i < oDims; i++) {
+            rDim = rDim * oDim[i];
         }
-        sprintf(kernelName, "mem_trans_nchw_to_ncwhc4");
-        gs[0] = (ow + 3) / 4;
-        gs[1] = oh;
-        gs[2] = (oc + 3) / 4;
-        CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel));
-        CHECK_STATUS(gcl_set_kernelArgs(kernel, ow_str_val, oh_str_val, ow_off_val, oh_off_val,
-            ow_str, oh_str, ow_off, oh_off, ow, oh, oc, ow, oh, oc, 0, 0, outbuf, output->mem));
-        gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
-#ifdef _DEBUG
-        CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
-#endif
+        U32 str[3] = {oDim[0], oDim[1], rDim};
+        U32 off[3] = {0, 0, 0};
+        MemFlags flag = CL_MEM_READ_WRITE;
+        CHECK_STATUS(gclmem_set_desc_padding(&desc, str, off, DT_F16, DF_NCHW, GCL_MEM_BUF, flag));
+        tMem.desc = desc;
+        tMem.mem = outbuf;
+        MemTransFormType type = (output->desc.memFormat == DF_NCHW) ? NCHW_TO_NCHW : NCHW_TO_NCHWC4;
+        CHECK_STATUS(ocl_data_trans_form(handle, &tMem, output, 0, 0, type));
     }
     return SUCCESS;
 }
@@ -204,12 +185,16 @@ EE transpose_infer_forward_tmp_bytes_mali_fp16(TensorDesc inputDesc,
     GCLMemDesc_t gclmemOutputDesc,
     U32 *bytes)
 {
-    UNUSED(inputDesc);
-    UNUSED(outputDesc);
-    U32 input_size = gclmemInputDesc->byteSize;
-    input_size = ALIGN(input_size, 1024);
-    U32 output_size = gclmemOutputDesc->byteSize;
-    *bytes = input_size + output_size;
+    U32 inputSize = 0;
+    U32 outputSize = 0;
+    if (gclmemInputDesc->memFormat == DF_NCHWC4) {
+        inputSize = tensorNumBytes(inputDesc);
+        inputSize = ALIGN(inputSize, BUFFER_ALIGN_BASE);
+    }
+    if (gclmemOutputDesc->memType != GCL_MEM_BUF) {
+        outputSize = tensorNumBytes(outputDesc);
+    }
+    *bytes = inputSize + outputSize;
     return SUCCESS;
 }
 

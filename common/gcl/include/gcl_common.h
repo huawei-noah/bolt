@@ -13,8 +13,8 @@
 
 #ifndef H_GCL_COMMON
 #define H_GCL_COMMON
-#define CL_TARGET_OPENCL_VERSION 200
 
+#include "uni.h"
 #include "tensor_desc.h"
 #include "gcl_kernel_type.h"
 #include "CL/cl.h"
@@ -135,7 +135,7 @@ inline CI8 *map_cl_error_2_string(cl_int err)
         if (err == 0)                                                                            \
             return SUCCESS;                                                                      \
         UNI_ERROR_LOG("GCLAPI error in:  File: %s  Line: %d  Func name is: %s  GCLERROR = %s\n", \
-            __FILE__, __LINE__, __func__, map_cl_error_2_string(err));                           \
+            __FILE__, __LINE__, __FUNCTION__, map_cl_error_2_string(err));                       \
         return GCL_ERROR;                                                                        \
     }
 
@@ -149,16 +149,6 @@ inline EE has_dedicated_local(Device device, I32 *b)
     free(value);
     map_cl_error_2_ee(ret);
 }
-
-/**
- *@ enum define
- **/
-typedef enum {
-    GCL_MEM_BUF = 0,
-    GCL_MEM_IMG_1D = 1,
-    GCL_MEM_IMG_2D = 2,
-    GCL_MEM_IMG_3D = 3
-} GCLMemType;
 
 typedef enum {
     HOST_TO_DEVICE_BUF = 0,
@@ -190,6 +180,11 @@ struct GCLHandle {
     U32 numDevice;
     U32 deviceId;
     cl_device_type deviceType;
+    U32 device_max_ls_size[3];
+    U32 device_max_cu;
+    U32 device_max_work_group;
+    U32 device_max_image3d_size[3];
+    bool useQualcommDev;
 
     Context context;
     CommandQueue queue;
@@ -226,35 +221,9 @@ struct GCLHandleConfig {
 
 typedef GCLHandleConfig *GCLHandleConfig_t;
 
-struct GCLMemDesc {
-    U32 dims[6];
-    U32 nDims;
-    DataType dt;
-    DataFormat df;
-
-    U32 stride[3];
-    U32 offset[3];
-    GCLMemType memType;
-    DataFormat memFormat;
-    U32 byteSize;
-    U32 num;
-    MemFlags flags;
-    ImgFormat imgFormat;
-    void *host_ptr;
-    bool need_pad;
-};
-typedef struct GCLMemDesc *GCLMemDesc_t;
-struct GCLMem {
-    Mem mem;
-    GCLMemDesc desc;
-    std::vector<Mem> subMem;
-    std::vector<U8 *> mapPtrArray;
-};
-typedef struct GCLMem *GCLMem_t;
-
 typedef struct {
     I32 algorithm;
-    U32 best_w[6];
+    U32 best_h[6];
     U32 best_c[6];
     U32 best_k[6];
 } ForwardRunInfoMali;
@@ -262,8 +231,6 @@ typedef ForwardRunInfoMali *ForwardRunInfoMali_t;
 
 typedef struct {
     GCLHandle_t handle;
-    GCLMemDesc_t gclmemInputDesc;
-    GCLMemDesc_t gclmemOutputDesc;
     GCLMemDesc_t gclmemFilterDesc;
     ForwardRunInfoMali_t forwardRunInfo;
 } MaliPara;

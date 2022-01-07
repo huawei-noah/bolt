@@ -11,10 +11,9 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <arm_neon.h>
-
 #include "mvm_common.h"
 #include "mvm.h"
+#include "thread_affinity.h"
 
 inline void mvm_row_kernel_A76(U32 N, U32 K, F16 *matrix, F16 *vector, F16 *result)
 {
@@ -106,6 +105,9 @@ inline void mvm_row_A76(U32 numRows, U32 numColumns, F16 *matrix, F16 *vector, F
     U32 K = numColumns;
     U32 NTail = N % 4;
     U32 NInner = N / 4;
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
     for (U32 i = 0; i < NInner; i++) {
         mvm_row_kernel_A76(NInner * 2, K, matrix + i * K, vector, result + i);
     }

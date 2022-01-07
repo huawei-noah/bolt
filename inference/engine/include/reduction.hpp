@@ -25,34 +25,9 @@ public:
         this->p = p;
     }
 
-    std::shared_ptr<Operator> clone() override
-    {
-        std::shared_ptr<Reduction> mem =
-            std::shared_ptr<Reduction>(new Reduction(this->dt, this->p));
-        *mem = *this;
-        return mem;
-    }
-
     OperatorType get_type() override
     {
         return OT_Reduction;
-    }
-
-    void run() override
-    {
-        Tensor inputTensor = this->inputTensors[0];
-        Tensor outputTensor = this->outputTensors[0];
-        Tensor maskTensor;
-        if (this->inputTensors.size() > 1) {
-            maskTensor = this->inputTensors[1];
-        } else {
-            TensorDesc maskDesc;
-            maskDesc.nDims = 0;
-            maskTensor.resize(maskDesc);
-        }
-
-        CHECK_STATUS(
-            reduction(inputTensor, maskTensor, this->p, this->temp, outputTensor, &this->archInfo));
     }
 
     U32 infer_tmp_memory_size() override
@@ -66,7 +41,21 @@ public:
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
-        Tensor maskTensor;
+        if (this->p.axes_num == 0) {
+            TensorDesc desc = inTensors[0]->get_desc();
+            this->p.axes_num = desc.nDims;
+            for (int i = 0; i < this->p.axes_num; i++) {
+                this->p.axes[i] = i;
+            }
+        }
+
+        MemoryType type = CPUMem;
+        if (IS_MALI_GPU(this->archInfo.arch)) {
+            type = OCLMem;
+        } else if (IS_QUALCOMM_GPU(this->archInfo.arch)) {
+            type = OCLMemImg;
+        }
+        Tensor maskTensor(type);
         if (inTensors.size() > 1) {
             maskTensor = *(inTensors[1]);
         } else {
@@ -74,10 +63,11 @@ public:
             maskDesc.nDims = 0;
             maskTensor.resize(maskDesc);
         }
-        return reduction_infer_output_size(inTensors[0], maskTensor, this->p, outTensors[0]);
+        return reduction_infer_output_size(
+            inTensors[0], maskTensor, this->p, outTensors[0], &this->archInfo);
     }
 
-private:
+protected:
     ReductionParamSpec p;
 };
 

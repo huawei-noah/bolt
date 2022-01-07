@@ -33,7 +33,7 @@ public:
     {
         Tensor inputTensor = this->inputTensors[0];
         Tensor outputTensor = this->outputTensors[0];
-        CHECK_STATUS(unsqueeze(inputTensor, outputTensor, &this->archInfo));
+        CHECK_STATUS(unsqueeze(inputTensor, this->temp, outputTensor, &this->archInfo));
         outputTensor.set_scale(inputTensor.get_scale());
     }
 

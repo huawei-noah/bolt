@@ -37,12 +37,8 @@ int roialignTest(int argc, char **argv, DataType dt)
     U32 output_w = atoi(argv[13]);
     U32 sampling_ratio = atoi(argv[14]);
     F32 spatial_scale = (F32)atof(argv[15]);
-    ArchInfo archInfo;
-    archInfo.arch = UT_ARCH;
-    ArchInfo archInfo_org;
-    archInfo_org.arch = CPU_GENERAL;
 
-    RoiAlignParamSpec p;
+    RoIAlignParamSpec p;
     p.output_h = output_h;
     p.output_w = output_w;
     p.sampling_ratio = sampling_ratio;
@@ -62,11 +58,11 @@ int roialignTest(int argc, char **argv, DataType dt)
     U8 *input_feat = ut_input_v(input_len_feat, dt, UT_INIT_RANDOM);
     U8 *input_rois = ut_input_v(input_len_rois, dt, UT_INIT_RANDOM);
     U8 *input_batch = ut_input_v(input_len_batch, dt, UT_INIT_ZERO);
-    memcpy(
-        get_ptr_from_tensor(inputTensor_feat, UT_ARCH), input_feat, tensorNumBytes(inputDesc_feat));
-    memcpy(
-        get_ptr_from_tensor(inputTensor_rois, UT_ARCH), input_rois, tensorNumBytes(inputDesc_rois));
-    memcpy(get_ptr_from_tensor(inputTensor_batch, UT_ARCH), input_batch,
+    memcpy(get_ptr_from_tensor(inputTensor_feat, CPU_GENERAL), input_feat,
+        tensorNumBytes(inputDesc_feat));
+    memcpy(get_ptr_from_tensor(inputTensor_rois, CPU_GENERAL), input_rois,
+        tensorNumBytes(inputDesc_rois));
+    memcpy(get_ptr_from_tensor(inputTensor_batch, CPU_GENERAL), input_batch,
         tensorNumBytes(inputDesc_batch));
     inputTensors[0] = inputTensor_feat;
     inputTensors[1] = inputTensor_rois;
@@ -77,7 +73,7 @@ int roialignTest(int argc, char **argv, DataType dt)
 
     // set output
     Tensor outputTensor, outputTensorRef;
-    CHECK_STATUS(roialign_infer_output_size(inputTensorPtrs, p, &outputTensor, &archInfo));
+    CHECK_STATUS(roialign_infer_output_size(inputTensorPtrs, p, &outputTensor, &UT_CPU_ARCHINFO));
     outputTensor.alloc();
     TensorDesc outputDesc_ref = outputTensor.get_desc();
     outputTensorRef.resize(outputDesc_ref);
@@ -87,18 +83,20 @@ int roialignTest(int argc, char **argv, DataType dt)
     CHECK_REQUIREMENT(input_len_feat == in0 * ic0 * ih0 * iw0 && input_len_rois == ih1 * iw1 &&
         input_len_batch == ilens2 && output_len == on0 * oc0 * oh0 * ow0);
 
+    Tensor tmpTensor;
     if (UT_CHECK) {
-        CHECK_STATUS(roialign(inputTensors, p, outputTensor, &archInfo));
-        CHECK_STATUS(roialign(inputTensors, p, outputTensorRef, &archInfo_org));
+        CHECK_STATUS(roialign(inputTensors, p, tmpTensor, outputTensor, &UT_CPU_ARCHINFO));
+        CHECK_STATUS(roialign(inputTensors, p, tmpTensor, outputTensorRef, &UT_SERIAL_ARCHINFO));
         // check
-        ut_check_v(get_ptr_from_tensor(outputTensor, UT_ARCH),
-            get_ptr_from_tensor(outputTensorRef, UT_ARCH), output_len, dt, 0.05, __FILE__, __LINE__);
+        ut_check_v(get_ptr_from_tensor(outputTensor, CPU_GENERAL),
+            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), output_len, dt, 0.05, __FILE__,
+            __LINE__);
     }
 
     // benchmark
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        CHECK_STATUS(roialign(inputTensors, p, outputTensor, &archInfo));
+        CHECK_STATUS(roialign(inputTensors, p, tmpTensor, outputTensor, &UT_CPU_ARCHINFO));
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;

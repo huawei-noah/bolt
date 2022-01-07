@@ -11,32 +11,31 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <iostream>
 #include <getopt.h>
 #include "online_conversion.h"
-#include "model_tools.h"
-#include "model_serialize_deserialize.hpp"
+#include "model_print.h"
+#include <iostream>
+#include <algorithm>
 
 void print_X2bolt_usage()
 {
     std::cout << "X2bolt(version:" << sg_boltVersion
-              << ") "
-                 "converter usage: (<> must be filled in with exact value; [] is "
-                 "optional)\n"
-                 "./X2bolt -d <modelDirectory> -m <modelName> -i <inferencePrecision> -v -s -h "
+              << ") converter usage: (<> must be filled in with exact value; [] is optional.)\n"
+                 "./X2bolt -d <modelDirectory> -m <modelFileName> -i <inferencePrecision> -v -V -h "
                  "-r [removeOperatorNum]\n"
                  "Parameter description:\n"
                  "1. -d <modelDirectory>: The directory where your model is stored.\n"
-                 "2. -m <modelName>: The name of your model. "
-                 "Tips: If your model trained from caffe, please ensure the names of prototxt and "
-                 "caffemodel are the same, otherwise error occurs.\n"
+                 "2. -m <modelFileName>: The name of your model file without file suffix.\n"
+                 "Tips: If your model trained from caffe, please ensure the model file prefix of "
+                 "prototxt and caffemodel are the same, otherwise error occurs.\n"
                  "3. -i <inferencePrecision>: The inference precision. Currently, you can only "
-                 "choose one of "
-                 "{FP32, FP16, PTQ}. PTQ produces the input for post_training_quantization tool.\n"
+                 "choose one of {FP32, FP16, PTQ, BNN_FP16}. PTQ produces the input for "
+                 "post_training_quantization tool. INT8_FP16 is for machine(ARMv8.2+) that "
+                 "supports fp16 to compute non BNN(1-bit) operators.\n"
                  "4. -r [removeOperatorNum]: The number of preprocession operator in onnx model."
                  "The default value is 0.\n"
                  "5. -v : X2bolt version information.\n"
-                 "6. -s : Bolt Model detail information.\n"
+                 "6. -V : Bolt Model detail information.\n"
                  "7. -h : X2bolt help information.\n"
                  "Example: ./X2bolt -d /local/models/ -m resnet50 -i FP16\n"
                  "If model conversion is successful, you can find the resnet50_f16.bolt file in "
@@ -63,69 +62,71 @@ int main(int argc, char *argv[])
             return -1;
         }
     }
-    CHECK_REQUIREMENT(argc >= 4);
-    char *storagePath = (char *)" ";
-    char *modelName = (char *)" ";
-    char *inferPrecision = (char *)" ";
+    std::string storagePath = ".";
+    std::string modelFileName;
+    std::string inferPrecision = "FP32";
     I32 removeProcessOpsNum = 0;
-    bool show_model_info = false;
+    bool printModel = false;
 
     int option;
-    const char *optionstring = "d:m:i:r:s";
+    const char *optionstring = "d:m:i:r:V";
     while ((option = getopt(argc, argv, optionstring)) != -1) {
         switch (option) {
             case 'd':
-                std::cout << "option is -d <modelDirectory>, value is: " << optarg << std::endl;
                 storagePath = optarg;
+                std::cout << "option is -d <modelDirectory>, value is: " << storagePath << std::endl;
                 break;
             case 'm':
-                std::cout << "option is -m <modelName>, value is: " << optarg << std::endl;
-                modelName = optarg;
+                modelFileName = optarg;
+                std::cout << "option is -m <modelFileName>, value is: " << modelFileName
+                          << std::endl;
                 break;
             case 'i':
-                std::cout << "option is -i <inferencePrecision>, value is: " << optarg << std::endl;
                 inferPrecision = optarg;
+                std::cout << "option is -i <inferencePrecision>, value is: " << inferPrecision
+                          << std::endl;
                 break;
             case 'r':
-                std::cout << "option is -r [removeOperatorNum], value is: " << optarg << std::endl;
                 removeProcessOpsNum = atoi(optarg);
+                std::cout << "option is -r [removeOperatorNum], value is: " << removeProcessOpsNum
+                          << std::endl;
                 break;
-            case 's':
-                show_model_info = true;
+            case 'V':
+                printModel = true;
                 break;
             default:
-                std::cerr << "Input option gets error. Please check the params meticulously."
+                std::cerr << "Input option gets error. Please check the params meticulously.\n"
                           << std::endl;
                 print_X2bolt_usage();
-                return -1;
+                exit(1);
         }
     }
+    if (modelFileName == "") {
+        UNI_ERROR_LOG("Please use -m <modelFileName> option to give an valid model file name "
+                      "without file suffix.\n");
+    }
+    transform(inferPrecision.begin(), inferPrecision.end(), inferPrecision.begin(), toupper);
 
-    void *onlineModel =
-        OnlineModelConversion(storagePath, modelName, inferPrecision, removeProcessOpsNum);
+    void *onlineModel = OnlineModelConversion(
+        storagePath.c_str(), modelFileName.c_str(), inferPrecision.c_str(), removeProcessOpsNum);
     ModelSpec *ms = (ModelSpec *)onlineModel;
 
-    std::string modelStorePath = std::string(storagePath) + "/" + std::string(modelName);
-    if (0) {
-#if _USE_FP32
-    } else if (std::string(inferPrecision).compare(std::string("PTQ")) == 0) {
+    std::string modelStorePath = storagePath + "/" + modelFileName;
+    if (inferPrecision.compare(std::string("PTQ")) == 0) {
         modelStorePath += std::string("_ptq_input.bolt");
-#endif
-#if _USE_FP16
-    } else if (std::string(inferPrecision).compare(std::string("FP16")) == 0) {
+    } else if (inferPrecision.compare(std::string("FP16")) == 0 ||
+        inferPrecision.compare(std::string("BNN_FP16")) == 0) {
         modelStorePath += std::string("_f16.bolt");
-#endif
-#if _USE_FP32
-    } else if (std::string(inferPrecision).compare(std::string("FP32")) == 0) {
+    } else if (inferPrecision.compare(std::string("FP32")) == 0) {
         modelStorePath += std::string("_f32.bolt");
-#endif
     } else {
-        std::cerr << "NOT SUPPORT THIS PRECISION " << inferPrecision << std::endl;
-        return -1;
+        UNI_ERROR_LOG("Unknown converter data precision: %s.\n", inferPrecision.c_str());
+        exit(1);
     }
+    UNI_INFO_LOG("Write bolt model to %s.\n", modelStorePath.c_str());
     CHECK_STATUS(serialize_model_to_file(ms, modelStorePath.c_str()));
     OnlineModelReclaim(onlineModel);
-    if (show_model_info) {
+    if (printModel) {
         ModelSpec resultMs;
         CHECK_STATUS(deserialize_model_from_file(modelStorePath.c_str(), &resultMs));
         print_header(resultMs);

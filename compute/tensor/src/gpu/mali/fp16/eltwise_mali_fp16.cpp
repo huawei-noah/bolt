@@ -13,10 +13,8 @@
 #include <algorithm>
 #include <unordered_set>
 
-#include "sys.h"
-#include "error.h"
-#include "types.h"
 #include "gpu/mali/fp16/eltwise_mali_fp16.h"
+#include "gpu/mali/cl/kernel_option/eltwise_opt.h"
 
 bool eltwise_same_desc(std::vector<TensorDesc> inputDesc, U32 *arrayDimMax)
 {
@@ -68,6 +66,22 @@ bool eltwise_same_desc(std::vector<TensorDesc> inputDesc, U32 *arrayDimMax)
     return sameDesc;
 }
 
+inline bool needTransInput(GCLMemDesc gclmemInputDesc, GCLMemDesc gclmemBroadDesc)
+{
+    DataFormat imf = gclmemInputDesc.memFormat;
+    DataFormat bmf = gclmemBroadDesc.memFormat;
+    U32 bw_str, bh_str, bw_off, bh_off;
+    CHECK_STATUS(gclmem_get_desc_padding(gclmemBroadDesc, &bw_str, &bh_str, NULL, NULL, NULL));
+    bool needTrans = true;
+    if (imf == bmf) {
+        needTrans = false;
+    }
+    if (bw_str == 1 && bh_str == 1) {
+        needTrans = false;
+    }
+    return needTrans;
+}
+
 inline EE eltwise_checkpara_mali_fp16(
     std::vector<TensorDesc> inputDesc, std::vector<void *> input, TensorDesc outputDesc)
 {
@@ -85,172 +99,208 @@ inline EE eltwise_checkpara_mali_fp16(
 inline EE eltwise_core_mali_fp16(GCLHandle_t handle,
     std::vector<TensorDesc> inputDesc,
     std::vector<void *> input,
+    GCLMem_t tmpbuf,
     TensorDesc outputDesc,
     GCLMem_t output,
     EltwiseParamSpec eltwiseDesc)
 {
-    UNUSED(outputDesc);
     U32 iw, ih, ic, in, it;
     U32 arrayDimMax;
     bool sameDesc = eltwise_same_desc(inputDesc, &arrayDimMax);
     tensorSelectGet(inputDesc[arrayDimMax], NULL, NULL, &in, &ic, &ih, &iw, &it);
 
     U32 num = input.size();
-    std::vector<GCLMem_t> inputMem;
+    if (num > 4) {
+        CHECK_STATUS(NOT_SUPPORTED);
+    }
+    std::vector<GCLMem_t> inputMem(4);
     for (U32 i = 0; i < num; ++i) {
-        inputMem.push_back((GCLMem_t)input[i]);
+        inputMem[i] = (GCLMem_t)input[i];
     }
     cl_mem outbuf;
     outbuf = output->mem;
 
-    U32 ow_str, oh_str, oc_str, ow_off, oh_off;
-    std::vector<U32> iw_str;
-    std::vector<U32> ih_str;
-    std::vector<U32> iw_off;
-    std::vector<U32> ih_off;
+    U32 ow_str, oh_str, oc_str, ow_off, oh_off, o_off;
+    GCLMemType outputMemType;
+    std::vector<U32> iw_str(4);
+    std::vector<U32> ih_str(4);
+    std::vector<U32> iw_off(4);
+    std::vector<U32> ih_off(4);
+    std::vector<U32> i_off(4);
+    std::vector<GCLMemType> inputMemType(4);
     for (U32 i = 0; i < num; ++i) {
         U32 w_str, h_str, w_off, h_off;
-        get_gclmem_dim(inputMem[i]->desc, &w_str, &h_str, NULL, &w_off, &h_off);
-        iw_str.push_back(w_str);
-        ih_str.push_back(h_str);
-        iw_off.push_back(w_off);
-        ih_off.push_back(h_off);
+        CHECK_STATUS(
+            gclmem_get_desc_padding(inputMem[i]->desc, &w_str, &h_str, NULL, &w_off, &h_off));
+        iw_str[i] = w_str;
+        ih_str[i] = h_str;
+        iw_off[i] = w_off;
+        ih_off[i] = h_off;
+        i_off[i] = h_off * w_str + w_off;
+        inputMemType[i] = inputMem[i]->desc.memType;
     }
-    get_gclmem_dim(output->desc, &ow_str, &oh_str, &oc_str, &ow_off, &oh_off);
-
-    char modeName[16];
-    char activeName[16];
-    char kernelName[128];
-    EltwiseMode eltwiseMode = eltwiseDesc.elt_mode;
-    ActivationMode activeMode = eltwiseDesc.activation_type;
+    CHECK_STATUS(gclmem_get_desc_padding(output->desc, &ow_str, &oh_str, &oc_str, &ow_off, &oh_off));
+    o_off = oh_off * ow_str + ow_off;
+    outputMemType = output->desc.memType;
 
     Kernel kernel;
-    if (eltwiseMode == ELTWISE_MAX) {
-        strcpy(modeName, "max");
-    }
-    if (eltwiseMode == ELTWISE_SUM) {
-        strcpy(modeName, "sum");
-    }
-    if (eltwiseMode == ELTWISE_PROD) {
-        strcpy(modeName, "prod");
-    }
-    switch (activeMode) {
-        case ACTIVATION_RELU:
-            strcpy(activeName, "relu_");
-            break;
-        case ACTIVATION_NULL:
-            strcpy(activeName, "");
-            break;
-        default:
-            return NOT_SUPPORTED;
-    }
-    U32 gs[3] = {ih, iw, (ic + 3) / 4 * in * it};
+    KernelOpt kernelOpt;
+    char kernelName[128];
+    bool useNchwFormat = (inputMem[arrayDimMax]->desc.memFormat == DF_NCHW) ? true : false;
+    EltwiseMode eltwiseMode = eltwiseDesc.elt_mode;
+    ActivationMode activeMode = eltwiseDesc.activation_type;
+    U32 gs[3] = {iw, ih, (ic + 3) / 4 * in * it};
     U32 ls[3] = {0, 0, 0};
     U32 dim = 3;
-    if (activeMode != ACTIVATION_NULL && !sameDesc) {
-        CHECK_STATUS(NOT_SUPPORTED);
+    if (useNchwFormat) {
+        gs[0] = (iw + 3) / 4;
+        gs[1] = ih;
+        gs[2] = ic * in * it;
     }
 
     if (sameDesc) {
-        char formatName[16] = "";
+        CHECK_STATUS(set_eltwise_opt_mali(num, useNchwFormat, eltwiseMode, activeMode, DT_F16,
+            inputMemType.data(), outputMemType, kernelName, &kernelOpt));
         ic = ic * in * it;
-        if (inputMem[0]->desc.memFormat == DF_NCHW) {
-            strcpy(formatName, "nchw_");
-            gs[0] = (iw + 3) / 4;
-            gs[1] = ih;
-            gs[2] = ic;
-            if (output->desc.memFormat == DF_NCWHC4) {
-                CHECK_STATUS(NOT_SUPPORTED);
-            }
-        }
-        sprintf(kernelName, "eltwise_%s%s%s%d", formatName, activeName, modeName, num);
-        CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel));
+        CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
         switch (num) {
             case 1:
-                CHECK_STATUS(gcl_set_kernelArgs(kernel, ih, iw, ic, oh_str, ow_str, oh_off, ow_off,
-                    gs[0], gs[1], ih_str[0], iw_str[0], ih_off[0], iw_off[0], inputMem[0]->mem,
-                    outbuf));
+                CHECK_STATUS(gcl_set_kernelArgs(kernel, iw, ih, ic, ow_str, oh_str, o_off, gs[0],
+                    gs[1], iw_str[0], ih_str[0], i_off[0], inputMem[0]->mem, outbuf));
                 break;
             case 2:
-                CHECK_STATUS(gcl_set_kernelArgs(kernel, ih, iw, ic, oh_str, ow_str, oh_off, ow_off,
-                    gs[0], gs[1], ih_str[0], iw_str[0], ih_off[0], iw_off[0], inputMem[0]->mem,
-                    ih_str[1], iw_str[1], ih_off[1], iw_off[1], inputMem[1]->mem, outbuf));
+                CHECK_STATUS(gcl_set_kernelArgs(kernel, iw, ih, ic, ow_str, oh_str, o_off, gs[0],
+                    gs[1], iw_str[0], ih_str[0], i_off[0], inputMem[0]->mem, iw_str[1], ih_str[1],
+                    i_off[1], inputMem[1]->mem, outbuf));
                 break;
             case 3:
-                CHECK_STATUS(gcl_set_kernelArgs(kernel, ih, iw, ic, oh_str, ow_str, oh_off, ow_off,
-                    gs[0], gs[1], ih_str[0], iw_str[0], ih_off[0], iw_off[0], inputMem[0]->mem,
-                    ih_str[1], iw_str[1], ih_off[1], iw_off[1], inputMem[1]->mem, ih_str[2],
-                    iw_str[2], ih_off[2], iw_off[2], inputMem[2]->mem, outbuf));
+                CHECK_STATUS(gcl_set_kernelArgs(kernel, iw, ih, ic, ow_str, oh_str, o_off, gs[0],
+                    gs[1], iw_str[0], ih_str[0], i_off[0], inputMem[0]->mem, iw_str[1], ih_str[1],
+                    i_off[1], inputMem[1]->mem, iw_str[2], ih_str[2], i_off[2], inputMem[2]->mem,
+                    outbuf));
                 break;
             case 4:
-                CHECK_STATUS(gcl_set_kernelArgs(kernel, ih, iw, ic, oh_str, ow_str, oh_off, ow_off,
-                    gs[0], gs[1], ih_str[0], iw_str[0], ih_off[0], iw_off[0], inputMem[0]->mem,
-                    ih_str[1], iw_str[1], ih_off[1], iw_off[1], inputMem[1]->mem, ih_str[2],
-                    iw_str[2], ih_off[2], iw_off[2], inputMem[2]->mem, ih_str[3], iw_str[3],
-                    ih_off[3], iw_off[3], inputMem[3]->mem, outbuf));
+                CHECK_STATUS(gcl_set_kernelArgs(kernel, iw, ih, ic, ow_str, oh_str, o_off, gs[0],
+                    gs[1], iw_str[0], ih_str[0], i_off[0], inputMem[0]->mem, iw_str[1], ih_str[1],
+                    i_off[1], inputMem[1]->mem, iw_str[2], ih_str[2], i_off[2], inputMem[2]->mem,
+                    iw_str[3], ih_str[3], i_off[3], inputMem[3]->mem, outbuf));
                 break;
             default:
-                return NOT_SUPPORTED;
+                CHECK_STATUS(NOT_SUPPORTED);
         }
         gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
 #ifdef _DEBUG
         CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
         handle->t_total += handle->t_execute;
 #endif
-        return SUCCESS;
     } else {
         if (num > 2) {
             CHECK_STATUS(NOT_SUPPORTED)
         }
-        DataFormat mf[2];
-        mf[0] = inputMem[arrayDimMax]->desc.memFormat;
-        mf[1] = inputMem[1 - arrayDimMax]->desc.memFormat;
-        if (mf[0] == DF_NCWHC4) {
-            U32 w_str, h_str, c_str, w_off, h_off;
-            get_gclmem_dim(inputMem[1 - arrayDimMax]->desc, &w_str, &h_str, &c_str, &w_off, &h_off);
-            U32 ic_non_max;
-            tensorSelectGet(inputDesc[1 - arrayDimMax], NULL, NULL, NULL, &ic_non_max, NULL, NULL);
-            char formatName[16] = "";
-            if (mf[1] == DF_NCHW) {
-                strcpy(formatName, "nchw_");
+        GCLMemDesc gclmemImaxDesc = inputMem[arrayDimMax]->desc;
+        GCLMemDesc gclmemBroadDesc = inputMem[1 - arrayDimMax]->desc;
+        bool needTrans = needTransInput(gclmemImaxDesc, gclmemBroadDesc);
+        Mem iMaxMem = inputMem[arrayDimMax]->mem;
+        Mem broadMem = inputMem[1 - arrayDimMax]->mem;
+        Mem tmp = tmpbuf->mem;
+        U32 bn, bc, bh, bw;
+        U32 mw_str, mh_str, mw_off, mh_off;
+        U32 bw_str, bh_str, bw_off, bh_off;
+        tensorSelectGet(inputDesc[1 - arrayDimMax], NULL, NULL, &bn, &bc, &bh, &bw);
+        CHECK_STATUS(gclmem_get_desc_padding(
+            inputMem[arrayDimMax]->desc, &mw_str, &mh_str, NULL, &mw_off, &mh_off));
+        CHECK_STATUS(gclmem_get_desc_padding(
+            inputMem[1 - arrayDimMax]->desc, &bw_str, &bh_str, NULL, &bw_off, &bh_off));
+        U32 m_off = mh_off * mw_str + mw_off;
+        U32 b_off = bh_off * bw_str + bw_off;
+        inputMemType[0] = inputMem[arrayDimMax]->desc.memType;
+        inputMemType[1] = inputMem[1 - arrayDimMax]->desc.memType;
+
+        if (needTrans) {
+            GCLMem tMem;
+            GCLMemDesc desc = gclmemBroadDesc;
+            desc.memType = GCL_MEM_BUF;
+            desc.offset[0] = 0;
+            desc.offset[1] = 0;
+            desc.offset[2] = 0;
+            bw_str = bw;
+            bh_str = bh;
+            bw_off = 0;
+            bh_off = 0;
+            b_off = 0;
+            if (desc.memFormat == DF_NCHWC4) {
+                desc.stride[0] = bw;
+                desc.stride[1] = bh;
+                desc.stride[2] = bc * bn;
+                desc.memFormat = DF_NCHW;
+                tMem.desc = desc;
+                tMem.mem = tmp;
+                CHECK_STATUS(ocl_data_trans_form(
+                    handle, inputMem[1 - arrayDimMax], &tMem, 0, 0, NCHWC4_TO_NCHW));
+                broadMem = tmp;
+            } else if (desc.memFormat == DF_NCHW) {
+                desc.stride[0] = bw;
+                desc.stride[1] = bh;
+                desc.stride[2] = (bc + 3) / 4 * bn;
+                desc.memFormat = DF_NCHWC4;
+                tMem.desc = desc;
+                tMem.mem = tmp;
+                CHECK_STATUS(ocl_data_trans_form(
+                    handle, inputMem[1 - arrayDimMax], &tMem, 0, 0, NCHW_TO_NCHWC4));
+                broadMem = tmp;
             }
-            char broadAxis[16] = "";
-            if (w_str == 1 && h_str == 1 && c_str == 1) {
-                strcpy(broadAxis, "_xyz");
-            } else if (w_str == 1 && h_str == 1) {
-                strcpy(broadAxis, "_xy");
-            } else if (w_str != 1 && h_str == 1) {
-                strcpy(broadAxis, "_y");
-            } else if (w_str == 1 && h_str != 1) {
-                strcpy(broadAxis, "_x");
-            } else {
-                CHECK_STATUS(NOT_SUPPORTED);
-            }
-            sprintf(kernelName, "eltwise_broadcast_%s%s%s", formatName, broadAxis, modeName);
-            CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel));
-            CHECK_STATUS(gcl_set_kernelArgs(kernel, ic_non_max, ih_str[arrayDimMax],
-                iw_str[arrayDimMax], ih_off[arrayDimMax], iw_off[arrayDimMax], oh_str, ow_str,
-                oh_off, ow_off, inputMem[arrayDimMax]->mem, inputMem[1 - arrayDimMax]->mem, outbuf));
-            gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
+            inputMemType[1] = GCL_MEM_BUF;
+        }
+        bool axisSpeMode = false;
+        if (gclmemImaxDesc.memFormat == DF_NCHW && bw == 1) {
+            axisSpeMode = true;
+        }
+        if (gclmemImaxDesc.memFormat == DF_NCHWC4 && bc == 1) {
+            axisSpeMode = true;
+        }
+        CHECK_STATUS(
+            set_eltwise_broadcast_opt_mali(useNchwFormat, axisSpeMode, arrayDimMax, eltwiseMode,
+                activeMode, DT_F16, inputMemType.data(), outputMemType, kernelName, &kernelOpt));
+        CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
+        CHECK_STATUS(gcl_set_kernelArgs(kernel, mw_str, mh_str, bw_str, bh_str, ow_str, oh_str,
+            m_off, b_off, o_off, iw, ic, bw, bh, bc, bn, gs[0], gs[1], iMaxMem, broadMem, outbuf));
+        gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
 #ifdef _DEBUG
-            CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
-            handle->t_total += handle->t_execute;
+        CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
+        handle->t_total += handle->t_execute;
 #endif
-            return SUCCESS;
+    }
+    return SUCCESS;
+}
+
+EE eltwise_infer_forward_tmp_bytes_mali_fp16(
+    std::vector<TensorDesc> inputDesc, std::vector<GCLMemDesc> gclmemInputDesc, U32 *bytes)
+{
+    U32 size = 0;
+    U32 arrayDimMax;
+    bool sameDesc = eltwise_same_desc(inputDesc, &arrayDimMax);
+    if (!sameDesc) {
+        bool needTrans =
+            needTransInput(gclmemInputDesc[arrayDimMax], gclmemInputDesc[1 - arrayDimMax]);
+        if (needTrans) {
+            size = tensorNumBytes(inputDesc[1 - arrayDimMax]);
         }
     }
-    return NOT_SUPPORTED;
+    *bytes = size;
+    return SUCCESS;
 }
 
 EE eltwise_mali_fp16(GCLHandle_t handle,
     std::vector<TensorDesc> inputDesc,
     std::vector<void *> input,
+    GCLMem_t tmpbuf,
     TensorDesc outputDesc,
     GCLMem_t output,
     EltwiseParamSpec eltwiseDesc)
 {
     CHECK_STATUS(eltwise_checkpara_mali_fp16(inputDesc, input, outputDesc));
     CHECK_STATUS(fill_output_zero(handle, output, outputDesc));
-    CHECK_STATUS(eltwise_core_mali_fp16(handle, inputDesc, input, outputDesc, output, eltwiseDesc));
+    CHECK_STATUS(
+        eltwise_core_mali_fp16(handle, inputDesc, input, tmpbuf, outputDesc, output, eltwiseDesc));
     return SUCCESS;
 }

@@ -21,6 +21,24 @@
 #include "profiling.h"
 #include "parse_command.h"
 
+std::map<std::string, U8 *> transform_input(
+    std::map<std::string, TensorDesc> inputDescs, std::vector<Tensor> image, U8 *inputBinPtr)
+{
+    std::map<std::string, U8 *> input;
+    int index = 0;
+    for (auto iter : inputDescs) {
+        U8 *inputPtr;
+        if (inputBinPtr) {
+            inputPtr = inputBinPtr;
+        } else {
+            inputPtr = (U8 *)((CpuMemory *)image[index].get_memory())->get_ptr();
+        }
+        input[iter.first] = inputPtr;
+        index++;
+    }
+    return input;
+}
+
 int main(int argc, char *argv[])
 {
     UNI_TIME_INIT
@@ -81,10 +99,14 @@ int main(int argc, char *argv[])
     std::cout << "Prepare time = " << timeEnd - timeBegin << "ms" << std::endl;
 
     // load images
+    std::map<std::string, TensorDesc> inputDescs = cnn->get_input_desc();
     std::vector<std::vector<Tensor>> images;
     std::vector<TensorDesc> imageDescs;
     std::vector<std::string> imagePaths;
     U8 *inputBinPtr = nullptr;
+    for (auto iter : inputDescs) {
+        imageDescs.push_back(iter.second);
+    }
 #ifdef _USE_FP16
     if (parse_res.readInputBinName.second) {
         U32 size = getBinFileSize(imageDir, inputBinName);
@@ -92,11 +114,6 @@ int main(int argc, char *argv[])
         readF32BinToF16((F16 *)inputBinPtr, size / bytesOf(DT_F32), imageDir, inputBinName);
     } else {
 #endif
-        std::map<std::string, std::shared_ptr<Tensor>> inMap = cnn->get_inputs();
-        for (auto p : inMap) {
-            TensorDesc imageDesc = (*(p.second)).get_desc();
-            imageDescs.push_back(imageDesc);
-        }
         imagePaths = load_image_with_scale(imageDir, imageDescs, &images, imageFormat, scaleValue);
 #ifdef _USE_FP16
     }
@@ -104,57 +121,52 @@ int main(int argc, char *argv[])
 
     std::map<int, int> categoryNum;
     double totalTime = 0;
-    double max_time = -DBL_MAX;
+    double max_time = 0;
     double min_time = DBL_MAX;
     U32 imageIndex = 0;
     std::cout << "[RESULT]:" << std::endl;
     int top1Index = 0;
     int top1Match = 0;
     int topKMatch = 0;
-    U32 count = (images.size() > 0) ? images.size() : 1;
     UNI_INFO_LOG("WARM UP\n");
     for (int i = 0; i < 2; i++) {
+        if (images.size() > 0 || inputBinPtr != nullptr) {
+            std::map<std::string, U8 *> input = transform_input(inputDescs, images[0], inputBinPtr);
+            cnn->set_input_by_copy(input);
+        }
         cnn->run();
     }
-    cnn->saveAlgorithmMapToText(algorithmMapPath);
-#ifdef _USE_MALI
+#ifdef _USE_GPU
     if (strcmp(affinityPolicyName, "GPU") == 0) {
         gcl_finish(OCLContext::getInstance().handle.get());
     }
 #endif
     UNI_INFO_LOG("RUN\n");
-    for (imageIndex = 0; imageIndex < count;) {
+    for (imageIndex = 0; imageIndex < imagePaths.size();) {
         // stage3: set input
         std::map<std::string, std::shared_ptr<Tensor>> outMap;
-        double loop_max_time = -DBL_MAX;
+        double loop_max_time = 0;
         double loop_min_time = DBL_MAX;
         double loop_total_time = 0;
 
         U8 *res = nullptr;
         TensorDesc resDesc;
+        std::cout << imagePaths[imageIndex] << " : " << std::endl;
+        std::map<std::string, U8 *> input =
+            transform_input(inputDescs, images[imageIndex], inputBinPtr);
+
         for (int i = 0; i < loopTime; i++) {
             timeBegin = ut_time_ms();
-            auto curModelInputTensorNames = cnn->get_model_input_tensor_names();
-            for (int index = 0; index < (int)curModelInputTensorNames.size(); index++) {
-                U8 *inputPtr;
-                if (inputBinPtr) {
-                    inputPtr = inputBinPtr;
-                } else {
-                    std::cout << imagePaths[imageIndex] << " : " << std::endl;
-                    std::vector<Tensor> image = images[imageIndex];
-                    inputPtr = (U8 *)((CpuMemory *)image[index].get_memory())->get_ptr();
-                }
-                cnn->copy_to_named_input(curModelInputTensorNames[index], inputPtr);
-            }
+            cnn->set_input_by_copy(input);
             // stage4: run
             cnn->run();
 
             // stage5: process result
-            outMap = cnn->get_outputs();
+            outMap = cnn->get_output();
             Tensor result = *(outMap.begin()->second);
             auto mem = result.get_memory();
             if (mem->get_mem_type() == OCLMem) {
-#ifdef _USE_MALI
+#ifdef _USE_GPU
                 res = (U8 *)((OclMemory *)mem)->get_mapped_ptr();
 #endif
             } else {
@@ -164,12 +176,8 @@ int main(int argc, char *argv[])
             timeEnd = ut_time_ms();
             double time = (timeEnd - timeBegin);
             loop_total_time += time;
-            if (time < loop_min_time) {
-                loop_min_time = time;
-            }
-            if (time > loop_max_time) {
-                loop_max_time = time;
-            }
+            loop_min_time = UNI_MIN(loop_min_time, time);
+            loop_max_time = UNI_MAX(loop_max_time, time);
         }
         totalTime += (loop_total_time) / loopTime;
         if (loopTime > 1) {
@@ -205,13 +213,9 @@ int main(int argc, char *argv[])
             std::cout << std::endl;
         }
 
-        if ((timeEnd - timeBegin) >= max_time) {
-            max_time = (timeEnd - timeBegin);
-        }
-
-        if ((timeEnd - timeBegin) <= min_time) {
-            min_time = (timeEnd - timeBegin);
-        }
+        double time = timeEnd - timeBegin;
+        min_time = UNI_MIN(min_time, time);
+        max_time = UNI_MAX(max_time, time);
         if (categoryNum.count(top1Index) == 0) {
             categoryNum[top1Index] = 1;
         } else {
@@ -219,6 +223,8 @@ int main(int argc, char *argv[])
         }
         imageIndex++;
     }
+    imageIndex = UNI_MAX(imageIndex, 1);
+    cnn->saveAlgorithmMapToFile(algorithmMapPath);
 
     UNI_TIME_STATISTICS
 

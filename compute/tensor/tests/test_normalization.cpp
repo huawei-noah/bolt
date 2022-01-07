@@ -22,10 +22,6 @@ int normalizationTest(int argc, char **argv, DataType dt)
     U32 ic = atoi(argv[3]);
     U32 ih = atoi(argv[4]);
     U32 iw = atoi(argv[5]);
-    ArchInfo archInfo;
-    archInfo.arch = UT_ARCH;
-    ArchInfo archInfo_org;
-    archInfo_org.arch = CPU_GENERAL;
 
     DataFormat df = DF_MTK;
     Tensor inputTensor;
@@ -34,11 +30,11 @@ int normalizationTest(int argc, char **argv, DataType dt)
     inputTensor.alloc();
     U32 input_len = tensorNumElements(inputDesc);
     U8 *input = ut_input_v(input_len, dt, UT_INIT_RANDOM);
-    memcpy(get_ptr_from_tensor(inputTensor, UT_ARCH), input, tensorNumBytes(inputDesc));
+    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inputDesc));
 
     // set output
     Tensor outputTensor, outputTensorRef;
-    CHECK_STATUS(normalization_infer_output_size(&inputTensor, &outputTensor, &archInfo));
+    CHECK_STATUS(normalization_infer_output_size(&inputTensor, &outputTensor, &UT_CPU_ARCHINFO));
     outputTensor.alloc();
     TensorDesc outputDesc_ref = outputTensor.get_desc();
     outputTensorRef.resize(outputDesc_ref);
@@ -52,7 +48,7 @@ int normalizationTest(int argc, char **argv, DataType dt)
         alpha_list[i] = alpha;
         beta_list[i] = beta;
     }
-    Tensor alphaTensor, betaTensor;
+    Tensor alphaTensor, betaTensor, tmpTensor;
     TensorDesc alphaDesc, betaDesc;
     alphaDesc = tensor1d(dt, ic);
     betaDesc = tensor1d(dt, ic);
@@ -60,28 +56,28 @@ int normalizationTest(int argc, char **argv, DataType dt)
     betaTensor.resize(betaDesc);
     alphaTensor.alloc();
     betaTensor.alloc();
-    memcpy(get_ptr_from_tensor(alphaTensor, UT_ARCH), alpha_list, tensorNumBytes(alphaDesc));
-    memcpy(get_ptr_from_tensor(betaTensor, UT_ARCH), beta_list, tensorNumBytes(betaDesc));
+    memcpy(get_ptr_from_tensor(alphaTensor, CPU_GENERAL), alpha_list, tensorNumBytes(alphaDesc));
+    memcpy(get_ptr_from_tensor(betaTensor, CPU_GENERAL), beta_list, tensorNumBytes(betaDesc));
 
     if (UT_CHECK) {
-        CHECK_STATUS(
-            layer_normalization(inputTensor, alphaTensor, betaTensor, outputTensor, &archInfo));
+        CHECK_STATUS(layer_normalization(
+            inputTensor, alphaTensor, betaTensor, tmpTensor, outputTensor, &UT_CPU_ARCHINFO));
 
         // naive implement
         CHECK_STATUS(layer_normalization(
-            inputTensor, alphaTensor, betaTensor, outputTensorRef, &archInfo_org));
+            inputTensor, alphaTensor, betaTensor, tmpTensor, outputTensorRef, &UT_SERIAL_ARCHINFO));
 
         // check
-        ut_check_v(get_ptr_from_tensor(outputTensor, UT_ARCH),
-            get_ptr_from_tensor(outputTensorRef, UT_ARCH), output_len, dt, 0.000001, __FILE__,
+        ut_check_v(get_ptr_from_tensor(outputTensor, CPU_GENERAL),
+            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), output_len, dt, 0.000001, __FILE__,
             __LINE__);
     }
 
     // benchmark
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        CHECK_STATUS(
-            layer_normalization(inputTensor, alphaTensor, betaTensor, outputTensor, &archInfo));
+        CHECK_STATUS(layer_normalization(
+            inputTensor, alphaTensor, betaTensor, tmpTensor, outputTensor, &UT_CPU_ARCHINFO));
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;

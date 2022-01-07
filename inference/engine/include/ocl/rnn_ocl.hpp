@@ -33,39 +33,173 @@ public:
     inline void run_prepare()
     {
         OCLContext::getInstance().handle.get()->curOpName = this->get_name();
-        Tensor inputTensor = this->inputTensors[0];
-        Tensor outputTensor = this->outputTensors[0];
+        Tensor tmpTensor = Tensor(OCLMem);
+        std::vector<Tensor> tmpTensors(2, tmpTensor);
+        tmpTensors[0] = this->temp;
+        get_tmp_image(0, bytes + 1, &tmpTensors[1]);
+        CHECK_STATUS(rnn(this->inputTensors, this->weightTensors, this->biasTensors, this->p,
+            tmpTensors, this->outputTensors, &this->archInfo));
+    }
 
-        // NOTE: no clean tmp and output
-        CHECK_STATUS(rnn(inputTensor, this->weightTensors, this->biasTensors, this->p, this->temp,
-            outputTensor, &this->archInfo));
+    EE infer_forward_algorithm(std::shared_ptr<AlgorithmMap> algorithmMap) override
+    {
+        OCLContext::getInstance().handle.get()->kernelVec = &this->opKernelVec;
+        ((MaliPara_t)(this->archInfo.archPara))->forwardRunInfo->algorithm =
+            CONVOLUTION_ALGORITHM_NULL;
+        I32 algo[10];
+        U32 algoNum = (this->p.numProjection > 0) ? 10 : 7;
+        std::string name = this->name + std::to_string(get_type()); 
+        if (algorithmMap->getAlgorithmInfoFromMap(name, algo, algoNum)) {
+            this->runInfo.algorithm = (ConvolutionForwardAlgorithm)algo[0];
+            this->runInfo.best_h[0] = algo[1];
+            this->runInfo.best_c[0] = algo[2];
+            this->runInfo.best_k[0] = algo[3];
+            this->runInfo.best_h[1] = algo[4];
+            this->runInfo.best_c[1] = algo[5];
+            this->runInfo.best_k[1] = algo[6];
+            if (algoNum == 10) {
+                this->runInfo.best_h[2] = algo[7];
+                this->runInfo.best_c[2] = algo[8];
+                this->runInfo.best_k[2] = algo[9];
+            }
+        } else {
+            CHECK_STATUS(rnn_infer_forward_algorithm(this->inputTensors[0], this->weightTensors,
+                this->biasTensors, this->p, this->outputTensors[0], &this->archInfo));
+            algo[0] = this->runInfo.algorithm;
+            algo[1] = this->runInfo.best_h[0];
+            algo[2] = this->runInfo.best_c[0];
+            algo[3] = this->runInfo.best_k[0];
+            algo[4] = this->runInfo.best_h[1];
+            algo[5] = this->runInfo.best_c[1];
+            algo[6] = this->runInfo.best_k[1];
+            if (algoNum == 10) {
+                algo[7] = this->runInfo.best_h[2];
+                algo[8] = this->runInfo.best_c[2];
+                algo[9] = this->runInfo.best_k[2];
+            }
+            algorithmMap->setAlgorithmInfoToMap(name, algo, algoNum);
+        }
+        return SUCCESS;
     }
 
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
         this->needSetKernelVec = true;
-        return NOT_SUPPORTED;
-        TensorDesc inDim = inTensors[0]->get_desc();
-
-        DataType dt;
-        DataFormat df;
-        U32 iB, inT, iX;
-        CHECK_STATUS(tensor3dGet(inDim, &dt, &df, &iB, &inT, &iX));
-        this->xDim = iX;
-        CHECK_STATUS(rnn_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo));
+        TensorDesc inputDesc = inTensors[0]->get_desc();
+        this->xDim = inputDesc.dims[inputDesc.nDims - 3];
+        for (U32 i = 0; i < inputDesc.nDims - 3; ++i) {
+            xDim *= inputDesc.dims[i];
+        }
+        CHECK_STATUS(rnn_infer_output_size(inTensors, this->p, outTensors, &this->archInfo));
         return SUCCESS;
     }
 
     U32 infer_tmp_memory_size() override
     {
-        U32 bytes = 0;
+        for (U32 i = 0; i < 4; i++) {
+            bytes[i] = 0;
+        }
         CHECK_STATUS(rnn_infer_forward_tmp_bytes(this->inputTensors[0], this->weightTensors[0],
-            this->outputTensors[0], this->p, &bytes, &this->archInfo));
-        return bytes;
+            this->outputTensors[0], this->p, bytes, &this->archInfo));
+        add_tmp_image(0, bytes + 1);
+        return bytes[0];
     }
 
+    EE alloc_wtm_memory() override
+    {
+        TensorDesc ftmDesc[3];
+        CHECK_STATUS(
+            rnn_transform_filter_bytes(this->weightTensors, this->p, ftmDesc, &this->archInfo));
+        this->wtmType = OCLMem;
+        this->wtm = std::shared_ptr<Tensor>(new Tensor(this->wtmType));
+        this->wtm->resize(ftmDesc[0]);
+        CHECK_STATUS(set_wtm_image(ftmDesc[0]));
+        this->wtm->alloc();
+        this->wtm_gemv = std::shared_ptr<Tensor>(new Tensor(this->wtmType));
+        this->wtm_gemv->resize(ftmDesc[1]);
+        this->wtm_gemv->alloc();
+        if (this->p.numProjection > 0) {
+            this->wtm_pro = std::shared_ptr<Tensor>(new Tensor(this->wtmType));
+            this->wtm_pro->resize(ftmDesc[2]);
+            this->wtm_pro->alloc();
+        }
+
+        if (this->p.biDirection) {
+            this->wtm_bi = std::shared_ptr<Tensor>(new Tensor(this->wtmType));
+            this->wtm_bi->resize(ftmDesc[0]);
+            CHECK_STATUS(set_wtm_image(ftmDesc[0], &wtm_bi));
+            this->wtm_bi->alloc();
+            this->wtm_gemv_bi = std::shared_ptr<Tensor>(new Tensor(this->wtmType));
+            this->wtm_gemv_bi->resize(ftmDesc[1]);
+            this->wtm_gemv_bi->alloc();
+            if (this->p.numProjection > 0) {
+                this->wtm_pro_bi = std::shared_ptr<Tensor>(new Tensor(this->wtmType));
+                this->wtm_pro_bi->resize(ftmDesc[2]);
+                this->wtm_pro_bi->alloc();
+            }
+        }
+        return SUCCESS;
+    }
+
+    EE transform_filter() override
+    {
+        CHECK_STATUS(alloc_wtm_memory());
+        std::vector<Tensor> filterTensors;
+        std::vector<Tensor *> ftmTensors;
+        U32 weightNum = (this->p.numProjection > 0) ? 2 : 1;
+        U32 directions = (this->p.biDirection) ? 2 : 1;
+        for (U32 i = 0; i < directions; i++) {
+            for (U32 j = 0; j < weightNum; j++) {
+                filterTensors.push_back(this->weightTensors[i * weightNum + j]);
+            }
+        }
+
+        ftmTensors.push_back(this->wtm.get());
+        ftmTensors.push_back(this->wtm_gemv.get());
+        if (this->p.numProjection > 0) {
+            ftmTensors.push_back(this->wtm_pro.get());
+        }
+        if (this->p.biDirection) {
+            ftmTensors.push_back(this->wtm_bi.get());
+            ftmTensors.push_back(this->wtm_gemv_bi.get());
+            if (this->p.numProjection > 0) {
+                ftmTensors.push_back(this->wtm_pro_bi.get());
+            }
+        }
+
+        CHECK_STATUS(
+            rnn_transform_filter(filterTensors, this->p, this->temp, ftmTensors, &this->archInfo));
+
+        U32 newWeightTensorsSize = (weightNum + 1) * directions;
+        U32 weightNumCount = 0;
+        this->weightTensors.resize(newWeightTensorsSize);
+        this->weightTensors[weightNumCount] = *this->wtm.get();
+        weightNumCount++;
+        this->weightTensors[weightNumCount] = *this->wtm_gemv.get();
+        weightNumCount++;
+        if (this->p.numProjection > 0) {
+            this->weightTensors[weightNumCount] = (*this->wtm_pro.get());
+            weightNumCount++;
+        }
+        if (this->p.biDirection) {
+            this->weightTensors[weightNumCount] = *this->wtm_bi.get();
+            weightNumCount++;
+            this->weightTensors[weightNumCount] = *this->wtm_gemv_bi.get();
+            weightNumCount++;
+            if (this->p.numProjection > 0) {
+                this->weightTensors[weightNumCount] = (*this->wtm_pro_bi.get());
+                weightNumCount++;
+            }
+        }
+        return SUCCESS;
+    }
     REGISTER_OCL_OPERATOR_RUN
+
+private:
+    std::shared_ptr<Tensor> wtm_gemv;
+    std::shared_ptr<Tensor> wtm_gemv_bi;
+    U32 bytes[4];
 };
 
 #endif  // _RNN_OCL_H

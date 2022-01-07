@@ -12,38 +12,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "sys.h"
-#include "types.h"
+
 #include "tensor_desc.h"
 #include "error.h"
 #include "gpu/mali/tensor_computing_mali.h"
 #include "gpu/mali/fp16/prelu_mali_fp16.h"
-
-EE prelu_infer_output_size_mali(TensorDesc inputDesc,
-    TensorDesc *outputDesc,
-    GCLMemDesc_t gclmemInputDesc,
-    GCLMemDesc_t gclmemOutputDesc)
-{
-    /*tensorDesc record cpu org data format info*/
-    /*gclmemDesc record gpu trans data format info*/
-
-    DataType idt;
-    DataFormat idf;
-    U32 iw, ih, ic, in;
-    tensorSelectGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw);
-
-    if (idf == DF_NCHW) {
-        if (outputDesc) {
-            *outputDesc = inputDesc;
-        }
-        CHECK_STATUS(infer_gclmem_desc_ncwhc4(
-            iw, ih, ic, 0, 0, iw, ih, ic, idt, idt, gclmemInputDesc, gclmemOutputDesc));
-        if (gclmemInputDesc && gclmemOutputDesc) {
-            *gclmemOutputDesc = *gclmemInputDesc;  // the input and output mem maybe the same
-        }
-        return SUCCESS;
-    }
-    return NOT_SUPPORTED;
-}
 
 inline EE prelu_checkpara_mali(GCLHandle_t handle,
     TensorDesc inputDesc,
@@ -55,7 +28,7 @@ inline EE prelu_checkpara_mali(GCLHandle_t handle,
     if (handle == nullptr || nullptr == weight || nullptr == input || nullptr == output) {
         return NULL_POINTER;
     }
-    if (input->desc.memFormat != output->desc.memFormat || input->desc.memFormat != DF_NCWHC4) {
+    if (input->desc.memFormat != output->desc.memFormat) {
         return NOT_SUPPORTED;
     }
     return SUCCESS;

@@ -11,13 +11,8 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifdef _USE_FP16
-#include "sys.h"
-#include "types.h"
-#include "tensor_desc.h"
-#include "error.h"
-
 #include "cpu/arm/bnn/convolution_xnor.h"
+#include "cpu/arm/transform_functions.h"
 
 EE convolution_xnor_A76(TensorDesc inputDesc,
     const F16 *input,
@@ -73,44 +68,9 @@ EE convolution_xnor_A76(TensorDesc inputDesc,
     BIN8 *inArray_pad;
 
     for (U32 n = 0; n < in; n++) {
-        const F16 *in = input + n * ic * ih * iw * 8;
-        for (U32 i = 0; i < ic * ih * iw; i++) {
-            BIN8 temp = 0;
-            for (U32 j = 0; j < 8; j++) {
-                if (in[i * 8 + j] >= 0) {
-                    temp |= (1 << (7 - j));  // set
-                }
-            }
-            inArray[i] = temp;
-        }
-
-        if (paddingT == 0 && paddingB == 0 && paddingL == 0 && paddingR == 0) {
-            inArray_pad = inArray + n * ic * ih * iw;  // ic has been divided by 8
-        } else {
-            // copy input into a input with padding
-            inArray_pad = (BIN8 *)tmp;
-            BIN8 *inArray_pad_mov = inArray_pad;
-            BIN8 *inArray_mov = inArray + n * ic * ih * iw;
-            for (U32 c = 0; c < ic; c++) {  // All divide by 8
-                for (U32 h = 0; h < paddingT; h++) {
-                    memset(inArray_pad_mov, 0, iw_pad * bytesOf(DT_BIN11));
-                    inArray_pad_mov += iw_pad;
-                }
-                for (U32 h = paddingT; h < ih_pad - paddingB; h++) {
-                    memset(inArray_pad_mov, 0, paddingL * bytesOf(DT_BIN11));
-                    inArray_pad_mov += paddingL;
-                    memcpy(inArray_pad_mov, inArray_mov, iw * bytesOf(DT_BIN11));
-                    inArray_pad_mov += iw;
-                    inArray_mov += iw;
-                    memset(inArray_pad_mov, 0, paddingR * bytesOf(DT_BIN11));
-                    inArray_pad_mov += paddingR;
-                }
-                for (U32 h = ih_pad - paddingB; h < ih_pad; h++) {
-                    memset(inArray_pad_mov, 0, iw_pad * bytesOf(DT_BIN11));
-                    inArray_pad_mov += iw_pad;
-                }
-            }
-        }
+        transformFromHalf(DT_BIN11, input + n * ic * ih * iw * 8, inArray, ic * ih * iw * 8);
+        inArray_pad = convolution_input_padding_per_channel<BIN8, 1>(
+            n, ic, 1, ih, iw, convParamSpec, inArray, (BIN8 *)tmp);
         // ohow / 8
         short base_s = fh * fw * ic * 8;  // For xnorNet, actual_sum = base_s - 2 * noOf1sFromXOR
         short base_v[8];                  // Assume the base can be represented as int16
@@ -146,8 +106,8 @@ EE convolution_xnor_A76(TensorDesc inputDesc,
             }
 
             // compute
-            for (U32 o = 0; o < oc; o +=
-                 2) {  // oc should be multiple of 32. It will at least be multiple of 16 in the future.
+            // oc should be multiple of 32. It will at least be multiple of 16 in the future.
+            for (U32 o = 0; o < oc; o += 2) {
                 BIN8 *in_hw0 = in_order;
                 const BIN8 *f_o0c0 = filterArray + o * 8 * fh * fw * ic;  // ic has been divided by 8
                 F16 *out_o0hw0 = outArray + n * oc * ohow * 8 + o * ohow * 8 + hw * 8;
@@ -476,8 +436,8 @@ EE convolution_xnor_A76(TensorDesc inputDesc,
             }
 
             // compute
-            for (U32 o = 0; o < oc; o +=
-                 2) {  // oc should be multiple of 32. It will at least be multiple of 16 in the future.
+            // oc should be multiple of 32. It will at least be multiple of 16 in the future.
+            for (U32 o = 0; o < oc; o += 2) {
                 BIN8 *in_hw0 = in_order;
                 const BIN8 *f_o0c0 = filterArray + o * 8 * fh * fw * ic;  // ic has been divided by 8
                 F16 *out_o0hw0 = outArray + n * oc * ohow * 8 + o * ohow * 8 + hw * 8;
@@ -740,18 +700,11 @@ EE convolution_xnor_A76(TensorDesc inputDesc,
                         sum[1] = vmlal_u8(sum[1], sub1[1], v2);
                     }
                 }
-                short temp[16];
-                vst1q_u16((uint16_t *)temp, sum[0]);
-                vst1q_u16((uint16_t *)(temp + 8), sum[1]);
                 int16x8_t base_abs = vdupq_n_s16(base_s);
-                int16x8_t ssum[2];
-                ssum[0] = vld1q_s16(temp);
-                ssum[1] = vld1q_s16(temp + 8);
-                ssum[0] = vsubq_s16(base_abs, ssum[0]);
-                ssum[1] = vsubq_s16(base_abs, ssum[1]);
-
-                float16x8_t res_o0 = vcvtq_f16_s16(ssum[0]);
-                float16x8_t res_o1 = vcvtq_f16_s16(ssum[1]);
+                float16x8_t res_o0 =
+                    vcvtq_f16_s16(vsubq_s16(base_abs, vreinterpretq_s16_u16(sum[0])));
+                float16x8_t res_o1 =
+                    vcvtq_f16_s16(vsubq_s16(base_abs, vreinterpretq_s16_u16(sum[1])));
                 float16x8_t scale_o0 = vld1q_f16(s0);
                 s0 += 16;
                 float16x8_t scale_o1 = vld1q_f16(s1);
@@ -760,10 +713,8 @@ EE convolution_xnor_A76(TensorDesc inputDesc,
                 b0 += 16;
                 float16x8_t bias_o1 = vld1q_f16(b1);
                 b1 += 16;
-                res_o0 = vmulq_f16(res_o0, scale_o0);
-                res_o1 = vmulq_f16(res_o1, scale_o1);
-                res_o0 = vaddq_f16(res_o0, bias_o0);
-                res_o1 = vaddq_f16(res_o1, bias_o1);
+                res_o0 = vfmaq_f16(bias_o0, res_o0, scale_o0);
+                res_o1 = vfmaq_f16(bias_o1, res_o1, scale_o1);
                 vst1q_f16(out_o0hw0, res_o0);
                 vst1q_f16(out_o1hw0, res_o1);
             }
@@ -771,4 +722,3 @@ EE convolution_xnor_A76(TensorDesc inputDesc,
     }
     return SUCCESS;
 }
-#endif

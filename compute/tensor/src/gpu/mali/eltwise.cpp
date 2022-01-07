@@ -12,73 +12,41 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "sys.h"
-#include "types.h"
+
 #include "tensor_desc.h"
 #include "error.h"
 #include "gpu/mali/tensor_computing_mali.h"
 #include "gpu/mali/fp16/eltwise_mali_fp16.h"
 
-EE eltwise_infer_output_size_mali(std::vector<TensorDesc> inputDesc,
+EE eltwise_padding_input_mali(std::vector<TensorDesc> inputDesc,
     TensorDesc *outputDesc,
-    GCLMemDesc_t gclmemInputDesc,
-    GCLMemDesc_t gclmemOutputDesc)
+    std::vector<OclMemory *> inputMems,
+    OclMemory *outputMem)
 {
-    /*tensorDesc record cpu org data format info*/
-    /*gclmemDesc record gpu trans data format info*/
-    if (outputDesc == nullptr || gclmemInputDesc == nullptr || gclmemOutputDesc == nullptr) {
+    if (outputDesc == nullptr || outputMem == nullptr) {
         CHECK_STATUS(NULL_POINTER);
     }
     U32 arrayDimMax = 0;
     bool sameDesc = eltwise_same_desc(inputDesc, &arrayDimMax);
     *outputDesc = inputDesc[arrayDimMax];
 
-    DataType idt;
-    DataFormat idf;
-    U32 iw, ih, ic, in, it;
-    tensorSelectGet(inputDesc[arrayDimMax], &idt, &idf, &in, &ic, &ih, &iw, &it);
-
     if (sameDesc) {
-        U32 size = inputDesc.size();
         bool useNCHW = true;
-        for (U32 i = 0; i < size; i++) {
-            if (gclmemInputDesc[i].memFormat != DF_NCHW && gclmemInputDesc[i].byteSize != 0) {
+        for (U32 i = 0; i < inputDesc.size(); i++) {
+            if (inputDesc[i].df == DF_NCHWC4) {
                 useNCHW = false;
+                break;
             }
         }
-        if (useNCHW) {
-            CHECK_STATUS(infer_gclmem_desc_nchw_3d(
-                0, 0, 0, 0, 0, 0, 0, iw, ih, ic, it, in, idt, idt, NULL, gclmemOutputDesc));
-            for (U32 i = 0; i < size; i++) {
-                CHECK_STATUS(infer_gclmem_desc_nchw_3d(
-                    iw, ih, ic, it, in, 0, 0, 0, 0, 0, 0, 0, idt, idt, &gclmemInputDesc[i], NULL));
-            }
-        } else {
-            CHECK_STATUS(infer_gclmem_desc_ncwhc4_3d(
-                0, 0, 0, 0, 0, 0, 0, iw, ih, ic, it, in, idt, idt, NULL, gclmemOutputDesc));
-            for (U32 i = 0; i < size; i++) {
-                CHECK_STATUS(infer_gclmem_desc_ncwhc4_3d(
-                    iw, ih, ic, it, in, 0, 0, 0, 0, 0, 0, 0, idt, idt, &gclmemInputDesc[i], NULL));
-            }
+        if (!useNCHW) {
+            (*outputDesc).df = DF_NCHWC4;
         }
-        return SUCCESS;
     } else {
         if (inputDesc.size() > 2) {
             CHECK_STATUS(NOT_SUPPORTED);
         }
-        CHECK_STATUS(infer_gclmem_desc_ncwhc4_3d(iw, ih, ic, it, in, 0, 0, iw, ih, ic, it, in, idt,
-            idt, &gclmemInputDesc[arrayDimMax], gclmemOutputDesc));
-        tensorSelectGet(inputDesc[1 - arrayDimMax], &idt, NULL, &in, &ic, &ih, &iw, &it);
-        if (gclmemInputDesc[1 - arrayDimMax].byteSize == 0 ||
-            gclmemInputDesc[1 - arrayDimMax].memFormat == DF_NCHW) {
-            CHECK_STATUS(infer_gclmem_desc_nchw_3d(iw, ih, ic, it, in, 0, 0, 0, 0, 0, 0, 0, idt,
-                idt, &gclmemInputDesc[1 - arrayDimMax], NULL));
-        } else {
-            CHECK_STATUS(infer_gclmem_desc_ncwhc4_3d(iw, ih, ic, it, in, 0, 0, 0, 0, 0, 0, 0, idt,
-                idt, &gclmemInputDesc[1 - arrayDimMax], NULL));
-        }
-        return SUCCESS;
     }
-    return NOT_SUPPORTED;
+    return SUCCESS;
 }
 
 inline EE eltwise_checkpara_mali(GCLHandle_t handle,
@@ -89,12 +57,12 @@ inline EE eltwise_checkpara_mali(GCLHandle_t handle,
     GCLMem_t output)
 {
     if (handle == nullptr || nullptr == output) {
-        return NULL_POINTER;
+        CHECK_STATUS(NULL_POINTER);
     }
     for (auto it : input) {
         GCLMem_t ptr = (GCLMem_t)it;
         if (ptr == nullptr) {
-            return NULL_POINTER;
+            CHECK_STATUS(NULL_POINTER);
         }
     }
     EltwiseMode eltwiseMode = eltwiseDesc.elt_mode;
@@ -103,16 +71,15 @@ inline EE eltwise_checkpara_mali(GCLHandle_t handle,
     if (sameDesc) {
         for (auto it : input) {
             if (((GCLMem_t)(it))->desc.memFormat != output->desc.memFormat) {
-                return NOT_SUPPORTED;
+                CHECK_STATUS(NOT_SUPPORTED);
             }
         }
         for (auto it : inputDesc) {
-            if (it.nDims != outputDesc.nDims) {
-                return NOT_SUPPORTED;
-            }
-            for (U32 i = 0; i < it.nDims; i++) {
-                if (it.dims[i] != outputDesc.dims[i]) {
-                    return NOT_SUPPORTED;
+            U32 nDims = outputDesc.nDims;
+            for (U32 i = 0; i < nDims; i++) {
+                U32 dv = (i < it.nDims) ? it.dims[i] : 1;
+                if (dv != outputDesc.dims[i]) {
+                    CHECK_STATUS(NOT_MATCH);
                 }
             }
         }
@@ -120,17 +87,39 @@ inline EE eltwise_checkpara_mali(GCLHandle_t handle,
         if (inputDesc.size() > 2) {
             CHECK_STATUS(NOT_SUPPORTED);
         }
+        GCLMem_t iMaxInput = (GCLMem_t)input[arrayDimMax];
+        if (iMaxInput->desc.memFormat != output->desc.memFormat) {
+            CHECK_STATUS(NOT_SUPPORTED);
+        }
     }
-    if (eltwiseMode != ELTWISE_SUM && eltwiseMode != ELTWISE_MAX && eltwiseMode != ELTWISE_PROD) {
-        return NOT_SUPPORTED;
+    if (eltwiseMode != ELTWISE_MAX && eltwiseMode != ELTWISE_MIN && eltwiseMode != ELTWISE_SUM &&
+        eltwiseMode != ELTWISE_SUB && eltwiseMode != ELTWISE_PROD && eltwiseMode != ELTWISE_DIV) {
+        CHECK_STATUS(NOT_SUPPORTED);
     }
     return SUCCESS;
+}
+
+EE eltwise_infer_forward_tmp_bytes_mali(
+    std::vector<TensorDesc> inputDesc, std::vector<GCLMemDesc> gclmemInputDesc, U32 *bytes)
+{
+    EE ret = SUCCESS;
+    switch (inputDesc[0].dt) {
+        case DT_F16: {
+            ret = eltwise_infer_forward_tmp_bytes_mali_fp16(inputDesc, gclmemInputDesc, bytes);
+            break;
+        }
+        default:
+            ret = NOT_SUPPORTED;
+            break;
+    }
+    return ret;
 }
 
 EE eltwise_mali(GCLHandle_t handle,
     std::vector<TensorDesc> inputDesc,
     std::vector<void *> input,
     EltwiseParamSpec eltwiseDesc,
+    GCLMem_t tmpbuf,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
@@ -138,7 +127,8 @@ EE eltwise_mali(GCLHandle_t handle,
     CHECK_STATUS(eltwise_checkpara_mali(handle, inputDesc, input, eltwiseDesc, outputDesc, output));
     switch (inputDesc[0].dt) {
         case DT_F16: {
-            ret = eltwise_mali_fp16(handle, inputDesc, input, outputDesc, output, eltwiseDesc);
+            ret = eltwise_mali_fp16(
+                handle, inputDesc, input, tmpbuf, outputDesc, output, eltwiseDesc);
             break;
         }
         default:

@@ -14,9 +14,8 @@
 #ifndef _H_MVM_COMMON
 #define _H_MVM_COMMON
 
-#include <arm_neon.h>
-#include "types.h"
 #include "arm_neon_expand.h"
+#include "data_type.h"
 
 inline void mvm_row_tail(U32 N, U32 K, F16 *matrix, F16 *vector, F16 *result)
 {
@@ -119,10 +118,10 @@ inline void mvm_col_kernel_4x8(U32 N, U32 K, F16 *matrix, F16 *vector, F16 *resu
                  "add x25, x24, %6\n"
                  "add x26, x25, %6\n"
                  "add x27, x26, %6\n"
-                 "mov x29, x21\n"
+                 "mov x2, x21\n"
 
                  "00:\n"
-                 "cmp x20, x29\n"
+                 "cmp x20, x2\n"
                  "bge 01f\n"
                  "ldr h0, [x20], 2\n"
                  "dup v0.8h, v0.h[0]\n"
@@ -171,7 +170,7 @@ inline void mvm_col_kernel_4x8(U32 N, U32 K, F16 *matrix, F16 *vector, F16 *resu
                  : "+r"(vector), "+r"(matrix), "+r"(result), "+r"(result_end8), "+r"(result_end)
                  : "r"((I64)K * 2), "r"((I64)K * N * 2)
                  : "memory", "cc", "x20", "x21", "x22", "x23", "x24", "x25", "x26", "x27", "x28",
-                 "x29", "v0", "v1", "v2", "v3", "v4", "v8", "v9", "v10", "v11");
+                 "x2", "v0", "v1", "v2", "v3", "v4", "v8", "v9", "v10", "v11");
 }
 
 inline void mvm_row_kernel(U32 N, U32 K, F16 *matrix, F16 *vector, F16 *result)

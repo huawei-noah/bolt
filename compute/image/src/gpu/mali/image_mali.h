@@ -16,15 +16,18 @@
 
 #include "image.h"
 
-EE resize_infer_output_size_mali(TensorDesc inputDesc,
-    ResizeDesc resizeDesc,
-    void *params,
-    TensorDesc *outputDesc,
-    U32 *outputBytes,
-    GCLMemDesc_t gclmemInputDesc,
-    GCLMemDesc_t gclmemOutputDesc);
+EE resize_bilinear_mali(GCLHandle_t handle,
+    TensorDesc inputDesc,
+    GCLMem_t input,
+    TensorDesc outputDesc,
+    GCLMem_t tmpbuf,
+    GCLMem_t output);
 
-EE resize_bilinear_mali(
-    GCLHandle_t handle, TensorDesc inputDesc, GCLMem_t input, TensorDesc outputDesc, GCLMem_t output);
-
+EE resize_nearest_mali(GCLHandle_t handle,
+    TensorDesc inputDesc,
+    GCLMem_t input,
+    ResizeParamSpec p,
+    TensorDesc outputDesc,
+    GCLMem_t tmpbuf,
+    GCLMem_t output);
 #endif

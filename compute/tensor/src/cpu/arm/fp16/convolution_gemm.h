@@ -15,8 +15,8 @@
 #define _H_CONVOLUTION_GEMM
 
 #include "sys.h"
-#include "types.h"
-#include "error.h"
+#include "tensor_desc.h"
+#include "parameter_spec.h"
 
 EE convolution_gemm_A55(TensorDesc inputDesc,
     F16 *inArray,

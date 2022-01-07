@@ -28,7 +28,7 @@ EE depthwise_convolution_general(TensorDesc inputDesc,
 {
     TensorDesc blankTensorDesc;
     ActivationParamSpec blankActivationParamSpec;
-    return depthwise_pointwise_convolution_general(inputDesc, input, filterDesc, filter,
+    return depthwise_pointwise_convolution_general(inputDesc, input, nullptr, filterDesc, filter,
         blankTensorDesc, nullptr, convParamSpec, blankTensorDesc, bias, biasDesc, nullptr, tmpBytes,
         tmp, outputDesc, output, depthwiseActivationParamSpec, blankActivationParamSpec);
 }

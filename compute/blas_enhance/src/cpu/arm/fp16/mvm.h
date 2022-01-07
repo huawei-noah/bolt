@@ -14,8 +14,6 @@
 #ifndef _H_MVM
 #define _H_MVM
 
-#include "types.h"
-
 void mvm_A55(U32 row, U32 col, bool transpose, F16 *matrix, F16 *vector, F16 *result);
 
 void mvm_A76(U32 row, U32 col, bool transpose, F16 *matrix, F16 *vector, F16 *result);

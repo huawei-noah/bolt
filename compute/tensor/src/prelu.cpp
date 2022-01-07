@@ -18,7 +18,10 @@
 #ifdef _USE_NEON
 #include "cpu/arm/tensor_computing_arm.h"
 #endif
-#ifdef _USE_MALI
+#ifdef _USE_X86
+#include "cpu/x86/tensor_computing_x86.h"
+#endif
+#ifdef _USE_GPU
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
 
@@ -26,9 +29,6 @@ inline EE prelu_infer_output_size_cpu(TensorDesc inputDesc, TensorDesc *outputDe
 {
     if (nullptr == outputDesc) {
         CHECK_STATUS(NULL_POINTER);
-    }
-    if (inputDesc.df != DF_NCHWC8) {
-        CHECK_STATUS(NOT_SUPPORTED);
     }
     *outputDesc = inputDesc;
     return SUCCESS;
@@ -44,21 +44,9 @@ EE prelu_infer_output_size(Tensor *inputTensor, Tensor *outputTensor, ArchInfo_t
     }
     TensorDesc inputDesc = inputTensor->get_desc();
     TensorDesc outputDesc = outputTensor->get_desc();
-    EE ret = NOT_SUPPORTED;
-    if (IS_MALI_GPU(archInfo->arch)) {
-#ifdef _USE_MALI
-        GCLMemDesc gclmemInputDesc = ocl_get_desc(*inputTensor);
-        GCLMemDesc gclmemOutputDesc = ocl_get_desc(*outputTensor);
-        ret = prelu_infer_output_size_mali(
-            inputDesc, &outputDesc, &gclmemInputDesc, &gclmemOutputDesc);
-        ocl_set_desc(inputTensor, gclmemInputDesc);
-        ocl_set_desc(outputTensor, gclmemOutputDesc);
-#endif
-    } else {
-        ret = prelu_infer_output_size_cpu(inputDesc, &outputDesc);
-    }
+    CHECK_STATUS(prelu_infer_output_size_cpu(inputDesc, &outputDesc));
     outputTensor->resize(outputDesc);
-    return ret;
+    return SUCCESS;
 }
 
 EE prelu(Tensor inputTensor,
@@ -80,16 +68,15 @@ EE prelu(Tensor inputTensor,
         ret = prelu_general(inputDesc, input, weight, preluDesc, outputDesc, output);
 #endif
 #ifdef _USE_X86
-    } else if (IS_X86_AVX2(arch)) {
-        UNI_WARNING_LOG("The x86 prelu operator is not optimized now.\n");
-        ret = prelu_general(inputDesc, input, weight, preluDesc, outputDesc, output);
+    } else if (IS_X86(arch)) {
+        ret = prelu_x86(inputDesc, input, weight, preluDesc, outputDesc, output);
 #endif
 #ifdef _USE_NEON
     } else if (IS_ARM(arch)) {
         ret = prelu_arm(inputDesc, input, weight, preluDesc, outputDesc, output);
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
         ret = prelu_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc, (GCLMem_t)input,
             (GCLMem_t)weight, preluDesc, outputDesc, (GCLMem_t)output);
 #endif

@@ -13,14 +13,22 @@
 
 #ifndef _SLICE_MALI_FP16
 #define _SLICE_MALI_FP16
-#include "sys.h"
-#include "types.h"
-#include "tensor_computing_type.h"
+
+#include "gpu/mali/fp16/tensor_computing_fp16.h"
+
+bool slice_axis_c_align4(U32 target_axis, std::vector<TensorDesc> outputDesc);
+
+EE slice_infer_forward_tmp_bytes_mali_fp16(TensorDesc inputDesc,
+    GCLMemDesc gclmemInputDesc,
+    SliceParamSpec p,
+    std::vector<TensorDesc> outputDesc,
+    U32 *bytes);
 
 EE slice_mali_fp16(GCLHandle_t handle,
     TensorDesc inputDesc,
     GCLMem_t input,
     SliceParamSpec p,
+    GCLMem_t tmpbuf,
     std::vector<TensorDesc> outputDesc,
     std::vector<void *> *output);
 #endif

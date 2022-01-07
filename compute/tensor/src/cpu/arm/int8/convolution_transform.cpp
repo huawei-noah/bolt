@@ -11,15 +11,11 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifdef _USE_INT8
 #include "cpu/arm/int8/tensor_computing_int8.h"
+#include "cpu/arm/transform_functions.h"
+#ifdef _USE_FP16
 #include "cpu/arm/fp16/convolution_winograd_transform.h"
-
-#include <string.h>
-#include "types.h"
-#include "tensor_desc.h"
-#include "error.h"
-#include "tensor_computing.h"
+#endif
 
 inline EE convolution_transform_filter_kernel_int8(TensorDesc filterDesc,
     const void *filter,
@@ -44,19 +40,33 @@ inline EE convolution_transform_filter_kernel_int8(TensorDesc filterDesc,
     }
     EE ret = SUCCESS;
     switch (ftmDataFormat) {
+        case DF_NHWCN8: {
+            ret = transformNCHWToNHWCNx<INT8, 8>(
+                filterDesc, (INT8 *)filter, ftmDataFormat, ftmDesc, (INT8 *)ftm);
+            break;
+        }
         case DF_NCHWN8C4: {
             INT8 *filterArray = (INT8 *)filter;
             INT8 *ftmArray = (INT8 *)ftm;
             U32 oc = fn / 8;
-            U32 fc_quad = fc / 4;
+#ifdef _USE_FP16
+            U32 fc_align = 4;
+#else
+            U32 fc_align = 1;
+#endif
+            U32 fc_quad = fc / fc_align;
             for (U32 o = 0; o < oc; o++) {
                 for (U32 c = 0; c < fc_quad; c++) {
                     for (U32 hw = 0; hw < fh * fw; hw++) {
                         for (U32 o8 = 0; o8 < 8; o8++) {
-                            for (U32 c4 = 0; c4 < 4; c4++) {
-                                ftmArray[o * fh * fw * fc * 8 + c * fh * fw * 32 + hw * 32 +
-                                    o8 * 4 + c4] = filterArray[(o * 8 + o8) * fc * fh * fw +
-                                    (c * 4 + c4) * fh * fw + hw];
+                            for (U32 c4 = 0; c4 < fc_align; c4++) {
+                                U32 dst =
+                                    (((o * fc_quad + c) * fh * fw + hw) * 8 + o8) * fc_align + c4;
+                                U32 src = ((o * 8 + o8) * fc + (c * fc_align + c4)) * fh * fw + hw;
+                                ftmArray[dst] = filterArray[src];
+                                //ftmArray[o * fh * fw * fc * 8 + c * fh * fw * 32 + hw * 32 +
+                                //    o8 * fc_align + c4] = filterArray[(o * 8 + o8) * fc * fh * fw +
+                                //    (c * fc_align + c4) * fh * fw + hw];
                             }
                         }
                     }
@@ -64,6 +74,7 @@ inline EE convolution_transform_filter_kernel_int8(TensorDesc filterDesc,
             }
             break;
         }
+#ifdef _USE_FP16
         case DF_HWNCN8C4: {
             F16 *filterArray = (F16 *)filter;
             F16 *ftmArray = (F16 *)ftm;
@@ -146,6 +157,7 @@ inline EE convolution_transform_filter_kernel_int8(TensorDesc filterDesc,
             fw = 6;
             break;
         }
+#endif
         default:
             ret = NOT_SUPPORTED;
             break;
@@ -167,7 +179,12 @@ EE convolution_transform_filter_int8(TensorDesc filterDesc,
             ftmDataFormat = DF_HWNCN8C4;
             break;
         case CONVOLUTION_ALGORITHM_GEMM:
+        case CONVOLUTION_ALGORITHM_GEMM_ICNCHW:
+#ifdef _USE_FP16
             ftmDataFormat = DF_NCHWN8C4;
+#else
+            ftmDataFormat = DF_NHWCN8;
+#endif
             break;
         default:
             return NOT_MATCH;
@@ -190,4 +207,3 @@ EE convolution_transform_filter_int8(TensorDesc filterDesc,
     ftmDesc->dims[channelAxis] = filterDesc.dims[channelAxis];
     return SUCCESS;
 }
-#endif

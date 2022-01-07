@@ -14,12 +14,10 @@
 #ifndef _H_CONVOLUTION_DOREFA
 #define _H_CONVOLUTION_DOREFA
 
-#ifdef _USE_FP16
-#include <string.h>
-#include <math.h>
 #include "sys.h"
-#include "types.h"
-#include "error.h"
+#include "uni.h"
+#include "tensor_desc.h"
+#include "parameter_spec.h"
 
 EE convolution_dorefa_A55(TensorDesc inputDesc,
     const F16 *input,
@@ -78,9 +76,9 @@ inline EE convolution_dorefa(TensorDesc inputDesc,
                 scaleDesc, scale, biasDesc, bias, tmpBytes, tmp, outputDesc, output, activationDesc);
             break;
         default:
-            return NOT_SUPPORTED;
+            ret = NOT_SUPPORTED;
+            break;
     }
     return ret;
 }
-#endif
 #endif

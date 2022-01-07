@@ -14,11 +14,105 @@
 #ifndef _H_FCFCOPTIMIZER
 #define _H_FCFCOPTIMIZER
 
-#include "model_tools.h"
 #include "OPOptimizer.hpp"
 
 class FCFCOptimizer : public OPOptimizer {
     bool optimize(ModelSpec *spec) override
+    {
+        bool hasOptimized = false;
+        hasOptimized |= horizontal_optimize(spec);
+        hasOptimized |= vertical_optimize(spec);
+        return hasOptimized;
+    }
+
+    template <typename T>
+    void mmm_nt(T *A, T *B, T *bias, T *C, int m, int n, int k)
+    {
+        for (int i = 0; i < m; i++) {
+            for (int j = 0; j < n; j++) {
+                T value = 0;
+                for (int z = 0; z < k; z++) {
+                    value += A[i * k + z] * B[j * k + z];
+                }
+                if (bias != nullptr) {
+                    value += bias[i * n + j];
+                }
+                C[i * n + j] = value;
+            }
+        }
+    }
+
+    bool vertical_optimize(ModelSpec *spec)
+    {
+        bool hasOptimized = false;
+        for (int i = 0; i < spec->num_operator_specs; i++) {
+            if (spec->ops[i].type == OT_FC && spec->ops[i].ps.fc_spec.num_slices == 1) {
+                std::vector<std::pair<int, int>> nextOpIndexes = searchOperatorIndexByInput(
+                    spec, spec->ops[i].output_tensors_name[0], i, spec->num_operator_specs);
+                // 1 -> N || next operator not FC
+                if (nextOpIndexes.size() != 1 || spec->ops[nextOpIndexes[0].first].type != OT_FC) {
+                    continue;
+                }
+                // y = Wa2 * (Wa1 * x + b1) + b2
+                // y = Wa3 * x + b3
+                // Wa3 = Wa2 * Wa1, b3 = Wa2 * b1 + b2
+                int a1_id = searchWeightIndex(spec, spec->ops[i].name);
+                U32 a1_m = spec->ops[i].ps.fc_spec.num_outputs;
+                U32 a1_k = spec->ws[a1_id].bytes_of_weight / bytesOf(spec->ws[a1_id].mdt) / a1_m;
+                int a2_id = searchWeightIndex(spec, spec->ops[nextOpIndexes[0].first].name);
+                U32 a2_m = spec->ops[nextOpIndexes[0].first].ps.fc_spec.num_outputs;
+                U32 a2_k = spec->ws[a2_id].bytes_of_weight / bytesOf(spec->ws[a2_id].mdt) / a2_m;
+                CHECK_REQUIREMENT(a2_k == a1_m);
+                int a3_id = a2_id;
+                U32 a3_m = a2_m;
+                U32 a3_k = a1_k;
+                U32 a3_size = a3_m * a3_k * bytesOf(spec->ws[a3_id].mdt);
+                U32 b3_size = a3_m * bytesOf(spec->ws[a3_id].mdt);
+                U8 *a3 = (U8 *)mt_new_storage(a3_size);
+                U8 *b3 = (U8 *)mt_new_storage(b3_size);
+                mmm_nt<F32>((F32 *)spec->ws[a2_id].weight, (F32 *)spec->ws[a1_id].weight, nullptr,
+                    (F32 *)a3, a3_m, a3_k, a2_k);
+                mmm_nt<F32>((F32 *)spec->ws[a2_id].weight, (F32 *)spec->ws[a1_id].vec,
+                    (F32 *)spec->ws[a2_id].vec, (F32 *)b3, a3_m, 1, a2_k);
+
+                //erase first fc parameter
+                if (spec->ws[a1_id].weight != nullptr) {
+                    spec->ws[a1_id].bytes_of_weight = 0;
+                    if (outOfFileMapRange(spec->ws[a1_id].weight, spec->mfd)) {
+                        delete spec->ws[a1_id].weight;
+                    }
+                    spec->ws[a1_id].weight = nullptr;
+                }
+                if (spec->ws[a1_id].vec != nullptr) {
+                    spec->ws[a1_id].bytes_of_vec = 0;
+                    if (outOfFileMapRange(spec->ws[a1_id].vec, spec->mfd)) {
+                        delete spec->ws[a1_id].vec;
+                    }
+                    spec->ws[a1_id].vec = nullptr;
+                }
+                str_copy(spec->ops[nextOpIndexes[0].first].input_tensors_name[0],
+                    spec->ops[i].input_tensors_name[0], NAME_LEN);
+                setOperatorInvalid(spec, i);
+
+                if (spec->ws[a2_id].weight != nullptr &&
+                    outOfFileMapRange(spec->ws[a2_id].weight, spec->mfd)) {
+                    delete spec->ws[a2_id].weight;
+                }
+                if (spec->ws[a2_id].vec != nullptr &&
+                    outOfFileMapRange(spec->ws[a2_id].vec, spec->mfd)) {
+                    delete spec->ws[a2_id].vec;
+                }
+                spec->ws[a2_id].bytes_of_weight = a3_size;
+                spec->ws[a2_id].weight = a3;
+                spec->ws[a2_id].bytes_of_vec = b3_size;
+                spec->ws[a2_id].vec = b3;
+                hasOptimized = true;
+            }
+        }
+        return hasOptimized;
+    }
+
+    bool horizontal_optimize(ModelSpec *spec)
     {
         const int queryNum = 1;
         OperatorType queryOps[queryNum] = {OT_FC};
@@ -75,22 +169,30 @@ class FCFCOptimizer : public OPOptimizer {
 
                 if (spec->ws[prevWeightIndex].weight != nullptr) {
                     spec->ws[prevWeightIndex].bytes_of_weight = 0;
-                    delete spec->ws[prevWeightIndex].weight;
+                    if (outOfFileMapRange(spec->ws[prevWeightIndex].weight, spec->mfd)) {
+                        delete spec->ws[prevWeightIndex].weight;
+                    }
                     spec->ws[prevWeightIndex].weight = nullptr;
                 }
                 if (spec->ws[prevWeightIndex].vec != nullptr) {
                     spec->ws[prevWeightIndex].bytes_of_vec = 0;
-                    delete spec->ws[prevWeightIndex].vec;
+                    if (outOfFileMapRange(spec->ws[prevWeightIndex].vec, spec->mfd)) {
+                        delete spec->ws[prevWeightIndex].vec;
+                    }
                     spec->ws[prevWeightIndex].vec = nullptr;
                 }
                 if (spec->ws[curWeightIndex].weight != nullptr) {
                     spec->ws[curWeightIndex].bytes_of_weight = 0;
-                    delete spec->ws[curWeightIndex].weight;
+                    if (outOfFileMapRange(spec->ws[curWeightIndex].weight, spec->mfd)) {
+                        delete spec->ws[curWeightIndex].weight;
+                    }
                     spec->ws[curWeightIndex].weight = nullptr;
                 }
                 if (spec->ws[curWeightIndex].vec != nullptr) {
                     spec->ws[curWeightIndex].bytes_of_vec = 0;
-                    delete spec->ws[curWeightIndex].vec;
+                    if (outOfFileMapRange(spec->ws[curWeightIndex].vec, spec->mfd)) {
+                        delete spec->ws[curWeightIndex].vec;
+                    }
                     spec->ws[curWeightIndex].vec = nullptr;
                 }
 

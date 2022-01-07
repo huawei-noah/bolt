@@ -11,16 +11,17 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string.h>
 #include "blas_enhance.h"
 #include "ut_util.h"
 
-int mmmTest(int argc, char **argv, DataType dt)
+// #define COVERTEST
+
+int mmmTestKernel(U32 m, U32 k, U32 n, DataType dt)
 {
-    CHECK_REQUIREMENT(argc == 4);
-    U32 m = atoi(argv[1]);
-    U32 k = atoi(argv[2]);
-    U32 n = atoi(argv[3]);
+    float threshold = 0.0001;
+    if (dt == DT_F16) {
+        threshold = 1;
+    }
 
     TensorDesc A_desc = tensor2df(dt, DF_TRANSPOSE, k, m);
     TensorDesc B_desc = tensor2df(dt, DF_NORMAL, k, n);
@@ -38,21 +39,22 @@ int mmmTest(int argc, char **argv, DataType dt)
 
     matrix_matrix_multiply_transform_rhs(B_desc, B, &tranDescB, B_tran, UT_ARCH);
     if (UT_CHECK) {
-        CHECK_STATUS(
-            matrix_matrix_multiply(A_desc, A, tranDescB, B_tran, bytes, tmp, C_desc, C, UT_ARCH));
+        CHECK_STATUS(matrix_matrix_multiply(
+            A_desc, A, tranDescB, B_tran, bytes, tmp, C_desc, C, nullptr, UT_ARCH));
 
         // naive implement
-        CHECK_STATUS(
-            matrix_matrix_multiply(A_desc, A, B_desc, B, bytes, tmp, C_desc, C_ref, CPU_GENERAL));
+        CHECK_STATUS(matrix_matrix_multiply(
+            A_desc, A, B_desc, B, bytes, tmp, C_desc, C_ref, nullptr, CPU_GENERAL));
 
         // check
-        ut_check_v(C, C_ref, m * n, dt, 10, __FILE__, __LINE__);
+        ut_check_v(C, C_ref, m * n, dt, threshold, __FILE__, __LINE__);
     }
 
     // benchmark
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        matrix_matrix_multiply(A_desc, A, tranDescB, B_tran, bytes, tmp, C_desc, C, UT_ARCH);
+        matrix_matrix_multiply(
+            A_desc, A, tranDescB, B_tran, bytes, tmp, C_desc, C, nullptr, UT_ARCH);
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;
@@ -73,6 +75,32 @@ int mmmTest(int argc, char **argv, DataType dt)
     free(tmp);
 
     return 0;
+}
+
+int mmmTest(int argc, char **argv, DataType dt)
+{
+#ifndef COVERTEST
+    CHECK_REQUIREMENT(argc == 4);
+    U32 m = atoi(argv[1]);
+    U32 k = atoi(argv[2]);
+    U32 n = atoi(argv[3]);
+    return mmmTestKernel(m, k, n, dt);
+#else
+    U32 mmin = 1, mmax = 100;
+    U32 kmin = 1, kmax = 100;
+    U32 nmin = 1, nmax = 100;
+    int ret = 0;
+    for (U32 m = mmin; m <= mmax; ++m) {
+        for (U32 k = kmin; k <= kmax; ++k) {
+            for (U32 n = nmin; n <= nmax; ++n) {
+                if (ret = mmmTestKernel(m, k, n, dt)) {
+                    return ret;
+                }
+            }
+        }
+    }
+    return 0;
+#endif
 }
 
 int main(int argc, char **argv)

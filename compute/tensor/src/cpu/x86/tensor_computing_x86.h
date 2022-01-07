@@ -17,7 +17,10 @@
 #include <vector>
 #include "error.h"
 #include "sys.h"
-#include "types.h"
+#include "tensor_desc.h"
+#include "parameter_spec.h"
+
+EE attention_x86(TensorDesc inputDesc, const void *input, TensorDesc outputDesc, void *output);
 
 EE attention_mask_x86(TensorDesc inputDesc,
     const void *input,
@@ -64,12 +67,13 @@ EE convolution_infer_forward_tmp_bytes_x86(TensorDesc inputDesc,
 
 EE convolution_x86(TensorDesc inputDesc,
     void *input,
+    void *eltwiseInput,
     TensorDesc filterDesc,
     const void *filter,
     ConvolutionParamSpec convParamSpec,
     ConvolutionForwardAlgorithm algorithm,
     TensorDesc scaleDesc,
-    const void *scale,
+    void *scale,
     TensorDesc biasDesc,
     const void *bias,
     U32 tmpBytes,
@@ -91,6 +95,7 @@ EE depthwise_pointwise_convolution_transform_filter_x86(TensorDesc dwFilterDesc,
 
 EE depthwise_pointwise_convolution_x86(TensorDesc inputDesc,
     void *input,
+    void *eltwiseInput,
     TensorDesc dwFilterDesc,
     const void *dwFilter,
     TensorDesc pwFilterDesc,
@@ -181,6 +186,12 @@ EE pooling_x86(TensorDesc inputDesc,
     TensorDesc outputDesc,
     void *output);
 
+EE pooling_bp_x86(TensorDesc inputDesc,
+    const void *input,
+    PoolingParamSpec poolingParamSpec,
+    TensorDesc outputDesc,
+    void *output);
+
 EE reshape_x86(TensorDesc inputDesc, void *input, TensorDesc outputDesc, void *output);
 
 EE softmax_x86(
@@ -192,14 +203,17 @@ EE deconvolution_transform_filter_x86(TensorDesc filterDesc,
     TensorDesc *ftmDesc,
     void *filterTransformed);
 
-EE deconvolution_x86(TensorDesc inputDesc,
+EE deconvolution_overlap_crop_x86(void *input,
+    void *output,
+    TensorDesc inputDesc,
+    TensorDesc outputDesc,
+    ConvolutionParamSpec convParamSpec);
+
+EE deconvolution_pointwise_x86(TensorDesc inputDesc,
     void *input,
     TensorDesc filterDesc,
     const void *filter,
     ConvolutionParamSpec convParamSpec,
-    ConvolutionForwardAlgorithm algorithm,
-    TensorDesc scaleDesc,
-    const void *scale,
     TensorDesc biasDesc,
     const void *bias,
     U32 tmpBytes,
@@ -208,5 +222,41 @@ EE deconvolution_x86(TensorDesc inputDesc,
     void *output,
     ActivationParamSpec activationDesc,
     Arch arch);
+
+EE prelu_x86(TensorDesc inputDesc,
+    void *input,
+    void *weight,
+    PReLUParamSpec preluDesc,
+    TensorDesc outputDesc,
+    void *output);
+
+EE instance_norm_x86(TensorDesc inputDesc,
+    void *input,
+    void *tmp,
+    void *scale,
+    void *bias,
+    InstanceNormParamSpec p,
+    void *output);
+
+EE instance_norm_infer_forward_tmp_bytes_x86(
+    TensorDesc inputDesc, InstanceNormParamSpec p, U32 *bytes);
+
+EE quantize_bias_offsetC(const void *bias,
+    TensorDesc biasDesc,
+    DataType qType,
+    const void *filter,
+    TensorDesc filterDesc,
+    const F32 *scale,
+    void *qBias);
+
+EE quantize_x86(TensorDesc dDesc, const void *data, TensorDesc *qDesc, void *qData, F32 *scale);
+
+EE dequantize_x86(TensorDesc qDesc,
+    void *qData,
+    const F32 *scale,
+    TensorDesc bDesc,
+    void *bData,
+    TensorDesc dDesc,
+    void *dData);
 
 #endif  //CHEETAH_TENSOR_COMPUTING_X86_H

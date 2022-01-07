@@ -11,11 +11,11 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "types.h"
 #include "cpu/x86/fp32/tensor_computing_fp32.h"
 
 EE depthwise_pointwise_convolution_fp32(TensorDesc inputDesc,
     F32 *input,
+    F32 *eltwiseInput,
     TensorDesc dwFilterDesc,
     const F32 *dwFilter,
     TensorDesc pwFilterDesc,
@@ -59,11 +59,10 @@ EE depthwise_pointwise_convolution_fp32(TensorDesc inputDesc,
     }
 
     EE ret = NOT_MATCH;
-    if (algorithm == DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_DIRECT ||
-        algorithm == DEPTHWISE_CONVOLUTION_ALGORITHM_DIRECT) {
-        ret = depthwise_convolution_direct(inputDesc, input, dwFilterDesc, dwFilter, pwFilterDesc,
-            pwFilter, convParamSpec, dwBiasDesc, dwBias, pwBiasDesc, pwBias, tmpBytes, tmp,
-            outputDesc, output, depthwiseActivationParamSpec, pointwiseActivationParamSpec);
-    }
+
+    ret = depthwise_convolution_direct(inputDesc, input, eltwiseInput, dwFilterDesc, dwFilter,
+        pwFilterDesc, pwFilter, convParamSpec, dwBiasDesc, dwBias, pwBiasDesc, pwBias, tmpBytes,
+        tmp, outputDesc, output, depthwiseActivationParamSpec, pointwiseActivationParamSpec);
+
     return ret;
 }

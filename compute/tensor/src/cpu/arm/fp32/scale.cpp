@@ -70,28 +70,39 @@ EE scale_nchw_fp32(
     return SUCCESS;
 }
 
+template <bool icoc_equal>
 EE scale_nhwc_fp32(
     F32 *input, F32 *alpha, F32 *beta, I32 in, I32 ic, I32 elements_per_channel, F32 *output)
 {
     float32x4_t one = vdupq_n_f32(1.);
     float32x4_t zero = vdupq_n_f32(0.);
-    U32 index = 0;
-    for (I32 n = 0; n < in; n++) {
-        for (I32 i = 0; i < elements_per_channel; i++) {
+    float32x4_t in_vec;
+    float in_s;
+    for (I32 n = 0, src = 0, dst = 0; n < in; n++) {
+        for (I32 i = 0; i < elements_per_channel; i++, src++) {
             I32 c = 0;
             for (; c < ic - 3; c += 4) {
                 float32x4_t alpha_vec = (alpha == nullptr) ? one : vld1q_f32(alpha + c);
                 float32x4_t beta_vec = (beta == nullptr) ? zero : vld1q_f32(beta + c);
-                float32x4_t in_vec = vld1q_f32(input + index);
+                if (icoc_equal) {
+                    in_vec = vld1q_f32(input + dst);
+                } else {
+                    in_vec = vdupq_n_f32(input[src]);
+                }
                 float32x4_t out_vec = vfmaq_f32(beta_vec, alpha_vec, in_vec);
-                vst1q_f32(output + index, out_vec);
-                index += 4;
+                vst1q_f32(output + dst, out_vec);
+                dst += 4;
             }
             for (; c < ic; c++) {
                 float alpha_s = (alpha == nullptr) ? 1 : alpha[c];
                 float beta_s = (beta == nullptr) ? 0 : beta[c];
-                output[index] = alpha_s * input[index] + beta_s;
-                index++;
+                if (icoc_equal) {
+                    in_s = input[dst];
+                } else {
+                    in_s = input[src];
+                }
+                output[dst] = alpha_s * in_s + beta_s;
+                dst++;
             }
         }
     }
@@ -103,22 +114,27 @@ EE scale_fp32(F32 *input,
     I32 nDims,
     F32 *alpha,
     F32 *beta,
-    I32 in,
-    I32 ic,
+    I32 on,
+    I32 oc,
     I32 elements_per_channel,
+    I32 ic,
     F32 *output)
 {
     if (nullptr == input || nullptr == output) {
         CHECK_STATUS(NULL_POINTER);
     }
     EE ret = SUCCESS;
-    // If ic is 1, it means that weights/vectors have only one param, so we need use the calculation logic of nchw.
-    if (axis == 1 || axis == 0 || ic == 1) {
-        ret = scale_nchw_fp32(input, alpha, beta, in, ic, elements_per_channel, output);
+    // If oc is 1, it means that weights/vectors have only one param, so we need use the calculation logic of nchw.
+    if (axis == 1 || axis == 0 || oc == 1) {
+        ret = scale_nchw_fp32(input, alpha, beta, on, oc, elements_per_channel, output);
     } else if (axis == nDims - 1) {
-        ret = scale_nhwc_fp32(input, alpha, beta, in, ic, elements_per_channel, output);
+        if (ic == oc) {
+            ret = scale_nhwc_fp32<true>(input, alpha, beta, on, oc, elements_per_channel, output);
+        } else {
+            ret = scale_nhwc_fp32<false>(input, alpha, beta, on, oc, elements_per_channel, output);
+        }
     } else if (axis == nDims) {
-        ret = scale_nchwc8_fp32(input, alpha, beta, in, ic, elements_per_channel, output);
+        ret = scale_nchwc8_fp32(input, alpha, beta, on, oc, elements_per_channel, output);
     } else {
         CHECK_STATUS(NOT_SUPPORTED);
     }

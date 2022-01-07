@@ -20,8 +20,7 @@ class PoolingOCL : public Pooling {
 public:
     PoolingOCL(PoolingParamSpec p) : Pooling(p)
     {
-        setMALIArchInfo(
-            &(this->archInfo), nullptr, &this->needSetKernelVec, &this->needSelectKernelLS);
+        INIT_GPU_INFO(nullptr)
     }
 
     ~PoolingOCL(){DESTROY_OCL_KERNEL}
@@ -40,6 +39,18 @@ public:
             this->inputTensors[0], this->p, this->temp, this->outputTensors[0], &this->archInfo));
     }
 
+    inline bool use_output_tensor_image(Tensor *inputTensor)
+    {
+        if (this->p.kernel_h == 0 || this->p.kernel_w == 0) {
+            return false;
+        }
+        TensorDesc desc = inputTensor->get_desc();
+        if (desc.dims[0] <= this->p.kernel_w || desc.dims[1] <= this->p.kernel_h) {
+            return false;
+        }
+        return true;
+    }
+
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
@@ -49,6 +60,9 @@ public:
         }
         CHECK_STATUS(
             pooling_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo));
+        if (check_tensors_image(inTensors) && use_output_tensor_image(inTensors[0])) {
+            CHECK_STATUS(set_tensors_image(outTensors, inTensors.size()));
+        }
         return SUCCESS;
     }
 

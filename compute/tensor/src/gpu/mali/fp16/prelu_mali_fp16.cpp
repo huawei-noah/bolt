@@ -11,9 +11,7 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "sys.h"
-#include "error.h"
-#include "types.h"
+#include "gpu/mali/cl/kernel_option/prelu_opt.h"
 #include "gpu/mali/fp16/prelu_mali_fp16.h"
 
 inline EE prelu_checkpara_mali_fp16(TensorDesc inputDesc, TensorDesc outputDesc)
@@ -32,45 +30,54 @@ inline EE prelu_core_mali_fp16(GCLHandle_t handle,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
-    UNUSED(outputDesc);
     U32 iw, ih, ic, in;
     tensorSelectGet(inputDesc, NULL, NULL, &in, &ic, &ih, &iw);
-    U32 iw_str, ih_str, iw_off, ih_off;
-    U32 ow_str, oh_str, ow_off, oh_off;
-    ih_str = input->desc.stride[0];
-    iw_str = input->desc.stride[1];
-    ih_off = input->desc.offset[0];
-    iw_off = input->desc.offset[1];
-    oh_str = output->desc.stride[0];
-    ow_str = output->desc.stride[1];
-    oh_off = output->desc.offset[0];
-    ow_off = output->desc.offset[1];
-    cl_mem inbuf, outbuf, webuf;
-    inbuf = input->mem;
-    outbuf = output->mem;
-    webuf = weight->mem;
-
-    char modeName[16];
-    char kernelName[128];
-    if (preluDesc.propagate_down) {
-        strcpy(modeName, "prop");
-    } else {
-        strcpy(modeName, "noprop");
+    U32 iw_str, ih_str, iw_off, ih_off, i_off;
+    U32 ow_str, oh_str, ow_off, oh_off, o_off;
+    CHECK_STATUS(gclmem_get_desc_padding(input->desc, &iw_str, &ih_str, NULL, &iw_off, &ih_off));
+    CHECK_STATUS(gclmem_get_desc_padding(output->desc, &ow_str, &oh_str, NULL, &ow_off, &oh_off));
+    i_off = ih_off * iw_str + iw_off;
+    o_off = oh_off * ow_str + ow_off;
+    Mem inMem = input->mem;
+    Mem outMem = output->mem;
+    Mem weiMem = weight->mem;
+    if (in > 1 && !preluDesc.propagate_down) {
+        CHECK_STATUS(NOT_SUPPORTED);
     }
-    sprintf(kernelName, "prelu_%s", modeName);
+    if (inputDesc.nDims > 4) {
+        CHECK_STATUS(NOT_SUPPORTED);
+    }
+    U32 weightNum = weight->desc.dims[0];
+    ReluAxis reluAxis = RELU_ON_C;
+    if (!preluDesc.propagate_down) {
+        if (weightNum == iw) {
+            reluAxis = RELU_ON_W;
+        } else if (weightNum == ih) {
+            reluAxis = RELU_ON_H;
+        }
+    }
 
-    U32 gs[3] = {ih, iw, (ic + 3) / 4};
+    char kernelName[128];
+    KernelOpt kernelOpt;
+    Kernel kernel;
+    bool useNchw = (input->desc.memFormat == DF_NCHW) ? true : false;
+    CHECK_STATUS(set_prelu_opt_mali(preluDesc.propagate_down, useNchw, reluAxis, input->desc.dt,
+        input->desc.memType, output->desc.memType, kernelName, &kernelOpt));
+
+    U32 gs[3] = {iw, ih, ((ic + 3) / 4) * in};
     U32 ls[3] = {0, 0, 0};
     U32 dim = 3;
-    Kernel kernel;
-    CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel));
-    CHECK_STATUS(gcl_set_kernelArgs(kernel, ih, iw, ih_str, iw_str, ih_off, iw_off, ih, iw, oh_str,
-        ow_str, oh_off, ow_off, webuf, inbuf, outbuf));
+    if (useNchw) {
+        gs[0] = (iw + 3) / 4;
+        gs[1] = ih;
+        gs[2] = ic * in;
+    }
+    CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
+    CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, i_off, ow_str, oh_str, o_off, iw, gs[0],
+        gs[1], weiMem, inMem, outMem));
     gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
 #ifdef _DEBUG
-    CHECK_STATUS(gcl_print_memory<F16>(handle, input, "prelu_input"));
     CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
-    CHECK_STATUS(gcl_print_memory<F16>(handle, weight, "prelu_weight"));
 #endif
     return SUCCESS;
 }

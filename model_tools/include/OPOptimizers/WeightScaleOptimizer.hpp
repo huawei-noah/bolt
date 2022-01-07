@@ -20,7 +20,119 @@ class WeightScaleOptimizer : public OPOptimizer {
     bool optimize(ModelSpec *spec) override
     {
         bool hasOptimized = false;
-        for (int i = 0; i < spec->num_operator_specs; i++) {
+        hasOptimized |= optimize_power(spec);
+        hasOptimized |= optimize_scale(spec);
+        return hasOptimized;
+    }
+
+    bool optimize_power(ModelSpec *spec)
+    {
+        bool hasOptimized = false;
+        for (int i = 0; i < spec->num_operator_specs - 1; i++) {
+            if (OT_Conv == spec->ops[i].type || OT_FC == spec->ops[i].type ||
+                OT_Scale == spec->ops[i].type) {
+                int prevOpIndex = i;
+                if (OT_Conv == spec->ops[prevOpIndex].type) {
+                    if (ACTIVATION_NULL != spec->ops[prevOpIndex].ps.conv_spec.dw_activation_type ||
+                        ACTIVATION_NULL != spec->ops[prevOpIndex].ps.conv_spec.pw_activation_type) {
+                        continue;
+                    }
+                }
+                std::vector<std::pair<int, int>> nextOpIndexes = searchOperatorIndexByInput(spec,
+                    spec->ops[prevOpIndex].output_tensors_name[0], prevOpIndex + 1,
+                    spec->num_operator_specs);
+                if (nextOpIndexes.size() != 1 || OT_Power != spec->ops[nextOpIndexes[0].first].type) {
+                    continue;
+                }
+                int powerOpIndex = nextOpIndexes[0].first;
+                if (spec->ops[powerOpIndex].ps.power_spec.power != 1) {
+                    UNI_WARNING_LOG(
+                        "encounter unoptimize Power layer(pow > 1): %s\n", spec->ops[i].name);
+                    continue;
+                }
+
+                int convWeightIndex = searchWeightIndex(spec, spec->ops[prevOpIndex].name);
+                CHECK_REQUIREMENT(convWeightIndex >= 0);
+                if (spec->ws[convWeightIndex].mdt == DT_BIN01 ||
+                    spec->ws[convWeightIndex].mdt == DT_BIN11) {
+                    continue;
+                }
+
+                if (spec->ws[convWeightIndex].weight == nullptr ||
+                    spec->ws[convWeightIndex].bytes_of_weight == 0) {
+                    spec->ws[convWeightIndex].bytes_of_weight =
+                        spec->ws[convWeightIndex].bytes_of_vec;
+                    spec->ws[convWeightIndex].weight =
+                        (U8 *)mt_new_storage(spec->ws[convWeightIndex].bytes_of_weight);
+                    F32 *ptr = (F32 *)spec->ws[convWeightIndex].weight;
+                    for (U32 m = 0; m < spec->ws[convWeightIndex].bytes_of_weight /
+                             bytesOf(spec->ws[convWeightIndex].mdt);
+                         m++) {
+                        ptr[m] = 1;
+                    }
+                }
+                F32 *weightTemp = (F32 *)mt_new_storage(spec->ws[convWeightIndex].bytes_of_weight);
+                memcpy(weightTemp, spec->ws[convWeightIndex].weight,
+                    spec->ws[convWeightIndex].bytes_of_weight);
+                if (spec->ws[convWeightIndex].vec == nullptr ||
+                    spec->ws[convWeightIndex].bytes_of_vec == 0) {
+                    if (OT_Conv == spec->ops[i].type) {
+                        spec->ws[convWeightIndex].bytes_of_vec =
+                            spec->ops[i].ps.conv_spec.num_outputs * sizeof(F32);
+                    } else if (OT_FC == spec->ops[i].type) {
+                        spec->ws[convWeightIndex].bytes_of_vec =
+                            spec->ops[i].ps.fc_spec.num_outputs * sizeof(F32);
+                    } else if (OT_Scale == spec->ops[i].type) {
+                        spec->ws[convWeightIndex].bytes_of_vec =
+                            spec->ws[convWeightIndex].bytes_of_weight;
+                    } else {
+                        continue;
+                    }
+                    spec->ws[convWeightIndex].vec =
+                        (U8 *)mt_new_storage(spec->ws[convWeightIndex].bytes_of_vec);
+                    memset(spec->ws[convWeightIndex].vec, 0, spec->ws[convWeightIndex].bytes_of_vec);
+                }
+                F32 *vecTemp = (F32 *)mt_new_storage(spec->ws[convWeightIndex].bytes_of_vec);
+                memcpy(
+                    vecTemp, spec->ws[convWeightIndex].vec, spec->ws[convWeightIndex].bytes_of_vec);
+                for (U32 m = 0; m < spec->ws[convWeightIndex].bytes_of_weight /
+                         bytesOf(spec->ws[convWeightIndex].mdt);
+                     m++) {
+                    weightTemp[m] *= spec->ops[powerOpIndex].ps.power_spec.scale;
+                }
+                for (U32 m = 0; m < spec->ws[convWeightIndex].bytes_of_vec /
+                         bytesOf(spec->ws[convWeightIndex].mdt);
+                     m++) {
+                    vecTemp[m] = vecTemp[m] * spec->ops[powerOpIndex].ps.power_spec.scale +
+                        spec->ops[powerOpIndex].ps.power_spec.shift;
+                }
+
+                // free origin spec->ws[convWeightIndex] memory
+                if (spec->ws[convWeightIndex].vec != nullptr) {
+                    if (outOfFileMapRange(spec->ws[convWeightIndex].vec, spec->mfd)) {
+                        delete spec->ws[convWeightIndex].vec;
+                    }
+                }
+                if (spec->ws[convWeightIndex].weight != nullptr) {
+                    if (outOfFileMapRange(spec->ws[convWeightIndex].weight, spec->mfd)) {
+                        delete spec->ws[convWeightIndex].weight;
+                    }
+                }
+                spec->ws[convWeightIndex].vec = (U8 *)vecTemp;
+                spec->ws[convWeightIndex].weight = (U8 *)weightTemp;
+
+                setOperatorInvalid(spec, powerOpIndex, true);
+                hasOptimized = true;
+                i--;
+            }
+        }
+        return hasOptimized;
+    }
+
+    bool optimize_scale(ModelSpec *spec)
+    {
+        bool hasOptimized = false;
+        for (int i = 0; i < spec->num_operator_specs - 1; i++) {
             if (OT_Conv == spec->ops[i].type || OT_FC == spec->ops[i].type ||
                 OT_Scale == spec->ops[i].type) {
                 int prevOpIndex = i;
@@ -80,7 +192,9 @@ class WeightScaleOptimizer : public OPOptimizer {
                         ptr[m] = 1;
                     }
                 }
-                F32 *weightTemp = (F32 *)spec->ws[convWeightIndex].weight;
+                F32 *weightTemp = (F32 *)mt_new_storage(spec->ws[convWeightIndex].bytes_of_weight);
+                memcpy(weightTemp, spec->ws[convWeightIndex].weight,
+                    spec->ws[convWeightIndex].bytes_of_weight);
                 if (spec->ws[convWeightIndex].vec == nullptr) {
                     spec->ws[convWeightIndex].bytes_of_vec = channelCur * sizeof(F32);
                     if (isBNN == 1) {
@@ -88,19 +202,29 @@ class WeightScaleOptimizer : public OPOptimizer {
                     }
                     spec->ws[convWeightIndex].vec =
                         (U8 *)mt_new_storage(spec->ws[convWeightIndex].bytes_of_vec);
-                    memset(spec->ws[convWeightIndex].vec, 0, spec->ws[convWeightIndex].bytes_of_vec);
+                    if (isBNN == 1) {
+                        F32 *scale = (F32 *)spec->ws[convWeightIndex].vec;
+                        F32 *bias = scale + channelCur;
+                        for (U32 m = 0; m < channelCur; m++) {
+                            scale[m] = 1;
+                            bias[m] = 0;
+                        }
+                    } else {
+                        memset(spec->ws[convWeightIndex].vec, 0,
+                            spec->ws[convWeightIndex].bytes_of_vec);
+                    }
                 }
-                F32 *vecTemp = (F32 *)spec->ws[convWeightIndex].vec;
+                F32 *vecTemp = (F32 *)mt_new_storage(spec->ws[convWeightIndex].bytes_of_vec);
+                memcpy(
+                    vecTemp, spec->ws[convWeightIndex].vec, spec->ws[convWeightIndex].bytes_of_vec);
                 if (isBNN == 1) {
                     F32 *scale = vecTemp;
                     F32 *bias = vecTemp + channelCur;
                     for (U32 m = 0; m < channelCur; m++) {
-                        if (scale[m] == 0) {
-                            scale[m] = alphaPtr[m];
-                        } else {
+                        if (alphaPtr != nullptr) {
                             scale[m] *= alphaPtr[m];
+                            bias[m] *= alphaPtr[m];
                         }
-                        bias[m] *= alphaPtr[m];
                         if (betaPtr != nullptr) {
                             bias[m] += betaPtr[m];
                         }
@@ -123,19 +247,39 @@ class WeightScaleOptimizer : public OPOptimizer {
                         }
                     }
                 }
+
+                // free origin spec->ws[convWeightIndex] memory
+                if (spec->ws[convWeightIndex].vec != nullptr) {
+                    if (outOfFileMapRange(spec->ws[convWeightIndex].vec, spec->mfd)) {
+                        delete spec->ws[convWeightIndex].vec;
+                    }
+                }
+                if (spec->ws[convWeightIndex].weight != nullptr) {
+                    if (outOfFileMapRange(spec->ws[convWeightIndex].weight, spec->mfd)) {
+                        delete spec->ws[convWeightIndex].weight;
+                    }
+                }
+                spec->ws[convWeightIndex].vec = (U8 *)vecTemp;
+                spec->ws[convWeightIndex].weight = (U8 *)weightTemp;
+
                 // free scale memory
                 if (spec->ws[scaleWeightIndex].weight != nullptr) {
                     spec->ws[scaleWeightIndex].bytes_of_weight = 0;
-                    delete spec->ws[scaleWeightIndex].weight;
+                    if (outOfFileMapRange(spec->ws[scaleWeightIndex].weight, spec->mfd)) {
+                        delete spec->ws[scaleWeightIndex].weight;
+                    }
                     spec->ws[scaleWeightIndex].weight = nullptr;
                 }
                 if (spec->ws[scaleWeightIndex].vec != nullptr) {
                     spec->ws[scaleWeightIndex].bytes_of_vec = 0;
-                    delete spec->ws[scaleWeightIndex].vec;
+                    if (outOfFileMapRange(spec->ws[scaleWeightIndex].vec, spec->mfd)) {
+                        delete spec->ws[scaleWeightIndex].vec;
+                    }
                     spec->ws[scaleWeightIndex].vec = nullptr;
                 }
                 setOperatorInvalid(spec, scaleOpIndex, true);
                 hasOptimized = true;
+                i--;
             }
         }
         return hasOptimized;

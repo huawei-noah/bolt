@@ -11,10 +11,8 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "sys.h"
-#include "error.h"
-#include "types.h"
 #include "gpu/mali/fp16/scale_mali_fp16.h"
+#include "gpu/mali/cl/kernel_option/scale_opt.h"
 
 inline EE scale_checkpara_mali_fp16(TensorDesc inputDesc, TensorDesc outputDesc)
 {
@@ -27,65 +25,58 @@ inline EE scale_checkpara_mali_fp16(TensorDesc inputDesc, TensorDesc outputDesc)
 inline EE scale_core_mali_fp16(GCLHandle_t handle,
     GCLMem_t alpha,
     GCLMem_t beta,
+    ScaleParamSpec p,
     TensorDesc inputDesc,
     GCLMem_t input,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
-    UNUSED(outputDesc);
     U32 iw, ih, ic, in;
+    U32 ow, oh, oc, on;
     tensorSelectGet(inputDesc, NULL, NULL, &in, &ic, &ih, &iw);
+    tensorSelectGet(outputDesc, NULL, NULL, &on, &oc, &oh, &ow);
     U32 iw_str, ih_str, iw_off, ih_off;
     U32 ow_str, oh_str, ow_off, oh_off;
-    ih_str = input->desc.stride[0];
-    iw_str = input->desc.stride[1];
-    ih_off = input->desc.offset[0];
-    iw_off = input->desc.offset[1];
-    oh_str = output->desc.stride[0];
-    ow_str = output->desc.stride[1];
-    oh_off = output->desc.offset[0];
-    ow_off = output->desc.offset[1];
+    CHECK_STATUS(gclmem_get_desc_padding(input->desc, &iw_str, &ih_str, NULL, &iw_off, &ih_off));
+    CHECK_STATUS(gclmem_get_desc_padding(output->desc, &ow_str, &oh_str, NULL, &ow_off, &oh_off));
     cl_mem inbuf, outbuf, albuf, bebuf;
     inbuf = input->mem;
     outbuf = output->mem;
-    albuf = alpha->mem;
+    albuf = (alpha) ? alpha->mem : beta->mem;
     bebuf = (beta) ? beta->mem : albuf;
-
-    char modeName[16];
-    char kernelName[128];
-    if (beta) {
-        strcpy(modeName, "beta");
-        if (alpha->desc.stride[0] == 1 && beta->desc.stride[0] == 1 && alpha->desc.stride[1] == 1 &&
-            beta->desc.stride[1] == 1 && alpha->desc.stride[2] == 1 && beta->desc.stride[2] == 1) {
-            sprintf(kernelName, "scale1_%s", modeName);
-        } else {
-            sprintf(kernelName, "scale_%s", modeName);
-        }
-    } else {
-        strcpy(modeName, "nobeta");
-        if (alpha->desc.stride[0] == 1 && alpha->desc.stride[1] == 1 && alpha->desc.stride[2] == 1) {
-            sprintf(kernelName, "scale1_%s", modeName);
-        } else {
-            sprintf(kernelName, "scale_%s", modeName);
-        }
+    bool useAlpha = (alpha) ? true : false;
+    bool useBeta = (beta) ? true : false;
+    bool useNchwFormat = false;
+    I32 axis = p.axis;
+    U32 nDims = inputDesc.nDims;
+    axis = (axis + nDims) % nDims;
+    axis = nDims - 1 - axis;
+    bool useBroadCast = false;
+    if (outputDesc.dims[axis] != inputDesc.dims[axis]) {
+        useBroadCast = true;
     }
-
-    U32 gs[3] = {ih, iw, (ic + 3) / 4};
+    char kernelName[128];
+    KernelOpt kernelOpt;
+    Kernel kernel;
+    U32 gs[3] = {ow, oh, (oc + 3) / 4 * on};
     U32 ls[3] = {0, 0, 0};
     U32 dim = 3;
-    Kernel kernel;
-    CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel));
-    CHECK_STATUS(gcl_set_kernelArgs(kernel, ih, ih_str, iw_str, ih_off, iw_off, oh_str, ow_str,
-        oh_off, ow_off, gs[0], gs[1], albuf, bebuf, inbuf, outbuf));
+    U32 i_off = ih_off * iw_str + iw_off;
+    U32 o_off = oh_off * ow_str + ow_off;
+    if (input->desc.memFormat == DF_NCHW) {
+        gs[0] = (ow + 3) / 4 * on;
+        gs[1] = oh;
+        gs[2] = oc;
+        useNchwFormat = true;
+    }
+    CHECK_STATUS(set_scale_opt_mali(useAlpha, useBeta, useNchwFormat, useBroadCast, axis, DT_F16,
+        input->desc.memType, output->desc.memType, kernelName, &kernelOpt));
+    CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
+    CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, ow_str, oh_str, i_off, o_off, iw, ih,
+        ic, ow, oh, oc, gs[0], gs[1], albuf, bebuf, inbuf, outbuf));
     gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
 #ifdef _DEBUG
-    CHECK_STATUS(gcl_print_memory<F16>(handle, input, "scale_input"));
     CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
-    CHECK_STATUS(gcl_print_memory<F16>(handle, alpha, "scale_alpha"));
-    if (beta) {
-        CHECK_STATUS(gcl_print_memory<F16>(handle, beta, "scale_beta"));
-    }
-    CHECK_STATUS(gcl_print_memory<F16>(handle, output, "scale_output"));
 #endif
     return SUCCESS;
 }
@@ -93,6 +84,7 @@ inline EE scale_core_mali_fp16(GCLHandle_t handle,
 EE scale_mali_fp16(GCLHandle_t handle,
     GCLMem_t alpha,
     GCLMem_t beta,
+    ScaleParamSpec p,
     TensorDesc inputDesc,
     GCLMem_t input,
     TensorDesc outputDesc,
@@ -102,6 +94,6 @@ EE scale_mali_fp16(GCLHandle_t handle,
     if (input->mem != output->mem) {
         CHECK_STATUS(fill_output_zero(handle, output, outputDesc));
     }
-    CHECK_STATUS(scale_core_mali_fp16(handle, alpha, beta, inputDesc, input, outputDesc, output));
+    CHECK_STATUS(scale_core_mali_fp16(handle, alpha, beta, p, inputDesc, input, outputDesc, output));
     return SUCCESS;
 }

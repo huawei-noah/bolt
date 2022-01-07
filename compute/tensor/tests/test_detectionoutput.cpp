@@ -31,10 +31,6 @@ int detectionoutputTest(int argc, char **argv, DataType dt)
     U32 oh = atoi(argv[8]);
     U32 ow = atoi(argv[9]);
     U32 num_class = atoi(argv[10]);
-    ArchInfo archInfo;
-    archInfo.arch = UT_ARCH;
-    ArchInfo archInfo_org;
-    archInfo_org.arch = CPU_GENERAL;
 
     DetectionOutputParamSpec detectionoutput_desc;
     detectionoutput_desc.num_class = num_class;
@@ -61,10 +57,11 @@ int detectionoutputTest(int argc, char **argv, DataType dt)
     U8 *input_loc = ut_input_v(input_len_loc, dt, UT_INIT_RANDOM);
     U8 *input_conf = ut_input_v(input_len_conf, dt, UT_INIT_RANDOM);
     U8 *input_priorbox = ut_input_v(input_len_priorbox, dt, UT_INIT_RANDOM);
-    memcpy(get_ptr_from_tensor(inputTensor_loc, UT_ARCH), input_loc, tensorNumBytes(inputDesc_loc));
-    memcpy(
-        get_ptr_from_tensor(inputTensor_conf, UT_ARCH), input_conf, tensorNumBytes(inputDesc_conf));
-    memcpy(get_ptr_from_tensor(inputTensor_priorbox, UT_ARCH), input_priorbox,
+    memcpy(get_ptr_from_tensor(inputTensor_loc, CPU_GENERAL), input_loc,
+        tensorNumBytes(inputDesc_loc));
+    memcpy(get_ptr_from_tensor(inputTensor_conf, CPU_GENERAL), input_conf,
+        tensorNumBytes(inputDesc_conf));
+    memcpy(get_ptr_from_tensor(inputTensor_priorbox, CPU_GENERAL), input_priorbox,
         tensorNumBytes(inputDesc_priorbox));
     inputTensors[0] = inputTensor_loc;
     inputTensors[1] = inputTensor_conf;
@@ -75,7 +72,7 @@ int detectionoutputTest(int argc, char **argv, DataType dt)
     // set output
     Tensor outputTensor, outputTensorRef;
     CHECK_STATUS(detectionoutput_infer_output_size(
-        inputTensorPtrs, detectionoutput_desc, &outputTensor, &archInfo));
+        inputTensorPtrs, detectionoutput_desc, &outputTensor, &UT_CPU_ARCHINFO));
     outputTensor.alloc();
     TensorDesc outputDesc_ref = outputTensor.get_desc();
     outputTensorRef.resize(outputDesc_ref);
@@ -84,41 +81,43 @@ int detectionoutputTest(int argc, char **argv, DataType dt)
     CHECK_REQUIREMENT(input_len_loc == ih0 * iw0 && input_len_conf == ih1 * iw1 &&
         input_len_priorbox == in2 * ic2 * ilens2 && output_len == oh * ow);
     if (UT_CHECK) {
-        CHECK_STATUS(detectionoutput(inputTensors, detectionoutput_desc, outputTensor, &archInfo));
         CHECK_STATUS(
-            detectionoutput(inputTensors, detectionoutput_desc, outputTensorRef, &archInfo_org));
+            detectionoutput(inputTensors, detectionoutput_desc, outputTensor, &UT_CPU_ARCHINFO));
+        CHECK_STATUS(detectionoutput(
+            inputTensors, detectionoutput_desc, outputTensorRef, &UT_SERIAL_ARCHINFO));
         // check
-        ut_check_v(get_ptr_from_tensor(outputTensor, UT_ARCH),
-            get_ptr_from_tensor(outputTensorRef, UT_ARCH), output_len, dt, 0.05, __FILE__, __LINE__);
+        ut_check_v(get_ptr_from_tensor(outputTensor, CPU_GENERAL),
+            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), output_len, dt, 0.05, __FILE__,
+            __LINE__);
     }
     U32 num_detected_max = detectionoutput_desc.keep_top_k;
 #ifdef _USE_FP16
     if (dt == DT_F16) {
-        F16 *output_f16 = (F16 *)get_ptr_from_tensor(outputTensor, UT_ARCH);
+        F16 *output_f16 = (F16 *)get_ptr_from_tensor(outputTensor, CPU_GENERAL);
         int idx = 0;
         for (U32 i = 0; i < 1 + num_detected_max; i++) {
             if (i >= 1 && output_f16[idx] == 0) {
                 break;
             }
-            std::cout << " 1 : " << output_f16[idx] << " 2 : " << output_f16[idx + 1]
-                      << " 3 : " << output_f16[idx + 2] << " 4 : " << output_f16[idx + 3]
-                      << " 5 : " << output_f16[idx + 4] << " 6 : " << output_f16[idx + 5]
-                      << std::endl;
+            for (int j = 0; j < 6; j++) {
+                printf("%d:%f ", j + 1, output_f16[idx + j]);
+            }
+            printf("\n");
             idx = idx + 6;
         }
     }
 #endif
     if (dt == DT_F32) {
-        F32 *output_f32 = (F32 *)get_ptr_from_tensor(outputTensorRef, UT_ARCH);
+        F32 *output_f32 = (F32 *)get_ptr_from_tensor(outputTensorRef, CPU_GENERAL);
         int idx = 0;
         for (U32 i = 0; i < 1 + num_detected_max; i++) {
             if (i >= 1 && output_f32[idx] == 0) {
                 break;
             }
-            std::cout << " 1 : " << output_f32[idx] << " 2 : " << output_f32[idx + 1]
-                      << " 3 : " << output_f32[idx + 2] << " 4 : " << output_f32[idx + 3]
-                      << " 5 : " << output_f32[idx + 4] << " 6 : " << output_f32[idx + 5]
-                      << std::endl;
+            for (int j = 0; j < 6; j++) {
+                printf("%d:%f ", j + 1, output_f32[idx + j]);
+            }
+            printf("\n");
             idx = idx + 6;
         }
     }
@@ -132,14 +131,14 @@ int detectionoutputTest(int argc, char **argv, DataType dt)
 int main(int argc, char **argv)
 {
 #ifdef _USE_FP16
-    std::cout << "----- Testing FP16 Detectionoutput -----" << std::endl;
+    printf("----- Testing FP16 Detectionoutput -----\n");
     detectionoutputTest(argc, argv, DT_F16);
-    std::cout << "----- Finished FP16 Detectionoutput -----" << std::endl;
+    printf("----- Finished FP16 Detectionoutput -----\n");
 #endif
 #ifdef _USE_FP32
-    std::cout << "----- Testing FP32 Detectionoutput -----" << std::endl;
+    printf("----- Testing FP32 Detectionoutput -----\n");
     detectionoutputTest(argc, argv, DT_F32);
-    std::cout << "----- Finished FP32 Detectionoutput -----" << std::endl;
+    printf("----- Finished FP32 Detectionoutput -----\n");
 #endif
     return 0;
 }

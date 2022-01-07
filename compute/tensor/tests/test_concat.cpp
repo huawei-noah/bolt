@@ -24,8 +24,6 @@ int concatTest(int argc, char **argv, DataType dt)
     p.axis = atoi(argv[2]);
     CHECK_REQUIREMENT(p.axis == 0 || p.axis == 1);
     CHECK_REQUIREMENT(argc == 1 + 2 + (num + 1) * 4);
-    ArchInfo archInfo;
-    archInfo.arch = UT_ARCH;
 
     std::vector<Tensor> inTensors(num);
     std::vector<Tensor *> inTensorPtr(num);
@@ -51,7 +49,7 @@ int concatTest(int argc, char **argv, DataType dt)
     U32 oh = atoi(argv[3 + num * 4 + 2]);
     U32 ow = atoi(argv[3 + num * 4 + 3]);
 
-    CHECK_STATUS(concat_infer_output_size(inTensorPtr, p, &outTensor, &archInfo));
+    CHECK_STATUS(concat_infer_output_size(inTensorPtr, p, &outTensor, &UT_CPU_ARCHINFO));
 
     U32 in_len = 0;
     for (int i = 0; i < num; i++) {
@@ -62,7 +60,7 @@ int concatTest(int argc, char **argv, DataType dt)
 
     // setup tmp
     U32 tmpBytes;
-    CHECK_STATUS(concat_infer_forward_tmp_bytes(inTensors, &tmpBytes, &archInfo));
+    CHECK_STATUS(concat_infer_forward_tmp_bytes(inTensors, &tmpBytes, &UT_CPU_ARCHINFO));
     Tensor tmpTensor;
     tmpTensor.resize(tensor1d(DT_U8, tmpBytes));
     tmpTensor.alloc();
@@ -79,7 +77,7 @@ int concatTest(int argc, char **argv, DataType dt)
         U32 bytes = tensorNumBytes(inputDesc);
         TensorDesc tmpDesc = inputDesc;
         tmpDesc.df = outDesc.df;
-        U8 *srcPtr = (U8 *)get_ptr_from_tensor(inTensors[i], UT_ARCH);
+        U8 *srcPtr = (U8 *)get_ptr_from_tensor(inTensors[i], CPU_GENERAL);
         if (inputDesc.df == DF_NCHW && outDesc.df == DF_NCHWC8) {
             transformNCHWToNCHWC8(inputDesc, srcPtr, tmpDesc, tmpPtr);
             srcPtr = tmpPtr;
@@ -94,17 +92,17 @@ int concatTest(int argc, char **argv, DataType dt)
     outTensor.alloc();
 
     if (UT_CHECK) {
-        CHECK_STATUS(concat(inTensors, p, tmpTensor, outTensor, &archInfo));
+        CHECK_STATUS(concat(inTensors, p, tmpTensor, outTensor, &UT_CPU_ARCHINFO));
 
         // check
-        ut_check_v(
-            get_ptr_from_tensor(outTensor, UT_ARCH), outputRef, in_len, dt, 0, __FILE__, __LINE__);
+        ut_check_v(get_ptr_from_tensor(outTensor, CPU_GENERAL), outputRef, in_len, dt, 0, __FILE__,
+            __LINE__);
     }
 
     // benchmark
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        CHECK_STATUS(concat(inTensors, p, tmpTensor, outTensor, &archInfo));
+        CHECK_STATUS(concat(inTensors, p, tmpTensor, outTensor, &UT_CPU_ARCHINFO));
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;

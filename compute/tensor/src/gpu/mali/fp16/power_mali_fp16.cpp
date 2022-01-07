@@ -11,8 +11,8 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "types.h"
 #include "gpu/mali/fp16/power_mali_fp16.h"
+#include "gpu/mali/cl/kernel_option/power_opt.h"
 
 inline EE power_checkpara_mali_fp16(TensorDesc inputDesc, TensorDesc outputDesc)
 {
@@ -30,55 +30,41 @@ inline EE power_core_mali_fp16(GCLHandle_t handle,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
-    UNUSED(outputDesc);
-    U32 iw, ih, ic, in;
     DataType dt;
-    if (inputDesc.df == DF_NCHW || inputDesc.df == DF_NORMAL) {
-        tensorSelectGet(inputDesc, &dt, NULL, &in, &ic, &ih, &iw);
-    } else if (inputDesc.df == DF_MKT) {
-        get_nlp_mkt_val(inputDesc, &dt, &in, &ic, &ih);
-        iw = 1;
-    } else {
-        return NOT_SUPPORTED;
-    }
-    U32 iw_str, ih_str, iw_off, ih_off;
-    U32 ow_str, oh_str, ow_off, oh_off;
-    get_gclmem_dim(input->desc, &iw_str, &ih_str, NULL, &iw_off, &ih_off);
-    get_gclmem_dim(output->desc, &ow_str, &oh_str, NULL, &ow_off, &oh_off);
+    U32 iw, ih, ic, in;
+    U32 iw_str, ih_str, iw_off, ih_off, i_off;
+    U32 ow_str, oh_str, ow_off, oh_off, o_off;
+    CHECK_STATUS(gclmem_get_desc_dim(input->desc, &dt, NULL, &in, &ic, &ih, &iw));
+    CHECK_STATUS(gclmem_get_desc_padding(input->desc, &iw_str, &ih_str, NULL, &iw_off, &ih_off));
+    CHECK_STATUS(gclmem_get_desc_padding(output->desc, &ow_str, &oh_str, NULL, &ow_off, &oh_off));
+    i_off = ih_off * iw_str + iw_off;
+    o_off = oh_off * ow_str + ow_off;
     cl_mem inbuf, outbuf;
     inbuf = input->mem;
     outbuf = output->mem;
     Kernel kernel;
     U32 gs[3];
-    U32 ls[3] = {0, 0, 0};
+    U32 ls[3] = {16, 1, 1};
     U32 dim = 3;
-    char kernelname[128];
-    sprintf(kernelname, "power_f16");
-    if (dt == DT_I32) {
-        sprintf(kernelname, "power_i32");
-    }
-    CHECK_STATUS(gcl_create_kernel(handle, kernelname, &kernel));
-    U32 has_power = (p.power == (F32)1.0) ? 0 : 1;
-    if (input->desc.memFormat == DF_NCHW) {
+    char kernelName[128];
+    KernelOpt kernelOpt;
+    bool useNchwFormat = (input->desc.memFormat == DF_NCHW) ? true : false;
+    CHECK_STATUS(set_power_opt_mali(
+        useNchwFormat, dt, input->desc.memType, output->desc.memType, kernelName, &kernelOpt));
+    CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
+    if (useNchwFormat) {
         gs[0] = (iw + 3) / 4;
         gs[1] = ih;
-        gs[2] = ic;
-        CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, iw_str, ih_off, iw_off, oh_str, ow_str,
-            oh_off, ow_off, iw, gs[0], gs[1], has_power, p.scale, p.shift, p.power, inbuf, outbuf));
+        gs[2] = ic * in;
+    } else {
+        gs[0] = iw;
+        gs[1] = ih;
+        gs[2] = (ic + 3) / 4 * in;
     }
-    if (input->desc.memFormat == DF_NCWHC4) {
-        gs[0] = ih;
-        gs[1] = iw;
-        gs[2] = (ic + 3) / 4;
-        CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str * 4, iw_off, ih_off * 4, ow_str,
-            oh_str * 4, ow_off, oh_off * 4, ih * 4, gs[0], gs[1], has_power, p.scale, p.shift,
-            p.power, inbuf, outbuf));
-    }
-    gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelname);
-#ifdef _DEBUG
-    CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelname));
-    handle->t_total += handle->t_execute;
-#endif
+    U32 has_power = (p.power == (F32)1.0) ? 0 : 1;
+    CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, ow_str, oh_str, i_off, o_off, iw, gs[0],
+        gs[1], has_power, p.scale, p.shift, p.power, inbuf, outbuf));
+    gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
     return SUCCESS;
 }
 

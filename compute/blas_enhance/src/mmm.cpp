@@ -42,7 +42,7 @@ EE matrix_matrix_multiply_tmp_bytes(
         ret = SUCCESS;
 #endif
 #ifdef _USE_X86
-    } else if (IS_X86_AVX2(arch)) {
+    } else if (IS_X86(arch)) {
         ret = matrix_matrix_multiply_tmp_bytes_x86(
             matrixA_M, matrixA_K, matrixB_K, matrixB_N, matrixADataType, bytes);
 #endif
@@ -72,8 +72,8 @@ EE matrix_matrix_multiply_transform_rhs(
     }
 #endif
 #ifdef _USE_X86
-    if (IS_X86_AVX2(arch)) {
-        ret = matrix_matrix_multiply_transform_rhs_x86(desc, src, descTran, dst);
+    if (IS_X86(arch)) {
+        ret = matrix_matrix_multiply_transform_rhs_x86(desc, src, descTran, dst, nullptr);
     }
 #endif
     return ret;
@@ -87,13 +87,19 @@ EE matrix_matrix_multiply(TensorDesc matrixADesc,
     void *tmp,
     TensorDesc matrixCDesc,
     void *matrixCData,
+    const F32 *scale,
     Arch arch)
 {
     if (bytes != 0 && tmp == nullptr) {
         CHECK_STATUS(NULL_POINTER);
+        return NULL_POINTER;
     }
     if (nullptr == matrixAData || nullptr == matrixBData || nullptr == matrixCData) {
         CHECK_STATUS(NULL_POINTER);
+        return NULL_POINTER;
+    }
+    if (tensorNumElements(matrixCDesc) == 0) {
+        return SUCCESS;
     }
 
     DataType matrixADataType, matrixBDataType, matrixCDataType;
@@ -107,16 +113,13 @@ EE matrix_matrix_multiply(TensorDesc matrixADesc,
         tensor2dGet(matrixCDesc, &matrixCDataType, &matrixCDataFormat, &matrixC_M, &matrixC_N));
 
     if (matrixADataType != matrixBDataType) {
-        CHECK_STATUS(NOT_MATCH);
-    }
-    if (matrixADataType != matrixCDataType) {
-        if (matrixADataType != DT_I8 || matrixCDataType != DT_I32) {
+        if (matrixADataType != DT_U8_Q || matrixBDataType != DT_I8) {
             CHECK_STATUS(NOT_MATCH);
         }
     }
 
     bool transposeA = false, transposeB = false;
-    if (matrixADataFormat == DF_TRANSPOSE) {
+    if (matrixADataFormat == DF_TRANSPOSE || matrixADataFormat == DF_NKN8) {
         std::swap(matrixA_M, matrixA_K);
         transposeA = true;
     }
@@ -135,16 +138,24 @@ EE matrix_matrix_multiply(TensorDesc matrixADesc,
             matrixAData, matrixBData, matrixCData);
 #endif
 #ifdef _USE_X86
-    } else if (IS_X86_AVX2(arch)) {
+    } else if (IS_X86(arch)) {
         TensorDesc tranDescB;
         U8 *dataB = (U8 *)matrixBData;
         if (matrixBDataFormat != targetFormat4MatrixB(matrixBDataType)) {
-            dataB = ((U8 *)tmp) + matrixA_M * matrixA_K * bytesOf(matrixADataType);
+            U8 *offsetCBias = nullptr;
+            U32 alignedAK = matrixA_K;
+            dataB = ((U8 *)tmp);
+            if (matrixADataType == DT_U8_Q && matrixBDataType == DT_I8) {
+                offsetCBias = (U8 *)tmp;
+                alignedAK = (matrixA_K + 7) / 8 * 8;
+                dataB += matrixC_N * bytesOf(DT_I32);
+            }
+            dataB += matrixA_M * alignedAK * bytesOf(matrixADataType);
             ret = matrix_matrix_multiply_transform_rhs_x86(
-                matrixBDesc, matrixBData, &tranDescB, dataB);
+                matrixBDesc, matrixBData, &tranDescB, dataB, offsetCBias);
         }
-        ret = mmm_x86(matrixC_N, matrixC_M, matrixA_K, matrixADataType, transposeA, matrixAData,
-            dataB, tmp, matrixCData);
+        ret = mmm_x86(matrixC_N, matrixC_M, matrixA_K, matrixBDataType, matrixADataFormat,
+            matrixAData, dataB, tmp, matrixCData, scale);
 #endif
 #ifdef _USE_NEON
     } else {

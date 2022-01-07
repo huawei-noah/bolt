@@ -16,7 +16,6 @@
 
 #include "sys.h"
 #include "tensor_desc.h"
-#include "types.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -33,6 +32,7 @@ EE matrix_matrix_multiply(TensorDesc matrixADesc,
     void *tmp,
     TensorDesc matrixCDesc,
     void *matrixC,
+    const F32 *scale,
     Arch arch);
 
 EE matrix_vector_multiply_tmp_bytes(TensorDesc matrixDesc, TensorDesc vectorDesc, U32 *bytes, Arch);
@@ -45,6 +45,7 @@ EE matrix_vector_multiply(TensorDesc matrixDesc,
     void *tmp,
     TensorDesc resultDesc,
     void *result,
+    const F32 *scale,
     Arch arch);
 
 inline DataFormat targetFormat4MatrixB(DataType dt)
@@ -81,6 +82,9 @@ inline DataFormat targetFormat4mvmMatrix(DataType dt)
         }
         case DT_F32: {
             return DF_NKN16;
+        }
+        case DT_U8_Q: {
+            return DF_NK;
         }
         default: {
             CHECK_STATUS(NOT_SUPPORTED);

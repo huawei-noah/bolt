@@ -13,13 +13,11 @@
 
 #ifndef _H_SOFTMAX_MALI_FP16
 #define _H_SOFTMAX_MALI_FP16
-#include "sys.h"
-#include "types.h"
-#include "error.h"
-#include "tensor_computing_type.h"
+
+#include "gpu/mali/fp16/tensor_computing_fp16.h"
 
 EE softmax_infer_forward_tmp_bytes_mali_fp16(
-    TensorDesc inputDesc, U32 *bytes, ForwardRunInfoMali_t forwardRunInfo);
+    TensorDesc inputDesc, GCLMemDesc gclmemInputDesc, int axis, U32 *bytes);
 
 EE softmax_mali_fp16(GCLHandle_t handle,
     TensorDesc inputdesc,

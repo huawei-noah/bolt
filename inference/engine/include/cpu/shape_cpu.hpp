@@ -33,7 +33,7 @@ public:
         Tensor inputTensor = this->inputTensors[0];
         TensorDesc inputDesc = inputTensor.get_desc();
         Tensor outputTensor = this->outputTensors[0];
-        UNI_memcpy(((CpuMemory *)(outputTensor.get_memory()))->get_ptr(), inputDesc.dims,
+        UNI_MEMCPY(((CpuMemory *)(outputTensor.get_memory()))->get_ptr(), inputDesc.dims,
             inputDesc.nDims * sizeof(U32));
     }
 

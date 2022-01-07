@@ -11,12 +11,8 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef CHEETAH_X86_AVX2_EXPAND_H
-#define CHEETAH_X86_AVX2_EXPAND_H
-#include <array>
-#include <math.h>
-#include "types.h"
-#include "error.h"
+#ifndef _H_X86_AVX2_EXPAND
+#define _H_X86_AVX2_EXPAND
 
 //horizontal add u32
 inline unsigned int _mm256_hadd_u32(__m256i x)
@@ -125,6 +121,19 @@ inline F32 _mm256_sum_ps(__m256 x)
     return _mm_cvtss_f32(sum);
 }
 
+// horizontal min
+inline F32 _mm256_hmin_ps(__m256 x)
+{
+    __m128 low = _mm256_extractf128_ps(x, 0);
+    __m128 high = _mm256_extractf128_ps(x, 1);
+    __m128 min = _mm_min_ps(low, high);
+    high = _mm_permute_ps(min, 0b1110);
+    low = _mm_min_ps(min, high);
+    high = _mm_permute_ps(low, 0b01);
+    min = _mm_min_ss(low, high);
+    return _mm_cvtss_f32(min);
+}
+
 // horizontal max
 inline F32 _mm256_hmax_ps(__m256 x)
 {
@@ -137,4 +146,30 @@ inline F32 _mm256_hmax_ps(__m256 x)
     max = _mm_max_ss(low, high);
     return _mm_cvtss_f32(max);
 }
-#endif  //CHEETAH_X86_AVX2_EXPAND_H
+
+// horizontal min
+inline I32 _mm256_hmin_epu32(__m256i x)
+{
+    __m128i low = _mm256_extractf128_si256(x, 0);
+    __m128i high = _mm256_extractf128_si256(x, 1);
+    __m128i min = _mm_min_epu32(low, high);
+    high = _mm_shuffle_epi32(min, 0b1110);
+    low = _mm_min_epu32(min, high);
+    high = _mm_shuffle_epi32(low, 0b01);
+    min = _mm_min_epu32(low, high);
+    return _mm_cvtsi128_si32(min);
+}
+
+// horizontal max
+inline I32 _mm256_hmax_epu32(__m256i x)
+{
+    __m128i low = _mm256_extractf128_si256(x, 0);
+    __m128i high = _mm256_extractf128_si256(x, 1);
+    __m128i max = _mm_max_epu32(low, high);
+    high = _mm_shuffle_epi32(max, 0b1110);
+    low = _mm_max_epu32(max, high);
+    high = _mm_shuffle_epi32(low, 0b01);
+    max = _mm_max_epu32(low, high);
+    return _mm_cvtsi128_si32(max);
+}
+#endif  // _H_X86_AVX2_EXPAND

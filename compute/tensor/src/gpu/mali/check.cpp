@@ -12,39 +12,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "sys.h"
-#include "types.h"
+
 #include "tensor_desc.h"
 #include "error.h"
 #include "gpu/mali/tensor_computing_mali.h"
-
-EE check_infer_output_size_mali(TensorDesc inputDesc,
-    TensorDesc *outputDesc,
-    GCLMemDesc_t gclmemInputADesc,
-    GCLMemDesc_t gclmemInputBDesc,
-    GCLMemDesc_t gclmemOutputDesc)
-{
-    /*tensorDesc record cpu org data format info*/
-    /*gclmemDesc record gpu trans data format info*/
-    if (outputDesc) {
-        (*outputDesc).dt = DT_I32;
-        (*outputDesc).nDims = 1;
-        (*outputDesc).dims[0] = inputDesc.dims[inputDesc.nDims - 1];
-    }
-    DataType idt = inputDesc.dt;
-    U32 ndims = inputDesc.nDims;
-    U32 iw = inputDesc.dims[0];
-    U32 ih = (ndims > 1) ? inputDesc.dims[1] : 1;
-    U32 ic = (ndims > 2) ? inputDesc.dims[2] : 1;
-    U32 in = (ndims > 3) ? inputDesc.dims[3] : 1;
-    if (in > 1) {
-        CHECK_STATUS(NOT_SUPPORTED);
-    }
-    CHECK_STATUS(infer_gclmem_desc_nchw(
-        iw, ih, ic, 0, 0, 1, 1, 1, idt, DT_I32, gclmemInputADesc, gclmemOutputDesc));
-    CHECK_STATUS(
-        infer_gclmem_desc_nchw(iw, ih, ic, 0, 0, 0, 0, 0, idt, idt, gclmemInputBDesc, NULL));
-    return SUCCESS;
-}
 
 inline EE check_checkpara_mali(GCLHandle_t handle,
     TensorDesc inputDescA,

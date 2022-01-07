@@ -22,6 +22,8 @@ public:
     {
         this->dt = dt;
         this->p = p;
+        this->inputFrameSize = 0;
+        this->outputFrameSize = 0;
     }
 
     OperatorType get_type() override
@@ -31,6 +33,8 @@ public:
 
 protected:
     SpliceParamSpec p;
+    int inputFrameSize;
+    int outputFrameSize;
 };
 
 #endif  // _EMBEDDING__H

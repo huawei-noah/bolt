@@ -34,7 +34,6 @@ public:
         int inputTensorNumber = this->inputTensors.size();
         Tensor inputTensor = this->inputTensors[this->dataID];
         Tensor outputTensor = this->outputTensors[0];
-        outputTensor.resize(inputTensor.get_desc());
 
         void *alpha, *beta;
         if (inputTensorNumber == 1) {
@@ -50,58 +49,26 @@ public:
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
-        auto inDim = inTensors[0]->get_desc();
-        auto curOpWs = this->get_weightspec();
-        if (curOpWs.bytes_of_weight == bytesOf(curOpWs.mdt) ||
-            curOpWs.bytes_of_vec == bytesOf(curOpWs.mdt)) {
-            this->p.axis = 0;
+        if (inTensors.size() > 1 &&
+            tensorNumElements(inTensors[1]->get_desc()) >
+                tensorNumElements(inTensors[0]->get_desc())) {
+            this->dataID = 1;
         }
-        I32 tmpAxis = (this->p.axis + inDim.nDims) % inDim.nDims;
-        tmpAxis = inDim.nDims - 1 - tmpAxis;
-        CHECK_REQUIREMENT(tmpAxis < (I32)inDim.nDims);
-        U32 ic = inDim.dims[tmpAxis];
-
-        if (0 != curOpWs.bytes_of_weight) {
-            this->numChannels = curOpWs.bytes_of_weight / UNI_MAX(1, bytesOf(curOpWs.mdt));
-        } else if (0 != curOpWs.bytes_of_vec) {
-            this->numChannels = curOpWs.bytes_of_vec / UNI_MAX(1, bytesOf(curOpWs.mdt));
-        } else {
-            this->numChannels = 0;
-        }
-
-        if (ic != numChannels && 0 != numChannels) {
-            UNI_ERROR_LOG("ScaleCPU input channels (IC) do not match. Perhaps some channel padding "
-                          "has been done earlier\n"
-                          "          IC is now %u but should be %u\n",
-                ic, numChannels);
-            CHECK_STATUS(NOT_SUPPORTED);
-            return NOT_SUPPORTED;
-        } else {
-            if (inTensors.size() > 1 &&
-                tensorNumElements(inTensors[1]->get_desc()) > tensorNumElements(inDim)) {
-                this->dataID = 1;
-            }
-        }
-
-        CHECK_STATUS(
-            scale_infer_output_size(inTensors[this->dataID], outTensors[0], &this->archInfo));
+        U32 axisLen = find_target_axis_len(inTensors);
+        CHECK_STATUS(scale_infer_output_size(
+            inTensors[this->dataID], this->p, axisLen, outTensors[0], &this->archInfo));
         return SUCCESS;
     }
 
     EE infer_weight_desc() override
     {
         auto curOpWs = this->get_weightspec();
-        if (0 != curOpWs.bytes_of_weight) {
-            this->numChannels = curOpWs.bytes_of_weight / UNI_MAX(1, bytesOf(curOpWs.mdt));
-        } else if (0 != curOpWs.bytes_of_vec) {
-            this->numChannels = curOpWs.bytes_of_vec / UNI_MAX(1, bytesOf(curOpWs.mdt));
-        } else {
-            this->numChannels = 0;
-        }
         this->weightTensors = std::vector<Tensor>(1);
-        this->weightTensors[0].resize(tensor1d(this->dt, numChannels));
+        this->weightTensors[0].resize(
+            tensor1d(this->dt, curOpWs.bytes_of_weight / UNI_MAX(1, bytesOf(curOpWs.mdt))));
         this->biasTensors = std::vector<Tensor>(1);
-        this->biasTensors[0].resize(tensor1d(this->dt, numChannels));
+        this->biasTensors[0].resize(
+            tensor1d(this->dt, curOpWs.bytes_of_vec / UNI_MAX(1, bytesOf(curOpWs.mdt))));
         return SUCCESS;
     }
 };

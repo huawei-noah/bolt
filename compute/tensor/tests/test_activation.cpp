@@ -11,7 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string.h>
 #include "tensor_computing.h"
 #include "ut_util.h"
 
@@ -23,11 +22,6 @@ int activationFunctionTest(U32 in,
     ActivationParamSpec activationDesc,
     const char *activationType)
 {
-    ArchInfo archInfo;
-    archInfo.arch = UT_ARCH;
-    ArchInfo archInfo_org;
-    archInfo_org.arch = CPU_GENERAL;
-
     DataFormat df = DF_NCHWC8;
     memset(activationDesc.value, 0, sizeof(activationDesc.value));
 
@@ -38,26 +32,26 @@ int activationFunctionTest(U32 in,
 
     Tensor dataTensor = Tensor::alloc_sized<CPUMem>(dataDesc);
     Tensor dataTensorRef = Tensor::alloc_sized<CPUMem>(dataDesc);
-    memcpy(get_ptr_from_tensor(dataTensor, UT_ARCH), data, tensorNumBytes(dataDesc));
-    memcpy(get_ptr_from_tensor(dataTensorRef, UT_ARCH), data, tensorNumBytes(dataDesc));
+    memcpy(get_ptr_from_tensor(dataTensor, CPU_GENERAL), data, tensorNumBytes(dataDesc));
+    memcpy(get_ptr_from_tensor(dataTensorRef, CPU_GENERAL), data, tensorNumBytes(dataDesc));
 
     if (UT_CHECK) {
         //check
-        CHECK_STATUS(activation(dataTensor, activationDesc, dataTensor, &archInfo));
+        CHECK_STATUS(activation(dataTensor, activationDesc, dataTensor, &UT_CPU_ARCHINFO));
 
         // naive implement
-        CHECK_STATUS(activation(dataTensorRef, activationDesc, dataTensorRef, &archInfo_org));
+        CHECK_STATUS(activation(dataTensorRef, activationDesc, dataTensorRef, &UT_SERIAL_ARCHINFO));
 
         // check
-        ut_check_v(get_ptr_from_tensor(dataTensor, UT_ARCH),
-            get_ptr_from_tensor(dataTensorRef, UT_ARCH), dataTensor.length(), dt, 0.01, __FILE__,
-            __LINE__);
+        ut_check_v(get_ptr_from_tensor(dataTensor, CPU_GENERAL),
+            get_ptr_from_tensor(dataTensorRef, CPU_GENERAL), dataTensor.length(), dt, 0.01,
+            __FILE__, __LINE__);
     }
 
     // benchmark
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        CHECK_STATUS(activation(dataTensor, activationDesc, dataTensor, &archInfo));
+        CHECK_STATUS(activation(dataTensor, activationDesc, dataTensor, &UT_CPU_ARCHINFO));
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;

@@ -12,12 +12,12 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "tensor_computing.h"
-#ifdef _USE_MALI
+#ifdef _USE_GPU
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
 #include <string.h>
 
-EE squeeze(Tensor inputTensor, Tensor outputTensor, ArchInfo_t archInfo)
+EE squeeze(Tensor inputTensor, Tensor tmpTensor, Tensor outputTensor, ArchInfo_t archInfo)
 {
     auto arch = archInfo->arch;
     TensorDesc inputDesc = inputTensor.get_desc();
@@ -25,11 +25,12 @@ EE squeeze(Tensor inputTensor, Tensor outputTensor, ArchInfo_t archInfo)
     void *output = get_ptr_from_tensor(outputTensor, arch);
 
     EE ret = NOT_SUPPORTED;
-    if (IS_MALI_GPU(arch)) {
-#ifdef _USE_MALI
+    if (IS_GPU(arch)) {
+#ifdef _USE_GPU
+        void *tmpbuf = get_ptr_from_tensor(tmpTensor, arch);
         TensorDesc outputDesc = outputTensor.get_desc();
         ret = squeeze_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc, (GCLMem_t)input,
-            outputDesc, (GCLMem_t)output);
+            (GCLMem_t)tmpbuf, outputDesc, (GCLMem_t)output);
 #endif
 #ifdef _USE_CPU
     } else {
@@ -42,14 +43,10 @@ EE squeeze(Tensor inputTensor, Tensor outputTensor, ArchInfo_t archInfo)
     return ret;
 }
 
-#ifdef _USE_CPU
 EE squeeze_infer_output_size_cpu(
     TensorDesc inputDesc, int *axes, int axesNum, TensorDesc *outputDesc)
 {
-    outputDesc->dt = inputDesc.dt;
-    for (U32 i = 0; i < inputDesc.nDims; i++) {
-        outputDesc->dims[i] = inputDesc.dims[i];
-    }
+    *outputDesc = inputDesc;
     for (int i = 0; i < axesNum; i++) {
         int axis = axes[i];
         if (axis < 0) {
@@ -65,10 +62,13 @@ EE squeeze_infer_output_size_cpu(
     }
     CHECK_REQUIREMENT(index + axesNum == inputDesc.nDims);
     outputDesc->nDims = index;
-    outputDesc->df = getTensorDefaultDataFormat(outputDesc->nDims);
+    if (inputDesc.df != DF_NCHWC8) {
+        outputDesc->df = getTensorDefaultDataFormat(outputDesc->nDims);
+    } else {
+        outputDesc->df = DF_NCHWC8;
+    }
     return SUCCESS;
 }
-#endif
 
 EE squeeze_infer_output_size(
     Tensor *inputTensor, SqueezeParamSpec p, Tensor *outputTensor, ArchInfo_t archInfo)
@@ -81,21 +81,25 @@ EE squeeze_infer_output_size(
     }
     TensorDesc inputDesc = inputTensor->get_desc();
     TensorDesc outputDesc = outputTensor->get_desc();
-    EE ret = NOT_SUPPORTED;
-    if (IS_MALI_GPU(archInfo->arch)) {
-#ifdef _USE_MALI
-        GCLMemDesc gclmemInputDesc = ocl_get_desc(*inputTensor);
-        GCLMemDesc gclmemOutputDesc = ocl_get_desc(*outputTensor);
-        ret = squeeze_infer_output_size_mali(
-            inputDesc, &outputDesc, &gclmemInputDesc, &gclmemOutputDesc);
-        ocl_set_desc(inputTensor, gclmemInputDesc);
-        ocl_set_desc(outputTensor, gclmemOutputDesc);
-#endif
-#ifdef _USE_CPU
-    } else {
-        ret = squeeze_infer_output_size_cpu(inputDesc, p.axes, p.axes_num, &outputDesc);
+    CHECK_STATUS(squeeze_infer_output_size_cpu(inputDesc, p.axes, p.axes_num, &outputDesc));
+    outputTensor->resize(outputDesc);
+    return SUCCESS;
+}
+
+EE squeeze_infer_forward_tmp_bytes(
+    Tensor inputTensor, Tensor outputTensor, U32 *bytes, ArchInfo_t archInfo)
+{
+    EE ret = SUCCESS;
+    *bytes = 0;
+    if (IS_GPU(archInfo->arch)) {
+#ifdef _USE_GPU
+        TensorDesc inputDesc = inputTensor.get_desc();
+        TensorDesc outputDesc = outputTensor.get_desc();
+        GCLMemDesc gclmemInputDesc = ocl_get_desc(inputTensor);
+        GCLMemDesc gclmemOutputDesc = ocl_get_desc(outputTensor);
+        ret = squeeze_infer_forward_tmp_bytes_mali(
+            inputDesc, gclmemInputDesc, outputDesc, gclmemOutputDesc, bytes);
 #endif
     }
-    outputTensor->resize(outputDesc);
     return ret;
 }

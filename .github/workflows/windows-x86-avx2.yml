@@ -1,0 +1,31 @@
+name: windows-x86-avx2
+on: [push, pull_request]
+jobs:
+  windows-x86-avx2:
+    runs-on: windows-latest
+    steps:
+    - name: cancel-previous-runs
+      uses: styfle/cancel-workflow-action@0.7.0
+      with:
+        access_token: ${{ secrets.GITHUB_TOKEN }}
+    - uses: actions/checkout@v2
+      with:
+        submodules: true
+    - name: cache-wget
+      id: cache-wget
+      uses: actions/cache@v1
+      with:
+        path: "wget-install"
+        key: wget-windows-install
+    - name: download wget
+      run: |
+        mkdir software && cd software
+        mkdir wget && cd wget
+        Invoke-WebRequest -Uri https://eternallybored.org/misc/wget/1.21.1/64/wget.exe -OutFile wget.exe > log.txt
+       
+    - name: compile x86-avx2 on windows
+      run: |        
+        export PATH=$PATH:/d/a/bolt/bolt/software/wget
+        cd /d/a/bolt/bolt
+        ./install.sh --target=windows-x86_64_avx2
+      shell: bash

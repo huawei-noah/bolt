@@ -15,12 +15,11 @@
 #define _H_ARM_FUNCTIONS
 
 #include "cpu/cpu_functions_template.h"
+#include "cpu/general/general_functions.h"
 #ifdef _USE_FP16
 #include "cpu/arm/fp16/arm_functions_fp16.h"
 #endif
-#ifdef _USE_FP32
 #include "cpu/arm/fp32/arm_functions_fp32.h"
-#endif
 #ifdef _USE_INT8
 #include "cpu/arm/int8/arm_functions_int8.h"
 #endif
@@ -91,26 +90,28 @@ inline F32 array_var_arm(DataType dt, const void *data, I32 len, F32 mean)
     return result;
 }
 
-// array max
-inline F32 array_max_value_arm(DataType dt, const void *data, I32 len)
+inline EE array_minmax_value_arm(DataType dt, const void *data, I32 len, int mode, F32 *result)
 {
-    F32 result = 0;
+    EE ret = SUCCESS;
     switch (dt) {
 #ifdef _USE_FP16
         case DT_F16:
-            result = array_max_value_f16((const F16 *)data, len);
+            ret = array_minmax_value_f16((const F16 *)data, len, mode, result);
             break;
 #endif
 #ifdef _USE_FP32
         case DT_F32:
-            result = array_max_value_f32((const F32 *)data, len);
+            ret = array_minmax_value_f32((const F32 *)data, len, mode, result);
             break;
 #endif
+        case DT_I32:
+            ret = array_minmax_value_i32((const I32 *)data, len, mode, result);
+            break;
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            ret = NOT_SUPPORTED;
             break;
     }
-    return result;
+    return ret;
 }
 
 inline F32 array_maxabs_arm(DataType dt, const void *data, I32 len)
@@ -202,10 +203,29 @@ inline EE array_activation_arm(
         }
 #endif
         default:
-            ret = NOT_SUPPORTED;
+            ret = array_activation_general(dt, input, len, activationDesc, output);
             break;
     }
     return ret;
+}
+
+inline void array_mul_arm(DataType dt, const void *inputA, const void *inputB, void *output, I32 len)
+{
+    switch (dt) {
+#ifdef _USE_FP16
+        case DT_F16:
+            array_mul_f16((const F16 *)inputA, (const F16 *)inputB, (F16 *)output, len);
+            break;
+#endif
+#ifdef _USE_FP32
+        case DT_F32:
+            array_mul_f32((const F32 *)inputA, (const F32 *)inputB, (F32 *)output, len);
+            break;
+#endif
+        default:
+            CHECK_STATUS(NOT_SUPPORTED);
+            break;
+    }
 }
 
 inline void array_add_arm(DataType dt, const void *inputA, const void *inputB, void *output, I32 len)
@@ -227,18 +247,20 @@ inline void array_add_arm(DataType dt, const void *inputA, const void *inputB, v
     }
 }
 
-inline void array_square_and_add_arm(
-    DataType dt, const void *inputA, const void *inputB, void *output, I32 len)
+inline void array_mul_and_add_arm(
+    DataType dt, const void *inputA, const void *inputB, const void *inputC, void *output, I32 len)
 {
     switch (dt) {
 #ifdef _USE_FP16
         case DT_F16:
-            array_square_and_add_f16((const F16 *)inputA, (const F16 *)inputB, (F16 *)output, len);
+            array_mul_and_add_f16(
+                (const F16 *)inputA, (const F16 *)inputB, (const F16 *)inputC, (F16 *)output, len);
             break;
 #endif
 #ifdef _USE_FP32
         case DT_F32:
-            array_square_and_add_f32((const F32 *)inputA, (const F32 *)inputB, (F32 *)output, len);
+            array_mul_and_add_f32(
+                (const F32 *)inputA, (const F32 *)inputB, (const F32 *)inputC, (F32 *)output, len);
             break;
 #endif
         default:
@@ -265,4 +287,27 @@ inline void array_max_arm(DataType dt, const void *inputA, const void *inputB, v
             break;
     }
 }
+
+inline void array_norm_scalar_scale_arm(
+    DataType dt, void *input, void *output, I32 len, F32 mean, F32 var, void *alpha, void *beta)
+{
+    switch (dt) {
+#ifdef _USE_FP16
+        case DT_F16:
+            array_norm_scalar_scale_fp16(
+                (F16 *)input, (F16 *)output, len, mean, var, (F16 *)alpha, (F16 *)beta);
+            break;
+#endif
+#ifdef _USE_FP32
+        case DT_F32:
+            array_norm_scalar_scale_fp32(
+                (F32 *)input, (F32 *)output, len, mean, var, (F32 *)alpha, (F32 *)beta);
+            break;
+#endif
+        default:
+            CHECK_STATUS(NOT_SUPPORTED);
+            break;
+    }
+}
+
 #endif

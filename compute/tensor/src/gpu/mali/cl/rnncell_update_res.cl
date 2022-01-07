@@ -11,6 +11,22 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+#include "kernel_def.h"
+#define MANGLE_NAME_IMPL(base, PRO, MODE) base##PRO##MODE
+#define MANGLE_NAME(base, PRO, MODE) MANGLE_NAME_IMPL(base, PRO, MODE)
+
+#if defined(USE_RNN_MODE)
+#define MODE ch
+#else
+#define MODE s
+#endif
+
+#if defined(USE_PROJECTION)
+#define PRO pro_
+#else
+#define PRO
+#endif
+
 #define load_float4(off, val, buf)  \
     {                               \
         T4 tmp;                     \
@@ -19,23 +35,6 @@
         val.y = tmp.y;              \
         val.z = tmp.z;              \
         val.w = tmp.w;              \
-    }
-
-#define load_float3(off, val, buf)  \
-    {                               \
-        T3 tmp;                     \
-        tmp = vload3(0, buf + off); \
-        val.x = tmp.x;              \
-        val.y = tmp.y;              \
-        val.z = tmp.z;              \
-    }
-
-#define load_float2(off, val, buf)  \
-    {                               \
-        T2 tmp;                     \
-        tmp = vload2(0, buf + off); \
-        val.x = tmp.x;              \
-        val.y = tmp.y;              \
     }
 
 #define store_float4(off, val, buf) \
@@ -63,13 +62,18 @@
         vstore2(tmp, 0, buf + off); \
     }
 
-__kernel void rnncell_update_res(const int col,
-    const uchar noproject,
+__kernel void MANGLE_NAME(rnncell_update_res_, PRO, MODE)(const int col,
+    const int out_off,
     const int bx,
     float fbias,
     float zonecell,
     float zoneout,
+#if defined(USE_RNN_MODE)
+    __global T *cmem,
+    __global T *hmem,
+#else
     __global T *smem,
+#endif
     __global T *imem,
     __global T *out)
 {
@@ -87,7 +91,11 @@ __kernel void rnncell_update_res(const int col,
     float4 res;
     float4 hres;
     int off = idx << 2;
+#if defined(USE_RNN_MODE)
+    load_float4(off, cval, cmem);
+#else
     load_float4(off, cval, smem);
+#endif
     load_float4(off, ival, imem);
     load_float4(off + col, gval, imem);
     load_float4(off + col * 2, fval, imem);
@@ -126,41 +134,59 @@ __kernel void rnncell_update_res(const int col,
         cval.w = cval.w * (1 - zonecell) + lcval.w * zonecell;
     }
 
-    if (zoneout != 0 && noproject) {
+#if !defined(USE_PROJECTION)
+    if (zoneout != 0) {
+#if defined(USE_RNN_MODE)
+        load_float4(off, hres, hmem);
+#else
         load_float4(off + col, hres, smem);
+#endif
         hres.x = res.x * (1 - zoneout) + hres.x * zoneout;
         hres.y = res.y * (1 - zoneout) + hres.y * zoneout;
         hres.z = res.z * (1 - zoneout) + hres.z * zoneout;
         hres.w = res.w * (1 - zoneout) + hres.w * zoneout;
     }
+#endif
 
+#if defined(USE_RNN_MODE)
+    store_float4(off, cval, cmem);
+#if !defined(USE_PROJECTION)
+    store_float4(off, hres, hmem);
+#endif
     if (ec == 4) {
-        store_float4(off, cval, smem);
-        store_float4(off, res, out);
-        if (noproject) {
-            store_float4(off + col, hres, smem);
-        }
-    } else {
-        if (ec == 1) {
-            smem[off] = (T)cval.x;
-            out[off] = (T)res.x;
-            if (noproject) {
-                smem[off + col] = (T)hres.x;
-            }
-        }
-        if (ec == 2) {
-            store_float2(off, cval, smem);
-            store_float2(off, res, out);
-            if (noproject) {
-                store_float2(off + col, hres, smem);
-            }
-        }
-        if (ec == 3) {
-            store_float3(off, cval, smem);
-            store_float3(off, res, out);
-            if (noproject) {
-                store_float3(off + col, hres, smem);
-            }
-        }
+        store_float4(off + out_off, res, out);
+    } else if (ec == 1) {
+        out[off + out_off] = (T)res.x;
+    } else if (ec == 2) {
+        store_float2(off + out_off, res, out);
+    } else if (ec == 3) {
+        store_float3(off + out_off, res, out);
     }
+#else
+    if (ec == 4) {
+        store_float4(off + out_off, res, out);
+        store_float4(off, cval, smem);
+#if !defined(USE_PROJECTION)
+        store_float4(off + col, hres, smem);
+#endif
+    } else if (ec == 1) {
+        smem[off] = (T)cval.x;
+        out[off + out_off] = (T)res.x;
+#if !defined(USE_PROJECTION)
+        smem[off + col] = (T)hres.x;
+#endif
+    } else if (ec == 2) {
+        store_float2(off, cval, smem);
+        store_float2(off + out_off, res, out);
+#if !defined(USE_PROJECTION)
+        store_float2(off + col, hres, smem);
+#endif
+    } else if (ec == 3) {
+        store_float3(off, cval, smem);
+        store_float3(off + out_off, res, out);
+#if !defined(USE_PROJECTION)
+        store_float3(off + col, hres, smem);
+#endif
+    }
+#endif
 }

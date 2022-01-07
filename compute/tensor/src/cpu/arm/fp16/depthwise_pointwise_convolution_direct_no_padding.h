@@ -16,8 +16,8 @@
 
 #include <string.h>
 #include "sys.h"
-#include "types.h"
-#include "error.h"
+#include "tensor_desc.h"
+#include "parameter_spec.h"
 
 inline void calc_eight_channel_elements(I32 hw,
     I32 ih_base,

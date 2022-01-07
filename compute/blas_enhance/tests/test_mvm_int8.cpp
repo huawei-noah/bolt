@@ -11,7 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string.h>
 #include "blas_enhance.h"
 #include "ut_util.h"
 
@@ -45,8 +44,10 @@ int main(int argc, char **argv)
     }
 
     INT8 *mat = (INT8 *)ut_input_v(m * k, DT_I8, UT_INIT_RANDOM);
-    INT8 *matTran = (INT8 *)ut_input_v(m * k4, DT_I8, UT_INIT_ZERO);
+    INT8 *matTran = (INT8 *)ut_input_v(m * k4 + m * 4, DT_I8, UT_INIT_ZERO);
     INT8 *vec = (INT8 *)ut_input_v(vc, DT_I8, UT_INIT_RANDOM);
+    INT8 *vec_ref = (INT8 *)ut_input_v(vc, DT_I8, UT_INIT_RANDOM);
+    memcpy(vec_ref, vec, vc);
     I32 *res = (I32 *)ut_input_v(rc, DT_I32, UT_INIT_ZERO);
     I32 *res_ref = (I32 *)ut_input_v(rc, DT_I32, UT_INIT_ZERO);
 
@@ -55,14 +56,23 @@ int main(int argc, char **argv)
     U32 bytes;
     CHECK_STATUS(matrix_vector_multiply_tmp_bytes(mat_desc, vec_desc, &bytes, UT_ARCH));
     I32 *tmp = (I32 *)ut_input_v(bytes / bytesOf(DT_I32), DT_I32, UT_INIT_ZERO);
+
+#ifdef _USE_X86
+    UINT8 *uA = (UINT8 *)vec;
+    for (U32 i = 0; i < vc; ++i) {
+        uA[i] = (UINT8)((I32)vec[i] + 128);
+    }
+    memcpy(tmp, matTran, rc * bytesOf(DT_I32));
+#endif
+
     // check
     if (UT_CHECK) {
         CHECK_STATUS(matrix_vector_multiply(
-            tranDesc, matTran, vec_desc, vec, bytes, tmp, res_desc, res, UT_ARCH));
+            tranDesc, matTran, vec_desc, vec, bytes, tmp, res_desc, res, nullptr, UT_ARCH));
 
         // naive implement
         CHECK_STATUS(matrix_vector_multiply(
-            mat_desc, mat, vec_desc, vec, bytes, tmp, res_desc, res_ref, CPU_GENERAL));
+            mat_desc, mat, vec_desc, vec_ref, bytes, tmp, res_desc, res_ref, nullptr, CPU_GENERAL));
 
         ut_check_v(res, res_ref, rc, DT_I32, 1, __FILE__, __LINE__);
     }
@@ -70,7 +80,8 @@ int main(int argc, char **argv)
     // benchmark
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        matrix_vector_multiply(tranDesc, matTran, vec_desc, vec, bytes, tmp, res_desc, res, UT_ARCH);
+        matrix_vector_multiply(
+            tranDesc, matTran, vec_desc, vec, bytes, tmp, res_desc, res, nullptr, UT_ARCH);
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;

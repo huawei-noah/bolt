@@ -11,36 +11,8 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifdef _USE_FP16
 #include "tensor_computing.h"
-#include "ut_util.h"
-#include "gcl.h"
-#include "libkernelsource.h"
-inline GCLMem_t alloc(Tensor tensor)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    mem->alloc();
-    return (GCLMem_t)mem->get_ptr();
-}
-
-inline GCLMem_t alloc_map(Tensor tensor)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    mem->mapped_alloc();
-    return (GCLMem_t)mem->get_ptr();
-}
-
-inline GCLMem_t alloc_bytes(Tensor tensor, U32 size)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    GCLMem_t ptr = NULL;
-    if (size > 0) {
-        mem->resize(tensor1d(DT_U8, size));
-        mem->alloc();
-        ptr = (GCLMem_t)mem->get_ptr();
-    }
-    return ptr;
-}
+#include "ut_util_ocl.h"
 
 int powerTest(int argc, char **argv, DataType dt)
 {
@@ -68,17 +40,14 @@ int powerTest(int argc, char **argv, DataType dt)
 
     ArchInfo archInfo;
     archInfo.arch = MALI;
-    ArchInfo archInfo_org;
-    archInfo_org.arch = CPU_GENERAL;
+
     U32 len = in * ic * ih * iw;
 
     TensorDesc input_desc_cpu = tensor1d(dt, len);
     TensorDesc output_desc_cpu = tensor1d(dt, len);
     TensorDesc input_desc_gpu = tensor4df(dt, DF_NCHW, in, ic, ih, iw);
-    TensorDesc output_desc_gpu;
 
     U8 *input_cpu = ut_input_v(len, dt, UT_INIT_RANDOM);
-    U8 *output_gpu = NULL;
 
     std::shared_ptr<GCLHandle> handleSharedPtr = OCLContext::getInstance().handle;
     GCLHandle_t handle = handleSharedPtr.get();
@@ -93,8 +62,10 @@ int powerTest(int argc, char **argv, DataType dt)
     maliPara.handle = handle;
     archInfo.archPara = &maliPara;
     CHECK_STATUS(power_infer_output_size(&inputTensor, &outputTensor, &archInfo));
+    TensorDesc output_desc_gpu = outputTensor.get_desc();
+    U8 *output_gpu = ut_input_v(on * oc * oh * ow, dt, UT_INIT_RANDOM);
 
-    GCLMem_t output = alloc_map(outputTensor);
+    GCLMem_t output = alloc(outputTensor);
     GCLMem_t input = alloc(inputTensor);
     CHECK_STATUS(gcl_fill_memory_zero(handle, input));
 
@@ -102,12 +73,14 @@ int powerTest(int argc, char **argv, DataType dt)
     U32 tmpBytes = 0;
     tmpBytes = tensorNumBytes(input_desc_gpu);
     maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
+    tmpBytes = tensorNumBytes(output_desc_gpu);
+    maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
     GCLMem_t tmpbuf = alloc_bytes(tmpTensor, maxBytes);
 
     CHECK_STATUS(ocl_set_input(handle, input, input_desc_gpu, input_cpu, tmpbuf, true));
     CHECK_STATUS(power(inputTensor, p, outputTensor, &archInfo));
     /*warp up*/
-    UNI_INFO_LOG("Warp up gpu:\n")
+    UNI_INFO_LOG("warm up gpu:\n")
     for (U32 i = 0; i < 2; i++) {
         CHECK_STATUS(gcl_run_kernelVec(handle));
     }
@@ -120,8 +93,7 @@ int powerTest(int argc, char **argv, DataType dt)
     CHECK_STATUS(gcl_run_kernelVec(handle));
 #endif
 
-    output_desc_gpu = outputTensor.get_desc();
-    CHECK_STATUS(ocl_get_output(handle, output, output_desc_gpu, true));
+    CHECK_STATUS(ocl_get_output(handle, output, output_desc_gpu, output_gpu, tmpbuf, true));
     output_gpu = output->mapPtrArray.back();
     char buffer[150];
     char params[120];
@@ -134,18 +106,20 @@ int powerTest(int argc, char **argv, DataType dt)
     Tensor inputTensorCpu;
     inputTensorCpu.resize(input_desc_cpu);
     inputTensorCpu.alloc();
-    memcpy(get_ptr_from_tensor(inputTensorCpu, UT_ARCH), input_cpu, tensorNumBytes(input_desc_cpu));
+    memcpy(get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), input_cpu,
+        tensorNumBytes(input_desc_cpu));
 
     Tensor outputTensorCpu;
     outputTensorCpu.resize(output_desc_cpu);
     outputTensorCpu.alloc();
 
-    CHECK_STATUS(power(inputTensorCpu, p, outputTensorCpu, &archInfo_org));
-    ut_check_a(output_gpu, get_ptr_from_tensor(outputTensorCpu, UT_ARCH), on * oc * ow * oh, dt);
+    CHECK_STATUS(power(inputTensorCpu, p, outputTensorCpu, &UT_SERIAL_ARCHINFO));
+    ut_check_a(output_gpu, get_ptr_from_tensor(outputTensorCpu, CPU_GENERAL), on * oc * ow * oh, dt);
 
     CHECK_STATUS(gcl_finish(handle));
     CHECK_STATUS(gcl_clean_kernelVec(handle));
     free(input_cpu);
+    free(output_gpu);
     return 0;
 }
 
@@ -154,4 +128,3 @@ int main(int argc, char **argv)
     powerTest(argc, argv, DT_F16);
     return 0;
 }
-#endif

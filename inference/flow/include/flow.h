@@ -45,7 +45,7 @@ public:
      * @param  precision      data process precision
      * @param  affinityPolicy CPU affinity setting
      * @param  cpuThreads     the number of CPU cores to use(default is 1)
-     * @param  useGPU         whether to use ARM MALI GPU(default is false)
+     * @param  useGPU         whether to use ARM GPU(default is false)
      *
      * @return
      */

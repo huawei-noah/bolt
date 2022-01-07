@@ -11,7 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifdef _USE_FP16
 #include "cpu/arm/bnn/tensor_computing_bnn.h"
 
 EE convolution_bnn(TensorDesc inputDesc,
@@ -71,4 +70,3 @@ EE convolution_bnn(TensorDesc inputDesc,
     }
     return ret;
 }
-#endif

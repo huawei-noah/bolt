@@ -13,10 +13,8 @@
 
 #ifndef _BILATERAL_SLICE_APPLY_MALI_UCHAR
 #define _BILATERAL_SLICE_APPLY_MALI_UCHAR
-#include "sys.h"
-#include "types.h"
-#include "error.h"
-#include "tensor_computing_type.h"
+
+#include "gpu/mali/uchar/tensor_computing_uchar.h"
 
 EE bilateral_slice_apply_mali_uchar(GCLHandle_t handle,
     TensorDesc inputDesc,

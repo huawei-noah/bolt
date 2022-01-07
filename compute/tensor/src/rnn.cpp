@@ -12,15 +12,19 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "tensor_computing.h"
+#ifdef _USE_X86
+#include "cpu/x86/tensor_computing_x86.h"
+#endif
 #ifdef _USE_CPU
 #include "cpu/tensor_computing_cpu.h"
 #endif
-#ifdef _USE_MALI
+#ifdef _USE_GPU
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
 
 EE rnn_transform_filter(std::vector<Tensor> filterTensors,
     RNNParamSpec rnnParamSpec,
+    Tensor tmpTensor,
     std::vector<Tensor *> ftmTensors,
     ArchInfo_t archInfo)
 {
@@ -31,23 +35,25 @@ EE rnn_transform_filter(std::vector<Tensor> filterTensors,
     std::vector<void *> ftms = get_data_from_tensor_ptrs<void *>(ftmTensors, arch);
 
     EE ret = NOT_SUPPORTED;
+
     if (IS_CPU(arch)) {
 #ifdef _USE_CPU
         ret = rnn_transform_filter_cpu(filterDescs.data(), (const void **)filters.data(),
-            rnnParamSpec, ftmDescs.data(), ftms.data());
+            rnnParamSpec, ftmDescs.data(), ftms.data(), arch);
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
-        GCLMem filterArray[2];
-        GCLMem filterTranArray[2];
-        filterArray[0] = *((GCLMem_t)filters[0]);
-        filterTranArray[0] = *((GCLMem_t)ftms[0]);
-        if (rnnParamSpec.numProjection > 0) {
-            filterArray[1] = *((GCLMem_t)filters[1]);
-            filterTranArray[1] = *((GCLMem_t)ftms[1]);
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
+        std::vector<GCLMem> filterArray;
+        std::vector<GCLMem> filterTranArray;
+        for (U32 i = 0; i < filters.size(); i++) {
+            filterArray.push_back(*((GCLMem_t)filters[i]));
         }
+        for (U32 i = 0; i < ftms.size(); i++) {
+            filterTranArray.push_back(*((GCLMem_t)ftms[i]));
+        }
+        GCLMem_t tmp = (GCLMem_t)get_ptr_from_tensor(tmpTensor, arch);
         ret = rnn_transform_filter_mali(((MaliPara_t)(archInfo->archPara))->handle, filterDescs[0],
-            filterArray, rnnParamSpec, ftmDescs.data(), filterTranArray,
+            filterArray.data(), tmp, rnnParamSpec, ftmDescs.data(), filterTranArray.data(),
             ((MaliPara_t)(archInfo->archPara))->forwardRunInfo);
 #endif
     }
@@ -58,45 +64,69 @@ EE rnn_transform_filter(std::vector<Tensor> filterTensors,
 }
 
 EE rnn_transform_filter_bytes(
-    std::vector<Tensor> filterTensors, RNNParamSpec rnnParamSpec, U32 *bytes, ArchInfo_t archInfo)
+    std::vector<Tensor> filterTensors, RNNParamSpec rnnParamSpec, void *bytes, ArchInfo_t archInfo)
 {
     std::vector<TensorDesc> filterDescs = get_desc_from_tensors(filterTensors);
     EE ret = NOT_SUPPORTED;
     auto arch = archInfo->arch;
+
     if (IS_CPU(arch)) {
 #ifdef _USE_CPU
-        ret = rnn_transform_filter_bytes_cpu(filterDescs.data(), rnnParamSpec, bytes);
+        ret = rnn_transform_filter_bytes_cpu(filterDescs.data(), rnnParamSpec, (U32 *)bytes);
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
         ret = rnn_transform_filter_bytes_mali(filterDescs[0], rnnParamSpec,
-            ((MaliPara_t)(archInfo->archPara))->gclmemFilterDesc, bytes,
-            ((MaliPara_t)(archInfo->archPara))->forwardRunInfo);
+            ((MaliPara_t)(archInfo->archPara))->forwardRunInfo, (TensorDesc *)bytes);
 #endif
     }
     return ret;
 }
 
-EE rnn_infer_output_size(
-    Tensor *inputTensor, RNNParamSpec rnnParamSpec, Tensor *outputTensor, ArchInfo_t archInfo)
+EE rnn_infer_output_size(std::vector<Tensor *> inputTensors,
+    RNNParamSpec rnnParamSpec,
+    std::vector<Tensor *> outputTensors,
+    ArchInfo_t archInfo)
 {
-    UNUSED(archInfo);
-    if (inputTensor == nullptr) {
+    if (inputTensors.size() == 0) {
         CHECK_STATUS(NULL_POINTER);
     }
-    if (outputTensor == nullptr) {
+    if (inputTensors.size() == 0) {
         CHECK_STATUS(NULL_POINTER);
     }
-    TensorDesc inputDesc = inputTensor->get_desc();
-    TensorDesc outputDesc = outputTensor->get_desc();
-    DataType idt;
-    DataFormat idf;
-    U32 batch, step, xDim;
-    CHECK_STATUS(tensor3dGet(inputDesc, &idt, &idf, &batch, &step, &xDim));
+    TensorDesc inputDesc = inputTensors[0]->get_desc();
+    DataType idt = inputDesc.dt;
+    DataFormat idf = inputDesc.df;
+    U32 batch = inputDesc.dims[inputDesc.nDims - 1];
+    U32 step = inputDesc.dims[inputDesc.nDims - 2];
+    U32 xDim = inputDesc.dims[inputDesc.nDims - 3];
+    for (U32 i = 0; i < inputDesc.nDims - 3; ++i) {
+        xDim *= inputDesc.dims[i];
+    }
     U32 num = (rnnParamSpec.biDirection) ? 2 : 1;
     U32 hDim = num * rnnParamSpec.numOutput;
-    outputDesc = tensor3df(idt, idf, batch, step, hDim);
-    outputTensor->resize(outputDesc);
+
+    std::vector<TensorDesc> outputDescs;
+    TensorDesc outputDesc = tensor3df(idt, DF_MTK, batch, step, hDim);
+    outputDescs.push_back(outputDesc);
+    U32 column = (rnnParamSpec.numProjection > 0) ? rnnParamSpec.numProjection
+                                                  : rnnParamSpec.numOutput;
+    if (outputTensors.size() == 2) {
+        if (rnnParamSpec.mode == RNN_LSTM) {
+            outputDesc = tensor2df(idt, DF_NORMAL, batch, column + hDim);
+        } else {
+            outputDesc = tensor2df(idt, DF_NORMAL, batch, hDim);
+        }
+        outputDescs.push_back(outputDesc);
+    } else if (outputTensors.size() == 3) {
+        outputDesc = tensor2df(idt, DF_NORMAL, batch, column);
+        outputDescs.push_back(outputDesc);
+        outputDesc = tensor2df(idt, DF_NORMAL, batch, hDim);
+        outputDescs.push_back(outputDesc);
+    }
+    for (U32 i = 0; i < outputDescs.size(); i++) {
+        outputTensors[i]->resize(outputDescs[i]);
+    }
     return SUCCESS;
 }
 
@@ -112,41 +142,98 @@ EE rnn_infer_forward_tmp_bytes(Tensor inputTensor,
     TensorDesc outputDesc = outputTensor.get_desc();
 
     EE ret = NOT_SUPPORTED;
-#ifdef _USE_CPU
+
     if (IS_CPU(archInfo->arch)) {
+#ifdef _USE_CPU
         ret = rnn_infer_forward_tmp_bytes_cpu(
             inputDesc, filterDesc, outputDesc, rnnParamSpec, bytes, archInfo->arch);
+#endif
+    } else if (IS_GPU(archInfo->arch)) {
+#ifdef _USE_GPU
+        GCLMemDesc gclmemInputDesc = ocl_get_desc(inputTensor);
+        ret = rnn_infer_forward_tmp_bytes_mali(inputDesc, gclmemInputDesc, filterDesc, outputDesc,
+            rnnParamSpec, bytes, ((MaliPara_t)(archInfo->archPara))->forwardRunInfo);
+#endif
+    }
+    return ret;
+}
+
+EE rnn_infer_forward_algorithm(Tensor inputTensor,
+    std::vector<Tensor> filterTensors,
+    std::vector<Tensor> biasTensors,
+    RNNParamSpec rnnParamSpec,
+    Tensor outputTensor,
+    ArchInfo_t archInfo)
+{
+    EE ret = NOT_SUPPORTED;
+#ifdef _USE_GPU
+    if (IS_GPU(archInfo->arch)) {
+        TensorDesc inputDesc = inputTensor.get_desc();
+        std::vector<TensorDesc> filterDescs = get_desc_from_tensors(filterTensors);
+        std::vector<TensorDesc> biasDescs = get_desc_from_tensors(biasTensors);
+        TensorDesc outputDesc = outputTensor.get_desc();
+        GCLMemDesc gclmemInputDesc = ocl_get_desc(inputTensor);
+        GCLMemDesc gclmemOutputDesc = ocl_get_desc(outputTensor);
+        ret = rnn_infer_forward_algorithm_mali(((MaliPara_t)(archInfo->archPara))->handle,
+            inputDesc, filterDescs, biasDescs, rnnParamSpec, outputDesc, gclmemInputDesc,
+            gclmemOutputDesc, ((MaliPara_t)(archInfo->archPara))->forwardRunInfo);
     }
 #endif
     return ret;
 }
 
-EE rnn(Tensor inputTensor,
+EE rnn(std::vector<Tensor> inputTensors,
     std::vector<Tensor> filterTensors,
     std::vector<Tensor> biasTensors,
     RNNParamSpec rnnParamSpec,
-    Tensor tmpTensor,
-    Tensor outputTensor,
+    std::vector<Tensor> tmpTensors,
+    std::vector<Tensor> outputTensors,
     ArchInfo_t archInfo)
 {
     auto arch = archInfo->arch;
-    TensorDesc inputDesc = inputTensor.get_desc();
-    void *input = get_ptr_from_tensor(inputTensor, arch);
+    std::vector<TensorDesc> inputDescs = get_desc_from_tensors(inputTensors);
+    std::vector<void *> inputs = get_data_from_tensors<void *>(inputTensors, arch);
     std::vector<TensorDesc> filterDescs = get_desc_from_tensors(filterTensors);
     std::vector<void *> filters = get_data_from_tensors<void *>(filterTensors, arch);
     std::vector<TensorDesc> biasDescs = get_desc_from_tensors(biasTensors);
     std::vector<void *> biases = get_data_from_tensors<void *>(biasTensors, arch);
-    U32 tmpBytes = tmpTensor.bytes();
-    void *tmp = get_ptr_from_tensor(tmpTensor, arch);
-    TensorDesc outputDesc = outputTensor.get_desc();
-    void *output = get_ptr_from_tensor(outputTensor, arch);
+    std::vector<TensorDesc> outputDescs = get_desc_from_tensors(outputTensors);
+    std::vector<void *> outputs = get_data_from_tensors<void *>(outputTensors, arch);
+    U32 tmpBytes = tmpTensors[0].bytes();
+    void *tmp = get_ptr_from_tensor(tmpTensors[0], arch);
 
     EE ret = NOT_SUPPORTED;
     if (IS_CPU(arch)) {
 #ifdef _USE_CPU
-        ret = rnn_cpu(inputDesc, input, filterDescs.data(), (const void **)filters.data(),
-            biasDescs.data(), (const void **)biases.data(), rnnParamSpec, tmpBytes, tmp, outputDesc,
-            output, arch);
+        ret = rnn_cpu(inputDescs[0], inputs[0], filterDescs.data(), (const void **)filters.data(),
+            biasDescs.data(), (const void **)biases.data(), rnnParamSpec, tmpBytes, tmp,
+            outputDescs[0], outputs[0], arch);
+#endif
+    } else if (IS_GPU(archInfo->arch)) {
+#ifdef _USE_GPU
+        std::vector<GCLMem> input;
+        std::vector<GCLMem> filter;
+        std::vector<GCLMem> bias;
+        std::vector<GCLMem> output;
+        for (U32 i = 0; i < inputs.size(); i++) {
+            input.push_back(*((GCLMem_t)inputs[i]));
+        }
+        for (U32 i = 0; i < filters.size(); i++) {
+            filter.push_back(*((GCLMem_t)filters[i]));
+        }
+        for (U32 i = 0; i < biases.size(); i++) {
+            bias.push_back(*((GCLMem_t)biases[i]));
+        }
+        for (U32 i = 0; i < outputs.size(); i++) {
+            output.push_back(*((GCLMem_t)outputs[i]));
+        }
+        std::vector<GCLMem_t> tmpVec(2, NULL);
+        for (U32 i = 0; i < tmpTensors.size(); i++) {
+            tmpVec[i] = (GCLMem_t)get_ptr_from_tensor(tmpTensors[i], arch);
+        }
+        ret = rnn_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDescs, input.data(),
+            filterDescs, filter.data(), biasDescs, bias.data(), rnnParamSpec, tmpVec, outputDescs,
+            output.data(), ((MaliPara_t)(archInfo->archPara))->forwardRunInfo);
 #endif
     }
     return ret;
@@ -168,32 +255,23 @@ EE rnncell_infer_output_size(std::vector<Tensor *> inputTensor,
     }
     TensorDesc inputDesc = inputTensor[0]->get_desc();
     TensorDesc outputDesc = outputTensor->get_desc();
-    EE ret = NOT_SUPPORTED;
     auto arch = archInfo->arch;
-    if (IS_CPU(arch)) {
-#ifdef _USE_CPU
-        DataType idt;
-        DataFormat idf;
-        U32 batch, xDim;
-        CHECK_STATUS(tensor2dGet(inputDesc, &idt, &idf, &batch, &xDim));
-        U32 hDim = rnnParamSpec.numOutput;
-        outputDesc = tensor2df(idt, idf, batch, hDim);
-        ret = SUCCESS;
-#endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
-        GCLMemDesc gclmemInputDesc = ocl_get_desc(*inputTensor[0]);
-        GCLMemDesc gclmemStateDesc = ocl_get_desc(*inputTensor[1]);
-        GCLMemDesc gclmemOutputDesc = ocl_get_desc(*outputTensor);
-        ret = rnncell_infer_output_size_mali(inputDesc, rnnParamSpec, &outputDesc, &gclmemInputDesc,
-            &gclmemStateDesc, &gclmemOutputDesc);
-        ocl_set_desc(inputTensor[0], gclmemInputDesc);
-        ocl_set_desc(inputTensor[1], gclmemStateDesc);
-        ocl_set_desc(outputTensor, gclmemOutputDesc);
+    DataType idt;
+    DataFormat idf;
+    U32 batch, xDim;
+    CHECK_STATUS(tensor2dGet(inputDesc, &idt, &idf, &batch, &xDim));
+    U32 hDim = rnnParamSpec.numOutput;
+    outputDesc = tensor2df(idt, idf, batch, hDim);
+    if (IS_GPU(arch)) {
+#ifdef _USE_GPU
+        U32 hDim_align = (hDim + 3) / 4 * 4;
+        U32 pr = (hDim + 3) / 4 * 4 - hDim;
+        OclMemory *stateMem = (OclMemory *)inputTensor[1]->get_memory();
+        stateMem->padding(0, pr, 0, 0);
 #endif
     }
     outputTensor->resize(outputDesc);
-    return ret;
+    return SUCCESS;
 }
 
 EE rnncell_infer_forward_tmp_bytes(Tensor inputTensor,
@@ -214,8 +292,8 @@ EE rnncell_infer_forward_tmp_bytes(Tensor inputTensor,
         ret = rnncell_infer_forward_tmp_bytes_cpu(
             inputDesc, filterDesc, outputDesc, rnnParamSpec, bytes, archInfo->arch);
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
         ret = rnncell_infer_forward_tmp_bytes_mali(inputDesc, filterDesc, outputDesc, rnnParamSpec,
             bytes, ((MaliPara_t)(archInfo->archPara))->forwardRunInfo);
 #endif
@@ -226,6 +304,7 @@ EE rnncell_infer_forward_tmp_bytes(Tensor inputTensor,
 EE rnncell_infer_forward_algorithm(Tensor xTensor,
     Tensor filterTensor,
     Tensor biasTensor,
+    Tensor stateTensor,
     RNNParamSpec rnncellDesc,
     U32 batchStrideX,
     U32 batchStrideH,
@@ -233,17 +312,68 @@ EE rnncell_infer_forward_algorithm(Tensor xTensor,
     ArchInfo_t archInfo)
 {
     EE ret = NOT_SUPPORTED;
-#ifdef _USE_MALI
-    if (IS_MALI_GPU(archInfo->arch)) {
+#ifdef _USE_GPU
+    if (IS_GPU(archInfo->arch)) {
         TensorDesc filterDesc = filterTensor.get_desc();
         TensorDesc biasDesc = biasTensor.get_desc();
         TensorDesc xDesc = xTensor.get_desc();
         TensorDesc hDesc = hTensor.get_desc();
-        ret = rnncell_infer_forward_algorithm_mali(((MaliPara_t)(archInfo->archPara))->handle,
-            xDesc, filterDesc, biasDesc, rnncellDesc, batchStrideX, batchStrideH, hDesc,
-            ((MaliPara_t)(archInfo->archPara))->forwardRunInfo);
+        GCLMemDesc gclmemInputDesc = ocl_get_desc(xTensor);
+        GCLMemDesc gclmemStateDesc = ocl_get_desc(stateTensor);
+        GCLMemDesc gclmemOutputDesc = ocl_get_desc(hTensor);
+        ret = rnncell_infer_forward_algorithm_mali(((MaliPara_t)(archInfo->archPara))->handle, xDesc,
+            filterDesc, biasDesc, rnncellDesc, batchStrideX, batchStrideH, hDesc, gclmemInputDesc,
+            gclmemStateDesc, gclmemOutputDesc, ((MaliPara_t)(archInfo->archPara))->forwardRunInfo);
     }
 #endif
+    return ret;
+}
+
+EE rnncell_transform_filter(std::vector<Tensor> filterTensors,
+    RNNParamSpec rnnParamSpec,
+    std::vector<Tensor *> ftmTensors,
+    ArchInfo_t archInfo)
+{
+    auto arch = archInfo->arch;
+    std::vector<TensorDesc> filterDescs = get_desc_from_tensors(filterTensors);
+    std::vector<void *> filters = get_data_from_tensors<void *>(filterTensors, arch);
+    std::vector<TensorDesc> ftmDescs(ftmTensors.size());
+    std::vector<void *> ftms = get_data_from_tensor_ptrs<void *>(ftmTensors, arch);
+
+    EE ret = NOT_SUPPORTED;
+    if (IS_GPU(arch)) {
+#ifdef _USE_GPU
+        GCLMem filterArray[2];
+        GCLMem filterTranArray[2];
+        filterArray[0] = *((GCLMem_t)filters[0]);
+        filterTranArray[0] = *((GCLMem_t)ftms[0]);
+        if (rnnParamSpec.numProjection > 0) {
+            filterArray[1] = *((GCLMem_t)filters[1]);
+            filterTranArray[1] = *((GCLMem_t)ftms[1]);
+        }
+        ret = rnncell_transform_filter_mali(((MaliPara_t)(archInfo->archPara))->handle,
+            filterDescs[0], filterArray, rnnParamSpec, ftmDescs.data(), filterTranArray,
+            ((MaliPara_t)(archInfo->archPara))->forwardRunInfo);
+#endif
+    }
+    for (U32 i = 0; i < ftmTensors.size(); i++) {
+        ftmTensors[i]->resize(ftmDescs[i]);
+    }
+    return ret;
+}
+
+EE rnncell_transform_filter_bytes(
+    std::vector<Tensor> filterTensors, RNNParamSpec rnnParamSpec, void *bytes, ArchInfo_t archInfo)
+{
+    std::vector<TensorDesc> filterDescs = get_desc_from_tensors(filterTensors);
+    EE ret = NOT_SUPPORTED;
+    auto arch = archInfo->arch;
+    if (IS_GPU(arch)) {
+#ifdef _USE_GPU
+        ret = rnncell_transform_filter_bytes_mali(filterDescs[0], rnnParamSpec,
+            ((MaliPara_t)(archInfo->archPara))->forwardRunInfo, (TensorDesc *)bytes);
+#endif
+    }
     return ret;
 }
 
@@ -271,7 +401,7 @@ EE rnncell(Tensor xTensor,
     void *tmp = get_ptr_from_tensor(tmpTensor, arch);
     TensorDesc hDesc = hTensor.get_desc();
     void *currentH = get_ptr_from_tensor(hTensor, arch);
-    if (!IS_MALI_GPU(arch)) {
+    if (!IS_GPU(arch)) {
         tmp = (U8 *)tmp + tmpOffset;
     }
     EE ret = NOT_SUPPORTED;
@@ -281,17 +411,20 @@ EE rnncell(Tensor xTensor,
             biasDescs.data(), (const void **)biases.data(), state, rnnParamSpec, batchStrideX,
             batchStrideH, tmpBytes, tmp, hDesc, currentH, archInfo->arch);
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
         GCLMem filterArray[2];
+        GCLMem biasArray[2];
         filterArray[0] = *((GCLMem_t)filters[0]);
+        biasArray[0] = *((GCLMem_t)biases[0]);
         if (rnnParamSpec.numProjection > 0) {
             filterArray[1] = *((GCLMem_t)filters[1]);
+            //biasArray[1] = *((GCLMem_t)biases[1]);currently only init one bias
         }
         ret = rnncell_mali(((MaliPara_t)(archInfo->archPara))->handle, xDesc, (GCLMem_t)currentX,
-            filterDescs[0], filterArray, biasDescs[0], (GCLMem_t)biases[0], (GCLMem_t)state,
-            rnnParamSpec, batchStrideX, batchStrideH, tmpBytes, (GCLMem_t)tmp, hDesc,
-            (GCLMem_t)currentH, ((MaliPara_t)(archInfo->archPara))->forwardRunInfo);
+            filterDescs[0], filterArray, biasDescs[0], biasArray, (GCLMem_t)state, rnnParamSpec,
+            batchStrideX, batchStrideH, tmpBytes, (GCLMem_t)tmp, hDesc, (GCLMem_t)currentH,
+            ((MaliPara_t)(archInfo->archPara))->forwardRunInfo);
 #endif
     }
     return ret;

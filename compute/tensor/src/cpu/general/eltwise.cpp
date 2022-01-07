@@ -30,16 +30,24 @@ EE eltwise_general_kernel(std::vector<void *> input,
 {
     T *output_ptr = (T *)output;
     for (U32 i = 0; i < len; i++) {
-        F32 tmp_s = getFloatScalar<T>(input[0], inputSize[0], i);
+        T tmp_s = getFloatScalar<T>(input[0], inputSize[0], i);
         for (U32 j = 1; j < num; j++) {
-            F32 value_s = getFloatScalar<T>(input[j], inputSize[j], i);
+            T value_s = getFloatScalar<T>(input[j], inputSize[j], i);
             switch (eltwiseMode) {
                 case ELTWISE_SUM:
                     tmp_s = value_s + tmp_s;
                     break;
-                case ELTWISE_MAX:
-                    tmp_s = (value_s > tmp_s) ? value_s : tmp_s;
+                case ELTWISE_MIN:
+                    tmp_s = UNI_MIN(value_s, tmp_s);
                     break;
+                case ELTWISE_OR:
+                case ELTWISE_MAX:
+                    tmp_s = UNI_MAX(value_s, tmp_s);
+                    break;
+                case ELTWISE_XOR:
+                    tmp_s = (value_s == tmp_s) ? 0 : 1;
+                    break;
+                case ELTWISE_AND:
                 case ELTWISE_PROD:
                     tmp_s *= value_s;
                     break;
@@ -80,6 +88,10 @@ EE eltwise_general(DataType dataType,
             break;
         }
 #endif
+        case DT_U8: {
+            ret = eltwise_general_kernel<U8>(input, inputSize, num, len, output, eltwiseMode);
+            break;
+        }
         default:
             ret = NOT_SUPPORTED;
             break;

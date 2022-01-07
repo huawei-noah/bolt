@@ -11,9 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "sys.h"
-#include "error.h"
-#include "types.h"
 #include "gpu/mali/fp16/depthwise_convolution_mali_fp16.h"
 #include "gpu/mali/fp16/depthwise_convolution_direct_mali_fp16.h"
 
@@ -28,41 +25,19 @@ inline EE depthwise_convolution_checkpara_mali_fp16(GCLHandle_t handle,
 {
     if (nullptr == handle || nullptr == input || nullptr == filter || nullptr == output ||
         nullptr == bias) {
-        return NULL_POINTER;
+        CHECK_STATUS(NULL_POINTER);
     }
     if (inputDesc.dt != outputDesc.dt || inputDesc.dt != filterDesc.dt || inputDesc.dt != DT_F16) {
-        return NOT_MATCH;
+        CHECK_STATUS(NOT_MATCH);
     }
-
-    DataFormat fdf;
-    U32 ic, fc, fh, fw, oc;
-    CHECK_STATUS(tensorSelectGet(inputDesc, NULL, NULL, NULL, &ic, NULL, NULL));
-    CHECK_STATUS(tensorSelectGet(filterDesc, NULL, &fdf, NULL, &fc, &fh, &fw));
-    CHECK_STATUS(tensorSelectGet(outputDesc, NULL, NULL, NULL, &oc, NULL, NULL));
-    if (input->desc.memFormat == DF_NCWHC4) {
-        if (filter->desc.memFormat != DF_NHWCN4) {
-            return NOT_MATCH;
-        }
-        if (output->desc.memFormat != DF_NCWHC4) {
-            return NOT_MATCH;
-        }
-    }
-    if (fw != 3 && fw != 5 && fw != 7) {
-        return NOT_MATCH;
-    }
-    if (fdf == DF_NCHW && ic != fc) {
-        return NOT_MATCH;
-    }
-    if (fc != oc) {
-        return NOT_MATCH;
+    if (output->desc.memFormat != DF_NCHWC4) {
+        CHECK_STATUS(NOT_MATCH);
     }
     return SUCCESS;
 }
 
-EE depthwise_convolution_transform_filter_bytes_mali_fp16(TensorDesc filterDesc,
-    ForwardRunInfoMali_t forwardRunInfo,
-    GCLMemDesc_t gclmemFilterDesc,
-    U32 *bytes)
+EE depthwise_convolution_transform_filter_bytes_mali_fp16(
+    TensorDesc filterDesc, ForwardRunInfoMali_t forwardRunInfo, TensorDesc *ftmDesc)
 {
     EE ret = SUCCESS;
     DepthwiseConvolutionForwardAlgorithm algorithm =
@@ -70,7 +45,7 @@ EE depthwise_convolution_transform_filter_bytes_mali_fp16(TensorDesc filterDesc,
     switch (algorithm) {
         case DEPTHWISE_CONVOLUTION_ALGORITHM_DIRECT:
             ret = depthwise_convolution_direct_transform_filter_bytes_mali_fp16(
-                filterDesc, forwardRunInfo, gclmemFilterDesc, bytes);
+                filterDesc, forwardRunInfo, ftmDesc);
             break;
         default:
             ret = NOT_SUPPORTED;
@@ -143,9 +118,22 @@ EE depthwise_convolution_mali_fp16(GCLHandle_t handle,
         handle, inputDesc, input, filterDesc, filter, bias, outputDesc, output));
     DepthwiseConvolutionForwardAlgorithm algorithm =
         (DepthwiseConvolutionForwardAlgorithm)(forwardRunInfo->algorithm);
+    GCLMem_t inputPtr = input;
+    GCLMem inputTran;
+    if (inputDesc.df == DF_NCHW) {
+        U32 tmpBufOff;
+        GCLMemDesc transDesc;
+        CHECK_STATUS(depthwise_convolution_trans_input_to_nchwc4(handle, inputDesc, filterDesc, input,
+            convParamSpec, tmpBuf, outputDesc, forwardRunInfo->best_h[0], &transDesc, &tmpBufOff));
+        inputDesc.df = DF_NCHWC4;
+        inputTran.desc = transDesc;
+        inputTran.mem =
+            tmpBuf->mem;  //no need to update tmpBuf for not used in DEPTHWISE_CONVOLUTION_ALGORITHM_DIRECT
+        inputPtr = &inputTran;
+    }
     switch (algorithm) {
         case DEPTHWISE_CONVOLUTION_ALGORITHM_DIRECT:
-            ret = depthwise_convolution_direct_mali_fp16(handle, inputDesc, input, filterDesc,
+            ret = depthwise_convolution_direct_mali_fp16(handle, inputDesc, inputPtr, filterDesc,
                 filter, convParamSpec, forwardRunInfo, biasDesc, bias, tmpBytes, tmpBuf, outputDesc,
                 output, depthwiseActivationMode);
             break;

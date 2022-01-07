@@ -12,10 +12,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "kernel_def.h"
-#define MANGLE_NAME_IMPL(base, ON, KN) base##ON##KN
-#define MANGLE_NAME(base, ON, KN) MANGLE_NAME_IMPL(base, ON, KN)
+#define MANGLE_NAME_IMPL(base, AM, ON, KN) base##AM##ON##KN
+#define MANGLE_NAME(base, AM, ON, KN) MANGLE_NAME_IMPL(base, AM, ON, KN)
 
-#if defined(REUSE_H)
+#if defined(REUSE_W)
 #if (ON == 2)
 #define SET_BIAS_VAL(bv, ov) \
     {                        \
@@ -103,27 +103,21 @@
     }
 #endif
 
-#if defined(USE_RELU)
-__kernel void MANGLE_NAME(deconv_gemm_f2s2_h_relu_, ON, KN)
-#else
-__kernel void MANGLE_NAME(deconv_gemm_f2s2_h_, ON, KN)
-#endif
-    (const int ih_str,
-        int ihw_str,
-        const int ic_str,
-        const int ih_off,
-        const int iw_off,
-        const int oh_str,
-        int ohw_str,
-        const int oh_off,
-        const int ow_off,
-        const int oh,
-        const int bx,
-        const int by,
-        __global const T *in,
-        __global const T *flt,
-        __read_only image1d_t bias,
-        __global T *out)
+__kernel void MANGLE_NAME(deconv_gemm_f2s2_w_, AM, ON, KN)(const int iw_str,
+    int ihw_str,
+    const int ic_str,
+    const int iw_off,
+    const int ih_off,
+    const int ow_str,
+    int ohw_str,
+    const int o_off,
+    const int ow,
+    const int bx,
+    const int by,
+    __global const T *in,
+    __global const T *flt,
+    __read_only image1d_t bias,
+    __global T *out)
 {
     const int idx = get_global_id(0);
     const int idy = get_global_id(1);
@@ -153,7 +147,7 @@ __kernel void MANGLE_NAME(deconv_gemm_f2s2_h_, ON, KN)
     SET_BIAS_VAL(bias_val, out_val[3]);
 #endif
 
-    int in_off = ((idy + iw_off) * ih_str + idx * ON + ih_off) << 2;
+    int in_off = ((idy + ih_off) * iw_str + idx * ON + iw_off) << 2;
     int flt_off = idz * ic_str * KN;
     ihw_str = ihw_str << 2;
 
@@ -186,18 +180,18 @@ __kernel void MANGLE_NAME(deconv_gemm_f2s2_h_, ON, KN)
     }
 
 #if (KN == 2)
-    int out_off = (idx << 1) * ON + oh_off;
-    out_off += ((idy << 1) + ow_off + (idz & 1)) * oh_str;
+    int out_off = (idx << 1) * ON + o_off;
+    out_off += ((idy << 1) + (idz & 1)) * ow_str;
     out_off += (idz >> 1) * ohw_str;
     out_off = (out_off << 2);
     VSTORE_VEC(out_val[0], out_val[1], out_off, out);
 #elif (KN == 4)
-    int out_off = (idx << 1) * ON + oh_off;
-    out_off += ((idy << 1) + ow_off) * oh_str;
+    int out_off = (idx << 1) * ON + o_off;
+    out_off += (idy << 1) * ow_str;
     out_off += idz * ohw_str;
     out_off = (out_off << 2);
     VSTORE_VEC(out_val[0], out_val[1], out_off, out);
-    VSTORE_VEC(out_val[2], out_val[3], out_off + oh_str * 4, out);
+    VSTORE_VEC(out_val[2], out_val[3], out_off + ow_str * 4, out);
 #endif
 }
 
@@ -211,27 +205,21 @@ __kernel void MANGLE_NAME(deconv_gemm_f2s2_h_, ON, KN)
         vstore8((T8)(v0.s0, v0.s1, v0.s2, v0.s3, v1.s0, v1.s1, v1.s2, v1.s3), 0, buf + off); \
     }
 
-#if defined(USE_RELU)
-__kernel void MANGLE_NAME(deconv_gemm_f2s2_relu_, ON, KN)
-#else
-__kernel void MANGLE_NAME(deconv_gemm_f2s2_, ON, KN)
-#endif
-    (const int ih_str,
-        const int ihw_str,
-        const int ic_str,
-        const int ih_off,
-        const int iw_off,
-        const int oh_str,
-        const int ohw_str,
-        const int oh_off,
-        const int ow_off,
-        const int ow,
-        const int bx,
-        const int by,
-        __global const T *in,
-        __global const T *flt,
-        __read_only image1d_t bias,
-        __global T *out)
+__kernel void MANGLE_NAME(deconv_gemm_f2s2_, AM, ON, KN)(const int iw_str,
+    const int ihw_str,
+    const int ic_str,
+    const int iw_off,
+    const int ih_off,
+    const int ow_str,
+    const int ohw_str,
+    const int o_off,
+    const int oh,
+    const int bx,
+    const int by,
+    __global const T *in,
+    __global const T *flt,
+    __read_only image1d_t bias,
+    __global T *out)
 {
     const int idx = get_global_id(0);
     const int idy = get_global_id(1);
@@ -256,11 +244,11 @@ __kernel void MANGLE_NAME(deconv_gemm_f2s2_, ON, KN)
     SET_REG_ARRAY(bias_val, out_val[3]);
 #endif
 
-    int in_off = (idy * ON + iw_off) * ih_str + idx + ih_off;
+    int in_off = (idy * ON + ih_off) * iw_str + idx + iw_off;
     int flt_off = idz * ic_str * KN;
 
     for (int i = 0; i < ic_str; ++i) {
-        LOAD_INPUT_BUF_ARRAY_V4(in_val, in_off, ih_str, in);
+        LOAD_INPUT_MEM_ARRAY_V4(in_val, in_off, iw_str, 0, 1, in);
 #if (KN == 2)
         flt_val = vload16(flt_off, flt);
         DIRECT_CONV_CAL_CORE_S1(in_val, flt_val, out_val[0]);
@@ -288,50 +276,50 @@ __kernel void MANGLE_NAME(deconv_gemm_f2s2_, ON, KN)
     }
 #if (KN == 2)
     int index_y = (idy << 1) * ON + (idz & 1);
-    int out_off = (idx << 1) + oh_off;
-    out_off += (index_y + ow_off) * oh_str;
+    int out_off = (idx << 1) + o_off;
+    out_off += index_y * ow_str;
     out_off += (idz >> 1) * ohw_str;
     out_off = (out_off << 2);
     VSTORE_VEC(out_val[0][0], out_val[1][0], out_off, out);
 #if (ON > 1)
-    if (index_y + 2 < ow) {
-        VSTORE_VEC(out_val[0][1], out_val[1][1], out_off + oh_str * 8, out);
+    if (index_y + 2 < oh) {
+        VSTORE_VEC(out_val[0][1], out_val[1][1], out_off + ow_str * 8, out);
     }
 #endif
 #if (ON > 2)
-    if (index_y + 4 < ow) {
-        VSTORE_VEC(out_val[0][2], out_val[1][2], out_off + oh_str * 16, out);
+    if (index_y + 4 < oh) {
+        VSTORE_VEC(out_val[0][2], out_val[1][2], out_off + ow_str * 16, out);
     }
 #endif
 #if (ON > 3)
-    if (index_y + 6 < ow) {
-        VSTORE_VEC(out_val[0][3], out_val[1][3], out_off + oh_str * 24, out);
+    if (index_y + 6 < oh) {
+        VSTORE_VEC(out_val[0][3], out_val[1][3], out_off + ow_str * 24, out);
     }
 #endif
 #elif (KN == 4)
     int index_y = (idy << 1) * ON;
-    int out_off = (idx << 1) + oh_off;
-    out_off += (index_y + ow_off) * oh_str;
+    int out_off = (idx << 1) + o_off;
+    out_off += index_y * ow_str;
     out_off += idz * ohw_str;
     out_off = (out_off << 2);
     VSTORE_VEC(out_val[0][0], out_val[1][0], out_off, out);
-    if (index_y + 1 < ow) {
-        VSTORE_VEC(out_val[2][0], out_val[3][0], out_off + oh_str * 4, out);
+    if (index_y + 1 < oh) {
+        VSTORE_VEC(out_val[2][0], out_val[3][0], out_off + ow_str * 4, out);
     }
 #if (ON > 1)
-    if (index_y + 2 < ow) {
-        VSTORE_VEC(out_val[0][1], out_val[1][1], out_off + oh_str * 8, out);
+    if (index_y + 2 < oh) {
+        VSTORE_VEC(out_val[0][1], out_val[1][1], out_off + ow_str * 8, out);
     }
-    if (index_y + 3 < ow) {
-        VSTORE_VEC(out_val[2][1], out_val[3][1], out_off + oh_str * 12, out);
+    if (index_y + 3 < oh) {
+        VSTORE_VEC(out_val[2][1], out_val[3][1], out_off + ow_str * 12, out);
     }
 #endif
 #if (ON > 2)
-    if (index_y + 4 < ow) {
-        VSTORE_VEC(out_val[0][2], out_val[1][2], out_off + oh_str * 16, out);
+    if (index_y + 4 < oh) {
+        VSTORE_VEC(out_val[0][2], out_val[1][2], out_off + ow_str * 16, out);
     }
-    if (index_y + 5 < ow) {
-        VSTORE_VEC(out_val[2][2], out_val[3][2], out_off + oh_str * 20, out);
+    if (index_y + 5 < oh) {
+        VSTORE_VEC(out_val[2][2], out_val[3][2], out_off + ow_str * 20, out);
     }
 #endif
 #endif

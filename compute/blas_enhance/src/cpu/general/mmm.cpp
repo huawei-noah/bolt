@@ -12,7 +12,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "error.h"
-#include "types.h"
 #include "cpu/general/blas_general.h"
 
 template <typename T1, typename T2>

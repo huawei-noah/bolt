@@ -45,11 +45,12 @@ int main(int argc, char *argv[])
     if (parse_res.algoPath.second) {
         algorithmMapPath = parse_res.algoPath.first;
     }
+    bool useGPU = (strcmp(affinityPolicyName, "GPU") == 0) ? true : false;
 
     auto pipeline = createPipeline(affinityPolicyName, modelPath, algorithmMapPath);
 
     // load sequences
-    std::map<std::string, std::shared_ptr<Tensor>> inMap = pipeline->get_inputs();
+    std::map<std::string, std::shared_ptr<Tensor>> inMap = pipeline->get_input();
     std::vector<TensorDesc> sequenceDescs;
     TensorDesc wordInputDesc = (*(inMap["nmt_words"])).get_desc();
     wordInputDesc.dt = DT_U32;
@@ -77,19 +78,36 @@ int main(int argc, char *argv[])
         inputDescMap["nmt_positions"] = sequence[1].get_desc();
         pipeline->reready(inputDescMap);
 
-        auto modelInputTensorNames = pipeline->get_model_input_tensor_names();
-        std::map<std::string, std::shared_ptr<U8>> model_tensors_input;
-        for (int index = 0; index < (int)modelInputTensorNames.size(); index++) {
-            U8 *tensorPointer = (U8 *)((CpuMemory *)(sequence[index].get_memory()))->get_ptr();
-            pipeline->copy_to_named_input(modelInputTensorNames[index], tensorPointer);
-        }
+        std::map<std::string, U8 *> inputMap;
+        inputMap["nmt_words"] = (U8 *)((CpuMemory *)(sequence[0].get_memory()))->get_ptr();
+        inputMap["nmt_positions"] = (U8 *)((CpuMemory *)(sequence[1].get_memory()))->get_ptr();
+        pipeline->set_input_by_copy(inputMap);
 
         double timeBegin = ut_time_ms();
         pipeline->run();
+#ifdef _USE_GPU
+        if (useGPU) {
+            gcl_finish(OCLContext::getInstance().handle.get());
+        }
+#endif
         double timeEnd = ut_time_ms();
         totalTime += (timeEnd - timeBegin);
 
         Tensor output = pipeline->get_tensor_by_name("decoder_output");
+#ifdef _USE_GPU
+        if (useGPU) {
+            auto mem = (OclMemory *)output.get_memory();
+            if (!mem->check_mapped()) {
+                Tensor outputMap = output.clone(false);
+                auto memMap = (OclMemory *)outputMap.get_memory();
+                memMap->mapped_alloc();
+                memMap->copy_from(mem);
+                output = outputMap;
+                mem = memMap;
+            }
+            mem->get_mapped_ptr();
+        }
+#endif
         std::cout << output.string(32) << std::endl;
         if (resultPaths.size() > sequenceIndex) {
             U32 *result = (U32 *)((CpuMemory *)(results[sequenceIndex][0].get_memory()))->get_ptr();
@@ -106,6 +124,7 @@ int main(int argc, char *argv[])
     }
 
     UNI_TIME_STATISTICS
+    pipeline->saveAlgorithmMapToFile(algorithmMapPath);
 
     std::cout << "[SUMMARY]:" << std::endl;
     UNI_CI_LOG(

@@ -23,25 +23,25 @@ int tileTest(int argc, char **argv, DataType dt)
     //input axis and tiles
     TileParamSpec tileParamSpec;
     tileParamSpec.axis = atoi(argv[5]);
-    tileParamSpec.dimsSize = 0;
+    tileParamSpec.dimsSize = 1;
     tileParamSpec.repeatsInfo[0] = atoi(argv[6]);
 
     //set input
-    ArchInfo archInfo;
-    archInfo.arch = UT_ARCH;
     DataFormat df = DF_NCHW;
     TensorDesc inDesc = tensor4df(dt, df, in, ic, ih, iw);
     U32 len = tensorNumElements(inDesc);
     U8 *input = ut_input_v(len, dt, UT_INIT_RANDOM);
     Tensor inputTensor = Tensor::alloc_sized<CPUMem>(inDesc);
-    memcpy(get_ptr_from_tensor(inputTensor, UT_ARCH), input, inputTensor.bytes());
+    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, inputTensor.bytes());
 
     //set output
     Tensor outputTensor;
-    CHECK_STATUS(tile_infer_output_size(&inputTensor, tileParamSpec, &outputTensor, &archInfo));
+    CHECK_STATUS(
+        tile_infer_output_size(&inputTensor, tileParamSpec, &outputTensor, &UT_CPU_ARCHINFO));
     outputTensor.alloc();
     if (UT_CHECK) {
-        CHECK_STATUS(tile(inputTensor, tileParamSpec, outputTensor, &archInfo));
+        Tensor tmpTensor;
+        CHECK_STATUS(tile(inputTensor, tileParamSpec, tmpTensor, outputTensor, &UT_CPU_ARCHINFO));
 
         CHECK_REQUIREMENT(outputTensor.length() == (len * tileParamSpec.repeatsInfo[0]));
     }

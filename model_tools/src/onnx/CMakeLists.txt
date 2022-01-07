@@ -1,5 +1,4 @@
-file(GLOB srcs ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
-file(GLOB commonsrcs ${CMAKE_CURRENT_SOURCE_DIR}/../model_*.cpp)
+file(GLOB srcs *.cpp)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -12,10 +11,9 @@ include_directories(${CMAKE_CURRENT_BINARY_DIR})
 include_directories(../)
 
 # shared library
-add_library(${PROJECT_NAME}_onnx SHARED ${srcs} ${ONNX_PROTO_HDRS} ${ONNX_PROTO_SRCS} ${commonsrcs})
-if (USE_IOS_CLANG)
-    target_link_libraries(${PROJECT_NAME}_onnx LINK_PUBLIC uni ${Protobuf_LIBRARY})
-endif (USE_IOS_CLANG)
+add_library(${PROJECT_NAME}_onnx SHARED ${srcs} ${ONNX_PROTO_HDRS} ${ONNX_PROTO_SRCS})
+
+target_link_libraries(${PROJECT_NAME}_onnx LINK_PUBLIC model_spec uni ${Protobuf_SHARED_LIBRARY})
 
 # static library
 add_library(${PROJECT_NAME}_onnx_static STATIC ${srcs} ${ONNX_PROTO_HDRS} ${ONNX_PROTO_SRCS})

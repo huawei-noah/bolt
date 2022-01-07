@@ -11,65 +11,243 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define MANGLE_NAME_IMPL(base, MD) base##MD
-#define MANGLE_NAME(base, MD) MANGLE_NAME_IMPL(base, MD)
+#include "kernel_def.h"
+#define MANGLE_NAME_IMPL(base, IOM, FM, BM, AXIS, ALPHA, BETA) base##IOM##FM##BM##AXIS##ALPHA##BETA
+#define MANGLE_NAME(base, IOM, FM, BM, AXIS, ALPHA, BETA) \
+    MANGLE_NAME_IMPL(base, IOM, FM, BM, AXIS, ALPHA, BETA)
 
-#if defined(USE_SAME)
-__kernel void MANGLE_NAME(scale1_, MD)
-#else
-__kernel void MANGLE_NAME(scale_, MD)
+#define FM
+#define BM
+#define AXIS
+#define ALPHA
+#define BETA
+
+#if defined(USE_NCHW)
+#define FM nchw_
 #endif
-    (const int h,
-        const int ih_str,
-        const int iw_str,
-        const int ih_off,
-        const int iw_off,
-        const int oh_str,
-        const int ow_str,
-        const int oh_off,
-        const int ow_off,
-        const int bx,
-        const int by,
-        __global const T *alpha,
-        __global const T *beta,
-        __global T *input,
-        __global T *output)
+
+#if defined(USE_BROADCAST_MODE)
+#define BM broad_
+#endif
+
+#if defined(SCALE_ON_AXIS_W)
+#define AXIS w_
+#elif defined(SCALE_ON_AXIS_H)
+#define AXIS h_
+#elif defined(SCALE_ON_AXIS_C)
+#define AXIS c_
+#endif
+
+#if defined(USE_ALPHA)
+#define ALPHA alpha_
+#endif
+
+#if defined(USE_BETA)
+#define BETA beta_
+#endif
+
+#define LOAD_ALPHA
+#define LOAD_BETA
+
+#if defined(USE_NCHW)
+
+#if !defined(USE_BROADCAST_MODE)
+#define LOAD_INPUT                                                                   \
+    {                                                                                \
+        LOAD_MEM_V4_C1_COMMON(val, idx, idy, idz, iw_str, ih_str, i_off, iw, input); \
+    }
+#endif
+
+#if defined(SCALE_ON_AXIS_W)
+
+#if defined(USE_ALPHA)
+#define LOAD_ALPHA alp = vload4(idx, alpha)
+#endif
+
+#if defined(USE_BETA)
+#define LOAD_BETA bet = vload4(idx, beta)
+#endif
+
+#if defined(USE_BROADCAST_MODE)
+#define LOAD_INPUT                                                                 \
+    {                                                                              \
+        LOAD_MEM_V4_C1_COMMON(val, 0, idy, idz, iw_str, ih_str, i_off, iw, input); \
+        val.y = val.x;                                                             \
+        val.z = val.x;                                                             \
+        val.w = val.x;                                                             \
+    }
+#endif
+
+#elif defined(SCALE_ON_AXIS_H)
+
+#if defined(USE_ALPHA)
+#define LOAD_ALPHA alp = alpha[idy]
+#endif
+
+#if defined(USE_BETA)
+#define LOAD_BETA bet = beta[idy]
+#endif
+
+#if defined(USE_BROADCAST_MODE)
+#define LOAD_INPUT                                                                 \
+    {                                                                              \
+        LOAD_MEM_V4_C1_COMMON(val, idx, 0, idz, iw_str, ih_str, i_off, iw, input); \
+    }
+#endif
+
+#elif defined(SCALE_ON_AXIS_C)
+
+#if defined(USE_ALPHA)
+#define LOAD_ALPHA alp = alpha[idc]
+#endif
+
+#if defined(USE_BETA)
+#define LOAD_BETA bet = beta[idc]
+#endif
+
+#if defined(USE_BROADCAST_MODE)
+#define LOAD_INPUT                                                                   \
+    {                                                                                \
+        LOAD_MEM_V4_C1_COMMON(val, idx, idy, idn, iw_str, ih_str, i_off, iw, input); \
+    }
+#endif
+#endif
+
+#else
+#if !defined(USE_BROADCAST_MODE)
+#define LOAD_INPUT                                                            \
+    {                                                                         \
+        LOAD_MEM_V4_COMMON(val, idx, idy, idz, iw_str, ih_str, i_off, input); \
+    }
+#endif
+
+#if defined(SCALE_ON_AXIS_W)
+
+#if defined(USE_ALPHA)
+#define LOAD_ALPHA alp = alpha[idx]
+#endif
+
+#if defined(USE_BETA)
+#define LOAD_BETA bet = beta[idx]
+#endif
+
+#if defined(USE_BROADCAST_MODE)
+#define LOAD_INPUT                                                          \
+    {                                                                       \
+        LOAD_MEM_V4_COMMON(val, 0, idy, idz, iw_str, ih_str, i_off, input); \
+    }
+#endif
+
+#elif defined(SCALE_ON_AXIS_H)
+
+#if defined(USE_ALPHA)
+#define LOAD_ALPHA alp = alpha[idy]
+#endif
+
+#if defined(USE_BETA)
+#define LOAD_BETA bet = beta[idy]
+#endif
+
+#if defined(USE_BROADCAST_MODE)
+#define LOAD_INPUT                                                          \
+    {                                                                       \
+        LOAD_MEM_V4_COMMON(val, idx, 0, idz, iw_str, ih_str, i_off, input); \
+    }
+#endif
+
+#elif defined(SCALE_ON_AXIS_C)
+
+#if defined(USE_ALPHA)
+#define LOAD_ALPHA alp = vload4(idc, alpha)
+#endif
+
+#if defined(USE_BETA)
+#define LOAD_BETA bet = vload4(idc, beta)
+#endif
+
+#if defined(USE_BROADCAST_MODE)
+#define LOAD_INPUT                                                            \
+    {                                                                         \
+        LOAD_MEM_V4_COMMON(val, idx, idy, idn, iw_str, ih_str, i_off, input); \
+        val.y = val.x;                                                        \
+        val.z = val.x;                                                        \
+        val.w = val.x;                                                        \
+    }
+#endif
+#endif
+#endif
+
+#if defined(USE_NCHW)
+#if defined(SCALE_ON_AXIS_W)
+#define USE_V4
+#endif
+#else
+#if defined(SCALE_ON_AXIS_C)
+#define USE_V4
+#endif
+#endif
+
+__kernel void MANGLE_NAME(scale_, IOM, FM, BM, AXIS, ALPHA, BETA)(const int iw_str,
+    const int ih_str,
+    const int ow_str,
+    const int oh_str,
+    const int i_off,
+    const int o_off,
+    const int iw,
+    const int ih,
+    const int ic,
+    const int ow,
+    const int oh,
+    const int oc,
+    const int bx,
+    const int by,
+    __global const T *alpha,
+    __global const T *beta,
+    READ_ONLY_KERNEL_MEM input,
+    KERNEL_MEM output)
 {
     int idx = get_global_id(0);
     int idy = get_global_id(1);
     int idz = get_global_id(2);
+#if !defined(USE_NCHW)
+    int idc = idz % ((oc + 3) >> 2);
+    int idn = idz / ((oc + 3) >> 2);
+#else
+    int idc = idz % oc;
+    int idn = idz / oc;
+#endif
     if (idx >= bx || idy >= by) {
         return;
     }
 
-#if defined(USE_SAME)
-    T4 alp = vload4(0, alpha);
-    alp.y = alp.x;
-    alp.z = alp.x;
-    alp.w = alp.x;
-    T4 bet = 0;
-#if defined(USE_BETA)
-    bet = vload4(0, beta);
-    bet.y = bet.x;
-    bet.z = bet.x;
-    bet.w = bet.x;
-#endif
-#else
-    T4 alp = vload4(idz, alpha);
-    T4 bet = 0;
-#if defined(USE_BETA)
-    bet = vload4(idz, beta);
-#endif
-#endif
     T4 val;
-    int in_off = (idz * iw_str + idy + iw_off) * ih_str + idx + ih_off;
-    val = vload4(in_off, input);
+#if defined(USE_V4)
+    T4 alp = (T4)1.0;
+    T4 bet = (T4)0.0;
+#else
+    T alp = 1.0;
+    T bet = 0.0;
+#endif
 
+    LOAD_ALPHA;
+    LOAD_BETA;
+    LOAD_INPUT;
+
+#if defined(USE_V4)
     val.s0 = val.s0 * alp.x + bet.x;
     val.s1 = val.s1 * alp.y + bet.y;
     val.s2 = val.s2 * alp.z + bet.z;
     val.s3 = val.s3 * alp.w + bet.w;
+#else
+    val.s0 = val.s0 * alp + bet;
+    val.s1 = val.s1 * alp + bet;
+    val.s2 = val.s2 * alp + bet;
+    val.s3 = val.s3 * alp + bet;
+#endif
 
-    int out_off = (idz * ow_str + idy + ow_off) * oh_str + idx + oh_off;
-    vstore4(val, out_off, output);
+#if defined(USE_NCHW)
+    STORE_MEM_V4_C1_COMMON(val, idx, idy, idz, ow_str, oh_str, o_off, ow, output);
+#else
+    STORE_MEM_V4_COMMON(val, idx, idy, idz, ow_str, oh_str, o_off, output);
+#endif
 }

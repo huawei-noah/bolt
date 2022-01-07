@@ -20,8 +20,7 @@ class CopyOCL : public Copy {
 public:
     CopyOCL(DataType dt, CopyParamSpec p) : Copy(dt, p)
     {
-        setMALIArchInfo(
-            &(this->archInfo), nullptr, &this->needSetKernelVec, &this->needSelectKernelLS);
+        INIT_GPU_INFO(nullptr)
     }
 
     ~CopyOCL(){DESTROY_OCL_KERNEL}

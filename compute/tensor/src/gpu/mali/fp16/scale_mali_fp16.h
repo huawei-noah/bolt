@@ -13,14 +13,13 @@
 
 #ifndef _SCALE_MALI_FP16
 #define _SCALE_MALI_FP16
-#include "sys.h"
-#include "types.h"
-#include "error.h"
-#include "tensor_computing_type.h"
+
+#include "gpu/mali/fp16/tensor_computing_fp16.h"
 
 EE scale_mali_fp16(GCLHandle_t handle,
     GCLMem_t alpha,
     GCLMem_t beta,
+    ScaleParamSpec p,
     TensorDesc inputDesc,
     GCLMem_t input,
     TensorDesc outputDesc,

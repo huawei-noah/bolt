@@ -14,8 +14,6 @@
 #ifndef _H_InnerProductOPTIMIZER
 #define _H_InnerProductOPTIMIZER
 
-#include <string>
-#include "model_tools.h"
 #include "OPOptimizer.hpp"
 
 class InnerProductOptimizer : public OPOptimizer {
@@ -54,7 +52,9 @@ class InnerProductOptimizer : public OPOptimizer {
                                 spec->ws[firScaleWeightIndex].vec = ln_vec;
 
                                 spec->ws[secScaleWeightIndex].bytes_of_vec = 0;
-                                delete spec->ws[secScaleWeightIndex].vec;
+                                if (outOfFileMapRange(spec->ws[secScaleWeightIndex].vec, spec->mfd)) {
+                                    delete spec->ws[secScaleWeightIndex].vec;
+                                }
                                 spec->ws[secScaleWeightIndex].vec = nullptr;
                                 memcpy(spec->ops[firScaleIndex].output_tensors_name[0],
                                     spec->ops[secScaleIndex].output_tensors_name[0], NAME_LEN);

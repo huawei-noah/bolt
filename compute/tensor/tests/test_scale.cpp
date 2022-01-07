@@ -11,7 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string.h>
 #include "tensor_computing.h"
 #include "ut_util.h"
 
@@ -22,10 +21,6 @@ int scaleTest(int argc, char **argv, DataType dt)
     U32 ic = atoi(argv[2]);
     U32 ih = atoi(argv[3]);
     U32 iw = atoi(argv[4]);
-    ArchInfo archInfo;
-    archInfo.arch = UT_ARCH;
-    ArchInfo archInfo_org;
-    archInfo_org.arch = CPU_GENERAL;
 
     ScaleParamSpec p;
     p.axis = 1;
@@ -40,27 +35,27 @@ int scaleTest(int argc, char **argv, DataType dt)
     dataTensorRef.resize(inDesc);
     dataTensor.alloc();
     dataTensorRef.alloc();
-    memcpy(get_ptr_from_tensor(dataTensor, UT_ARCH), data, tensorNumBytes(inDesc));
-    memcpy(get_ptr_from_tensor(dataTensorRef, UT_ARCH), data, tensorNumBytes(inDesc));
+    memcpy(get_ptr_from_tensor(dataTensor, CPU_GENERAL), data, tensorNumBytes(inDesc));
+    memcpy(get_ptr_from_tensor(dataTensorRef, CPU_GENERAL), data, tensorNumBytes(inDesc));
 
     U8 *alpha = ut_input_v(ic, dt, UT_INIT_RANDOM);
     U8 *beta = ut_input_v(ic, dt, UT_INIT_RANDOM);
 
     if (UT_CHECK) {
-        CHECK_STATUS(scale(dataTensor, alpha, beta, p, dataTensor, &archInfo));
+        CHECK_STATUS(scale(dataTensor, alpha, beta, p, dataTensor, &UT_CPU_ARCHINFO));
 
         // naive implement
-        CHECK_STATUS(scale(dataTensorRef, alpha, beta, p, dataTensorRef, &archInfo_org));
+        CHECK_STATUS(scale(dataTensorRef, alpha, beta, p, dataTensorRef, &UT_SERIAL_ARCHINFO));
 
         // check
-        ut_check_v(get_ptr_from_tensor(dataTensor, UT_ARCH),
-            get_ptr_from_tensor(dataTensorRef, UT_ARCH), len, dt, 1.0, __FILE__, __LINE__);
+        ut_check_v(get_ptr_from_tensor(dataTensor, CPU_GENERAL),
+            get_ptr_from_tensor(dataTensorRef, CPU_GENERAL), len, dt, 1.0, __FILE__, __LINE__);
     }
 
     // benchmark
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        CHECK_STATUS(scale(dataTensor, alpha, beta, p, dataTensor, &archInfo));
+        CHECK_STATUS(scale(dataTensor, alpha, beta, p, dataTensor, &UT_CPU_ARCHINFO));
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;

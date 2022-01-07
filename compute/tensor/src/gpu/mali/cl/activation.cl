@@ -12,47 +12,58 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "kernel_def.h"
-#define MANGLE_NAME_IMPL(base, AC, H) base##AC##H
-#define MANGLE_NAME(base, AC, H) MANGLE_NAME_IMPL(base, AC, H)
-__kernel void MANGLE_NAME(activation_, AC, H)(const int h,
-    const int w,
-    const int cd4,
-    const int ce4,
-    const int ih_str,
+#define MANGLE_NAME_IMPL(base, IOM, FM, AM) base##IOM##FM##AM
+#define MANGLE_NAME(base, IOM, FM, AM) MANGLE_NAME_IMPL(base, IOM, FM, AM)
+#define FM
+#if defined(USE_NCHW)
+#define FM nchw_
+#endif
+
+__kernel void MANGLE_NAME(activation_, IOM, FM, AM)(const int w,
+    const int h,
+    const int c,
     const int iw_str,
-    const int ih_off,
-    const int iw_off,
-    const int oh_str,
+    const int ih_str,
     const int ow_str,
-    const int oh_off,
-    const int ow_off,
-    __global T *input,
-    __global T *output)
+    const int oh_str,
+    const int i_off,
+    const int o_off,
+    const int bx,
+    const int by,
+    READ_ONLY_KERNEL_MEM input,
+    KERNEL_MEM output)
 {
     int idx = get_global_id(0);
     int idy = get_global_id(1);
     int idz = get_global_id(2);
-    if (idx >= h || idy >= w) {
+    if (idx >= bx || idy >= by) {
         return;
     }
 
-    T4 val;
-    int in_off = (idz * iw_str + idy + iw_off) * ih_str + idx + ih_off;
-    val = vload4(in_off, input);
+    T4 val = 0;
+#if defined(USE_NCHW)
+    LOAD_MEM_V4_C1_COMMON(val, idx, idy, idz, iw_str, ih_str, i_off, w, input);
+
+    ACTIVATION_V4(val);
+
+    STORE_MEM_V4_C1_COMMON(val, idx, idy, idz, ow_str, oh_str, o_off, w, output);
+#else
+    LOAD_MEM_V4_COMMON(val, idx, idy, idz, iw_str, ih_str, i_off, input);
+
     ACTIVATION_V4(val);
 #if defined(USE_TANH) || defined(USE_SIGMOID) || defined(USE_HSIGMOID) || defined(USE_GELU)
-    if (idz == cd4 - 1) {
-        if (ce4 < 2) {
-            val.y = 0;
-        }
-        if (ce4 < 3) {
-            val.z = 0;
-        }
-        if (ce4 < 4) {
-            val.w = 0;
-        }
+    char ec = (((idz << 2) + 4) <= c) ? 4 : (c & 3);
+    if (ec < 2) {
+        val.y = 0;
+    }
+    if (ec < 3) {
+        val.z = 0;
+    }
+    if (ec < 4) {
+        val.w = 0;
     }
 #endif
-    int out_off = (idz * ow_str + idy + ow_off) * oh_str + idx + oh_off;
-    vstore4(val, out_off, output);
+
+    STORE_MEM_V4_COMMON(val, idx, idy, idz, ow_str, oh_str, o_off, output);
+#endif
 }

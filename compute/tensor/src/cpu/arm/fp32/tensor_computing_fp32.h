@@ -17,7 +17,7 @@
 #include "sys.h"
 #include "error.h"
 #include "thread_affinity.h"
-#include "types.h"
+
 #include "cpu/arm/fp32/arm_functions_fp32.h"
 
 EE convolution_transform_filter_fp32(TensorDesc filterDesc,
@@ -117,14 +117,21 @@ EE deconvolution_transform_filter_fp32(TensorDesc filterDesc,
     TensorDesc *ftmDesc,
     F32 *filterTransformed);
 
-EE pooling_c8_fp32(const F32 *input,
-    U32 stride,
-    int hstart,
-    int hend,
-    int wstart,
-    int wend,
-    F32 *output,
-    PoolingParamSpec poolingParamSpec);
+template <PoolingMode pm>
+EE pooling_c8_fp32(const I32 &tstart,
+    const I32 &tend,
+    const I32 &hstart,
+    const I32 &hend,
+    const I32 &wstart,
+    const I32 &wend,
+    const I32 &poolSize,
+    const I32 &kernelSize,
+    const U8 *input,
+    const I32 &it,
+    const I32 &ih,
+    const I32 &iw,
+    U8 *output,
+    void *scale);
 
 EE pooling_bp_c8_fp32(const F32 *input,
     int hstart,
@@ -196,6 +203,38 @@ EE rnncell_fp32(TensorDesc xDesc,
     void *output,
     Arch arch);
 
+EE lstmcell_fp32(TensorDesc xDesc,
+    const void *currentX,
+    const TensorDesc *filterDesc,
+    const void **filter,
+    const TensorDesc *biasDesc,
+    const void **bias,
+    void *state,
+    U32 tmpBytes,
+    void *tmp,
+    RNNParamSpec rnnParamSpec,
+    U32 batchStrideX,
+    U32 batchStrideH,
+    TensorDesc hDesc,
+    void *output,
+    Arch arch);
+
+EE grucell_fp32(TensorDesc xDesc,
+    const void *currentX,
+    const TensorDesc *filterDesc,
+    const void **filter,
+    const TensorDesc *biasDesc,
+    const void **bias,
+    void *state,
+    U32 tmpBytes,
+    void *tmp,
+    RNNParamSpec rnnParamSpec,
+    U32 batchStrideX,
+    U32 batchStrideH,
+    TensorDesc hDesc,
+    void *output,
+    Arch arch);
+
 EE power_fp32(TensorDesc inputDesc,
     F32 *input,
     F32 scale,
@@ -212,9 +251,10 @@ EE scale_fp32(F32 *input,
     I32 nDims,
     F32 *alpha,
     F32 *beta,
-    I32 in,
-    I32 ic,
+    I32 on,
+    I32 oc,
     I32 elements_per_channel,
+    I32 ic,
     F32 *output);
 
 EE softmax_fp32(TensorDesc inputDesc, const F32 *input, TensorDesc outputDesc, F32 *output);
@@ -239,4 +279,12 @@ EE prelu_fp32(TensorDesc inputDesc,
     PReLUParamSpec preluDesc,
     TensorDesc outputDesc,
     F32 *output);
+
+EE dequantize_to_f32(TensorDesc qDesc,
+    void *qData,
+    const F32 *scale,
+    TensorDesc bDesc,
+    void *bData,
+    TensorDesc dDesc,
+    void *data);
 #endif

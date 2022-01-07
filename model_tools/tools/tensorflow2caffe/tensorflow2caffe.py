@@ -2,11 +2,6 @@
 # -*- coding: utf-8 -*-
 import numpy as np
 import math
-import tensorflow as tf
-from tensorflow.python import pywrap_tensorflow
-from tensorflow.python.platform import gfile
-from tensorflow.python.framework import tensor_util
-from tensorflow.python.training import checkpoint_utils
 
 from Caffe import caffe_net
 from operators import Operators
@@ -34,6 +29,9 @@ class Tensorflow2Caffe:
         self.quantization_max = {}
 
     def load_tensorflow_model_from_ckpt(self, tensorflow_model_path):
+        from tensorflow.python.training import checkpoint_utils
+        from tensorflow.python import pywrap_tensorflow
+    
         self.tensor_map = checkpoint_utils.list_variables(tensorflow_model_path)
         reader = pywrap_tensorflow.NewCheckpointReader(tensorflow_model_path)
         variable_shape_map = reader.get_variable_to_shape_map()
@@ -43,6 +41,10 @@ class Tensorflow2Caffe:
         return weight_map
 
     def load_tensorflow_model_from_pb(self, tensorflow_model_path):
+        import tensorflow as tf
+        from tensorflow.python.platform import gfile
+        from tensorflow.python.framework import tensor_util
+
         with tf.Session() as sess:
             with gfile.FastGFile(tensorflow_model_path,'rb') as f:
                 graph_def = tf.GraphDef()
@@ -52,9 +54,46 @@ class Tensorflow2Caffe:
                 graph_nodes=[n for n in graph_def.node]
         weight_map = {}
         for node in graph_nodes:
-            #print("[INFO] tensorflow pb node %s" % (node.name))
             if node.op == 'Const':
                 weight_map[node.name] = tensor_util.MakeNdarray(node.attr['value'].tensor)
+        return weight_map
+
+    def load_keras_model_from_h5(self, keras_model_path):
+        def isGroup(item):
+            ret = False
+            if (isinstance(item, h5py.Group)):
+                ret = True
+            return ret
+        def isDataset(item):
+            ret = False
+            if (isinstance(item, h5py.Dataset)):
+                ret = True
+            return ret
+        def getDataSetFromGroup(datasets, prefix, item):
+            if (isGroup(item)):
+                for key in item:
+                    value = item[key]
+                    if (prefix is None):
+                        name = key
+                    else:
+                        name = prefix + "/" + key
+                    getDataSetFromGroup(datasets, name, value)
+            else:
+                name_suffix = prefix.split(":")[-1]
+                if (name_suffix == "0"):
+                    name = prefix[:-2]
+                else:
+                    name = prefix
+                datasets[name] = np.array(item)
+
+        import h5py
+        model = h5py.File(keras_model_path)
+        weight_map = {}
+        for layerName in model:
+            if (layerName == "model_weights"):
+                layer = model[layerName]
+                getDataSetFromGroup(weight_map, None, layer)
+        model.close()
         return weight_map
 
     def load_tensorflow_model(self, tensorflow_model_path):
@@ -62,14 +101,26 @@ class Tensorflow2Caffe:
         model_path_suffix = model_path.split(".")
         if (model_path_suffix[-1].startswith("pb")):
             return self.load_tensorflow_model_from_pb(tensorflow_model_path)
-            return None
         if (model_path_suffix[-1].startswith("ckpt")):
             return self.load_tensorflow_model_from_ckpt(tensorflow_model_path)
-        print("[ERROR] unrecognized file type %s, currently only support .ckpt or .pb" % (tensorflow_model_path))
+        if (model_path_suffix[-1].startswith("h5") or model_path_suffix[-1].startswith("hdf5")):
+            return self.load_keras_model_from_h5(tensorflow_model_path)
+        print("[ERROR] unrecognized file type %s, currently only support *.ckpt, *.pb, *.h5, *.hdf5" % (tensorflow_model_path))
         exit(1)
 
     def set_add_layer(self, add_layer_set):
         self.caffe_model.set_add_layer(add_layer_set)
+
+    def rename_weight(self, input_name, output_name):
+        self.weight_map[output_name] = self.weight_map[input_name]
+        del self.weight_map[input_name]
+
+    def concat_weight(self, input_names, output_name, axis):
+        weights = []
+        for name in input_names:
+            weights.append(self.weight_map[name])
+            del self.weight_map[name]
+        self.weight_map[output_name] = np.concatenate(weights, axis=axis)
 
     def get_weight(self, name):
         if (self.check):
@@ -361,15 +412,30 @@ class Tensorflow2Caffe:
             output_name = scale_name
         return output_name
 
+    def transpose_nchwc8_nhwc(self, x):
+        x = self.add_transpose(x, x+"_nchc8_nhc", [0, 2, 3, 1, 4])
+        shape = self.get_tensor_shape(x)
+        x = self.add_reshape(x, x+"_r", [self.batch, shape[1], shape[2], shape[3]*shape[4]])
+        return x
+
+    def transpose_nchwc8_nchw(self, x):
+        x = self.transpose_nchwc8_nhwc(x)
+        x = self.transpose_nhwc_nchw(x)
+        return x
+
+    def transpose_nhwc_nchw(self, x):
+        x = self.add_transpose(x, x+"_nhwc_nchw", [0, 3, 1, 2])
+        return x
+
+    def transpose_nchw_nhwc(self, x):
+        x = self.add_transpose(x, x+"_nchw_nhwc", [0, 2, 3, 1])
+        return x
+
     def transpose_nchc8_nhc(self, x):
         x = self.add_transpose(x, x+"_nchc8_nhc", [0, 2, 3, 1, 4])
         shape = self.get_tensor_shape(x)
         assert(shape[2] == 1)
         x = self.add_reshape(x, x+"_r", [self.batch, -1, shape[3]*shape[4]])
-        return x
-
-    def transpose_nhwc_nchw(self, x):
-        x = self.add_transpose(x, x+"_nhwc_nchw", [0, 3, 1, 2])
         return x
 
     def transpose_nhc_nchw(self, x):
@@ -403,11 +469,11 @@ class Tensorflow2Caffe:
 
     def extract_convolution(self, input_name, output_name, scope_id,
                             num_output, kernel_size, stride, padding,
-                            data_format="NCHW", weight_format="NHWC",
+                            data_format="NCHW", weight_format="HWCN",
                             axis=1, dilation=1, groups=1,
                             layer_names=["convolution", "kernel", "bias"]):
         kernel, bias = self.get_weights(scope_id, layer_names)
-        if (weight_format == "NHWC"):
+        if (weight_format == "HWCN"):
             if (len(kernel.shape) == 3):
                 kernel = kernel.transpose([2, 1, 0])
                 kernel = np.expand_dims(kernel, -1)
@@ -823,11 +889,25 @@ class Tensorflow2Caffe:
         self.data_dict[output_name] = Operators.argmax(self.data_dict[input_name], axis, output_name)
         return output_name
 
-    def extract_lstm(self, input_name, state_name, output_name, scope_id,
+    def extract_rnn(self, mode, input_name, state_name, output_name, scope_id,
             steps=-1, scope_name="basic_lstm_cell",
-            use_proj=False, zoneoutCell=0, zoneoutOutput=0):
+            use_proj=False, zoneout_cell=0, zoneout_output=0, linear_before_reset=False):
         if (isinstance(scope_name, str)):
             scope_name = [scope_name]
+        bottom = [input_name]
+        if (state_name is not None):
+            bottom.append(state_name)
+        layer = caffe_net.LayerParameter(name=output_name, type=mode,
+                    bottom=bottom, top=[output_name])
+        if (mode == "LSTM"):
+            factor = 4
+        elif (mode == "GRU"):
+            factor = 3
+        elif (mode == "GRU_LBR"):
+            factor = 3
+        else:
+            print("[ERROR] RNN can not support %s" % (mode))
+            exit(1)
         kernels = []
         biases = []
         projections = []
@@ -843,15 +923,16 @@ class Tensorflow2Caffe:
             num_output_4 = len(kernel[0])
             if (bias is not None):
                 if (len(bias) != num_output_4):
-                    print("[ERROR] extract_lstm failed")
+                    print("[ERROR] extract_rnn failed")
                     exit(0)
             if (use_proj):
                 num_output = projection.shape[1]
             else:
-                num_output = num_output_4 // 4
-            if (len(kernel) != self.get_tensor_shape(input_name)[-1] + num_output):
+                num_output = num_output_4 // factor
+            if (self.calculate and len(kernel) != self.get_tensor_shape(input_name)[-1] + num_output):
                 kernel_2, bias_2 = self.get_weights(scope_id, [scope_name[i], "recurrent_kernel", "bias"])
-                kernel = np.concatenate([kernel, kernel_2], axis = 0)
+                if (kernel_2 is not None):
+                    kernel = np.concatenate([kernel, kernel_2], axis = 0)
             kernels.append(kernel.transpose([1, 0]))
             if (bias is None):
                 bias = np.zeros([num_output_4 // 2])
@@ -864,12 +945,6 @@ class Tensorflow2Caffe:
             else:
                 projections.append(None)
                 projection_biases.append(None)
-        bottom = [input_name]
-        if (state_name is not None):
-            bottom.append(state_name)
-        layer = caffe_net.LayerParameter(name=output_name, type='LSTM',
-                    bottom=bottom, top=[output_name])
-        layer.lstm_param(num_output, steps, projection_size, zoneoutCell, zoneoutOutput)
         if (use_proj):
             if (projection_biases[0] is not None):
                 layer.add_data(np.concatenate(kernels, axis=0), np.concatenate(biases, axis=0),
@@ -880,34 +955,41 @@ class Tensorflow2Caffe:
         else:
             layer.add_data(np.concatenate(kernels, axis=0),
                 np.concatenate(biases, axis=0))
+        if (mode == "LSTM"):
+            layer.lstm_param(num_output, steps, projection_size, zoneout_cell, zoneout_output)
+        elif (mode == "GRU"):
+            layer.lstm_param(num_output, steps, projection_size, zoneout_cell, zoneout_output)
+        elif (mode == "GRU_LBR"):
+            layer.lstm_param(num_output, steps, projection_size, zoneout_cell, zoneout_output)
+        else:
+            print("[ERROR] RNN can not support %s" % (mode))
+            exit(1)
         self.caffe_model.add_layer(layer)
-        #if (len(scope_name) == 1):
         if (steps >= 0):
-            self.data_dict[output_name] = Operators.fw_lstm(self.data_dict[input_name],
+            self.data_dict[output_name] = Operators.fw_rnn(mode, self.data_dict[input_name],
                 kernels[0],
                 biases[0],
                 projections[0],
                 projection_biases[0],
-                zoneoutCell, zoneoutOutput,
+                zoneout_cell, zoneout_output,
                 output_name)
         elif (steps == -1):
-            self.data_dict[output_name], self.data_dict[state_name] = Operators.lstm(self.data_dict[input_name],
+            self.data_dict[output_name], self.data_dict[state_name] = Operators.rnn(mode, self.data_dict[input_name],
                 self.data_dict[state_name],
                 kernels[0],
                 biases[0],
                 projections[0],
                 projection_biases[0],
-                zoneoutCell, zoneoutOutput,
+                zoneout_cell, zoneout_output,
                 output_name,
                 state_name)
-        #elif (len(scope_name) == 2):
         elif (steps == -2):
-            self.data_dict[output_name] = Operators.bi_lstm(self.data_dict[input_name],
+            self.data_dict[output_name] = Operators.bi_rnn(mode, self.data_dict[input_name],
                 kernels,
                 biases,
                 projections,
                 projection_biases,
-                zoneoutCell, zoneoutOutput,
+                zoneout_cell, zoneout_output,
                 output_name)
         return output_name
 
@@ -996,12 +1078,17 @@ class Tensorflow2Caffe:
         self.data_dict[output_name] = Operators.pad(self.data_dict[input_name], padding_shapes, padding_values, output_name)
         return output_name
 
-    def add_relative_shift(self, input_name, output_name, axis, shift_length):
+    def add_relative_shift(self, input_name, output_name, axis, shift_length, ref_name=None):
+        input_names = [input_name]
+        ref_data = None
+        if (ref_name is not None):
+            input_names.append(ref_name)
+            ref_data = self.data_dict[ref_name]
         layer = caffe_net.LayerParameter(name=output_name, type='RelativeShift',
-                    bottom=[input_name], top=[output_name])
+                    bottom=input_names, top=[output_name])
         layer.relative_shift_param(axis, shift_length)
         self.caffe_model.add_layer(layer)
-        self.data_dict[output_name] = Operators.relative_shift(self.data_dict[input_name], axis, shift_length, output_name)
+        self.data_dict[output_name] = Operators.relative_shift(self.data_dict[input_name], ref_data, axis, shift_length, output_name)
         return output_name
 
     def add_clip(self, input_name, output_name, min_value, max_value):
@@ -1011,4 +1098,29 @@ class Tensorflow2Caffe:
         layer.clip_param(min_value, max_value)
         self.caffe_model.add_layer(layer)
         self.data_dict[output_name] = Operators.clip(self.data_dict[input_name], min_value, max_value, output_name)
+        return output_name
+
+    def add_exp(self, input_name, output_name, base=-1, scale=1, shift=0):
+        layer = caffe_net.LayerParameter(name=output_name, type='Exp',
+                    bottom=[input_name],
+                    top=[output_name])
+        layer.exp_param(base, scale, shift)
+        self.caffe_model.add_layer(layer)
+        self.data_dict[output_name] = Operators.exp(self.data_dict[input_name], base, scale, shift, output_name)
+        return output_name
+
+    def add_softplus(self, input_name, output_name):
+        layer = caffe_net.LayerParameter(name=output_name, type='SoftPlus',
+                    bottom=[input_name],
+                    top=[output_name])
+        self.caffe_model.add_layer(layer)
+        self.data_dict[output_name] = Operators.softplus(self.data_dict[input_name], output_name)
+        return output_name
+
+    def add_mish(self, input_name, output_name):
+        layer = caffe_net.LayerParameter(name=output_name, type='Mish',
+                    bottom=[input_name],
+                    top=[output_name])
+        self.caffe_model.add_layer(layer)
+        self.data_dict[output_name] = Operators.mish(self.data_dict[input_name], output_name)
         return output_name

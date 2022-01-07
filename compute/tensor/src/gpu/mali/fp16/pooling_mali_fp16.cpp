@@ -11,10 +11,8 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "sys.h"
-#include "error.h"
-#include "types.h"
 #include "gpu/mali/fp16/pooling_mali_fp16.h"
+#include "gpu/mali/cl/kernel_option/pooling_opt.h"
 
 inline EE pooling_checkpara_mali_fp16(GCLHandle_t handle,
     TensorDesc inputDesc,
@@ -41,7 +39,7 @@ inline EE pooling_checkpara_mali_fp16(GCLHandle_t handle,
     if (poolingParamSpec.padding_bottom >= poolingParamSpec.kernel_w) {
         return NOT_SUPPORTED;
     }
-    if (input->desc.memFormat != output->desc.memFormat || input->desc.memFormat != DF_NCWHC4) {
+    if (input->desc.memFormat != output->desc.memFormat || input->desc.memFormat != DF_NCHWC4) {
         return NOT_SUPPORTED;
     }
     return SUCCESS;
@@ -65,10 +63,12 @@ inline EE pooling_core_mali_fp16(GCLHandle_t handle,
     inbuf = input->mem;
     outbuf = output->mem;
     tmpbuf = temp->mem;
-    U32 iw_str, ih_str, iw_off, ih_off;
-    U32 ow_str, oh_str, ow_off, oh_off;
+    U32 iw_str, ih_str, iw_off, ih_off, i_off;
+    U32 ow_str, oh_str, ow_off, oh_off, o_off;
     get_gclmem_dim(input->desc, &iw_str, &ih_str, NULL, &iw_off, &ih_off);
     get_gclmem_dim(output->desc, &ow_str, &oh_str, NULL, &ow_off, &oh_off);
+    i_off = ih_off * iw_str + iw_off;
+    o_off = oh_off * ow_str + ow_off;
 
     U32 sw, sh, st, pw, ph, pt, kw, kh, kt;
     sw = poolingParamSpec.stride_w;
@@ -81,7 +81,7 @@ inline EE pooling_core_mali_fp16(GCLHandle_t handle,
     kh = poolingParamSpec.kernel_h;
     kt = poolingParamSpec.kernel_t;
 
-    if (df == DF_NCHW) {
+    if (inputDesc.nDims < 5) {
         st = 1;
         pt = 0;
         kt = 1;
@@ -89,73 +89,57 @@ inline EE pooling_core_mali_fp16(GCLHandle_t handle,
     Kernel kernel;
     U32 gs[3];
     U32 ls[3] = {0, 0, 0};
-    U32 dim = 3;
-    char kernelname[128];
-    switch (poolingParamSpec.mode) {
-        case POOLING_MAX: {
-            gs[0] = oh;
-            gs[1] = ow;
-            gs[2] = (oc + 3) / 4 * ot * on;
-            if (st == 1 && pt == 0 && kt == 1) {
-                sprintf(kernelname, "pooling_max");
-                CHECK_STATUS(gcl_create_kernel(handle, kernelname, &kernel));
-                CHECK_STATUS(gcl_set_kernelArgs(kernel, ih, iw, ih_off, iw_off, ih_str, iw_str, oh,
-                    ow, oh_off, ow_off, oh_str, ow_str, sh, sw, ph, pw, kh, kw, inbuf, outbuf));
-            } else {
-                return NOT_SUPPORTED;
-            }
-            gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelname);
-#ifdef _DEBUG
-            CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelname));
-            handle->t_total += handle->t_execute;
-#endif
-            break;
-        }
-        case POOLING_MEAN: {
-            if (oh == 1 && ow == 1 && iw > 7) {
-                sprintf(kernelname, "pooling_global_mean_w");
-                gs[0] = ih;
-                gs[1] = (oc + 3) / 4 * on;
-                dim = 2;
-                CHECK_STATUS(gcl_create_kernel(handle, kernelname, &kernel));
-                CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, ih_str * iw_str, ih_off, iw_off, ih,
-                    iw, gs[0], gs[1], inbuf, tmpbuf));
-                CHECK_STATUS(gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelname));
-#ifdef _DEBUG
-                CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelname));
-                handle->t_total += handle->t_execute;
-#endif
-                sprintf(kernelname, "pooling_global_mean_h");
-                gs[0] = (oc + 3) / 4 * on;
-                dim = 1;
-                CHECK_STATUS(gcl_create_kernel(handle, kernelname, &kernel));
-                CHECK_STATUS(gcl_set_kernelArgs(
-                    kernel, ih, oh_str, oh_str * ow_str, oh_off, ow_off, gs[0], tmpbuf, outbuf));
-                CHECK_STATUS(gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelname));
-#ifdef _DEBUG
-                CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelname));
-#endif
-            } else {
-                sprintf(kernelname, "pooling_mean");
-                CHECK_STATUS(gcl_create_kernel(handle, kernelname, &kernel));
-                CHECK_STATUS(gcl_set_kernelArgs(kernel, ih, iw, ih_off, iw_off, ih_str, iw_str, oh,
-                    ow, oh_off, ow_off, oh_str, ow_str, sh, sw, ph, pw, kh, kw, inbuf, outbuf));
-
-                gs[0] = oh;
-                gs[1] = ow;
-                gs[2] = (oc + 3) / 4 * on;
-                dim = 3;
-                gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelname);
-#ifdef _DEBUG
-                CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelname));
-                handle->t_total += handle->t_execute;
-#endif
-            }
-            break;
-        }
-        default: {
+    U32 dim;
+    char kernelName[128];
+    KernelOpt kernelOpt;
+    PoolingMode mode = poolingParamSpec.mode;
+    if (oh == 1 && ow == 1 && iw > 7) {
+        if (ot > 1 || mode != POOLING_MEAN) {
             CHECK_STATUS(NOT_SUPPORTED);
         }
+        gs[0] = iw;
+        gs[1] = (oc + 3) / 4 * on;
+        dim = 2;
+        CHECK_STATUS(set_common_opt(DT_F16, input->desc.memType, GCL_MEM_BUF,
+            "pooling_global_mean_h", kernelName, &kernelOpt));
+        CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
+        CHECK_STATUS(gcl_set_kernelArgs(
+            kernel, iw_str, ih_str * iw_str, i_off, iw, ih, gs[0], gs[1], inbuf, tmpbuf));
+        CHECK_STATUS(gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName));
+#ifdef _DEBUG
+        CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
+        handle->t_total += handle->t_execute;
+#endif
+        CHECK_STATUS(set_common_opt(DT_F16, GCL_MEM_BUF, output->desc.memType,
+            "pooling_global_mean_w", kernelName, &kernelOpt));
+        gs[0] = (oc + 3) / 4 * on;
+        dim = 1;
+        CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
+        CHECK_STATUS(
+            gcl_set_kernelArgs(kernel, iw, ow_str, oh_str * ow_str, o_off, gs[0], tmpbuf, outbuf));
+        CHECK_STATUS(gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName));
+#ifdef _DEBUG
+        CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
+        handle->t_total += handle->t_execute;
+#endif
+    } else {
+        if (st != 1 || pt != 0 || kt != 1) {
+            CHECK_STATUS(NOT_SUPPORTED);
+        }
+        gs[0] = ow;
+        gs[1] = oh;
+        gs[2] = (oc + 3) / 4 * ot * on;
+        dim = 3;
+        CHECK_STATUS(set_pooling_opt_mali(
+            mode, DT_F16, input->desc.memType, output->desc.memType, kernelName, &kernelOpt));
+        CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
+        CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, iw_off, ih_off, ow_str, oh_str,
+            o_off, iw, ih, ow, oh, sw, sh, pw, ph, kw, kh, inbuf, outbuf));
+        CHECK_STATUS(gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName));
+#ifdef _DEBUG
+        CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
+        handle->t_total += handle->t_execute;
+#endif
     }
     return SUCCESS;
 }
@@ -179,10 +163,9 @@ EE pooling_mali_fp16(GCLHandle_t handle,
 EE pooling_infer_forward_tmp_bytes_mali_fp16(
     TensorDesc inputDesc, U32 *bytes, ForwardRunInfoMali_t forwardRunInfo)
 {
-    UNUSED(forwardRunInfo);
     DataType idt;
     U32 in, ic, ih, iw;
     tensorSelectGet(inputDesc, &idt, NULL, &in, &ic, &ih, &iw);
-    *bytes = ih * ((ic + 3) / 4 * 4) * bytesOf(idt);
+    *bytes = iw * ((ic + 3) / 4 * 4) * bytesOf(idt);
     return SUCCESS;
 }

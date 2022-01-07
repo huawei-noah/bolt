@@ -16,7 +16,9 @@
 
 #include <math.h>
 #include "arm_neon_expand.h"
-#include "types.h"
+#include "uni.h"
+#include "data_type.h"
+#include "parameter_spec.h"
 
 // array sum
 inline F32 array_sum_f16(const F16 *data, I32 len)
@@ -73,28 +75,61 @@ inline F32 array_var_f16(const F16 *data, I32 len, F32 mean)
     return sum_s / len;
 }
 
-// array max
-inline F16 array_max_value_f16(const F16 *data, I32 len)
+template <int mode>
+inline static void array_minmax_value_f16_template(const F16 *data, I32 len, F32 *result)
 {
-    F16 max_s = data[0];
+    F32 min_s = data[0];
+    F32 max_s = data[0];
     I32 i = 0;
     if (len >= 8) {
-        float16x8_t max_v, tmp_v;
-        max_v = vld1q_f16(data);
+        float16x8_t min_v, max_v, tmp_v;
+        min_v = max_v = vld1q_f16(data);
         for (i = 8; i < len - 7; i += 8) {
             tmp_v = vld1q_f16(data + i);
-            max_v = vmaxq_f16(tmp_v, max_v);
+            if (mode & 1)
+                min_v = vminq_f16(tmp_v, min_v);
+            if (mode & 2)
+                max_v = vmaxq_f16(tmp_v, max_v);
         }
-        max_s = vmaxvq_f16(max_v);
+        if (mode & 1)
+            min_s = vminvq_f16(min_v);
+        if (mode & 2)
+            max_s = vmaxvq_f16(max_v);
     }
 
     for (; i < len; i++) {
+        if (data[i] < min_s) {
+            min_s = data[i];
+        }
         if (data[i] > max_s) {
             max_s = data[i];
         }
     }
+    int id = 0;
+    if (mode & 1)
+        result[id++] = min_s;
+    if (mode & 2)
+        result[id++] = max_s;
+}
 
-    return max_s;
+inline EE array_minmax_value_f16(const F16 *data, I32 len, int mode, F32 *result)
+{
+    EE ret = SUCCESS;
+    switch (mode) {
+        case 1:
+            array_minmax_value_f16_template<1>(data, len, result);
+            break;
+        case 2:
+            array_minmax_value_f16_template<2>(data, len, result);
+            break;
+        case 3:
+            array_minmax_value_f16_template<3>(data, len, result);
+            break;
+        default:
+            ret = NOT_SUPPORTED;
+            break;
+    }
+    return ret;
 }
 
 inline F16 array_maxabs_f16(const F16 *data, I32 len)
@@ -168,6 +203,23 @@ inline void array_power_f16(F16 *input, F16 *output, I32 len, F32 power)
             vst1q_f16(output + i, tmp_v);
         }
 #endif
+    } else if (power == -0.5) {
+#ifdef _USE_F16_MIX_PRECISION
+        float32x4_t one_v = vdupq_n_f32(1);
+        for (i = 0; i < len - 3; i += 4) {
+            float16x4_t in = vld1_f16(input + i);
+            float32x4_t in_f32 = vcvt_f32_f16(in);
+            float32x4_t result = vdivq_f32(one_v, vsqrtq_f32(in_f32));
+            vst1_f16(output + i, vcvt_f16_f32(result));
+        }
+#else
+        float16x8_t one_v = vdupq_n_f16(1);
+        for (i = 0; i < len - 7; i += 8) {
+            float16x8_t in = vld1q_f16(input + i);
+            float16x8_t tmp_v = vdivq_f16(one_v, vsqrtq_f16(in));
+            vst1q_f16(output + i, tmp_v);
+        }
+#endif
     } else if (power == 0.5) {
 #ifdef _USE_F16_MIX_PRECISION
         for (i = 0; i < len - 3; i += 4) {
@@ -220,6 +272,7 @@ inline EE activation_fp16(F16 *input, U32 len, ActivationParamSpec activationDes
     U32 len_tail = len % 8;
 
     F16 value;
+    EE ret = SUCCESS;
     switch (activationDesc.mode) {
         case ACTIVATION_NULL: {
             break;
@@ -313,6 +366,26 @@ inline EE activation_fp16(F16 *input, U32 len, ActivationParamSpec activationDes
             }
             break;
         }
+        case ACTIVATION_H_SWISH_NODIV: {
+            for (U32 i = 0; i < len_main; i++) {
+                in = vld1q_f16(input);
+                out = vaddq_f16(in, three);
+                out = vmaxq_f16(out, zero);
+                out = vminq_f16(out, six);
+                out = vmulq_f16(out, in);
+                vst1q_f16(output, out);
+                input += 8;
+                output += 8;
+            }
+            for (U32 i = 0; i < len_tail; i++) {
+                value = input[i] + 3;
+                value = (value < 0) ? 0 : value;
+                value = (value > 6) ? 6 : value;
+                value = input[i] * value;
+                output[i] = value;
+            }
+            break;
+        }
         case ACTIVATION_GELU: {
             F16 two_div_PI_sqrt = sqrt(2 / 3.14159265358979323846);
             float16x8_t vec0 = vdupq_n_f16(two_div_PI_sqrt);
@@ -391,11 +464,74 @@ inline EE activation_fp16(F16 *input, U32 len, ActivationParamSpec activationDes
             }
             break;
         }
+        case ACTIVATION_SOFTPLUS: {
+            for (U32 i = 0; i < len_main; i++) {
+                in = vld1q_f16(input);
+                out = vlogq_f16(vaddq_f16(vexpq_f16_03_percent_error(in), one));
+                vst1q_f16(output, out);
+                input += 8;
+                output += 8;
+            }
+            for (U32 i = 0; i < len_tail; i++) {
+                output[i] = log(1 + exp(input[i]));
+            }
+            break;
+        }
+        case ACTIVATION_EXP: {
+            for (U32 i = 0; i < len_main; i++) {
+                in = vld1q_f16(input);
+                out = vexpq_f16_03_percent_error(in);
+                vst1q_f16(output, out);
+                input += 8;
+                output += 8;
+            }
+            for (U32 i = 0; i < len_tail; i++) {
+                output[i] = exp(input[i]);
+            }
+            break;
+        }
+        case ACTIVATION_ABS: {
+            for (U32 i = 0; i < len_main; i++) {
+                in = vld1q_f16(input);
+                out = vabsq_f16(in);
+                vst1q_f16(output, out);
+                input += 8;
+                output += 8;
+            }
+            for (U32 i = 0; i < len_tail; i++) {
+                output[i] = UNI_ABS(input[i]);
+            }
+            break;
+        }
+        case ACTIVATION_SIGN: {
+            for (U32 i = 0; i < len; i++) {
+                output[i] = UNI_SIGN(input[i]);
+            }
+            break;
+        }
+        case ACTIVATION_LOG: {
+            for (U32 i = 0; i < len; i++) {
+                output[i] = log(input[i]);
+            }
+            break;
+        }
+        case ACTIVATION_NOT: {
+            for (U32 i = 0; i < len; i++) {
+                output[i] = (input[i] > 0) ? 0 : 1;
+            }
+            break;
+        }
+        case ACTIVATION_NEG: {
+            for (U32 i = 0; i < len; i++) {
+                output[i] = -input[i];
+            }
+            break;
+        }
         default:
-            return NOT_SUPPORTED;
+            ret = NOT_SUPPORTED;
+            break;
     }
-
-    return SUCCESS;
+    return ret;
 }
 
 inline void array_add_f16(const F16 *inputA, const F16 *inputB, F16 *output, I32 len)
@@ -413,19 +549,39 @@ inline void array_add_f16(const F16 *inputA, const F16 *inputB, F16 *output, I32
     }
 }
 
-inline void array_square_and_add_f16(const F16 *inputA, const F16 *inputB, F16 *output, I32 len)
+inline void array_mul_f16(const F16 *inputA, const F16 *inputB, F16 *output, I32 len)
 {
     I32 i = 0;
     for (i = 0; i < len - 7; i += 8) {
         float16x8_t a = vld1q_f16(inputA + i);
         float16x8_t b = vld1q_f16(inputB + i);
-        b = vmulq_f16(b, b);
-        float16x8_t c = vaddq_f16(a, b);
+        float16x8_t c = vmulq_f16(a, b);
         vst1q_f16(output + i, c);
     }
 
     for (; i < len; i++) {
-        output[i] = inputA[i] + inputB[i] * inputB[i];
+        output[i] = inputA[i] * inputB[i];
+    }
+}
+
+inline void array_mul_and_add_f16(
+    const F16 *inputA, const F16 *inputB, const F16 *inputC, F16 *output, I32 len)
+{
+    I32 i = 0;
+    for (i = 0; i < len - 7; i += 8) {
+        float16x8_t a = vld1q_f16(inputA + i);
+        float16x8_t b;
+        if (inputA == inputB) {
+            b = a;
+        } else {
+            b = vld1q_f16(inputB + i);
+        }
+        float16x8_t c = vaddq_f16(vmulq_f16(a, b), vld1q_f16(inputC + i));
+        vst1q_f16(output + i, c);
+    }
+
+    for (; i < len; i++) {
+        output[i] = inputA[i] * inputB[i] + inputC[i];
     }
 }
 
@@ -439,6 +595,29 @@ inline void array_max_f16(const F16 *inputA, const F16 *inputB, F16 *output, I32
     }
     for (; i < len; i++) {
         output[i] = UNI_MAX(inputA[i], inputB[i]);
+    }
+}
+
+inline void array_norm_scalar_scale_fp16(
+    F16 *input, F16 *output, I32 len, F32 mean, F32 var, F16 *alpha, F16 *beta)
+{
+    F32 eps = 1e-6;
+    F32 std_value = sqrt(var + eps);
+    float16x8_t mean_v = vdupq_n_f16(mean);
+    float16x8_t std_v = vdupq_n_f16(std_value);
+    float16x8_t alpha_v = vdupq_n_f16(*alpha);
+    float16x8_t beta_v = vdupq_n_f16(*beta);
+
+    I32 i = 0;
+    for (i = 0; i < len - 7; i += 8) {
+        float16x8_t in = vld1q_f16(input + i);
+        float16x8_t tmp_v = vsubq_f16(in, mean_v);
+        tmp_v = vdivq_f16(tmp_v, std_v);
+        tmp_v = vfmaq_f16(beta_v, alpha_v, tmp_v);
+        vst1q_f16(output + i, tmp_v);
+    }
+    for (; i < len; i++) {
+        output[i] = *alpha * (input[i] - mean) / std_value + *beta;
     }
 }
 

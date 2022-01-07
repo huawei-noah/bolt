@@ -11,8 +11,10 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string>
 #include "online_conversion.h"
+#include "model_converter.h"
+#include "model_optimizer.hpp"
+#include "model_data_type_converter.h"
 
 bool fileExist(const std::string &name)
 {
@@ -29,15 +31,16 @@ void *OnlineModelConversion(const char *storagePath,
     const char *inferPrecision,
     I32 removeProcessOpsNum)
 {
-    DataConvertType converterMode = F32_to_F16;
+    DataConvertType converterMode = F32_to_F32;
     if (inferPrecision == std::string("PTQ")) {
         converterMode = F32_to_F32;
-    } else if (inferPrecision == std::string("FP16")) {
+    } else if (inferPrecision == std::string("FP16") || inferPrecision == std::string("BNN_FP16")) {
         converterMode = F32_to_F16;
     } else if (inferPrecision == std::string("FP32")) {
         converterMode = F32_to_F32;
     } else {
-        UNI_ERROR_LOG("Unknown converter data precision : %s", inferPrecision);
+        UNI_ERROR_LOG("Unknown converter data precision: %s.\n", inferPrecision);
+        exit(1);
     }
 
     ModelSpec *originalMs = new ModelSpec();
@@ -49,28 +52,36 @@ void *OnlineModelConversion(const char *storagePath,
     std::string mnStr = modelName;
     std::string prefix = (spStr.at(spStr.size() - 1) == '/') ? (spStr + mnStr)
                                                              : (spStr + "/" + mnStr);
-
     if (0) {
 #ifdef _USE_CAFFE
     } else if (fileExist(prefix + ".prototxt") && fileExist(prefix + ".caffemodel")) {
+        UNI_INFO_LOG("Start to convert %s.caffemodel...\n", prefix.c_str());
         caffe_converter(storagePath, modelName, originalMs);
 #endif
 #ifdef _USE_ONNX
     } else if (fileExist(prefix + ".onnx")) {
-        onnx_converter(storagePath, modelName, removeProcessOpsNum, originalMs);
+        UNI_INFO_LOG("Start to convert %s.onnx...\n", prefix.c_str());
+        onnx_converter(storagePath, modelName, removeProcessOpsNum,
+            inferPrecision == std::string("BNN_FP16"), originalMs);
 #endif
 #ifdef _USE_TFLITE
     } else if (fileExist(prefix + ".tflite")) {
+        UNI_INFO_LOG("Start to convert %s.tflite...\n", prefix.c_str());
         tflite_converter(storagePath, modelName, originalMs);
 #endif
 #ifdef _USE_TENSORFLOW
     } else if (fileExist(prefix + ".json")) {
+        UNI_INFO_LOG("Start to convert %s.json...\n", prefix.c_str());
         tensorflow_converter(storagePath, modelName, originalMs);
 #endif
     } else {
-        UNI_ERROR_LOG("Can not find any valid model, FAIL!");
+        UNI_ERROR_LOG("Can not find %s.prototxt/caffemodel, %s.onnx, %s.tflite or %s.json model "
+                      "file.\n",
+            prefix.c_str(), prefix.c_str(), prefix.c_str(), prefix.c_str());
+        exit(1);
     }
 
+    UNI_DEBUG_LOG("Start to optimize graph...\n");
     ModelSpecOptimizer msOptimizer;
     msOptimizer.suggest(inferPrecision == std::string("PTQ"));
     msOptimizer.optimize(originalMs);
@@ -78,7 +89,7 @@ void *OnlineModelConversion(const char *storagePath,
     CHECK_STATUS(ms_datatype_converter(originalMs, targetMs, converterMode, "NOQUANT"));
     CHECK_STATUS(mt_destroy_model(originalMs));
     delete originalMs;
-    operator_relationship(targetMs);
+    //operator_relationship(targetMs);
     return (void *)targetMs;
 }
 

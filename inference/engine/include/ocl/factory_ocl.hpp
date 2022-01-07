@@ -48,6 +48,15 @@
 #include "ocl/rnncell_ocl.hpp"
 #include "ocl/padding_ocl.hpp"
 #include "ocl/prelu_ocl.hpp"
+#include "ocl/reduction_ocl.hpp"
+#include "ocl/topk_ocl.hpp"
+#include "ocl/tfslice_ocl.hpp"
+#include "ocl/cast_ocl.hpp"
+#include "ocl/expand_ocl.hpp"
+#include "ocl/tile_ocl.hpp"
+#include "ocl/roialign_ocl.hpp"
+#include "ocl/generate_proposals_ocl.hpp"
+#include "ocl/gather_ocl.hpp"
 
 class FactoryOCL : public Factory {
 public:
@@ -206,7 +215,7 @@ public:
 
     std::shared_ptr<Operator> createReduction(DataType dt, ReductionParamSpec p) override
     {
-        OP_UNSUP(2, dt, p);
+        auto cep = new ReductionOCL(dt, p);
         return std::shared_ptr<Operator>(cep);
     }
 
@@ -263,9 +272,9 @@ public:
         return std::shared_ptr<Operator>(cep);
     }
 
-    std::shared_ptr<Operator> createSpace2Depth(DataType dt) override
+    std::shared_ptr<Operator> createSpace2Depth(DataType dt, Space2DepthParamSpec p) override
     {
-        auto cep = (Space2Depth *)(new Space2DepthOCL(dt));
+        auto cep = (Space2Depth *)(new Space2DepthOCL(dt, p));
         return std::shared_ptr<Operator>(cep);
     }
 
@@ -332,13 +341,13 @@ public:
 
     std::shared_ptr<Operator> createTile(DataType dt, TileParamSpec p) override
     {
-        OP_UNSUP(2, dt, p);
+        auto cep = (Tile *)new TileOCL(dt, p);
         return std::shared_ptr<Operator>(cep);
     }
 
     std::shared_ptr<Operator> createTfSlice(DataType dt, TfSliceParamSpec p) override
     {
-        OP_UNSUP(2, dt, p);
+        auto cep = (TopK *)new TfSliceOCL(dt, p);
         return std::shared_ptr<Operator>(cep);
     }
 
@@ -351,6 +360,97 @@ public:
     std::shared_ptr<Operator> createShape() override
     {
         OP_UNSUP(0);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createWhere(DataType dt) override
+    {
+        OP_UNSUP(1, dt);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createTdnn(DataType dt, TdnnParamSpec p) override
+    {
+        OP_UNSUP(2, dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createBatchNorm(DataType dt, BatchNormParamSpec p) override
+    {
+        OP_UNSUP(2, dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createTopK(DataType dt, TopKParamSpec p) override
+    {
+        auto cep = (TopK *)new TopKOCL(dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createCast(DataType dt, CastParamSpec p) override
+    {
+        auto cep = (Cast *)new CastOCL(dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createEqual(DataType dt, EqualParamSpec p) override
+    {
+        OP_UNSUP(2, dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createInstanceNorm(DataType dt, InstanceNormParamSpec p) override
+    {
+        OP_UNSUP(2, dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createExpand(DataType dt, ExpandParamSpec p) override
+    {
+        auto cep = (Expand *)new ExpandOCL(dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createScatter(DataType dt, ScatterParamSpec p) override
+    {
+        OP_UNSUP(2, dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createGather(DataType dt, GatherParamSpec p) override
+    {
+        auto cep = new GatherOCL(dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createLogSoftmax(DataType dt, SoftmaxParamSpec p) override
+    {
+        OP_UNSUP(2, dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createSelect(DataType dt) override
+    {
+        OP_UNSUP(1, dt);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createRoIAlign(RoIAlignParamSpec p) override
+    {
+        auto cep = (RoIAlign *)new RoIAlignOCL(p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createGenerateProposals(
+        DataType dt, GenerateProposalsParamSpec p) override
+    {
+        auto cep = (GenerateProposals *)new GenerateProposalsOCL(dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createGAT(DataType dt, GATParamSpec p) override
+    {
+        OP_UNSUP(2, dt, p);
         return std::shared_ptr<Operator>(cep);
     }
 };

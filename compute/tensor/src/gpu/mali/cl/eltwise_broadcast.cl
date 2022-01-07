@@ -11,144 +11,235 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define MANGLE_NAME_IMPL(base, TP, B_AXIS) base##TP##B_AXIS
-#define MANGLE_NAME(base, TP, B_AXIS) MANGLE_NAME_IMPL(base, TP, B_AXIS)
+#include "kernel_def.h"
+#define MANGLE_NAME_IMPL(base, IOM, AM, EM, SI, FM, AXIS_NAME) base##IOM##AM##EM##SI##FM##AXIS_NAME
+#define MANGLE_NAME(base, IOM, AM, EM, SI, FM, AXIS_NAME) \
+    MANGLE_NAME_IMPL(base, IOM, AM, EM, SI, FM, AXIS_NAME)
 
-#if defined(USE_SUM)
-#define calCore(v, res) \
-    {                   \
-        res.s0 += v.s0; \
-        res.s1 += v.s1; \
-        res.s2 += v.s2; \
-        res.s3 += v.s3; \
-    }
-#endif
-
-#if defined(USE_MAX)
-#define calCore(v, res)     \
-    {                       \
-        res = fmax(res, v); \
-    }
-#endif
-
-#if defined(USE_PROD)
-#define calCore(v, res) \
-    {                   \
-        res.s0 *= v.s0; \
-        res.s1 *= v.s1; \
-        res.s2 *= v.s2; \
-        res.s3 *= v.s3; \
-    }
-#endif
-
-#if defined(USE_NCHW)
-__kernel void MANGLE_NAME(eltwise_broadcast_nchw_, TP, B_AXIS)
+#if defined(USE_INPUT_IMG1)
+#define READ_ONLY_KERNEL_MEM_1 __read_only image3d_t
 #else
-__kernel void MANGLE_NAME(eltwise_broadcast_, TP, B_AXIS)
+#define READ_ONLY_KERNEL_MEM_1 __global const T *
 #endif
-    (const int c,
-        const int ih_str,
-        const int iw_str,
-        const int ih_off,
-        const int iw_off,
-        const int oh_str,
-        const int ow_str,
-        const int oh_off,
-        const int ow_off,
-        __global const T *in0,
-        __global const T *in1,
-        __global T *out)
-{
-    char ec = 4;
+
+#define SI
+#define FM
+#define AXIS_NAME common
+#if defined(SWAP_INPUT)
+#define SI si_
+#endif
+
 #if defined(USE_NCHW)
-    ec = c & 3;
-    if (ec == 0) {
-        ec = 4;
+#define FM nchw_
+
+#if defined(USE_INPUT_IMG1)
+#define LOAD_BROAD(val)                                                            \
+    {                                                                              \
+        char ew = ((idx << 2) + 4 <= bw) ? 4 : (bw & 3);                           \
+        if ((idx << 2) >= bw) {                                                    \
+            ew = 1;                                                                \
+        }                                                                          \
+        const int bidx = (ew == 1) ? (bw >> 2) : idx;                              \
+        val = READ_IMAGE(broad, sampler, (int4)(bidx, bidy, bidn * bc + bidc, 0)); \
+        if (ew == 3) {                                                             \
+            val.w = val.z;                                                         \
+        } else if (ew == 2) {                                                      \
+            val.z = val.y;                                                         \
+            val.w = val.y;                                                         \
+        } else if (ew == 1) {                                                      \
+            val.y = val.x;                                                         \
+            val.z = val.x;                                                         \
+            val.w = val.x;                                                         \
+        }                                                                          \
+    }
+#else
+#define LOAD_BROAD(val)                                                     \
+    {                                                                       \
+        char ew = ((idx << 2) + 4 <= bw) ? 4 : (bw & 3);                    \
+        if ((idx << 2) >= bw) {                                             \
+            ew = 1;                                                         \
+        }                                                                   \
+        int b_off = ((bidn * bc + bidc) * bh_str + bidy) * bw_str + ib_off; \
+        if (ew == 4) {                                                      \
+            val = vload4(idx, broad + b_off);                               \
+        } else {                                                            \
+            if (ew == 3) {                                                  \
+                val.xyz = vload3(0, broad + b_off + (idx << 2));            \
+                val.w = val.z;                                              \
+            } else if (ew == 2) {                                           \
+                val.xy = vload2(0, broad + b_off + (idx << 2));             \
+                val.z = val.y;                                              \
+                val.w = val.y;                                              \
+            } else if (ew == 1) {                                           \
+                val.x = broad[b_off + bw - 1];                              \
+                val.y = val.x;                                              \
+                val.z = val.x;                                              \
+                val.w = val.x;                                              \
+            }                                                               \
+        }                                                                   \
     }
 #endif
-    int idx = get_global_id(0);
-    int idy = get_global_id(1);
-    if (idx >= h || idy >= w) {
+#else
+#if defined(USE_INPUT_IMG1)
+#define LOAD_BROAD(val)                                                              \
+    {                                                                                \
+        const int bcd4 = (bc + 3) >> 2;                                              \
+        const int bwh_str = bw_str * bh_str;                                         \
+        char ec = ((idc << 2) + 4 <= bc) ? 4 : (bc & 3);                             \
+        if ((idc << 2) >= bc) {                                                      \
+            ec = 1;                                                                  \
+        }                                                                            \
+        const int bidc = (ec == 1) ? (bc >> 2) : idc;                                \
+        val = READ_IMAGE(broad, sampler, (int4)(bidx, bidy, bidn * bcd4 + bidc, 0)); \
+        if (ec == 3) {                                                               \
+            val.w = val.z;                                                           \
+        } else if (ec == 2) {                                                        \
+            val.z = val.y;                                                           \
+            val.w = val.y;                                                           \
+        } else if (ec == 1) {                                                        \
+            val.y = val.x;                                                           \
+            val.z = val.x;                                                           \
+            val.w = val.x;                                                           \
+        }                                                                            \
+    }
+#else
+#define LOAD_BROAD(val)                                                     \
+    {                                                                       \
+        const int bcd4 = (bc + 3) >> 2;                                     \
+        const int bwh_str = bw_str * bh_str;                                \
+        char ec = ((idc << 2) + 4 <= bc) ? 4 : (bc & 3);                    \
+        if ((idc << 2) >= bc) {                                             \
+            ec = 1;                                                         \
+        }                                                                   \
+        int b_off = (bidn * bcd4 * bh_str + bidy) * bw_str + bidx + ib_off; \
+        if (ec == 4) {                                                      \
+            val = vload4(idc * bwh_str + b_off, broad);                     \
+        } else {                                                            \
+            b_off = b_off << 2;                                             \
+            if (ec == 3) {                                                  \
+                val.xyz = vload3(0, broad + b_off + (idc << 2) * bwh_str);  \
+                val.w = val.z;                                              \
+            } else if (ec == 2) {                                           \
+                val.xy = vload2(0, broad + b_off + (idc << 2) * bwh_str);   \
+                val.z = val.y;                                              \
+                val.w = val.y;                                              \
+            } else if (ec == 1) {                                           \
+                val.x = broad[b_off + (bc - 1) * bwh_str];                  \
+                val.y = val.x;                                              \
+                val.z = val.x;                                              \
+                val.w = val.x;                                              \
+            }                                                               \
+        }                                                                   \
+    }
+#endif
+#endif
+
+#if defined(AXIS_W1)
+#define AXIS_NAME axis_w1
+#if defined(USE_INPUT_IMG1)
+#define LOAD_BROAD(val)                                                         \
+    {                                                                           \
+        val = READ_IMAGE(broad, sampler, (int4)(0, bidy, bidn * bc + bidc, 0)); \
+        val.y = val.x;                                                          \
+        val.z = val.x;                                                          \
+        val.w = val.x;                                                          \
+    }
+#else
+#define LOAD_BROAD(val)                                                     \
+    {                                                                       \
+        int b_off = ((bidn * bc + bidc) * bh_str + bidy) * bw_str + ib_off; \
+        val.x = broad[b_off];                                               \
+        val.y = val.x;                                                      \
+        val.z = val.x;                                                      \
+        val.w = val.x;                                                      \
+    }
+#endif
+#endif
+
+#if defined(AXIS_C1)
+#define AXIS_NAME axis_c1
+#if defined(USE_INPUT_IMG1)
+#define LOAD_BROAD(val)                                                \
+    {                                                                  \
+        val = READ_IMAGE(broad, sampler, (int4)(bidx, bidy, bidn, 0)); \
+        val.y = val.x;                                                 \
+        val.z = val.x;                                                 \
+        val.w = val.x;                                                 \
+    }
+#else
+#define LOAD_BROAD(val)                                                     \
+    {                                                                       \
+        const int bcd4 = (bc + 3) >> 2;                                     \
+        int b_off = (bidn * bcd4 * bh_str + bidy) * bw_str + bidx + ib_off; \
+        val.x = broad[b_off * 4];                                           \
+        val.y = val.x;                                                      \
+        val.z = val.x;                                                      \
+        val.w = val.x;                                                      \
+    }
+#endif
+#endif
+
+__kernel void MANGLE_NAME(eltwise_broadcast_, IOM, AM, EM, SI, FM, AXIS_NAME)(const int iw_str,
+    const int ih_str,
+    const int bw_str,
+    const int bh_str,
+    const int ow_str,
+    const int oh_str,
+    const int i_off,
+    const int ib_off,
+    const int o_off,
+    const int iw,
+    const int ic,
+    const int bw,
+    const int bh,
+    const int bc,
+    const int bn,
+    const int bx,
+    const int by,
+    READ_ONLY_KERNEL_MEM in,
+    READ_ONLY_KERNEL_MEM_1 broad,
+    KERNEL_MEM out)
+{
+    const int idx = get_global_id(0);
+    const int idy = get_global_id(1);
+    const int idz = get_global_id(2);
+#if defined(USE_NCHW)
+    const int idc = idz % ic;
+    const int idn = idz / ic;
+#else
+    const int idc = idz % ((ic + 3) >> 2);
+    const int idn = idz / ((ic + 3) >> 2);
+#endif
+    if (idx >= bx || idy >= by) {
         return;
     }
-
-    int idn = 0;
-    int idz, in_off_res;
-    if (ec == 4) {
-        idz = get_global_id(2);
-        in_off_res = (idz * iw_str + idy + iw_off) * ih_str + idx + ih_off;
-    } else {
-        int cd4 = (c + 3) >> 2;
-        idz = get_global_id(2) % cd4;
-        idn = get_gloabl_id(2) / cd4;
-        in_off_res = ((idn * cd4 + idz) * iw_str + idy + iw_off) * ih_str + idx + ih_off;
-        if ((idz << 2) + 4 <= c) {
-            ec = 4;
-        }
-    }
     T4 val = 0;
-    T4 res;
+    T4 res = 0;
 
-#if defined(BROAD_XYZ)
-    const int in_off_val = 0;
 #if defined(USE_NCHW)
-    val.x = in1[in_off_val];
-    val.y = val.x;
-    val.z = val.x;
-    val.w = val.x;
+    LOAD_MEM_V4_C1_COMMON(res, idx, idy, idz, iw_str, ih_str, i_off, iw, in);
+    const int bidy = (idy < bh) ? idy : bh - 1;
+    const int bidc = (idc < bc) ? idc : bc - 1;
+    const int bidn = (idn < bn) ? idn : bn - 1;
+#else
+    LOAD_MEM_V4_COMMON(res, idx, idy, idz, iw_str, ih_str, i_off, in);
+    const int bidx = (idx < bw) ? idx : bw - 1;
+    const int bidy = (idy < bh) ? idy : bh - 1;
+    const int bidn = (idn < bn) ? idn : bn - 1;
 #endif
 
-#elif defined(BROAD_XY)
-    const int in_off_val = idz;
+    LOAD_BROAD(val);
+#if defined(SWAP_INPUT)
+    ELTWISE_V4(res, val);
+    res = val;
+#else
+    ELTWISE_V4(val, res);
+#endif
+    ACTIVATION_V4(res);
+
 #if defined(USE_NCHW)
-    if (ec == 4) {
-        val = vload4(in_off_val, in1);
-    } else {
-        in_off_val = idn * ic + (idz << 2);
-        if (ec == 1) {
-            val.x = in1[in_off_val];
-        }
-        if (ec == 2) {
-            val.xy = vload2(0, in1 + in_off_val)
-        }
-        if (ec == 3) {
-            val.xyz = vload3(0, in1 + in_off_val)
-        }
-    }
+    STORE_MEM_V4_C1_COMMON(res, idx, idy, idz, ow_str, oh_str, o_off, iw, out);
+#else
+    STORE_MEM_V4_COMMON(res, idx, idy, idz, ow_str, oh_str, o_off, out);
 #endif
-
-#elif defined(BROAD_Y)
-    const int in_off_val = idz * iw_str + idy + iw_off;
-#if defined(USE_NCHW)
-    in_off_val = (idn * ic + (idz << 2)) * iw_str + idy + iw_off;
-    val.x = in1[in_off_val];
-    if (ec > 1)
-        val.y = in1[in_off_val + iw_str];
-    if (ec > 2)
-        val.z = in1[in_off_val + iw_str * 2];
-    if (ec > 3)
-        val.w = in1[in_off_val + iw_str * 3];
-#endif
-
-#elif defined(BROAD_X)
-    const int in_off_val = idz * ih_str + idx + ih_off;
-#if defined(USE_NCHW)
-    in_off_val = (idn * ic + (idz << 2)) * ih_str + idx + ih_off;
-    val.x = in1[in_off_val];
-    if (ec > 1)
-        val.y = in1[in_off_val + ih_str];
-    if (ec > 2)
-        val.z = in1[in_off_val + ih_str * 2];
-    if (ec > 3)
-        val.w = in1[in_off_val + ih_str * 3];
-#endif
-#endif
-
-#if !defined(USE_NCHW)
-    val = vload4(in_off_val, in1);
-#endif
-    res = vload4(in_off_res, in0);
-    calCore(val, res);
-    const int out_off = (idz * ow_str + idy + ow_off) * oh_str + idx + oh_off;
-    vstore4(res, out_off, out);
 }

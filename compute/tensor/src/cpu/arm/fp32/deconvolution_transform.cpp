@@ -23,33 +23,26 @@ inline EE deconvolution_transform_filter_kernel_fp32(TensorDesc filterDesc,
     if (nullptr == filterArray || nullptr == ftmDesc || nullptr == ftmArray) {
         CHECK_STATUS(NULL_POINTER);
     }
-    DataType fdt;
-    DataFormat fdf;
-    U32 fn, fc, fh, fw;
-    CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-    if (fdf == ftmDataFormat) {
+    if (filterDesc.df == ftmDataFormat) {
         *ftmDesc = filterDesc;
-        memcpy(ftmArray, filterArray, fn * fc * fh * fw * bytesOf(fdt));
+        memcpy(ftmArray, filterArray, tensorNumBytes(filterDesc));
         return SUCCESS;
     }
-    if (fdf != DF_NCHW) {
-        CHECK_STATUS(NOT_SUPPORTED);
+    if (filterDesc.df != DF_NCHW) {
+        return NOT_SUPPORTED;
     }
     EE ret = SUCCESS;
     switch (ftmDataFormat) {
         case DF_NHWCN8: {
-            *ftmDesc = tensor4df(fdt, ftmDataFormat, fc, fn, fh, fw);
-            transformCNHWToNHWCNx<F32, 8>(filterDesc, filterArray, *ftmDesc, ftmArray);
+            transformCNHWToNHWCNx<F32, 8>(filterDesc, filterArray, ftmDataFormat, ftmDesc, ftmArray);
             break;
         }
         case DF_HWNCN8: {
-            *ftmDesc = tensor4df(fdt, ftmDataFormat, fc, fn, 6, 6);
-            transformCNHWToHWNCNx<F32, 8>(filterDesc, filterArray, *ftmDesc, ftmArray);
+            transformCNHWToHWNCNx<F32, 8>(filterDesc, filterArray, ftmDataFormat, ftmDesc, ftmArray);
             break;
         }
         case DF_NCHWC8: {
-            *ftmDesc = tensor4df(fdt, DF_NCHWC8, fn, fc, fh, fw);
-            transformCNHWToNCHWC8<F32>(filterDesc, filterArray, *ftmDesc, ftmArray);
+            transformCNHWToNCHWC8<F32>(filterDesc, filterArray, ftmDataFormat, ftmDesc, ftmArray);
             break;
         }
         default:

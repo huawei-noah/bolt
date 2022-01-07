@@ -11,10 +11,8 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "sys.h"
-#include "error.h"
-#include "types.h"
 #include "gpu/mali/fp16/depth2space_mali_fp16.h"
+#include "gpu/mali/cl/kernel_option/depth2space_opt.h"
 
 inline EE depth2space_checkpara_mali_fp16(TensorDesc inputDesc, TensorDesc outputDesc)
 {
@@ -37,63 +35,70 @@ inline EE depth2space_core_mali_fp16(GCLHandle_t handle,
 {
     UNUSED(outputDesc);
     U32 iw, ih, ic, in;
+    U32 oc;
     tensorSelectGet(inputDesc, NULL, NULL, &in, &ic, &ih, &iw);
-    U32 iw_str, ih_str, iw_off, ih_off, iwh_str, ic_str;
-    U32 ow_str, oh_str, ow_off, oh_off, owh_str;
+    tensorSelectGet(outputDesc, NULL, NULL, NULL, &oc, NULL, NULL);
+    U32 iw_str, ih_str, iw_off, ih_off, ihw_str, ic_str, i_off;
+    U32 ow_str, oh_str, ow_off, oh_off, ohw_str, o_off;
     get_gclmem_dim(input->desc, &iw_str, &ih_str, &ic_str, &iw_off, &ih_off);
     get_gclmem_dim(output->desc, &ow_str, &oh_str, NULL, &ow_off, &oh_off);
-    iwh_str = iw_str * ih_str;
-    owh_str = ow_str * oh_str;
+    ihw_str = iw_str * ih_str;
+    ohw_str = ow_str * oh_str;
     cl_mem inbuf, outbuf, tmp;
     inbuf = input->mem;
     outbuf = output->mem;
     tmp = tmpBuf->mem;
-    DataFormat memFormat = input->desc.memFormat;
+    DataFormat imf = input->desc.memFormat;
+    DataFormat omf = output->desc.memFormat;
+    i_off = ih_off * iw_str + iw_off;
+    o_off = oh_off * ow_str + ow_off;
+    Kernel kernel;
+    char kernelName[128];
+    KernelOpt kernelOpt;
 
-    if (memFormat == DF_NCWHC4 && p.blockSize == 2) {
-        U32 gs[3] = {ih, iw, (ic_str + 3) / 4};
+    if (imf == DF_NCHWC4 && p.blockSize == 2) {
+        U32 gs[3] = {iw, ih, (ic_str + 3) / 4};
         U32 ls[3] = {0, 0, 0};
         U32 dim = 3;
-        Kernel kernel;
-        CHECK_STATUS(gcl_create_kernel(handle, "depth2space_ncwhc4_2x2", &kernel));
-        CHECK_STATUS(gcl_set_kernelArgs(kernel, p.blockSize, ih_str, iwh_str, ic_str, ih_off,
-            iw_off, oh_str, owh_str, oh_off, ow_off, ih, iw, inbuf, outbuf));
-        gcl_set_kernelVec(handle, kernel, dim, gs, ls, "depth2space_ncwhc4_2x2");
+        bool useOutputNchw = (omf == DF_NCHW) ? true : false;
+        CHECK_STATUS(set_depth2space_nchwc4_2x2_opt(
+            useOutputNchw, DT_F16, GCL_MEM_BUF, GCL_MEM_BUF, kernelName, &kernelOpt));
+        CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
+        CHECK_STATUS(gcl_set_kernelArgs(kernel, p.blockSize, iw_str, ihw_str, ic_str, i_off, ow_str,
+            oh_str, ohw_str, o_off, iw, ih, oc, inbuf, outbuf));
+        gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
 #ifdef _DEBUG
-        CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, "depth2space_ncwhc4_2x2"));
+        CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
 #endif
-        return SUCCESS;
-    } else if (memFormat == DF_NCHW || memFormat == DF_NCWHC4) {
-        if (memFormat == DF_NCWHC4) {
-            U32 gs0[3] = {ih, (iw + 3) / 4, (ic + 3) / 4};
-            U32 ls0[3] = {0, 0, 0};
-            U32 dim0 = 3;
-            Kernel kernel0;
-            CHECK_STATUS(gcl_create_kernel(handle, "mem_trans_ncwhc4_to_nchw", &kernel0));
-            CHECK_STATUS(gcl_set_kernelArgs(kernel0, iw_str, ih_str, iw_off, ih_off, iw, ih, 0, 0,
-                iw, ih, ic, iw, ih, ic, 0, 0, inbuf, tmp));
-            gcl_set_kernelVec(handle, kernel0, dim0, gs0, ls0, "mem_trans_ncwhc4_to_nchw");
-#ifdef _DEBUG
+    } else {
+        if (imf == DF_NCHWC4) {
+            GCLMem tMem;
+            GCLMemDesc desc = input->desc;
+            U32 str[3] = {iw, ih, ic * in};
+            U32 off[3] = {0, 0, 0};
+            MemFlags flag = CL_MEM_READ_WRITE;
             CHECK_STATUS(
-                gcl_run_kernel(handle, kernel0, dim0, gs0, ls0, "mem_trans_ncwhc4_to_nchw"));
-#endif
+                gclmem_set_desc_padding(&desc, str, off, DT_F16, DF_NCHW, GCL_MEM_BUF, flag));
+            tMem.desc = desc;
+            tMem.mem = tmp;
+            CHECK_STATUS(ocl_data_trans_form(handle, input, &tMem, 0, 0, NCHWC4_TO_NCHW));
             inbuf = tmp;
         }
         U32 gs[3] = {
             iw, ih, (ic / (p.blockSize * p.blockSize) + 3) / 4 * (p.blockSize * p.blockSize)};
         U32 ls[3] = {0, 0, 0};
         U32 dim = 3;
-        Kernel kernel;
-        CHECK_STATUS(gcl_create_kernel(handle, "depth2space_nchw", &kernel));
-        CHECK_STATUS(gcl_set_kernelArgs(kernel, p.blockSize, iw_str, iwh_str, iw_off, ih_off,
-            oh_str, owh_str, oh_off, ow_off, iw, ih, ic, inbuf, outbuf));
-        gcl_set_kernelVec(handle, kernel, dim, gs, ls, "depth2space_nchw");
+        CHECK_STATUS(set_common_opt(
+            DT_F16, GCL_MEM_BUF, GCL_MEM_BUF, "depth2space_nchw", kernelName, &kernelOpt));
+        CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
+        CHECK_STATUS(gcl_set_kernelArgs(kernel, p.blockSize, iw_str, ihw_str, ow_str, ohw_str,
+            i_off, o_off, iw, ih, ic, inbuf, outbuf));
+        gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
 #ifdef _DEBUG
-        CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, "depth2space_nchw"));
+        CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
 #endif
-        return SUCCESS;
     }
-    return NOT_SUPPORTED;
+    return SUCCESS;
 }
 
 EE depth2space_infer_tmpBuf_size_mali_fp16(
@@ -105,7 +110,7 @@ EE depth2space_infer_tmpBuf_size_mali_fp16(
     U32 iw, ih, ic, in;
     tensorSelectGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw);
     *bytes = 0;
-    if (idf == DF_NCHW && p.blockSize != 2) {
+    if (p.blockSize != 2) {
         *bytes = in * ic * ih * iw * bytesOf(idt);
     }
     return SUCCESS;

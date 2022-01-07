@@ -15,16 +15,10 @@
 #define _HPP_INFERENCE
 
 #include "cnn.h"
-#ifdef _USE_MALI
+#ifdef _USE_GPU
 #include "gcl.h"
 #endif
-#ifdef _BUILD_TEST
-#include "sequential.hpp"
-#endif
 #include "thread_affinity.h"
-#include "op_type.h"
-#include "model_tools.h"
-#include "model_serialize_deserialize.hpp"
 
 inline std::map<std::string, TensorDesc> extractInputDims(const ModelSpec *ms)
 {
@@ -49,7 +43,7 @@ inline std::shared_ptr<CNN> createPipelinefromMs(
 
     std::map<std::string, TensorDesc> inputDescMap = extractInputDims(ms);
 
-    cnn->loadAlgorithmMapFromText(algorithmMapPath);
+    cnn->loadAlgorithmMap(algorithmMapPath);
 
     // assign space for output, tmp, bias, and trans_weight
     cnn->ready(inputDescMap);
@@ -65,20 +59,9 @@ inline std::shared_ptr<CNN> createPipeline(
     // deserialize model from file
     ModelSpec ms;
     CHECK_STATUS(deserialize_model_from_file(modelPath, &ms));
-
     std::shared_ptr<CNN> pipeline = createPipelinefromMs(affinityPolicyName, &ms, algorithmMapPath);
-
     CHECK_STATUS(mt_destroy_model(&ms));
     return pipeline;
 }
 
-#ifdef _BUILD_TEST
-inline Sequential createSequentialPipeline(
-    const char *affinityPolicyName, DataType dt, const char *modelName)
-{
-    AffinityPolicy affinityPolicy = thread_affinity_get_policy_by_name(affinityPolicyName);
-    auto sequential = Sequential(affinityPolicy, dt, modelName);
-    return sequential;
-}
-#endif
 #endif

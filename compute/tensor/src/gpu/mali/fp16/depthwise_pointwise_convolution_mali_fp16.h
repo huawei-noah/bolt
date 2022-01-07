@@ -13,17 +13,14 @@
 
 #ifndef _DEPTHWISE_POINTWISE_CONVOLUTION_MALI_FP16
 #define _DEPTHWISE_POINTWISE_CONVOLUTION_MALI_FP16
-#include "sys.h"
-#include "error.h"
-#include "types.h"
-#include "tensor_computing_type.h"
+
+#include "gpu/mali/fp16/tensor_computing_fp16.h"
 
 EE depthwise_pointwise_convolution_transform_filter_bytes_mali_fp16(TensorDesc dwFilterDesc,
     TensorDesc pwFilterDesc,
     ForwardRunInfoMali_t forwardRunInfo,
-    GCLMemDesc_t gclmemDwFilterDesc,
-    GCLMemDesc_t gclmemPwFilterDesc,
-    U32 *bytes);
+    TensorDesc *dwFtmDesc,
+    TensorDesc *pwFtmDesc);
 
 EE depthwise_pointwise_convolution_transform_filter_mali_fp16(GCLHandle_t handle,
     TensorDesc dwFilterDesc,
@@ -58,7 +55,7 @@ EE depthwise_pointwise_convolution_mali_fp16(GCLHandle_t handle,
     const GCLMem_t dwBias,
     const GCLMem_t pwBias,
     U32 tmpBytes,
-    GCLMem_t tmpBuf,
+    std::vector<GCLMem_t> tmp,
     TensorDesc outputDesc,
     GCLMem_t output,
     ActivationMode depthwiseActivationMode,

@@ -11,8 +11,8 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <math.h>
 #include "cpu/general/tensor_computing_general.h"
+#include "tensor_transpose.h"
 
 template <typename T>
 static F32 array_max(const T *input, U32 len, U32 stride)
@@ -35,12 +35,17 @@ static EE softmax(TensorDesc inputDesc, const T *input, int axis, TensorDesc out
     }
 
     U32 size = tensorNumElements(inputDesc);
+    int channel_axis = inputDesc.nDims - 2;
     axis = (axis + inputDesc.nDims) % inputDesc.nDims;
     axis = inputDesc.nDims - 1 - axis;
     std::vector<T> buffer;
     if (inputDesc.df == DF_NCHWC8) {
-        if (axis == 2) {
-            if (inputDesc.dims[0] != 1 || inputDesc.dims[1] != 1) {
+        if (axis == channel_axis) {
+            U32 hw = 1;
+            for (int i = 0; i < channel_axis; i++) {
+                hw *= inputDesc.dims[i];
+            }
+            if (hw != 1) {
                 buffer = std::vector<T>(size);
                 TensorDesc tmpInputDesc = inputDesc;
                 tmpInputDesc.df = DF_NCHW;
@@ -71,14 +76,14 @@ static EE softmax(TensorDesc inputDesc, const T *input, int axis, TensorDesc out
             T *out = output + i * loops * loop_inner + j;
             F32 max_value = array_max<T>(in, loops, loop_inner);
             F32 sum = 0;
-            for (U32 i = 0; i < loops; i++) {
-                F32 tmp = exp(in[i * loop_inner] - max_value);
+            for (U32 k = 0; k < loops; k++) {
+                F32 tmp = exp(in[k * loop_inner] - max_value);
                 sum += tmp;
-                out[i * loop_inner] = tmp;
+                out[k * loop_inner] = tmp;
             }
             sum = 1 / sum;
-            for (U32 i = 0; i < loops; i++) {
-                out[i * loop_inner] *= sum;
+            for (U32 k = 0; k < loops; k++) {
+                out[k * loop_inner] *= sum;
             }
         }
     }

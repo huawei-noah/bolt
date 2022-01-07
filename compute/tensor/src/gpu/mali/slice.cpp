@@ -12,66 +12,32 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "sys.h"
-#include "types.h"
+
 #include "tensor_desc.h"
 #include "error.h"
 #include "gpu/mali/tensor_computing_mali.h"
 #include "gpu/mali/fp16/slice_mali_fp16.h"
 
-EE slice_infer_output_size_mali(TensorDesc inputDesc,
+EE slice_padding_input_mali(TensorDesc inputDesc,
     SliceParamSpec p,
     std::vector<TensorDesc> *outputDesc,
-    GCLMemDesc_t gclmemInputDesc,
-    GCLMemDesc_t gclmemOutputDesc)
+    OclMemory *inputMem,
+    std::vector<OclMemory *> outputMem)
 {
-    if (outputDesc == NULL) {
+    if (outputDesc == nullptr || inputMem == nullptr) {
         CHECK_STATUS(NULL_POINTER);
     }
-    int axis = p.axis;
-    int *slice_points = p.slice_points;
-    U32 num = outputDesc->size();
-    axis = (axis + inputDesc.nDims) % inputDesc.nDims;
-    I32 target_axis = inputDesc.nDims - 1 - axis;
-    for (U32 i = 0; i < num; i++) {
-        (*outputDesc)[i] = inputDesc;
-
-        I32 prev_point = 0;
-        if (i > 0) {
-            prev_point = slice_points[i - 1];
-        }
-        I32 next_point = inputDesc.dims[target_axis];
-        if (i < num - 1) {
-            next_point = slice_points[i];
-        }
-        if (prev_point < 0) {
-            prev_point = (prev_point + inputDesc.dims[target_axis]) % inputDesc.dims[target_axis];
-        }
-        if (next_point < 0) {
-            next_point = (next_point + inputDesc.dims[target_axis]) % inputDesc.dims[target_axis];
-        }
-        (*outputDesc)[i].dims[target_axis] = next_point - prev_point;
-    }
-    if (inputDesc.df == DF_MKT) {
-        if (axis == 2) {  // slice on T
-            DataType dt;
-            U32 m, k, t;
-            U32 gw, gh, gc;
-            get_nlp_mkt_val(inputDesc, &dt, &m, &k, &t);
-            map_nlp_mkt_to_ncwhc4(m, k, t, &gw, &gh, &gc);
-            CHECK_STATUS(infer_gclmem_desc_ncwhc4(
-                gw, gh, gc * 4, 0, 0, 0, 0, 0, dt, dt, gclmemInputDesc, NULL));
-            if (gclmemOutputDesc) {
-                for (U32 i = 0; i < num; ++i) {
-                    get_nlp_mkt_val((*outputDesc)[i], NULL, &m, &k, &t);
-                    map_nlp_mkt_to_ncwhc4(m, k, t, &gw, &gh, &gc);
-                    CHECK_STATUS(infer_gclmem_desc_ncwhc4(
-                        0, 0, 0, 0, 0, gw, gh, gc * 4, dt, dt, NULL, &gclmemOutputDesc[i]));
-                }
+    if (inputDesc.df == DF_NCHWC4) {
+        int axis = p.axis;
+        U32 target_axis = inputDesc.nDims - 1 - axis;
+        bool axisAlign4 = slice_axis_c_align4(target_axis, *outputDesc);
+        if (!axisAlign4) {
+            for (U32 i = 0; i < outputDesc->size(); i++) {
+                (*outputDesc)[i].df = DF_NCHW;
             }
         }
-        return SUCCESS;
     }
-    return NOT_SUPPORTED;
+    return SUCCESS;
 }
 
 inline EE slice_checkpara_mali(GCLHandle_t handle,
@@ -82,24 +48,12 @@ inline EE slice_checkpara_mali(GCLHandle_t handle,
     std::vector<void *> *output)
 {
     if (handle == nullptr || input == nullptr) {
-        return NULL_POINTER;
-    }
-    if (input->desc.memFormat != DF_NCWHC4) {
-        return NOT_SUPPORTED;
+        CHECK_STATUS(NULL_POINTER);
     }
     for (auto p : (*output)) {
         if (p == nullptr) {
-            return NULL_POINTER;
+            CHECK_STATUS(NULL_POINTER);
         }
-        if (((GCLMem_t)p)->desc.memFormat != input->desc.memFormat) {
-            return NOT_MATCH;
-        }
-    }
-    if (inputDesc.df != DF_MKT) {
-        return NOT_SUPPORTED;
-    }
-    if (inputDesc.df == DF_MKT && p.axis != 2) {
-        return NOT_SUPPORTED;
     }
     for (auto p : outputDesc) {
         if (p.df != inputDesc.df) {
@@ -109,10 +63,31 @@ inline EE slice_checkpara_mali(GCLHandle_t handle,
     return SUCCESS;
 }
 
+EE slice_infer_forward_tmp_bytes_mali(TensorDesc inputDesc,
+    GCLMemDesc gclmemInputDesc,
+    SliceParamSpec p,
+    std::vector<TensorDesc> outputDesc,
+    U32 *bytes)
+{
+    EE ret = SUCCESS;
+    switch (inputDesc.dt) {
+        case DT_F16: {
+            ret = slice_infer_forward_tmp_bytes_mali_fp16(
+                inputDesc, gclmemInputDesc, p, outputDesc, bytes);
+            break;
+        }
+        default:
+            ret = NOT_SUPPORTED;
+            break;
+    }
+    return ret;
+}
+
 EE slice_mali(GCLHandle_t handle,
     TensorDesc inputDesc,
     GCLMem_t input,
     SliceParamSpec p,
+    GCLMem_t tmpbuf,
     std::vector<TensorDesc> outputDesc,
     std::vector<void *> *output)
 {
@@ -120,7 +95,7 @@ EE slice_mali(GCLHandle_t handle,
     CHECK_STATUS(slice_checkpara_mali(handle, inputDesc, input, p, outputDesc, output));
     switch (inputDesc.dt) {
         case DT_F16: {
-            ret = slice_mali_fp16(handle, inputDesc, input, p, outputDesc, output);
+            ret = slice_mali_fp16(handle, inputDesc, input, p, tmpbuf, outputDesc, output);
             break;
         }
         default:

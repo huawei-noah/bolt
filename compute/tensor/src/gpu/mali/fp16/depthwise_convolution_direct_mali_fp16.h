@@ -13,15 +13,11 @@
 
 #ifndef _DEPTHWISE_CONVOLUTION_DIRECT_MALI_FP16
 #define _DEPTHWISE_CONVOLUTION_DIRECT_MALI_FP16
-#include "sys.h"
-#include "error.h"
-#include "types.h"
-#include "tensor_computing_type.h"
 
-EE depthwise_convolution_direct_transform_filter_bytes_mali_fp16(TensorDesc filterDesc,
-    ForwardRunInfoMali_t forwardRunInfo,
-    GCLMemDesc_t gclmemFilterDesc,
-    U32 *bytes);
+#include "gpu/mali/fp16/tensor_computing_fp16.h"
+
+EE depthwise_convolution_direct_transform_filter_bytes_mali_fp16(
+    TensorDesc filterDesc, ForwardRunInfoMali_t forwardRunInfo, TensorDesc *ftmDesc);
 
 EE depthwise_convolution_direct_transform_filter_mali_fp16(GCLHandle_t handle,
     TensorDesc filterDesc,
@@ -29,6 +25,23 @@ EE depthwise_convolution_direct_transform_filter_mali_fp16(GCLHandle_t handle,
     ForwardRunInfoMali_t forwardRunInfo,
     TensorDesc *fltmemDesc,
     GCLMem_t fltmem);
+
+GCLMemDesc depthwise_convolution_get_input_nchwc4_desc(TensorDesc inputDesc,
+    TensorDesc filterDesc,
+    ConvolutionParamSpec convParamSpec,
+    TensorDesc outputDesc,
+    U32 item_h);
+
+EE depthwise_convolution_trans_input_to_nchwc4(GCLHandle_t handle,
+    TensorDesc inputDesc,
+    TensorDesc filterDesc,
+    GCLMem_t input,
+    ConvolutionParamSpec convParamSpec,
+    GCLMem_t tmpBuf,
+    TensorDesc outputDesc,
+    U32 item_h,
+    GCLMemDesc *transDesc,
+    U32 *tmpSubOff);
 
 EE depthwise_convolution_direct_infer_forward_tmp_bytes_mali_fp16(TensorDesc inputDesc,
     TensorDesc filterDesc,

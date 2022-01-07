@@ -29,16 +29,30 @@ public:
         return mem;
     }
 
+    bool use_scale(const std::vector<TensorDesc> &inputDesc)
+    {
+        bool ret;
+        if (this->eltwiseDesc.elt_mode == ELTWISE_PROD && inputDesc.size() == 2 &&
+            inputDesc[0].nDims > 1 && inputDesc[1].nDims > 1 &&
+            inputDesc[0].dims[inputDesc[0].nDims - 2] == inputDesc[1].dims[inputDesc[1].nDims - 2] &&
+            inputDesc[1].dims[inputDesc[1].nDims - 1] == 1 &&
+            (inputDesc[1].nDims == 2 || (inputDesc[1].nDims == 3 && inputDesc[1].dims[0] == 1) ||
+                (inputDesc[1].nDims == 4 && inputDesc[1].dims[0] == 1 && inputDesc[1].dims[1] == 1)) &&
+            tensorNumElements(inputDesc[0]) != tensorNumElements(inputDesc[1])) {
+            ret = true;
+        } else {
+            ret = false;
+        }
+        return ret;
+    }
+
     void run() override
     {
         std::vector<TensorDesc> inputDesc;
         for (auto p : this->inputTensors) {
             inputDesc.push_back(p.get_desc());
         }
-        if (this->eltwiseDesc.elt_mode == ELTWISE_PROD && inputDesc.size() == 2 &&
-            (inputDesc[1].nDims == 2 || (inputDesc[1].nDims == 3 && inputDesc[1].dims[0] == 1) ||
-                (inputDesc[1].nDims == 4 && inputDesc[1].dims[0] == 1 && inputDesc[1].dims[1] == 1)) &&
-            tensorNumElements(inputDesc[0]) != tensorNumElements(inputDesc[1])) {
+        if (this->use_scale(inputDesc)) {
             Tensor inTensor = this->inputTensors[1];
             U8 *alpha = (U8 *)((CpuMemory *)(inTensor.get_memory()))->get_ptr();
             ScaleParamSpec scaleParam;
@@ -54,27 +68,21 @@ public:
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
-        std::vector<TensorDesc> inDims;
+        std::vector<TensorDesc> inputDesc;
         for (auto p : inTensors) {
-            inDims.push_back(p->get_desc());
+            inputDesc.push_back(p->get_desc());
         }
-        if (this->eltwiseDesc.elt_mode == ELTWISE_PROD && inDims.size() == 2 &&
-            (inDims[1].nDims == 2 || (inDims[1].nDims == 3 && inDims[1].dims[0] == 1) ||
-                (inDims[1].nDims == 4 && inDims[1].dims[0] == 1 && inDims[1].dims[1] == 1)) &&
-            tensorNumElements(inDims[0]) != tensorNumElements(inDims[1])) {
-            CHECK_STATUS(scale_infer_output_size(inTensors[0], outTensors[0], &this->archInfo));
+        if (this->use_scale(inputDesc)) {
+            ScaleParamSpec scaleParam;
+            scaleParam.axis = 1;
+            TensorDesc desc = inTensors[1]->get_desc();
+            U32 axisLen = desc.dims[desc.nDims - 2];
+            CHECK_STATUS(scale_infer_output_size(
+                inTensors[0], scaleParam, axisLen, outTensors[0], &this->archInfo));
         } else {
             CHECK_STATUS(eltwise_infer_output_size(inTensors, outTensors[0], &this->archInfo));
         }
         return SUCCESS;
-    }
-
-    U32 infer_tmp_memory_size() override
-    {
-        U32 bytes = 0;
-        CHECK_STATUS(eltwise_infer_forward_tmp_bytes(
-            this->inputTensors, this->outputTensors[0], &bytes, &this->archInfo));
-        return UNI_MAX(bytes, this->lenOfTemp);
     }
 };
 

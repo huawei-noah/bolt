@@ -11,11 +11,7 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "sys.h"
-#include "error.h"
-#include "types.h"
 #include "gpu/mali/fp16/deconvolution_mali_fp16.h"
-#include "gpu/mali/fp16/deconvolution_direct_mali_fp16.h"
 #include "gpu/mali/fp16/deconvolution_gemm_mali_fp16.h"
 
 inline EE deconvolution_checkpara_mali_fp16(GCLHandle_t handle,
@@ -29,46 +25,30 @@ inline EE deconvolution_checkpara_mali_fp16(GCLHandle_t handle,
 {
     if (nullptr == handle || nullptr == input || nullptr == filter || nullptr == output ||
         nullptr == bias) {
-        return NULL_POINTER;
+        CHECK_STATUS(NULL_POINTER);
     }
     if (inputDesc.dt != outputDesc.dt || inputDesc.dt != filterDesc.dt || inputDesc.dt != DT_F16) {
-        return NOT_MATCH;
+        CHECK_STATUS(NOT_MATCH);
     }
 
-    U32 ic, fc, fn, fh, fw, oc;
-    CHECK_STATUS(tensorSelectGet(inputDesc, NULL, NULL, NULL, &ic, NULL, NULL));
-    CHECK_STATUS(tensorSelectGet(filterDesc, NULL, NULL, &fn, &fc, &fh, &fw));
-    CHECK_STATUS(tensorSelectGet(outputDesc, NULL, NULL, NULL, &oc, NULL, NULL));
-    if (input->desc.memFormat != DF_NCWHC4) {
-        return NOT_MATCH;
+    if (input->desc.memFormat != DF_NCHWC4) {
+        CHECK_STATUS(NOT_MATCH);
     }
-    if (output->desc.memFormat != DF_NCWHC4) {
-        return NOT_MATCH;
-    }
-    if (fc != oc) {
-        return NOT_MATCH;
-    }
-    if (ic != fn) {
-        return NOT_MATCH;
+    if (output->desc.memFormat != DF_NCHWC4) {
+        CHECK_STATUS(NOT_MATCH);
     }
     return SUCCESS;
 }
 
-EE deconvolution_transform_filter_bytes_mali_fp16(TensorDesc filterDesc,
-    ForwardRunInfoMali_t forwardRunInfo,
-    GCLMemDesc_t gclmemFilterDesc,
-    U32 *bytes)
+EE deconvolution_transform_filter_bytes_mali_fp16(
+    TensorDesc filterDesc, ForwardRunInfoMali_t forwardRunInfo, TensorDesc *ftmDesc)
 {
     EE ret = SUCCESS;
     ConvolutionForwardAlgorithm algorithm = (ConvolutionForwardAlgorithm)(forwardRunInfo->algorithm);
     switch (algorithm) {
-        case CONVOLUTION_ALGORITHM_DIRECT:
-            ret = deconvolution_direct_transform_filter_bytes_mali_fp16(
-                filterDesc, forwardRunInfo, gclmemFilterDesc, bytes);
-            break;
         case CONVOLUTION_ALGORITHM_GEMM:
             ret = deconvolution_gemm_transform_filter_bytes_mali_fp16(
-                filterDesc, forwardRunInfo, gclmemFilterDesc, bytes);
+                filterDesc, forwardRunInfo, ftmDesc);
             break;
         default:
             ret = NOT_SUPPORTED;
@@ -88,10 +68,6 @@ EE deconvolution_transform_filter_mali_fp16(GCLHandle_t handle,
     EE ret = SUCCESS;
     ConvolutionForwardAlgorithm algorithm = (ConvolutionForwardAlgorithm)(forwardRunInfo->algorithm);
     switch (algorithm) {
-        case CONVOLUTION_ALGORITHM_DIRECT:
-            ret = deconvolution_direct_transform_filter_mali_fp16(
-                handle, filterDesc, filter, forwardRunInfo, fltmemDesc, fltmem);
-            break;
         case CONVOLUTION_ALGORITHM_GEMM:
             ret = deconvolution_gemm_transform_filter_mali_fp16(
                 handle, filterDesc, filter, forwardRunInfo, fltmemDesc, fltmem);
@@ -113,10 +89,6 @@ EE deconvolution_infer_forward_tmp_bytes_mali_fp16(TensorDesc inputDesc,
     EE ret = SUCCESS;
     ConvolutionForwardAlgorithm algorithm = (ConvolutionForwardAlgorithm)(forwardRunInfo->algorithm);
     switch (algorithm) {
-        case CONVOLUTION_ALGORITHM_DIRECT:
-            ret = deconvolution_direct_infer_forward_tmp_bytes_mali_fp16(
-                inputDesc, filterDesc, outputDesc, convParamSpec, forwardRunInfo, bytes);
-            break;
         case CONVOLUTION_ALGORITHM_GEMM:
             ret = deconvolution_gemm_infer_forward_tmp_bytes_mali_fp16(
                 inputDesc, filterDesc, outputDesc, convParamSpec, forwardRunInfo, bytes);
@@ -148,11 +120,6 @@ EE deconvolution_mali_fp16(GCLHandle_t handle,
     EE ret = SUCCESS;
     ConvolutionForwardAlgorithm algorithm = (ConvolutionForwardAlgorithm)(forwardRunInfo->algorithm);
     switch (algorithm) {
-        case CONVOLUTION_ALGORITHM_DIRECT:
-            ret = deconvolution_direct_mali_fp16(handle, inputDesc, input, filterDesc, filter,
-                convParamSpec, forwardRunInfo, biasDesc, bias, tmpBytes, tmpBuf, outputDesc, output,
-                activationMode);
-            break;
         case CONVOLUTION_ALGORITHM_GEMM:
             ret = deconvolution_gemm_mali_fp16(handle, inputDesc, input, filterDesc, filter,
                 convParamSpec, forwardRunInfo, biasDesc, bias, tmpBytes, tmpBuf, outputDesc, output,

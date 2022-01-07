@@ -1,5 +1,4 @@
-file(GLOB srcs ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
-file(GLOB commonsrcs ${CMAKE_CURRENT_SOURCE_DIR}/../model_*.cpp)
+file(GLOB srcs *.cpp)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -8,10 +7,8 @@ include_directories(${JSONCPP_INCLUDE_DIR})
 include_directories(../)
 
 # shared library
-add_library(${PROJECT_NAME}_tensorflow SHARED ${srcs} ${commonsrcs})
-if (USE_IOS_CLANG)
-    target_link_libraries(${PROJECT_NAME}_tensorflow LINK_PUBLIC ${JSONCPP_LIBRARY} uni)
-endif (USE_IOS_CLANG)
+add_library(${PROJECT_NAME}_tensorflow SHARED ${srcs})
+target_link_libraries(${PROJECT_NAME}_tensorflow LINK_PUBLIC model_spec ${JSONCPP_SHARED_LIBRARY} uni)
 
 # static library
 add_library(${PROJECT_NAME}_tensorflow_static STATIC ${srcs})

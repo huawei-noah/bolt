@@ -15,10 +15,10 @@
 #define _H_OPOPTIMIZER
 
 #include <vector>
+#include <set>
 #include <string>
-#include "types.h"
-#include "op_type.h"
-#include "model_tools.h"
+#include "model_common.h"
+#include "uni.h"
 
 class OPOptimizer {
 public:
@@ -27,7 +27,40 @@ public:
 
     virtual bool optimize(ModelSpec *spec) = 0;
 
-    int searchWeightIndex(ModelSpec *spec, char *op_name)
+    template <int bufferSize>
+    std::string copyBuffer(void *ptr, int size)
+    {
+        size = UNI_MIN(size, bufferSize);
+        char buffer[bufferSize];
+        memcpy(buffer, ptr, size);
+        if (size < bufferSize)
+            buffer[size] = '\0';
+        else
+            buffer[bufferSize - 1] = '\0';
+        for (int j = 0; j < size - 1; j++) {
+            if (buffer[j] == '\0')
+                buffer[j] = '-';
+        }
+        return buffer;
+    }
+
+    bool isModelOutput(ModelSpec *spec, int opIndex)
+    {
+        std::set<std::string> modelOutput;
+        for (int i = 0; i < spec->num_outputs; i++) {
+            modelOutput.insert(spec->output_names[i]);
+        }
+        bool ret = false;
+        for (unsigned int i = 0; i < spec->ops[opIndex].num_outputs; i++) {
+            if (modelOutput.find(spec->ops[opIndex].output_tensors_name[i]) != modelOutput.end()) {
+                ret = true;
+                break;
+            }
+        }
+        return ret;
+    }
+
+    static int searchWeightIndex(ModelSpec *spec, char *op_name)
     {
         if (spec->num_weight_specs <= 0) {
             return -1;
@@ -58,10 +91,15 @@ public:
 
     void setOperatorInvalid(ModelSpec *spec, int index, bool removeEdge = false)
     {
+        UNI_DEBUG_LOG("remove operator(%d) and edges(%d).\n", index, removeEdge);
         if (index >= spec->num_operator_specs || index < 0) {
             return;
         }
         spec->ops[index].type = OT_None;
+        int weightId = searchWeightIndex(spec, spec->ops[index].name);
+        if (weightId >= 0) {
+            setWeightOperatorInvalid(spec, weightId);
+        }
         if (removeEdge) {
             if (spec->ops[index].num_inputs == 1 && spec->ops[index].num_outputs == 1 &&
                 std::string(spec->ops[index].input_tensors_name[0]) ==
@@ -92,9 +130,13 @@ public:
     {
         spec->ws[index].bytes_of_weight = 0;
         spec->ws[index].bytes_of_vec = 0;
-        delete spec->ws[index].weight;
+        if (outOfFileMapRange(spec->ws[index].weight, spec->mfd)) {
+            delete spec->ws[index].weight;
+        }
         spec->ws[index].weight = nullptr;
-        delete spec->ws[index].weight;
+        if (outOfFileMapRange(spec->ws[index].vec, spec->mfd)) {
+            delete spec->ws[index].vec;
+        }
         spec->ws[index].vec = nullptr;
     }
 
@@ -110,10 +152,14 @@ public:
         return result;
     }
 
-    int searchOperatorIndexBackward(
-        ModelSpec *spec, int end, OperatorType *queryOps, int queryNum, bool unskip = true)
+    int searchOperatorIndexBackward(ModelSpec *spec,
+        int end,
+        OperatorType *queryOps,
+        int queryNum,
+        bool unskip = true,
+        int start = 0)
     {
-        for (int i = end; i >= 0; i--) {
+        for (int i = end; i >= start; i--) {
             if (isValidOperator(spec, i)) {
                 for (int j = 0; j < queryNum; j++) {
                     OperatorType opType = queryOps[j];
@@ -134,10 +180,14 @@ public:
         OperatorType *queryOps,
         int queryNum,
         bool unskip = true,
-        std::string str = "")
+        std::string str = "",
+        int end = 0)
     {
         std::string strEmpty = "";
-        for (int i = start; i < spec->num_operator_specs; i++) {
+        if (end == 0) {
+            end = spec->num_operator_specs;
+        }
+        for (int i = start; i < end; i++) {
             if (isValidOperator(spec, i)) {
                 for (int j = 0; j < queryNum; j++) {
                     OperatorType opType = queryOps[j];
@@ -170,9 +220,9 @@ public:
         if (right == 0) {
             right = spec->num_operator_specs;
         }
+        bool hasFind = false;
         for (int i = left; i < right; i++) {
             if (isValidOperator(spec, i)) {
-                bool hasFind = false;
                 for (int j = 0; j < (int)spec->ops[i].num_inputs; j++) {
                     if (spec->ops[i].input_tensors_name[j] == tensorName) {
                         result.push_back(std::make_pair(i, j));
@@ -201,9 +251,9 @@ public:
         if (right == 0) {
             right = spec->num_operator_specs;
         }
+        bool hasFind = false;
         for (int i = right - 1; i >= left; i--) {
             if (isValidOperator(spec, i)) {
-                bool hasFind = false;
                 for (int j = 0; j < (int)spec->ops[i].num_outputs; j++) {
                     if (spec->ops[i].output_tensors_name[j] == tensorName) {
                         result.push_back(std::make_pair(i, j));
@@ -231,6 +281,16 @@ public:
             }
         }
         return result;
+    }
+
+    int skipInvalidOperator(ModelSpec *spec, int k)
+    {
+        for (; k < spec->num_operator_specs; k++) {
+            if (isValidOperator(spec, k)) {
+                break;
+            }
+        }
+        return k;
     }
 };
 #endif

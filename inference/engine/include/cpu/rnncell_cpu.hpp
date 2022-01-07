@@ -82,55 +82,59 @@ public:
         CHECK_STATUS(
             rnn_transform_filter_bytes(this->weightTensors, this->p, bytes.data(), &this->archInfo));
         std::vector<Tensor> ftmTensors(filter_num);
-        std::vector<Tensor *> tmp(filter_num);
+        std::vector<Tensor *> tmpFilter(filter_num);
         for (I32 i = 0; i < filter_num; i++) {
             ftmTensors[i].resize(tensor1d(DT_U8, bytes[i]));
             ftmTensors[i].alloc();
-            tmp[i] = &ftmTensors[i];
+            tmpFilter[i] = &ftmTensors[i];
         }
-        CHECK_STATUS(rnn_transform_filter(this->weightTensors, this->p, tmp, &this->archInfo));
+        CHECK_STATUS(rnn_transform_filter(
+            this->weightTensors, this->p, this->temp, tmpFilter, &this->archInfo));
         this->weightTensors = ftmTensors;
         return SUCCESS;
     }
 
     EE infer_weight_desc() override
     {
-        int num1 = (this->p.biDirection) ? 2 : 1;
-        int num2, column;
+        int directions = (this->p.biDirection) ? 2 : 1;
+        int weightNum, biasNum, column;
         if (this->p.numProjection > 0) {
-            num2 = 2;
+            weightNum = biasNum = 2;
             column = this->p.numProjection;
         } else {
-            num2 = 1;
+            weightNum = biasNum = 1;
             column = this->p.numOutput;
         }
-        int factor = 0;
+        int gates = 0;
         switch (this->p.mode) {
             case RNN_LSTM:
-                factor = 4;
+                gates = 4;
                 break;
             case RNN_GRU:
-                factor = 3;
+                gates = 3;
                 break;
             case RNN_GRU_LBR:
-                factor = 3;
+                gates = 3;
+                biasNum++;
                 break;
             default:
                 return NOT_SUPPORTED;
         }
-        U32 filterRow = factor * column;
+        U32 filterRow = gates * column;
         U32 filterCol = this->xDim + this->p.numOutput;
         std::vector<TensorDesc> weight_desc(2), bias_desc(2);
         weight_desc[0] = tensor2df(this->dt, DF_NK, filterRow, filterCol);
         weight_desc[1] = tensor2df(this->dt, DF_NK, this->p.numOutput, this->p.numProjection);
         bias_desc[0] = tensor1d(this->dt, filterRow);
         bias_desc[1] = tensor1d(this->dt, this->p.numOutput);
-        this->weightTensors = std::vector<Tensor>(num1 * num2);
-        this->biasTensors = std::vector<Tensor>(num1 * num2);
-        for (int i = 0, id = 0; i < num1; i++) {
-            for (int j = 0; j < num2; j++, id++) {
-                this->weightTensors[id].resize(weight_desc[j]);
-                this->biasTensors[id].resize(bias_desc[j]);
+        this->weightTensors = std::vector<Tensor>(directions * weightNum);
+        this->biasTensors = std::vector<Tensor>(directions * biasNum);
+        for (int i = 0, wid = 0, vid = 0; i < directions; i++) {
+            for (int j = 0; j < weightNum; j++, wid++) {
+                this->weightTensors[wid].resize(weight_desc[j]);
+            }
+            for (int j = 0; j < biasNum; j++, vid++) {
+                this->biasTensors[vid].resize(bias_desc[j]);
             }
         }
         return SUCCESS;

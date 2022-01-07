@@ -11,7 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string.h>
 #include <vector>
 
 #include "tensor_computing.h"
@@ -30,8 +29,6 @@ int reshapeTest(int argc, char **argv, DataType dt)
     for (I32 i = 0; i < p.shape_size; i++) {
         p.shape_dims[i] = atoi(argv[6 + i]);
     }
-    ArchInfo archInfo;
-    archInfo.arch = UT_ARCH;
 
     DataFormat df = DF_NCHW;
     TensorDesc inDesc = tensor4df(dt, df, in, ic, ih, iw);
@@ -40,23 +37,23 @@ int reshapeTest(int argc, char **argv, DataType dt)
     Tensor inputTensor;
     inputTensor.resize(inDesc);
     inputTensor.alloc();
-    memcpy(get_ptr_from_tensor(inputTensor, UT_ARCH), input, tensorNumBytes(inDesc));
+    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inDesc));
 
     Tensor outputTensor;
-    CHECK_STATUS(reshape_infer_output_size(&inputTensor, p, &outputTensor, &archInfo));
+    CHECK_STATUS(reshape_infer_output_size(&inputTensor, p, &outputTensor, &UT_CPU_ARCHINFO));
     outputTensor.alloc();
     TensorDesc outDesc = outputTensor.get_desc();
     Tensor nullTensor;
 
     if (UT_CHECK) {
-        CHECK_STATUS(reshape(inputTensor, nullTensor, outputTensor, &archInfo));
+        CHECK_STATUS(reshape(inputTensor, nullTensor, outputTensor, &UT_CPU_ARCHINFO));
 
         CHECK_REQUIREMENT(tensorNumElements(outDesc) == len);
     }
 
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        CHECK_STATUS(reshape(inputTensor, nullTensor, outputTensor, &archInfo));
+        CHECK_STATUS(reshape(inputTensor, nullTensor, outputTensor, &UT_CPU_ARCHINFO));
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;

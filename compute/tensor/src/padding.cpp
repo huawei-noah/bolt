@@ -15,7 +15,7 @@
 #ifdef _USE_CPU
 #include "cpu/tensor_computing_cpu.h"
 #endif
-#ifdef _USE_MALI
+#ifdef _USE_GPU
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
 
@@ -30,21 +30,7 @@ EE padding_infer_output_size(
     }
     TensorDesc inputDesc = inputTensor->get_desc();
     TensorDesc outputDesc = outputTensor->get_desc();
-    EE ret = NOT_SUPPORTED;
-    if (IS_MALI_GPU(archInfo->arch)) {
-#ifdef _USE_MALI
-        GCLMemDesc gclmemInputDesc = ocl_get_desc(*inputTensor);
-        GCLMemDesc gclmemOutputDesc = ocl_get_desc(*outputTensor);
-        ret = padding_infer_output_size_mali(
-            inputDesc, padParamSpec, &outputDesc, &gclmemInputDesc, &gclmemOutputDesc);
-        ocl_set_desc(inputTensor, gclmemInputDesc);
-        ocl_set_desc(outputTensor, gclmemOutputDesc);
-#endif
-#ifdef _USE_CPU
-    } else {
-        ret = padding_infer_output_size_cpu(inputDesc, padParamSpec, &outputDesc);
-#endif
-    }
+    EE ret = padding_infer_output_size_cpu(inputDesc, padParamSpec, &outputDesc);
     outputTensor->resize(outputDesc);
     return ret;
 }
@@ -58,8 +44,8 @@ EE padding(Tensor inputTensor, PadParamSpec padParamSpec, Tensor outputTensor, A
     void *output = get_ptr_from_tensor(outputTensor, arch);
 
     EE ret = NOT_SUPPORTED;
-    if (IS_MALI_GPU(arch)) {
-#ifdef _USE_MALI
+    if (IS_GPU(arch)) {
+#ifdef _USE_GPU
         ret = padding_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc,
             (const GCLMem_t)input, padParamSpec, outputDesc, (GCLMem_t)output);
 #endif

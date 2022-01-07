@@ -23,6 +23,7 @@
         GCLHandle_t handle = OCLContext::getInstance().handle.get();                            \
         handle->kernelVec = &this->opKernelVec;                                                 \
         if (this->needSetKernelVec) {                                                           \
+            CHECK_STATUS(gcl_clean_kernelVec(handle));                                          \
             run_prepare();                                                                      \
             this->needSetKernelVec = false;                                                     \
             if (this->needSelectKernelLS) {                                                     \
@@ -33,34 +34,23 @@
         CHECK_STATUS(gcl_run_kernelVec(handle));                                                \
     }                                                                                           \
                                                                                                 \
-private:                                                                                        \
+protected:                                                                                      \
     bool needSetKernelVec;                                                                      \
     bool needSelectKernelLS;                                                                    \
-    std::vector<GCLKernelInfo> opKernelVec;
+    std::vector<GCLKernelInfo> opKernelVec;                                                     \
+    MaliPara maliPara;
 
 #define DESTROY_OCL_KERNEL                                       \
     GCLHandle_t handle = OCLContext::getInstance().handle.get(); \
     handle->kernelVec = &this->opKernelVec;                      \
     CHECK_STATUS(gcl_clean_kernelVec(handle));
 
-inline void setMALIArchInfo(
-    ArchInfo *archInfo, ForwardRunInfoMali *runInfo, bool *needSetKernelVec, bool *needSelectKernelLS)
-{
-    if (runInfo != nullptr) {
-        runInfo->algorithm = 0;
-        runInfo->best_w[0] = 1;
-        runInfo->best_w[1] = 1;
-        runInfo->best_c[0] = 1;
-        runInfo->best_c[1] = 1;
-        runInfo->best_k[0] = 1;
-        runInfo->best_k[1] = 1;
+#define INIT_GPU_INFO(runInfoPtr)                                 \
+    {                                                             \
+        maliPara.handle = OCLContext::getInstance().handle.get(); \
+        maliPara.forwardRunInfo = runInfoPtr;                     \
+        archInfo.archPara = &maliPara;                            \
+        needSetKernelVec = true;                                  \
+        needSelectKernelLS = true;                                \
     }
-    MaliPara *maliPara = (MaliPara *)malloc(sizeof(MaliPara));
-    maliPara->handle = OCLContext::getInstance().handle.get();
-    maliPara->forwardRunInfo = runInfo;
-    archInfo->arch = MALI;
-    archInfo->archPara = (void *)maliPara;
-    *needSetKernelVec = true;
-    *needSelectKernelLS = true;
-}
 #endif  // H_OCL_ENGINE

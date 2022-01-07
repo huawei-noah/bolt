@@ -13,18 +13,19 @@
 
 #include <vector>
 #include "sys.h"
-#include "types.h"
+
 #include "tensor_desc.h"
 #include "error.h"
 #include "gpu/mali/tensor_computing_mali.h"
 #include "gpu/mali/fp16/deconvolution_mali_fp16.h"
+#include "gpu/mali/cl/kernel_option/deconv_opt.h"
 
 inline void deconvolution_produce_algos_paras(TensorDesc inputDesc,
     TensorDesc filterDesc,
     ConvolutionParamSpec convParamSpec,
     std::vector<ConvolutionForwardAlgorithm> *deconvAlgorithms,
     std::vector<U32> *algoNumIndex,
-    std::vector<U32> *vecW,
+    std::vector<U32> *vecH,
     std::vector<U32> *vecC,
     std::vector<U32> *vecK)
 {
@@ -34,144 +35,49 @@ inline void deconvolution_produce_algos_paras(TensorDesc inputDesc,
     tensorSelectGet(filterDesc, NULL, NULL, &fn, &fc, &fh, &fw);
     sh = convParamSpec.stride_h;
     sw = convParamSpec.stride_w;
-    U32 configInfo[3][128];
-    U32 configNums[2];
-    ConvolutionForwardAlgorithm algo[2];
-    U32 algoNum = 1;
-    algo[0] = CONVOLUTION_ALGORITHM_DIRECT;
-    if (fw != 2 || fh != 2 || sw != 2 || sh != 2) {
-        configInfo[0][0] = 1;
-        configInfo[1][0] = 4;
-        configInfo[2][0] = 4;
-        configNums[0] = 1;
+
+    deconvAlgorithms->push_back(CONVOLUTION_ALGORITHM_GEMM);
+    if (fw == 2 && fh == 2 && sw == 2 && sh == 2) {
+        CHECK_STATUS(get_deconv_gemm_f2s2_scheme(vecH, vecC, vecK, iw));
     } else {
-        algo[0] = CONVOLUTION_ALGORITHM_GEMM;
-        U32 configNum = 0;
-        U32 c = 8;
-        U32 ni = 4;
-        for (U32 ii = 0; ii < 2; ii++) {
-            for (U32 i = 0; i < ni; i++) {
-                configInfo[0][configNum] = i + 1;
-                configInfo[1][configNum] = c;
-                configInfo[2][configNum] = 4;
-                configNum++;
-            }
-            c = c << 1;
-            ni = 3;
-        }
-
-        ni = 2;
-        U32 w = 2;
-        for (U32 ii = 0; ii < 2; ii++) {
-            c = 8;
-            if (ih % w == 0) {
-                for (U32 i = 0; i < ni; i++) {
-                    configInfo[0][configNum] = w << 8;
-                    configInfo[1][configNum] = c;
-                    configInfo[2][configNum] = 4;
-                    configNum++;
-                    c = c << 1;
-                }
-            }
-            w = w << 1;
-            ni = 1;
-        }
-        configNums[0] = configNum;
+        CHECK_STATUS(get_deconv_gemm_scheme(vecH, vecC, vecK, iw, fw, fh, fc));
     }
-
-    for (U32 i = 0; i < algoNum; i++) {
-        (*deconvAlgorithms).push_back(algo[i]);
-        (*algoNumIndex).push_back(configNums[i]);
-        U32 be = (i == 0) ? 0 : configNums[i - 1];
-        U32 end = configNums[i];
-        for (U32 j = be; j < end; j++) {
-            if (vecW) {
-                (*vecW).push_back(configInfo[0][j]);
-            }
-            if (vecC) {
-                (*vecC).push_back(configInfo[1][j]);
-            }
-            if (vecK) {
-                (*vecK).push_back(configInfo[2][j]);
-            }
-        }
-    }
+    algoNumIndex->push_back(vecH->size());
 }
-EE deconvolution_infer_output_size_mali(TensorDesc inputDesc,
+
+EE deconvolution_padding_input_mali(TensorDesc inputDesc,
     TensorDesc filterDesc,
     ConvolutionParamSpec convParamSpec,
     TensorDesc *outputDesc,
-    GCLMemDesc_t gclmemInputDesc,
-    GCLMemDesc_t gclmemOutputDesc)
+    OclMemory *inputMem,
+    OclMemory *outputMem)
 {
-    DataType idt, fdt;
-    DataFormat idf, fdf;
-    U32 iw, ih, ic, in;
-    U32 fw, fh, fc, fn;
-    U32 ow, oh;
-    U32 sw, sh, dw, dh;
-    U32 pt, pb, pl, pr;
-    tensorSelectGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw);
-    tensorSelectGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw);
-    sw = convParamSpec.stride_w;
-    sh = convParamSpec.stride_h;
-    dw = convParamSpec.dilatedRate_w;
-    dh = convParamSpec.dilatedRate_h;
-    if (in != 1) {
+    if (inputMem == nullptr || outputMem == nullptr || outputDesc == nullptr) {
+        CHECK_STATUS(NULL_POINTER);
+    }
+    if (inputDesc.df != DF_NCHWC4) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
-    if (fw < 1 || fh < 1) {
-        CHECK_STATUS(NOT_SUPPORTED);
-    }
-    if (dw != 1 || dh != 1) {
-        CHECK_STATUS(NOT_SUPPORTED);
-    }
-
-    sw = convParamSpec.stride_h;
-    sh = convParamSpec.stride_w;
-    pt = convParamSpec.padding_top;
-    pb = convParamSpec.padding_bottom;
-    pl = convParamSpec.padding_left;
-    pr = convParamSpec.padding_right;
-
-    oh = fh + sh * (ih - 1) - pt - pb;
-    ow = fw + sw * (iw - 1) - pl - pr;
-
-    bool need_pad = false;
     std::vector<ConvolutionForwardAlgorithm> deconvAlgorithms;
     std::vector<U32> algoNumIndex;
-    std::vector<U32> vecW;
-    deconvolution_produce_algos_paras(
-        inputDesc, filterDesc, convParamSpec, &deconvAlgorithms, &algoNumIndex, &vecW, NULL, NULL);
-
-    if (idf == DF_NCHW) {
-        if (outputDesc) {
-            *outputDesc = tensor4df(idt, DF_NCHW, in, fc, oh, ow);
-        }
-        if (fw == 2 && fh == 2 && sw == 2 && sh == 2) {
-            U32 iw_align, item_w;
-            iw_align = ow;
-            U32 tmp_align = 0;
-            for (U32 i = 0; i < algoNumIndex[0]; i++) {
-                item_w = vecW[i];
-                item_w = ((item_w >> 8) > 0) ? 1 : item_w;
-                U32 j = ALIGN(ow, item_w);
-                tmp_align = (tmp_align < j) ? j : tmp_align;
-            }
-            iw_align = (iw_align < tmp_align) ? tmp_align : iw_align;
-            if (iw_align != iw) {
-                need_pad = true;
-            }
-            CHECK_STATUS(infer_gclmem_desc_ncwhc4(iw_align, ih, ic, 0, 0, ow, oh, fc, idt, idt,
-                gclmemInputDesc, gclmemOutputDesc, need_pad));
-        } else {
-            CHECK_STATUS(infer_gclmem_desc_ncwhc4(iw, ih, ic, 0, 0, ow, oh, fc, idt, idt,
-                gclmemInputDesc, gclmemOutputDesc, need_pad));
-        }
-        return SUCCESS;
+    std::vector<U32> vecH;
+    std::vector<U32> vecC;
+    std::vector<U32> vecK;
+    deconvolution_produce_algos_paras(inputDesc, filterDesc, convParamSpec, &deconvAlgorithms,
+        &algoNumIndex, &vecH, &vecC, &vecK);
+    (*outputDesc).df = inputDesc.df;
+    U32 ow = (*outputDesc).dims[0];
+    U32 iw = inputDesc.dims[0];
+    U32 iw_align = iw;
+    for (U32 i = 0; i < algoNumIndex[0]; i++) {
+        U32 item_h = vecH[i];
+        item_h = ((item_h >> 8) > 0) ? 1 : item_h;
+        U32 j = ALIGN(ow, item_h);
+        iw_align = (iw_align < j) ? j : iw_align;
     }
-
-    return NOT_SUPPORTED;
+    U32 pr = iw_align - iw;
+    inputMem->padding(0, pr, 0, 0);
+    return SUCCESS;
 }
 
 EE deconvolution_infer_forward_algorithm_mali(GCLHandle_t handle,
@@ -181,6 +87,8 @@ EE deconvolution_infer_forward_algorithm_mali(GCLHandle_t handle,
     TensorDesc outputDesc,
     ConvolutionPolicy policy,
     ActivationMode activationMode,
+    GCLMemDesc inputMemDesc,
+    GCLMemDesc outputMemDesc,
     ForwardRunInfoMali_t forwardRunInfo)
 {
     if (forwardRunInfo == nullptr) {
@@ -196,13 +104,13 @@ EE deconvolution_infer_forward_algorithm_mali(GCLHandle_t handle,
     tensorSelectGet(filterDesc, &dt, NULL, NULL, &fc, &fh, &fw);
     std::vector<ConvolutionForwardAlgorithm> deconvAlgorithms;
     std::vector<U32> algoNumIndex;
-    std::vector<U32> vecW;
+    std::vector<U32> vecH;
     std::vector<U32> vecC;
     std::vector<U32> vecK;
     deconvolution_produce_algos_paras(inputDesc, filterDesc, convParamSpec, &deconvAlgorithms,
-        &algoNumIndex, &vecW, &vecC, &vecK);
-    if (vecW.size() == 1) {
-        forwardRunInfo->best_w[0] = vecW[0];
+        &algoNumIndex, &vecH, &vecC, &vecK);
+    if (vecH.size() == 1) {
+        forwardRunInfo->best_h[0] = vecH[0];
         forwardRunInfo->best_k[0] = vecK[0];
         forwardRunInfo->best_c[0] = vecC[0];
         forwardRunInfo->algorithm = deconvAlgorithms[0];
@@ -223,11 +131,7 @@ EE deconvolution_infer_forward_algorithm_mali(GCLHandle_t handle,
         std::vector<ForwardRunInfoMali> runInfos;
         U32 stride[3] = {0, 0, 0};
         U32 offset[3] = {0, 0, 0};
-        GCLMemDesc inputMemDesc = gcl_mem_desc(stride, offset, DT_U8, DF_NCWHC4);
-        GCLMemDesc outputMemDesc = gcl_mem_desc(stride, offset, DT_U8, DF_NCWHC4);
-        CHECK_STATUS(deconvolution_infer_output_size_mali(
-            inputDesc, filterDesc, convParamSpec, NULL, &inputMemDesc, &outputMemDesc));
-        std::vector<GCLMemDesc> filterMemDescs;
+        TensorDesc ftmDesc;
         for (U32 i = 0; i < algoNumIndex.size(); i++) {
             U32 bytes = 0;
             ForwardRunInfoMali runInfo;
@@ -235,33 +139,38 @@ EE deconvolution_infer_forward_algorithm_mali(GCLHandle_t handle,
             U32 end = algoNumIndex[i];
             runInfo.algorithm = deconvAlgorithms[i];
             for (U32 j = be; j < end; j++) {
-                GCLMemDesc filterMemDesc = gcl_mem_desc(stride, offset, DT_U8, DF_NCWHC4);
-                runInfo.best_w[0] = vecW[j];
+                TensorDesc desc;
+                runInfo.best_h[0] = vecH[j];
                 runInfo.best_c[0] = vecC[j];
                 runInfo.best_k[0] = vecK[j];
-                if (deconvolution_transform_filter_bytes_mali(
-                        filterDesc, &runInfo, &filterMemDesc, &bytes) != SUCCESS) {
+                if (deconvolution_transform_filter_bytes_mali(filterDesc, &runInfo, &desc) !=
+                    SUCCESS) {
                     continue;
                 }
-                maxBytes = (maxBytes < bytes) ? bytes : maxBytes;
                 if (deconvolution_infer_forward_tmp_bytes_mali(inputDesc, filterDesc, outputDesc,
                         convParamSpec, &runInfo, &bytes) != SUCCESS) {
                     continue;
                 }
                 maxBytes = (maxBytes < bytes) ? bytes : maxBytes;
-                maxFilterSize = (maxFilterSize < filterMemDesc.byteSize) ? filterMemDesc.byteSize
-                                                                         : maxFilterSize;
-                filterMemDescs.push_back(filterMemDesc);
+                if (maxFilterSize < tensorNumBytes(desc)) {
+                    ftmDesc = desc;
+                    maxFilterSize = tensorNumBytes(desc);
+                }
                 runInfos.push_back(runInfo);
             }
         }
 
         algosNum = runInfos.size();
         TensorDesc biasDesc = tensor1d(dt, fc);
-        filterMemDescs[0].byteSize = maxFilterSize;
+        stride[0] = ftmDesc.dims[0];
+        stride[1] = ftmDesc.dims[1];
+        stride[2] = ftmDesc.dims[2];
+        CHECK_STATUS(gclmem_set_desc_padding(
+            &filter->desc, stride, offset, dt, DF_NCHW, GCL_MEM_BUF, CL_MEM_READ_WRITE));
+
+        outputMemDesc.need_pad = false;
         input->desc = inputMemDesc;
         output->desc = outputMemDesc;
-        filter->desc = filterMemDescs[0];
         stride[0] = (fc + 3) / 4;
         stride[1] = 1;
         stride[2] = 1;
@@ -279,19 +188,15 @@ EE deconvolution_infer_forward_algorithm_mali(GCLHandle_t handle,
 
         double minTimeGemm = DBL_MAX;
         double minTime = DBL_MAX;
-        U32 runKernelBe = 0;
-        U32 runKernelEnd = 0;
         ForwardRunInfoMali bestRunInfo;
         ForwardRunInfoMali bestRunInfoGemm;
         for (U32 i = 0; i < algosNum; i++) {
-            filter->desc = filterMemDescs[i];
+            U32 runKernelBe = handle->kernelVec->size();
             if (deconvolution_mali(handle, inputDesc, input, filterDesc, filter, convParamSpec,
                     &runInfos[i], biasDesc, NULL, biasDesc, bias, maxBytes, tmpbuf, outputDesc,
                     output, activationMode) == SUCCESS) {
                 if (runInfos[i].algorithm == (I32)CONVOLUTION_ALGORITHM_GEMM) {
-                    runKernelEnd = handle->kernelVec->size();
-                    gcl_run_kernelVec_timing(handle, runKernelBe, runKernelEnd);
-                    runKernelBe = runKernelEnd;
+                    gcl_run_kernelVec_timing(handle, runKernelBe, runKernelBe + 1);
                     if (minTimeGemm > handle->t_execute) {
                         minTimeGemm = handle->t_execute;
                         bestRunInfoGemm = runInfos[i];
@@ -313,24 +218,22 @@ EE deconvolution_infer_forward_algorithm_mali(GCLHandle_t handle,
         gcl_destroy_gclmem(tmpbuf);
         deconvAlgorithms.clear();
         runInfos.clear();
-        filterMemDescs.clear();
         CHECK_STATUS(gcl_clean_kernelVec(handle));
+        CHECK_STATUS(gcl_clean_programMap(handle));
         CHECK_STATUS(gcl_off_queue_profiling(handle));
         return SUCCESS;
     }
     return NOT_SUPPORTED;
 }
 
-EE deconvolution_transform_filter_bytes_mali(TensorDesc filterDesc,
-    ForwardRunInfoMali_t forwardRunInfo,
-    GCLMemDesc_t gclmemFilterDesc,
-    U32 *bytes)
+EE deconvolution_transform_filter_bytes_mali(
+    TensorDesc filterDesc, ForwardRunInfoMali_t forwardRunInfo, TensorDesc *ftmDesc)
 {
     EE ret = SUCCESS;
     switch (filterDesc.dt) {
         case DT_F16: {
-            ret = deconvolution_transform_filter_bytes_mali_fp16(
-                filterDesc, forwardRunInfo, gclmemFilterDesc, bytes);
+            ret =
+                deconvolution_transform_filter_bytes_mali_fp16(filterDesc, forwardRunInfo, ftmDesc);
             break;
         }
         case DT_I8: {

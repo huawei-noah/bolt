@@ -21,6 +21,9 @@ class DepthwisePointwiseOptimizer : public OPOptimizer {
     {
         bool hasOptimized = false;
         for (int i = 0; i < spec->num_operator_specs; i++) {
+            if (isModelOutput(spec, i)) {
+                continue;
+            }
             // process depthwise convolution
             if (spec->ops[i].type == OT_Conv &&
                 spec->ops[i].ps.conv_spec.convolution_type == Convolution_Depthwise) {
@@ -30,7 +33,8 @@ class DepthwisePointwiseOptimizer : public OPOptimizer {
                     spec->num_operator_specs);
                 if (nextOpIndexes.size() != 1 || OT_Conv != spec->ops[nextOpIndexes[0].first].type ||
                     spec->ops[nextOpIndexes[0].first].ps.conv_spec.convolution_type !=
-                        Convolution_Pointwise) {
+                        Convolution_Pointwise ||
+                    spec->ops[nextOpIndexes[0].first].ps.conv_spec.group != 1) {
                     UNI_WARNING_LOG("encounter unoptimize DepthwiseConv layer(no PointwiseConv): "
                                     "%s\n",
                         spec->ops[i].name);
@@ -83,22 +87,30 @@ class DepthwisePointwiseOptimizer : public OPOptimizer {
                 // free and reallocate
                 if (spec->ws[dwConvWeightIndex].weight != nullptr) {
                     spec->ws[dwConvWeightIndex].bytes_of_weight = 0;
-                    delete spec->ws[dwConvWeightIndex].weight;
+                    if (outOfFileMapRange(spec->ws[dwConvWeightIndex].weight, spec->mfd)) {
+                        delete spec->ws[dwConvWeightIndex].weight;
+                    }
                     spec->ws[dwConvWeightIndex].weight = nullptr;
                 }
                 if (spec->ws[dwConvWeightIndex].vec != nullptr) {
                     spec->ws[dwConvWeightIndex].bytes_of_vec = 0;
-                    delete spec->ws[dwConvWeightIndex].vec;
+                    if (outOfFileMapRange(spec->ws[dwConvWeightIndex].vec, spec->mfd)) {
+                        delete spec->ws[dwConvWeightIndex].vec;
+                    }
                     spec->ws[dwConvWeightIndex].vec = nullptr;
                 }
                 if (spec->ws[convWeightIndex].weight != nullptr) {
                     spec->ws[convWeightIndex].bytes_of_weight = 0;
-                    delete spec->ws[convWeightIndex].weight;
+                    if (outOfFileMapRange(spec->ws[convWeightIndex].weight, spec->mfd)) {
+                        delete spec->ws[convWeightIndex].weight;
+                    }
                     spec->ws[convWeightIndex].weight = nullptr;
                 }
                 if (spec->ws[convWeightIndex].vec != nullptr) {
                     spec->ws[convWeightIndex].bytes_of_vec = 0;
-                    delete spec->ws[convWeightIndex].vec;
+                    if (outOfFileMapRange(spec->ws[convWeightIndex].vec, spec->mfd)) {
+                        delete spec->ws[convWeightIndex].vec;
+                    }
                     spec->ws[convWeightIndex].vec = nullptr;
                 }
 

@@ -11,14 +11,9 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string.h>
-#include <arm_neon.h>
-#include <math.h>
-
-#include "types.h"
-#include "error.h"
 #include "cpu/arm/fp16/mmm_common.h"
 #include "cpu/arm/fp16/mmm.h"
+#include "thread_affinity.h"
 
 inline void mmm_4x24_A55(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
 {
@@ -40,6 +35,7 @@ inline void mmm_4x24_A55(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
         "ld1 {v14.8h, v15.8h, v16.8h}, [x26]\n"
 
         "mov x20, %3\n"
+        "cbz x20, 2f\n"
 
         "0:\n"
         // w- > v4, in0- > v2/v3/v1, out0=v5~v28
@@ -93,6 +89,7 @@ inline void mmm_4x24_A55(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
         "subs x20, x20, #0x2\n"
         "bne 0b\n"
 
+        "2:\n"
         "cbz %5, 1f\n"
         "fmla v5.8h, v1.8h, v0.h[0]\n"
         "ld1 {v2.4h}, [%1], #8\n"
@@ -188,6 +185,7 @@ inline void mmm_8x4_A55(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
                  "ldr x24, [%2], #8\n"
                  "ins v1.d[1], x24\n"
                  "ld1 {v2.4h}, [%1], #8\n"
+                 "cbz x20, 2f\n"
 
                  "0:\n"
                  "fmla v5.8h, v1.8h, v2.h[0]\n"
@@ -211,6 +209,7 @@ inline void mmm_8x4_A55(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
                  "subs x20, x20, 0x2\n"
                  "bne 0b\n"
 
+                 "2:\n"
                  "cbz %5, 1f\n"
                  "fmla v5.8h, v1.8h, v2.h[0]\n"
                  "fmla v6.8h, v1.8h, v2.h[1]\n"
@@ -291,6 +290,7 @@ inline void mmm_4x8_A55(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
                  "ldr x24, [%1], #8\n"
                  "ins v1.d[1], x24\n"
                  "ld1 {v2.4h}, [%2], #8\n"
+                 "cbz x20, 2f\n"
 
                  "0:\n"
                  "fmla v5.8h, v1.8h, v2.h[0]\n"
@@ -313,6 +313,7 @@ inline void mmm_4x8_A55(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
                  "subs x20, x20, 0x2\n"
                  "bne 0b\n"
 
+                 "2:\n"
                  "cbz %5, 1f\n"
                  "fmla v5.8h, v1.8h, v2.h[0]\n"
                  "fmla v6.8h, v1.8h, v2.h[1]\n"
@@ -351,6 +352,7 @@ inline void mmm_4x4_A55(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
 
                  "ld1 {v1.4h}, [%1], #8\n"
                  "ld1 {v2.4h}, [%2], #8\n"
+                 "cbz x20, 2f\n"
 
                  "0:\n"
                  "fmla v5.4h, v1.4h, v2.h[0]\n"
@@ -369,6 +371,7 @@ inline void mmm_4x4_A55(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
                  "subs x20, x20, 0x2\n"
                  "bne 0b\n"
 
+                 "2:\n"
                  "cbz %5, 1f\n"
                  "fmla v5.4h, v1.4h, v2.h[0]\n"
                  "fmla v6.4h, v1.4h, v2.h[1]\n"
@@ -418,6 +421,7 @@ inline void mmm_8x8_A55(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
                  "ld1 {v2.4h}, [%2], #8\n"
                  "ldr x22, [%2], #8\n"
                  "ins v2.d[1], x22\n"
+                 "cbz x20, 2f\n"
 
                  "0:\n"
                  "fmla v5.8h, v1.8h, v2.h[0]\n"
@@ -453,6 +457,7 @@ inline void mmm_8x8_A55(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
                  "subs x20, x20, 0x2\n"
                  "bne 0b\n"
 
+                 "2:\n"
                  "cbz %5, 1f\n"
                  "fmla v5.8h, v1.8h, v2.h[0]\n"
                  "fmla v6.8h, v1.8h, v2.h[1]\n"
@@ -517,6 +522,7 @@ inline void mmm_8x24_A55(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
         "ld1 {v26.8h, v27.8h, v28.8h}, [x26]\n"
 
         "mov x20, %3\n"
+        "cbz x20, 2f\n"
 
         "0:\n"
         // w- > v4, in0- > v2/v3/v1, out0=v5~v28
@@ -602,6 +608,7 @@ inline void mmm_8x24_A55(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
 
         "bne 0b\n"
 
+        "2:\n"
         "cbz %5, 1f\n"
         "ld1 {v2.4h}, [%1], #8\n"
         "fmla v5.8h, v1.8h, v0.h[0]\n"
@@ -664,117 +671,151 @@ inline void mmm_8x24_A55(U32 M, U32 K, F16 *w, F16 *in, F16 *out)
 void mmm_A55(int M, int N, int K, bool transposeA, F16 *matrix1, F16 *matrix2, F16 *tmp, F16 *result)
 {
     int blockK = K;
-    int blockM = 192;
-    F16 *matrix1Trans = tmp;
-    F16 *resultCurrent = result;
-    int KInner, MInner, m, n;
+    int blockM = 96;
     for (int k = 0; k < K; k += blockK) {
-        KInner = UNI_MIN(blockK, K - k);
+        int KInner = UNI_MIN(blockK, K - k);
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
+        for (int n = 0; n <= N - 8; n += 8) {
+            F16 *matrix1Trans = tmp + n * KInner;
+            if (transposeA) {
+                matrix2_trans(8, KInner, N, matrix1 + n, matrix1Trans);
+            } else {
+                matrix1_trans(8, KInner, K, matrix1 + n * K + k, matrix1Trans);
+            }
+        }
+        int n = N / 8 * 8;
+        for (; n <= N - 4; n += 4) {
+            F16 *matrix1Trans = tmp + n * KInner;
+            if (transposeA) {
+                matrix2_trans(4, KInner, N, matrix1 + n, matrix1Trans);
+            } else {
+                matrix1_trans(4, KInner, K, matrix1 + n * K + k, matrix1Trans);
+            }
+        }
+        if (N - n > 0) {
+            F16 *matrix1Trans = tmp + n * KInner;
+            if (transposeA) {
+                matrix2_trans(N - n, KInner, N, matrix1 + n, matrix1Trans);
+            } else {
+                matrix1_trans(N - n, KInner, K, matrix1 + n * K + k, matrix1Trans);
+            }
+        }
+
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
         for (int i = 0; i < M; i += blockM) {
-            MInner = UNI_MIN(blockM, M - i);
+            int MInner = UNI_MIN(blockM, M - i);
+            F16 *resultCurrent;
+            int m, n;
 
             for (n = 0; n <= N - 8; n += 8) {
-                if (i == 0) {
-                    if (transposeA) {
-                        matrix2_trans(8, KInner, N, matrix1 + n, matrix1Trans + n * KInner);
-                    } else {
-                        matrix1_trans(8, KInner, K, matrix1 + n * K + k, matrix1Trans + n * KInner);
-                    }
-                }
+                F16 *matrix1Trans = tmp + n * KInner;
+                //if (i == 0) {
+                //    if (transposeA) {
+                //        matrix2_trans(8, KInner, N, matrix1 + n, matrix1Trans + n * KInner);
+                //    } else {
+                //        matrix1_trans(8, KInner, K, matrix1 + n * K + k, matrix1Trans + n * KInner);
+                //    }
+                //}
                 for (m = 0; m <= (MInner - 24); m += 24) {
                     resultCurrent = result + n * M + m + i;
-                    mmm_8x24_A55(M * 2, KInner, matrix1Trans + n * KInner,
-                        matrix2 + (i + m) * KInner, resultCurrent);
+                    mmm_8x24_A55(
+                        M * 2, KInner, matrix1Trans, matrix2 + (i + m) * KInner, resultCurrent);
                 }
                 for (; m <= (MInner - 8); m += 8) {
                     resultCurrent = result + n * M + m + i;
-                    mmm_8x8_A55(M * 2, KInner, matrix1Trans + n * KInner,
-                        matrix2 + (i + m) * KInner, resultCurrent);
+                    mmm_8x8_A55(
+                        M * 2, KInner, matrix1Trans, matrix2 + (i + m) * KInner, resultCurrent);
                 }
 
                 if ((MInner - m) >= 4) {
                     resultCurrent = result + n * M + m + i;
-                    mmm_8x4_A55(M * 2, KInner, matrix1Trans + n * KInner,
-                        matrix2 + (i + m) * KInner, resultCurrent);
+                    mmm_8x4_A55(
+                        M * 2, KInner, matrix1Trans, matrix2 + (i + m) * KInner, resultCurrent);
                     m += 4;
                 }
 
                 if (MInner - m) {
                     resultCurrent = result + n * M + m + i;
-                    mmm_N8_MTail(MInner - m, M, KInner, matrix1Trans + n * KInner,
-                        matrix2 + (i + m) * KInner, resultCurrent);
+                    mmm_N8_MTail(MInner - m, M, KInner, matrix1Trans, matrix2 + (i + m) * KInner,
+                        resultCurrent);
                 }
             }
 
             if ((N - n) >= 4) {
-                if (i == 0) {
-                    if (transposeA) {
-                        matrix2_trans(4, KInner, N, matrix1 + n, matrix1Trans + n * KInner);
-                    } else {
-                        matrix1_trans(4, KInner, K, matrix1 + n * K + k, matrix1Trans + n * KInner);
-                    }
-                }
+                F16 *matrix1Trans = tmp + n * KInner;
+                //if (i == 0) {
+                //    if (transposeA) {
+                //        matrix2_trans(4, KInner, N, matrix1 + n, matrix1Trans + n * KInner);
+                //    } else {
+                //        matrix1_trans(4, KInner, K, matrix1 + n * K + k, matrix1Trans + n * KInner);
+                //    }
+                //}
 
                 for (m = 0; m <= (MInner - 24); m += 24) {
                     resultCurrent = result + n * M + m + i;
-                    mmm_4x24_A55(M * 2, KInner, matrix1Trans + n * KInner,
-                        matrix2 + (i + m) * KInner, resultCurrent);
+                    mmm_4x24_A55(
+                        M * 2, KInner, matrix1Trans, matrix2 + (i + m) * KInner, resultCurrent);
                 }
 
                 for (; m <= (MInner - 8); m += 8) {
                     resultCurrent = result + n * M + m + i;
-                    mmm_4x8_A55(M * 2, KInner, matrix1Trans + n * KInner,
-                        matrix2 + (i + m) * KInner, resultCurrent);
+                    mmm_4x8_A55(
+                        M * 2, KInner, matrix1Trans, matrix2 + (i + m) * KInner, resultCurrent);
                 }
 
                 if ((MInner - m) >= 4) {
                     resultCurrent = result + n * M + m + i;
-                    mmm_4x4_A55(M * 2, KInner, matrix1Trans + n * KInner,
-                        matrix2 + (i + m) * KInner, resultCurrent);
+                    mmm_4x4_A55(
+                        M * 2, KInner, matrix1Trans, matrix2 + (i + m) * KInner, resultCurrent);
                     m += 4;
                 }
 
                 if (MInner - m) {
                     resultCurrent = result + n * M + m + i;
-                    mmm_N4_MTail(MInner - m, M, KInner, matrix1Trans + n * KInner,
-                        matrix2 + (i + m) * KInner, resultCurrent);
+                    mmm_N4_MTail(MInner - m, M, KInner, matrix1Trans, matrix2 + (i + m) * KInner,
+                        resultCurrent);
                 }
 
                 n += 4;
             }
 
             if (N - n) {
-                if (i == 0) {
-                    if (transposeA) {
-                        matrix2_trans(N - n, KInner, N, matrix1 + n, matrix1Trans + n * KInner);
-                    } else {
-                        matrix1_trans(
-                            N - n, KInner, K, matrix1 + n * K + k, matrix1Trans + n * KInner);
-                    }
-                }
+                F16 *matrix1Trans = tmp + n * KInner;
+                //if (i == 0) {
+                //    if (transposeA) {
+                //        matrix2_trans(N - n, KInner, N, matrix1 + n, matrix1Trans + n * KInner);
+                //    } else {
+                //        matrix1_trans(
+                //            N - n, KInner, K, matrix1 + n * K + k, matrix1Trans + n * KInner);
+                //    }
+                //}
 
                 for (m = 0; m <= (MInner - 24); m += 24) {
                     resultCurrent = result + n * M + m + i;
-                    mmm_NTail_M24(M, N - n, KInner, matrix1Trans + n * KInner,
-                        matrix2 + (i + m) * KInner, resultCurrent);
+                    mmm_NTail_M24(
+                        M, N - n, KInner, matrix1Trans, matrix2 + (i + m) * KInner, resultCurrent);
                 }
 
                 for (; m <= (MInner - 8); m += 8) {
                     resultCurrent = result + n * M + m + i;
-                    mmm_NTail_M8(M, N - n, KInner, matrix1Trans + n * KInner,
-                        matrix2 + (i + m) * KInner, resultCurrent);
+                    mmm_NTail_M8(
+                        M, N - n, KInner, matrix1Trans, matrix2 + (i + m) * KInner, resultCurrent);
                 }
 
                 if ((MInner - m) >= 4) {
                     resultCurrent = result + n * M + m + i;
-                    mmm_NTail_M4(M, N - n, KInner, matrix1Trans + n * KInner,
-                        matrix2 + (i + m) * KInner, resultCurrent);
+                    mmm_NTail_M4(
+                        M, N - n, KInner, matrix1Trans, matrix2 + (i + m) * KInner, resultCurrent);
                     m += 4;
                 }
 
                 if (MInner - m) {
                     resultCurrent = result + n * M + m + i;
-                    mmm_NTail_M(MInner - m, M, N - n, KInner, matrix1Trans + n * KInner,
+                    mmm_NTail_M(MInner - m, M, N - n, KInner, matrix1Trans,
                         matrix2 + (i + m) * KInner, resultCurrent);
                 }
             }

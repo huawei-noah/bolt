@@ -15,7 +15,7 @@
 #ifdef _USE_GENERAL
 #include "cpu/general/tensor_computing_general.h"
 #endif
-#ifdef _USE_MALI
+#ifdef _USE_GPU
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
 #include "cpu/tensor_computing_cpu.h"
@@ -36,12 +36,7 @@ inline EE deconvolution_infer_output_size_cpu(TensorDesc inputDesc,
     U32 oh, ow;
     CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
     CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-
     CHECK_REQUIREMENT(1 == fn || ic == fn);
-
-    if (fc % 8 != 0) {
-        CHECK_STATUS(NOT_SUPPORTED);
-    }
 
     if (fh < 1 || fw < 1) {
         CHECK_STATUS(NOT_SUPPORTED);
@@ -49,13 +44,17 @@ inline EE deconvolution_infer_output_size_cpu(TensorDesc inputDesc,
 
     U32 strideH = convParamSpec.stride_h;
     U32 strideW = convParamSpec.stride_w;
-    U32 paddingT = convParamSpec.padding_top;
-    U32 paddingB = convParamSpec.padding_bottom;
-    U32 paddingL = convParamSpec.padding_left;
-    U32 paddingR = convParamSpec.padding_right;
-
-    oh = fh + strideH * (ih - 1) - paddingT - paddingB;
-    ow = fw + strideW * (iw - 1) - paddingL - paddingR;
+    if (convParamSpec.rm == TF_SAME) {
+        oh = strideH * ih;
+        ow = strideW * iw;
+    } else {
+        U32 paddingT = convParamSpec.padding_top;
+        U32 paddingB = convParamSpec.padding_bottom;
+        U32 paddingL = convParamSpec.padding_left;
+        U32 paddingR = convParamSpec.padding_right;
+        oh = fh + strideH * (ih - 1) - paddingT - paddingB;
+        ow = fw + strideW * (iw - 1) - paddingL - paddingR;
+    }
 
     *outputDesc = tensor4df(targetDataType, DF_NCHWC8, in, fc, oh, ow);
     return SUCCESS;
@@ -77,22 +76,23 @@ EE deconvolution_infer_output_size(Tensor *inputTensor,
     TensorDesc inputDesc = inputTensor->get_desc();
     TensorDesc filterDesc = filterTensor.get_desc();
     TensorDesc outputDesc = outputTensor->get_desc();
-    EE ret = NOT_SUPPORTED;
-    if (IS_MALI_GPU(archInfo->arch)) {
-#ifdef _USE_MALI
-        GCLMemDesc gclmemInputDesc = ocl_get_desc(*inputTensor);
-        GCLMemDesc gclmemOutputDesc = ocl_get_desc(*outputTensor);
-        ret = deconvolution_infer_output_size_mali(
-            inputDesc, filterDesc, convParamSpec, &outputDesc, &gclmemInputDesc, &gclmemOutputDesc);
-        ocl_set_desc(inputTensor, gclmemInputDesc);
-        ocl_set_desc(outputTensor, gclmemOutputDesc);
+    CHECK_STATUS(deconvolution_infer_output_size_cpu(
+        inputDesc, filterDesc, convParamSpec, &outputDesc, targetDataType));
+    if (IS_GPU(archInfo->arch)) {
+#ifdef _USE_GPU
+        OclMemory *inputMem = (OclMemory *)inputTensor->get_memory();
+        OclMemory *outputMem = (OclMemory *)outputTensor->get_memory();
+        CHECK_STATUS(deconvolution_padding_input_mali(
+            inputDesc, filterDesc, convParamSpec, &outputDesc, inputMem, outputMem));
 #endif
     } else {
-        ret = deconvolution_infer_output_size_cpu(
-            inputDesc, filterDesc, convParamSpec, &outputDesc, targetDataType);
+        U32 fc = filterDesc.dims[filterDesc.nDims - 2];
+        if (fc % 8 != 0) {
+            CHECK_STATUS(NOT_SUPPORTED);
+        }
     }
     outputTensor->resize(outputDesc);
-    return ret;
+    return SUCCESS;
 }
 
 EE deconvolution_infer_forward_algorithm(Tensor inputTensor,
@@ -116,15 +116,17 @@ EE deconvolution_infer_forward_algorithm(Tensor inputTensor,
         ret = SUCCESS;
 #endif
 #if defined(_USE_NEON) || defined(_USE_X86)
-    } else if (IS_X86_AVX2(arch) || IS_ARM(arch)) {
+    } else if (IS_X86(arch) || IS_ARM(arch)) {
         ret = deconvolution_infer_forward_algorithm_cpu(inputDesc, filterDesc, outputDesc,
             convParamSpec, policy, algorithm, targetDataType, arch);
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
+        GCLMemDesc gclmemInputDesc = ocl_get_desc(inputTensor);
+        GCLMemDesc gclmemOutputDesc = ocl_get_desc(outputTensor);
         ret = deconvolution_infer_forward_algorithm_mali(((MaliPara_t)(archInfo->archPara))->handle,
             inputDesc, filterDesc, convParamSpec, outputDesc, policy, activationDesc.mode,
-            ((MaliPara_t)(archInfo->archPara))->forwardRunInfo);
+            gclmemInputDesc, gclmemOutputDesc, ((MaliPara_t)(archInfo->archPara))->forwardRunInfo);
 #endif
     }
     return ret;
@@ -133,7 +135,7 @@ EE deconvolution_infer_forward_algorithm(Tensor inputTensor,
 EE deconvolution_transform_filter_bytes(Tensor filterTensor,
     ConvolutionParamSpec convParamSpec,
     ConvolutionForwardAlgorithm algorithm,
-    U32 *bytes,
+    void *bytes,
     ArchInfo_t archInfo)
 {
     TensorDesc filterDesc = filterTensor.get_desc();
@@ -142,19 +144,19 @@ EE deconvolution_transform_filter_bytes(Tensor filterTensor,
     auto arch = archInfo->arch;
     if (IS_GENERAL(arch)) {
 #ifdef _USE_GENERAL
-        *bytes = tensorNumBytes(filterDesc);
+        U32 *size = (U32 *)bytes;
+        *size = tensorNumBytes(filterDesc);
         ret = SUCCESS;
 #endif
 #if defined(_USE_NEON) || defined(_USE_X86)
-    } else if (IS_X86_AVX2(arch) || IS_ARM(arch)) {
+    } else if (IS_X86(arch) || IS_ARM(arch)) {
         ret = deconvolution_transform_filter_bytes_cpu(
-            filterDesc, convParamSpec, algorithm, bytes, arch);
+            filterDesc, convParamSpec, algorithm, (U32 *)bytes, arch);
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
-        ret = deconvolution_transform_filter_bytes_mali(filterDesc,
-            ((MaliPara_t)(archInfo->archPara))->forwardRunInfo,
-            ((MaliPara_t)(archInfo->archPara))->gclmemFilterDesc, bytes);
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
+        ret = deconvolution_transform_filter_bytes_mali(
+            filterDesc, ((MaliPara_t)(archInfo->archPara))->forwardRunInfo, (TensorDesc *)bytes);
 #endif
     }
     return ret;
@@ -176,17 +178,17 @@ EE deconvolution_transform_filter(Tensor filterTensor,
     EE ret = NOT_SUPPORTED;
     if (IS_GENERAL(arch)) {
 #ifdef _USE_GENERAL
-        UNI_memcpy(filterTransformed, filter, tensorNumBytes(filterDesc));
+        UNI_MEMCPY(filterTransformed, filter, tensorNumBytes(filterDesc));
         ftmDesc = filterDesc;
         ret = SUCCESS;
 #endif
 #if defined(_USE_NEON) || defined(_USE_X86)
-    } else if (IS_X86_AVX2(arch) || IS_ARM(arch)) {
+    } else if (IS_X86(arch) || IS_ARM(arch)) {
         ret = deconvolution_transform_filter_cpu(
             filterDesc, filter, convParamSpec, algorithm, &ftmDesc, filterTransformed, arch);
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
         void *tmp = get_ptr_from_tensor(tmpTensor, arch);
         ret = deconvolution_transform_filter_mali(((MaliPara_t)(archInfo->archPara))->handle,
             filterDesc, (GCLMem_t)filter, ((MaliPara_t)(archInfo->archPara))->forwardRunInfo,
@@ -216,12 +218,12 @@ EE deconvolution_infer_forward_tmp_bytes(Tensor inputTensor,
         ret = SUCCESS;
 #endif
 #if defined(_USE_NEON) || defined(_USE_X86)
-    } else if (IS_X86_AVX2(arch) || IS_ARM(arch)) {
+    } else if (IS_X86(arch) || IS_ARM(arch)) {
         ret = deconvolution_infer_forward_tmp_bytes_cpu(
             inputDesc, filterDesc, outputDesc, convParamSpec, algorithm, bytes, archInfo->arch);
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
         ret = deconvolution_infer_forward_tmp_bytes_mali(inputDesc, filterDesc, outputDesc,
             convParamSpec, ((MaliPara_t)(archInfo->archPara))->forwardRunInfo, bytes);
 #endif
@@ -260,13 +262,13 @@ EE deconvolution(Tensor inputTensor,
             scale, biasDesc, bias, outputDesc, output, activationDesc);
 #endif
 #if defined(_USE_NEON) || defined(_USE_X86)
-    } else if (IS_X86_AVX2(arch) || IS_ARM(arch)) {
+    } else if (IS_X86(arch) || IS_ARM(arch)) {
         ret = deconvolution_cpu(inputDesc, input, filterDesc, filter, convParamSpec, algorithm,
             scaleDesc, scale, biasDesc, bias, tmpBytes, tmp, outputDesc, output, activationDesc,
             archInfo->arch);
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
         ret = deconvolution_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc,
             (GCLMem_t)input, filterDesc, (GCLMem_t)filter, convParamSpec,
             ((MaliPara_t)(archInfo->archPara))->forwardRunInfo, scaleDesc, (GCLMem_t)scale,

@@ -44,8 +44,8 @@ EE matrix_vector_multiply_transform_weight_fp16(TensorDesc desc, F16 *src, F16 *
                 int base = i;
                 F16 *basePtr = dst + i * K;
                 for (int j = 0; j < (int)K; j++) {
-                    for (; i < (int)N; i++) {
-                        basePtr[(i - base) * K + j] = src[j * N + i];
+                    for (int k = base; k < (int)N; k++) {
+                        basePtr[(k - base) * K + j] = src[j * N + k];
                     }
                 }
             }

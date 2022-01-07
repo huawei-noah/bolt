@@ -32,21 +32,72 @@ public:
     {
         Tensor inputTensor = this->inputTensors[0];
         Tensor outputTensor = this->outputTensors[0];
-        // NOTE: no clean tmp and output
-        CHECK_STATUS(rnn(inputTensor, this->weightTensors, this->biasTensors, this->p, this->temp,
-            outputTensor, &this->archInfo));
+
+        U8 *state = (U8 *)get_ptr_from_tensor(this->temp, this->archInfo.arch);
+        TensorDesc desc = inputTensor.get_desc();
+        int batch = desc.dims[desc.nDims - 1];
+        I32 num = p.biDirection ? 2 : 1;
+        I32 column = this->p.numProjection > 0 ? this->p.numProjection : this->p.numOutput;
+        U32 ch_size = (this->p.numOutput + column) * bytesOf(desc.dt);
+        if (this->inputTensors.size() == 1) {
+            // bi-direction rnn has forward-states and backward-states
+            memset(state, 0, batch * num * ch_size);
+        } else if (this->inputTensors.size() == 2) {
+            if (num != 1) {
+                UNI_ERROR_LOG("currently not support to set bi-direction RNN's h or c.\n");
+            }
+            memcpy(state, get_ptr_from_tensor(this->inputTensors[1], this->archInfo.arch),
+                tensorNumBytes(this->inputTensors[1].get_desc()));
+        } else if (this->inputTensors.size() == 3) {
+            if (num != 1) {
+                UNI_ERROR_LOG("currently not support to set bi-direction RNN's h or c.\n");
+            }
+            U8 *h = (U8 *)get_ptr_from_tensor(this->inputTensors[1], this->archInfo.arch);
+            U8 *c = (U8 *)get_ptr_from_tensor(this->inputTensors[2], this->archInfo.arch);
+            U32 c_size = column * bytesOf(desc.dt);
+            U32 input_h_tile = tensorNumBytes(this->inputTensors[1].get_desc()) / batch;
+            U32 input_c_tile = tensorNumBytes(this->inputTensors[2].get_desc()) / batch;
+            for (int i = 0; i < batch; i++) {
+                U8 *ptr = state + i * ch_size;
+                memcpy(ptr, c + input_c_tile * i, input_c_tile);
+                memcpy(ptr + c_size, h + input_h_tile * i, input_h_tile);
+            }
+        }
+
+        std::vector<Tensor> tmpTensor(1, this->temp);
+        CHECK_STATUS(rnn(this->inputTensors, this->weightTensors, this->biasTensors, this->p,
+            tmpTensor, this->outputTensors, &this->archInfo));
+
+        if (this->outputTensors.size() == 2) {
+            memcpy(get_ptr_from_tensor(this->outputTensors[1], this->archInfo.arch), state,
+                tensorNumBytes(this->outputTensors[1].get_desc()));
+        } else if (this->outputTensors.size() == 3) {
+            U8 *h = (U8 *)get_ptr_from_tensor(this->outputTensors[1], this->archInfo.arch);
+            U8 *c = (U8 *)get_ptr_from_tensor(this->outputTensors[2], this->archInfo.arch);
+            U32 c_size = column * bytesOf(desc.dt);
+            U32 output_h_tile = tensorNumBytes(this->outputTensors[1].get_desc()) / batch;
+            U32 output_c_tile = tensorNumBytes(this->outputTensors[2].get_desc()) / batch;
+            for (int i = 0; i < batch; i++) {
+                U8 *ptr = state + i * ch_size;
+                memcpy(c + output_c_tile * i, ptr, output_c_tile);
+                memcpy(h + output_h_tile * i, ptr + c_size, output_h_tile);
+            }
+        }
     }
 
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
-        TensorDesc inDim = inTensors[0]->get_desc();
-        DataType dt;
-        DataFormat df;
-        U32 iB, inT, iX;
-        CHECK_STATUS(tensor3dGet(inDim, &dt, &df, &iB, &inT, &iX));
-        this->xDim = iX;
-        CHECK_STATUS(rnn_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo));
+        TensorDesc inputDesc = inTensors[0]->get_desc();
+
+        if (inputDesc.nDims < 3) {
+            CHECK_STATUS(NOT_MATCH);
+        }
+        this->xDim = inputDesc.dims[inputDesc.nDims - 3];
+        for (U32 i = 0; i < inputDesc.nDims - 3; ++i) {
+            xDim *= inputDesc.dims[i];
+        }
+        CHECK_STATUS(rnn_infer_output_size(inTensors, this->p, outTensors, &this->archInfo));
         return SUCCESS;
     }
 

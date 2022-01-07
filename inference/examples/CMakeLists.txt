@@ -5,7 +5,7 @@ if (BOLT_CONFIGURE_FILE)
     include(${BOLT_CONFIGURE_FILE})
 else (BOLT_CONFIGURE_FILE)
     message(FATAL_ERROR "
-FATAL: can not find bolt.cmake in <BOLT_ROOT> directory,
+FATAL: can not find bolt.cmake in <BOLT_ROOT>/common/cmakes directory,
        please set shell or cmake environment variable BOLT_ROOT.
     ")
 endif (BOLT_CONFIGURE_FILE)
@@ -17,7 +17,12 @@ set_test_c_cxx_flags()
 
 include_flow()
 
+engine_test(benchmark benchmark/benchmark.cpp)
+install(TARGETS benchmark
+        RUNTIME DESTINATION examples)
 if (BUILD_TEST)
+    engine_test(c_image_classifification "c_api/c_image_classifification.c;c_api/c_common.c;c_api/c_test.c")
+    engine_test(c_input_method "c_api/c_input_method.c;c_api/c_common.c;c_api/c_test.c")
     engine_test(bert bert/bert.cpp)
     engine_test(tinybert bert/tinybert.cpp)
     engine_test(classification image_classification/classification.cpp)
@@ -29,10 +34,16 @@ if (BUILD_TEST)
     engine_test(vad automatic_speech_recognition/vad.cpp)
     engine_test(detection object_detection/detection.cpp)
     engine_test(tinybert_onnx bert/tinybert_onnx.cpp)
-    engine_test(benchmark benchmark/benchmark.cpp)
-    engine_test(test_api_c c_api/test_api_c.c)
+    engine_test(tinyGPT tinyGPT/tinyGPT.cpp)
+    engine_test(slide_tdnn voice_wake_up/slide_tdnn.cpp)
+    if (EXISTS ${OpenCV_CMAKE_PATH})
+        engine_test(ultra_face ultra_face/ultra_face.cpp)
+        engine_test(u2net image_matting/u2net.cpp)
+        install(TARGETS ultra_face
+                        u2net
+                RUNTIME DESTINATION examples)
+    endif()
     install(TARGETS classification
-                    benchmark
                     tinybert
                     tinybert_onnx
                     nmt
@@ -40,14 +51,9 @@ if (BUILD_TEST)
                     asr_convolution_transformer
                     tts
                     vad
-                    test_api_c
+                    c_image_classifification
+                    c_input_method
             RUNTIME DESTINATION examples)
-    if (USE_MALI AND USE_FP16)
-        engine_test(test_pipeline_ocl sequential/test_pipeline_ocl.cpp)
-        engine_test(hdr high_dynamic_range/hdr.cpp)
-        install(TARGETS hdr
-                RUNTIME DESTINATION examples)
-    endif (USE_MALI AND USE_FP16)
 
     if (USE_FLOW)
         flow_test(graph_tinybert bert/graph_tinybert.cpp)

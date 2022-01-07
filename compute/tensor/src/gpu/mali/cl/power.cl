@@ -11,16 +11,25 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define MANGLE_NAME_IMPL(base, DT) base##DT
-#define MANGLE_NAME(base, DT) MANGLE_NAME_IMPL(base, DT)
-__kernel void MANGLE_NAME(power_, DT)(const int ih_str,
-    const int iw_str,
-    const int ih_off,
-    const int iw_off,
-    const int oh_str,
+#include "kernel_def.h"
+#define MANGLE_NAME_IMPL(base, IOM, FM, DT) base##IOM##FM##DT
+#define MANGLE_NAME(base, IOM, FM, DT) MANGLE_NAME_IMPL(base, IOM, FM, DT)
+
+#define FM
+#define DT
+#if defined(USE_I32)
+#define DT _i32
+#endif
+#if defined(USE_NCHW)
+#define FM nchw
+#endif
+
+__kernel void MANGLE_NAME(power_, IOM, FM, DT)(const int iw_str,
+    const int ih_str,
     const int ow_str,
-    const int oh_off,
-    const int ow_off,
+    const int oh_str,
+    const int i_off,
+    const int o_off,
     const int w,
     const int bx,
     const int by,
@@ -28,8 +37,8 @@ __kernel void MANGLE_NAME(power_, DT)(const int ih_str,
     const float alp,
     const float bet,
     float power,
-    __global T *input,
-    __global T *output)
+    READ_ONLY_KERNEL_MEM input,
+    KERNEL_MEM output)
 {
     int idx = get_global_id(0);
     int idy = get_global_id(1);
@@ -37,57 +46,26 @@ __kernel void MANGLE_NAME(power_, DT)(const int ih_str,
     if (idx >= bx || idy >= by) {
         return;
     }
-    char ew = (((idx << 2) + 4) <= w) ? 4 : (w & 3);
-
-    int in_off = (idz * ih_str + idy + ih_off) * iw_str + (idx << 2) + iw_off;
-    int out_off = (idz * oh_str + idy + oh_off) * ow_str + (idx << 2) + ow_off;
-    if (ew == 4) {
-        T4 val;
-        val = vload4(0, input + in_off);
-        val.x = (T)(((float)val.x) * alp + bet);
-        val.y = (T)(((float)val.y) * alp + bet);
-        val.z = (T)(((float)val.z) * alp + bet);
-        val.w = (T)(((float)val.w) * alp + bet);
-        if (has_power) {
-            val.x = pow((float)val.x, power);
-            val.y = pow((float)val.y, power);
-            val.z = pow((float)val.z, power);
-            val.w = pow((float)val.w, power);
-        }
-        vstore4(val, 0, output + out_off);
-    } else {
-        if (ew == 1) {
-            T val;
-            val = input[in_off];
-            val = ((float)val) * alp + bet;
-            if (has_power) {
-                val = pow((float)val, power);
-            }
-            output[out_off] = (T)val;
-        }
-        if (ew == 2) {
-            T2 val;
-            val = vload2(0, input + in_off);
-            val.x = (T)(((float)val.x) * alp + bet);
-            val.y = (T)(((float)val.y) * alp + bet);
-            if (has_power) {
-                val.x = pow((float)val.x, power);
-                val.y = pow((float)val.y, power);
-            }
-            vstore2(val, 0, output + out_off);
-        }
-        if (ew == 3) {
-            T3 val;
-            val = vload3(0, input + in_off);
-            val.x = (T)(((float)val.x) * alp + bet);
-            val.y = (T)(((float)val.y) * alp + bet);
-            val.z = (T)(((float)val.z) * alp + bet);
-            if (has_power) {
-                val.x = pow((float)val.x, power);
-                val.y = pow((float)val.y, power);
-                val.z = pow((float)val.z, power);
-            }
-            vstore3(val, 0, output + out_off);
-        }
+    T4 val = 0;
+#if defined(USE_NCHW)
+    LOAD_MEM_V4_C1_COMMON(val, idx, idy, idz, iw_str, ih_str, i_off, w, input);
+#else
+    LOAD_MEM_V4_COMMON(val, idx, idy, idz, iw_str, ih_str, i_off, input);
+#endif
+    val.x = (T)(((float)val.x) * alp + bet);
+    val.y = (T)(((float)val.y) * alp + bet);
+    val.z = (T)(((float)val.z) * alp + bet);
+    val.w = (T)(((float)val.w) * alp + bet);
+    if (has_power) {
+        val.x = pow((float)val.x, power);
+        val.y = pow((float)val.y, power);
+        val.z = pow((float)val.z, power);
+        val.w = pow((float)val.w, power);
     }
+
+#if defined(USE_NCHW)
+    STORE_MEM_V4_C1_COMMON(val, idx, idy, idz, ow_str, oh_str, o_off, w, output);
+#else
+    STORE_MEM_V4_COMMON(val, idx, idy, idz, ow_str, oh_str, o_off, output);
+#endif
 }

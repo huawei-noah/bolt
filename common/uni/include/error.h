@@ -16,14 +16,14 @@
 
 #include <stdio.h>
 #include <stdlib.h>
-#include <iostream>
 #include <unistd.h>
-#include <sys/syscall.h>
 
-#ifdef __GLIBC__
+#ifdef _WIN32
+#define UNI_THREADID int tid = 0;
+#elif defined(__GLIBC__) || defined(__linux__)
+#include <sys/syscall.h>
 #define UNI_THREADID pid_t tid = syscall(SYS_gettid);
-#else
-#ifdef _USE_IOS
+#elif defined(__APPLE__)
 #include <thread>
 #define UNI_THREADID                   \
     uint64_t tid64;                    \
@@ -32,9 +32,9 @@
 #else
 #define UNI_THREADID pid_t tid = gettid();
 #endif
-#endif
 
 #ifdef _THREAD_SAFE
+#include <pthread.h>
 extern pthread_mutex_t uniThreadMutex;
 #endif
 
@@ -46,19 +46,20 @@ extern pthread_mutex_t uniThreadMutex;
         printf(__VA_ARGS__);                                         \
         fflush(stdout);                                              \
     }
-#define UNI_EXIT
 #else
 #define UNI_LOGD(...)        \
     {                        \
         printf(__VA_ARGS__); \
         fflush(stdout);      \
     }
-#define UNI_EXIT exit(1);
 #endif
+
+#define UNI_EXIT exit(1);
 
 #ifdef __cplusplus
 extern "C" {
 #endif
+
 #ifdef _THREAD_SAFE
 #define UNI_THREAD_SAFE(func)            \
     pthread_mutex_lock(&uniThreadMutex); \
@@ -67,7 +68,9 @@ extern "C" {
 #else
 #define UNI_THREAD_SAFE(func) func;
 #endif
+
 #define UNI_CI_LOG(...) printf(__VA_ARGS__);
+
 #define UNI_INFO_LOG(...)                       \
     {                                           \
         UNI_THREADID                            \
@@ -76,23 +79,26 @@ extern "C" {
             UNI_LOGD(__VA_ARGS__);              \
         })                                      \
     }
-#define UNI_WARNING_LOG(...)                       \
-    {                                              \
-        UNI_THREADID                               \
-        UNI_THREAD_SAFE({                          \
-            UNI_LOGD("[WARNING] thread %d ", tid); \
-            UNI_LOGD(__VA_ARGS__);                 \
-        })                                         \
+
+#define UNI_WARNING_LOG(...)                                                           \
+    {                                                                                  \
+        UNI_THREADID                                                                   \
+        UNI_THREAD_SAFE({                                                              \
+            UNI_LOGD("[WARNING] thread %d file %s line %d ", tid, __FILE__, __LINE__); \
+            UNI_LOGD(__VA_ARGS__);                                                     \
+        })                                                                             \
     }
-#define UNI_ERROR_LOG(...)                       \
-    {                                            \
-        UNI_THREADID                             \
-        UNI_THREAD_SAFE({                        \
-            UNI_LOGD("[ERROR] thread %d ", tid); \
-            UNI_LOGD(__VA_ARGS__);               \
-        })                                       \
-        UNI_EXIT;                                \
+
+#define UNI_ERROR_LOG(...)                                                           \
+    {                                                                                \
+        UNI_THREADID                                                                 \
+        UNI_THREAD_SAFE({                                                            \
+            UNI_LOGD("[ERROR] thread %d file %s line %d ", tid, __FILE__, __LINE__); \
+            UNI_LOGD(__VA_ARGS__);                                                   \
+        })                                                                           \
+        UNI_EXIT;                                                                    \
     }
+
 #ifdef _DEBUG
 #define UNI_DEBUG_LOG(...)                       \
     {                                            \
@@ -105,32 +111,19 @@ extern "C" {
 #else
 #define UNI_DEBUG_LOG(...)
 #endif
-#define CHECK_REQUIREMENT(status)                                                            \
-    if (!(status)) {                                                                         \
-        UNI_ERROR_LOG("%s %s line %d requirement mismatch\n", __FILE__, __func__, __LINE__); \
-    }
-#define CHECK_STATUS(ee)                                                                           \
-    {                                                                                              \
-        EE status = (ee);                                                                          \
-        if (status != SUCCESS) {                                                                   \
-            UNI_ERROR_LOG(                                                                         \
-                "%s %s line %d got an error: %s\n", __FILE__, __func__, __LINE__, ee2str(status)); \
-        }                                                                                          \
+
+#define CHECK_REQUIREMENT(status)                 \
+    if (!(status)) {                              \
+        UNI_ERROR_LOG("requirement mismatch.\n"); \
     }
 
-inline void UNI_PROFILE_INFO(const char *name, const char *category, long start, long duration)
-{
-#ifdef _PROFILE
-    int pid = 0;
-    UNI_THREADID;
-    UNI_THREAD_SAFE({
-        UNI_LOGD("[PROFILE] thread %d ", tid);
-        UNI_LOGD("{\"name\": \"%s\", \"cat\": \"%s\", \"ph\": \"X\", \"pid\": \"%d\", \"tid\": "
-                 "\"%d\", \"ts\": %ld, \"dur\": %ld},\n",
-            name, category, pid, tid, start, duration);
-    });
-#endif
-}
+#define CHECK_STATUS(ee)                                         \
+    {                                                            \
+        EE status = (ee);                                        \
+        if (status != SUCCESS) {                                 \
+            UNI_ERROR_LOG("got an error: %s\n", ee2str(status)); \
+        }                                                        \
+    }
 
 typedef enum {
     SUCCESS = 0,

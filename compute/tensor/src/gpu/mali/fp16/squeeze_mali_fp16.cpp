@@ -11,9 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "sys.h"
-#include "types.h"
-#include "error.h"
 #include "gpu/mali/fp16/squeeze_mali_fp16.h"
 
 inline EE squeeze_checkpara_mali_fp16(TensorDesc inputDesc, TensorDesc outputDesc)
@@ -27,57 +24,106 @@ inline EE squeeze_checkpara_mali_fp16(TensorDesc inputDesc, TensorDesc outputDes
     return SUCCESS;
 }
 
-inline EE squeeze_core_mali_fp16(
-    GCLHandle_t handle, TensorDesc inputDesc, GCLMem_t input, TensorDesc outputDesc, GCLMem_t output)
+inline EE squeeze_core_mali_fp16(GCLHandle_t handle,
+    TensorDesc inputDesc,
+    GCLMem_t input,
+    GCLMem_t tmpbuf,
+    TensorDesc outputDesc,
+    GCLMem_t output)
 {
-    UNUSED(outputDesc);
     U32 iw, ih, ic, in;
-    if (inputDesc.df == DF_NCHW) {
-        tensorSelectGet(inputDesc, NULL, NULL, &in, &ic, &ih, &iw);
-    } else if (inputDesc.df == DF_MKT) {
-        get_nlp_mkt_val(inputDesc, NULL, &in, &ic, &ih);
-        iw = 1;
-    } else {
-        return NOT_SUPPORTED;
+    U32 ow, oh, oc, on;
+    U32 iw_str, ih_str;
+    U32 ow_str, oh_str;
+
+    DataFormat imf = input->desc.memFormat;
+    CHECK_STATUS(gclmem_get_desc_dim(input->desc, NULL, NULL, &in, &ic, &ih, &iw));
+    CHECK_STATUS(gclmem_get_desc_dim(output->desc, NULL, NULL, &on, &oc, &oh, &ow));
+    CHECK_STATUS(gclmem_get_desc_padding(input->desc, &iw_str, &ih_str, NULL, NULL, NULL));
+    CHECK_STATUS(gclmem_get_desc_padding(output->desc, &ow_str, &oh_str, NULL, NULL, NULL));
+
+    bool needTransIn = false;
+    bool needPadOut = false;
+    if (iw != iw_str || ih != ih_str || imf == DF_NCHWC4 || input->desc.memType != GCL_MEM_BUF) {
+        needTransIn = true;
     }
-    U32 iw_str, ih_str, iw_off, ih_off;
-    ih_str = input->desc.stride[0];
-    iw_str = input->desc.stride[1];
-    ih_off = input->desc.offset[0];
-    iw_off = input->desc.offset[1];
-    U32 ow_str, oh_str, ow_off, oh_off;
-    oh_str = output->desc.stride[0];
-    ow_str = output->desc.stride[1];
-    oh_off = output->desc.offset[0];
-    ow_off = output->desc.offset[1];
+    if (ow != ow_str || oh != oh_str || output->desc.memType != GCL_MEM_BUF) {
+        needPadOut = true;
+    }
 
-    cl_mem inbuf, outbuf;
-    inbuf = input->mem;
-    outbuf = output->mem;
+    MemTransFormType type = (imf == DF_NCHWC4) ? NCHWC4_TO_NCHW : NCHW_TO_NCHW;
+    GCLMem tMem;
+    GCLMemDesc desc;
+    if (needPadOut) {
+        if (needTransIn) {
+            tMem.mem = tmpbuf->mem;
+        } else {
+            tMem.mem = input->mem;
+        }
+    } else {
+        tMem.mem = output->mem;
+        if (!needTransIn) {
+            needTransIn = true;
+        }
+    }
 
-    U32 gs[3] = {ih, iw, (ic + 3) / 4};
-    U32 ls[3] = {0, 0, 0};
-    U32 dim = 3;
-    Kernel kernel;
-    CHECK_STATUS(gcl_create_kernel(handle, "squeeze", &kernel));
-    CHECK_STATUS(gcl_set_kernelArgs(kernel, ih, iw, ih_str, iw_str, ih_off, iw_off, oh_str, ow_str,
-        oh_off, ow_off, inbuf, outbuf));
-    gcl_set_kernelVec(handle, kernel, dim, gs, ls, "squeeze");
-#ifdef _DEBUG
-    CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, "squeeze"));
-    CHECK_STATUS(gcl_print_memory<F16>(handle, input, "squeeze_input"));
-    CHECK_STATUS(gcl_print_memory<F16>(handle, output, "squeeze_output"));
-#endif
+    if (needTransIn) {
+        desc = input->desc;
+        U32 str[3] = {iw, ih, ic * in};
+        U32 off[3] = {0, 0, 0};
+        MemFlags flag = CL_MEM_READ_WRITE;
+        CHECK_STATUS(gclmem_set_desc_padding(&desc, str, off, DT_F16, DF_NCHW, GCL_MEM_BUF, flag));
+        tMem.desc = desc;
+        CHECK_STATUS(ocl_data_trans_form(handle, input, &tMem, 0, 0, type));
+    }
+
+    if (needPadOut) {
+        desc = output->desc;
+        U32 str[3] = {ow, oh, oc * on};
+        U32 off[3] = {0, 0, 0};
+        MemFlags flag = CL_MEM_READ_WRITE;
+        CHECK_STATUS(gclmem_set_desc_padding(&desc, str, off, DT_F16, DF_NCHW, GCL_MEM_BUF, flag));
+        tMem.desc = desc;
+        CHECK_STATUS(ocl_data_trans_form(handle, &tMem, output, 0, 0, NCHW_TO_NCHW));
+    }
     return SUCCESS;
 }
 
-EE squeeze_mali_fp16(
-    GCLHandle_t handle, TensorDesc inputDesc, GCLMem_t input, TensorDesc outputDesc, GCLMem_t output)
+EE squeeze_infer_forward_tmp_bytes_mali_fp16(TensorDesc inputDesc,
+    GCLMemDesc gclmemInputDesc,
+    TensorDesc outputDesc,
+    GCLMemDesc gclmemOutputDesc,
+    U32 *bytes)
+{
+    U32 iw, ih, ow, oh;
+    U32 iw_str, ih_str, ow_str, oh_str;
+    U32 size = 0;
+    CHECK_STATUS(gclmem_get_desc_dim(gclmemInputDesc, NULL, NULL, NULL, NULL, &ih, &iw));
+    CHECK_STATUS(gclmem_get_desc_dim(gclmemOutputDesc, NULL, NULL, NULL, NULL, &oh, &ow));
+    CHECK_STATUS(gclmem_get_desc_padding(gclmemInputDesc, &iw_str, &ih_str, NULL, NULL, NULL));
+    CHECK_STATUS(gclmem_get_desc_padding(gclmemOutputDesc, &ow_str, &oh_str, NULL, NULL, NULL));
+    if (ih != ih_str || iw != iw_str || gclmemInputDesc.memFormat == DF_NCHWC4 ||
+        gclmemInputDesc.memType != GCL_MEM_BUF) {
+        size = tensorNumBytes(inputDesc);
+    }
+    if (oh != oh_str || ow != ow_str || gclmemOutputDesc.memType != GCL_MEM_BUF) {
+        size = tensorNumBytes(inputDesc);
+    }
+    *bytes = size;
+    return SUCCESS;
+}
+
+EE squeeze_mali_fp16(GCLHandle_t handle,
+    TensorDesc inputDesc,
+    GCLMem_t input,
+    GCLMem_t tmpbuf,
+    TensorDesc outputDesc,
+    GCLMem_t output)
 {
     CHECK_STATUS(squeeze_checkpara_mali_fp16(inputDesc, outputDesc));
     if (input->mem != output->mem) {
         CHECK_STATUS(fill_output_zero(handle, output, outputDesc));
     }
-    CHECK_STATUS(squeeze_core_mali_fp16(handle, inputDesc, input, outputDesc, output));
+    CHECK_STATUS(squeeze_core_mali_fp16(handle, inputDesc, input, tmpbuf, outputDesc, output));
     return SUCCESS;
 }

@@ -12,40 +12,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "sys.h"
-#include "types.h"
+
 #include "tensor_desc.h"
 #include "error.h"
 #include "gpu/mali/tensor_computing_mali.h"
 #include "gpu/mali/fp16/padding_mali_fp16.h"
-
-EE padding_infer_output_size_mali(TensorDesc inputDesc,
-    PadParamSpec padParamSpec,
-    TensorDesc *outputDesc,
-    GCLMemDesc_t gclmemInputDesc,
-    GCLMemDesc_t gclmemOutputDesc)
-{
-    /*tensorDesc record cpu org data format info*/
-    /*gclmemDesc record gpu trans data format info*/
-    DataType idt;
-    DataFormat idf;
-    U32 iw, ih, ic, in;
-    U32 ow, oh;
-    U32 pw, ph, pr, pb;
-    tensorSelectGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw);
-    pw = padParamSpec.left;
-    pr = padParamSpec.right;
-    ph = padParamSpec.top;
-    pb = padParamSpec.bottom;
-    // if (pw!=pr || ph != pb) CHECK_STATUS(NOT_SUPPORTED);
-    ow = iw + pw + pr;
-    oh = ih + ph + pb;
-    CHECK_STATUS(infer_gclmem_desc_ncwhc4(
-        iw, ih, ic, 0, 0, ow, oh, ic, idt, idt, gclmemInputDesc, gclmemOutputDesc));
-    if (outputDesc) {
-        *outputDesc = tensor4df(idt, idf, in, ic, oh, ow);
-    }
-    return SUCCESS;
-}
 
 EE padding_mali(GCLHandle_t handle,
     TensorDesc inputDesc,

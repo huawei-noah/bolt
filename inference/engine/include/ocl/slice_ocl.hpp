@@ -20,8 +20,7 @@ class SliceOCL : public Slice {
 public:
     SliceOCL(DataType dt, SliceParamSpec p) : Slice(dt, p)
     {
-        setMALIArchInfo(
-            &(this->archInfo), nullptr, &this->needSetKernelVec, &this->needSelectKernelLS);
+        INIT_GPU_INFO(nullptr)
     }
 
     ~SliceOCL(){DESTROY_OCL_KERNEL}
@@ -37,7 +36,8 @@ public:
     {
         OCLContext::getInstance().handle.get()->curOpName = this->get_name();
         Tensor inputTensor = this->inputTensors[0];
-        CHECK_STATUS(slice(this->inputTensors[0], this->p, this->outputTensors, &this->archInfo));
+        CHECK_STATUS(
+            slice(this->inputTensors[0], this->p, this->temp, this->outputTensors, &this->archInfo));
     }
 
     EE infer_output_tensors_size(
@@ -46,6 +46,15 @@ public:
         this->needSetKernelVec = true;
         CHECK_STATUS(slice_infer_output_size(inTensors[0], this->p, outTensors, &this->archInfo));
         return SUCCESS;
+    }
+
+    U32 infer_tmp_memory_size() override
+    {
+        Tensor inputTensor = this->inputTensors[0];
+        U32 bytes = 0;
+        CHECK_STATUS(slice_infer_forward_tmp_bytes(
+            inputTensor, this->p, this->outputTensors, &bytes, &this->archInfo));
+        return bytes;
     }
 
     REGISTER_OCL_OPERATOR_RUN

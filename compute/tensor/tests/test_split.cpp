@@ -24,8 +24,6 @@ int splitTest(int argc, char **argv, DataType dt)
     U32 ic = atoi(argv[3]);
     U32 ih = atoi(argv[4]);
     U32 iw = atoi(argv[5]);
-    ArchInfo archInfo;
-    archInfo.arch = UT_ARCH;
 
     DataFormat df = DF_NCHWC8;
     TensorDesc inDesc = tensor4df(dt, df, in, ic, ih, iw);
@@ -34,7 +32,7 @@ int splitTest(int argc, char **argv, DataType dt)
     Tensor inputTensor;
     inputTensor.resize(inDesc);
     inputTensor.alloc();
-    memcpy(get_ptr_from_tensor(inputTensor, UT_ARCH), input, tensorNumBytes(inDesc));
+    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inDesc));
 
     std::vector<Tensor> outputTensors(num);
     std::vector<Tensor *> outputTensorsPtr(num);
@@ -47,17 +45,17 @@ int splitTest(int argc, char **argv, DataType dt)
     }
 
     if (UT_CHECK) {
-        CHECK_STATUS(split(inputTensor, outputTensors, &archInfo));
+        CHECK_STATUS(split(inputTensor, outputTensors, &UT_CPU_ARCHINFO));
 
         for (I32 i = 0; i < num; i++) {
-            ut_check_v(get_ptr_from_tensor(outputTensors[i], UT_ARCH), input, len, dt, 0, __FILE__,
-                __LINE__);
+            ut_check_v(get_ptr_from_tensor(outputTensors[i], CPU_GENERAL), input, len, dt, 0,
+                __FILE__, __LINE__);
         }
     }
 
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        CHECK_STATUS(split(inputTensor, outputTensors, &archInfo));
+        CHECK_STATUS(split(inputTensor, outputTensors, &UT_CPU_ARCHINFO));
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;

@@ -13,16 +13,17 @@
 
 #ifndef _NORMALIZATION_MALI_FP16
 #define _NORMALIZATION_MALI_FP16
-#include "sys.h"
-#include "error.h"
-#include "types.h"
-#include "tensor_computing_type.h"
+
+#include "gpu/mali/fp16/tensor_computing_fp16.h"
+
+EE normalization_infer_forward_tmp_bytes_mali_fp16(GCLMemDesc gclmemInputDesc, U32 *bytes);
 
 EE normalization_mali_fp16(GCLHandle_t handle,
-    GCLMem_t alpha,
-    GCLMem_t beta,
     TensorDesc inputDesc,
     GCLMem_t input,
+    GCLMem_t alpha,
+    GCLMem_t beta,
+    GCLMem_t tmpbuf,
     TensorDesc outputDesc,
     GCLMem_t output);
 #endif

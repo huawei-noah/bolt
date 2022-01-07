@@ -32,24 +32,22 @@ public:
 
     void run() override
     {
-        CHECK_STATUS(resize(inputTensors[0], temp, outputTensors[0], &this->archInfo));
+        CHECK_STATUS(resize(inputTensors[0], temp, outputTensors[0], this->p, &this->archInfo));
     }
 
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
-        ResizeDesc resizeDesc;
-        resizeDesc.paramDT = this->paramDT;
         U32 bytes;
         switch (paramDT) {
             case DT_F32: {
                 CHECK_REQUIREMENT(1 == this->p.scales[0] && 1 == this->p.scales[1]);
-                CHECK_STATUS(resize_infer_output_size(inTensors[0], resizeDesc, this->p.scales + 2,
-                    outTensors[0], &bytes, &this->archInfo));
+                CHECK_STATUS(resize_infer_output_size(inTensors[0], this->paramDT,
+                    this->p.scales + 2, outTensors[0], &bytes, &this->archInfo));
                 break;
             }
             case DT_U32: {
-                CHECK_STATUS(resize_infer_output_size(inTensors[0], resizeDesc, this->p.sizes,
+                CHECK_STATUS(resize_infer_output_size(inTensors[0], this->paramDT, this->p.sizes,
                     outTensors[0], &bytes, &this->archInfo));
                 break;
             }
@@ -64,7 +62,7 @@ public:
     {
         U32 size = 0;
         TensorDesc inputDesc = inputTensors[0].get_desc();
-        if (DF_NCHW == inputDesc.df && IS_ARM(archInfo.arch)) {
+        if (DF_NCHW == inputDesc.df && (IS_ARM(archInfo.arch) || IS_X86(archInfo.arch))) {
             U32 paddedC = (inputDesc.dims[2] + 7) / 8 * 8;
             TensorDesc outputDesc = outputTensors[0].get_desc();
             inputDesc.dims[2] = paddedC;

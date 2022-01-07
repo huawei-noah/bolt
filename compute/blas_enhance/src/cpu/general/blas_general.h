@@ -15,7 +15,7 @@
 #define _H_BLAS_GENERAL
 
 #include "sys.h"
-#include "types.h"
+#include "data_type.h"
 
 EE mvm_general(U32 row,
     U32 col,

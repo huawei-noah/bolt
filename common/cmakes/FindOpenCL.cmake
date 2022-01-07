@@ -1,6 +1,6 @@
 find_path(OPENCL_INCLUDE_DIR NAMES CL/cl.h HINTS $ENV{OpenCL_ROOT}/include ${OpenCL_ROOT}/include /usr/local/include)
-find_path(OPENCL_LIB_DIR NAMES libOpenCL.so HINTS $ENV{OpenCL_ROOT}/lib64 ${OpenCL_ROOT}/lib64 /usr/local/lib)
-find_path(GLES_MALI_LIB_DIR NAMES libGLES_mali.so HINT $ENV{OpenCL_ROOT}/lib64 ${OpenCL_ROOT}/lib64 /usr/local/lib)
+find_path(OPENCL_LIB_DIR NAMES libOpenCL.so HINTS $ENV{OpenCL_ROOT}/lib ${OpenCL_ROOT}/lib /usr/local/lib)
+find_path(GLES_MALI_LIB_DIR NAMES libGLES_mali.so HINT $ENV{OpenCL_ROOT}/lib ${OpenCL_ROOT}/lib /usr/local/lib)
 
 if (OPENCL_INCLUDE_DIR)
     set(OPENCL_HEAD_FOUND true)

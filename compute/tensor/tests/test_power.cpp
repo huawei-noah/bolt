@@ -22,40 +22,36 @@ int powerTest(int argc, char **argv, DataType dt)
     p.scale = atof(argv[2]);
     p.shift = atof(argv[3]);
     p.power = atof(argv[4]);
-    ArchInfo archInfo;
-    archInfo.arch = UT_ARCH;
-    ArchInfo archInfo_org;
-    archInfo_org.arch = CPU_GENERAL;
 
     Tensor inputTensor;
     TensorDesc inputDesc = tensor1d(dt, len);
     inputTensor.resize(inputDesc);
     inputTensor.alloc();
     U8 *input = ut_input_v(len, dt, UT_INIT_RANDOM);
-    memcpy(get_ptr_from_tensor(inputTensor, UT_ARCH), input, tensorNumBytes(inputDesc));
+    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inputDesc));
     // set output
     Tensor outputTensor, outputTensorRef;
-    CHECK_STATUS(power_infer_output_size(&inputTensor, &outputTensor, &archInfo));
+    CHECK_STATUS(power_infer_output_size(&inputTensor, &outputTensor, &UT_CPU_ARCHINFO));
     outputTensor.alloc();
     TensorDesc outputDesc_ref = outputTensor.get_desc();
     outputTensorRef.resize(outputDesc_ref);
     outputTensorRef.alloc();
 
     if (UT_CHECK) {
-        CHECK_STATUS(power(inputTensor, p, outputTensor, &archInfo));
+        CHECK_STATUS(power(inputTensor, p, outputTensor, &UT_CPU_ARCHINFO));
 
         // naive implement
-        CHECK_STATUS(power(inputTensor, p, outputTensorRef, &archInfo_org));
+        CHECK_STATUS(power(inputTensor, p, outputTensorRef, &UT_SERIAL_ARCHINFO));
 
         // check
-        ut_check_v(get_ptr_from_tensor(outputTensor, UT_ARCH),
-            get_ptr_from_tensor(outputTensorRef, UT_ARCH), len, dt, 0.1, __FILE__, __LINE__);
+        ut_check_v(get_ptr_from_tensor(outputTensor, CPU_GENERAL),
+            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), len, dt, 0.1, __FILE__, __LINE__);
     }
 
     // benchmark
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        CHECK_STATUS(power(inputTensor, p, outputTensor, &archInfo));
+        CHECK_STATUS(power(inputTensor, p, outputTensor, &UT_CPU_ARCHINFO));
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;

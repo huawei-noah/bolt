@@ -13,36 +13,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "tensor_computing.h"
-#include "ut_util.h"
-#include "gcl.h"
-#include "libkernelsource.h"
+#include "ut_util_ocl.h"
 
-#ifdef _USE_FP16
-inline GCLMem_t alloc(Tensor tensor)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    mem->alloc();
-    return (GCLMem_t)mem->get_ptr();
-}
-
-inline GCLMem_t alloc_map(Tensor tensor)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    mem->mapped_alloc();
-    return (GCLMem_t)mem->get_ptr();
-}
-
-inline GCLMem_t alloc_bytes(Tensor tensor, U32 size)
-{
-    auto mem = (OclMemory *)tensor.get_memory();
-    GCLMem_t ptr = NULL;
-    if (size > 0) {
-        mem->resize(tensor1d(DT_U8, size));
-        mem->alloc();
-        ptr = (GCLMem_t)mem->get_ptr();
-    }
-    return ptr;
-}
 int paddingTest(int argc, char **argv, DataType dt)
 {
     // input dim
@@ -52,22 +24,23 @@ int paddingTest(int argc, char **argv, DataType dt)
     U32 iw = atoi(argv[4]);
 
     // padding info
-    U32 h_fir = atoi(argv[7]);
-    U32 w_fir = atoi(argv[8]);
-    U32 h_sec = atoi(argv[11]);
-    U32 w_sec = atoi(argv[12]);
-    U32 mode = atoi(argv[13]);
+    U32 h_top = atoi(argv[5]);
+    U32 h_bot = atoi(argv[7]);
+    U32 w_lef = atoi(argv[6]);
+    U32 w_rig = atoi(argv[8]);
+    U32 mode = atoi(argv[9]);
 
     ArchInfo archInfo;
     archInfo.arch = MALI;
-    ArchInfo archInfo_org;
-    archInfo_org.arch = CPU_GENERAL;
+
     PadParamSpec padParamSpec;
 
-    padParamSpec.top = h_fir;
-    padParamSpec.bottom = h_sec;
-    padParamSpec.left = w_fir;
-    padParamSpec.right = w_sec;
+    padParamSpec.top = h_top;
+    padParamSpec.bottom = h_bot;
+    padParamSpec.left = w_lef;
+    padParamSpec.right = w_rig;
+    padParamSpec.front = 0;
+    padParamSpec.back = 0;
     padParamSpec.constant_value = 0.0;
     switch (mode) {
         case 0: {
@@ -99,7 +72,9 @@ int paddingTest(int argc, char **argv, DataType dt)
 
     U32 input_len = tensorNumElements(inputDescCPU);
     U8 *inputCPU = ut_input_v(input_len, dt, UT_INIT_RANDOM);
-    U8 *outputGPU = NULL;
+    F16 *val = (F16 *)inputCPU;
+    for (U32 i = 0; i < input_len; i++)
+        val[i] = i;
 
     std::shared_ptr<GCLHandle> handleSharedPtr = OCLContext::getInstance().handle;
     GCLHandle_t handle = handleSharedPtr.get();
@@ -109,14 +84,20 @@ int paddingTest(int argc, char **argv, DataType dt)
     Tensor outputTensor = Tensor(OCLMem);
     Tensor tmpTensor = Tensor(OCLMem);
     inputTensor.resize(inputDescGPU);
-
     MaliPara maliPara;
     maliPara.handle = handle;
     archInfo.archPara = &maliPara;
 
     CHECK_STATUS(padding_infer_output_size(&inputTensor, padParamSpec, &outputTensor, &archInfo));
+    outputDescGPU = outputTensor.get_desc();
+    U32 on, oc, oh, ow;
+    on = outputDescGPU.dims[3];
+    oc = outputDescGPU.dims[2];
+    oh = outputDescGPU.dims[1];
+    ow = outputDescGPU.dims[0];
+    U8 *outputGPU = ut_input_v(on * oc * oh * ow, dt, UT_INIT_RANDOM);
 
-    GCLMem_t output = alloc_map(outputTensor);
+    GCLMem_t output = alloc(outputTensor);
     GCLMem_t input = alloc(inputTensor);
     CHECK_STATUS(gcl_fill_memory_zero(handle, input));
 
@@ -124,12 +105,14 @@ int paddingTest(int argc, char **argv, DataType dt)
     U32 tmpBytes = 0;
     tmpBytes = tensorNumBytes(inputDescGPU);
     maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
+    tmpBytes = tensorNumBytes(outputDescGPU);
+    maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
     GCLMem_t tmpbuf = alloc_bytes(tmpTensor, maxBytes);
 
     CHECK_STATUS(ocl_set_input(handle, input, inputDescGPU, inputCPU, tmpbuf, true));
     CHECK_STATUS(padding(inputTensor, padParamSpec, outputTensor, &archInfo));
     /*warp up*/
-    UNI_INFO_LOG("Warp up gpu:\n")
+    UNI_INFO_LOG("warm up gpu:\n")
     for (U32 i = 0; i < 2; i++) {
         CHECK_STATUS(gcl_run_kernelVec(handle));
     }
@@ -139,17 +122,10 @@ int paddingTest(int argc, char **argv, DataType dt)
 #else
     CHECK_STATUS(gcl_run_kernelVec(handle));
 #endif
-    outputDescGPU = outputTensor.get_desc();
-    CHECK_STATUS(ocl_get_output(handle, output, outputDescGPU, true));
-    outputGPU = output->mapPtrArray.back();
+    CHECK_STATUS(ocl_get_output(handle, output, outputDescGPU, outputGPU, tmpbuf, true));
 
     char buffer[150];
     char params[120];
-    U32 on, oc, oh, ow;
-    on = outputDescGPU.dims[3];
-    oc = outputDescGPU.dims[2];
-    oh = outputDescGPU.dims[1];
-    ow = outputDescGPU.dims[0];
     sprintf(params, "(%u %u %u %u)->(%u %u %u %u)", in, ic, ih, iw, on, oc, oh, ow);
     sprintf(buffer, "%20s, %80s", "padding", params);
 #ifdef _DEBUG
@@ -159,26 +135,26 @@ int paddingTest(int argc, char **argv, DataType dt)
     Tensor inputTensorCpu;
     inputTensorCpu.resize(inputDescCPU);
     inputTensorCpu.alloc();
-    memcpy(get_ptr_from_tensor(inputTensorCpu, UT_ARCH), inputCPU, tensorNumBytes(inputDescCPU));
+    memcpy(get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), inputCPU, tensorNumBytes(inputDescCPU));
 
     Tensor outputTensorCpu;
-    CHECK_STATUS(
-        padding_infer_output_size(&inputTensorCpu, padParamSpec, &outputTensorCpu, &archInfo_org));
+    CHECK_STATUS(padding_infer_output_size(
+        &inputTensorCpu, padParamSpec, &outputTensorCpu, &UT_SERIAL_ARCHINFO));
     outputTensorCpu.alloc();
 
     if (UT_CHECK) {
-        CHECK_STATUS(padding(inputTensorCpu, padParamSpec, outputTensorCpu, &archInfo_org));
+        CHECK_STATUS(padding(inputTensorCpu, padParamSpec, outputTensorCpu, &UT_SERIAL_ARCHINFO));
     }
     TensorDesc desc = outputTensorCpu.get_desc();
     ut_check_a(
-        outputGPU, get_ptr_from_tensor(outputTensorCpu, UT_ARCH), tensorNumElements(desc), dt);
+        outputGPU, get_ptr_from_tensor(outputTensorCpu, CPU_GENERAL), tensorNumElements(desc), dt);
 
     CHECK_STATUS(gcl_finish(handle));
     CHECK_STATUS(gcl_clean_kernelVec(handle));
     free(inputCPU);
+    free(outputGPU);
     return 0;
 }
-#endif
 
 int main(int argc, char **argv)
 {

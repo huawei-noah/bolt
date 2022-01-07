@@ -11,10 +11,8 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "sys.h"
-#include "error.h"
-#include "types.h"
 #include "gpu/mali/fp16/argmax_mali_fp16.h"
+
 #define get_thread_num(len, maxThreadNum, threadNum)                               \
     {                                                                              \
         threadNum = ((len + 7) / 8 < maxThreadNum) ? (len + 7) / 8 : maxThreadNum; \
@@ -25,7 +23,7 @@ inline EE argmax_checkpara_mali_fp16(TensorDesc inputDesc, TensorDesc outputDesc
     if (inputDesc.dt != DT_F16) {
         return NOT_SUPPORTED;
     }
-    if (outputDesc.dt != DT_U32) {
+    if (outputDesc.dt != DT_U32 && outputDesc.dt != DT_I32) {
         return NOT_SUPPORTED;
     }
     return SUCCESS;
@@ -183,8 +181,8 @@ EE argmax_infer_forward_tmp_bytes_mali_fp16(
     ic = (inDims > 2) ? inputDesc.dims[2] : 1;
     U32 size = 1024 * ih * ic * bytesOf(dt);
     size += 1024 * ih * ic * bytesOf(DT_U32);
-    size += (128 * ih * ic * bytesOf(dt) + 1023) / 1024 * 1024;
-    size += (128 * ih * ic * bytesOf(DT_U32) + 1023) / 1024 * 1024;
+    size += ALIGN(128 * ih * ic * bytesOf(dt), BUFFER_ALIGN_BASE);
+    size += ALIGN(128 * ih * ic * bytesOf(DT_U32), BUFFER_ALIGN_BASE);
     *bytes = size;
     return SUCCESS;
 }

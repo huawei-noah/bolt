@@ -15,6 +15,7 @@
 #ifdef _USE_FP32
 #include "cpu/x86/fp32/tensor_computing_fp32.h"
 #endif
+#include "blas_enhance.h"
 
 EE rnncell_x86(TensorDesc xDesc,
     const void *currentX,

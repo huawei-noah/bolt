@@ -41,45 +41,33 @@ int int8PoolingTest(int argc, char **argv, DataType dt)
     p.padding_left = atoi(argv[16]);
     p.padding_right = atoi(argv[17]);
 
-    ArchInfo archInfo;
-    archInfo.arch = UT_ARCH;
-    ArchInfo archInfo_org;
-    archInfo_org.arch = CPU_GENERAL;
+    TensorDesc inputDesc = tensor4df(DT_I8, DF_NCHWC8, in, ic, ih, iw);
+    TensorDesc inputDescRef = inputDesc;
+    inputDescRef.dt = dt;
+    Tensor inputTensor = Tensor::alloc_sized<CPUMem>(inputDesc);
+    Tensor inputTensorRef = Tensor::alloc_sized<CPUMem>(inputDescRef);
+    ut_init_v((U8 *)get_ptr_from_tensor(inputTensorRef, CPU_GENERAL), inputTensorRef.length(), dt,
+        UT_INIT_RANDOM);
 
-    TensorDesc input_desc = tensor4df(DT_I8, DF_NCHWC8, in, ic, ih, iw);
-    TensorDesc in_desc_ref = input_desc;
-    in_desc_ref.dt = dt;
-
-    Tensor inputTensor, outputTensor;
-    inputTensor.resize(input_desc);
-
-    //TensorDesc output_desc;
-    CHECK_STATUS(pooling_infer_output_size(&inputTensor, p, &outputTensor, &archInfo));
-    U32 input_len = inputTensor.length();
-    U32 output_len = outputTensor.length();
-
-    U8 *input_ref = ut_input_v(input_len, dt, UT_INIT_RANDOM);
-    Tensor inputTensorRef = Tensor::alloc_sized<CPUMem>(in_desc_ref);
-    memcpy(get_ptr_from_tensor(inputTensorRef, UT_ARCH), input_ref, tensorNumBytes(in_desc_ref));
-
-    inputTensor.alloc();
-    F16 inputScale = -1;
-    quantize_tensor(in_desc_ref, input_ref, &input_desc, get_ptr_from_tensor(inputTensor, UT_ARCH),
-        &inputScale);
-    inputTensor.set_scale(inputScale);
-
+    Tensor outputTensor;
+    CHECK_STATUS(pooling_infer_output_size(&inputTensor, p, &outputTensor, &UT_CPU_ARCHINFO));
     outputTensor.alloc();
-    INT8 *output = (INT8 *)get_ptr_from_tensor(outputTensor, UT_ARCH);
-    U8 *out_d = ut_input_v(output_len, dt, UT_INIT_ZERO);
-
     TensorDesc outputDesc = outputTensor.get_desc();
     outputDesc.dt = dt;
     Tensor outputTensorRef = Tensor::alloc_sized<CPUMem>(outputDesc);
 
+    U32 output_len = outputTensor.length();
+
+    F32 inputScale = -1;
+    CHECK_STATUS(quantize(inputTensorRef, &inputTensor, &inputScale, &UT_CPU_ARCHINFO));
+    inputTensor.set_scale(inputScale);
+
     Tensor tmpTensor;
     if (UT_CHECK) {
-        CHECK_STATUS(pooling(inputTensor, p, tmpTensor, outputTensor, &archInfo));
+        CHECK_STATUS(pooling(inputTensor, p, tmpTensor, outputTensor, &UT_CPU_ARCHINFO));
         F32 outputScale = outputTensor.get_scale();
+        INT8 *output = (INT8 *)get_ptr_from_tensor(outputTensor, CPU_GENERAL);
+        U8 *out_d = ut_input_v(output_len, dt, UT_INIT_ZERO);
         for (U32 i = 0; i < output_len; i++) {
             switch (dt) {
 #ifdef _USE_FP32
@@ -97,17 +85,18 @@ int int8PoolingTest(int argc, char **argv, DataType dt)
             }
         }
 
-        CHECK_STATUS(pooling(inputTensorRef, p, tmpTensor, outputTensorRef, &archInfo_org));
+        CHECK_STATUS(pooling(inputTensorRef, p, tmpTensor, outputTensorRef, &UT_SERIAL_ARCHINFO));
 
         // check
-        ut_check_v(out_d, get_ptr_from_tensor(outputTensorRef, UT_ARCH), output_len, dt, 0.05,
+        ut_check_v(out_d, get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), output_len, dt, 0.05,
             __FILE__, __LINE__);
+        free(out_d);
     }
 
     // benchmark
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        CHECK_STATUS(pooling(inputTensor, p, tmpTensor, outputTensor, &archInfo));
+        CHECK_STATUS(pooling(inputTensor, p, tmpTensor, outputTensor, &UT_CPU_ARCHINFO));
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;
@@ -128,9 +117,6 @@ int int8PoolingTest(int argc, char **argv, DataType dt)
     sprintf(buffer, "%20s, %80s", "Pooling", params);
     double ops = 1.0 * output_len * p.kernel_t * p.kernel_h * p.kernel_w;
     ut_log(DT_I8, buffer, ops, time);
-
-    free(input_ref);
-    free(out_d);
 
     return 0;
 }

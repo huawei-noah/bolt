@@ -13,14 +13,12 @@
 
 #ifndef _TENSOR_H
 #define _TENSOR_H
-
 #include <memory>
-#include <vector>
-#include <set>
-#include <map>
+
 #include "memory_cpu.hpp"
-#ifdef _USE_MALI
+#ifdef _USE_GPU
 #include "memory_ocl.hpp"
+#include "memory_ocl_img.hpp"
 #endif
 
 class Tensor {
@@ -30,13 +28,24 @@ public:
         if (memoryType == CPUMem) {
             this->val = std::shared_ptr<Memory>(new CpuMemory());
         } else {
-#ifdef _USE_MALI
-            this->val = std::shared_ptr<Memory>(new OclMemory());
+#ifdef _USE_GPU
+            if (memoryType == OCLMem) {
+                this->val = std::shared_ptr<Memory>(new OclMemory());
+            } else if (memoryType == OCLMemImg) {
+                this->val = std::shared_ptr<Memory>(new OclMemoryImg());
+            } else if (memoryType == OCLMemImg2D) {
+                this->val = std::shared_ptr<Memory>(new OclMemoryImg(OCLMemImg2D));
+            } else if (memoryType == OCLMemImg1D) {
+                this->val = std::shared_ptr<Memory>(new OclMemoryImg(OCLMemImg1D));
+            } else {
+                CHECK_STATUS(NOT_SUPPORTED);
+                UNI_ERROR_LOG("Unsupported GPU memory type\n");
+            }
 #else
             UNI_ERROR_LOG("not support to create GPU Tensor\n");
 #endif
         }
-        this->scale = std::shared_ptr<F32>(new F32(-1.0));
+        this->scale = std::shared_ptr<F32>(new F32(0.0));
     }
 
     Tensor clone(bool allocate = true)
@@ -49,7 +58,6 @@ public:
 
     void resize(TensorDesc desc)
     {
-        this->desc = desc;
         this->val->resize(desc);
     }
 
@@ -69,7 +77,7 @@ public:
 
     TensorDesc get_desc()
     {
-        return this->desc;
+        return this->val->get_dims();
     }
 
     void set_scale(F32 scale)
@@ -89,7 +97,6 @@ public:
 
     void copy_from(Tensor *other)
     {
-        this->desc = other->desc;
         memcpy(this->scale.get(), other->scale.get(), sizeof(F32));
         this->val->copy_from(other->val.get());
     }
@@ -109,6 +116,16 @@ public:
         return this->val;
     }
 
+    void set_shared_memory(std::shared_ptr<Memory> mem)
+    {
+        this->val = mem;
+    }
+
+    MemoryType get_mem_type()
+    {
+        return this->val->get_mem_type();
+    }
+
     U32 length()
     {
         return this->val->length();
@@ -119,19 +136,19 @@ public:
         return this->val->bytes();
     }
 
-    U32 capacity()
+    void capacity(U32 *size)
     {
-        return this->val->capacity();
+        this->val->capacity(size);
     }
 
     std::string string(int length = -1)
     {
-        int num = tensorNumElements(this->desc);
+        int num = tensorNumElements(this->val->get_dims());
         if (length >= 0 && length < num) {
             num = length;
         }
         F32 factor = this->get_scale();
-        factor = (factor == -1) ? 1 : factor;
+        factor = (factor <= 0) ? 1 : factor;
         std::string line = this->val->string(num, factor);
         return line;
     }
@@ -139,30 +156,12 @@ public:
     F32 element(U32 index)
     {
         F32 factor = this->get_scale();
-        factor = (factor == -1) ? 1 : factor;
-        return this->val->element(index) * factor;
+        factor = (factor <= 0) ? 1 : factor;
+        return this->val->element(index) / factor;
     }
 
 private:
-    TensorDesc desc;
     std::shared_ptr<Memory> val;
     std::shared_ptr<F32> scale;
 };
-
-#include "sys.h"
-
-// deprecated API, this will be remove
-inline void *get_ptr_from_tensor(Tensor tensor, Arch arch)
-{
-    void *ptr = nullptr;
-    if (arch == MALI) {
-#ifdef _USE_MALI
-        ptr = ((OclMemory *)(tensor.get_memory()))->get_ptr();
-#endif
-    } else {
-        ptr = ((CpuMemory *)(tensor.get_memory()))->get_ptr();
-    }
-    return ptr;
-}
-
 #endif  // _TENSOR_H

@@ -39,6 +39,7 @@ EE eltwise_fp16(std::vector<void *> input,
                 case ELTWISE_MAX:
                     tmp_v = vmaxq_f16(tmp_v, value_v);
                     break;
+                case ELTWISE_AND:
                 case ELTWISE_PROD:
                     tmp_v = vmulq_f16(tmp_v, value_v);
                     break;
@@ -67,6 +68,7 @@ EE eltwise_fp16(std::vector<void *> input,
                 case ELTWISE_MAX:
                     tmp_s = (value_s > tmp_s) ? value_s : tmp_s;
                     break;
+                case ELTWISE_AND:
                 case ELTWISE_PROD:
                     tmp_s *= value_s;
                     break;

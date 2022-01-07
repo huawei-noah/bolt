@@ -14,23 +14,26 @@
 #ifndef _H_UT_UTIL
 #define _H_UT_UTIL
 
-#include <math.h>
-#include <string>
-#include <sys/time.h>
-#include <iostream>
-#include <cstring>
+#include <string.h>
 
 #include "sys.h"
-#include "types.h"
+#include "uni.h"
 #include "error.h"
+#include "data_type.h"
+#include "profiling.h"
 
 #if defined(_USE_NEON)
 const Arch UT_ARCH = ARM_A76;
+const Arch UT_CPU_ARCH = ARM_A76;
 #elif defined(_USE_X86)
-const Arch UT_ARCH = X86_AVX2;
+const Arch UT_ARCH = X86_AVX512;
+const Arch UT_CPU_ARCH = X86_AVX512;
 #else
 const Arch UT_ARCH = CPU_GENERAL;
+const Arch UT_CPU_ARCH = CPU_GENERAL;
 #endif
+static ArchInfo UT_CPU_ARCHINFO = {UT_ARCH, NULL};
+static ArchInfo UT_SERIAL_ARCHINFO = {CPU_GENERAL, NULL};
 
 // whether to check right
 const int UT_CHECK = 1;
@@ -125,7 +128,7 @@ inline void ut_init_v(U8 *data, U32 len, DataType dt, UT_RANDOM_TYPE type)
                 break;
             }
             default:
-                UNI_ERROR_LOG("unsupported data type in ut_init_v\n");
+                UNI_ERROR_LOG("unsupported data type %s.\n", DataTypeName()[dt]);
         }
     }
 }
@@ -139,16 +142,17 @@ inline U8 *ut_input_v(U32 len, DataType dt, UT_RANDOM_TYPE type)
 }
 
 // unit test element check
-inline void ut_check_s(F32 a, F32 b, F32 threshold, std::string file, int line, int index)
+inline void ut_check_s(F32 a, F32 b, F32 threshold, const char *file, int line, int index)
 {
     if (!((a <= b + threshold) && (a >= b - threshold))) {
-        UNI_ERROR_LOG("check in %s at line %d, %d @ %f %f\n", file.c_str(), line, index, a, b);
+        printf("check in %s at line %d, %d @ %f %f\n", file, line, index, a, b);
+        exit(1);
     }
 }
 
 // unit test array check
 inline void ut_check_v(
-    void *A, void *B, U32 len, DataType dt, F32 threshold, std::string file, int line)
+    void *A, void *B, U32 len, DataType dt, F32 threshold, const char *file, int line)
 {
     F32 a = 0, b = 0;
     for (U32 i = 0; i < len; i++) {
@@ -186,13 +190,13 @@ inline void ut_check_v(
                 b = ((BIN8 *)B)[i];
                 break;
             default:
-                UNI_ERROR_LOG("unsupported data type in ut_check_v(array, array)\n");
+                UNI_ERROR_LOG("unsupported data type.\n");
         }
         ut_check_s(a, b, threshold, file, line, i);
     }
 }
 
-inline void ut_check_v(void *A, F32 val, U32 len, DataType dt, std::string file, int line)
+inline void ut_check_v(void *A, F32 val, U32 len, DataType dt, const char *file, int line)
 {
     F32 a;
     for (U32 i = 0; i < len; i++) {
@@ -220,7 +224,7 @@ inline void ut_check_v(void *A, F32 val, U32 len, DataType dt, std::string file,
                 a = ((BIN8 *)A)[i];
                 break;
             default:
-                UNI_ERROR_LOG("unsupported data type in ut_check_v(array, scalar)\n");
+                UNI_ERROR_LOG("unsupported data type.\n");
         }
         ut_check_s(a, val, 0, file, line, i);
     }
@@ -228,49 +232,26 @@ inline void ut_check_v(void *A, F32 val, U32 len, DataType dt, std::string file,
 
 inline void ut_check_a(void *A, void *B, U32 len, DataType dt)
 {
-    U32 e0, e1, e2, e3, e4, e5, e6;
-    e0 = 0;
-    e1 = 0;
-    e2 = 0;
-    e3 = 0;
-    e4 = 0;
-    e5 = 0;
-    e6 = 0;
+    const int num = 7;
+    F32 threshold[num];
+    F32 threshold_float[num] = {1, 0.1, 0.01, 0.001, 0.0001, 0.00001, 0};
+    F32 threshold_int8[num] = {30, 20, 10, 5, 3, 2, 0};
+    U32 count[num] = {0, 0, 0, 0, 0, 0, 0};
     F32 a = 1, b = 0, diff;
-    F32 d0, d1, d2, d3, d4, d5;
     F32 maxrel = -1.0;
     F32 maxabs = -1.0;
-    F32 max_a0, max_b0, max_a1, max_b1;
-    U32 max_n0, max_n1;
+    F32 max_a0 = 0, max_b0 = 0, max_a1 = 0, max_b1 = 0;
+    I32 max_n0 = 0, max_n1 = 0;
     switch (dt) {
         case DT_F32:
-            d0 = 1;
-            d1 = 0.1;
-            d2 = 0.01;
-            d3 = 0.001;
-            d4 = 0.0001;
-            d5 = 0.00001;
-            break;
-#ifdef _USE_FP16
         case DT_F16:
-            d0 = 1;
-            d1 = 0.1;
-            d2 = 0.01;
-            d3 = 0.001;
-            d4 = 0.0001;
-            d5 = 0.00001;
+            memcpy(threshold, threshold_float, sizeof(F32) * num);
             break;
-#endif
         case DT_U8:
-            d0 = 30;
-            d1 = 20;
-            d2 = 10;
-            d3 = 5;
-            d4 = 3;
-            d5 = 2;
+            memcpy(threshold, threshold_int8, sizeof(F32) * num);
             break;
         default:
-            UNI_ERROR_LOG("unsupported data type in ut_check_a(array, array)\n");
+            UNI_ERROR_LOG("unsupported data type.\n");
     }
 
     for (U32 i = 0; i < len; i++) {
@@ -302,10 +283,7 @@ inline void ut_check_a(void *A, void *B, U32 len, DataType dt)
             return;
         }
 
-        diff = a - b;
-        if (diff < 0) {
-            diff = -diff;
-        }
+        diff = UNI_ABS(a - b);
         if (diff > maxabs) {
             maxabs = diff;
             max_a0 = a;
@@ -319,64 +297,19 @@ inline void ut_check_a(void *A, void *B, U32 len, DataType dt)
             max_b1 = b;
             max_n1 = i;
         }
-        if (diff >= d0) {
-            e0++;
-            continue;
-        }
-        if (diff >= d1) {
-            e1++;
-            continue;
-        }
-        if (diff >= d2) {
-            e2++;
-            continue;
-        }
-        if (diff >= d3) {
-            e3++;
-            continue;
-        }
-        if (diff >= d4) {
-            e4++;
-            continue;
-        }
-        if (diff >= d5) {
-            e5++;
-            continue;
-        }
-        e6++;
-    }
-    std::cout << "abs(diff) >= " << std::scientific << d0 << " number = " << std::dec << e0
-              << std::endl;
-    std::cout << "abs(diff) >= " << std::scientific << d1 << " number = " << std::dec << e1
-              << std::endl;
-    std::cout << "abs(diff) >= " << std::scientific << d2 << " number = " << std::dec << e2
-              << std::endl;
-    std::cout << "abs(diff) >= " << std::scientific << d3 << " number = " << std::dec << e3
-              << std::endl;
-    std::cout << "abs(diff) >= " << std::scientific << d4 << " number = " << std::dec << e4
-              << std::endl;
-    std::cout << "abs(diff) >= " << std::scientific << d5 << " number = " << std::dec << e5
-              << std::endl;
-    std::cout << "others number = " << e6 << std::endl;
-    std::cout << "number " << max_n0 << " is "
-              << "maxabs = " << std::fixed << maxabs << " a = " << max_a0 << " b = " << max_b0
-              << std::endl;
-    std::cout << "number " << max_n1 << " is "
-              << "maxrel = " << std::fixed << maxrel << " a = " << max_a1 << " b = " << max_b1
-              << std::endl;
-}
-// benchmark time
-inline double ut_time_ms()
-{
-    struct timeval tv;
-    gettimeofday(&tv, NULL);
-    double time = tv.tv_sec * 1000.0 + tv.tv_usec / 1000.0;
-    return time;
-}
 
-inline double ut_time_s()
-{
-    return ut_time_ms() / 1000.0;
+        for (int j = 0; j < num; j++) {
+            if (diff >= threshold[j]) {
+                count[j]++;
+                break;
+            }
+        }
+    }
+    for (int j = 0; j < num; j++) {
+        printf("abs(diff) >= %ef, number = %u\n", threshold[j], count[j]);
+    }
+    printf("maxabs = %f, a = %f, b = %f @ %d\n", maxabs, max_a0, max_b0, max_n0);
+    printf("maxrel = %f, a = %f, b = %f @ %d\n", maxrel, max_a1, max_b1, max_n1);
 }
 
 // calculate GFLOPS
@@ -388,14 +321,7 @@ inline double ut_gflops(double ops, double time_ms)
 // uniform log message
 inline void ut_log(DataType dt, char *call, double ops, double time_ms)
 {
-    UNI_INFO_LOG("%ubit, %s,\tTIME %10.6lfms,\tGFLOPS %10.6lf\n", (U32)bytesOf(dt) * 8, call,
+    UNI_INFO_LOG("%2ubit, %s,\tTIME %8.3lfms,\tGFLOPS %8.3lf\n", (U32)bytesOf(dt) * 8, call,
         time_ms, ut_gflops(ops, time_ms));
 }
-
-inline void initialization_zero(void *ptr, int bytesOfNum)
-{
-    memset(ptr, 0, bytesOfNum);
-    return;
-}
-
 #endif

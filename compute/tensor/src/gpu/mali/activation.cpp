@@ -12,34 +12,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "sys.h"
-#include "types.h"
+
 #include "tensor_desc.h"
 #include "error.h"
 #include "gpu/mali/tensor_computing_mali.h"
 #include "gpu/mali/fp16/activation_mali_fp16.h"
-
-EE activation_infer_output_size_mali(TensorDesc inputDesc,
-    TensorDesc *outputDesc,
-    GCLMemDesc_t gclmemInputDesc,
-    GCLMemDesc_t gclmemOutputDesc)
-{
-    /*tensorDesc record cpu org data format info*/
-    /*gclmemDesc record gpu trans data format info*/
-    if (outputDesc) {
-        *outputDesc = inputDesc;
-    }
-
-    DataType idt;
-    DataFormat idf;
-    U32 iw, ih, ic, in;
-    tensorSelectGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw);
-    CHECK_STATUS(infer_gclmem_desc_ncwhc4(
-        iw, ih, ic, 0, 0, iw, ih, ic, idt, idt, gclmemInputDesc, gclmemOutputDesc));
-    if (gclmemInputDesc && gclmemOutputDesc) {
-        *gclmemOutputDesc = *gclmemInputDesc;
-    }
-    return SUCCESS;
-}
 
 inline EE activation_checkpara_mali(GCLHandle_t handle,
     TensorDesc inputDesc,
@@ -49,22 +26,21 @@ inline EE activation_checkpara_mali(GCLHandle_t handle,
     ActivationMode activationMode)
 {
     if (handle == nullptr || nullptr == input || nullptr == output) {
-        return NULL_POINTER;
+        CHECK_STATUS(NULL_POINTER);
     }
     if (inputDesc.df != outputDesc.df) {
-        return NOT_SUPPORTED;
-    }
-    if (input->desc.memFormat != DF_NCWHC4) {
-        return NOT_SUPPORTED;
-    }
-    if (output->desc.memFormat != DF_NCWHC4) {
-        return NOT_SUPPORTED;
+        CHECK_STATUS(NOT_SUPPORTED);
     }
     if (activationMode != ACTIVATION_NULL && activationMode != ACTIVATION_RELU &&
         activationMode != ACTIVATION_RELU6 && activationMode != ACTIVATION_H_SIGMOID &&
         activationMode != ACTIVATION_H_SWISH && activationMode != ACTIVATION_GELU &&
-        activationMode != ACTIVATION_TANH && activationMode != ACTIVATION_SIGMOID) {
-        return NOT_SUPPORTED;
+        activationMode != ACTIVATION_TANH && activationMode != ACTIVATION_SIGMOID &&
+        activationMode != ACTIVATION_ABS && activationMode != ACTIVATION_LOG &&
+        activationMode != ACTIVATION_NEG) {
+        CHECK_STATUS(NOT_SUPPORTED);
+    }
+    if (input->desc.memFormat != output->desc.memFormat) {
+        CHECK_STATUS(NOT_MATCH)
     }
     return SUCCESS;
 }

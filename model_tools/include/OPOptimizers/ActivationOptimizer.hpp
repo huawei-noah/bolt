@@ -21,7 +21,8 @@ class ActivationOptimizer : public OPOptimizer {
     {
         bool hasOptimized = false;
         for (int i = 0; i < spec->num_operator_specs; i++) {
-            if (OT_Conv == spec->ops[i].type || OT_Eltwise == spec->ops[i].type) {
+            if (OT_Conv == spec->ops[i].type || OT_Eltwise == spec->ops[i].type ||
+                OT_Tdnn == spec->ops[i].type) {
                 int prevOpIndex = i;
                 std::vector<std::pair<int, int>> nextOpIndexes = searchOperatorIndexByInput(spec,
                     spec->ops[prevOpIndex].output_tensors_name[0], prevOpIndex + 1,
@@ -62,6 +63,11 @@ class ActivationOptimizer : public OPOptimizer {
                 if (spec->ops[prevOpIndex].type == OT_Eltwise) {
                     spec->ops[prevOpIndex].ps.eltwise_spec.activation_type = ACTIVATION_RELU;
                     spec->ops[prevOpIndex].ps.eltwise_spec.activation_spec.relu_spec =
+                        spec->ops[atOpIndex].ps.relu_spec;
+                }
+                if (spec->ops[prevOpIndex].type == OT_Tdnn) {
+                    spec->ops[prevOpIndex].ps.tdnn_spec.activation_type = ACTIVATION_RELU;
+                    spec->ops[prevOpIndex].ps.tdnn_spec.activation_spec.relu_spec =
                         spec->ops[atOpIndex].ps.relu_spec;
                 }
                 setOperatorInvalid(spec, atOpIndex, true);

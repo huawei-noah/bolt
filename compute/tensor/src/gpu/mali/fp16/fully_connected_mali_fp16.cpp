@@ -11,10 +11,12 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "sys.h"
-#include "error.h"
-#include "types.h"
 #include "gpu/mali/fp16/fully_connected_mali_fp16.h"
+#include "gpu/mali/fp16/gemv_mali_fp16.h"
+#include "gpu/mali/fp16/matmul_mali_fp16.h"
+#include "gpu/mali/cl/kernel_option/conv_direct_opt.h"
+#include "gpu/mali/cl/kernel_option/gemm_tn_opt.h"
+#include "gpu/mali/cl/kernel_option/transpose_opt.h"
 
 inline EE fully_connected_checkpara_mali_fp16(
     TensorDesc inputDesc, TensorDesc filterDesc, TensorDesc outputDesc)
@@ -25,199 +27,230 @@ inline EE fully_connected_checkpara_mali_fp16(
     return SUCCESS;
 }
 
-inline EE fully_connected_core_mali_fp16(GCLHandle_t handle,
+inline EE fully_connected_gemv_mali_fp16(GCLHandle_t handle,
     TensorDesc inputDesc,
     const GCLMem_t input,
     TensorDesc filterDesc,
-    std::vector<GCLMem_t> filter,
+    GCLMem_t filter,
     TensorDesc biasDesc,
-    std::vector<GCLMem_t> bias,
+    GCLMem_t bias,
     U32 tmpBytes,
     GCLMem_t tmpBuf,
     TensorDesc outputDesc,
-    std::vector<GCLMem_t> output,
+    GCLMem_t output,
     ForwardRunInfoMali_t forwardRunInfo)
 {
-    UNUSED(biasDesc);
-    UNUSED(tmpBytes);
-    UNUSED(outputDesc);
-
-    U32 ih_str, iw_str, ih_off, iw_off, ihw_str;
-    U32 oh_str, ow_str, oh_off, ow_off;
-    U32 fw, fh, fc, fn;
-    cl_mem inbuf, fltbuf, biasmem, outbuf, tmp;
-    inbuf = input->mem;
-    fltbuf = filter[0]->mem;
-    biasmem = bias[0]->mem;
-    outbuf = output[0]->mem;
-    tmp = tmpBuf->mem;
-
-    tensorSelectGet(filterDesc, NULL, NULL, &fn, &fc, &fh, &fw);
-    ih_str = input->desc.stride[0];
-    iw_str = input->desc.stride[1];
-    ih_off = input->desc.offset[0];
-    iw_off = input->desc.offset[1];
-    oh_str = output[0]->desc.stride[0];
-    ow_str = output[0]->desc.stride[1];
-    oh_off = output[0]->desc.offset[0];
-    ow_off = output[0]->desc.offset[1];
-    ihw_str = ih_str * iw_str;
-    char kernelname[128];
-    Kernel kernel;
-    U32 gs[3];
-    U32 ls[3] = {0, 0, 0};
-    U32 dim = 3;
-    U32 item_w = forwardRunInfo->best_w[0];
-    U32 item_c = forwardRunInfo->best_c[0];
-    U32 item_k = forwardRunInfo->best_k[0];
-
-    if (fw == 1 && fh == 1) {
-        if (inputDesc.df == DF_NCHW || inputDesc.df == DF_NORMAL) {
-            U32 ic_str;
-            ic_str = filter[0]->desc.stride[1];
-            if (ih_str > 1 || iw_str > 1) {
-                CHECK_STATUS(NOT_SUPPORTED);
-            }
-            sprintf(kernelname, "conv_direct_spe_fwhs1_%d", item_c);
-            gs[0] = fn;
-            gs[1] = 1;
-            gs[2] = 1;
-            dim = 1;
-            CHECK_STATUS(gcl_create_kernel(handle, kernelname, &kernel));
-            CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, ihw_str, ic_str, ih_off, iw_off, oh_str,
-                ow_str, oh_off, ow_off, fn, 0, 0, gs[0], gs[1], inbuf, fltbuf, biasmem, outbuf));
-            gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelname);
-#ifdef _DEBUG
-            CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelname));
-            handle->t_total += handle->t_execute;
-#endif
-        }
-        if (inputDesc.df == DF_MKT) {
-            item_k = item_k >> 2;
-            U32 ic_str = input->desc.stride[2];
-            U32 ohw_str;
-            U32 step, k;
-            tensorSelectGet(outputDesc, NULL, NULL, NULL, &k, &step, NULL);
-            sprintf(kernelname, "conv_direct_s%d_%d%d%d", 1, 1, item_w, item_k);
-            for (U32 i = 0; i < filter.size(); ++i) {
-                fltbuf = filter[i]->mem;
-                biasmem = bias[i]->mem;
-                outbuf = output[i]->mem;
-                iw_str = input->desc.stride[0];
-                ih_str = input->desc.stride[1];
-                iw_off = input->desc.offset[0];
-                ih_off = input->desc.offset[1];
-                ow_str = output[i]->desc.stride[0];
-                oh_str = output[i]->desc.stride[1];
-                ow_off = output[i]->desc.offset[0];
-                oh_off = output[i]->desc.offset[1];
-                ohw_str = oh_str * ow_str;
-                if (ih_str != 1 || ih_off != 0) {
-                    CHECK_STATUS(NOT_SUPPORTED);
-                }
-                U32 oc = output[i]->desc.stride[2] * 4;
-                gs[0] = 1;
-                gs[1] = (step + item_w - 1) / item_w;
-                gs[2] = output[i]->desc.stride[2] / item_k;
-                CHECK_STATUS(gcl_create_kernel(handle, kernelname, &kernel));
-                CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, ihw_str, ic_str, ih_off, iw_off,
-                    oh_str, ohw_str, oh_off, ow_off, step, k, 1, 0, 0, gs[0], gs[1], inbuf, fltbuf,
-                    biasmem, outbuf));
-                gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelname);
-#ifdef _DEBUG
-                CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelname));
-                handle->t_total += handle->t_execute;
-#endif
-            }
-        }
-    } else {
-        U32 ihy_str, fhy_str, fhw_str, fwc_str;
-        ihy_str = ih_str * item_w;
-        fc = (fc + item_c - 1) / item_c;
-        fn = (fn + item_k - 1) / item_k;
-        fhy_str = fh * item_w;
-        fhw_str = fh * fw;
-        fwc_str = fw * fc;
-        CHECK_STATUS(gcl_create_kernel(handle, "fc_p1", &kernel));
-        CHECK_STATUS(gcl_set_kernelArgs(kernel, item_w, ih_str, iw_str, ih_off, iw_off, ihy_str,
-            ihw_str, fh, fw, fc, fn, fhy_str, fhw_str, fwc_str, fltbuf, inbuf, tmp));
-        gs[0] = fh;
-        gs[1] = item_w;
-        gs[2] = fn;
-        gcl_set_kernelVec(handle, kernel, dim, gs, ls, "fc_p1");
-#ifdef _DEBUG
-        CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, "fc_p1"));
-        handle->t_total += handle->t_execute;
-#endif
-        CHECK_STATUS(gcl_create_kernel(handle, "fc_p2", &kernel));
-        CHECK_STATUS(gcl_set_kernelArgs(
-            kernel, fh * item_w, fn, oh_str, ow_str, oh_off, ow_off, tmp, biasmem, outbuf));
-        U32 gs2 = fn;
-        U32 ls2 = 0;
-        dim = 1;
-        gcl_set_kernelVec(handle, kernel, dim, &gs2, &ls2, "fc_p2");
-#ifdef _DEBUG
-        CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, &gs2, &ls2, "fc_p2"));
-        handle->t_total += handle->t_execute;
-#endif
-    }
+    U32 tmpOff = 0;
+    CHECK_STATUS(gemv(handle, inputDesc, outputDesc, ACTIVATION_NULL, false, &tmpOff, tmpBuf, input,
+        bias, filter, output, forwardRunInfo));
     return SUCCESS;
 }
 
-EE fully_connected_transform_filter_bytes_mali_fp16(TensorDesc filterDesc,
-    GCLMemDesc_t gclmemFilterDesc,
-    U32 *bytes,
+inline bool gemm_need_reshape_input(GCLMemDesc desc)
+{
+    bool needReshape = false;
+    if (desc.memFormat == DF_NCHWC4) {
+        needReshape = true;
+    } else {
+        U32 iw_str, ih_str;
+        gclmem_get_desc_padding(desc, &iw_str, &ih_str, NULL, NULL, NULL);
+        if (iw_str != desc.dims[0] || ih_str != desc.dims[1] || desc.memType != GCL_MEM_BUF) {
+            for (U32 i = 2; i < desc.nDims; i++) {
+                if (desc.dims[i] > 1) {
+                    needReshape = true;
+                }
+            }
+        }
+    }
+    return needReshape;
+}
+
+inline EE gemm_reshape_input(GCLHandle_t handle,
+    TensorDesc inputDesc,
+    GCLMem_t input,
+    GCLMem_t inputTran,
+    U32 *tmpOff,
+    GCLMem_t tmp)
+{
+    MemTransFormType type = (input->desc.memFormat == DF_NCHW) ? NCHW_TO_NCHW : NCHWC4_TO_NCHW;
+    DataType dt = inputDesc.dt;
+    U32 dim[3] = {1, 1, 1};
+    for (U32 i = 0; i < inputDesc.nDims; i++) {
+        if (i < 2) {
+            dim[i] = inputDesc.dims[i];
+        } else {
+            dim[2] = dim[2] * inputDesc.dims[i];
+        }
+    }
+    inputTran->desc = input->desc;
+    inputTran->desc.df = DF_NCHW;
+    U32 str[3] = {dim[0], dim[1], dim[2]};
+    U32 off[3] = {0, 0, 0};
+    MemFlags flag = CL_MEM_READ_WRITE;
+    CHECK_STATUS(
+        gclmem_set_desc_padding(&(inputTran->desc), str, off, DT_F16, DF_NCHW, GCL_MEM_BUF, flag));
+    CHECK_STATUS(gcl_create_sub_buffer(inputTran->desc.byteSize, tmpOff, tmp, &inputTran->mem));
+    CHECK_STATUS(ocl_data_trans_form(handle, input, inputTran, 0, 0, type));
+    return SUCCESS;
+}
+
+inline EE gemm_trans_fc_input(GCLHandle_t handle,
+    TensorDesc inputDesc,
+    U32 item,
+    GCLMem_t input,
+    GCLMem_t inputTran,
+    U32 *tmpOff,
+    GCLMem_t tmpBuf,
+    GCLMem_t tmpImg)
+{
+    GCLMem_t inputPtr = input;
+    GCLMem curMem;
+    OclMemory tmpOclMem;
+    OclMemoryImg tmpOclImg;
+    bool needReshapeDesc = false;
+    for (U32 i = 2; i < inputDesc.nDims; i++) {
+        if (inputDesc.dims[i] > 1) {
+            needReshapeDesc = true;
+        }
+    }
+    if (needReshapeDesc) {
+        for (U32 i = 2; i < inputDesc.nDims; i++) {
+            inputDesc.dims[1] *= inputDesc.dims[i];
+            inputDesc.dims[i] = 1;
+        }
+        tmpOclMem.resize(inputDesc);
+        curMem.desc = tmpOclMem.get_desc();
+        curMem.mem = input->mem;
+        inputPtr = &curMem;
+    }
+
+    DataType dt = inputDesc.dt;
+    U32 w = inputDesc.dims[0];
+    U32 h = inputDesc.dims[1];
+    U32 c = 1;
+
+    inputDesc.dims[0] = h;
+    inputDesc.dims[1] = w;
+    OclMemory *memPtr = (tmpImg) ? (OclMemory *)(&tmpOclImg) : &tmpOclMem;
+    memPtr->resize(inputDesc);
+    U32 pr = ALIGN(h, item) - h;
+    memPtr->padding(0, pr, 0, 0);
+    inputTran->desc = memPtr->get_desc();
+    if (tmpImg) {
+        inputTran->mem = tmpImg->mem;
+    } else {
+        CHECK_STATUS(
+            gcl_create_sub_buffer(inputTran->desc.byteSize, tmpOff, tmpBuf, &inputTran->mem));
+    }
+    CHECK_STATUS(trans_matmul_input(handle, inputPtr, inputTran, dt, w, h, c));
+    return SUCCESS;
+}
+
+inline EE fully_connected_gemm_mali_fp16(GCLHandle_t handle,
+    TensorDesc inputDesc,
+    const GCLMem_t input,
+    TensorDesc filterDesc,
+    GCLMem_t filter,
+    TensorDesc biasDesc,
+    GCLMem_t bias,
+    U32 tmpBytes,
+    GCLMem_t tmpBuf,
+    GCLMem_t tmpImg,
+    TensorDesc outputDesc,
+    GCLMem_t output,
     ForwardRunInfoMali_t forwardRunInfo)
 {
-    U32 fw, fh, fc, fn;
-    tensorSelectGet(filterDesc, NULL, NULL, &fn, &fc, &fh, &fw);
+    U32 M, N, K;
+    cl_mem matrixA, matrixB, biasbuf, matrixC, tmp;
+    matrixB = filter->mem;
+    matrixC = output->mem;
+    tmp = tmpBuf->mem;
+    OclGemmBiasMode biasMode = (bias) ? USE_BIAS_MATCH_B : NO_BIAS;
+    biasbuf = (biasMode == USE_BIAS_MATCH_B) ? bias->mem : tmp;
+    U32 item_n = forwardRunInfo->best_h[0];
+    U32 item_m = forwardRunInfo->best_k[0];
+    GCLMem_t inputPtr = input;
+    GCLMem inputTran[2];
+    U32 tmpOff = 0;
+    if (gemm_need_reshape_input(input->desc)) {
+        CHECK_STATUS(gemm_reshape_input(handle, inputDesc, inputPtr, inputTran, &tmpOff, tmpBuf));
+        inputPtr = inputTran;
+    }
+    CHECK_STATUS(gemm_trans_fc_input(
+        handle, inputDesc, item_m, inputPtr, inputTran + 1, &tmpOff, tmpBuf, tmpImg));
+    matrixA = inputTran[1].mem;
+    M = 1;
+    for (U32 i = 1; i < inputDesc.nDims; i++) {
+        M *= inputDesc.dims[i];
+    }
+    if (M != outputDesc.dims[1]) {
+        CHECK_STATUS(NOT_MATCH);
+    }
+    M = ALIGN(M, item_m);
+    K = inputDesc.dims[0];
+    N = ALIGN(outputDesc.dims[0], item_n);
+
+    U32 ow, oh, oc;
+    U32 oh_str, ow_str, oh_off, ow_off;
+    CHECK_STATUS(gclmem_get_desc_dim(output->desc, NULL, NULL, NULL, &oc, &oh, &ow));
+    CHECK_STATUS(gclmem_get_desc_padding(output->desc, &ow_str, &oh_str, NULL, &ow_off, &oh_off));
+
+    U32 A_str = M * K;
+    U32 B_str = N * K;
+    U32 C_str = ow_str * oh_str;
+    U32 A_off = 0;
+    U32 B_off = 0;
+    U32 C_off = oh_off * ow_str + ow_off;
+
+    U32 gs[3] = {(ow + item_n - 1) / item_n, (oh + item_m - 1) / item_m, 1};
+    U32 ls[3] = {0, 0, 0};
+    U32 dim = 3;
+    char kernelName[128];
+    Kernel kernel;
+    KernelOpt kernelOpt;
+    GCLMemType amt = inputTran[1].desc.memType;
+    GCLMemType bmt = filter->desc.memType;
+    CHECK_STATUS(set_gemm_tn_opt_mali(item_m, item_n, biasMode, false, ACTIVATION_NULL, DT_F16, amt,
+        bmt, output->desc.memType, kernelName, &kernelOpt));
+    CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
+    CHECK_STATUS(gcl_set_kernelArgs(kernel, M, N, K, A_str, B_str, C_str, A_off, B_off, C_off,
+        ow_str, ow, oh, oc, gs[0], gs[1], matrixA, matrixB, biasbuf, matrixC));
+    gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
+    return SUCCESS;
+}
+
+inline TensorDesc gemm_transform_filter_desc(
+    TensorDesc filterDesc, U32 item_h, U32 item_c, U32 item_k)
+{
+    U32 fc = filterDesc.dims[filterDesc.nDims - 2];
+    U32 fn = filterDesc.dims[filterDesc.nDims - 1];
+    TensorDesc desc;
+    desc.df = DF_NCHW;
+    desc.dt = DT_F16;
+    desc.nDims = 4;
+    desc.dims[3] = 1;
+    desc.dims[2] = 1;
+    desc.dims[1] = fc;
+    desc.dims[0] = ALIGN(fn, item_h);
+    return desc;
+}
+
+inline TensorDesc transform_filter_desc(TensorDesc filterDesc, U32 item_h, U32 item_c, U32 item_k)
+{
+    if (item_k == 0) {  //spe direct for gemv
+        return gemv_transform_filter_desc(filterDesc, item_h, item_c, item_k);
+    } else {
+        return gemm_transform_filter_desc(filterDesc, item_h, item_c, item_k);
+    }
+}
+
+EE fully_connected_transform_filter_bytes_mali_fp16(
+    TensorDesc filterDesc, ForwardRunInfoMali_t forwardRunInfo, TensorDesc *ftmDesc)
+{
+    U32 item_h = forwardRunInfo->best_h[0];
     U32 item_c = forwardRunInfo->best_c[0];
     U32 item_k = forwardRunInfo->best_k[0];
-    U32 s0 = 0;
-    U32 s1 = 0;
-    U32 s2 = 0;
-    U32 num = 0;
-    U32 byteSize;
-
-    if (item_k == 0) {
-        s0 = fn;
-        s1 = (fc + item_c - 1) / item_c;
-        s2 = 1;
-        DataFormat df = DF_CHWNC4;
-        if (item_c == 8) {
-            df = DF_CHWNC8;
-        }
-        if (item_c == 16) {
-            df = DF_CHWNC16;
-        }
-        gclmemFilterDesc->memFormat = df;
-        num = s0 * s1 * s2 * item_c;
-    } else if (fw == 1 && fh == 1) {
-        s0 = item_k >> 2;
-        s1 = (fc + item_c - 1) / item_c;
-        s2 = (fn + item_k - 1) / item_k;
-        gclmemFilterDesc->memFormat = DF_NCHWN4C4;
-        num = s0 * s1 * s2 * item_c * item_k / (item_k >> 2);
-    } else {
-        s0 = fh;
-        s1 = fw;
-        s2 = ((fc + item_c - 1) / item_c) * ((fn + item_k - 1) / item_k);
-        num = s0 * s1 * s2 * item_c * item_k;
-        gclmemFilterDesc->memFormat = DF_NCWHN4C4;
-    }
-    byteSize = num * bytesOf(DT_F16);
-    gclmemFilterDesc->stride[0] = s0;
-    gclmemFilterDesc->stride[1] = s1;
-    gclmemFilterDesc->stride[2] = s2;
-    gclmemFilterDesc->offset[0] = 0;
-    gclmemFilterDesc->offset[1] = 0;
-    gclmemFilterDesc->offset[2] = 0;
-    gclmemFilterDesc->num = num;
-    gclmemFilterDesc->byteSize = byteSize;
-    gclmemFilterDesc->memType = GCL_MEM_BUF;
-    gclmemFilterDesc->flags = CL_MEM_READ_WRITE;
-    gclmemFilterDesc->host_ptr = NULL;
-    *bytes = 0;
+    *ftmDesc = transform_filter_desc(filterDesc, item_h, item_c, item_k);
     return SUCCESS;
 }
 
@@ -225,96 +258,64 @@ EE fully_connected_transform_filter_mali_fp16(GCLHandle_t handle,
     TensorDesc filterDesc,
     GCLMem_t filter,
     TensorDesc *fltmemDesc,
-    std::vector<GCLMem_t> fltmem,
+    GCLMem_t fltmem,
     ForwardRunInfoMali_t forwardRunInfo)
 {
-    DataType fdt;
-    DataFormat fdf;
-    U32 fw, fh, fc, fn;
-    tensorSelectGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw);
-    char kernelname[128];
-    Kernel kernel;
-    U32 gs[3];
-    U32 ls[3] = {0, 0, 0};
-    U32 dim = 3;
-    U32 fwh = fw * fh;
+    U32 item_h = forwardRunInfo->best_h[0];
     U32 item_c = forwardRunInfo->best_c[0];
     U32 item_k = forwardRunInfo->best_k[0];
-    if (fw == 1 && fh == 1) {
-        if (item_k == 0) {
-            sprintf(kernelname, "conv_direct_trans_fltbuf_%d%d", item_c, item_k);
-            CHECK_STATUS(gcl_get_kernel_from_map(handle, kernelname, &kernel));
-            CHECK_STATUS(gcl_set_kernelArgs(kernel, fwh, fc, fn, filter->mem, fltmem[0]->mem));
-            gs[0] = fwh;
-            gs[1] = (fc + item_c - 1) / item_c;
-            gs[2] = fn;
-            CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelname));
-        } else {
-            sprintf(kernelname, "conv_direct_trans_fltbuf_%d%d", item_c, item_k);
-            CHECK_STATUS(gcl_get_kernel_from_map(handle, kernelname, &kernel));
-            if (fltmem.size() == 1) {
-                CHECK_STATUS(gcl_set_kernelArgs(kernel, fwh, fc, fn, filter->mem, fltmem[0]->mem));
-                gs[0] = fwh;
-                gs[1] = (fc + item_c - 1) / item_c;
-                gs[2] = (fn + item_k - 1) / item_k * item_k;
-                CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelname));
-            } else {
-                GCLMem_t tmp = gcl_create_gclmem();
-                tmp->desc.byteSize = 0;
-                for (U32 i = 0; i < fltmem.size(); ++i) {
-                    tmp->desc.byteSize += fltmem[i]->desc.byteSize;
-                }
-                tmp->desc.memType = GCL_MEM_BUF;
-                tmp->desc.flags = CL_MEM_READ_WRITE;
-                CHECK_STATUS(gcl_create_memory(handle, tmp));
-                CHECK_STATUS(gcl_set_kernelArgs(kernel, fwh, fc, fn, filter->mem, tmp->mem));
-                gs[0] = fwh;
-                gs[1] = (fc + item_c - 1) / item_c;
-                gs[2] = (fn + item_k - 1) / item_k * item_k;
-                CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelname));
-                U32 offset[2] = {0, 0};
-                for (U32 i = 0; i < fltmem.size(); i++) {
-                    U32 size = fltmem[i]->desc.byteSize;
-                    CHECK_STATUS(gcl_trans_memory(
-                        handle, tmp, fltmem[i], &size, DEVICE_BUF_TO_BUF, CL_TRUE, offset));
-                    offset[0] += size;
-                }
-                gcl_destroy_gclmem(tmp);
-            }
-        }
+    if (item_k == 0) {
+        CHECK_STATUS(gemv_transform_filter_mali_fp16(
+            handle, filterDesc, filter, fltmemDesc, fltmem, forwardRunInfo));
     } else {
-        sprintf(kernelname, "fc_trans_fltbuf_%d%d", item_c, item_k);
-        CHECK_STATUS(gcl_get_kernel_from_map(handle, kernelname, &kernel));
-        CHECK_STATUS(gcl_set_kernelArgs(kernel, fw, fh, fwh, fc, fn, filter->mem, fltmem[0]->mem));
-        gs[0] = fw;
-        gs[1] = fh;
-        gs[2] = (fc + item_c - 1) / item_c * ((fn + item_k - 1) / item_k) * item_k;
-        CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelname));
+        U32 w = filterDesc.dims[0];
+        U32 h = filterDesc.dims[1];
+        U32 c = 1;
+        CHECK_STATUS(trans_matmul_input(handle, filter, fltmem, filterDesc.dt, w, h, c, false));
+        *fltmemDesc = transform_filter_desc(filterDesc, item_h, item_c, item_k);
     }
-    *fltmemDesc = tensor4df(fdt, fdf, fn, fc, fh, fw);
-#ifdef _DEBUG
-    CHECK_STATUS(gcl_print_memory<F16>(handle, filter, "fc_filter_org"));
-    for (U32 i = 0; i < fltmem.size(); ++i) {
-        CHECK_STATUS(gcl_print_memory<F16>(handle, fltmem[i], "fc_filter_tran"));
-    }
-#endif
     return SUCCESS;
 }
 
-EE fully_connected_infer_forward_tmp_bytes_mali_fp16(
-    TensorDesc inputDesc, TensorDesc filterDesc, U32 *bytes, ForwardRunInfoMali_t forwardRunInfo)
+EE fully_connected_infer_forward_tmp_bytes_mali_fp16(TensorDesc inputDesc,
+    TensorDesc filterDesc,
+    TensorDesc outputDesc,
+    GCLMemDesc gclmemInputDesc,
+    U32 *bytes,
+    ForwardRunInfoMali_t forwardRunInfo)
 {
-    U32 fn, fw, fh;
-    tensorSelectGet(filterDesc, NULL, NULL, &fn, NULL, &fh, &fw);
-    if (fh == 1 && fw == 1) {
-        *bytes = 0;
+    U32 item_k = forwardRunInfo->best_k[0];
+    if (item_k == 0) {
+        CHECK_STATUS(
+            gemv_infer_forward_tmp_bytes_mali_fp16(inputDesc, outputDesc, bytes, forwardRunInfo));
     } else {
-        DataType dt;
-        U32 ic, ih, iw;
-        tensorSelectGet(inputDesc, &dt, NULL, NULL, &ic, &ih, &iw);
-        U32 item_w = forwardRunInfo->best_w[0];
-        U32 item_k = forwardRunInfo->best_k[0];
-        *bytes = ih * item_w * ((fn + item_k - 1) / item_k * item_k) * bytesOf(dt);
+        U32 size = 0;
+        bool useImg = check_qualcomm_device();
+        if (gemm_need_reshape_input(gclmemInputDesc)) {
+            size += ALIGN(tensorNumBytes(inputDesc), BUFFER_ALIGN_BASE);
+        }
+        DataType dt = inputDesc.dt;
+        U32 iw = inputDesc.dims[0];
+        U32 ih = 1;
+        for (U32 i = 1; i < inputDesc.nDims; i++) {
+            ih = ih * inputDesc.dims[i];
+        }
+        if (useImg) {
+            U32 width = (ih + 3) / 4;
+            U32 height = iw;
+            U32 depth = 1;
+            if (CHECK_MEET_IMAGE_LIMITS(width, height, depth)) {
+                bytes[1] = width;
+                bytes[2] = height;
+                bytes[3] = depth;
+            } else {
+                useImg = false;
+            }
+        }
+        if (!useImg) {
+            size += ALIGN(ih, item_k) * iw * bytesOf(dt);
+        }
+        bytes[0] = size;
     }
     return SUCCESS;
 }
@@ -323,20 +324,24 @@ EE fully_connected_mali_fp16(GCLHandle_t handle,
     TensorDesc inputDesc,
     const GCLMem_t input,
     TensorDesc filterDesc,
-    std::vector<GCLMem_t> filter,
+    GCLMem_t filter,
     TensorDesc biasDesc,
-    std::vector<GCLMem_t> bias,
+    GCLMem_t bias,
     U32 tmpBytes,
-    GCLMem_t tmpBuf,
+    std::vector<GCLMem_t> tmp,
     TensorDesc outputDesc,
-    std::vector<GCLMem_t> output,
+    GCLMem_t output,
     ForwardRunInfoMali_t forwardRunInfo)
 {
     CHECK_STATUS(fully_connected_checkpara_mali_fp16(inputDesc, filterDesc, outputDesc));
-    for (U32 i = 0; i < output.size(); i++) {
-        CHECK_STATUS(fill_output_zero(handle, output[i], outputDesc));
+    CHECK_STATUS(fill_output_zero(handle, output, outputDesc));
+    U32 row = outputDesc.dims[1];
+    if (row == 1) {
+        CHECK_STATUS(fully_connected_gemv_mali_fp16(handle, inputDesc, input, filterDesc, filter,
+            biasDesc, bias, tmpBytes, tmp[0], outputDesc, output, forwardRunInfo));
+    } else {
+        CHECK_STATUS(fully_connected_gemm_mali_fp16(handle, inputDesc, input, filterDesc, filter,
+            biasDesc, bias, tmpBytes, tmp[0], tmp[1], outputDesc, output, forwardRunInfo));
     }
-    CHECK_STATUS(fully_connected_core_mali_fp16(handle, inputDesc, input, filterDesc, filter,
-        biasDesc, bias, tmpBytes, tmpBuf, outputDesc, output, forwardRunInfo));
     return SUCCESS;
 }

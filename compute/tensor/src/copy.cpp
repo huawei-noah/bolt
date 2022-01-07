@@ -12,28 +12,18 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "tensor_computing.h"
-#ifdef _USE_MALI
+#ifdef _USE_GPU
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
 
 EE copy_infer_output_size(std::vector<Tensor *> inputTensor, ArchInfo_t archInfo)
 {
     auto arch = archInfo->arch;
-    std::vector<TensorDesc> inputDesc = get_desc_from_tensor_ptrs(inputTensor);
-    EE ret = NOT_SUPPORTED;
-    if (IS_MALI_GPU(arch)) {
-#ifdef _USE_MALI
-        std::vector<GCLMemDesc> gclmemInputDescs;
-        for (auto p : inputTensor) {
-            gclmemInputDescs.push_back(ocl_get_desc(*p));
-        }
-        ret = copy_infer_output_size_mali(inputDesc, gclmemInputDescs.data());
-        for (U32 i = 0; i < inputTensor.size(); i++) {
-            ocl_set_desc(inputTensor[i], gclmemInputDescs[i]);
-        }
+    if (IS_GPU(arch)) {
+#ifdef _USE_GPU
 #endif
     }
-    return ret;
+    return SUCCESS;
 }
 
 EE copy(std::vector<Tensor> inputTensor,
@@ -49,16 +39,25 @@ EE copy(std::vector<Tensor> inputTensor,
     std::vector<void *> input = get_data_from_tensors<void *>(inputTensor, arch);
 
     EE ret = NOT_SUPPORTED;
-    if (IS_MALI_GPU(arch)) {
-#ifdef _USE_MALI
+    if (IS_GPU(arch)) {
+#ifdef _USE_GPU
         ret = copy_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc, input, srcOffset,
             dstOffset, srcStride, dstStride, length);
 #endif
 #ifdef _USE_CPU
     } else {
-        memcpy((U8 *)input[1] + bytesOf(inputDesc[1].dt) * dstOffset,
-            (U8 *)input[0] + bytesOf(inputDesc[0].dt) * srcOffset,
-            length * bytesOf(inputDesc[0].dt));
+        U32 srcIndex = bytesOf(inputDesc[0].dt) * srcOffset;
+        U32 dstIndex = bytesOf(inputDesc[1].dt) * dstOffset;
+        U32 copyLength = length * bytesOf(inputDesc[0].dt);
+        if (dstIndex + copyLength > inputTensor[1].bytes()) {
+            UNI_ERROR_LOG("copy %u bytes to dst tensor(%u) beyond size(%u).\n", copyLength,
+                dstIndex, inputTensor[1].bytes());
+        }
+        if (srcIndex + copyLength > inputTensor[0].bytes()) {
+            UNI_ERROR_LOG("copy %u bytes from src tensor(%u) beyond size(%u).\n", copyLength,
+                srcIndex, inputTensor[0].bytes());
+        }
+        memcpy((U8 *)input[1] + dstIndex, (U8 *)input[0] + srcIndex, copyLength);
         ret = SUCCESS;
 #endif
     }

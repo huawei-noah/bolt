@@ -40,11 +40,6 @@ int poolingTest(int argc, char **argv, DataType dt)
     p.padding_left = atoi(argv[16]);
     p.padding_right = atoi(argv[17]);
 
-    ArchInfo archInfo;
-    archInfo.arch = UT_ARCH;
-    ArchInfo archInfo_org;
-    archInfo_org.arch = CPU_GENERAL;
-
     TensorDesc inputDesc;
     if (it == 1) {
         inputDesc = tensor4df(dt, DF_NCHWC8, in, ic, ih, iw);
@@ -54,29 +49,30 @@ int poolingTest(int argc, char **argv, DataType dt)
     Tensor inputTensor = Tensor::alloc_sized<CPUMem>(inputDesc);
     U32 input_len = inputTensor.length();
     U8 *input = ut_input_v(input_len, dt, UT_INIT_RANDOM);
-    memcpy(get_ptr_from_tensor(inputTensor, UT_ARCH), input, inputTensor.bytes());
+    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, inputTensor.bytes());
 
     // set output
     Tensor outputTensor;
-    CHECK_STATUS(pooling_infer_output_size(&inputTensor, p, &outputTensor, &archInfo));
+    CHECK_STATUS(pooling_infer_output_size(&inputTensor, p, &outputTensor, &UT_CPU_ARCHINFO));
     outputTensor.alloc();
     TensorDesc outputDesc = outputTensor.get_desc();
     Tensor outputTensorRef = Tensor::alloc_sized<CPUMem>(outputDesc);
     U32 output_len = outputTensor.length();
     Tensor tmpTensor;
     if (UT_CHECK) {
-        CHECK_STATUS(pooling(inputTensor, p, tmpTensor, outputTensor, &archInfo));
+        CHECK_STATUS(pooling(inputTensor, p, tmpTensor, outputTensor, &UT_CPU_ARCHINFO));
 
-        CHECK_STATUS(pooling(inputTensor, p, tmpTensor, outputTensorRef, &archInfo_org));
+        CHECK_STATUS(pooling(inputTensor, p, tmpTensor, outputTensorRef, &UT_SERIAL_ARCHINFO));
         // check
-        ut_check_v(get_ptr_from_tensor(outputTensor, UT_ARCH),
-            get_ptr_from_tensor(outputTensorRef, UT_ARCH), output_len, dt, 0.05, __FILE__, __LINE__);
+        ut_check_v(get_ptr_from_tensor(outputTensor, CPU_GENERAL),
+            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), output_len, dt, 0.05, __FILE__,
+            __LINE__);
     }
 
     // benchmark
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        CHECK_STATUS(pooling(inputTensor, p, tmpTensor, outputTensor, &archInfo));
+        CHECK_STATUS(pooling(inputTensor, p, tmpTensor, outputTensor, &UT_CPU_ARCHINFO));
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;

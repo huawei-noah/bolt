@@ -13,12 +13,11 @@
 
 #ifndef _CONCAT_MALI_FP16
 #define _CONCAT_MALI_FP16
-#include "sys.h"
-#include "error.h"
-#include "types.h"
-#include "tensor_computing_type.h"
 
-EE concat_infer_forward_tmp_bytes_mali_fp16(std::vector<TensorDesc> inputDesc, U32 *bytes);
+#include "gpu/mali/fp16/tensor_computing_fp16.h"
+
+EE concat_infer_forward_tmp_bytes_mali_fp16(
+    std::vector<TensorDesc> inputDesc, std::vector<GCLMemDesc> gclmemInputDesc, U32 *bytes);
 
 EE concat_mali_fp16(GCLHandle_t handle,
     std::vector<TensorDesc> inputDesc,

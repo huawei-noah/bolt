@@ -11,9 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "sys.h"
-#include "error.h"
-#include "types.h"
 #include "gpu/mali/fp16/embedding_mali_fp16.h"
 
 inline EE embedding_checkpara_mali_fp16(TensorDesc weightDesc, TensorDesc outputDesc)
@@ -33,36 +30,35 @@ inline EE embedding_core_mali_fp16(GCLHandle_t handle,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
-    UNUSED(weightDesc);
-    UNUSED(outputDesc);
-    U32 step = inputDesc.dims[0];
-    U32 on = p.num_output;
-    U32 oh_str = output->desc.stride[0];
-    U32 ow_str = output->desc.stride[1];
-    U32 oc_str = output->desc.stride[2];
-    U32 oh_off = output->desc.offset[0];
-    U32 ow_off = output->desc.offset[1];
-    if (ow_str != 1 || oh_off != 0 || ow_off != 0) {
-        CHECK_STATUS(NOT_SUPPORTED);
-    }
+    U32 ow, oh, oc;
+    U32 iw_str, iw_off, ih_off;
+    U32 fw_str, fw_off, fh_off;
+    U32 ow_str, oh_str, ow_off, oh_off;
+    CHECK_STATUS(gclmem_get_desc_padding(input->desc, &iw_str, NULL, NULL, &iw_off, &ih_off));
+    CHECK_STATUS(gclmem_get_desc_padding(weight->desc, &fw_str, NULL, NULL, &fw_off, &fh_off));
+    CHECK_STATUS(gclmem_get_desc_dim(output->desc, NULL, NULL, NULL, &oc, &oh, &ow));
+    CHECK_STATUS(gclmem_get_desc_padding(output->desc, &ow_str, &oh_str, NULL, &ow_off, &oh_off));
     cl_mem inbuf, weibuf, outbuf;
     inbuf = input->mem;
     weibuf = weight->mem;
     outbuf = output->mem;
+    U32 i_off = ih_off * iw_str + iw_off;
+    U32 f_off = fh_off * fw_str + fw_off;
+    U32 o_off = oh_off * ow_str + ow_off;
 
     if (!p.transpose) {
-        U32 gs[2] = {oc_str, step};
-        U32 ls[2] = {0, 0};
-        U32 dim = 2;
+        U32 gs[3] = {(ow + 3) / 4, oh, oc};
+        U32 ls[3] = {0, 0, 0};
+        U32 dim = 3;
         Kernel kernel;
-        CHECK_STATUS(gcl_create_kernel(handle, "embedding", &kernel));
-        CHECK_STATUS(gcl_set_kernelArgs(
-            kernel, step, on, oc_str, oh_str, oh_off, ow_off, inbuf, weibuf, outbuf));
-        gcl_set_kernelVec(handle, kernel, dim, gs, ls, "embedding");
-#ifdef _DEBUG
-        CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, "embedding"));
-        CHECK_STATUS(gcl_print_memory<F16>(handle, output, "embedding_output"));
-#endif
+        KernelOpt kernelOpt;
+        char kernelName[128];
+        CHECK_STATUS(
+            set_common_opt(DT_F16, GCL_MEM_BUF, GCL_MEM_BUF, "embedding", kernelName, &kernelOpt));
+        CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
+        CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, fw_str, ow_str, oh_str, i_off, f_off, o_off,
+            ow, gs[0], gs[1], inbuf, weibuf, outbuf));
+        gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
         return SUCCESS;
     } else {
         return NOT_SUPPORTED;

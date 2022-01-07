@@ -15,6 +15,9 @@
 #include <getopt.h>
 #include "inference.hpp"
 #include "data_loader.hpp"
+#include "profiling.h"
+#include <math.h>
+#include <float.h>
 
 char *modelPath = (char *)"";
 std::string inputData = "";
@@ -22,24 +25,26 @@ char *affinityPolicyName = (char *)"CPU_AFFINITY_HIGH_PERFORMANCE";
 char *algorithmMapPath = (char *)"";
 int loopTime = 1;
 int warmUp = 10;
+int threadsNum = OMP_MAX_NUM_THREADS;
 
 void print_benchmark_usage()
 {
-    std::cout << "benchmark usage: (<> must be filled in with exact value; [] is optional)\n"
-                 "./benchmark -m <boltModelPath> -i [inputDataPath] -a [affinityPolicyName] -p "
-                 "[algorithmMapPath] -l [loopTime]\n"
-                 "\nParameter description:\n"
-                 "1. -m <boltModelPath>: The path where .bolt is stored.\n"
-                 "2. -i [inputDataPath]: The input data absolute path. If not input the option, "
-                 "benchmark will run with fake data.\n"
-                 "3. -a [affinityPolicyName]: The affinity policy. If not input the option, "
-                 "affinityPolicyName is CPU_AFFINITY_HIGH_PERFORMANCE.Or you can only choose one "
-                 "of {CPU_AFFINITY_HIGH_PERFORMANCE, CPU_AFFINITY_LOW_POWER, GPU}.\n"
-                 "4. -p [algorithmMapPath]: The algorithm configration path.\n"
-                 "5. -l [loopTime]: The running loopTimes.\n"
-                 "6. -w [warmUp]: WarmUp times. The default value is 10.\n"
-                 "Example: ./benchmark -m /local/models/resnet50_f16.bolt"
-              << std::endl;
+    printf("benchmark usage: (<> must be filled in with exact value; [] is optional)\n"
+           "./benchmark -m <boltModelPath> -i [inputDataPath] -a [affinityPolicyName] -p "
+           "[algorithmMapPath] -l [loopTime]\n"
+           "\nParameter description:\n"
+           "1. -m <boltModelPath>: The path where .bolt is stored.\n"
+           "2. -i [inputDataPath]: The input data absolute path. If not input the option, "
+           "benchmark will run with fake data.\n"
+           "3. -a [affinityPolicyName]: The affinity policy. If not input the option, "
+           "affinityPolicyName is CPU_AFFINITY_HIGH_PERFORMANCE.Or you can only choose one of "
+           "{CPU_AFFINITY_HIGH_PERFORMANCE, CPU_AFFINITY_LOW_POWER, GPU}.\n"
+           "4. -p [algorithmMapPath]: The algorithm configration path.\n"
+           "5. -l [loopTime]: The running loopTimes. The default value is %d.\n"
+           "6. -w [warmUp]: WarmUp times. The default value is %d.\n"
+           "7. -t [threadsNum]: Parallel threads num. The default value is %d.\n"
+           "Example: ./benchmark -m /local/models/resnet50_f16.bolt\n",
+        loopTime, warmUp, threadsNum);
 }
 
 void parse_options(int argc, char *argv[])
@@ -55,7 +60,7 @@ void parse_options(int argc, char *argv[])
     }
 
     int option;
-    const char *optionstring = "m:i:a:p:l:w:";
+    const char *optionstring = "m:i:a:p:l:w:t:";
     while ((option = getopt(argc, argv, optionstring)) != -1) {
         switch (option) {
             case 'm':
@@ -82,6 +87,10 @@ void parse_options(int argc, char *argv[])
                 std::cout << "option is -w [warmUp], value is: " << optarg << std::endl;
                 warmUp = atoi(optarg);
                 break;
+            case 't':
+                std::cout << "option is -t [threadsNum], value is: " << optarg << std::endl;
+                threadsNum = atoi(optarg);
+                break;
             default:
                 std::cout << "Input option gets error, please check the params meticulously.\n";
                 print_benchmark_usage();
@@ -93,14 +102,11 @@ void parse_options(int argc, char *argv[])
 std::map<std::string, std::shared_ptr<U8>> create_tensors_from_path(
     std::string dataPath, std::shared_ptr<CNN> pipeline)
 {
-    std::vector<std::string> inputNames = pipeline->get_model_input_tensor_names();
-    std::map<std::string, std::shared_ptr<Tensor>> inMap = pipeline->get_inputs();
+    std::map<std::string, TensorDesc> inputDescMap = pipeline->get_input_desc();
     std::vector<DataType> sourceDataTypes;
     std::vector<TensorDesc> inputDescs;
-    for (int i = 0; i < (int)(inputNames.size()); i++) {
-        std::string curName = inputNames[i];
-        TensorDesc curDesc = (*(inMap[curName])).get_desc();
-        std::cout << "Input Tensor Dimension: " << tensorDesc2Str(curDesc) << std::endl;
+    for (auto iter : inputDescMap) {
+        TensorDesc curDesc = iter.second;
         sourceDataTypes.push_back(curDesc.dt);
         inputDescs.push_back(curDesc);
     }
@@ -111,30 +117,31 @@ std::map<std::string, std::shared_ptr<U8>> create_tensors_from_path(
         input = load_bin(inputData, sourceDataTypes, inputDescs);
     }
     std::map<std::string, std::shared_ptr<U8>> model_tensors_input;
-    for (U32 index = 0; index < inputNames.size(); index++) {
-        model_tensors_input[inputNames[index]] =
-            ((CpuMemory *)input[index].get_memory())->get_shared_ptr();
+    int index = 0;
+    std::cout << "\nInput Information:" << std::endl;
+    for (auto iter : inputDescMap) {
+        std::cout << "Input Tensor " << iter.first << " " << input[index].string(8) << std::endl;
+        model_tensors_input[iter.first] = ((CpuMemory *)input[index].get_memory())->get_shared_ptr();
+        index++;
     }
     return model_tensors_input;
 }
 
 void print_result(std::map<std::string, std::shared_ptr<Tensor>> outMap)
 {
-    std::cout << "\n\nBenchmark Result:\n";
-    int outputIndex = 0;
+    std::cout << "\nBenchmark Result:" << std::endl;
     for (auto iter : outMap) {
         Tensor result = *(iter.second);
-        std::cout << "Output Tensor" << outputIndex++ << " : " << iter.first << "\n"
-                  << result.string(8) << "\n\n";
+        std::cout << "Output Tensor " << iter.first << " " << result.string(8) << std::endl;
     }
 }
 
 std::map<std::string, std::shared_ptr<Tensor>> get_output(
     std::shared_ptr<CNN> pipeline, std::string affinity)
 {
-    std::map<std::string, std::shared_ptr<Tensor>> outMap = pipeline->get_outputs();
+    std::map<std::string, std::shared_ptr<Tensor>> outMap = pipeline->get_output();
     if (affinity == "GPU") {
-#ifdef _USE_MALI
+#ifdef _USE_GPU
         for (auto iter : outMap) {
             Tensor result = *(iter.second);
             auto mem = (OclMemory *)result.get_memory();
@@ -153,6 +160,8 @@ int main(int argc, char *argv[])
     UNI_TIME_INIT
     parse_options(argc, argv);
 
+    set_cpu_num_threads(threadsNum);
+
     // 1: set up the pipeline
     auto pipeline = createPipeline(affinityPolicyName, modelPath, algorithmMapPath);
 
@@ -163,26 +172,39 @@ int main(int argc, char *argv[])
 
     // 3: warm up and run
     for (int i = 0; i < warmUp; i++) {
-        pipeline->set_input_tensors_value(model_tensors_input);
+        pipeline->set_input_by_assign(model_tensors_input);
         pipeline->run();
         outMap = get_output(pipeline, affinityPolicyName);
     }
+#ifdef _USE_GPU
+    if (strcmp(affinityPolicyName, "GPU") == 0) {
+        gcl_finish(OCLContext::getInstance().handle.get());
+    }
+#endif
 
-    double timeBegin = ut_time_ms();
+    double minTime = DBL_MAX;
+    double maxTime = 0;
+    double totalTime = 0;
     for (int i = 0; i < loopTime; i++) {
-        pipeline->set_input_tensors_value(model_tensors_input);
+        double timeBegin = ut_time_ms();
+        pipeline->set_input_by_assign(model_tensors_input);
         pipeline->run();
         outMap = get_output(pipeline, affinityPolicyName);
+        double timeEnd = ut_time_ms();
+        double time = timeEnd - timeBegin;
+        minTime = (minTime < time) ? minTime : time;
+        maxTime = (maxTime > time) ? maxTime : time;
+        totalTime += time;
     }
-    double timeEnd = ut_time_ms();
-    double totalTime = (timeEnd - timeBegin);
 
     // 4: process result
     print_result(outMap);
 
     UNI_TIME_STATISTICS
     UNI_CI_LOG("total_time:%fms(loops=%d)\n", 1.0 * totalTime, loopTime);
-    UNI_CI_LOG("avg_time:%fms/data\n", 1.0 * totalTime / loopTime);
-    pipeline->saveAlgorithmMapToText(algorithmMapPath);
+    UNI_CI_LOG("avg_time:%fms/data\n", 1.0 * totalTime / UNI_MAX(1, loopTime));
+    UNI_CI_LOG("min_time:%fms/data\n", 1.0 * minTime);
+    UNI_CI_LOG("max_time:%fms/data\n", 1.0 * maxTime);
+    pipeline->saveAlgorithmMapToFile(algorithmMapPath);
     return 0;
 }

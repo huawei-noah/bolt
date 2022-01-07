@@ -18,6 +18,9 @@
 #ifdef _USE_NEON
 #include "cpu/arm/tensor_computing_arm.h"
 #endif
+#ifdef _USE_X86
+#include "cpu/x86/tensor_computing_x86.h"
+#endif
 // only support average pooling now
 EE pooling_bp(
     Tensor inputTensor, PoolingParamSpec poolingParamSpec, Tensor outputTensor, ArchInfo_t archInfo)
@@ -35,9 +38,8 @@ EE pooling_bp(
         ret = pooling_bp_general(inputDesc, input, poolingParamSpec, outputDesc, output);
 #endif
 #ifdef _USE_X86
-    } else if (IS_X86_AVX2(arch)) {
-        UNI_WARNING_LOG("The x86 pooling_bp operator is not optimized now.\n");
-        ret = pooling_bp_general(inputDesc, input, poolingParamSpec, outputDesc, output);
+    } else if (IS_X86(arch)) {
+        ret = pooling_bp_x86(inputDesc, input, poolingParamSpec, outputDesc, output);
 #endif
 #ifdef _USE_NEON
     } else if (IS_ARM(arch)) {

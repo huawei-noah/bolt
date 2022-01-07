@@ -11,20 +11,14 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <stdlib.h>
-#include <iostream>
 #include <fstream>
-#include <string.h>
-#include <error.h>
-#include <stdio.h>
 #include <vector>
-#include <dirent.h>
-#include <fcntl.h>
-#include <sys/stat.h>
-#include <sys/mman.h>
 #include <map>
 #include <string>
-#include "types.h"
+#include <dirent.h>
+
+#include "data_type.h"
+#include "error.h"
 
 typedef struct {
     std::string kernel;
@@ -62,6 +56,33 @@ inline std::vector<std::string> buildFileNames(std::string path, std::string pos
     return names;
 }
 
+inline std::string readBinaryFile(std::string fileName)
+{
+    std::string fileContent, line;
+    std::ifstream file;
+    file.open(fileName);
+    if (file.is_open()) {
+        while (getline(file, line)) {
+            fileContent += line + "\n";
+        }
+        file.close();
+    } else {
+        UNI_ERROR_LOG("Write file %s failed.\n", fileName.c_str());
+    }
+    return fileContent;
+}
+
+inline void writeTextFile(std::string fileName, std::string fileContent)
+{
+    std::ofstream file(fileName.c_str());
+    if (file.is_open()) {
+        file << fileContent.c_str();
+        file.close();
+    } else {
+        UNI_ERROR_LOG("Write file %s failed.\n", fileName.c_str());
+    }
+}
+
 inline std::map<std::string, KernelInfo> buildClMap(std::vector<std::string> clNames,
     std::vector<std::string> clPaths,
     std::vector<U32> clNamesIndex,
@@ -76,26 +97,9 @@ inline std::map<std::string, KernelInfo> buildClMap(std::vector<std::string> clN
             KernelInfo kernelInfo;
             std::string clName = clNames[i];
             std::string fileName = clPath + clName + postfix;
-            int fd = open(fileName.c_str(), O_RDONLY);
-            if (-1 == fd) {
-                UNI_ERROR_LOG("Cannot open .bolt file. Name: %s\n", fileName.c_str());
-            }
-
-            struct stat ss;
-            if (-1 == fstat(fd, &ss)) {
-                UNI_ERROR_LOG(
-                    "Cannot get size from file descriptor. File Name: %s\n", fileName.c_str());
-            }
-
-            int fileLength = ss.st_size;
-            char *bytes = (char *)mmap(nullptr, fileLength, PROT_READ, MAP_SHARED, fd, 0);
-            if (MAP_FAILED == bytes) {
-                UNI_ERROR_LOG("Mmap failed. File Name: %s\n", fileName.c_str());
-            }
-            std::string fileContent = (const char *)bytes;
+            std::string fileContent = readBinaryFile(fileName);
             int note_pos = -1;
             int j = 0;
-
             for (; j < fileContent.size() - 1; j++) {
                 if (fileContent[j] == '/' && note_pos < 0) {
                     if (fileContent[j + 1] == '/') {
@@ -190,10 +194,6 @@ inline std::map<std::string, KernelInfo> buildClMap(std::vector<std::string> clN
             fileContent.insert(fileContent.size(), substr_b);
             kernelInfo.kernel = fileContent;
             clMap[clName] = kernelInfo;
-            munmap(bytes, fileLength);
-            if (-1 != fd) {
-                close(fd);
-            }
         }
     }
     return clMap;
@@ -203,28 +203,12 @@ inline std::map<std::string, std::string> buildClOptionMap(
     std::vector<std::string> optionNames, std::string optionPath, std::string postfix)
 {
     std::map<std::string, std::string> optionMap;
-    for (int i = 0; i < optionNames.size(); i++) {
+    for (U32 i = 0; i < optionNames.size(); i++) {
         std::string optionName = optionNames[i];
         std::string fileName = optionPath + optionName + postfix;
-        int fd = open(fileName.c_str(), O_RDONLY);
-        if (-1 == fd) {
-            UNI_ERROR_LOG("Cannot open .bolt file. Name: %s\n", fileName.c_str());
-        }
-
-        struct stat ss;
-        if (-1 == fstat(fd, &ss)) {
-            UNI_ERROR_LOG("Cannot get size from file descriptor. File Name: %s\n", fileName.c_str());
-        }
-
-        int fileLength = ss.st_size;
-        char *bytes = (char *)mmap(nullptr, fileLength, PROT_READ, MAP_SHARED, fd, 0);
-        if (MAP_FAILED == bytes) {
-            UNI_ERROR_LOG("Mmap failed. File Name: %s\n", fileName.c_str());
-        }
-        std::string fileContent = (const char *)bytes;
+        std::string fileContent = readBinaryFile(fileName);
         int note_pos = -1;
         int j = 0;
-
         for (; j < fileContent.size() - 1; j++) {
             if (fileContent[j] == '#' && note_pos < 0) {
                 note_pos = j;
@@ -260,10 +244,6 @@ inline std::map<std::string, std::string> buildClOptionMap(
             fileContent.erase(fileContent.size() - 1, 1);
         }
         optionMap[optionName] = fileContent;
-        munmap(bytes, fileLength);
-        if (-1 != fd) {
-            close(fd);
-        }
     }
     return optionMap;
 }
@@ -301,7 +281,8 @@ inline std::map<std::string, OptionInfo> buildClOptionExpandMap(
                 optionInfo.use_common_opt = true;
                 if (name == "common") {
                     expandOption.replace(0, common_opt.size(),
-                        "-D T=half -D T2=half2 -D T3=half3 -D T4=half4 -D T8=half8 -D T16=half16 "
+                        "-cl-std=CL2.0 -D T=half -D T2=half2 -D T3=half3 -D T4=half4 -D T8=half8 "
+                        "-D T16=half16 "
                         "-DUSE_HALF");
                 } else {
                     expandOption.erase(common_opt_pos, common_opt.size());
@@ -391,18 +372,6 @@ inline std::string produce_option_source(std::string name, OptionInfo optionInfo
     return source;
 }
 
-inline void write_to_file(std::string str, std::string path, std::string name)
-{
-    std::string fileName = path + name;
-    std::ofstream file(fileName.c_str());
-    if (file.is_open()) {
-        file << str.c_str();
-        file.close();
-    } else {
-        UNI_ERROR_LOG("fail to write file %s\n", fileName.c_str());
-    }
-}
-
 int main()
 {
     CI8 *boltEnv = getenv("BOLT_ROOT");
@@ -415,20 +384,19 @@ int main()
         boltPath += "/";
     }
     std::string tensorComputingClPath = "compute/tensor/src/gpu/mali/cl/";
+    std::string tensorComputingClPathQc = "compute/tensor/src/gpu/mali/cl/qualcomm/";
     std::string imageClPath = "compute/image/src/gpu/mali/cl/";
     tensorComputingClPath = boltPath + tensorComputingClPath;
+    tensorComputingClPathQc = boltPath + tensorComputingClPathQc;
     imageClPath = boltPath + imageClPath;
 
     std::string clOptionPath = "common/gcl/tools/kernel_lib_compile/sh/compile/";
     clOptionPath = boltPath + clOptionPath;
 
-    //    std::string samplePath = "gcl/tools/gcl_sample/cl/";
-    //    samplePath = boltPath + samplePath;
-
     std::vector<std::string> clPath;
     clPath.push_back(tensorComputingClPath);
+    clPath.push_back(tensorComputingClPathQc);
     clPath.push_back(imageClPath);
-    //    clPath.push_back(samplePath);
 
     std::vector<std::string> clNames;
     std::vector<std::string> headNames;
@@ -474,28 +442,11 @@ int main()
     kernel_source_executor += "    void loadKernelOption();\n";
     kernel_source_executor += "};\n";
     kernel_source_executor += "#endif\n";
-    write_to_file(kernel_source_executor, filePath, "libkernelsource.h");
+    writeTextFile(filePath + "libkernelsource.h", kernel_source_executor);
 
     filePath = "common/gcl/tools/kernel_source_compile/src/cl/";
     filePath = boltPath + filePath;
-    std::string inline_cl_source_head;
-    inline_cl_source_head = "#ifndef _INLINE_CL_SOURCE_HEAD\n";
-    inline_cl_source_head += "#define _INLINE_CL_SOURCE_HEAD\n";
-    inline_cl_source_head += produce_inline_cl_source_head(headNames);
-    inline_cl_source_head += produce_inline_cl_source_head(clNames);
-    inline_cl_source_head += "#endif\n ";
-    write_to_file(inline_cl_source_head, filePath, "inline_cl_source_head.h");
-
-    std::string inline_cl_source;
-    inline_cl_source = "#include \"libkernelsource.h\"\n";
-    inline_cl_source += "#include \"inline_cl_source_head.h\"\n";
-    inline_cl_source += "void kernel_source_executor::loadKernelSource() {\n";
-    inline_cl_source += produce_inline_cl_source(headNames);
-    inline_cl_source += produce_inline_cl_source(clNames);
-    inline_cl_source += "}\n";
-    write_to_file(inline_cl_source, filePath, "inline_cl_source.cpp");
-
-    std::string kernel_source = "#include \"inline_cl_source_head.h\"\n";
+    std::string kernel_source = "#include \"libkernelsource.h\"\n";
     for (auto p : headMap) {
         std::string name = p.first;
         KernelInfo kernelInfo = p.second;
@@ -506,7 +457,11 @@ int main()
         KernelInfo kernelInfo = p.second;
         kernel_source += produce_kernel_source(name, kernelInfo);
     }
-    write_to_file(kernel_source, filePath, "gcl_kernel_source.cpp");
+    kernel_source += "void kernel_source_executor::loadKernelSource() {\n";
+    kernel_source += produce_inline_cl_source(headNames);
+    kernel_source += produce_inline_cl_source(clNames);
+    kernel_source += "}\n";
+    writeTextFile(filePath + "gcl_kernel_source.cpp", kernel_source);
 
     clOptionMapExpand = buildClOptionExpandMap(clOptionMap);
     for (auto p : clOptionMapExpand) {
@@ -514,27 +469,16 @@ int main()
     }
     filePath = "common/gcl/tools/kernel_source_compile/src/option/";
     filePath = boltPath + filePath;
-    std::string inline_cl_option_head;
-    inline_cl_option_head = "#ifndef _INLINE_CL_OPTION_HEAD\n";
-    inline_cl_option_head += "#define _INLINE_CL_OPTION_HEAD\n";
-    inline_cl_option_head += produce_inline_cl_option_head(clOptionNamesExpand);
-    inline_cl_option_head += "#endif\n ";
-    write_to_file(inline_cl_option_head, filePath, "inline_cl_option_head.h");
 
-    std::string inline_cl_option;
-    inline_cl_option = "#include \"libkernelsource.h\"\n";
-    inline_cl_option += "#include \"inline_cl_option_head.h\"\n";
-    inline_cl_option += "void kernel_source_executor::loadKernelOption() {\n";
-    inline_cl_option += produce_inline_cl_option(clOptionNamesExpand);
-    inline_cl_option += "}\n";
-    write_to_file(inline_cl_option, filePath, "inline_cl_option.cpp");
-
-    std::string option_source = "#include \"inline_cl_option_head.h\"\n";
+    std::string option_source = "#include \"libkernelsource.h\"\n";
     for (auto p : clOptionMapExpand) {
         std::string name = p.first;
         OptionInfo optionInfo = p.second;
         option_source += produce_option_source(name, optionInfo);
     }
-    write_to_file(option_source, filePath, "gcl_kernel_option.cpp");
+    option_source += "void kernel_source_executor::loadKernelOption() {\n";
+    option_source += produce_inline_cl_option(clOptionNamesExpand);
+    option_source += "}\n";
+    writeTextFile(filePath + "gcl_kernel_option.cpp", option_source);
     return 0;
 }

@@ -1,5 +1,4 @@
-file(GLOB srcs ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
-file(GLOB commonsrcs ${CMAKE_CURRENT_SOURCE_DIR}/../model_*.cpp)
+file(GLOB srcs *.cpp)
 
 include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 
@@ -8,8 +7,8 @@ include_directories(${TFLITE_INCLUDE_DIR})
 include_directories(../)
 
 # shared library
-add_library(${PROJECT_NAME}_tflite SHARED ${srcs} ${commonsrcs})
-target_link_libraries (${PROJECT_NAME}_tflite LINK_PUBLIC uni)
+add_library(${PROJECT_NAME}_tflite SHARED ${srcs})
+target_link_libraries (${PROJECT_NAME}_tflite LINK_PUBLIC model_spec uni)
 
 # static library
 add_library(${PROJECT_NAME}_tflite_static STATIC ${srcs})

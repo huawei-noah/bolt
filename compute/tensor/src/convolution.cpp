@@ -18,7 +18,7 @@
 #ifdef _USE_NEON
 #include "cpu/arm/tensor_computing_arm.h"
 #endif
-#ifdef _USE_MALI
+#ifdef _USE_GPU
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
 #ifdef _USE_X86
@@ -53,9 +53,6 @@ inline EE convolution_infer_output_size_cpu(TensorDesc inputDesc,
     if (ft < 1 || fh < 1 || fw < 1) {
         ret = NOT_SUPPORTED;
     }
-    if (fn % 8 != 0) {
-        ret = NOT_SUPPORTED;
-    }
 
     U32 ftDilated = (ft - 1) * p.dilatedRate_t + 1;
     U32 fhDilated = (fh - 1) * p.dilatedRate_h + 1;
@@ -63,6 +60,9 @@ inline EE convolution_infer_output_size_cpu(TensorDesc inputDesc,
     ot = (it + p.padding_before + p.padding_after - ftDilated) / p.stride_t + 1;
     oh = (ih + p.padding_top + p.padding_bottom - fhDilated) / p.stride_h + 1;
     ow = (iw + p.padding_left + p.padding_right - fwDilated) / p.stride_w + 1;
+    if (ot < 0 || oh < 0 || ow < 0) {
+        ret = NOT_MATCH;
+    }
 
     if (tensorIs4d(inputDesc)) {
         *outputDesc = tensor4df(targetDataType, DF_NCHWC8, in, fn, oh, ow);
@@ -88,22 +88,28 @@ EE convolution_infer_output_size(Tensor *inputTensor,
     TensorDesc inputDesc = inputTensor->get_desc();
     TensorDesc filterDesc = filterTensor.get_desc();
     TensorDesc outputDesc = outputTensor->get_desc();
-    EE ret = NOT_SUPPORTED;
-    if (IS_MALI_GPU(archInfo->arch)) {
-#ifdef _USE_MALI
-        GCLMemDesc gclmemInputDesc = ocl_get_desc(*inputTensor);
-        GCLMemDesc gclmemOutputDesc = ocl_get_desc(*outputTensor);
-        ret = convolution_infer_output_size_mali(
-            inputDesc, filterDesc, convParamSpec, &outputDesc, &gclmemInputDesc, &gclmemOutputDesc);
-        ocl_set_desc(inputTensor, gclmemInputDesc);
-        ocl_set_desc(outputTensor, gclmemOutputDesc);
+    CHECK_STATUS(convolution_infer_output_size_cpu(
+        inputDesc, filterDesc, convParamSpec, &outputDesc, targetDataType));
+    if (IS_GPU(archInfo->arch)) {
+#ifdef _USE_GPU
+        OclMemory *inputMem = (OclMemory *)inputTensor->get_memory();
+        OclMemory *outputMem = (OclMemory *)outputTensor->get_memory();
+        CHECK_STATUS(convolution_padding_input_mali(
+            inputDesc, filterDesc, convParamSpec, &outputDesc, inputMem, outputMem));
 #endif
     } else {
-        ret = convolution_infer_output_size_cpu(
-            inputDesc, filterDesc, convParamSpec, &outputDesc, targetDataType);
+        U32 fn = filterDesc.dims[filterDesc.nDims - 1];
+        if (fn % 8 != 0) {
+            CHECK_STATUS(NOT_SUPPORTED);
+        }
+#ifdef _USE_INT8
+        if (IS_X86_AVX512(archInfo->arch) && (targetDataType == DT_U8_Q)) {
+            outputDesc.df = DF_NCHWC16;
+        }
+#endif
     }
     outputTensor->resize(outputDesc);
-    return ret;
+    return SUCCESS;
 }
 
 EE convolution_infer_forward_algorithm(Tensor inputTensor,
@@ -127,7 +133,7 @@ EE convolution_infer_forward_algorithm(Tensor inputTensor,
         ret = SUCCESS;
 #endif
 #ifdef _USE_X86
-    } else if (IS_X86_AVX2(arch)) {
+    } else if (IS_X86(arch)) {
         ret = convolution_infer_forward_algorithm_x86(
             inputDesc, filterDesc, outputDesc, convParamSpec, policy, algorithm, targetDataType);
 #endif
@@ -136,8 +142,8 @@ EE convolution_infer_forward_algorithm(Tensor inputTensor,
         ret = convolution_infer_forward_algorithm_arm(
             inputDesc, filterDesc, outputDesc, convParamSpec, policy, algorithm, targetDataType);
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
         GCLMemDesc gclmemInputDesc = ocl_get_desc(inputTensor);
         GCLMemDesc gclmemOutputDesc = ocl_get_desc(outputTensor);
         ret = convolution_infer_forward_algorithm_mali(((MaliPara_t)(archInfo->archPara))->handle,
@@ -151,7 +157,7 @@ EE convolution_infer_forward_algorithm(Tensor inputTensor,
 EE convolution_transform_filter_bytes(Tensor filterTensor,
     ConvolutionParamSpec convParamSpec,
     ConvolutionForwardAlgorithm algorithm,
-    U32 *bytes,
+    void *bytes,
     ArchInfo_t archInfo)
 {
     TensorDesc filterDesc = filterTensor.get_desc();
@@ -160,22 +166,24 @@ EE convolution_transform_filter_bytes(Tensor filterTensor,
     auto arch = archInfo->arch;
     if (IS_GENERAL(arch)) {
 #ifdef _USE_GENERAL
-        *bytes = tensorNumBytes(filterDesc);
+        U32 *size = (U32 *)bytes;
+        *size = tensorNumBytes(filterDesc);
         ret = SUCCESS;
 #endif
 #ifdef _USE_X86
-    } else if (IS_X86_AVX2(arch)) {
-        ret = convolution_transform_filter_bytes_x86(filterDesc, convParamSpec, algorithm, bytes);
+    } else if (IS_X86(arch)) {
+        ret = convolution_transform_filter_bytes_x86(
+            filterDesc, convParamSpec, algorithm, (U32 *)bytes);
 #endif
 #ifdef _USE_NEON
     } else if (IS_ARM(arch)) {
-        ret = convolution_transform_filter_bytes_arm(filterDesc, convParamSpec, algorithm, bytes);
+        ret = convolution_transform_filter_bytes_arm(
+            filterDesc, convParamSpec, algorithm, (U32 *)bytes);
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
-        ret = convolution_transform_filter_bytes_mali(filterDesc,
-            ((MaliPara_t)(archInfo->archPara))->forwardRunInfo,
-            ((MaliPara_t)(archInfo->archPara))->gclmemFilterDesc, bytes);
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
+        ret = convolution_transform_filter_bytes_mali(
+            filterDesc, ((MaliPara_t)(archInfo->archPara))->forwardRunInfo, (TensorDesc *)bytes);
 #endif
     }
     return ret;
@@ -197,12 +205,12 @@ EE convolution_transform_filter(Tensor filterTensor,
     EE ret = NOT_SUPPORTED;
     if (IS_GENERAL(arch)) {
 #ifdef _USE_GENERAL
-        UNI_memcpy(filterTransformed, filter, tensorNumBytes(filterDesc));
+        UNI_MEMCPY(filterTransformed, filter, tensorNumBytes(filterDesc));
         ftmDesc = filterDesc;
         ret = SUCCESS;
 #endif
 #ifdef _USE_X86
-    } else if (IS_X86_AVX2(arch)) {
+    } else if (IS_X86(arch)) {
         ret = convolution_transform_filter_x86(
             filterDesc, filter, convParamSpec, algorithm, &ftmDesc, filterTransformed);
 #endif
@@ -211,8 +219,8 @@ EE convolution_transform_filter(Tensor filterTensor,
         ret = convolution_transform_filter_arm(
             filterDesc, filter, convParamSpec, algorithm, &ftmDesc, filterTransformed);
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
         void *tmp = get_ptr_from_tensor(tmpTensor, arch);
         ret = convolution_transform_filter_mali(((MaliPara_t)(archInfo->archPara))->handle,
             filterDesc, (GCLMem_t)filter, ((MaliPara_t)(archInfo->archPara))->forwardRunInfo,
@@ -239,10 +247,23 @@ EE convolution_infer_forward_tmp_bytes(Tensor inputTensor,
     auto arch = archInfo->arch;
     if (IS_GENERAL(arch)) {
 #ifdef _USE_GENERAL
+        *bytes = 0;
+        if (filterDesc.dt == DT_I8 && outputDesc.dt == DT_I8) {
+            TensorDesc tmpDesc = outputDesc;
+#ifdef _USE_FP16
+            tmpDesc.dt = DT_F16;
+#else
+            tmpDesc.dt = DT_F32;
+#endif
+            *bytes += tensorNumBytes(tmpDesc);
+        }
+        if (filterDesc.dt == DT_I8 && inputDesc.dt != DT_I8) {
+            *bytes += tensorNumBytes(inputDesc);
+        }
         ret = SUCCESS;
 #endif
 #ifdef _USE_X86
-    } else if (IS_X86_AVX2(arch)) {
+    } else if (IS_X86(arch)) {
         ret = convolution_infer_forward_tmp_bytes_x86(
             inputDesc, filterDesc, outputDesc, convParamSpec, algorithm, bytes);
 #endif
@@ -251,11 +272,14 @@ EE convolution_infer_forward_tmp_bytes(Tensor inputTensor,
         ret = convolution_infer_forward_tmp_bytes_arm(
             inputDesc, filterDesc, outputDesc, convParamSpec, algorithm, bytes);
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
         ret = convolution_infer_forward_tmp_bytes_mali(inputDesc, filterDesc, outputDesc,
             convParamSpec, ((MaliPara_t)(archInfo->archPara))->forwardRunInfo, bytes);
 #endif
+    }
+    if (inputDesc.df == DF_NHWC) {
+        *bytes += tensorNumBytes(inputDesc);
     }
     return ret;
 }
@@ -270,33 +294,50 @@ inline void convolution_process_bnn_scale(
     *bias += vecLen * bytesOf(DT_F16);
 }
 
-EE convolution(Tensor inputTensor,
+EE convolution(std::vector<Tensor> inputTensors,
     Tensor filterTensor,
     ConvolutionParamSpec convParamSpec,
     ConvolutionForwardAlgorithm algorithm,
     void *scale,
     Tensor biasTensor,
-    Tensor tmpTensor,
+    std::vector<Tensor> tmpTensors,
     Tensor outputTensor,
     ActivationParamSpec activationDesc,
     ArchInfo_t archInfo)
 {
     auto arch = archInfo->arch;
-    TensorDesc inputDesc = inputTensor.get_desc();
-    if (3 == inputDesc.nDims) {
-        inputDesc = tensor4df(
-            inputDesc.dt, DF_NCHW, inputDesc.dims[2], inputDesc.dims[1], inputDesc.dims[0], 1);
-    }
-    void *input = get_ptr_from_tensor(inputTensor, arch);
+    TensorDesc inputDesc = inputTensors[0].get_desc();
+
+    void *input = get_ptr_from_tensor(inputTensors[0], arch);
     TensorDesc filterDesc = filterTensor.get_desc();
     void *filter = get_ptr_from_tensor(filterTensor, arch);
     TensorDesc biasDesc = biasTensor.get_desc();
     void *bias = get_ptr_from_tensor(biasTensor, arch);
-    U32 tmpBytes = tmpTensor.bytes();
-    void *tmp = get_ptr_from_tensor(tmpTensor, arch);
+    U32 tmpBytes = tmpTensors[0].bytes();
+    void *tmp = get_ptr_from_tensor(tmpTensors[0], arch);
     TensorDesc outputDesc = outputTensor.get_desc();
     void *output = get_ptr_from_tensor(outputTensor, arch);
     TensorDesc scaleDesc = filterDesc;
+
+    // process fused-add
+    ActivationParamSpec eltwiseActDesc = activationDesc;
+    void *eltwiseInput = nullptr;
+    bool isEltwiseSeperate = true;
+    TensorDesc eltwiseInputDesc;
+    if (inputTensors.size() > 1) {
+        eltwiseInput = get_ptr_from_tensor(inputTensors[1], arch);
+        eltwiseInputDesc = inputTensors[1].get_desc();
+        activationDesc.mode = ACTIVATION_NULL;
+    }
+#if defined(_USE_GENERAL) || defined(_USE_X86)
+    if (tensorNumElements(eltwiseInputDesc) == tensorNumElements(outputDesc) &&
+        eltwiseInputDesc.df == outputDesc.df) {
+        isEltwiseSeperate = false;
+        activationDesc = eltwiseActDesc;
+    } else {
+        eltwiseInput = nullptr;
+    }
+#endif
 
     EE ret = NOT_SUPPORTED;
 #ifdef _USE_FP16
@@ -310,16 +351,17 @@ EE convolution(Tensor inputTensor,
         }
     }
 #endif
+
     if (IS_GENERAL(arch)) {
 #ifdef _USE_GENERAL
-        ret = convolution_general(inputDesc, input, filterDesc, filter, convParamSpec, scaleDesc,
-            scale, biasDesc, bias, outputDesc, output, activationDesc);
+        ret = convolution_general(inputDesc, input, eltwiseInput, filterDesc, filter, convParamSpec,
+            scaleDesc, scale, biasDesc, bias, tmpBytes, tmp, outputDesc, output, activationDesc);
 #endif
 #ifdef _USE_X86
-    } else if (IS_X86_AVX2(arch)) {
-        ret = convolution_x86(inputDesc, input, filterDesc, filter, convParamSpec, algorithm,
-            scaleDesc, scale, biasDesc, bias, tmpBytes, tmp, outputDesc, output, activationDesc,
-            archInfo->arch);
+    } else if (IS_X86(arch)) {
+        ret = convolution_x86(inputDesc, input, eltwiseInput, filterDesc, filter, convParamSpec,
+            algorithm, scaleDesc, scale, biasDesc, bias, tmpBytes, tmp, outputDesc, output,
+            activationDesc, archInfo->arch);
 #endif
 #ifdef _USE_NEON
     } else if (IS_ARM(arch)) {
@@ -327,14 +369,31 @@ EE convolution(Tensor inputTensor,
             scaleDesc, scale, biasDesc, bias, tmpBytes, tmp, outputDesc, output, activationDesc,
             archInfo->arch);
 #endif
-#ifdef _USE_MALI
-    } else if (IS_MALI_GPU(arch)) {
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
+        std::vector<GCLMem_t> tmpVec(3, NULL);
+        for (U32 i = 0; i < tmpTensors.size(); i++) {
+            tmpVec[i] = (GCLMem_t)get_ptr_from_tensor(tmpTensors[i], arch);
+        }
         ret = convolution_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc,
             (GCLMem_t)input, filterDesc, (GCLMem_t)filter, convParamSpec,
             ((MaliPara_t)(archInfo->archPara))->forwardRunInfo, scaleDesc, (GCLMem_t)scale,
-            biasDesc, (GCLMem_t)bias, tmpBytes, (GCLMem_t)tmp, outputDesc, (GCLMem_t)output,
+            biasDesc, (GCLMem_t)bias, tmpBytes, tmpVec, outputDesc, (GCLMem_t)output,
             activationDesc.mode);
 #endif
     }
+
+    // process fused-add
+#ifdef _USE_CPU
+    if (inputTensors.size() > 1 && isEltwiseSeperate) {
+        std::vector<Tensor> eltwiseInputTensors = {outputTensor, inputTensors[1]};
+        EltwiseParamSpec eltwiseDesc;
+        eltwiseDesc.elt_mode = ELTWISE_SUM;
+        eltwiseDesc.activation_type = eltwiseActDesc.mode;
+        eltwiseDesc.activation_spec = convParamSpec.activation_spec;
+        ret = eltwise(eltwiseInputTensors, eltwiseDesc, tmpTensors[0], outputTensor, archInfo);
+    }
+#endif
+
     return ret;
 }

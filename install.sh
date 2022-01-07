@@ -1,233 +1,243 @@
 #!/bin/bash
 
 script_name=$0
-compiler_arch="arm_gnu"
-skip=false
+script_dir=$(cd `dirname ${script_name}` && pwd)
+BOLT_ROOT=${script_dir}
+
+target=""
 build_threads="8"
-llvm_gpu="ON"
-finetune="OFF"
+converter="on"
+use_serial="on"
+use_fp32="on"
+use_fp16="on"
+use_int8="on"
+clean="off"
+
+find . -name "*.sh" | xargs chmod +x
+
+source ${script_dir}/scripts/target.sh
+
+check_getopt
 
 print_help() {
     cat <<EOF
 Usage: ${script_name} [OPTION]...
-Build Bolt.
+Build bolt library.
 
 Mandatory arguments to long options are mandatory for short options too.
   -h, --help                 display this help and exit.
-  -c, --compiler <arm_llvm|arm_gnu|arm_himix100|arm_ndkv7|x86_gnu|x86_ndk|arm_ios>  use to set compiler(default: arm_gnu).
-  -s, --skip <true|false>    skip dependency library install and option set(default: false).
-  -t, --threads              use parallel build(default: 8).
-  -g, --gpu <on|off>         use gpu(default: llvm(on), others(off)).
-  -f, --finetune <on|off>    use finetuning(default: off).
+  --target=<???>             target device system and hardware setting, currently only support theses targets:
+EOF
+    print_targets
+    cat <<EOF
+  --converter=<ON|OFF>       set to use model converter(default: ON).
+  --example                  set to build example(default: OFF).
+  --debug                    set to use debug(default: OFF).
+  --profile                  set to print performance profiling information(default: OFF).
+  --shared                   set to use shared library(default: OFF).
+  --gpu                      set to use arm mali/qualcomm gpu(default: OFF).
+  --openmp                   set to use OpenMP multi-threads parallel operator(default: OFF).
+  --flow                     set to use flow to process pipeline data(default: OFF).
+  --serial=<ON|OFF>          set to use serial calculation(default: ON).
+  --fp32=<ON|OFF>            set to use float32 calculation(default: ON).
+  --fp16=<ON|OFF>            set to use float16 calculation on arm aarch64(default: ON on aarch64, OFF on others).
+  --int8=<ON|OFF>            set to use int8 calculation on arm aarch64(default: ON on aarch64, OFF on others).
+  -t, --threads=8            use parallel build(default: 8).
+  --clean                    remove build and install files.
 EOF
     exit 1;
 }
 
-find . -name "*.sh" | xargs chmod +x
-
-TEMP=`getopt -o c:g:hs:t:f: --long compiler:gpu:help,skip:threads:finetune: \
-     -n ${script_name} -- "$@"`
-if [ $? != 0 ] ; then echo "[ERROR] terminating..." >&2 ; exit 1 ; fi
+cmake_options=""
+TEMP=`getopt -o "ht:c:" -al target:,threads:,help,converter:,example,debug,profile,shared,gpu,openmp,flow,serial:,fp32:,fp16:,int8:,clean -- "$@"`
+if [[ $? != 0 ]]; then
+    echo "[ERROR] ${script_name} terminating..." >&2
+    exit 1
+fi
+if [[ ${TEMP} != *-- ]]; then
+    echo "[ERROR] ${script_name} can not recognize ${TEMP##*-- }"
+    echo "maybe it contains invalid character(such as Chinese)."
+    exit 1
+fi
+if [ $? != 0 ] ; then echo "[ERROR] ${script_name} terminating..." >&2 ; exit 1 ; fi
 eval set -- "$TEMP"
 while true ; do
     case "$1" in
-        -c|--compiler)
-            compiler_arch=$2
-            echo "[INFO] build library for '${compiler_arch}'" ;
-            shift 2 ;;
-        -s|--skip)
-            skip=$2
-            echo "[INFO] skip dependency library install... ${skip}" ;
-            shift 2 ;;
-        -t|--threads)
-            build_threads=$2
-            echo "[INFO] '${build_threads}' threads parallel to build" ;
-            shift 2 ;;
-        -g|--gpu)
-            llvm_gpu=${2^^}
-            if [ "${llvm_gpu}" != "OFF" -a "${llvm_gpu}" != "ON" ] ; then
-                echo "[ERROR] the gpu option should be <ON|OFF>"
-                exit 1
-            fi
-            echo "[INFO] gpu option is ${llvm_gpu}";
-            shift 2 ;;
-        -f|--finetune)
-            finetune=${2^^}
-            if [ "${finetune}" != "OFF" -a "${finetune}" != "ON" ] ; then
-                echo "[ERROR] the finetune option should be <ON|OFF>"
-                exit 1
-            fi
-            echo "[INFO] finetune option is ${finetune}";
-            shift 2 ;;
         -h|--help)
             print_help ;
             shift ;;
+        -t|--threads)
+            build_threads=$2
+            shift 2 ;;
+        --target)
+            target=$2
+            shift 2 ;;
+        -c|--converter)
+            converter=$2
+            shift 2 ;;
+        --example)
+            cmake_options="${cmake_options} -DBUILD_TEST=ON"
+            shift ;;
+        --debug)
+            cmake_options="${cmake_options} -DUSE_DEBUG=ON"
+            shift ;;
+        --profile)
+            cmake_options="${cmake_options} -DUSE_PROFILE=ON -DUSE_PROFILE_STATISTICS=ON"
+            shift ;;
+        --shared)
+            cmake_options="${cmake_options} -DUSE_DYNAMIC_LIBRARY=ON"
+            shift ;;
+        --gpu)
+            cmake_options="${cmake_options} -DUSE_GPU=ON"
+            shift ;;
+        --openmp)
+            cmake_options="${cmake_options} -DUSE_OPENMP=ON"
+            shift ;;
+        --flow)
+            cmake_options="${cmake_options} -DUSE_FLOW=ON -DUSE_THREAD_SAFE=ON"
+            shift ;;
+        --serial)
+            use_serial=$2
+            shift 2 ;;
+        --fp32)
+            use_fp32=$2
+            shift 2 ;;
+        --fp16)
+            use_fp16=$2
+            shift 2 ;;
+        --int8)
+            use_int8=$2
+            shift 2 ;;
+        --clean)
+            clean="on"
+            shift ;;
         --) shift ;
             break ;;
-        *) echo "[ERROR]" ; exit 1 ;;
+        *) echo "[ERROR] ${script_name} can not recognize $1" ; exit 1 ;;
     esac
 done
 
-exeIsValid(){
-    if type $1 &> /dev/null;
-    then
-        return 0
-    else
-        echo "[ERROR] please install ${1} tools and set shell environment PATH to find it"
-        exit 1
+if [[ "${target}" == "" ]]; then
+    echo "[ERROR] please set target option to specify the target deployment platform."
+    print_help
+    exit 1
+fi
+
+target=$(map_target ${target})
+check_target ${target}
+
+if [[ "${converter}" == "ON" || "${converter}" == "on" ]]; then
+    cmake_options="${cmake_options} -DUSE_CAFFE=ON -DUSE_ONNX=ON -DUSE_TFLITE=ON -DUSE_TENSORFLOW=ON"
+fi
+
+source ${script_dir}/scripts/setup_compiler.sh || exit 1
+cmake_options="${CMAKE_OPTIONS} ${cmake_options}"
+
+platform="${target}"
+if [[ "${clean}" == "on" ]]; then
+    ${script_dir}/third_party/install.sh --target=${target} --threads=${build_threads} --clean || exit 1
+    if [[ -d ${script_dir}/build_${platform} ]]; then
+        rm -rf ${script_dir}/build_${platform} || exit 1
     fi
-}
-
-exeIsValid cmake
-exeIsValid make
-
-export BOLT_ROOT=$(cd `dirname $0` && pwd)
-echo "[INFO] build bolt in ${BOLT_ROOT}..."
-cd ${BOLT_ROOT}
-rm -rf build_${compiler_arch} install_${compiler_arch}
-mkdir  build_${compiler_arch} install_${compiler_arch}
-
-options=""
-if [ ${skip} != true ] ; then
-    if [[ ! -f "./third_party/${compiler_arch}.sh" || ! -d "./third_party/${compiler_arch}" ]]; then
-        ./third_party/install.sh -c ${compiler_arch} -t ${build_threads} || exit 1
+    if [[ -d ${script_dir}/install_${platform} ]]; then
+        rm -rf ${script_dir}/install_${platform} || exit 1
     fi
-    echo "[INFO] use ./third_party/${compiler_arch}.sh to set environment variable..."
-    source ./third_party/${compiler_arch}.sh
+    exit 0
+fi
 
-    options="-DUSE_CROSS_COMPILE=ON \
-            -DBUILD_TEST=ON "
-    if [ "${compiler_arch}" == "arm_gnu" ] ; then
-        exeIsValid aarch64-linux-gnu-g++
-        options="${options} \
-            -DUSE_GNU_GCC=ON \
-            -DUSE_LLVM_CLANG=OFF \
-            -DUSE_MALI=OFF \
-            -DUSE_NEON=ON \
-            -DCMAKE_C_COMPILER=`which aarch64-linux-gnu-gcc` \
-            -DCMAKE_CXX_COMPILER=`which aarch64-linux-gnu-g++` \
-            -DCMAKE_STRIP=`which aarch64-linux-gnu-strip` "
+aarch64_fp16_cflags=""
+aarch64_int8_cflags=""
+if [[ ${CC} =~ clang ]]; then
+    aarch64_fp16_cflags="-march=armv8-a+fp16"
+    aarch64_int8_cflags="-march=armv8-a+fp16+dotprod"
+fi
+if [[ ${CC} =~ gcc ]]; then
+    aarch64_fp16_cflags="-march=armv8.2-a+fp16"
+    aarch64_int8_cflags="-march=armv8.2-a+fp16+dotprod"
+fi
+
+if [[ "${use_serial}" == "ON" || "${use_serial}" == "on" ]]; then
+    cmake_options="${cmake_options} -DUSE_GENERAL=ON"
+else
+    cmake_options="${cmake_options} -DUSE_GENERAL=OFF"
+fi
+if [[ "${use_fp32}" == "ON" || "${use_fp32}" == "on" ]]; then
+    cmake_options="${cmake_options} -DUSE_FP32=ON"
+else
+    cmake_options="${cmake_options} -DUSE_FP32=OFF"
+fi
+if [[ ${target} =~ aarch64 ]]; then
+    cmake_options="${cmake_options} -DUSE_NEON=ON"
+    if [[ ${cmake_options} =~ USE_GPU=ON ]]; then
+        use_fp16="on"
     fi
-    if [ "${compiler_arch}" == "arm_llvm" ] ; then
-        exeIsValid aarch64-linux-android21-clang++
-        if [[ "${llvm_gpu}" == "ON" ]]; then
-            if [[ ! -f "${OpenCL_ROOT}/lib64/libOpenCL.so" || ! -f "${OpenCL_ROOT}/lib64/libGLES_mali.so" ]]; then
-                echo "[ERROR] If you want to use ARM MALI GPU, please pull libOpenCL.so and libGLES_mali.so from android device.
-If you don't want to  use ARM MALI GPU, you can add -g option to close ARM MALI GPU usage."
-                exit 1
+    if [[ "${use_fp16}" == "ON" || "${use_fp16}" == "on" ]]; then
+        ${CC} ${CFLAGS} ${aarch64_fp16_cflags} ${script_dir}/common/cmakes/blank.c -o main &> test.log && cmake_options="${cmake_options} -DUSE_FP16=ON"
+        if [[ ! ${cmake_options} =~ USE_FP16=ON ]]; then
+            echo "[WARNING] not build armv8.2 fp16 library."
+        fi
+        if [[ "${use_int8}" == "ON" || "${use_int8}" == "on" ]]; then
+            ${CC} ${CFLAGS} ${aarch64_int8_cflags} ${script_dir}/common/cmakes/blank.c -o main &> test.log && cmake_options="${cmake_options} -DUSE_INT8=ON"
+            if [[ ! ${cmake_options} =~ USE_INT8=ON ]]; then
+                echo "[WARNING] not build armv8.2 int8 library."
             fi
         fi
-
-        options="${options} \
-            -DUSE_GNU_GCC=OFF \
-            -DUSE_LLVM_CLANG=ON \
-            -DUSE_MALI=${llvm_gpu} \
-            -DUSE_NEON=ON \
-            -DUSE_DYNAMIC_LIBRARY=OFF \
-            -DUSE_TRAINING=${finetune} \
-            -DCMAKE_C_COMPILER=`which aarch64-linux-android21-clang` \
-            -DCMAKE_CXX_COMPILER=`which aarch64-linux-android21-clang++` \
-            -DCMAKE_STRIP=`which aarch64-linux-android-strip` "
+        rm -rf test.log main
     fi
-    if [ "${compiler_arch}" == "arm_himix100" ] ; then
-        exeIsValid arm-himix100-linux-g++
-        options="${options} \
-            -DUSE_GNU_GCC=ON \
-            -DUSE_LLVM_CLANG=OFF \
-            -DUSE_MALI=OFF \
-            -DUSE_NEON=ON \
-            -DUSE_ARMV8=OFF \
-            -DUSE_ARMV7=ON \
-            -DUSE_FP32=ON \
-            -DUSE_FP16=OFF \
-            -DUSE_INT8=OFF \
-            -DCMAKE_C_COMPILER=`which arm-himix100-linux-gcc` \
-            -DCMAKE_CXX_COMPILER=`which arm-himix100-linux-g++` \
-            -DCMAKE_STRIP=`which arm-himix100-linux-strip` "
+elif [[ ${target} =~ avx ]]; then
+    cmake_options="${cmake_options} -DUSE_X86=ON"
+    if [[ ${target} =~ avx512 ]]; then
+        if [[ "${use_int8}" == "ON" || "${use_int8}" == "on" ]]; then
+            cmake_options="${cmake_options} -DUSE_INT8=ON"
+        fi
+        if [[ ${target} =~ vnni ]]; then
+            cmake_options="${cmake_options} -DUSE_AVX512_VNNI=ON"
+        fi
     fi
-    if [ "${compiler_arch}" == "arm_ndkv7" ] ; then
-        exeIsValid armv7a-linux-androideabi19-clang++
-        options="${options} \
-            -DUSE_GNU_GCC=OFF \
-            -DUSE_LLVM_CLANG=ON \
-            -DUSE_MALI=OFF \
-            -DUSE_NEON=ON \
-            -DUSE_DYNAMIC_LIBRARY=ON \
-            -DUSE_ARMV8=OFF \
-            -DUSE_ARMV7=ON \
-            -DUSE_FP32=ON \
-            -DUSE_FP16=OFF \
-            -DUSE_INT8=OFF \
-            -DCMAKE_C_COMPILER=`which armv7a-linux-androideabi19-clang` \
-            -DCMAKE_CXX_COMPILER=`which armv7a-linux-androideabi19-clang++` \
-            -DCMAKE_STRIP=`which arm-linux-androideabi-strip` "
-    fi
-    if [ "${compiler_arch}" == "x86_gnu" ] ; then
-        export JNI_ROOT=/usr/lib/jvm/java-8-openjdk-amd64
-        exeIsValid g++
-        options="${options} \
-            -DUSE_GNU_GCC=ON \
-            -DUSE_LLVM_CLANG=OFF \
-            -DUSE_MALI=OFF \
-            -DUSE_NEON=OFF \
-            -DUSE_X86=ON \
-            -DUSE_DYNAMIC_LIBRARY=OFF \
-            -DUSE_ARMV8=OFF \
-            -DUSE_ARMV7=OFF \
-            -DUSE_FP32=ON \
-            -DUSE_FP16=OFF \
-            -DUSE_INT8=OFF \
-            -DCMAKE_C_COMPILER=`which gcc` \
-            -DCMAKE_CXX_COMPILER=`which g++` \
-            -DCMAKE_STRIP=`which strip` "
-    fi
-    if [ "${compiler_arch}" == "x86_ndk" ] ; then
-        exeIsValid x86_64-linux-android21-clang++
-        options="${options} \
-            -DUSE_GNU_GCC=OFF \
-            -DUSE_LLVM_CLANG=ON \
-            -DUSE_MALI=OFF \
-            -DUSE_NEON=OFF \
-            -DUSE_X86=ON \
-            -DUSE_DYNAMIC_LIBRARY=ON \
-            -DUSE_ARMV8=OFF \
-            -DUSE_ARMV7=OFF \
-            -DUSE_FP32=ON \
-            -DUSE_FP16=OFF \
-            -DUSE_INT8=OFF \
-            -DCMAKE_C_COMPILER=`which x86_64-linux-android21-clang` \
-            -DCMAKE_CXX_COMPILER=`which x86_64-linux-android21-clang++` \
-            -DCMAKE_STRIP=`which x86_64-linux-android-strip` "
-    fi
-    if [ "${compiler_arch}" == "arm_ios" ] ; then
-        exeIsValid arm-apple-darwin11-clang++
-        options="${options} \
-            -DUSE_IOS_CLANG=ON \
-            -DUSE_NEON=ON \
-            -DBUILD_TEST=OFF \
-            -DUSE_ONNX=OFF \
-            -DUSE_TFLITE=OFF \
-            -DUSE_LIBRARY_TUNING=OFF \
-            -DUSE_DYNAMIC_LIBRARY=ON \
-            -DCMAKE_C_COMPILER=`which arm-apple-darwin11-clang` \
-            -DCMAKE_CXX_COMPILER=`which arm-apple-darwin11-clang++` \
-            -DCMAKE_STRIP=`which arm-apple-darwin11-strip` "
+else
+    if [[ "${use_int8}" == "ON" || "${use_int8}" == "on" ]]; then
+        cmake_options="${cmake_options} -DUSE_INT8=ON"
     fi
 fi
+if [[ "${target}" == "linux-arm_himix100" || ${target} =~ armv7 || "${target}" == "linux-arm_musleabi" ]]; then
+    cmake_options="${cmake_options} -DUSE_NEON=ON"
+    if [[ "${use_int8}" == "ON" || "${use_int8}" == "on" ]]; then
+        cmake_options="${cmake_options} -DUSE_INT8=ON"
+    fi
+fi
+if [[ ${target} =~ android ]]; then
+    cmake_options="${cmake_options} -DUSE_JNI=ON"
+    cmake_options="${cmake_options} -DUSE_ANDROID_LOG=ON"
+fi
+cmake_options="${cmake_options} -DCMAKE_INSTALL_PREFIX=${script_dir}/install_${platform}"
+
+export cmake_options="${cmake_options}"
+
+${script_dir}/third_party/install.sh --target=${target} --threads=${build_threads} || exit 1
+echo "[INFO] use ${script_dir}/third_party/${platform}.sh to set environment variable..."
+source ${script_dir}/third_party/${platform}.sh || exit 1
 
 cd ${BOLT_ROOT}
-cd build_${compiler_arch}
-cmake .. -DCMAKE_INSTALL_PREFIX=${BOLT_ROOT}/install_${compiler_arch} ${options}
-make -j${build_threads} || exit 1
-make install -j${build_threads} || exit 1
-if [ "${compiler_arch}" == "arm_llvm" ] ; then
-    make test ARGS="-V"
+if [[ ${cmake_options} =~ USE_GPU=ON ]]; then
+    ./common/gcl/tools/kernel_source_compile/buildKernelSourceLib.sh || exit 1
 fi
-cd ..
 
-if [ "${compiler_arch}" == "arm_ios" ] ; then
-    bash ./kit/iOS/setup_lib_iOS.sh
+export cmake_options="${cmake_options} ${cmake_env_options}"
+echo "[INFO] use ${build_threads} threads to parallel build bolt on ${host} for target ${target} in directory ${BOLT_ROOT}..."
+rm -rf build_${platform} install_${platform}
+mkdir build_${platform} install_${platform}
+cd build_${platform}
+echo "[INFO] use cmake options ${cmake_options}"
+cmake -G"${CMAKE_GENERATOR}" ${cmake_options} .. || exit 1
+${MAKE} -j${build_threads}
+${MAKE} install || exit 1
+
+kit_flow=false
+if [[ ${cmake_options} =~ USE_FLOW=ON ]]; then
+    kit_flow=true
 fi
-if [[ "${compiler_arch}" == "arm_llvm" && "${llvm_gpu}" == "OFF" ]] ; then
-    bash ./kit/Android/setup_lib_Android.sh
-fi
+${BOLT_ROOT}/kit/setup.sh ${platform} ${kit_flow} || exit 1
+
+${MAKE} test ARGS="-V"
+
+cd ..

@@ -13,15 +13,11 @@
 
 #ifndef _H_CONVOLUTION_WINO_MALI_FP16
 #define _H_CONVOLUTION_WINO_MALI_FP16
-#include "sys.h"
-#include "error.h"
-#include "types.h"
-#include "tensor_computing_type.h"
 
-EE convolution_wino_transform_filter_bytes_mali_fp16(TensorDesc filterDesc,
-    ForwardRunInfoMali_t forwardRunInfo,
-    GCLMemDesc_t gclmemFilterDesc,
-    U32 *bytes);
+#include "gpu/mali/fp16/tensor_computing_fp16.h"
+
+EE convolution_wino_transform_filter_bytes_mali_fp16(
+    TensorDesc filterDesc, ForwardRunInfoMali_t forwardRunInfo, TensorDesc *ftmDesc);
 
 EE convolution_wino_transform_filter_mali_fp16(GCLHandle_t handle,
     TensorDesc filterDesc,
@@ -48,7 +44,7 @@ EE convolution_wino_mali_fp16(GCLHandle_t handle,
     TensorDesc biasDesc,
     const GCLMem_t bias,
     U32 tmpBytes,
-    GCLMem_t tmpBuf,
+    std::vector<GCLMem_t> tmpBuf,
     TensorDesc outputDesc,
     GCLMem_t output,
     ActivationMode activationMode);

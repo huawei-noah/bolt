@@ -11,14 +11,9 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "sys.h"
-#include "error.h"
-#include "types.h"
-
 #include "gpu/mali/fp16/convolution_mali_fp16.h"
 #include "gpu/mali/fp16/convolution_direct_mali_fp16.h"
 #include "gpu/mali/fp16/convolution_wino_mali_fp16.h"
-#include "gpu/mali/fp16/convolution_direct_spe_ck_mali_fp16.h"
 
 inline EE convolution_checkpara_mali_fp16(GCLHandle_t handle,
     TensorDesc inputDesc,
@@ -31,57 +26,40 @@ inline EE convolution_checkpara_mali_fp16(GCLHandle_t handle,
 {
     if (nullptr == handle || nullptr == input || nullptr == filter || nullptr == output ||
         nullptr == bias) {
-        return NULL_POINTER;
+        CHECK_STATUS(NULL_POINTER);
     }
     if (inputDesc.dt != outputDesc.dt || inputDesc.dt != filterDesc.dt || inputDesc.dt != DT_F16) {
-        return NOT_MATCH;
+        CHECK_STATUS(NOT_MATCH);
     }
-
-    U32 ic, fc, fn, fh, fw, oc;
-    CHECK_STATUS(tensorSelectGet(inputDesc, NULL, NULL, NULL, &ic, NULL, NULL));
-    CHECK_STATUS(tensorSelectGet(filterDesc, NULL, NULL, &fn, &fc, &fh, &fw));
-    CHECK_STATUS(tensorSelectGet(outputDesc, NULL, NULL, NULL, &oc, NULL, NULL));
-
-    if (input->desc.memFormat == DF_NCWHC4) {
+    U32 oc = outputDesc.dims[outputDesc.nDims - 2];
+    if (input->desc.memFormat == DF_NCHWC4) {
         if (output->desc.memFormat == DF_NCHW) {
-            if (fn != 1) {
-                return NOT_SUPPORTED;
+            if (oc != 1) {
+                CHECK_STATUS(NOT_SUPPORTED);
             }
-        } else if (output->desc.memFormat != DF_NCWHC4) {
-            return NOT_MATCH;
+        } else if (output->desc.memFormat != DF_NCHWC4) {
+            CHECK_STATUS(NOT_MATCH);
         }
-    }
-    if (fn != oc) {
-        return NOT_MATCH;
-    }
-    if (ic != fc) {
-        return NOT_MATCH;
     }
     return SUCCESS;
 }
 
-EE convolution_transform_filter_bytes_mali_fp16(TensorDesc filterDesc,
-    ForwardRunInfoMali_t forwardRunInfo,
-    GCLMemDesc_t gclmemFilterDesc,
-    U32 *bytes)
+EE convolution_transform_filter_bytes_mali_fp16(
+    TensorDesc filterDesc, ForwardRunInfoMali_t forwardRunInfo, TensorDesc *ftmDesc)
 {
     EE ret = SUCCESS;
     ConvolutionForwardAlgorithm algorithm = (ConvolutionForwardAlgorithm)(forwardRunInfo->algorithm);
     switch (algorithm) {
         case CONVOLUTION_ALGORITHM_DIRECT:
             ret = convolution_direct_transform_filter_bytes_mali_fp16(
-                filterDesc, forwardRunInfo, gclmemFilterDesc, bytes);
-            break;
-        case CONVOLUTION_ALGORITHM_DIRECT_SPE_CK:
-            ret = convolution_direct_spe_ck_transform_filter_bytes_mali_fp16(
-                filterDesc, forwardRunInfo, gclmemFilterDesc, bytes);
+                filterDesc, forwardRunInfo, ftmDesc);
             break;
         case CONVOLUTION_ALGORITHM_GEMM:
             ret = NOT_SUPPORTED;
             break;
         case CONVOLUTION_ALGORITHM_WINOGRAD:
             ret = convolution_wino_transform_filter_bytes_mali_fp16(
-                filterDesc, forwardRunInfo, gclmemFilterDesc, bytes);
+                filterDesc, forwardRunInfo, ftmDesc);
             break;
         default:
             ret = NOT_SUPPORTED;
@@ -103,10 +81,6 @@ EE convolution_transform_filter_mali_fp16(GCLHandle_t handle,
     switch (algorithm) {
         case CONVOLUTION_ALGORITHM_DIRECT:
             ret = convolution_direct_transform_filter_mali_fp16(
-                handle, filterDesc, filter, forwardRunInfo, fltmemDesc, fltmem);
-            break;
-        case CONVOLUTION_ALGORITHM_DIRECT_SPE_CK:
-            ret = convolution_direct_spe_ck_transform_filter_mali_fp16(
                 handle, filterDesc, filter, forwardRunInfo, fltmemDesc, fltmem);
             break;
         case CONVOLUTION_ALGORITHM_GEMM:
@@ -137,10 +111,6 @@ EE convolution_infer_forward_tmp_bytes_mali_fp16(TensorDesc inputDesc,
             ret = convolution_direct_infer_forward_tmp_bytes_mali_fp16(
                 inputDesc, filterDesc, outputDesc, convParamSpec, forwardRunInfo, bytes);
             break;
-        case CONVOLUTION_ALGORITHM_DIRECT_SPE_CK:
-            ret = convolution_direct_spe_ck_infer_forward_tmp_bytes_mali_fp16(
-                inputDesc, filterDesc, outputDesc, convParamSpec, forwardRunInfo, bytes);
-            break;
         case CONVOLUTION_ALGORITHM_GEMM:
             ret = NOT_SUPPORTED;
             break;
@@ -165,7 +135,7 @@ EE convolution_mali_fp16(GCLHandle_t handle,
     TensorDesc biasDesc,
     const GCLMem_t bias,
     U32 tmpBytes,
-    GCLMem_t tmpBuf,
+    std::vector<GCLMem_t> tmpBuf,
     TensorDesc outputDesc,
     GCLMem_t output,
     ActivationMode activationMode)
@@ -177,12 +147,7 @@ EE convolution_mali_fp16(GCLHandle_t handle,
     switch (algorithm) {
         case CONVOLUTION_ALGORITHM_DIRECT:
             ret = convolution_direct_mali_fp16(handle, inputDesc, input, filterDesc, filter,
-                convParamSpec, forwardRunInfo, biasDesc, bias, tmpBytes, tmpBuf, outputDesc, output,
-                activationMode);
-            break;
-        case CONVOLUTION_ALGORITHM_DIRECT_SPE_CK:
-            ret = convolution_direct_spe_ck_mali_fp16(handle, inputDesc, input, filterDesc, filter,
-                convParamSpec, forwardRunInfo, biasDesc, bias, tmpBytes, tmpBuf, outputDesc, output,
+                convParamSpec, forwardRunInfo, biasDesc, bias, tmpBytes, tmpBuf[0], outputDesc, output,
                 activationMode);
             break;
         case CONVOLUTION_ALGORITHM_GEMM:

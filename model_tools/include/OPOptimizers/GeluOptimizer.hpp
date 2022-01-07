@@ -14,55 +14,58 @@
 #ifndef _H_GeluOPTIMIZER
 #define _H_GeluOPTIMIZER
 
-#include "model_tools.h"
 #include "OPOptimizer.hpp"
 
 class GeluOptimizer : public OPOptimizer {
     bool optimize(ModelSpec *spec) override
     {
         bool hasOptimized = false;
-        for (int i = 0; i < spec->num_operator_specs; i++) {
+        for (int i = 0; i < spec->num_operator_specs - 2; i++) {
             if (spec->ops[i].type == OT_Erf) {
                 int erfIndex = i;
-                int firMulIndex = erfIndex - 2;
                 int divIndex = erfIndex - 1;
                 int AddIndex = erfIndex + 1;
                 int secMulIndex = erfIndex + 2;
 
-                if (spec->ops[firMulIndex].type == OT_Scale) {
-                    if (spec->ops[divIndex].type == OT_Scale) {
-                        if (spec->ops[AddIndex].type == OT_Scale) {
-                            if (spec->ops[secMulIndex].type == OT_Eltwise) {
-                                spec->ops[secMulIndex].num_inputs = 1;
-                                free(spec->ops[secMulIndex].input_tensors_name[1]);
-                                memcpy(spec->ops[secMulIndex].input_tensors_name[0],
-                                    spec->ops[divIndex].input_tensors_name[0], NAME_LEN);
-                                spec->ops[secMulIndex].type = OT_Gelu;
-                                setOperatorInvalid(spec, firMulIndex);
-                                setOperatorInvalid(spec, divIndex);
-                                setOperatorInvalid(spec, erfIndex);
-                                setOperatorInvalid(spec, AddIndex);
+                int firMulIndex = -1;
+                int candidate = erfIndex - 2;
+                if (candidate >= 0 && spec->ops[candidate].type == OT_Power &&
+                    UNI_ABS(spec->ops[candidate].ps.power_spec.scale - 0.5) < eps &&
+                    UNI_ABS(spec->ops[candidate].ps.power_spec.shift) < eps &&
+                    UNI_ABS(spec->ops[candidate].ps.power_spec.power - 1) < eps) {
+                    firMulIndex = candidate;
+                }
+                candidate = erfIndex + 3;
+                if (candidate < spec->num_operator_specs && spec->ops[candidate].type == OT_Power &&
+                    UNI_ABS(spec->ops[candidate].ps.power_spec.scale - 0.5) < eps &&
+                    UNI_ABS(spec->ops[candidate].ps.power_spec.shift) < eps &&
+                    UNI_ABS(spec->ops[candidate].ps.power_spec.power - 1) < eps) {
+                    firMulIndex = candidate;
+                }
+                if (firMulIndex == -1) {
+                    continue;
+                }
+                if (spec->ops[divIndex].type == OT_Power &&
+                    UNI_ABS(spec->ops[divIndex].ps.power_spec.scale - 1 / 1.4142135381) < eps &&
+                    UNI_ABS(spec->ops[divIndex].ps.power_spec.shift) < eps &&
+                    UNI_ABS(spec->ops[divIndex].ps.power_spec.power - 1) < eps) {
+                    if (spec->ops[AddIndex].type == OT_Power &&
+                        UNI_ABS(spec->ops[AddIndex].ps.power_spec.scale - 1) < eps &&
+                        UNI_ABS(spec->ops[AddIndex].ps.power_spec.shift - 1) < eps &&
+                        UNI_ABS(spec->ops[AddIndex].ps.power_spec.power - 1) < eps) {
+                        if (spec->ops[secMulIndex].type == OT_Eltwise &&
+                            spec->ops[secMulIndex].ps.eltwise_spec.elt_mode == ELTWISE_PROD) {
+                            spec->ops[secMulIndex].num_inputs = 1;
+                            delete spec->ops[secMulIndex].input_tensors_name[1];
+                            memcpy(spec->ops[secMulIndex].input_tensors_name[0],
+                                spec->ops[divIndex].input_tensors_name[0], NAME_LEN);
+                            spec->ops[secMulIndex].type = OT_Gelu;
+                            setOperatorInvalid(spec, firMulIndex, true);
+                            setOperatorInvalid(spec, divIndex, true);
+                            setOperatorInvalid(spec, erfIndex, true);
+                            setOperatorInvalid(spec, AddIndex, true);
 
-                                int firMulWeightIndex =
-                                    searchWeightIndex(spec, spec->ops[firMulIndex].name);
-                                spec->ws[firMulWeightIndex].bytes_of_weight = 0;
-                                delete spec->ws[firMulWeightIndex].weight;
-                                spec->ws[firMulWeightIndex].weight = nullptr;
-
-                                int divWeightIndex =
-                                    searchWeightIndex(spec, spec->ops[divIndex].name);
-                                spec->ws[divWeightIndex].bytes_of_weight = 0;
-                                delete spec->ws[divWeightIndex].weight;
-                                spec->ws[divWeightIndex].weight = nullptr;
-
-                                int AddWeightIndex =
-                                    searchWeightIndex(spec, spec->ops[AddIndex].name);
-                                spec->ws[AddWeightIndex].bytes_of_vec = 0;
-                                delete spec->ws[AddWeightIndex].vec;
-                                spec->ws[AddWeightIndex].vec = nullptr;
-
-                                hasOptimized = true;
-                            }
+                            hasOptimized = true;
                         }
                     }
                 }
@@ -70,5 +73,8 @@ class GeluOptimizer : public OPOptimizer {
         }
         return hasOptimized;
     }
+
+private:
+    float eps = 0.0001;
 };
 #endif

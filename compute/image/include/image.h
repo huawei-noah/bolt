@@ -14,25 +14,22 @@
 #ifndef _H_IMAGE
 #define _H_IMAGE
 
-#include "tensor.hpp"
-#include "tensor_desc.h"
+#include "tensor_auxiliary.h"
+#include "parameter_spec.h"
 #include "sys.h"
 
-#ifdef _USE_MALI
+#ifdef _USE_GPU
 #include "gcl.h"
 #include "ocl_desc_trans.h"
 #endif
 
-typedef struct {
-    DataType paramDT;
-} ResizeDesc;
-
 EE resize_infer_output_size(Tensor *inputTensor,
-    ResizeDesc resizeDesc,
+    DataType paramDT,
     void *params,
     Tensor *outputTensor,
     U32 *outputBytes,
     ArchInfo_t archInfo);
 
-EE resize(Tensor inputTensor, Tensor tmpTensor, Tensor outputTensor, ArchInfo_t archInfo);
+EE resize(
+    Tensor inputTensor, Tensor tmpTensor, Tensor outputTensor, ResizeParamSpec p, ArchInfo_t archInfo);
 #endif

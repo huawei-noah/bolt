@@ -11,7 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "types.h"
 #include "cpu/general/tensor_computing_general.h"
 #include "cpu/general/general_functions.h"
 
@@ -69,6 +68,9 @@ inline EE depthwise_pointwise_convolution(TensorDesc inputDesc,
     U32 strideW = convParamSpec.stride_w;
     U32 paddingT = convParamSpec.padding_top;
     U32 paddingL = convParamSpec.padding_left;
+    U32 dilatedRateH = convParamSpec.dilatedRate_h;
+    U32 dilatedRateW = convParamSpec.dilatedRate_w;
+
     bool fuseDepthwisePointwise = (pwFilterArray == nullptr) ? false : true;
 
     T3 *pwArray;
@@ -80,19 +82,19 @@ inline EE depthwise_pointwise_convolution(TensorDesc inputDesc,
     }
     U32 ic8 = ic / 8;
     U32 oc8 = oc / 8;
-    for (U32 n = 0; n < in; n++) {
+    for (U32 n = 0, pw_off = 0; n < in; n++) {
         // dw conv
-        for (U32 c = 0, pw_off = 0; c < ic; c++) {
+        for (U32 c = 0; c < ic; c++) {
             for (U32 h = 0; h < oh; h++) {
                 for (U32 w = 0; w < ow; w++, pw_off++) {
                     T3 value = dwBiasArray[c];
                     for (U32 fh_idx = 0; fh_idx < fh; fh_idx++) {
                         for (U32 fw_idx = 0; fw_idx < fw; fw_idx++) {
-                            I32 ih_idx = h * strideH - paddingT + fh_idx;
-                            I32 iw_idx = w * strideW - paddingL + fw_idx;
+                            I32 ih_idx = h * strideH - paddingT + fh_idx * dilatedRateH;
+                            I32 iw_idx = w * strideW - paddingL + fw_idx * dilatedRateW;
                             if (ih_idx >= 0 && ih_idx < (I32)ih && iw_idx >= 0 && iw_idx < (I32)iw) {
                                 U32 i_off;
-                                if (idf == DF_NCHW) {
+                                if (idf != DF_NCHWC8) {
                                     i_off = ((n * ic + c) * ih + ih_idx) * iw + iw_idx;
                                 } else {
                                     i_off = (((n * ic8 + (c / 8)) * ih + ih_idx) * iw + iw_idx) * 8 +
@@ -106,7 +108,7 @@ inline EE depthwise_pointwise_convolution(TensorDesc inputDesc,
                     CHECK_STATUS(
                         activation_template<T3>(depthwiseActivationParamSpec, value, &value));
 
-                    if (fuseDepthwisePointwise || odf == DF_NCHW) {
+                    if (fuseDepthwisePointwise || odf != DF_NCHWC8) {
                         pwArray[pw_off] = value;
                     } else {
                         pwArray[(((n * ic8 + (c / 8)) * oh + h) * ow + w) * 8 + c % 8] = value;
@@ -120,18 +122,18 @@ inline EE depthwise_pointwise_convolution(TensorDesc inputDesc,
                 for (U32 hw = 0; hw < oh * ow; hw++) {
                     T3 value = pwBiasArray[o];
                     for (U32 c = 0; c < ic; c++) {
-                        U32 pw_off = c * oh * ow + hw;
+                        U32 pw_off = (n * ic + c) * oh * ow + hw;
                         value += pwArray[pw_off] * pwFilterArray[o * ic + c];
                     }
                     CHECK_STATUS(
                         activation_template<T3>(pointwiseActivationParamSpec, value, &value));
                     U32 o_off;
-                    if (odf == DF_NCHW) {
+                    if (odf != DF_NCHWC8) {
                         o_off = (n * oc + o) * oh * ow + hw;
                     } else {
                         o_off = ((n * oc8 + (o / 8)) * oh * ow + hw) * 8 + o % 8;
                     }
-                    outArray[o_off] = value;
+                    outArray[o_off] += value;
                 }
             }
         }
@@ -141,6 +143,7 @@ inline EE depthwise_pointwise_convolution(TensorDesc inputDesc,
 
 EE depthwise_pointwise_convolution_general(TensorDesc inputDesc,
     void *input,
+    void *eltwiseInput,
     TensorDesc dwFilterDesc,
     const void *dwFilter,
     TensorDesc pwFilterDesc,
@@ -157,6 +160,11 @@ EE depthwise_pointwise_convolution_general(TensorDesc inputDesc,
     ActivationParamSpec depthwiseActivationParamSpec,
     ActivationParamSpec pointwiseActivationParamSpec)
 {
+    if (eltwiseInput == nullptr) {
+        memset(output, 0, tensorNumBytes(outputDesc));
+    } else {
+        memcpy(output, eltwiseInput, tensorNumBytes(outputDesc));
+    }
     EE ret = SUCCESS;
     switch (inputDesc.dt) {
 #ifdef _USE_FP16

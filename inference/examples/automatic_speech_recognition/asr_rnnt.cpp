@@ -45,7 +45,7 @@ int main(int argc, char *argv[])
     auto pipeline = createPipeline(affinityPolicyName, modelPath);
 
     // load sequences
-    std::map<std::string, std::shared_ptr<Tensor>> inMap = pipeline->get_inputs();
+    std::map<std::string, std::shared_ptr<Tensor>> inMap = pipeline->get_input();
     std::vector<TensorDesc> sequenceDescs;
     TensorDesc soundInputDesc = (*(inMap["sounds"])).get_desc();
     sequenceDescs.push_back(soundInputDesc);
@@ -71,12 +71,9 @@ int main(int argc, char *argv[])
         inputDescMap["sounds"] = inputDesc;
         pipeline->reready(inputDescMap);
 
-        auto modelInputTensorNames = pipeline->get_model_input_tensor_names();
         std::map<std::string, std::shared_ptr<U8>> model_tensors_input;
-        for (int index = 0; index < (int)modelInputTensorNames.size(); index++) {
-            U8 *tensorPointer = (U8 *)((CpuMemory *)(sequence[index].get_memory()))->get_ptr();
-            pipeline->copy_to_named_input(modelInputTensorNames[index], tensorPointer);
-        }
+        model_tensors_input["sounds"] = ((CpuMemory *)(sequence[0].get_memory()))->get_shared_ptr();
+        pipeline->set_input_by_assign(model_tensors_input);
 
         double timeBegin = ut_time_ms();
         pipeline->run();

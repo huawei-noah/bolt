@@ -40,6 +40,9 @@ public:
         pthread_mutex_lock(&(this->taskQueueLock));
         pthread_mutex_destroy(&(this->taskQueueLock));
         pthread_cond_destroy(&(this->condition));
+#if !defined(__ANDROID_API__) && !defined(__APPLE__)
+        pthread_barrier_destroy(&(this->barrier));
+#endif
         delete[] this->threads;
     }
 
@@ -59,6 +62,11 @@ public:
         if (pthread_cond_init(&(this->condition), NULL)) {
             return 1;
         }
+#if !defined(__ANDROID_API__) && !defined(__APPLE__)
+        if (pthread_barrier_init(&(this->barrier), NULL, threadNum)) {
+            return 1;
+        }
+#endif
         this->precision = dataType;
         this->deviceInfo = get_cpu_info(affinityPolicy);
         this->graphPath = graphPath;
@@ -69,6 +77,7 @@ public:
             this->graph[graphPath[i]].ready(this->precision, this->deviceInfo.affinityPolicy, -1);
         }
 #endif
+#ifndef _USE_OPENMP
         int cpuId;
         if (this->deviceInfo.affinityPolicy == AFFINITY_CPU_LOW_POWER) {
             cpuId = 3;
@@ -76,6 +85,7 @@ public:
             cpuId = 4;
         }
         set_thread_affinity(0, &cpuId, 1);
+#endif
         this->threadNum = threadNum;
         this->threads = new pthread_t[threadNum];
         for (int i = 0; i < threadNum; i++) {
@@ -146,6 +156,9 @@ private:
     pthread_mutex_t taskQueueLock;
     std::queue<Task *> taskQueue;
     pthread_cond_t condition;
+#if !defined(__ANDROID_API__) && !defined(__APPLE__)
+    pthread_barrier_t barrier;
+#endif
     pthread_t *threads;
     int stop;
 
@@ -172,10 +185,8 @@ private:
         int threadId = schedule->getThreadId(pthread_self());
         UNI_DEBUG_LOG("worker(%d) begin\n", threadId);
         std::map<std::string, Graph<GraphParameter, ComputeNode, DataTensor>> threadPrivateGraph;
-        double timeStart = ut_time_ms();
 #ifdef _USE_WEIGHT_SHARE
         int gpuId = -1, cpuId = -1;
-        Arch arch = MALI;
         if (schedule->useGPU && threadId == schedule->threadNum - 1) {
             gpuId = 0;
             for (unsigned int i = 0; i < schedule->graphPath.size(); i++) {
@@ -185,36 +196,50 @@ private:
             }
         }
         if (gpuId < 0) {
+#ifndef _USE_OPENMP
             if (schedule->deviceInfo.affinityPolicy == AFFINITY_CPU_HIGH_PERFORMANCE) {
                 cpuId = schedule->deviceInfo.cpuNum - 1 - threadId;
             } else {
                 cpuId = threadId;
             }
-            arch = schedule->deviceInfo.archs[cpuId];
+#endif
+#if !defined(__ANDROID_API__) && !defined(__APPLE__)
             if (threadId == 0) {
+#else
+            if (0) {
+#endif
                 threadPrivateGraph = schedule->graph;
+#ifndef _USE_OPENMP
                 for (unsigned int i = 0; i < schedule->graphPath.size(); i++) {
-                    threadPrivateGraph[schedule->graphPath[i]].setRuntime(cpuId, arch);
+                    threadPrivateGraph[schedule->graphPath[i]].setRuntime(
+                        cpuId, schedule->deviceInfo.archs[cpuId]);
                 }
+#endif
             } else {
                 for (unsigned int i = 0; i < schedule->graphPath.size(); i++) {
                     threadPrivateGraph[schedule->graphPath[i]] =
                         schedule->graph[schedule->graphPath[i]].clone();
-                    threadPrivateGraph[schedule->graphPath[i]].setRuntime(cpuId, arch);
+#ifndef _USE_OPENMP
+                    threadPrivateGraph[schedule->graphPath[i]].setRuntime(
+                        cpuId, schedule->deviceInfo.archs[cpuId]);
+#endif
                 }
             }
         }
+#if !defined(__ANDROID_API__) && !defined(__APPLE__)
+        pthread_barrier_wait(&(schedule->barrier));
+#endif
 #else
         for (unsigned int i = 0; i < schedule->graphPath.size(); i++) {
             threadPrivateGraph[schedule->graphPath[i]].init(schedule->graphPath[i]);
             threadPrivateGraph[schedule->graphPath[i]].ready(
                 schedule->precision, schedule->deviceInfo.affinityPolicy, -1);
+#ifndef _USE_OPENMP
             threadPrivateGraph[schedule->graphPath[i]].setRuntime(6, ARM_A76);
+#endif
         }
 #endif
         UNI_DEBUG_LOG("start to wait task\n");
-        double timeEnd = ut_time_ms();
-        UNI_PROFILE_INFO("graphs init", "init", timeStart * 1000, (timeEnd - timeStart) * 1000);
         while (1) {
             pthread_mutex_lock(&(schedule->taskQueueLock));
             while (schedule->taskQueue.empty() && !(schedule->stop)) {

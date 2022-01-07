@@ -43,10 +43,7 @@ cd ${kernelBinPath}
 rm -rf build
 mkdir build
 cd build
-cmake_options="-DUSE_CROSS_COMPILE=ON \
-         -DUSE_GNU_GCC=OFF \
-         -DUSE_LLVM_CLANG=ON \
-         -DUSE_MALI=ON \
+cmake_options="-DUSE_GPU=ON \
          -DUSE_DYNAMIC_LIBRARY=ON \
          -DBUILD_TEST=ON \
          -DUSE_THREAD_SAFE=OFF"

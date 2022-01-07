@@ -15,7 +15,7 @@
 #define _H_BLAS_INT8
 
 #include "sys.h"
-#include "types.h"
+
 #include "error.h"
 #include "tensor_desc.h"
 
@@ -39,5 +39,4 @@ EE mmm_int8(int M,
     INT8 *tmp,
     I32 *result,
     Arch arch);
-
 #endif

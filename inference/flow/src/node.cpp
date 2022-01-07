@@ -13,6 +13,7 @@
 
 #include "node.h"
 #include "inference.hpp"
+#include "profiling.h"
 
 Node::Node()
 {}
@@ -63,13 +64,14 @@ EE Node::inferOutputSize()
         ret = this->inferOutputSizeFunction(
             this->inputs, this->tmpTensor, this->outputs, this->inferOutputSizeParameter);
     } else {
-        std::vector<std::string> inferenceOutputNames =
-            this->boltModel.get_model_output_tensor_names();
-        for (std::string name : inferenceOutputNames) {
+        std::map<std::string, TensorDesc> inferenceOutputDescs = this->boltModel.get_output_desc();
+        for (auto iter : inferenceOutputDescs) {
+            std::string name = iter.first;
             if (this->outputs.find(name) == this->outputs.end()) {
-                this->outputs[name] = std::shared_ptr<Tensor>(new Tensor());
+                //this->outputs[name] = std::shared_ptr<Tensor>(new Tensor());
+                continue;
             }
-            this->outputs[name]->resize(this->boltModel.get_tensor_desc_by_name(name));
+            this->outputs[name]->resize(iter.second);
         }
     }
     UNI_DEBUG_LOG("node %s infer output size end\n", this->nodeParameter.name().c_str());
@@ -98,7 +100,7 @@ void Node::initInference(AffinityPolicy affinityPolicy)
         return;
     }
     std::string modelPath = this->inferenceParameter[0];
-    const char *algorithmMapPath = "./";
+    const char *algorithmMapPath = nullptr;
     if (this->inferenceParameter.size() > 1) {
         algorithmMapPath = this->inferenceParameter[1].c_str();
     }
@@ -110,11 +112,12 @@ void Node::initInference(AffinityPolicy affinityPolicy)
     CNN cnn(affinityPolicy, precision, ms.model_name);
     cnn.sort_operators_sequential(&ms);
     cnn.initialize_ops(&ms);
-    cnn.loadAlgorithmMapFromText(algorithmMapPath);
+    cnn.loadAlgorithmMap(algorithmMapPath);
     std::map<std::string, TensorDesc> inputDescMap = extractInputDims(&ms);
     cnn.ready(inputDescMap);
     CHECK_STATUS(cnn.mark_input_output());
-    cnn.saveAlgorithmMapToText(algorithmMapPath);
+    if (algorithmMapPath != nullptr)
+        cnn.saveAlgorithmMapToFile(algorithmMapPath);
     CHECK_STATUS(mt_destroy_model(&ms));
     this->boltModel = cnn;
     UNI_DEBUG_LOG("node %s init inference engine end\n", this->nodeParameter.name().c_str());
@@ -165,66 +168,66 @@ EE Node::run()
                                                                   : "NULL";
     UNI_DEBUG_LOG("node %s run begin, preprocess use %s begin\n",
         this->nodeParameter.name().c_str(), preprocessFunctionName.c_str());
-    std::map<std::string, std::shared_ptr<Tensor>> preprocessOutputs, postprocessInputs;
-    if (postprocessFunction == NULL) {
-        for (auto iter : this->outputs) {
-            postprocessInputs[iter.first] = iter.second;
-        }
-    } else {
-        postprocessInputs = this->boltModel.get_outputs();
-    }
 
     // pre process part
-    if (preprocessFunction != NULL) {
-        preprocessOutputs = this->boltModel.get_inputs();
-        preprocessFunction(
-            this->inputs, this->tmpTensor, preprocessOutputs, this->preprocessParameter);
-    } else {
+    std::map<std::string, std::shared_ptr<Tensor>> preprocessOutputs = this->inputs;
+    if (preprocessFunction == NULL) {
         UNI_DEBUG_LOG("node %s use default preprocess function(output is set to input)\n",
             this->nodeParameter.name().c_str());
-        preprocessOutputs = this->inputs;
+    } else {
+        if (modelPath != std::string("NULL")) {
+            for (auto &iter : this->boltModel.get_input()) {
+                preprocessOutputs[iter.first] = iter.second;
+            }
+        }
+        for (auto &iter : this->outputs) {
+            preprocessOutputs[iter.first] = iter.second;
+        }
+        preprocessFunction(
+            this->inputs, this->tmpTensor, preprocessOutputs, this->preprocessParameter);
     }
     UNI_DEBUG_LOG("node %s preprocess end, inference use %s begin\n",
         this->nodeParameter.name().c_str(), this->inferenceParameter[0].c_str());
 
+    std::map<std::string, std::shared_ptr<Tensor>> postprocessInputs = preprocessOutputs;
+    if (postprocessFunction == NULL) {
+        postprocessInputs = this->outputs;
+    } else {
+        for (auto &iter : this->boltModel.get_output()) {
+            postprocessInputs[iter.first] = iter.second;
+        }
+    }
     // inference part
     if (modelPath != std::string("NULL")) {
-        std::map<std::string, TensorDesc> inputDescs;
-        for (auto iter : preprocessOutputs) {
-            inputDescs[iter.first] = iter.second->get_desc();
+        std::map<std::string, TensorDesc> inputDescs = this->boltModel.get_input_desc();
+        for (auto &iter : inputDescs) {
+            iter.second = preprocessOutputs[iter.first]->get_desc();
         }
         this->boltModel.reready(inputDescs);
         std::map<std::string, std::shared_ptr<U8>> inputs;
-        for (auto iter : preprocessOutputs) {
-            inputs[iter.first] = ((CpuMemory *)iter.second->get_memory())->get_shared_ptr();
+        for (auto &iter : inputDescs) {
+            inputs[iter.first] =
+                ((CpuMemory *)preprocessOutputs[iter.first]->get_memory())->get_shared_ptr();
         }
-        this->boltModel.set_input_tensors_value(inputs);
-        double timeStart = ut_time_ms();
+        this->boltModel.set_input_by_assign(inputs);
         this->boltModel.run();
-        double timeEnd = ut_time_ms();
-        UNI_PROFILE_INFO(this->nodeParameter.name().c_str(), "run", timeStart * 1000,
-            (timeEnd - timeStart) * 1000);
         std::map<std::string, std::shared_ptr<Tensor>> inferenceResult =
-            this->boltModel.get_outputs();
-        for (auto iter : postprocessInputs) {
+            this->boltModel.get_output();
+        for (auto &iter : inferenceResult) {
             std::string name = iter.first;
-            if (inferenceResult.find(name) != inferenceResult.end()) {
+            if (postprocessInputs.find(name) != postprocessInputs.end()) {
                 TensorDesc desc = inferenceResult[name]->get_desc();
-                iter.second->resize(desc);
+                postprocessInputs[name]->resize(desc);
                 void *src = ((CpuMemory *)inferenceResult[name]->get_memory())->get_ptr();
-                void *dst = ((CpuMemory *)iter.second->get_memory())->get_ptr();
+                void *dst = ((CpuMemory *)postprocessInputs[name]->get_memory())->get_ptr();
                 if (src != dst) {
                     memcpy(dst, src, tensorNumBytes(desc));
                 }
-            } else {
-                UNI_ERROR_LOG("%s is not marked as graph %s output\n", name.c_str(),
-                    this->inferenceParameter[0].c_str());
             }
         }
     } else {
         UNI_DEBUG_LOG("node %s use default inference function(output is set to input)\n",
             this->nodeParameter.name().c_str());
-        postprocessInputs = preprocessOutputs;
     }
     UNI_DEBUG_LOG("node %s inference end, postprocess use %s begin\n",
         this->nodeParameter.name().c_str(), postprocessFunctionName.c_str());

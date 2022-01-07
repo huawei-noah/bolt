@@ -20,8 +20,7 @@ class PReLUOCL : public PReLU {
 public:
     PReLUOCL(DataType dt) : PReLU(dt)
     {
-        setMALIArchInfo(
-            &(this->archInfo), nullptr, &this->needSetKernelVec, &this->needSelectKernelLS);
+        INIT_GPU_INFO(nullptr)
     }
 
     ~PReLUOCL(){DESTROY_OCL_KERNEL}
@@ -49,18 +48,8 @@ public:
             this->preluDesc.propagate_down = false;
         }
         Tensor modelWeightTensor = Tensor(OCLMem);
-        auto weightMem = (OclMemory *)modelWeightTensor.get_memory();
         TensorDesc weightDesc = tensor1d(this->dt, weightNum);
         modelWeightTensor.resize(weightDesc);
-
-        U32 stride[3] = {1, 1, 1};
-        U32 offset[3] = {0, 0, 0};
-        stride[0] = (weightNum > 1) ? (weightNum + 3) / 4 * 4 : 1;
-        GCLMemType mt = GCL_MEM_BUF;
-        MemFlags flags = CL_MEM_READ_WRITE;
-        GCLMemDesc desc = gclmem_build_desc();
-        CHECK_STATUS(gclmem_set_desc_padding(&desc, stride, offset, this->dt, DF_NCHW, mt, flags));
-        weightMem->padding(desc);
         this->weightTensors.push_back(modelWeightTensor);
         return SUCCESS;
     }
@@ -77,6 +66,9 @@ public:
     {
         this->needSetKernelVec = true;
         CHECK_STATUS(prelu_infer_output_size(inTensors[0], outTensors[0], &this->archInfo));
+        if (check_tensors_image(inTensors)) {
+            CHECK_STATUS(set_tensors_image(outTensors, inTensors.size()));
+        }
         return SUCCESS;
     }
 

@@ -33,6 +33,14 @@ EE eltwise_x86(DataType dataType,
             break;
         }
 #endif
+        case DT_I32: {
+            ret = eltwise_i32(input, inputSize, num, len, output, eltwiseMode);
+            break;
+        }
+        case DT_U8: {
+            ret = eltwise_u8(input, inputSize, num, len, output, eltwiseMode);
+            break;
+        }
         default:
             ret = NOT_SUPPORTED;
             break;

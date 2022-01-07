@@ -14,9 +14,10 @@
 #ifndef _H_CPU_FUNCTIONS_TEMPLATE
 #define _H_CPU_FUNCTIONS_TEMPLATE
 
-#include <string.h>
 #include <math.h>
-#include "types.h"
+#include "data_type.h"
+#include "parameter_spec.h"
+#include "uni.h"
 
 // copy input[index]~input[index+length] to output buffer
 template <typename T>
@@ -25,17 +26,19 @@ void get_vector(T *input, int lda, T **output, int ldb, int index, int length, T
     UNUSED(ldb);
     int local = index % lda;
     if (length == 1) {
-        *output = buffer;
-        (*output)[0] = input[local];
+        *output = input + local;
     } else if (lda == 1) {
-        *output = input;
+        *output = buffer;
+        for (int i = 0; i < length; i++) {
+            (*output)[i] = input[local];
+        }
     } else {
         int remain = lda - local;
         if (remain >= length) {
             *output = input + local;
         } else {
             *output = buffer;
-            memcpy(*output, input + local, sizeof(T) * remain);
+            UNI_MEMCPY(*output, input + local, sizeof(T) * remain);
             for (int i = 0; i < length - remain; i++) {
                 (*output)[remain + i] = input[i % lda];
             }
@@ -111,11 +114,20 @@ EE activation_template(ActivationParamSpec activationDesc, F32 input, T *output)
             result = input * (value / 6);
             break;
         }
+        case ACTIVATION_H_SWISH_NODIV: {
+            value = input + 3;
+            if (value < 0) {
+                value = 0;
+            }
+            if (value > 6) {
+                value = 6;
+            }
+            result = input * value;
+            break;
+        }
         case ACTIVATION_GELU: {
             value = input;
-            F32 two_div_PI_sqrt = sqrt(2 / 3.14159265358979323846);
-            value = two_div_PI_sqrt * (value + 0.044715 * powf(value, 3));
-            value = 1.0 - 2.0 / (exp(2.0 * value) + 1.0);
+            value = erf(value / sqrt(2));
             value = 0.5 * (1.0 + value);
             value = input * value;
             result = value;
@@ -141,6 +153,34 @@ EE activation_template(ActivationParamSpec activationDesc, F32 input, T *output)
             }
             value = input * tanh(value);
             result = value;
+            break;
+        }
+        case ACTIVATION_SOFTPLUS: {
+            result = log(1 + exp(input));
+            break;
+        }
+        case ACTIVATION_EXP: {
+            result = exp(input);
+            break;
+        }
+        case ACTIVATION_ABS: {
+            result = UNI_ABS(input);
+            break;
+        }
+        case ACTIVATION_SIGN: {
+            result = UNI_SIGN(input);
+            break;
+        }
+        case ACTIVATION_LOG: {
+            result = log(input);
+            break;
+        }
+        case ACTIVATION_NOT: {
+            result = (input > 0) ? 0 : 1;
+            break;
+        }
+        case ACTIVATION_NEG: {
+            result = -input;
             break;
         }
         default:
@@ -192,6 +232,15 @@ inline void array_add_template(const T *inputA, const T *inputB, T *output, I32 
 }
 
 template <typename T>
+inline void array_mul_and_add_template(
+    const T *inputA, const T *inputB, const T *inputC, T *output, I32 len)
+{
+    for (I32 i = 0; i < len; i++) {
+        output[i] = inputA[i] * inputB[i] + inputC[i];
+    }
+}
+
+template <typename T>
 inline F32 array_sum_template(const T *data, I32 len)
 {
     if (len <= 0) {
@@ -206,10 +255,10 @@ inline F32 array_sum_template(const T *data, I32 len)
 }
 
 template <typename T>
-inline void array_square_and_add_template(const T *inputA, const T *inputB, T *output, I32 len)
+inline void array_mul_template(const T *inputA, const T *inputB, T *output, I32 len)
 {
     for (I32 i = 0; i < len; i++) {
-        output[i] = inputA[i] + inputB[i] * inputB[i];
+        output[i] = inputA[i] * inputB[i];
     }
 }
 
@@ -222,15 +271,41 @@ inline void array_max_template(const T *inputA, const T *inputB, T *output, I32 
 }
 
 template <typename T>
-F32 array_max_value_template(const T *data, I32 len)
+EE array_minmax_value_template(const T *data, I32 len, int mode, F32 *result)
 {
     if (len <= 0) {
-        return 0;
+        return SUCCESS;
     }
-    F32 max_s = data[0];
-    for (I32 i = 1; i < len; i++) {
-        max_s = UNI_MAX(data[i], max_s);
+    int id = 0;
+    EE ret = NOT_SUPPORTED;
+    if (mode & 1) {
+        T min_s = data[0];
+        for (I32 i = 1; i < len; i++) {
+            min_s = UNI_MIN(data[i], min_s);
+        }
+        result[id++] = min_s;
+        ret = SUCCESS;
     }
-    return max_s;
+    if (mode & 2) {
+        T max_s = data[0];
+        for (I32 i = 1; i < len; i++) {
+            max_s = UNI_MAX(data[i], max_s);
+        }
+        result[id++] = max_s;
+        ret = SUCCESS;
+    }
+    return ret;
 }
+
+template <typename T>
+inline void array_norm_scalar_scale_template(
+    T *input, T *output, I32 len, F32 mean, F32 var, T *alpha, T *beta)
+{
+    F32 eps = 1e-6;
+    F32 std_value = sqrt(var + eps);
+    for (I32 i = 0; i < len; i++) {
+        output[i] = *alpha * (input[i] - mean) / std_value + *beta;
+    }
+}
+
 #endif

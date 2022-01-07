@@ -15,7 +15,8 @@
 #define _H_BLAS_FP32
 
 #include "sys.h"
-#include "types.h"
+
+#include "uni.h"
 #include "error.h"
 #include "tensor_desc.h"
 #include "arm_neon_expand.h"

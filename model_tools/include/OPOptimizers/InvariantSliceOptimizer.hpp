@@ -14,18 +14,11 @@
 #ifndef _H_InvariantSliceOPTIMIZER
 #define _H_InvariantSliceOPTIMIZER
 
-#include <vector>
-#include <string>
-#include <math.h>
-#include <stdlib.h>
-#include "model_tools.h"
 #include "OPOptimizer.hpp"
 
 class InvariantSliceOptimizer : public OPOptimizer {
     bool optimize(ModelSpec *spec) override
     {
-        // const int queryNum = 3;
-        // OperatorType queryOps[queryNum] = {OT_Conv, OT_FC, OT_Deconvolution};
         bool hasOptimized = false;
         for (int i = 1; i < spec->num_operator_specs; i++) {
             if (spec->ops[i].type == OT_Slice) {

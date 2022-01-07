@@ -42,6 +42,9 @@ EE reshape_infer_output_size_cpu(TensorDesc inputDesc, ReshapeParamSpec p, Tenso
     if (shape_size == 2) {
         (*outputDesc).df = DF_NORMAL;
     }
+    if (shape_size == 3) {
+        (*outputDesc).df = DF_MTK;
+    }
     if (shape_size >= 4) {
         (*outputDesc).df = DF_NCHW;
     }
@@ -66,10 +69,17 @@ EE reshape_infer_output_size_cpu(TensorDesc inputDesc, ReshapeParamSpec p, Tenso
         return NOT_SUPPORTED;
     }
 
+    bool sameDim = ((*outputDesc).nDims == inputDesc.nDims);
     for (I32 i = 0; i < shape_size; i++) {
         if ((*outputDesc).dims[i] == 0) {
             (*outputDesc).dims[i] = tensorNumElements(inputDesc) / factor;
         }
+        if ((*outputDesc).dims[i] != inputDesc.dims[i]) {
+            sameDim = false;
+        }
+    }
+    if (sameDim) {
+        (*outputDesc).df = inputDesc.df;
     }
 
     return SUCCESS;
@@ -87,7 +97,15 @@ EE reshape_cpu(TensorDesc inputDesc, void *input, TensorDesc outputDesc, void *o
         CHECK_REQUIREMENT(tensorNumElements(inputDesc) >= tensorNumElements(outputDesc));
         inputDesc.df = DF_NCHW;
     }
-    if (DF_NCHWC8 != inputDesc.df) {
+
+    bool sameDim = (outputDesc.nDims == inputDesc.nDims);
+    for (U32 i = 0; i < inputDesc.nDims; i++) {
+        if (outputDesc.dims[i] != inputDesc.dims[i]) {
+            sameDim = false;
+        }
+    }
+
+    if ((DF_NCHWC8 != inputDesc.df && DF_NCHWC16 != inputDesc.df) || sameDim) {
         if (output != input) {
             memcpy(output, input, tensorNumBytes(outputDesc));
         }
@@ -96,20 +114,29 @@ EE reshape_cpu(TensorDesc inputDesc, void *input, TensorDesc outputDesc, void *o
         DataType idt;
         DataFormat idf;
         U32 in, ic, ih, iw;
-        CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+        if (tensorIs4d(inputDesc)) {
+            CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+        } else if (tensorIs3d(inputDesc)) {
+            CHECK_STATUS(tensor3dGet(inputDesc, &idt, &idf, &in, &ic, &ih));
+            iw = 1;
+        } else {
+            return NOT_SUPPORTED;
+        }
 
+        U32 cx = (DF_NCHWC8 == inputDesc.df) ? 8 : 16;
         U32 elementBytes = bytesOf(idt);
-        ic /= 8;
+        ic /= cx;
         U8 *inPtr = (U8 *)input;
         U8 *outPtr = (U8 *)output;
         for (U32 n = 0; n < in; n++) {
             for (U32 c = 0; c < ic; c++) {
                 for (U32 hw = 0; hw < ih * iw; hw++) {
-                    for (U32 c8 = 0; c8 < 8; c8++) {
+                    for (U32 c8 = 0; c8 < cx; c8++) {
                         memcpy(outPtr +
-                                elementBytes * (n * ic * 8 * ih * iw + (c * 8 + c8) * ih * iw + hw),
+                                elementBytes * (n * ic * cx * ih * iw + (c * cx + c8) * ih * iw + hw),
                             inPtr +
-                                elementBytes * (n * ic * ih * iw * 8 + c * ih * iw * 8 + hw * 8 + c8),
+                                elementBytes *
+                                    (n * ic * ih * iw * cx + c * ih * iw * cx + hw * cx + c8),
                             elementBytes);
                     }
                 }

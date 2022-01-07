@@ -60,7 +60,7 @@ int main(int argc, char *argv[])
     auto cnn = createPipeline(affinityPolicyName, modelPath, algorithmMapPath);
 
     // load images
-    std::map<std::string, std::shared_ptr<Tensor>> inMap = cnn->get_inputs();
+    std::map<std::string, std::shared_ptr<Tensor>> inMap = cnn->get_input();
     TensorDesc imageDesc = (*(inMap.begin()->second)).get_desc();
     std::vector<TensorDesc> imageDescs;
     imageDescs.push_back(imageDesc);
@@ -78,26 +78,17 @@ int main(int argc, char *argv[])
         std::cout << imagePaths[imageIndex] << " : ";
         // stage3: set input
         double timeBegin = ut_time_ms();
-        if (cnn->get_runtime_device() == MALI) {
-            auto curModelInputTensorNames = cnn->get_model_input_tensor_names();
-            std::map<std::string, std::shared_ptr<U8>> modelInputTensors;
-            for (int index = 0; index < (int)curModelInputTensorNames.size(); index++) {
-                modelInputTensors[curModelInputTensorNames[index]] =
-                    ((CpuMemory *)image[index].get_memory())->get_shared_ptr();
-            }
-            cnn->set_input_tensors_value(modelInputTensors);
-        } else {
-            auto curModelInputTensorNames = cnn->get_model_input_tensor_names();
-            for (int index = 0; index < (int)curModelInputTensorNames.size(); index++) {
-                cnn->copy_to_named_input(curModelInputTensorNames[index],
-                    (U8 *)((CpuMemory *)(image[index].get_memory()))->get_ptr());
-            }
+        std::map<std::string, U8 *> inputMap;
+        for (auto iter : inMap) {
+            inputMap[iter.first] = (U8 *)((CpuMemory *)(image[0].get_memory()))->get_ptr();
         }
+        cnn->set_input_by_copy(inputMap);
+
         // stage4: run
         cnn->run();
 
         // stage5: process result
-        std::map<std::string, std::shared_ptr<Tensor>> outMap = cnn->get_outputs();
+        std::map<std::string, std::shared_ptr<Tensor>> outMap = cnn->get_output();
         double timeEnd = ut_time_ms();
         totalTime += (timeEnd - timeBegin);
         Tensor result = *(outMap.begin()->second);

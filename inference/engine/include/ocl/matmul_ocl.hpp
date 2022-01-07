@@ -20,8 +20,7 @@ class MatMulOCL : public MatMul {
 public:
     MatMulOCL(DataType dt, MatMulParamSpec p) : MatMul(dt, p)
     {
-        setMALIArchInfo(&(this->archInfo), &(this->runInfo), &this->needSetKernelVec,
-            &this->needSelectKernelLS);
+        INIT_GPU_INFO(&this->runInfo)
     }
 
     ~MatMulOCL(){DESTROY_OCL_KERNEL}
@@ -39,10 +38,19 @@ public:
         OCLContext::getInstance().handle.get()->curOpName = this->get_name();
         Tensor inputTensorA = this->inputTensors[0];
         Tensor inputTensorB = this->inputTensors[1];
+        Tensor inputTensorC = Tensor(OCLMem);
+        if (this->inputTensors.size() > 2) {
+            inputTensorC = this->inputTensors[2];
+        }
         Tensor outputTensor = this->outputTensors[0];
+        Tensor tmpTensor = Tensor(OCLMem);
+        std::vector<Tensor> tmpTensors(3, tmpTensor);
+        tmpTensors[0] = this->temp;
+        get_tmp_image(0, bytes + 1, &tmpTensors[1]);
+        get_tmp_image(1, bytes + 4, &tmpTensors[2]);
 
         CHECK_STATUS(matmul(inputTensorA, this->p.transpose_a, inputTensorB, this->p.transpose_b,
-            this->temp, outputTensor, &this->archInfo));
+            inputTensorC, tmpTensors, outputTensor, &this->archInfo));
     }
 
     EE infer_forward_algorithm(std::shared_ptr<AlgorithmMap> algorithmMap) override
@@ -54,19 +62,20 @@ public:
         ((MaliPara_t)(this->archInfo.archPara))->forwardRunInfo->algorithm =
             CONVOLUTION_ALGORITHM_NULL;
         I32 algo[4];
-        if (algorithmMap->getAlgorithmInfoFromMap(this->name, algo, 4)) {
+        std::string name = this->name + std::to_string(get_type());
+        if (algorithmMap->getAlgorithmInfoFromMap(name, algo, 4)) {
             this->runInfo.algorithm = (ConvolutionForwardAlgorithm)algo[0];
-            this->runInfo.best_w[0] = algo[1];
+            this->runInfo.best_h[0] = algo[1];
             this->runInfo.best_c[0] = algo[2];
             this->runInfo.best_k[0] = algo[3];
         } else {
             CHECK_STATUS(matmul_infer_forward_algorithm(matrixATensor, this->p.transpose_a,
                 matrixBTensor, this->p.transpose_b, matrixCTensor, &this->archInfo));
             algo[0] = this->runInfo.algorithm;
-            algo[1] = this->runInfo.best_w[0];
+            algo[1] = this->runInfo.best_h[0];
             algo[2] = this->runInfo.best_c[0];
             algo[3] = this->runInfo.best_k[0];
-            algorithmMap->setAlgorithmInfoToMap(this->name, algo, 4);
+            algorithmMap->setAlgorithmInfoToMap(name, algo, 4);
         }
         return SUCCESS;
     }
@@ -75,23 +84,35 @@ public:
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
         this->needSetKernelVec = true;
+        if (inTensors.size() > 2) {
+            CHECK_STATUS(NOT_SUPPORTED);
+        }
         CHECK_STATUS(matmul_infer_output_size(inTensors[0], this->p.transpose_a, inTensors[1],
             this->p.transpose_b, outTensors[0], &this->archInfo));
+        if (check_tensors_image(inTensors)) {
+            CHECK_STATUS(set_tensors_image(outTensors, inTensors.size()));
+        }
         return SUCCESS;
     }
 
     U32 infer_tmp_memory_size() override
     {
-        U32 bytes = 0;
+        for (U32 i = 0; i < 7; i++) {
+            bytes[i] = 0;
+        }
         CHECK_STATUS(matmul_infer_forward_tmp_bytes(this->inputTensors[0], this->p.transpose_a,
-            this->inputTensors[1], this->p.transpose_b, &bytes, &this->archInfo));
-        return bytes;
+            this->inputTensors[1], this->p.transpose_b, this->outputTensors[0], bytes,
+            &this->archInfo));
+        add_tmp_image(0, bytes + 1);
+        add_tmp_image(1, bytes + 4);
+        return bytes[0];
     }
 
     REGISTER_OCL_OPERATOR_RUN
 
 protected:
     ForwardRunInfoMali runInfo;
+    U32 bytes[7];
 };
 
 #endif  // _MATMUL_OCL_H

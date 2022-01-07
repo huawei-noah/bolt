@@ -21,8 +21,7 @@ public:
     DeconvolutionOCL(DataType dt, ConvolutionParamSpec p, ActivationParamSpec activationDesc)
         : Deconvolution(dt, p, activationDesc)
     {
-        setMALIArchInfo(&(this->archInfo), &(this->runInfo), &this->needSetKernelVec,
-            &this->needSelectKernelLS);
+        INIT_GPU_INFO(&this->runInfo)
     }
 
     ~DeconvolutionOCL(){DESTROY_OCL_KERNEL}
@@ -52,29 +51,12 @@ public:
         U32 vectorLen = fn;
         ((MaliPara_t)(this->archInfo.archPara))->forwardRunInfo->algorithm =
             CONVOLUTION_ALGORITHM_NULL;
+        Tensor modelWeightTensor = Tensor(OCLMem);
+        Tensor modelVectorTensor = Tensor(OCLMemImg1D);
         TensorDesc filterTensorDesc = tensor4df(dtNoQ, df, fn, fc, fh, fw);
         TensorDesc vectorTensorDesc = tensor1d(dtNoQ, vectorLen);
-
-        Tensor modelWeightTensor = Tensor(OCLMem);
-        Tensor modelVectorTensor = Tensor(OCLMem);
-        auto weightMem = (OclMemory *)modelWeightTensor.get_memory();
-        auto vectorMem = (OclMemory *)modelVectorTensor.get_memory();
         modelWeightTensor.resize(filterTensorDesc);
         modelVectorTensor.resize(vectorTensorDesc);
-        U32 stride[3] = {fw * fh, fc, fn};
-        U32 offset[3] = {0, 0, 0};
-        GCLMemType mt = GCL_MEM_BUF;
-        MemFlags flags = CL_MEM_READ_WRITE;
-        GCLMemDesc desc = gclmem_build_desc();
-        CHECK_STATUS(gclmem_set_desc_padding(&desc, stride, offset, dtNoQ, df, mt, flags));
-        weightMem->padding(desc);
-
-        mt = GCL_MEM_IMG_1D;
-        stride[0] = (vectorLen + 3) / 4;
-        stride[1] = 1;
-        stride[2] = 1;
-        gclmem_set_desc_padding(&desc, stride, offset, dtNoQ, DF_NHWC, mt, flags);
-        vectorMem->padding(desc);
         this->weightTensors.push_back(modelWeightTensor);
         this->biasTensors.push_back(modelVectorTensor);
         return SUCCESS;
@@ -101,9 +83,10 @@ public:
         DataType targetType = DT_F16;
 
         I32 algo[4];
-        if (algorithmMap->getAlgorithmInfoFromMap(this->name, algo, 4)) {
+        std::string name = this->name + std::to_string(get_type());
+        if (algorithmMap->getAlgorithmInfoFromMap(name, algo, 4)) {
             this->runInfo.algorithm = (ConvolutionForwardAlgorithm)algo[0];
-            this->runInfo.best_w[0] = algo[1];
+            this->runInfo.best_h[0] = algo[1];
             this->runInfo.best_c[0] = algo[2];
             this->runInfo.best_k[0] = algo[3];
             this->alg = (ConvolutionForwardAlgorithm)algo[0];
@@ -112,11 +95,11 @@ public:
                 this->weightTensors[0], this->outputTensors[0], p, policy, &(this->alg), targetType,
                 this->activationDesc, &this->archInfo));
             algo[0] = this->runInfo.algorithm;
-            algo[1] = this->runInfo.best_w[0];
+            algo[1] = this->runInfo.best_h[0];
             algo[2] = this->runInfo.best_c[0];
             algo[3] = this->runInfo.best_k[0];
             this->alg = (ConvolutionForwardAlgorithm)algo[0];
-            algorithmMap->setAlgorithmInfoToMap(this->name, algo, 4);
+            algorithmMap->setAlgorithmInfoToMap(name, algo, 4);
         }
         return SUCCESS;
     }
@@ -141,6 +124,9 @@ public:
         DataType targetType = this->dt;
         CHECK_STATUS(deconvolution_infer_output_size(
             inputTensor, filterTensor, p, outTensors[0], targetType, &this->archInfo));
+        if (check_tensors_image(inTensors)) {
+            CHECK_STATUS(set_tensors_image(outTensors, inTensors.size()));
+        }
         return SUCCESS;
     }
 
@@ -156,29 +142,25 @@ public:
         return bytes;
     }
 
-    GCLMemDesc infer_wtm_memory_size_mali() override
+    EE alloc_wtm_memory() override
     {
-        U32 stride[3] = {0, 0, 0};
-        U32 offset[3] = {0, 0, 0};
-        GCLMemDesc gclmemWtmDesc = gcl_mem_desc(stride, offset, DT_U8, DF_NCWHC4);
-        U32 bytes = 0;
-        ((MaliPara_t)(this->archInfo.archPara))->gclmemFilterDesc = &gclmemWtmDesc;
+        TensorDesc ftmDesc;
         CHECK_STATUS(deconvolution_transform_filter_bytes(
-            this->weightTensors[0], this->p, this->alg, &bytes, &this->archInfo));
-        return gclmemWtmDesc;
+            this->weightTensors[0], this->p, this->alg, &ftmDesc, &this->archInfo));
+        this->wtmType = OCLMem;
+        this->wtm = std::shared_ptr<Tensor>(new Tensor(this->wtmType));
+        this->wtm->resize(ftmDesc);
+        this->wtm->alloc();
+        return SUCCESS;
     }
 
     EE transform_filter() override
     {
         Tensor filterTensor = this->weightTensors[0];
-        auto wtmDesc = this->infer_wtm_memory_size_mali();
-        Tensor wtm(OCLMem);
-        OclMemory *wtmMem = (OclMemory *)wtm.get_memory();
-        wtmMem->padding(wtmDesc);
-        wtmMem->alloc();
+        CHECK_STATUS(alloc_wtm_memory());
         CHECK_STATUS(deconvolution_transform_filter(
-            filterTensor, this->p, this->alg, this->temp, &wtm, &this->archInfo));
-        this->weightTensors[0] = wtm;
+            filterTensor, this->p, this->alg, this->temp, this->wtm.get(), &this->archInfo));
+        this->weightTensors[0] = *this->get_wtm();
         return SUCCESS;
     }
 

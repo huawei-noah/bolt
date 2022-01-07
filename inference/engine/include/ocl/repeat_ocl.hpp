@@ -21,8 +21,7 @@ public:
     RepeatOCL(DataType dt, RepeatParamSpec p, I32 jumpOperatorIndex, I32 currentOperatorIndex)
         : Repeat(dt, p, jumpOperatorIndex, currentOperatorIndex)
     {
-        setMALIArchInfo(
-            &(this->archInfo), nullptr, &this->needSetKernelVec, &this->needSelectKernelLS);
+        INIT_GPU_INFO(nullptr)
     }
 
     ~RepeatOCL(){DESTROY_OCL_KERNEL}
@@ -90,8 +89,8 @@ public:
             if (inTensors.size() > 2) {
                 axisIndex = 2;
             } else {
-                UNI_ERROR_LOG("[ERROR] set to use axis feature of Repeat must meet input tensors "
-                              ">= 3 requirement\n");
+                UNI_ERROR_LOG("set to use axis feature of Repeat must meet input tensors >= 3 "
+                              "requirement\n");
             }
             TensorDesc desc = inTensors[axisIndex]->get_desc();
             this->p.loops = desc.dims[desc.nDims - 1 - this->p.axis];

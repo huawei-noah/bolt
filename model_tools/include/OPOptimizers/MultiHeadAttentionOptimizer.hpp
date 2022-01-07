@@ -14,10 +14,7 @@
 #ifndef _H_MultiHeadAttentionOPTIMIZER
 #define _H_MultiHeadAttentionOPTIMIZER
 
-#include <vector>
-#include <string>
 #include <map>
-#include "model_tools.h"
 #include "OPOptimizer.hpp"
 
 class MultiHeadAttentionOptimizer : public OPOptimizer {
@@ -447,8 +444,12 @@ class MultiHeadAttentionOptimizer : public OPOptimizer {
                     spec->ws[lnWeightIndex].bytes_of_weight = weightSize;
                     spec->ws[lnWeightIndex].bytes_of_vec = biasSize;
 
-                    delete spec->ws[lnWeightIndex].weight;
-                    delete spec->ws[lnWeightIndex].vec;
+                    if (outOfFileMapRange(spec->ws[lnWeightIndex].weight, spec->mfd)) {
+                        delete spec->ws[lnWeightIndex].weight;
+                    }
+                    if (outOfFileMapRange(spec->ws[lnWeightIndex].vec, spec->mfd)) {
+                        delete spec->ws[lnWeightIndex].vec;
+                    }
                     spec->ws[lnWeightIndex].weight = multihead_weight;
                     spec->ws[lnWeightIndex].vec = multihead_vec;
 
