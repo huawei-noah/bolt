@@ -798,7 +798,7 @@ ResultHandle CloneResultHandle(ResultHandle ir)
     UNI_DEBUG_LOG("C API %s...\n", __FUNCTION__);
     ResultHandleInner *ir_inner = (ResultHandleInner *)ir;
     assert_not_nullptr(__FUNCTION__, "ResultHandle", ir_inner);
-    ResultHandleInner *clone_ir_inner = new ResultHandleInner();
+    ResultHandleInner *clone_ir_inner = (ResultHandleInner *)malloc(sizeof(ResultHandleInner));
     *clone_ir_inner = *ir_inner;
     U32 size = sizeof(DataDesc) * clone_ir_inner->num_outputs;
     if (size > 0) {
