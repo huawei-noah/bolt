@@ -92,12 +92,7 @@ CMAKE_OPTIONS="${CMAKE_OPTIONS} -DCMAKE_INSTALL_LIBDIR=lib"
 if [[ ${cmake_options} =~ USE_CAFFE=ON || ${cmake_options} =~ USE_ONNX=ON || ${cmake_options} =~ USE_FLOW=ON ]]; then
     PROTOC_ROOT=${work_dir}/protoc
     protobuf_version="3.14.0"
-    protobuf_cmake_options=""
-    if [[ ${target} =~ linux-aarch64 ]]; then
-        protobuf_version="3.1.0"
-    else
-        protobuf_cmake_options="-DWITH_PROTOC=${PROTOC_ROOT}/bin/protoc -Dprotobuf_BUILD_PROTOC_BINARIES=OFF"
-    fi
+    protobuf_cmake_options="-DWITH_PROTOC=${PROTOC_ROOT}/bin/protoc -Dprotobuf_BUILD_PROTOC_BINARIES=OFF"
     # download prebuilt protoc
     if [ ! -f "${PROTOC_ROOT}/bin/protoc" ]; then
         echo "[INFO] build protoc in ${PROTOC_ROOT}..."
@@ -112,6 +107,9 @@ if [[ ${cmake_options} =~ USE_CAFFE=ON || ${cmake_options} =~ USE_ONNX=ON || ${c
         fi
         if [[ ${host} =~ macos-x86_64 ]] ; then
             protoc_platform="osx-x86_64"
+        fi
+        if [[ ${host} =~ linux-aarch64 ]] ; then
+            protoc_platform="linux-aarch_64"
         fi
         if [ ! -f "${script_dir}/sources/protoc-${protobuf_version}-${protoc_platform}.zip" ]; then
 	    echo "${script_dir}/sources/protoc-${protobuf_version}-${protoc_platform}.zip"
