@@ -56,10 +56,10 @@ EE depth2space_padding_input_mali(TensorDesc inputDesc,
         return NOT_MATCH;
     }
     DataFormat odf = idf;
-    if (p.blockSize == 2 && oc < 4) {
+    if ((p.blockSize == 2 && oc < 4) || p.blockSize != 2) {
         odf = DF_NCHW;
     }
-    *outputDesc = tensor4df(idt, idf, on, oc, oh, ow);
+    *outputDesc = tensor4df(idt, odf, on, oc, oh, ow);
     return SUCCESS;
 }
 
