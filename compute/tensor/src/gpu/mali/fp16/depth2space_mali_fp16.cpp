@@ -62,7 +62,7 @@ inline EE depth2space_core_mali_fp16(GCLHandle_t handle,
         U32 dim = 3;
         bool useOutputNchw = (omf == DF_NCHW) ? true : false;
         CHECK_STATUS(set_depth2space_nchwc4_2x2_opt(
-            useOutputNchw, DT_F16, GCL_MEM_BUF, GCL_MEM_BUF, kernelName, &kernelOpt));
+            useOutputNchw, DT_F16, input->desc.memType, GCL_MEM_BUF, kernelName, &kernelOpt));
         CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
         CHECK_STATUS(gcl_set_kernelArgs(kernel, p.blockSize, iw_str, ihw_str, ic_str, i_off, ow_str,
             oh_str, ohw_str, o_off, iw, ih, oc, inbuf, outbuf));
