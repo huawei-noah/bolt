@@ -32,7 +32,7 @@ __kernel void MANGLE_NAME(depth2space_nchwc4_2x2_, IOM, OFM)(const int blockSize
     const int iw,
     const int ih,
     const int oc,
-    READ_ONLY_KERNEL_MEM in,
+    READ_ONLY_KERNEL_MEM input,
     __global T *out)
 {
     const int idx = get_global_id(0);
