@@ -17,7 +17,6 @@
 #include "result_format.hpp"
 #include <stdlib.h>
 #include <fstream>
-#include <string.h>
 #include <vector>
 #include <string>
 #include <dirent.h>
@@ -70,52 +69,50 @@ inline void write_to_file(std::string str, std::string path, std::string name)
 inline void runBoltModel(
     CI8 *modelPath, CI8 *algoPath, std::map<std::string, std::vector<U8>> *kernelInfos)
 {
+    UNI_INFO_LOG("Build gpu kernels and algorithm map file for bolt model(%s)...\n", modelPath);
     if (!strstr(modelPath, "f16.bolt")) {
-        UNI_ERROR_LOG("Bolt gpu only support F16(_f16.bolt) now\n");
-        UNI_ERROR_LOG("Ensure your model is xxxx_f16.bolt\n");
+        UNI_ERROR_LOG("Bolt gpu only support float16 inference, and model file is end with "
+                      "_f16.bolt suffix.\n");
         exit(1);
     }
 
-    UNI_INFO_LOG("Building algofile and used kernelInfos for %s\n", modelPath);
-
-    ModelHandle model_address = model_address = CreateModel(modelPath, GPU, algoPath);
-    int num_input = GetNumInputsFromModel(model_address);
-    int *n = (int *)malloc(sizeof(int) * num_input);
-    int *c = (int *)malloc(sizeof(int) * num_input);
-    int *h = (int *)malloc(sizeof(int) * num_input);
-    int *w = (int *)malloc(sizeof(int) * num_input);
-    char **name = (char **)malloc(sizeof(char *) * num_input);
-    for (int i = 0; i < num_input; i++) {
-        name[i] = (char *)malloc(sizeof(char) * 1024);
+    ModelHandle model = CreateModel(modelPath, GPU, algoPath);
+    int input_num = GetNumInputsFromModel(model);
+    int *input_n = (int *)malloc(sizeof(int) * input_num);
+    int *input_c = (int *)malloc(sizeof(int) * input_num);
+    int *input_h = (int *)malloc(sizeof(int) * input_num);
+    int *input_w = (int *)malloc(sizeof(int) * input_num);
+    DATA_TYPE *input_dt = (DATA_TYPE *)malloc(sizeof(DATA_TYPE) * input_num);
+    DATA_FORMAT *input_df = (DATA_FORMAT *)malloc(sizeof(DATA_FORMAT) * input_num);
+    char **input_name = (char **)malloc(sizeof(char *) * input_num);
+    for (int i = 0; i < input_num; i++) {
+        input_name[i] = (char *)malloc(sizeof(char) * 1024);
     }
-    DATA_TYPE *dt_input = (DATA_TYPE *)malloc(sizeof(DATA_TYPE) * num_input);
-    DATA_FORMAT *df_input = (DATA_FORMAT *)malloc(sizeof(DATA_FORMAT) * num_input);
-    GetInputDataInfoFromModel(model_address, num_input, name, n, c, h, w, dt_input, df_input);
-    unsigned char **input_ptr = (unsigned char **)malloc(sizeof(unsigned char *) * num_input);
-    for (int i = 0; i < num_input; i++) {
-        int length = n[i] * c[i] * h[i] * w[i];
-        F16 *ptr = (F16 *)malloc(sizeof(F16) * length);
-        for (int i = 0; i < length; i++) {
-            ptr[i] = 1;
-        }
-        input_ptr[i] = (unsigned char *)ptr;
+    GetInputDataInfoFromModel(
+        model, input_num, input_name, input_n, input_c, input_h, input_w, input_dt, input_df);
+    unsigned char **input_ptr = (unsigned char **)malloc(sizeof(unsigned char *) * input_num);
+    for (int i = 0; i < input_num; i++) {
+        int length = input_n[i] * input_c[i] * input_h[i] * input_w[i];
+        input_ptr[i] = (unsigned char *)malloc(sizeof(F16) * length);
+        UNI_INIT(length, DT_F16, 1, input_ptr[i]);
     }
-    PrepareModel(model_address, num_input, (const char **)name, n, c, h, w, dt_input, df_input);
-    ResultHandle model_result = AllocAllResultHandle(model_address);
-    int model_result_num = GetNumOutputsFromResultHandle(model_result);
-    int *output_n = (int *)malloc(sizeof(int) * model_result_num);
-    int *output_c = (int *)malloc(sizeof(int) * model_result_num);
-    int *output_h = (int *)malloc(sizeof(int) * model_result_num);
-    int *output_w = (int *)malloc(sizeof(int) * model_result_num);
-    char **outputNames = (char **)malloc(sizeof(char *) * model_result_num);
-    for (int i = 0; i < model_result_num; i++) {
-        outputNames[i] = (char *)malloc(sizeof(char) * 1024);
+    PrepareModel(model, input_num, (const char **)input_name, input_n, input_c, input_h, input_w,
+        input_dt, input_df);
+    ResultHandle result = AllocAllResultHandle(model);
+    int output_num = GetNumOutputsFromResultHandle(result);
+    int *output_n = (int *)malloc(sizeof(int) * output_num);
+    int *output_c = (int *)malloc(sizeof(int) * output_num);
+    int *output_h = (int *)malloc(sizeof(int) * output_num);
+    int *output_w = (int *)malloc(sizeof(int) * output_num);
+    DATA_TYPE *output_dt = (DATA_TYPE *)malloc(sizeof(DATA_TYPE) * output_num);
+    DATA_FORMAT *output_df = (DATA_FORMAT *)malloc(sizeof(DATA_FORMAT) * output_num);
+    char **output_name = (char **)malloc(sizeof(char *) * output_num);
+    for (int i = 0; i < output_num; i++) {
+        output_name[i] = (char *)malloc(sizeof(char) * 1024);
     }
-    DATA_TYPE *dt_output = (DATA_TYPE *)malloc(sizeof(DATA_TYPE) * model_result_num);
-    DATA_FORMAT *df_output = (DATA_FORMAT *)malloc(sizeof(DATA_FORMAT) * model_result_num);
-    GetOutputDataInfoFromResultHandle(model_result, model_result_num, outputNames, output_n,
-        output_c, output_h, output_w, dt_output, df_output);
-    RunModel(model_address, model_result, num_input, (const char **)name, (void **)input_ptr);
+    GetOutputDataInfoFromResultHandle(result, output_num, output_name, output_n, output_c, output_h,
+        output_w, output_dt, output_df);
+    RunModel(model, result, input_num, (const char **)input_name, (void **)input_ptr);
 
     GCLHandle_t handle = OCLContext::getInstance().handle.get();
     for (auto p : handle->kernelMap) {
@@ -153,31 +150,31 @@ inline void runBoltModel(
         }
     }
     CHECK_STATUS(gcl_finish(handle));
-    FreeResultHandle(model_result);
-    DestroyModel(model_address);
+    FreeResultHandle(result);
+    DestroyModel(model);
 
-    free(n);
-    free(c);
-    free(h);
-    free(w);
-    free(dt_input);
-    free(df_input);
-    for (int i = 0; i < num_input; i++) {
-        free(name[i]);
+    free(input_n);
+    free(input_c);
+    free(input_h);
+    free(input_w);
+    free(input_dt);
+    free(input_df);
+    for (int i = 0; i < input_num; i++) {
+        free(input_name[i]);
         free(input_ptr[i]);
     }
-    free(name);
+    free(input_name);
     free(input_ptr);
     free(output_n);
     free(output_c);
     free(output_h);
     free(output_w);
-    free(dt_output);
-    free(df_output);
-    for (int i = 0; i < model_result_num; i++) {
-        free(outputNames[i]);
+    free(output_dt);
+    free(output_df);
+    for (int i = 0; i < output_num; i++) {
+        free(output_name[i]);
     }
-    free(outputNames);
+    free(output_name);
 }
 
 inline void buildFileStream(CI8 *fileName, U8 **bytesPtr, U32 *len)
@@ -238,6 +235,7 @@ inline void buildKernelBinFiles(std::map<std::string, std::vector<U8>> kernelInf
     device_map += "#include \"gcl_kernel_binmap.h\"\n";
     device_map += "#include \"" + device_map_head_name + "\"\n";
 
+    I8 buffer[16];
     for (auto p : kernelInfos) {
         std::string kernelName = p.first;
         std::vector<U8> binaryInfo = p.second;
@@ -247,12 +245,11 @@ inline void buildKernelBinFiles(std::map<std::string, std::vector<U8>> kernelInf
         device_map += "const unsigned int " + func + "_len = " + std::to_string(len) + ";\n";
         device_map += "const unsigned char " + func + "[] = " + "{";
         for (U32 i = 0; i < len; i++) {
-            I8 tempstr[4];
             if (i % 20 == 0) {
                 device_map += "\n";
             }
-            sprintf(tempstr, "0x%02x", binaryInfo[i]);
-            device_map += std::string(tempstr);
+            sprintf(buffer, "0x%02x", binaryInfo[i]);
+            device_map += std::string(buffer);
             if (i != len - 1) {
                 device_map += ", ";
             } else {
@@ -269,12 +266,11 @@ inline void buildKernelBinFiles(std::map<std::string, std::vector<U8>> kernelInf
         device_map += "const unsigned int " + algoName + "_len = " + std::to_string(len) + ";\n";
         device_map += "const unsigned char " + algoName + "[] = " + "{";
         for (U32 i = 0; i < len; i++) {
-            I8 tempstr[4];
             if (i % 20 == 0) {
                 device_map += "\n";
             }
-            sprintf(tempstr, "0x%02x", bytes[i]);
-            device_map += std::string(tempstr);
+            sprintf(buffer, "0x%02x", bytes[i]);
+            device_map += std::string(buffer);
             if (i != len - 1) {
                 device_map += ", ";
             } else {
@@ -333,29 +329,10 @@ int main(int argc, char *argv[])
         exit(1);
     }
     I8 lastFlag;
-    std::string modelsPath = (CI8 *)argv[1];
-    lastFlag = modelsPath[modelsPath.length() - 1];
-    if (strcmp(&lastFlag, "/") != 0) {
-        modelsPath += "/";
-    }
-
-    std::string algoPath = (CI8 *)argv[2];
-    lastFlag = algoPath[algoPath.length() - 1];
-    if (strcmp(&lastFlag, "/") != 0) {
-        algoPath += "/";
-    }
-
-    std::string includePath = (CI8 *)argv[3];
-    lastFlag = includePath[includePath.length() - 1];
-    if (strcmp(&lastFlag, "/") != 0) {
-        includePath += "/";
-    }
-
-    std::string cppPath = (CI8 *)argv[4];
-    lastFlag = cppPath[cppPath.length() - 1];
-    if (strcmp(&lastFlag, "/") != 0) {
-        cppPath += "/";
-    }
+    std::string modelsPath = (CI8 *)argv[1] + std::string("/");
+    std::string algoPath = (CI8 *)argv[2] + std::string("/");
+    std::string includePath = (CI8 *)argv[3] + std::string("/");
+    std::string cppPath = (CI8 *)argv[4] + std::string("/");
 
     std::vector<std::string> modelNamesArray;
     modelNamesArray = buildFileNamesArray(modelsPath, ".bolt");

@@ -55,7 +55,7 @@ static EE attention_mask(TensorDesc inputDesc,
             if (start + loops > klen) {
                 loops = UNI_MAX(klen - start, 0);
             }
-            memset(&mask[i][start], 0, sizeof(T) * loops);
+            UNI_MEMSET(&mask[i][start], 0, sizeof(T) * loops);
         }
     }
     I32 loops = tensorNumElements(inputDesc) / qlen / klen;

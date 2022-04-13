@@ -232,9 +232,9 @@ inline EE rnn_core_update(GCLHandle_t handle,
     char *kernelName,
     KernelOpt *kernelOpt)
 {
-    float fbias = rnnPara.forgetBias;
-    float zonecell = rnnPara.zoneoutCell;
-    float zoneout = rnnPara.zoneoutOutput;
+    float fbias = rnnPara.forget_bias;
+    float zonecell = rnnPara.zoneout_cell;
+    float zoneout = rnnPara.zoneout_output;
     U32 gs = (col + 3) / 4;
     U32 ls = 16;
     U32 dim = 1;
@@ -310,7 +310,7 @@ inline EE rnn_core_mali_fp16(GCLHandle_t handle,
     GCLMem_t output,
     ForwardRunInfoMali_t forwardRunInfo)
 {
-    bool project = (rnnPara.numProjection > 0) ? true : false;
+    bool project = (rnnPara.num_projection > 0) ? true : false;
     if (project) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
@@ -337,8 +337,8 @@ inline EE rnn_core_mali_fp16(GCLHandle_t handle,
     U32 batch = desc.dims[desc.nDims - 1];
     U32 step = desc.dims[desc.nDims - 2];
     U32 xDim = desc.dims[desc.nDims - 3];
-    U32 hDim = rnnPara.numOutput;
-    U32 col = (rnnPara.numProjection > 0) ? rnnPara.numProjection : hDim;
+    U32 hDim = rnnPara.num_outputs;
+    U32 col = (rnnPara.num_projection > 0) ? rnnPara.num_projection : hDim;
     for (U32 i = 0; i < desc.nDims - 3; i++) {
         xDim *= desc.dims[i];
     }
@@ -421,7 +421,7 @@ inline EE rnn_core_mali_fp16(GCLHandle_t handle,
             rnn_core_copy_stateH(handle, col, hDim, outputDescs.size(), false, stateH, output));
     }
 
-    if (rnnPara.biDirection) {
+    if (rnnPara.bi_direction) {
         gemmMatB = filter[filterCount].mem;
         gemmMatBType = filter[filterCount].desc.memType;
         gemmBias = bias[biasCount].mem;
@@ -458,7 +458,7 @@ inline void transform_filter_desc(TensorDesc filterDesc,
 {
     U32 filterRow, filterCol;
     tensorSelectGet(filterDesc, NULL, NULL, NULL, NULL, &filterRow, &filterCol);
-    U32 hDim = rnnPara.numOutput;
+    U32 hDim = rnnPara.num_outputs;
     U32 xDim = filterCol - hDim;
 
     TensorDesc desc;
@@ -499,7 +499,7 @@ EE rnn_transform_filter_mali_fp16(GCLHandle_t handle,
     DataType fdt;
     U32 filterRow, filterCol;
     tensorSelectGet(filterDesc, &fdt, NULL, NULL, NULL, &filterRow, &filterCol);
-    U32 hDim = rnnPara.numOutput;
+    U32 hDim = rnnPara.num_outputs;
     U32 xDim = filterCol - hDim;
     char kernelName[128];
     KernelOpt kernelOpt;
@@ -515,7 +515,7 @@ EE rnn_transform_filter_mali_fp16(GCLHandle_t handle,
     CHECK_STATUS(gcl_create_sub_buffer(weightGemmSize, &subMemOff, tmpBuf, &weightGemm));
     CHECK_STATUS(gcl_create_sub_buffer(weightGemvSize, &subMemOff, tmpBuf, &weightGemv));
 
-    U32 biDirNum = (rnnPara.biDirection) ? 2 : 1;
+    U32 biDirNum = (rnnPara.bi_direction) ? 2 : 1;
     U32 filterCount = 0;
     U32 filterTranCount = 0;
     U32 item_n = forwardRunInfo->best_h[0];
@@ -596,8 +596,8 @@ EE rnn_infer_forward_tmp_bytes_mali_fp16(TensorDesc inputDesc,
         size += ALIGN(gemmMatASize, BUFFER_ALIGN_BASE);
     }
 
-    U32 hDim = rnnPara.numOutput;
-    U32 col = (rnnPara.numProjection > 0) ? rnnPara.numProjection : hDim;
+    U32 hDim = rnnPara.num_outputs;
+    U32 col = (rnnPara.num_projection > 0) ? rnnPara.num_projection : hDim;
     U32 filterRow = col * 4;
     U32 M = ALIGN(step * batch, item_m);
     U32 N = ALIGN(filterRow, item_n);

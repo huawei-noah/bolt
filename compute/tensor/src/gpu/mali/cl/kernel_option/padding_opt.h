@@ -11,36 +11,36 @@ inline EE set_padding_opt_mali(bool useNchwFormat,
 {
     kernelOpt->kernelDataType = dt;
     char *opt = kernelOpt->option;
-    std::string formatName = "";
+    std::string name = "padding_";
     if (useNchwFormat) {
-        formatName = "nchw_";
+        name += "nchw_";
     }
     char ioMemName[128] = "";
     CHECK_STATUS(set_io_mem_name(inputMemType, outputMemType, ioMemName));
-    std::string modeName = "";
+    std::string modeName;
     switch (mode) {
-        case Pad_Constant:
+        case PAD_CONSTANT:
             modeName = "constant";
             CHECK_STATUS(set_chars_define_opt("USE_CONSTANT", opt));
             break;
-        case Pad_Edge:
+        case PAD_EDGE:
             modeName = "edge";
             CHECK_STATUS(set_chars_define_opt("USE_EDGE", opt));
             break;
-        case Pad_Reflect:
+        case PAD_REFLECT:
             modeName = "reflect";
             CHECK_STATUS(set_chars_define_opt("USE_REFLECT", opt));
             break;
-        case Pad_Symmetric:
+        case PAD_SYMMETRIC:
             modeName = "symmetric";
             CHECK_STATUS(set_chars_define_opt("USE_SYMMETRIC", opt));
             break;
         default:
             return NOT_SUPPORTED;
     }
-
-    sprintf(kernelName, "padding_%s%s", formatName.c_str(), modeName.c_str());
-    sprintf(kernelOpt->sourceName, "padding");
+    name += modeName;
+    UNI_STRCPY(kernelName, name.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, "padding");
     if (useNchwFormat) {
         CHECK_STATUS(set_chars_define_opt("USE_NCHW", opt));
     }

@@ -38,9 +38,7 @@ public:
         TensorDesc srcDesc = this->inputTensors[0].get_desc();
         TensorDesc dstDesc = this->inputTensors[1].get_desc();
         U32 batch = srcDesc.dims[srcDesc.nDims - 1];
-        if (batch > 1) {
-            CHECK_STATUS(NOT_SUPPORTED);
-        }
+        CHECK_REQUIREMENT(batch == 1);
         U32 copyLength = (this->p.length >= 0) ? this->p.length : tensorNumElements(srcDesc) / batch;
         U32 srcStride = (this->p.src_dims[0] >= 0) ? this->p.src_dims[1]
                                                    : tensorNumElements(srcDesc) / batch;

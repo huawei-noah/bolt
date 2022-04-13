@@ -13,18 +13,32 @@
 
 #include "cpu/tensor_computing_cpu.h"
 #include "cpu/cpu_functions.h"
+#include "affinity_policy.h"
+#include "uni.h"
 
 EE power_cpu(
     TensorDesc inputDesc, void *input, PowerParamSpec p, TensorDesc outputDesc, void *output, Arch arch)
 {
     UNUSED(outputDesc);
+    if (nullptr == input || nullptr == output) {
+        return NULL_POINTER;
+    }
     ArrayScaleFunction scale_func = get_array_scale_function(arch);
     ArrayPowerFunction power_func = get_array_power_function(arch);
-    if (nullptr == input || nullptr == output) {
-        CHECK_STATUS(NULL_POINTER);
+    int size = tensorNumElements(inputDesc);
+#ifdef _USE_OPENMP
+    int tile = UNI_MAX(64, (((size + OMP_NUM_THREADS - 1) / OMP_NUM_THREADS + 7) / 8 * 8));
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+    for (int i = 0; i < size; i += tile)
+#else
+    int i = 0;
+    int tile = size;
+#endif
+    {
+        int j = i * bytesOf(inputDesc.dt);
+        int num = UNI_MIN(size - i, tile);
+        scale_func(inputDesc.dt, ((U8 *)input) + j, ((U8 *)output) + j, num, p.scale, p.shift);
+        power_func(outputDesc.dt, ((U8 *)output) + j, ((U8 *)output) + j, num, p.power);
     }
-
-    scale_func(inputDesc.dt, input, output, tensorNumElements(inputDesc), p.scale, p.shift);
-    power_func(outputDesc.dt, output, output, tensorNumElements(inputDesc), p.power);
     return SUCCESS;
 }

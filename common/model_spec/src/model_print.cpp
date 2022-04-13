@@ -16,6 +16,7 @@
 
 void print_header(const ModelSpec ms)
 {
+#ifdef _USE_MODEL_PRINT
     printf("[Model] %s\n    [DataType] %s\n    [Inputs] %d\n", ms.model_name, DataTypeName()[ms.dt],
         ms.num_inputs);
     if (ms.num_inputs > 0) {
@@ -32,10 +33,12 @@ void print_header(const ModelSpec ms)
     for (int i = 0; i < ms.num_outputs; i++) {
         printf("        %2d %s\n", i, ms.output_names[i]);
     }
+#endif
 }
 
 void print_operator_tensor_relationship(const ModelSpec ms, bool deleteDeprecatedOp)
 {
+#ifdef _USE_MODEL_PRINT
     int number = ms.num_operator_specs;
     printf("    [Operators] %d\n", number);
     if (number > 0) {
@@ -72,10 +75,12 @@ void print_operator_tensor_relationship(const ModelSpec ms, bool deleteDeprecate
         }
         printf("\n");
     }
+#endif
 }
 
 void print_weights(const ModelSpec ms)
 {
+#ifdef _USE_MODEL_PRINT
     std::map<std::string, DataType> vec_data_type;
     for (int i = 0; i < ms.num_operator_specs; i++) {
         switch (ms.ops[i].type) {
@@ -129,10 +134,12 @@ void print_weights(const ModelSpec ms)
         }
         printf("\n");
     }
+#endif
 }
 
 void print_relationship(const ModelSpec ms)
 {
+#ifdef _USE_MODEL_PRINT
     int number = ms.num_op_tensor_entries;
     printf("    [Relationships] %d\n", number);
     if (number > 0) {
@@ -149,6 +156,7 @@ void print_relationship(const ModelSpec ms)
         }
         printf("\n");
     }
+#endif
 }
 
 void print_ms(const ModelSpec ms)

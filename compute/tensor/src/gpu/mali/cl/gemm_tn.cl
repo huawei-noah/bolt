@@ -74,8 +74,7 @@
 #if defined(USE_OUTPUT_IMG)
 #define ADD_C_OFF(off) \
     {                  \
-        \ 
-    off.z += 1;        \
+        off.z += 1;    \
     }
 #else
 #define ADD_C_OFF(off) \

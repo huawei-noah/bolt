@@ -19,58 +19,35 @@
 
 class ResizeCPU : public Resize {
 public:
-    ResizeCPU(DataType paramDT, ResizeParamSpec p) : Resize(paramDT, p)
+    ResizeCPU(DataType dt, ResizeParamSpec p) : Resize(dt, p)
     {}
 
     std::shared_ptr<Operator> clone() override
     {
         std::shared_ptr<ResizeCPU> mem =
-            std::shared_ptr<ResizeCPU>(new ResizeCPU(this->paramDT, this->p));
+            std::shared_ptr<ResizeCPU>(new ResizeCPU(this->dt, this->p));
         *mem = *this;
         return mem;
     }
 
     void run() override
     {
-        CHECK_STATUS(resize(inputTensors[0], temp, outputTensors[0], this->p, &this->archInfo));
+        CHECK_STATUS(resize(inputTensors[0], this->p, temp, outputTensors[0], &this->archInfo));
     }
 
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
-        U32 bytes;
-        switch (paramDT) {
-            case DT_F32: {
-                CHECK_REQUIREMENT(1 == this->p.scales[0] && 1 == this->p.scales[1]);
-                CHECK_STATUS(resize_infer_output_size(inTensors[0], this->paramDT,
-                    this->p.scales + 2, outTensors[0], &bytes, &this->archInfo));
-                break;
-            }
-            case DT_U32: {
-                CHECK_STATUS(resize_infer_output_size(inTensors[0], this->paramDT, this->p.sizes,
-                    outTensors[0], &bytes, &this->archInfo));
-                break;
-            }
-            default: {
-                CHECK_STATUS(NOT_SUPPORTED);
-            }
-        }
-        return SUCCESS;
+        return resize_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo);
     }
 
     U32 infer_tmp_memory_size() override
     {
-        U32 size = 0;
-        TensorDesc inputDesc = inputTensors[0].get_desc();
-        if (DF_NCHW == inputDesc.df && (IS_ARM(archInfo.arch) || IS_X86(archInfo.arch))) {
-            U32 paddedC = (inputDesc.dims[2] + 7) / 8 * 8;
-            TensorDesc outputDesc = outputTensors[0].get_desc();
-            inputDesc.dims[2] = paddedC;
-            outputDesc.dims[2] = paddedC;
-            size = tensorNumBytes(inputDesc) + tensorNumBytes(outputDesc);
-        }
-        return size;
+        U32 bytes = 0;
+        CHECK_STATUS(resize_infer_forward_tmp_bytes(
+            this->inputTensors[0], this->p, this->outputTensors[0], &bytes, &this->archInfo));
+        return bytes;
     }
 };
 
-#endif  // _RESIZECPU_H
+#endif  // _RESIZE_CPU_H

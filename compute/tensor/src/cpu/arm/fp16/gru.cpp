@@ -11,7 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string.h>
 #include "cpu/arm/fp16/tensor_computing_fp16.h"
 #include "cpu/arm/fp16/mvm_nkn32.h"
 
@@ -54,9 +53,9 @@ EE grucell_fp16(TensorDesc xDesc,
 
     U32 batch = in;
     I32 xDim = ix;
-    I32 hDim = rnnParamSpec.numOutput;
+    I32 hDim = rnnParamSpec.num_outputs;
     I32 column = hDim;
-    int num1 = rnnParamSpec.biDirection ? 2 : 1;
+    int num1 = rnnParamSpec.bi_direction ? 2 : 1;
     U32 steps = batchStrideH / hDim / num1;
     if (!(idt == DT_F16 && fdt == DT_F16 && odt == DT_F16)) {
         CHECK_STATUS(NOT_MATCH);
@@ -64,8 +63,7 @@ EE grucell_fp16(TensorDesc xDesc,
     if (!(3 * column == (I32)fn * 32 && (ix + oh) == fk && in == on)) {
         CHECK_STATUS(NOT_MATCH);
     }
-    ActivationMode activationMode = rnnParamSpec.activationMode;
-    if (activationMode != ACTIVATION_TANH) {
+    if (rnnParamSpec.activation_type != ACTIVATION_TANH) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
 
@@ -84,16 +82,16 @@ EE grucell_fp16(TensorDesc xDesc,
         F16 *currentBatchH = currentHArray + m * currentHStride;
         F16 *currentOutput = outputArray + m * batchStrideH;
         if (xDim > 0) {
-            memcpy(xhArray, currentXArray + m * batchStrideX, xDim * sizeof(F16));
-            memcpy(xhArray + xDim, lastBatchH, hDim * sizeof(F16));
+            UNI_MEMCPY(xhArray, currentXArray + m * batchStrideX, xDim * sizeof(F16));
+            UNI_MEMCPY(xhArray + xDim, lastBatchH, hDim * sizeof(F16));
         } else {
             intermediateH = tmpArray;
             xhArray = lastBatchH;
-            memcpy(currentOutput, lastBatchH, hDim * sizeof(F16));
+            UNI_MEMCPY(currentOutput, lastBatchH, hDim * sizeof(F16));
         }
 
         const F16 *mBias = (const F16 *)bias[0] + m * steps * column * 3;
-        memcpy(intermediateH, mBias, column * 2 * sizeof(F16));
+        UNI_MEMCPY(intermediateH, mBias, column * 2 * sizeof(F16));
         mvm_nkn32(column * 2 / 32, fk, (const F16 *)filter[0], xhArray, intermediateH);
         F16 *out_z = intermediateH;
         F16 *out_r = out_z + column;
@@ -111,12 +109,12 @@ EE grucell_fp16(TensorDesc xDesc,
         if (rnnParamSpec.mode == RNN_GRU_LBR) {
             F16 *h_x_b = (F16 *)mBias + column * 2;
             F16 *h_h_b = (F16 *)bias[1];
-            memcpy(out_h, h_h_b, column * sizeof(F16));
+            UNI_MEMCPY(out_h, h_h_b, column * sizeof(F16));
             mvm_nkn32(column / 32, hDim, (const F16 *)filter[0] + column * 2 * fk + column * xDim,
                 xhArray + xDim, out_h);
             array_mul_f16(out_r, out_h, out_h, hDim);
             if (xDim > 0) {
-                memcpy(out_r, h_x_b, column * sizeof(F16));
+                UNI_MEMCPY(out_r, h_x_b, column * sizeof(F16));
                 mvm_nkn32(
                     column / 32, xDim, (const F16 *)filter[0] + column * 2 * fk, xhArray, out_r);
                 h_x_b = out_r;
@@ -124,7 +122,7 @@ EE grucell_fp16(TensorDesc xDesc,
             array_add_f16(h_x_b, out_h, out_h, hDim);
         } else {
             array_mul_f16(out_r, xhArray + xDim, xhArray + xDim, hDim);
-            memcpy(out_h, mBias + column * 2, column * sizeof(F16));
+            UNI_MEMCPY(out_h, mBias + column * 2, column * sizeof(F16));
             mvm_nkn32(column / 32, fk, (const F16 *)filter[0] + column * 2 * fk, xhArray, out_h);
         }
         for (h = 0; h < column - 7; h += 8) {
@@ -147,7 +145,7 @@ EE grucell_fp16(TensorDesc xDesc,
         array_scale_f16(out_z, out_z, column, -1, 1);
         array_mul_f16(out_z, out_h, out_h, column);
         array_add_f16(out_r, out_h, currentOutput, column);
-        memcpy(currentBatchH, currentOutput, sizeof(F16) * hDim);
+        UNI_MEMCPY(currentBatchH, currentOutput, sizeof(F16) * hDim);
     }
     return SUCCESS;
 }

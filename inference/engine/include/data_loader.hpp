@@ -20,6 +20,8 @@
 
 int string_end_with(std::string s, std::string sub);
 
+bool is_directory(std::string path);
+
 void get_files(std::string directoryName, std::vector<std::string> &files);
 
 std::vector<Tensor> load_fake_data(std::vector<TensorDesc> dataDesc);

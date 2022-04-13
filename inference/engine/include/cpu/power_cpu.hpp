@@ -42,7 +42,7 @@ public:
             auto inPtr = ((CpuMemory *)(inputTensor.get_memory()))->get_ptr();
             auto outPtr = ((CpuMemory *)(outputTensor.get_memory()))->get_ptr();
             if (inPtr != outPtr) {
-                memcpy(outPtr, inPtr, tensorNumBytes(inputDesc));
+                UNI_MEMCPY(outPtr, inPtr, tensorNumBytes(inputDesc));
             }
 #endif
         } else {
@@ -53,7 +53,8 @@ public:
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
-        return power_infer_output_size(inTensors[0], outTensors[0], &this->archInfo);
+        CHECK_STATUS(power_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo));
+        return SUCCESS;
     }
 };
 

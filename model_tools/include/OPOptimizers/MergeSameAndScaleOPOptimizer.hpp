@@ -77,8 +77,8 @@ class MergeSameAndScaleOPOptimizer : public OPOptimizer {
                 (spec->ops[nextOpIndexes[0].first].ps.power_spec.power == 1)) {
                 int curIdx = nextOpIndexes[0].first;
                 if (nextOpIndexes.size() == 2 &&
-                    strcmp(spec->ops[curIdx].input_tensors_name[0],
-                        spec->ops[curIdx].output_tensors_name[0])) {
+                    std::string(spec->ops[curIdx].input_tensors_name[0]) !=
+                        std::string(spec->ops[curIdx].output_tensors_name[0])) {
                     continue;
                 }
 
@@ -94,8 +94,8 @@ class MergeSameAndScaleOPOptimizer : public OPOptimizer {
                 if (spec->ws[scaleWeightIndex].vec == nullptr) {
                     spec->ws[scaleWeightIndex].bytes_of_vec = channelAlpha * sizeof(F32);
                     spec->ws[scaleWeightIndex].vec =
-                        (U8 *)mt_new_storage(spec->ws[scaleWeightIndex].bytes_of_vec);
-                    memset(
+                        (U8 *)mt_malloc(spec->ws[scaleWeightIndex].bytes_of_vec);
+                    UNI_MEMSET(
                         spec->ws[scaleWeightIndex].vec, 0, spec->ws[scaleWeightIndex].bytes_of_vec);
                 }
 

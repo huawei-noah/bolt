@@ -15,7 +15,7 @@
 #include <sys/mman.h>
 #endif
 
-#include "model_spec.h"
+#include "model_common.h"
 
 EE mt_create_model(ModelSpec *ms)
 {
@@ -49,29 +49,22 @@ EE mt_destroy_model(ModelSpec *ms)
 
     if (nullptr != ms->input_names) {
         for (int i = 0; i < ms->num_inputs; i++) {
-            if (nullptr != ms->input_names[i]) {
-                delete ms->input_names[i];
-            }
-            ms->input_names[i] = nullptr;
+            mt_free(ms->input_names[i]);
         }
-        delete ms->input_names;
-        ms->input_names = nullptr;
+        ms->num_inputs = 0;
+        mt_free(ms->input_names);
     }
 
     if (nullptr != ms->input_dims) {
-        delete ms->input_dims;
-        ms->input_dims = nullptr;
+        mt_free(ms->input_dims);
     }
 
     if (nullptr != ms->output_names) {
         for (int i = 0; i < ms->num_outputs; i++) {
-            if (nullptr != ms->output_names[i]) {
-                delete ms->output_names[i];
-            }
-            ms->output_names[i] = nullptr;
+            mt_free(ms->output_names[i]);
         }
-        delete ms->output_names;
-        ms->output_names = nullptr;
+        ms->num_outputs = 0;
+        mt_free(ms->output_names);
     }
 
     if (nullptr != ms->ops) {
@@ -79,92 +72,79 @@ EE mt_destroy_model(ModelSpec *ms)
         for (int i = 0; i < op_num; i++) {
             if (nullptr != ms->ops[i].input_tensors_name) {
                 for (U32 j = 0; j < ms->ops[i].num_inputs; j++) {
-                    if (nullptr != ms->ops[i].input_tensors_name[j]) {
-                        delete ms->ops[i].input_tensors_name[j];
-                    }
-                    ms->ops[i].input_tensors_name[j] = nullptr;
+                    mt_free(ms->ops[i].input_tensors_name[j]);
                 }
-                delete ms->ops[i].input_tensors_name;
-                ms->ops[i].input_tensors_name = nullptr;
+                ms->ops[i].num_inputs = 0;
+                mt_free(ms->ops[i].input_tensors_name);
             }
             if (nullptr != ms->ops[i].output_tensors_name) {
                 for (U32 j = 0; j < ms->ops[i].num_outputs; j++) {
-                    if (nullptr != ms->ops[i].output_tensors_name[j]) {
-                        delete ms->ops[i].output_tensors_name[j];
-                    }
-                    ms->ops[i].output_tensors_name[j] = nullptr;
+                    mt_free(ms->ops[i].output_tensors_name[j]);
                 }
-                delete ms->ops[i].output_tensors_name;
-                ms->ops[i].output_tensors_name = nullptr;
+                ms->ops[i].num_outputs = 0;
+                mt_free(ms->ops[i].output_tensors_name);
             }
-
-            if (nullptr != ms->ops[i].tensor_positions) {
-                delete ms->ops[i].tensor_positions;
-            }
+            mt_free(ms->ops[i].tensor_positions);
 
             if (0 != ms->ops[i].num_quant_feature && nullptr != ms->ops[i].feature_scale) {
                 for (U32 j = 0; j < ms->ops[i].num_quant_feature; j++) {
                     if (0 != ms->ops[i].feature_scale[j].num_scale) {
-                        if (nullptr != ms->ops[i].feature_scale[j].scale) {
-                            delete ms->ops[i].feature_scale[j].scale;
-                        }
+                        ms->ops[i].feature_scale[j].num_scale = 0;
+                        mt_free(ms->ops[i].feature_scale[j].scale);
                     }
                 }
-                delete ms->ops[i].feature_scale;
+                ms->ops[i].num_quant_feature = 0;
+                mt_free(ms->ops[i].feature_scale);
             }
         }
-        delete ms->ops;
-        ms->ops = nullptr;
+        ms->num_operator_specs = 0;
+        mt_free(ms->ops);
     }
 
     if (nullptr != ms->ws) {
-        int weightOpNum = ms->num_weight_specs;
-        for (int i = 0; i < weightOpNum; i++) {
-            if (nullptr != ms->ws[i].weight && outOfFileMapRange(ms->ws[i].weight, ms->mfd)) {
-                delete ms->ws[i].weight;
+        for (int i = 0; i < ms->num_weight_specs; i++) {
+            ms->ws[i].bytes_of_weight = 0;
+            mt_free(ms->ws[i].weight, ms);
+            ms->ws[i].bytes_of_vec = 0;
+            mt_free(ms->ws[i].vec, ms);
+            for (U32 j = 0; j < ms->ws[i].num_quant_scale; j++) {
+                if (0 != ms->ws[i].weight_scale[j].num_scale) {
+                    ms->ws[i].weight_scale[j].num_scale = 0;
+                    mt_free(ms->ws[i].weight_scale[j].scale);
+                }
             }
-            ms->ws[i].weight = nullptr;
-            if (nullptr != ms->ws[i].vec && outOfFileMapRange(ms->ws[i].vec, ms->mfd)) {
-                delete ms->ws[i].vec;
-            }
-            ms->ws[i].vec = nullptr;
+            ms->ws[i].num_quant_scale = 0;
+            mt_free(ms->ws[i].weight_scale);
         }
-        delete ms->ws;
-        ms->ws = nullptr;
+        ms->num_weight_specs = 0;
+        mt_free(ms->ws);
     }
 
     if (nullptr != ms->op_relationship_entries) {
-        int numOpRelationPair = ms->num_op_tensor_entries;
-        for (int i = 0; i < numOpRelationPair; i++) {
+        for (int i = 0; i < ms->num_op_tensor_entries; i++) {
             if (nullptr != ms->op_relationship_entries[i].input_op_names) {
                 for (U32 j = 0; j < ms->op_relationship_entries[i].num_inputs; j++) {
-                    if (nullptr != ms->op_relationship_entries[i].input_op_names[j]) {
-                        delete ms->op_relationship_entries[i].input_op_names[j];
-                    }
-                    ms->op_relationship_entries[i].input_op_names[j] = nullptr;
+                    mt_free(ms->op_relationship_entries[i].input_op_names[j]);
                 }
-                delete ms->op_relationship_entries[i].input_op_names;
-                ms->op_relationship_entries[i].input_op_names = nullptr;
+                ms->op_relationship_entries[i].num_inputs = 0;
+                mt_free(ms->op_relationship_entries[i].input_op_names);
             }
             if (nullptr != ms->op_relationship_entries[i].output_op_names) {
                 for (U32 j = 0; j < ms->op_relationship_entries[i].num_outputs; j++) {
-                    if (nullptr != ms->op_relationship_entries[i].output_op_names[j]) {
-                        delete ms->op_relationship_entries[i].output_op_names[j];
-                    }
-                    ms->op_relationship_entries[i].output_op_names[j] = nullptr;
+                    mt_free(ms->op_relationship_entries[i].output_op_names[j]);
                 }
-                delete ms->op_relationship_entries[i].output_op_names;
-                ms->op_relationship_entries[i].output_op_names = nullptr;
+                ms->op_relationship_entries[i].num_outputs = 0;
+                mt_free(ms->op_relationship_entries[i].output_op_names);
             }
         }
-        delete ms->op_relationship_entries;
-        ms->op_relationship_entries = nullptr;
+        ms->num_op_tensor_entries = 0;
+        mt_free(ms->op_relationship_entries);
     }
 
     if (ms->mfd != nullptr && !ms->mfd->useFileStream && ms->mfd->bytes != nullptr) {
 #ifdef _WIN32
         // use fread to read model file
-        free(ms->mfd->bytes);
+        UNI_FREE(ms->mfd->bytes);
 #else
         // use mmap to read model file
         munmap(ms->mfd->bytes, ms->mfd->fileLength);
@@ -173,9 +153,6 @@ EE mt_destroy_model(ModelSpec *ms)
         }
 #endif
     }
-
-    delete ms->mfd;
-    ms->mfd = nullptr;
-
+    mt_free(ms->mfd);
     return SUCCESS;
 }

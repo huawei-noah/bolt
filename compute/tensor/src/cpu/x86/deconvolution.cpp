@@ -128,15 +128,15 @@ EE deconvolution_pointwise_x86(TensorDesc inputDesc,
     CHECK_REQUIREMENT(idf == DF_NCHWC8);
 
     ConvolutionParamSpec p = createConvolutionParamSpec(
-        1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, oc, Convolution_Pointwise);
+        1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, oc, CONVOLUTION_POINTWISE);
     TensorDesc nullDesc;
     U8 *convBias = (U8 *)tmp;
     if (fh == convParamSpec.stride_h && fw == convParamSpec.stride_w) {
         for (U32 ii = 0; ii < fh * fw; ++ii) {
-            memcpy(convBias + ii * oc * bytesOf(odt), bias, oc * bytesOf(odt));
+            UNI_MEMCPY(convBias + ii * oc * bytesOf(odt), bias, oc * bytesOf(odt));
         }
     } else {
-        memset(convBias, 0, oc * fh * fw * bytesOf(odt));
+        UNI_MEMSET(convBias, 0, oc * fh * fw * bytesOf(odt));
     }
     TensorDesc convOutDesc = tensor4df(odt, DF_NCHWC8, in, oc * fh * fw, ih, iw);
     U8 *convOut = (U8 *)tmp + oc * fh * fw * bytesOf(odt);
@@ -153,11 +153,13 @@ EE deconvolution_pointwise_x86(TensorDesc inputDesc,
     } else {
         U8 *tmpOutputPtr = (U8 *)output;
         U32 biasTileSize = bytesOf(biasDesc.dt) * 8;
-        U8 *biasPtr = (U8 *)bias;
-        for (U32 c = 0; c < oc / 8; c++, biasPtr += biasTileSize) {
-            for (U32 n = 0; n < oh * ow; n++) {
-                memcpy(tmpOutputPtr, biasPtr, biasTileSize);
-                tmpOutputPtr += biasTileSize;
+        for (U32 n = 0; n < on; ++n) {
+            U8 *biasPtr = (U8 *)bias;
+            for (U32 c = 0; c < oc / 8; c++, biasPtr += biasTileSize) {
+                for (U32 hw = 0; hw < oh * ow; hw++) {
+                    UNI_MEMCPY(tmpOutputPtr, biasPtr, biasTileSize);
+                    tmpOutputPtr += biasTileSize;
+                }
             }
         }
         deconvolution_overlap_crop_c8_x86(convOut, output, inputDesc, outputDesc, convParamSpec);

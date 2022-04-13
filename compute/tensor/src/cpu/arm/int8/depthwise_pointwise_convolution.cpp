@@ -59,12 +59,14 @@ EE depthwise_pointwise_convolution_int8(TensorDesc inputDesc,
 
     EE ret = SUCCESS;
     switch (algorithm) {
+#if defined(_USE_FP16) || !defined(__aarch64__)
         case DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_DIRECT:
             ret = depthwise_pointwise_convolution_direct(inputDesc, input, dwFilterDesc, dwFilter,
                 pwFilterDesc, pwFilter, convParamSpec, dwBiasDesc, dwBias, pwBiasDesc, pwBias,
                 tmpBytes, tmp, outputDesc, output, depthwiseActivationParamSpec,
                 pointwiseActivationParamSpec, arch);
             break;
+#endif
         default:
             ret = NOT_SUPPORTED;
             break;

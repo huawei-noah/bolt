@@ -45,7 +45,7 @@ inline void transformNCHWCxNx(U32 fc, U32 fh, U32 fw, U32 oc, const F32 *input, 
                     _mm256_storeu_ps(dest + 24, _mm256_i32gather_ps(src + 24 * lstep, vindex, 4));
                 }
             }
-            memset(dest + N, 0, ((cSizePadding - cSize) * N * 4));
+            UNI_MEMSET(dest + N, 0, ((cSizePadding - cSize) * N * 4));
         }
     }
 }
@@ -112,7 +112,7 @@ inline EE transformNCHWToNCHWCxNx(
                     dest = output + c * fh * fw * 8 + hw * cSizePadding * 8 + c8 * 8;
                     _mm256_storeu_ps(dest, _mm256_mask_i32gather_ps(src256, src, vindex, mask, 4));
                 }
-                memset(dest + 8, 0, ((cSizePadding - cSize) * 32));
+                UNI_MEMSET(dest + 8, 0, ((cSizePadding - cSize) * 32));
             }
         }
         fn += remain;
@@ -128,10 +128,10 @@ inline void PaddingNCHWC8(
     DataFormat idf;
     U32 in, ic, ih, iw;
     CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    U32 paddingT = convParamSpec.padding_top;
-    U32 paddingB = convParamSpec.padding_bottom;
-    U32 paddingL = convParamSpec.padding_left;
-    U32 paddingR = convParamSpec.padding_right;
+    U32 paddingT = convParamSpec.pad_top;
+    U32 paddingB = convParamSpec.pad_bottom;
+    U32 paddingL = convParamSpec.pad_left;
+    U32 paddingR = convParamSpec.pad_right;
 
     U32 padih = paddingT + paddingB + ih;
     U32 padiw = paddingL + paddingR + iw;
@@ -148,8 +148,9 @@ inline void PaddingNCHWC8(
 #endif
         for (U32 c = 0; c < ic; ++c) {
             U32 coff = c * padih * padiw * 8;
-            memset(tmp + coff, 0, padiw * paddingT * 8 * bytesOf(idt));
-            memset(tmp + coff + (ih + paddingT) * padiw * 8, 0, padiw * paddingB * 8 * bytesOf(idt));
+            UNI_MEMSET(tmp + coff, 0, padiw * paddingT * 8 * bytesOf(idt));
+            UNI_MEMSET(
+                tmp + coff + (ih + paddingT) * padiw * 8, 0, padiw * paddingB * 8 * bytesOf(idt));
         }
 
 #ifdef _USE_OPENMP
@@ -161,10 +162,10 @@ inline void PaddingNCHWC8(
             U32 h = hc % ih;
             U32 hoff = (h + paddingT) * padiw;
 
-            memset(tmp + coff + hoff * 8, 0, paddingL * 8 * bytesOf(idt));
-            memcpy(tmp + coff + (hoff + paddingL) * 8, data + c * ih * iw * 8 + h * iw * 8,
+            UNI_MEMSET(tmp + coff + hoff * 8, 0, paddingL * 8 * bytesOf(idt));
+            UNI_MEMCPY(tmp + coff + (hoff + paddingL) * 8, data + c * ih * iw * 8 + h * iw * 8,
                 iw * 8 * bytesOf(idt));
-            memset(tmp + coff + (hoff + (paddingL + iw)) * 8, 0, paddingR * 8 * bytesOf(idt));
+            UNI_MEMSET(tmp + coff + (hoff + (paddingL + iw)) * 8, 0, paddingR * 8 * bytesOf(idt));
         }
 
 #ifdef _USE_OPENMP
@@ -188,8 +189,8 @@ inline void deconvOverlapAndCrop(F32 *input,
     U32 fhfw = fh * fw;
     U32 strideH = convParamSpec.stride_h;
     U32 strideW = convParamSpec.stride_w;
-    U32 paddingT = convParamSpec.padding_top;
-    U32 paddingL = convParamSpec.padding_left;
+    U32 paddingT = convParamSpec.pad_top;
+    U32 paddingL = convParamSpec.pad_left;
     __m256i vindex =
         _mm256_set_epi32(fhfw * 7, fhfw * 6, fhfw * 5, fhfw * 4, fhfw * 3, fhfw * 2, fhfw, 0);
     for (U32 kn = 0; kn < in; ++kn) {
@@ -216,7 +217,7 @@ inline void deconvOverlapAndCrop(F32 *input,
                 }
             }
         }
-        input += ic * ih * iw;
+        input += oc * fh * fw * ih * iw;
         output += oc * oh * ow;
     }
 }
@@ -237,8 +238,8 @@ inline void deconvOverlapAndCropNCHWC8(F32 *input,
     U32 fhfw = fh * fw;
     U32 strideH = convParamSpec.stride_h;
     U32 strideW = convParamSpec.stride_w;
-    U32 paddingT = convParamSpec.padding_top;
-    U32 paddingL = convParamSpec.padding_left;
+    U32 paddingT = convParamSpec.pad_top;
+    U32 paddingL = convParamSpec.pad_left;
     for (U32 kn = 0; kn < in; ++kn) {
         for (U32 kh = 0; kh < ih; ++kh) {
             for (U32 kw = 0; kw < iw; ++kw) {
@@ -263,7 +264,7 @@ inline void deconvOverlapAndCropNCHWC8(F32 *input,
                 }
             }
         }
-        input += ic * ih * iw;
+        input += oc * fh * fw * ih * iw;
         output += oc * oh * ow;
     }
 }
@@ -285,8 +286,8 @@ inline void deconvOverlapAndCropEqualNCHWC8(F32 *input,
     U32 fhfw = fh * fw;
     U32 strideH = convParamSpec.stride_h;
     U32 strideW = convParamSpec.stride_w;
-    U32 paddingT = convParamSpec.padding_top;
-    U32 paddingL = convParamSpec.padding_left;
+    U32 paddingT = convParamSpec.pad_top;
+    U32 paddingL = convParamSpec.pad_left;
     for (U32 kn = 0; kn < in; ++kn) {
         for (U32 kc = 0; kc < oc; kc += 8) {
 #ifdef _USE_OPENMP
@@ -312,7 +313,7 @@ inline void deconvOverlapAndCropEqualNCHWC8(F32 *input,
                 }
             }
         }
-        input += ic * ih * iw;
+        input += oc * fh * fw * ih * iw;
         output += oc * oh * ow;
     }
 }

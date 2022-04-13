@@ -32,7 +32,7 @@ class ConvolutionEltwiseOptimizer : public OPOptimizer {
         bool hasOptimized = false;
         for (int i = 1; i < spec->num_operator_specs; i++) {
             if (spec->ops[i].type == OT_Eltwise && spec->ops[i].num_inputs == 2 &&
-                spec->ops[i].ps.eltwise_spec.elt_mode == ELTWISE_SUM) {
+                spec->ops[i].ps.eltwise_spec.mode == ELTWISE_SUM) {
                 bool thisOptimized = false;
                 int fuseConvIdx = -1;
                 std::string curIn = spec->ops[i].input_tensors_name[0];
@@ -44,15 +44,17 @@ class ConvolutionEltwiseOptimizer : public OPOptimizer {
                 int nextNodeNum = 1;
                 for (auto nextOpIndex : nextOpIndexes) {
                     if (isValidOperator(spec, nextOpIndex.first) &&
-                        strcmp(spec->ops[nextOpIndex.first].name, spec->ops[i].name)) {
+                        std::string(spec->ops[nextOpIndex.first].name) !=
+                            std::string(spec->ops[i].name)) {
                         ++nextNodeNum;
                     }
                 }
                 if (nextNodeNum == 1 && isValidOperator(spec, curInIdx) &&
                     spec->ops[curInIdx].type == OT_Conv &&
-                    (spec->ops[curInIdx].ps.conv_spec.convolution_type == Convolution_Pointwise ||
+                    (spec->ops[curInIdx].ps.conv_spec.convolution_type == CONVOLUTION_POINTWISE ||
                         spec->ops[curInIdx].ps.conv_spec.convolution_type ==
-                            Convolution_Depthwise_Pointwise) &&
+                            CONVOLUTION_DEPTHWISE_POINTWISE ||
+                        spec->ops[curInIdx].ps.conv_spec.convolution_type == CONVOLUTION_DILATION) &&
                     spec->ops[curInIdx].ps.conv_spec.pw_activation_type == ACTIVATION_NULL) {
                     thisOptimized = true;
                     fuseConvIdx = curInIdx;
@@ -67,15 +69,18 @@ class ConvolutionEltwiseOptimizer : public OPOptimizer {
                         spec, curIn, curInIdx + 1, spec->num_operator_specs, false);
                     for (auto nextOpIndex : nextOpIndexes) {
                         if (isValidOperator(spec, nextOpIndex.first) &&
-                            strcmp(spec->ops[nextOpIndex.first].name, spec->ops[i].name)) {
+                            std::string(spec->ops[nextOpIndex.first].name) !=
+                                std::string(spec->ops[i].name)) {
                             ++nextNodeNum;
                         }
                     }
                     if (nextNodeNum == 1 && isValidOperator(spec, curInIdx) &&
                         spec->ops[curInIdx].type == OT_Conv &&
-                        (spec->ops[curInIdx].ps.conv_spec.convolution_type == Convolution_Pointwise ||
+                        (spec->ops[curInIdx].ps.conv_spec.convolution_type == CONVOLUTION_POINTWISE ||
                             spec->ops[curInIdx].ps.conv_spec.convolution_type ==
-                                Convolution_Depthwise_Pointwise) &&
+                                CONVOLUTION_DEPTHWISE_POINTWISE ||
+                            spec->ops[curInIdx].ps.conv_spec.convolution_type ==
+                                CONVOLUTION_DILATION) &&
                         spec->ops[curInIdx].ps.conv_spec.pw_activation_type == ACTIVATION_NULL) {
                         thisOptimized = true;
                         fuseConvIdx = curInIdx;
@@ -107,6 +112,25 @@ class ConvolutionEltwiseOptimizer : public OPOptimizer {
                     int convWeightIndex = searchWeightIndex(spec, spec->ops[fuseConvIdx].name);
                     str_copy(spec->ws[convWeightIndex].op_name, nodeName.data(),
                         strlen(nodeName.data()));
+
+                    // set feature scale
+                    spec->ops[i].num_quant_feature = spec->ops[fuseConvIdx].num_quant_feature;
+                    if (0 == spec->ops[i].num_quant_feature) {
+                        spec->ops[i].feature_scale = nullptr;
+                    } else {
+                        spec->ops[i].feature_scale = (QuantSpec *)mt_malloc(
+                            spec->ops[fuseConvIdx].num_quant_feature * sizeof(QuantSpec));
+                        for (U32 j = 0; j < spec->ops[i].num_quant_feature; j++) {
+                            spec->ops[i].feature_scale[j].num_scale =
+                                spec->ops[fuseConvIdx].feature_scale[j].num_scale;
+                            int num = spec->ops[i].feature_scale[j].num_scale;
+
+                            spec->ops[i].feature_scale[j].scale =
+                                (F32 *)mt_malloc(num * sizeof(F32));
+                            UNI_MEMCPY(spec->ops[i].feature_scale[j].scale,
+                                spec->ops[fuseConvIdx].feature_scale[j].scale, num * sizeof(F32));
+                        }
+                    }
 
                     setOperatorInvalid(spec, fuseConvIdx, true);
                 }

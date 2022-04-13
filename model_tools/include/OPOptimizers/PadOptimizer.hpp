@@ -20,52 +20,51 @@ class PadOptimizer : public OPOptimizer {
     bool optimize(ModelSpec *spec) override
     {
         bool hasOptimized = false;
-        for (int i = 0; i < spec->num_operator_specs; i++) {
-            if (spec->ops[i].type == OT_Pad && spec->ops[i].ps.pad_spec.pad_mode == Pad_Constant &&
+        for (int i = 0; i < spec->num_operator_specs - 1; i++) {
+            if (spec->ops[i].type == OT_Pad && spec->ops[i].ps.pad_spec.pad_mode == PAD_CONSTANT &&
                 spec->ops[i].ps.pad_spec.constant_value == 0) {
                 int padOpIndex = i;
                 std::vector<std::pair<int, int>> nextOpIndexes = searchOperatorIndexByInput(spec,
                     spec->ops[padOpIndex].output_tensors_name[0], padOpIndex + 1,
                     spec->num_operator_specs);
-                if ((nextOpIndexes.size() != 1) ||
-                    ((OT_Pooling != spec->ops[nextOpIndexes[0].first].type) &&
-                        (OT_Conv != spec->ops[nextOpIndexes[0].first].type))) {
+                if (nextOpIndexes.size() != 1) {
                     continue;
                 }
                 int nextOpIndex = nextOpIndexes[0].first;
-                if (spec->ops[nextOpIndex].type == OT_Pooling) {
-                    if (spec->ops[nextOpIndex].ps.pooling_spec.mode == POOLING_MAX) {
-                        continue;
-                    }
-                    spec->ops[nextOpIndex].ps.pooling_spec.padding_before +=
+                if (spec->ops[nextOpIndex].type == OT_Pooling &&
+                    spec->ops[nextOpIndex].ps.pooling_spec.mode == POOLING_MEAN) {
+                    spec->ops[nextOpIndex].ps.pooling_spec.count_include_pad = true;
+                    spec->ops[nextOpIndex].ps.pooling_spec.pad_before +=
                         spec->ops[padOpIndex].ps.pad_spec.before;
-                    spec->ops[nextOpIndex].ps.pooling_spec.padding_after +=
+                    spec->ops[nextOpIndex].ps.pooling_spec.pad_after +=
                         spec->ops[padOpIndex].ps.pad_spec.after;
-                    spec->ops[nextOpIndex].ps.pooling_spec.padding_top +=
+                    spec->ops[nextOpIndex].ps.pooling_spec.pad_top +=
                         spec->ops[padOpIndex].ps.pad_spec.top;
-                    spec->ops[nextOpIndex].ps.pooling_spec.padding_bottom +=
+                    spec->ops[nextOpIndex].ps.pooling_spec.pad_bottom +=
                         spec->ops[padOpIndex].ps.pad_spec.bottom;
-                    spec->ops[nextOpIndex].ps.pooling_spec.padding_left +=
+                    spec->ops[nextOpIndex].ps.pooling_spec.pad_left +=
                         spec->ops[padOpIndex].ps.pad_spec.left;
-                    spec->ops[nextOpIndex].ps.pooling_spec.padding_right +=
+                    spec->ops[nextOpIndex].ps.pooling_spec.pad_right +=
                         spec->ops[padOpIndex].ps.pad_spec.right;
+                    setOperatorInvalid(spec, padOpIndex, true);
+                    hasOptimized = true;
                 }
                 if (spec->ops[nextOpIndex].type == OT_Conv) {
-                    spec->ops[nextOpIndex].ps.conv_spec.padding_before +=
+                    spec->ops[nextOpIndex].ps.conv_spec.pad_before +=
                         spec->ops[padOpIndex].ps.pad_spec.before;
-                    spec->ops[nextOpIndex].ps.conv_spec.padding_after +=
+                    spec->ops[nextOpIndex].ps.conv_spec.pad_after +=
                         spec->ops[padOpIndex].ps.pad_spec.after;
-                    spec->ops[nextOpIndex].ps.conv_spec.padding_top +=
+                    spec->ops[nextOpIndex].ps.conv_spec.pad_top +=
                         spec->ops[padOpIndex].ps.pad_spec.top;
-                    spec->ops[nextOpIndex].ps.conv_spec.padding_bottom +=
+                    spec->ops[nextOpIndex].ps.conv_spec.pad_bottom +=
                         spec->ops[padOpIndex].ps.pad_spec.bottom;
-                    spec->ops[nextOpIndex].ps.conv_spec.padding_left +=
+                    spec->ops[nextOpIndex].ps.conv_spec.pad_left +=
                         spec->ops[padOpIndex].ps.pad_spec.left;
-                    spec->ops[nextOpIndex].ps.conv_spec.padding_right +=
+                    spec->ops[nextOpIndex].ps.conv_spec.pad_right +=
                         spec->ops[padOpIndex].ps.pad_spec.right;
+                    setOperatorInvalid(spec, padOpIndex, true);
+                    hasOptimized = true;
                 }
-                setOperatorInvalid(spec, padOpIndex, true);
-                hasOptimized = true;
             }
         }
         return hasOptimized;

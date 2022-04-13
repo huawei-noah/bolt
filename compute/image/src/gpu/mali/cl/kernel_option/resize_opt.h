@@ -15,22 +15,22 @@ inline EE set_resize_nearest_opt_mali(ResizeParamSpec p,
     CHECK_STATUS(set_io_mem_name(inputMemType, outputMemType, ioMemName));
     std::string modeName = "";
     switch (p.trans_mode) {
-        case HALF_PIXEL: {
+        case COORDINATE_TRANS_HALF_PIXEL: {
             modeName = "_half_pixel";
             CHECK_STATUS(set_chars_define_opt("USE_HALF_PIXEL", opt));
             break;
         }
-        case PYTORCH_HALF_PIXEL: {
+        case COORDINATE_TRANS_PYTORCH_HALF_PIXEL: {
             modeName = "_pytorch_half_pixel";
             CHECK_STATUS(set_chars_define_opt("USE_PYTORCH_HALF_PIXEL", opt));
             break;
         }
-        case ALIGN_CORNERS: {
+        case COORDINATE_TRANS_ALIGN_CORNERS: {
             modeName = "_align_corners";
             CHECK_STATUS(set_chars_define_opt("USE_ALIGN_CORNERS", opt));
             break;
         }
-        case ASYMMETRIC: {
+        case COORDINATE_TRANS_ASYMMETRIC: {
             modeName = "_asymmetric";
             CHECK_STATUS(set_chars_define_opt("USE_ASYMMETRIC", opt));
             break;
@@ -42,8 +42,9 @@ inline EE set_resize_nearest_opt_mali(ResizeParamSpec p,
     if (useNchwFormat) {
         formatName = "nchw";
     }
-    sprintf(kernelName, "resize_nearest_%s%s%s", ioMemName, formatName.c_str(), modeName.c_str());
-    sprintf(kernelOpt->sourceName, "resize_nearest");
+    std::string kernel = std::string("resize_nearest_") + ioMemName + formatName + modeName;
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, "resize_nearest");
     if (useNchwFormat) {
         CHECK_STATUS(set_chars_define_opt("USE_NCHW", opt));
     }
@@ -66,8 +67,9 @@ inline EE set_resize_bilinear_opt_mali(bool useNchwFormat,
     if (useNchwFormat) {
         formatName = "nchw";
     }
-    sprintf(kernelName, "resize_bilinear_%s%s", ioMemName, formatName.c_str());
-    sprintf(kernelOpt->sourceName, "resize_bilinear");
+    std::string kernel = std::string("resize_bilinear_") + ioMemName + formatName;
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, "resize_bilinear");
     if (useNchwFormat) {
         CHECK_STATUS(set_chars_define_opt("USE_NCHW", opt));
     }

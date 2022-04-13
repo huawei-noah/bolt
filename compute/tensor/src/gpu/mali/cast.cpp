@@ -42,9 +42,9 @@ inline void set_dt_name(TensorDesc desc, char *name)
 {
     DataType dt = desc.dt;
     if (dt == DT_F16) {
-        strcpy(name, "f16");
+        UNI_STRCPY(name, "f16");
     } else if (dt == DT_I32) {
-        strcpy(name, "i32");
+        UNI_STRCPY(name, "i32");
     } else {
         CHECK_STATUS(NOT_SUPPORTED);
     }

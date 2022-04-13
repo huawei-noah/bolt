@@ -28,19 +28,28 @@ public:
         return mem;
     }
 
+    TopKParamSpec get_param(TensorDesc desc)
+    {
+        TopKParamSpec lp = this->p;
+        if (lp.k == 0) {
+            lp.k = desc.dims[desc.nDims];
+        }
+        return lp;
+    }
     void run() override
     {
-        Tensor inputTensor = this->inputTensors[0];
-        Tensor outputTensor = this->outputTensors[0];
-        Tensor outputIndicesTensor = this->outputTensors[1];
-        CHECK_STATUS(topk(
-            inputTensor, this->p, this->temp, outputTensor, outputIndicesTensor, &this->archInfo));
+        CHECK_STATUS(topk(inputTensors[0], this->p, this->temp, outputTensors[0], outputTensors[1],
+            &this->archInfo));
     }
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
-        CHECK_STATUS(topk_infer_output_size(
-            inTensors[0], this->p, outTensors[0], outTensors[1], &this->archInfo));
+        TopKParamSpec lp = this->p;
+        if (lp.k == 0 && inTensors.size() > 1) {
+            lp = get_param(inTensors[1]->get_desc());
+        }
+        CHECK_STATUS(
+            topk_infer_output_size(inTensors[0], lp, outTensors[0], outTensors[1], &this->archInfo));
         return SUCCESS;
     }
 

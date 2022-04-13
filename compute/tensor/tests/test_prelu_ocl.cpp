@@ -70,7 +70,7 @@ int preluTest(int argc, char **argv, DataType dt)
     U32 icAlign = (ic + 3) / 4 * 4;
     if (!preluDesc.propagate_down) {
         U8 *weightAlign = ut_input_v(icAlign, dt, UT_INIT_ZERO);
-        memcpy(weightAlign, weightCPU, ic * bytesOf(dt));
+        UNI_MEMCPY(weightAlign, weightCPU, ic * bytesOf(dt));
         free(weightCPU);
         weightCPU = weightAlign;
         alloc_padding(weightTensor, 0, icAlign - ic, 0, 0, weightCPU);

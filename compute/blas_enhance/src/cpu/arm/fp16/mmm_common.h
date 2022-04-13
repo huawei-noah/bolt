@@ -13,7 +13,7 @@
 
 #ifndef _H_MMM_COMMON
 #define _H_MMM_COMMON
-#include <string.h>
+
 #include <arm_neon.h>
 #include "data_type.h"
 #include "uni.h"
@@ -41,7 +41,7 @@ inline void matrix2_trans(U32 size, U32 blockK, U32 M, F16 *src, F16 *dst)
 {
     for (U32 i = 0; i < blockK; i++) {
         asm volatile("prfm pldl2keep, [%0, #48]\n" : "+r"(src) : : "memory", "cc");
-        memcpy(dst, src, size * sizeof(F16));
+        UNI_MEMCPY(dst, src, size * sizeof(F16));
         dst += size;
         src += M;
     }

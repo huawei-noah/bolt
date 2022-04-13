@@ -18,14 +18,10 @@
 
 class Resize : public Operator {
 public:
-    Resize(DataType paramDT, ResizeParamSpec p)
+    Resize(DataType dt, ResizeParamSpec p)
     {
-        if (paramDT == DT_F32 || paramDT == DT_U32) {
-            this->paramDT = paramDT;
-            this->p = p;
-        } else {
-            CHECK_STATUS(NOT_SUPPORTED);
-        }
+        this->dt = dt;
+        this->p = p;
     }
 
     OperatorType get_type() override
@@ -34,7 +30,6 @@ public:
     }
 
 protected:
-    DataType paramDT;
     ResizeParamSpec p;
 };
 

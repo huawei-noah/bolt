@@ -14,6 +14,7 @@
 #include "gpu/mali/fp16/convolution_mali_fp16.h"
 #include "gpu/mali/fp16/convolution_direct_mali_fp16.h"
 #include "gpu/mali/fp16/convolution_wino_mali_fp16.h"
+#include "gpu/mali/fp16/convolution_invgemm_mali_fp16.h"
 
 inline EE convolution_checkpara_mali_fp16(GCLHandle_t handle,
     TensorDesc inputDesc,
@@ -61,6 +62,10 @@ EE convolution_transform_filter_bytes_mali_fp16(
             ret = convolution_wino_transform_filter_bytes_mali_fp16(
                 filterDesc, forwardRunInfo, ftmDesc);
             break;
+        case CONVOLUTION_ALGORITHM_INVGEMM:
+            ret = convolution_invgemm_transform_filter_bytes_mali_fp16(
+                filterDesc, forwardRunInfo, ftmDesc);
+            break;
         default:
             ret = NOT_SUPPORTED;
             break;
@@ -90,6 +95,10 @@ EE convolution_transform_filter_mali_fp16(GCLHandle_t handle,
             ret = convolution_wino_transform_filter_mali_fp16(
                 handle, filterDesc, filter, forwardRunInfo, fltmemDesc, fltmem, tmp);
             break;
+        case CONVOLUTION_ALGORITHM_INVGEMM:
+            ret = convolution_invgemm_transform_filter_mali_fp16(
+                handle, filterDesc, filter, forwardRunInfo, fltmemDesc, fltmem);
+            break;
         default:
             ret = NOT_SUPPORTED;
             break;
@@ -116,6 +125,10 @@ EE convolution_infer_forward_tmp_bytes_mali_fp16(TensorDesc inputDesc,
             break;
         case CONVOLUTION_ALGORITHM_WINOGRAD:
             ret = convolution_wino_infer_forward_tmp_bytes_mali_fp16(
+                inputDesc, filterDesc, outputDesc, convParamSpec, forwardRunInfo, bytes);
+            break;
+        case CONVOLUTION_ALGORITHM_INVGEMM:
+            ret = convolution_invgemm_infer_forward_tmp_bytes_mali_fp16(
                 inputDesc, filterDesc, outputDesc, convParamSpec, forwardRunInfo, bytes);
             break;
         default:
@@ -156,6 +169,11 @@ EE convolution_mali_fp16(GCLHandle_t handle,
         case CONVOLUTION_ALGORITHM_WINOGRAD:
             ret = convolution_wino_mali_fp16(handle, inputDesc, input, filterDesc, filter,
                 convParamSpec, forwardRunInfo, biasDesc, bias, tmpBytes, tmpBuf, outputDesc, output,
+                activationMode);
+            break;
+        case CONVOLUTION_ALGORITHM_INVGEMM:
+            ret = convolution_invgemm_mali_fp16(handle, inputDesc, input, filterDesc, filter,
+                convParamSpec, forwardRunInfo, biasDesc, bias, tmpBytes, tmpBuf[0], outputDesc, output,
                 activationMode);
             break;
         default:

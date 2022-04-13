@@ -108,7 +108,7 @@ int softmaxTest(int argc, char **argv, DataType dt)
     Tensor inputTensorCpu;
     inputTensorCpu.resize(in_desc);
     inputTensorCpu.alloc();
-    memcpy(get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), input_cpu, tensorNumBytes(in_desc));
+    UNI_MEMCPY(get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), input_cpu, tensorNumBytes(in_desc));
 
     Tensor outputTensorCpu;
     outputTensorCpu.resize(out_desc);

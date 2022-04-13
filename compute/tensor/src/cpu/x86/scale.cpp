@@ -12,6 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "cpu/x86/tensor_computing_x86.h"
+#include "cpu/x86/int32/tensor_computing_int32.h"
 #ifdef _USE_FP32
 #include "cpu/x86/fp32/tensor_computing_fp32.h"
 #endif
@@ -37,7 +38,7 @@ EE scale_x86(TensorDesc inputDesc,
         CHECK_REQUIREMENT(oc % 16 == 0);
         axis = outputDesc.nDims + 1;
     }
-    EE ret = SUCCESS;
+    EE ret = NOT_SUPPORTED;
     switch (outputDesc.dt) {
 #ifdef _USE_FP32
         case DT_F32: {
@@ -46,10 +47,13 @@ EE scale_x86(TensorDesc inputDesc,
             break;
         }
 #endif
+        case DT_I32: {
+            ret = scale_int32((I32 *)input, axis, outputDesc.nDims, (I32 *)alpha, (I32 *)beta, on,
+                oc, elements_per_channel, ic, (I32 *)output);
+            break;
+        }
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
-
     return ret;
 }

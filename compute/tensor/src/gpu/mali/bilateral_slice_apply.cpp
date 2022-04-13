@@ -33,7 +33,7 @@ inline EE bilateral_slice_apply_checkpara_mali_common(GCLHandle_t handle,
     if (nullptr == handle || nullptr == input || nullptr == grid || nullptr == output) {
         return NULL_POINTER;
     }
-    if (bilateralSliceApplyParamSpec.mode == BSliceApply_NULL && nullptr == guide) {
+    if (bilateralSliceApplyParamSpec.mode == BSLICE_APPLY_NULL && nullptr == guide) {
         return NULL_POINTER;
     }
     if (inputDesc.df != guideDesc.df || inputDesc.df != gridDesc.df) {
@@ -51,15 +51,14 @@ inline EE bilateral_slice_apply_checkpara_mali_common(GCLHandle_t handle,
     if (inputDesc.dims[2] != outputDesc.dims[2]) {
         return NOT_MATCH;
     }
-    if ((gridDesc.dims[2] % bilateralSliceApplyParamSpec.coefficient_len) != 0) {
+    if ((gridDesc.dims[2] % bilateralSliceApplyParamSpec.coefficient) != 0) {
         return NOT_MATCH;
     }
     if (bilateralSliceApplyParamSpec.has_offset == true) {
-        if (bilateralSliceApplyParamSpec.coefficient_len !=
-            inputDesc.dims[2] * (inputDesc.dims[2] + 1)) {
+        if (bilateralSliceApplyParamSpec.coefficient != inputDesc.dims[2] * (inputDesc.dims[2] + 1)) {
             return NOT_MATCH;
         }
-        if (bilateralSliceApplyParamSpec.coefficient_len != 12) {
+        if (bilateralSliceApplyParamSpec.coefficient != 12) {
             return NOT_SUPPORTED;
         }
     } else {

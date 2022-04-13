@@ -11,9 +11,10 @@ inline EE set_expand_opt_mali(U32 nDims,
     char *opt = kernelOpt->option;
     char ioMemName[128] = "";
     CHECK_STATUS(set_io_mem_name(inputMemType, outputMemType, ioMemName));
+    std::string kernel = std::string("expand_") + ioMemName + std::to_string(nDims);
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, "expand");
     kernelOpt->kernelDataType = dt;
-    sprintf(kernelName, "expand_%s%d", ioMemName, nDims);
-    sprintf(kernelOpt->sourceName, "expand");
     CHECK_STATUS(set_value_define_opt(nDims, "DN", opt));
     CHECK_STATUS(set_io_mem_define_opt(inputMemType, outputMemType, opt));
     return SUCCESS;

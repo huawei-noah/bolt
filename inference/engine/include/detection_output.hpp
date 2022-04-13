@@ -46,9 +46,7 @@ public:
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
-        CHECK_STATUS(
-            detectionoutput_infer_output_size(inTensors, this->p, outTensors[0], &this->archInfo));
-        return SUCCESS;
+        return detectionoutput_infer_output_size(inTensors, this->p, outTensors[0], &this->archInfo);
     }
 
 protected:

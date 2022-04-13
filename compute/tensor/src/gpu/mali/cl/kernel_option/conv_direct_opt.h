@@ -21,9 +21,10 @@ inline EE set_conv_direct_trans_flt(U32 workChannelsPerThread,
         transWHName = "hw_";
         CHECK_STATUS(set_chars_define_opt("USE_TRANS_WH", opt));
     }
-    sprintf(kernelName, "conv_direct_trans_flt_%s%s%d%d", ioMemName, transWHName.c_str(), item_c,
-        item_k);
-    sprintf(kernelOpt->sourceName, "conv_direct_trans_flt");
+    std::string kernel = std::string("conv_direct_trans_flt_") + ioMemName + transWHName +
+        std::to_string(item_c) + std::to_string(item_k);
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, "conv_direct_trans_flt");
     CHECK_STATUS(set_value_define_opt(item_c, "C", opt));
     CHECK_STATUS(set_value_define_opt(item_k, "K", opt));
     CHECK_STATUS(set_io_mem_define_opt(GCL_MEM_BUF, outputMemType, opt));
@@ -81,15 +82,18 @@ inline EE set_conv_direct_opt_mali(U32 fw,
         biasName = "nobias_";
     }
 
+    std::string kernel, source;
     if (ft > 1) {
-        sprintf(kernelName, "conv_direct_3d_sh%d%s_%s%s%s%d%d%d%d%d", sh, devName, ioMemName,
-            modeName, biasName.c_str(), fw, fh, ft, ON, KN);
-        sprintf(kernelOpt->sourceName, "conv_direct_3d_sh%d%s", sh, devName);
+        source = std::string("conv_direct_3d_sh") + std::to_string(sh) + std::string(devName);
+        kernel = source + std::string("_") + ioMemName + modeName + biasName + std::to_string(fw) +
+            std::to_string(fh) + std::to_string(ft) + std::to_string(ON) + std::to_string(KN);
     } else {
-        sprintf(kernelName, "conv_direct_sh%d%s_%s%s%s%d%d%d%d", sh, devName, ioMemName, modeName,
-            biasName.c_str(), fw, fh, ON, KN);
-        sprintf(kernelOpt->sourceName, "conv_direct_sh%d%s", sh, devName);
+        source = std::string("conv_direct_sh") + std::to_string(sh) + std::string(devName);
+        kernel = source + std::string("_") + ioMemName + modeName + biasName + std::to_string(fw) +
+            std::to_string(fh) + std::to_string(ON) + std::to_string(KN);
     }
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, source.c_str());
 
     kernelOpt->kernelDataType = dt;
     char *opt = kernelOpt->option;
@@ -192,9 +196,11 @@ inline EE set_conv_direct_multi_batch_opt_mali(U32 fw,
     CHECK_STATUS(set_activation_mode_name(activeMode, modeName));
     char ioMemName[128] = "";
     CHECK_STATUS(set_io_mem_name(inputMemType, outputMemType, ioMemName));
-    sprintf(kernelName, "conv_direct_multi_batch_sh%d_%s%s%d%d%d%d%d", sh, ioMemName, modeName, fw,
-        fh, ON, KN, BN);
-    sprintf(kernelOpt->sourceName, "conv_direct_multi_batch_sh%d", sh);
+    std::string source = std::string("conv_direct_multi_batch_sh") + std::to_string(sh);
+    std::string kernel = source + std::string("_") + ioMemName + modeName + std::to_string(fw) +
+        std::to_string(fh) + std::to_string(ON) + std::to_string(KN) + std::to_string(BN);
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, source.c_str());
     kernelOpt->kernelDataType = dt;
     char *opt = kernelOpt->option;
     if (ON < 1 || ON > 8) {
@@ -284,8 +290,10 @@ inline EE set_conv_direct_reuse_w_opt_mali(U32 fw,
     CHECK_STATUS(set_activation_mode_name(activeMode, modeName));
     char ioMemName[128] = "";
     CHECK_STATUS(set_io_mem_name(inputMemType, outputMemType, ioMemName));
-    sprintf(kernelName, "conv_direct_sw1_reuse_w_%s%s%d%d%d%d", ioMemName, modeName, fw, fh, ON, KN);
-    sprintf(kernelOpt->sourceName, "conv_direct_sw1_reuse_w");
+    std::string kernel = std::string("conv_direct_sw1_reuse_w_") + ioMemName + modeName +
+        std::to_string(fw) + std::to_string(fh) + std::to_string(ON) + std::to_string(KN);
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, "conv_direct_sw1_reuse_w");
     kernelOpt->kernelDataType = dt;
     char *opt = kernelOpt->option;
     if (ON < 1 || ON > 8) {
@@ -353,15 +361,20 @@ inline EE set_conv_direct_nchw_to_nchwc4_opt_mali(U32 fw,
     CHECK_STATUS(set_activation_mode_name(activeMode, modeName));
     char ioMemName[128] = "";
     CHECK_STATUS(set_io_mem_name(inputMemType, outputMemType, ioMemName));
+    std::string kernel, source;
     if (ft > 1) {
-        sprintf(kernelName, "conv_direct_3d_sw%d_nchw_to_nchwc4%s_%s%s%d%d%d%d", sw, devName, 
-            ioMemName, modeName, fw, fh, ft, ON);
-        sprintf(kernelOpt->sourceName, "conv_direct_3d_sw%d_nchw_to_nchwc4%s", sw, devName);
+        source = std::string("conv_direct_3d_sw") + std::to_string(sw) +
+            std::string("_nchw_to_nchwc4") + devName;
+        kernel = source + std::string("_") + ioMemName + modeName + std::to_string(fw) +
+            std::to_string(fh) + std::to_string(ft) + std::to_string(ON);
     } else {
-        sprintf(kernelName, "conv_direct_sw%d_nchw_to_nchwc4%s_%s%s%d%d%d", sw, devName, ioMemName,
-            modeName, fw, fh, ON);
-        sprintf(kernelOpt->sourceName, "conv_direct_sw%d_nchw_to_nchwc4%s", sw, devName);
+        source = std::string("conv_direct_sw") + std::to_string(sw) +
+            std::string("_nchw_to_nchwc4") + devName;
+        kernel = source + std::string("_") + ioMemName + modeName + std::to_string(fw) +
+            std::to_string(fh) + std::to_string(ON);
     }
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, source.c_str());
 
     kernelOpt->kernelDataType = dt;
     char *opt = kernelOpt->option;
@@ -441,9 +454,13 @@ inline EE set_conv_direct_dila_opt_mali(U32 fw,
     if (dh == 2) {
         dilaMode = "dila2_";
     }
-    sprintf(kernelName, "conv_direct_sh%d%s_%s%s%s%d%d%d%d", sh, devName, dilaMode.c_str(),
-        ioMemName, modeName, fw, fh, ON, KN);
-    sprintf(kernelOpt->sourceName, "conv_direct_sh%d%s_dila", sh, devName);
+    std::string kernel = std::string("conv_direct_sh") + std::to_string(sh) + devName +
+        std::string("_") + dilaMode + ioMemName + modeName + std::to_string(fw) +
+        std::to_string(fh) + std::to_string(ON) + std::to_string(KN);
+    std::string source =
+        std::string("conv_direct_sh") + std::to_string(sh) + devName + std::string("_dila");
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, source.c_str());
     kernelOpt->kernelDataType = dt;
     char *opt = kernelOpt->option;
     if (ON < 1 || ON > 8) {
@@ -517,9 +534,10 @@ inline EE set_conv_direct_sh1_fn_spe_opt_mali(U32 fw,
     if (useNchwFormat) {
         formatName = "nchw_";
     }
-    sprintf(kernelName, "conv_direct_sh1_fn_spe_%s%s%s%d%d%d", ioMemName, modeName,
-        formatName.c_str(), fw, fh, ON);
-    sprintf(kernelOpt->sourceName, "conv_direct_sh1_fn_spe");
+    std::string buffer = std::string("conv_direct_sh1_fn_spe_") + ioMemName + modeName +
+        formatName + std::to_string(fw) + std::to_string(fh) + std::to_string(ON);
+    UNI_STRCPY(kernelName, buffer.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, "conv_direct_sh1_fn_spe");
     kernelOpt->kernelDataType = dt;
     char *opt = kernelOpt->option;
 

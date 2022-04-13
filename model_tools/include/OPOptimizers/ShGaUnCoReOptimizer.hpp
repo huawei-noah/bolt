@@ -27,21 +27,19 @@ class ShGaUnCoReOptimizer : public OPOptimizer {
                     spec->ops[i + 3].type == OT_Unsqueeze && spec->ops[i + 4].type == OT_Concat &&
                     spec->ops[i + 5].type == OT_Reshape) {
                     for (int k = 1; k < (int)(spec->ops[shapeOpIndex - 1].num_outputs); k++) {
-                        delete spec->ops[shapeOpIndex - 1].output_tensors_name[k];
-                        spec->ops[shapeOpIndex - 1].output_tensors_name[k] = nullptr;
+                        mt_free(spec->ops[shapeOpIndex - 1].output_tensors_name[k]);
                     }
                     spec->ops[shapeOpIndex - 1].num_outputs = 1;
 
                     for (int k = 1; k < (int)(spec->ops[i + 5].num_outputs); k++) {
-                        delete spec->ops[i + 5].input_tensors_name[k];
-                        spec->ops[i + 5].input_tensors_name[k] = nullptr;
+                        mt_free(spec->ops[i + 5].input_tensors_name[k]);
                     }
                     spec->ops[i + 5].num_inputs = 1;
 
                     // make the reshape proper
-                    spec->ops[i + 5].ps.reshape_spec.shape_dims[0] = 1;
-                    spec->ops[i + 5].ps.reshape_spec.shape_dims[1] = -1;
-                    spec->ops[i + 5].ps.reshape_spec.shape_size = 2;
+                    spec->ops[i + 5].ps.reshape_spec.shape[0] = 1;
+                    spec->ops[i + 5].ps.reshape_spec.shape[1] = -1;
+                    spec->ops[i + 5].ps.reshape_spec.num_shape = 2;
 
                     // drop the redundant op
                     setOperatorInvalid(spec, i);

@@ -57,10 +57,10 @@
 
 - #### Android NDK
 
-    Refer to the [NDK installation example](https://askubuntu.com/questions/837847/how-to-install-android-ndk) to install [android-ndk-r20](https://developer.android.google.cn/ndk/downloads) and set shell environment variable **ANDROID_NDK_ROOT**.
+    Refer to the [NDK installation example](https://askubuntu.com/questions/837847/how-to-install-android-ndk) to install [android-ndk-r22b](https://developer.android.google.cn/ndk/downloads) and set shell environment variable **ANDROID_NDK_ROOT**.
 
     ```
-    export ANDROID_NDK_ROOT=/data/opt/android-ndk-r20
+    export ANDROID_NDK_ROOT=/data/opt/android-ndk-r22b
     ```
 
 ### Linux-AArch64 Target System Cross-Compilation Tools
@@ -143,7 +143,7 @@ We will install Bolt to *install_[target]* directory. These subdirectories will 
     - *benchmark* for measuring inference performance of bolt model
     
     These examples will be build when using *--example* option
-    - *classification* for imagenet classification task，*c_image_classifification* is a simplified C API version
+    - *classification* for imagenet classification task，*c_image_classification* is a simplified C API version
     - *u2net* for object detection
     - *ultra_face* for face detection
     - *tinybert* and *tinybert_onnx* for tinybert intention identification
@@ -176,6 +176,9 @@ We will install Bolt to *install_[target]* directory. These subdirectories will 
   7. optional. save <http://www.ijg.org/files/jpegsrc.v9c.tar.gz> to *third_party/sources/jpegsrc.v9c.tar.gz* when using example.
   8. optional. save <https://codeload.github.com/anthonix/ffts/zip/master> to *third_party/sources/ffts-master.zip* when using Flow.
   9. optional. save <https://github.com/opencv/opencv/archive/refs/tags/4.5.2.zip> to *third_party/sources/opencv-4.5.2.zip* when using face detection example.
+  10. optional. save <https://codeload.github.com/agruzdev/Yato/zip/9b5a49f6ec4169b67b9e5ffd11fdae9c238b0a3d> to *third_party/sources/half-2.2.0.zip* when using on-device training.
+  11. optional. save <https://telkomuniversity.dl.sourceforge.net/project/half/half/2.2.0/half-2.2.0.zip> to *third_party/sources/Yato-9b5a49f6ec4169b67b9e5ffd11fdae9c238b0a3d.zip* when using on-device training.
+  12. optional. save <https://gitee.com/Janisa/huawei_secure_c> to *third_party/sources/huawei_secure_c-master.zip* when using Huawei secure C functions.
 
 - #### MinGW version error
 

@@ -32,7 +32,7 @@ public:
     {
         size = UNI_MIN(size, bufferSize);
         char buffer[bufferSize];
-        memcpy(buffer, ptr, size);
+        UNI_MEMCPY(buffer, ptr, size);
         if (size < bufferSize)
             buffer[size] = '\0';
         else
@@ -60,16 +60,15 @@ public:
         return ret;
     }
 
-    static int searchWeightIndex(ModelSpec *spec, char *op_name)
+    static int searchWeightIndex(ModelSpec *spec, std::string op_name)
     {
         if (spec->num_weight_specs <= 0) {
             return -1;
         }
 
-        std::string opNameStr = op_name;
         for (int i = 0; i < spec->num_weight_specs; i++) {
             std::string key = spec->ws[i].op_name;
-            if (key == opNameStr) {
+            if (key == op_name) {
                 return i;
             }
         }
@@ -91,10 +90,11 @@ public:
 
     void setOperatorInvalid(ModelSpec *spec, int index, bool removeEdge = false)
     {
-        UNI_DEBUG_LOG("remove operator(%d) and edges(%d).\n", index, removeEdge);
         if (index >= spec->num_operator_specs || index < 0) {
             return;
         }
+        UNI_DEBUG_LOG("remove operator:%s(%s) and edges(%d).\n", spec->ops[index].name,
+            OperatorTypeName()[spec->ops[index].type], removeEdge);
         spec->ops[index].type = OT_None;
         int weightId = searchWeightIndex(spec, spec->ops[index].name);
         if (weightId >= 0) {
@@ -128,16 +128,13 @@ public:
 
     void setWeightOperatorInvalid(ModelSpec *spec, int index)
     {
+        UNI_DEBUG_LOG("remove weight operator:%s.\n", spec->ws[index].op_name);
         spec->ws[index].bytes_of_weight = 0;
+        mt_free(spec->ws[index].weight, spec);
         spec->ws[index].bytes_of_vec = 0;
-        if (outOfFileMapRange(spec->ws[index].weight, spec->mfd)) {
-            delete spec->ws[index].weight;
-        }
-        spec->ws[index].weight = nullptr;
-        if (outOfFileMapRange(spec->ws[index].vec, spec->mfd)) {
-            delete spec->ws[index].vec;
-        }
-        spec->ws[index].vec = nullptr;
+        mt_free(spec->ws[index].vec, spec);
+        spec->ws[index].num_quant_scale = 0;
+        mt_free(spec->ws[index].weight_scale, spec);
     }
 
     int searchOperatorIndexByName(ModelSpec *spec, std::string name)

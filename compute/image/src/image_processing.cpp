@@ -11,6 +11,7 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+#include <math.h>
 #include "image.h"
 
 template <typename T>
@@ -87,7 +88,10 @@ std::shared_ptr<Tensor> get_resize_image(
     }
 
     ResizeParamSpec p;
-    p.mode = LINEAR;
+    p.mode = RESIZE_LINEAR;
+    p.trans_mode = COORDINATE_TRANS_ASYMMETRIC;
+    p.round_mode = ROUND_FLOOR;
+
     // consider the dataformat
     if (targetImageFormat == RGB_SC) {  // Specific for Birealnet18, scale short edge to 224 first
         F32 scale = 224.0 / UNI_MIN(height, width);
@@ -98,11 +102,9 @@ std::shared_ptr<Tensor> get_resize_image(
             height = (U32)(scale * height + 0.5);
             width = 224;
         }
-        Tensor scaleTensor;
         TensorDesc scaledDesc = tensor4df(imageDt, imageDf, imageNum, imageChannel, height, width);
-        scaleTensor.resize(scaledDesc);
-        scaleTensor.alloc();
-        resize(rgbTensor, temp, scaleTensor, p, &archInfo);
+        Tensor scaleTensor = Tensor::alloc_sized<CPUMem>(scaledDesc);
+        resize(rgbTensor, p, temp, scaleTensor, &archInfo);
 
         U32 h0 = (U32)((height - 224) * 0.5);
         U32 w0 = (U32)((width - 224) * 0.5);
@@ -113,14 +115,14 @@ std::shared_ptr<Tensor> get_resize_image(
                 for (U32 w = w0; w < w0 + imageWidth; w++) {
                     T value = (scaled[c * height * width + h * width + w] / 255 - meanRGBSC[c]) /
                         stdRGBSC[c];
-                    CHECK_REQUIREMENT(!UNI_ISNAN(value));
+                    CHECK_REQUIREMENT(!isnan((float)value));
                     *transferSpacePtrMov = value;
                     transferSpacePtrMov++;
                 }
             }
         }
     } else if (targetImageFormat == RGB_RAW) {
-        resize(rgbTensor, temp, *transferSpaceTensor.get(), p, &archInfo);
+        resize(rgbTensor, p, temp, *transferSpaceTensor.get(), &archInfo);
     } else if (targetImageFormat == RGB_SC_RAW || targetImageFormat == BGR_SC_RAW) {
         F32 scale = 256.0 / UNI_MIN(height, width);
         if (height < width) {
@@ -130,11 +132,9 @@ std::shared_ptr<Tensor> get_resize_image(
             height = (U32)(scale * (F32)height + 0.5);
             width = 256;
         }
-        Tensor scaleTensor;
         TensorDesc scaledDesc = tensor4df(imageDt, imageDf, imageNum, imageChannel, height, width);
-        scaleTensor.resize(scaledDesc);
-        scaleTensor.alloc();
-        resize(rgbTensor, temp, scaleTensor, p, &archInfo);
+        Tensor scaleTensor = Tensor::alloc_sized<CPUMem>(scaledDesc);
+        resize(rgbTensor, p, temp, scaleTensor, &archInfo);
 
         U32 h0 = (U32)((height - 224) * 0.5);
         U32 w0 = (U32)((width - 224) * 0.5);
@@ -142,16 +142,14 @@ std::shared_ptr<Tensor> get_resize_image(
         T *scaled = (T *)get_ptr_from_tensor(scaleTensor, arch);
         for (U32 c : transform) {
             for (U32 h = h0; h < h0 + 224; h++) {
-                memcpy(transferSpacePtrMov, scaled + c * height * width + h * width + w0,
+                UNI_MEMCPY(transferSpacePtrMov, scaled + c * height * width + h * width + w0,
                     224 * bytesOf(imageDt));
                 transferSpacePtrMov += 224;
             }
         }
     } else {
-        Tensor scaleTensor;
-        scaleTensor.resize(imageDesc);
-        scaleTensor.alloc();
-        resize(rgbTensor, temp, scaleTensor, p, &archInfo);
+        Tensor scaleTensor = Tensor::alloc_sized<CPUMem>(imageDesc);
+        resize(rgbTensor, p, temp, scaleTensor, &archInfo);
 
         T *resized = (T *)get_ptr_from_tensor(scaleTensor, arch);
         for (U32 c : transform) {
@@ -160,7 +158,7 @@ std::shared_ptr<Tensor> get_resize_image(
                     T value = (resized[c * imageHeight * imageWidth + h * imageWidth + w] -
                                   1.0 * meanRGB[c]) *
                         scaleValue;
-                    CHECK_REQUIREMENT(!UNI_ISNAN(value));
+                    CHECK_REQUIREMENT(!isnan((float)value));
                     *transferSpacePtrMov = value;
                     transferSpacePtrMov++;
                 }

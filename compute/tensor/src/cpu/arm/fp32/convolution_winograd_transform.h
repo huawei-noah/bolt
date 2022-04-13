@@ -16,7 +16,7 @@
 
 #ifdef _USE_FP32
 #include <math.h>
-#include <string.h>
+
 #include "cpu/arm/fp32/arm_functions_fp32.h"
 
 inline void trans_W_4x4_3x3(float *WTM[36], float *W[9])

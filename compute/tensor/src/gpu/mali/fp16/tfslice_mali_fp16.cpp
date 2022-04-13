@@ -56,7 +56,6 @@ inline EE tfslice_core_mali_fp16(GCLHandle_t handle,
     DataFormat imf = input->desc.memFormat;
     DataFormat omf = output->desc.memFormat;
 
-    char kernelName[128];
     Kernel kernel;
     U32 gs[3] = {0, 0, 0};
     U32 ls[3] = {0, 0, 0};
@@ -87,7 +86,7 @@ inline EE tfslice_core_mali_fp16(GCLHandle_t handle,
     gs[0] = ow;
     gs[1] = oh;
     gs[2] = oc * on;
-    sprintf(kernelName, "tfslice_nchw");
+    const char *kernelName = "tfslice_nchw";
     CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel));
     CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, ow_str, oh_str, i_off, o_off, ic, oc,
         be[0], be[1], be[2], be[3], stride[0], stride[1], stride[2], stride[3], gs[0], gs[1], inMem,

@@ -23,15 +23,15 @@ EE tile_infer_output_size(
     auto inDim = inputTensor->get_desc();
     auto outDim = inDim;
 
-    if ((int)inDim.nDims == tileParamSpec.dimsSize) {
-        for (int i = 0; i < tileParamSpec.dimsSize; i++) {
-            outDim.dims[tileParamSpec.dimsSize - 1 - i] =
-                inDim.dims[tileParamSpec.dimsSize - 1 - i] * tileParamSpec.repeatsInfo[i];
+    if ((int)inDim.nDims == tileParamSpec.num_repeats) {
+        for (int i = 0; i < tileParamSpec.num_repeats; i++) {
+            outDim.dims[tileParamSpec.num_repeats - 1 - i] =
+                inDim.dims[tileParamSpec.num_repeats - 1 - i] * tileParamSpec.repeats[i];
         }
     } else {
         int axis = (tileParamSpec.axis >= 0) ? tileParamSpec.axis : tileParamSpec.axis + inDim.nDims;
         axis = inDim.nDims - 1 - axis;
-        outDim.dims[axis] = outDim.dims[axis] * tileParamSpec.repeatsInfo[0];
+        outDim.dims[axis] = outDim.dims[axis] * tileParamSpec.repeats[0];
     }
     if (IS_GPU(archInfo->arch)) {
 #ifdef _USE_GPU
@@ -89,25 +89,25 @@ EE tile(Tensor inputTensor,
             outputDesc.dims[0] *= 8;
         }
 
-        if (tileParamSpec.dimsSize != (int)inputDesc.nDims) {
-            CHECK_REQUIREMENT(tileParamSpec.dimsSize == 1);
+        if (tileParamSpec.num_repeats != (int)inputDesc.nDims) {
+            CHECK_REQUIREMENT(tileParamSpec.num_repeats == 1);
             int axis = (tileParamSpec.axis >= 0) ? tileParamSpec.axis
                                                  : tileParamSpec.axis + inputDesc.nDims;
-            U32 tiles = tileParamSpec.repeatsInfo[0];
+            U32 tiles = tileParamSpec.repeats[0];
             for (int i = 0; i < (int)inputDesc.nDims; ++i) {
-                tileParamSpec.repeatsInfo[i] = 1;
+                tileParamSpec.repeats[i] = 1;
                 if (axis == i) {
-                    tileParamSpec.repeatsInfo[i] = tiles;
+                    tileParamSpec.repeats[i] = tiles;
                 }
             }
         }
 
         U32 repeat_num = 0;
         for (U32 i = 0; i < inputDesc.nDims; ++i) {
-            repeat_num += (tileParamSpec.repeatsInfo[inputDesc.nDims - 1 - i] > 1);
+            repeat_num += (tileParamSpec.repeats[inputDesc.nDims - 1 - i] > 1);
         }
         if (repeat_num == 0) {
-            memcpy(output, input, tensorNumBytes(inputDesc));
+            UNI_MEMCPY(output, input, tensorNumBytes(inputDesc));
             return SUCCESS;
         }
 
@@ -122,14 +122,14 @@ EE tile(Tensor inputTensor,
 
         bool first_copy = true;
         for (U32 j = 0; j < inputDesc.nDims; ++j) {
-            if (tileParamSpec.repeatsInfo[inputDesc.nDims - 1 - j] > 1) {
-                U32 tiles = tileParamSpec.repeatsInfo[inputDesc.nDims - 1 - j];
+            if (tileParamSpec.repeats[inputDesc.nDims - 1 - j] > 1) {
+                U32 tiles = tileParamSpec.repeats[inputDesc.nDims - 1 - j];
                 int loopOuter = itile_size[inputDesc.nDims - 1] / itile_size[j];
                 if (first_copy) {
                     first_copy = false;
                     for (int i = 0; i < loopOuter; ++i) {
                         for (U32 ii = 0; ii < tiles; ++ii) {
-                            memcpy(output_ptr + i * tiles * itile_size[j] + ii * itile_size[j],
+                            UNI_MEMCPY(output_ptr + i * tiles * itile_size[j] + ii * itile_size[j],
                                 input_ptr + i * itile_size[j], itile_size[j]);
                         }
                     }
@@ -138,7 +138,7 @@ EE tile(Tensor inputTensor,
                         for (U32 ii = 0; ii < tiles; ++ii) {
                             if (i != 0 || ii != 0) {
                                 U32 copy_size = otile_size[j - 1] * inputDesc.dims[i];
-                                memcpy(output_ptr + i * tiles * copy_size + ii * copy_size,
+                                UNI_MEMCPY(output_ptr + i * tiles * copy_size + ii * copy_size,
                                     output_ptr + i * copy_size, copy_size);
                             }
                         }

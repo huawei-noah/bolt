@@ -43,7 +43,7 @@ public:
             tmpOffset = xTensor.bytes();
         }
         CHECK_STATUS(rnncell(xTensor, this->weightTensors, this->biasTensors, stateTensor, this->p,
-            this->xDim, this->p.numOutput, tmpOffset, tmpTensor, hTensor, &this->archInfo));
+            this->xDim, this->p.num_outputs, tmpOffset, tmpTensor, hTensor, &this->archInfo));
     }
 
     EE infer_output_tensors_size(
@@ -96,14 +96,14 @@ public:
 
     EE infer_weight_desc() override
     {
-        int directions = (this->p.biDirection) ? 2 : 1;
+        int directions = (this->p.bi_direction) ? 2 : 1;
         int weightNum, biasNum, column;
-        if (this->p.numProjection > 0) {
+        if (this->p.num_projection > 0) {
             weightNum = biasNum = 2;
-            column = this->p.numProjection;
+            column = this->p.num_projection;
         } else {
             weightNum = biasNum = 1;
-            column = this->p.numOutput;
+            column = this->p.num_outputs;
         }
         int gates = 0;
         switch (this->p.mode) {
@@ -121,12 +121,12 @@ public:
                 return NOT_SUPPORTED;
         }
         U32 filterRow = gates * column;
-        U32 filterCol = this->xDim + this->p.numOutput;
+        U32 filterCol = this->xDim + this->p.num_outputs;
         std::vector<TensorDesc> weight_desc(2), bias_desc(2);
         weight_desc[0] = tensor2df(this->dt, DF_NK, filterRow, filterCol);
-        weight_desc[1] = tensor2df(this->dt, DF_NK, this->p.numOutput, this->p.numProjection);
+        weight_desc[1] = tensor2df(this->dt, DF_NK, this->p.num_outputs, this->p.num_projection);
         bias_desc[0] = tensor1d(this->dt, filterRow);
-        bias_desc[1] = tensor1d(this->dt, this->p.numOutput);
+        bias_desc[1] = tensor1d(this->dt, this->p.num_outputs);
         this->weightTensors = std::vector<Tensor>(directions * weightNum);
         this->biasTensors = std::vector<Tensor>(directions * biasNum);
         for (int i = 0, wid = 0, vid = 0; i < directions; i++) {

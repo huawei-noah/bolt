@@ -64,13 +64,18 @@ class WeightBNOptimizer : public OPOptimizer {
                     isBNN = 1;
                 }
                 F32 *weightTemp = (F32 *)spec->ws[convWeightIndex].weight;
+                F32 *weightTempRecAlloc =
+                    (F32 *)mt_malloc(spec->ws[convWeightIndex].bytes_of_weight);
+                UNI_MEMCPY(
+                    weightTempRecAlloc, weightTemp, spec->ws[convWeightIndex].bytes_of_weight);
+                spec->ws[convWeightIndex].weight = (U8 *)weightTempRecAlloc;
                 if (spec->ws[convWeightIndex].vec == nullptr) {
                     spec->ws[convWeightIndex].bytes_of_vec = channelCur * sizeof(F32);
                     if (isBNN == 1) {
                         spec->ws[convWeightIndex].bytes_of_vec *= 2;
                     }
                     spec->ws[convWeightIndex].vec =
-                        (U8 *)mt_new_storage(spec->ws[convWeightIndex].bytes_of_vec);
+                        (U8 *)mt_malloc(spec->ws[convWeightIndex].bytes_of_vec);
                     if (isBNN == 1) {
                         F32 *scale = (F32 *)spec->ws[convWeightIndex].vec;
                         F32 *bias = scale + channelCur;
@@ -79,7 +84,7 @@ class WeightBNOptimizer : public OPOptimizer {
                             bias[m] = 0;
                         }
                     } else {
-                        memset(spec->ws[convWeightIndex].vec, 0,
+                        UNI_MEMSET(spec->ws[convWeightIndex].vec, 0,
                             spec->ws[convWeightIndex].bytes_of_vec);
                     }
                 }
@@ -93,32 +98,21 @@ class WeightBNOptimizer : public OPOptimizer {
                         bias[m] = (bias[m] - gamaCur * meanPtr[m]) / stdValue[m];
                     }
                 } else {
+                    F32 *vecTempReAlloc = (F32 *)mt_malloc(spec->ws[convWeightIndex].bytes_of_vec);
+                    UNI_MEMCPY(vecTempReAlloc, vecTemp, spec->ws[convWeightIndex].bytes_of_vec);
+                    spec->ws[convWeightIndex].vec = (U8 *)vecTempReAlloc;
                     int weightDataSize = spec->ws[convWeightIndex].bytes_of_weight /
                         bytesOf(spec->ws[convWeightIndex].mdt);
                     int weightPerChannel = weightDataSize / channelCur;
                     // NCHW
                     for (U32 m = 0; m < channelCur; m++) {
                         F32 *convWeightPerChannel = weightTemp + weightPerChannel * m;
+                        F32 *convWeightReAllocPerChannel = weightTempRecAlloc + weightPerChannel * m;
                         for (int n = 0; n < weightPerChannel; n++) {
-                            convWeightPerChannel[n] /= stdValue[m];
+                            convWeightReAllocPerChannel[n] /= stdValue[m];
                         }
-                        vecTemp[m] = (vecTemp[m] - gamaCur * meanPtr[m]) / stdValue[m];
+                        vecTempReAlloc[m] = (vecTempReAlloc[m] - gamaCur * meanPtr[m]) / stdValue[m];
                     }
-                }
-                // free BN memory
-                if (spec->ws[bnWeightIndex].weight != nullptr) {
-                    spec->ws[bnWeightIndex].bytes_of_weight = 0;
-                    if (outOfFileMapRange(spec->ws[bnWeightIndex].weight, spec->mfd)) {
-                        delete spec->ws[bnWeightIndex].weight;
-                    }
-                    spec->ws[bnWeightIndex].weight = nullptr;
-                }
-                if (spec->ws[bnWeightIndex].vec != nullptr) {
-                    spec->ws[bnWeightIndex].bytes_of_vec = 0;
-                    if (outOfFileMapRange(spec->ws[bnWeightIndex].vec, spec->mfd)) {
-                        delete spec->ws[bnWeightIndex].vec;
-                    }
-                    spec->ws[bnWeightIndex].vec = nullptr;
                 }
                 setOperatorInvalid(spec, bnOpIndex, true);
                 hasOptimized = true;

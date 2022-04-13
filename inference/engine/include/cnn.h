@@ -82,6 +82,8 @@ private:
 
     void update_op_tensors();
 
+    void update_tensor_positions();
+
     void set_input_desc(std::map<std::string, TensorDesc> inputDescMap);
 
     void infer_tmp_memory_size() override;
@@ -97,6 +99,8 @@ private:
     void assign_output_tensor() override;
 
     void clean_tensorMap_desc();
+
+    void check_dynamic_output_size(OperatorType type);
 
 private:
     std::map<std::string, std::shared_ptr<Tensor>> tensorMap;
@@ -116,5 +120,6 @@ private:
 #ifdef _USE_GPU
     ImageContainer tmpImages;
 #endif
+    bool dynamicOutputSize = false;
 };
 #endif

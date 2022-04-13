@@ -17,15 +17,14 @@
 #ifndef _WIN32
 #include <sys/syscall.h>
 #include <sched.h>
-#endif
-#ifdef _USE_OPENMP
-#include <omp.h>
+#else
+#include <windows.h>
 #endif
 #include <unistd.h>
-#include <string.h>
 #include "sys.h"
 #include "error.h"
 #include "data_type.h"
+#include "affinity_policy.h"
 
 #ifdef _USE_X86
 #define __cpuid(data, eaxIn, ecxIn)                                                   \
@@ -33,53 +32,6 @@
                          : "=a"(data[0]), "=b"(data[1]), "=c"(data[2]), "=d"(data[3]) \
                          : "0"(eaxIn), "2"(ecxIn))
 #endif
-
-const int CPU_MAX_NUMBER = 128;
-#ifdef _USE_OPENMP
-#define OMP_MAX_NUM_THREADS \
-    (getenv("OMP_NUM_THREADS") == NULL ? omp_get_num_procs() : atoi(getenv("OMP_NUM_THREADS")))
-#else
-#define OMP_MAX_NUM_THREADS 1
-#endif
-extern int OMP_NUM_THREADS;
-
-typedef enum {
-    AFFINITY_CPU_LOW_POWER = 0,
-    AFFINITY_CPU_HIGH_PERFORMANCE = 1,
-    AFFINITY_GPU = 2
-} AffinityPolicy;
-
-typedef struct CpuStat {
-    unsigned long idle;
-    unsigned long total;
-} CpuStat;
-
-typedef struct DeviceInfo {
-    int cpuNum;
-    Arch archs[CPU_MAX_NUMBER];
-    long freqs[CPU_MAX_NUMBER];
-    float occupys[CPU_MAX_NUMBER];
-    int cpuids[CPU_MAX_NUMBER];
-    CpuStat cpuStats[CPU_MAX_NUMBER];
-
-    float maxOccupy;
-    AffinityPolicy affinityPolicy;
-    Arch schedule;
-} DeviceInfo;
-
-inline const char *const *AffinityPolicyNames()
-{
-    static const char *const names[] = {
-        "CPU_AFFINITY_LOW_POWER", "CPU_AFFINITY_HIGH_PERFORMANCE", "GPU"};
-    return names;
-}
-
-inline const AffinityPolicy *AffinityPolicies()
-{
-    static const AffinityPolicy policies[] = {
-        AFFINITY_CPU_LOW_POWER, AFFINITY_CPU_HIGH_PERFORMANCE, AFFINITY_GPU};
-    return policies;
-}
 
 inline int get_cpus_num()
 {
@@ -166,7 +118,7 @@ inline void get_cpus_arch(Arch *archs, int cpuNum)
     }
     const int bufferSize = 1024;
     char buffer[bufferSize];
-    while (!feof(fp)) {
+    while (!feof(fp) && cpuid < cpuNum) {
         char *status = fgets(buffer, bufferSize, fp);
         if (!status) {
             break;
@@ -175,7 +127,7 @@ inline void get_cpus_arch(Arch *archs, int cpuNum)
         if (memcmp(buffer, "CPU part", 8) == 0) {
             Arch arch = ARM_V8;
             int id = 0;
-            sscanf(buffer, "CPU part\t: %x", &id);
+            UNI_SSCANF(buffer, "CPU part\t: %x", &id);
             switch (id) {
                 case 0xc07:
                     arch = ARM_V7;
@@ -244,7 +196,7 @@ inline void get_cpus_arch(Arch *archs, int cpuNum)
                     arch = ARM_V8;
                     break;
                 default:
-                    UNI_WARNING_LOG("unknown CPU %d arch %x, set to ARM_V8\n", cpuid, id);
+                    UNI_DEBUG_LOG("unknown CPU %d arch %x, set to ARM_V8\n", cpuid, id);
                     break;
             }
             archs[cpuid++] = arch;
@@ -257,6 +209,28 @@ inline void get_cpus_arch(Arch *archs, int cpuNum)
     }
 }
 
+inline Arch get_cpu_arch()
+{
+    static bool blank = true;
+    static Arch arch = CPU_GENERAL;
+    if (blank) {
+        UNI_THREAD_SAFE({
+            if (blank) {
+                int num = get_cpus_num();
+                Arch archs[CPU_MAX_NUMBER];
+                get_cpus_arch(archs, num);
+                for (int i = 0; i < num; i++) {
+                    if (archs[i] > arch) {
+                        arch = archs[i];
+                    }
+                }
+                blank = false;
+            }
+        });
+    }
+    return arch;
+}
+
 inline long get_cpu_freq(int cpuid)
 {
     long maxFrequency = -1;
@@ -264,24 +238,26 @@ inline long get_cpu_freq(int cpuid)
     char path[256];
     FILE *fp = NULL;
     if (fp == NULL) {
-        snprintf(
+        UNI_SNPRINTF(
             path, sizeof(path), "/sys/devices/system/cpu/cpufreq/stats/cpu%d/time_in_state", cpuid);
         fp = fopen(path, "rb");
     }
     if (fp == NULL) {
-        snprintf(
+        UNI_SNPRINTF(
             path, sizeof(path), "/sys/devices/system/cpu/cpu%d/cpufreq/stats/time_in_state", cpuid);
         fp = fopen(path, "rb");
     }
     if (fp == NULL) {
-        snprintf(
+        UNI_SNPRINTF(
             path, sizeof(path), "/sys/devices/system/cpu/cpu%d/cpufreq/cpuinfo_max_freq", cpuid);
         fp = fopen(path, "rb");
     }
     if (fp == NULL) {
-        UNI_WARNING_LOG("can not get CPU max frequency\n");
+        UNI_DEBUG_LOG("can not get CPU max frequency\n");
     } else {
-        fscanf(fp, "%ld", &maxFrequency);
+        char buffer[32];
+        fgets(buffer, 32, fp);
+        UNI_SSCANF(buffer, "%ld", &maxFrequency);
         fclose(fp);
     }
 #endif
@@ -314,7 +290,7 @@ inline void get_cpus_occupy(CpuStat *cpuStat, float *cpuOccupy, int cpuNum)
 
     for (int i = 0; i < cpuNum; i++) {
         fgets(buffer, bufferSize, fp);
-        sscanf(buffer, "%s %lu %lu %lu %lu %lu %lu %lu", name, &user, &nice, &system, &idle,
+        UNI_SSCANF(buffer, "%s %lu %lu %lu %lu %lu %lu %lu", name, &user, &nice, &system, &idle,
             &iowait, &irq, &softirq);
         total = user + nice + system + idle + iowait + irq + softirq;
         cpuOccupy[i] = 0;
@@ -334,9 +310,9 @@ inline void get_cpus_occupy(CpuStat *cpuStat, float *cpuOccupy, int cpuNum)
 inline void swap_variable(void *a, void *b, const int size)
 {
     char buffer[size];
-    memcpy(buffer, a, size);
-    memcpy(a, b, size);
-    memcpy(b, buffer, size);
+    UNI_MEMCPY(buffer, a, size);
+    UNI_MEMCPY(a, b, size);
+    UNI_MEMCPY(b, buffer, size);
 }
 
 inline void disable_cpus(float *occupys, int *cpuids, int cpuNum, float cpuOccupyMax)
@@ -386,7 +362,19 @@ inline void sort_cpus_by_arch_freq_occupy(
 
 inline int set_thread_affinity(int threadid, const int *cpuids, int num)
 {
-#if !(defined(__APPLE__) || defined(_WIN32))
+#ifdef _WIN32
+    DWORD_PTR mask = 0x0;
+    for (int i = 0; i < num; i++) {
+        UNI_DEBUG_LOG("bind thread %d to core %d\n", threadid, cpuids[i]);
+        DWORD_PTR m = 0x1;
+        for (int j = 0; j < cpuids[i]; j++) {
+            m = m << 1;
+        }
+        mask |= m;
+    }
+    HANDLE thread = GetCurrentThread();
+    SetThreadAffinityMask(thread, mask);
+#elif !defined(__APPLE__)
     UNI_THREADID;
     cpu_set_t mask;
     CPU_ZERO(&mask);
@@ -396,36 +384,11 @@ inline int set_thread_affinity(int threadid, const int *cpuids, int num)
     }
     int status = syscall(__NR_sched_setaffinity, tid, sizeof(mask), &mask);
     if (status) {
-        UNI_WARNING_LOG("fail to set affinity %d\n", status);
+        UNI_DEBUG_LOG("fail to set affinity %d\n", status);
         return -1;
     }
 #endif
     return 0;
-}
-
-inline AffinityPolicy thread_affinity_get_policy_by_name(const char *name)
-{
-    int nameLength = strlen(name);
-    for (int i = 0; i < 3; i++) {
-        const char *target = AffinityPolicyNames()[i];
-        int targetLength = strlen(target);
-        if (nameLength < targetLength) {
-            continue;
-        }
-        int match = 1;
-        for (int j = 0; j < targetLength; j++) {
-            if (name[j] == target[j] || name[j] == target[j] + 32) {
-                continue;
-            } else {
-                match = 0;
-                break;
-            }
-        }
-        if (match) {
-            return AffinityPolicies()[i];
-        }
-    }
-    return AFFINITY_CPU_HIGH_PERFORMANCE;
 }
 
 inline Arch thread_affinity_set_by_policy(
@@ -435,7 +398,9 @@ inline Arch thread_affinity_set_by_policy(
         UNI_WARNING_LOG("can not allocate more cores for thread %d\n", threadId);
         return CPU_GENERAL;
     }
-    if (policy == AFFINITY_GPU) {
+    if (policy == AFFINITY_CPU) {
+        return archs[cpuNum - 1];
+    } else if (policy == AFFINITY_GPU) {
         return MALI;
     }
 #ifndef _USE_OPENMP
@@ -478,6 +443,12 @@ inline Arch thread_affinity_set_by_policy(
     int candidates[CPU_MAX_NUMBER];
     for (int i = 0; i < cpuNum; i++) {
         if (archs[index] == archs[i]) {
+            candidates[count++] = i;
+        }
+    }
+    if (OMP_NUM_THREADS > count) {
+        count = 0;
+        for (int i = 0; i < cpuNum; i++) {
             candidates[count++] = i;
         }
     }
@@ -545,22 +516,5 @@ inline void set_cpu_dynamic(DeviceInfo *deviceInfo, int threadId)
     if (deviceInfo->affinityPolicy == AFFINITY_GPU) {
         deviceInfo->schedule = MALI;
     }
-}
-
-inline void set_cpu_num_threads(int threadNum)
-{
-#ifndef _USE_OPENMP
-    if (threadNum > 1) {
-        UNI_WARNING_LOG("this library not support multi-threads parallel, please rebuild with "
-                        "--openmp option.\n");
-    }
-#endif
-    if (threadNum < 0) {
-        threadNum = 1;
-    }
-    if (threadNum > OMP_MAX_NUM_THREADS) {
-        threadNum = OMP_MAX_NUM_THREADS;
-    }
-    OMP_NUM_THREADS = threadNum;
 }
 #endif

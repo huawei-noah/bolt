@@ -44,10 +44,9 @@ public:
     EE infer_weight_desc() override
     {
         auto curOpWs = this->get_weightspec();
-        int weightBytes = curOpWs.bytes_of_weight;
-        int weightLen = weightBytes / bytesOf(curOpWs.mdt);
         this->weightTensors = std::vector<Tensor>(1);
-        this->weightTensors[0].resize(tensor2d(this->dt, 1, weightLen));
+        this->weightTensors[0].resize(
+            tensor2d(curOpWs.mdt, 1, curOpWs.bytes_of_weight / bytesOf(curOpWs.mdt)));
         return SUCCESS;
     }
 };

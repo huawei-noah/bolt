@@ -36,7 +36,7 @@ std::map<std::string, std::shared_ptr<Tensor>> inputOutput()
     tensors["tinybert_words"] = std::shared_ptr<Tensor>(new Tensor());
     tensors["tinybert_words"]->resize(inputDesc);
     tensors["tinybert_words"]->alloc();
-    memcpy(((CpuMemory *)tensors["tinybert_words"]->get_memory())->get_ptr(), words,
+    UNI_MEMCPY(((CpuMemory *)tensors["tinybert_words"]->get_memory())->get_ptr(), words,
         tensorNumBytes(inputDesc));
 
     tensors["tinybert_positions"] = std::shared_ptr<Tensor>(new Tensor());

@@ -18,14 +18,14 @@ EE serialize_header(const ModelSpec *spec, std::string *tmp)
     U32 bufSize = sizeof(I32) * 2 + sizeof(I8) * NAME_LEN + sizeof(DataType) + sizeof(I32) +
         sizeof(I8) * NAME_LEN * spec->num_inputs + sizeof(TensorDesc) * spec->num_inputs +
         sizeof(I32) + sizeof(I8) * NAME_LEN * spec->num_outputs;
-    I8 *data = (I8 *)mt_new_storage(bufSize);
+    I8 *data = (I8 *)mt_malloc(bufSize);
 
     I32 *pointer4version = (I32 *)data;
-    memcpy(pointer4version, &spec->version, sizeof(I32));
+    UNI_MEMCPY(pointer4version, &spec->version, sizeof(I32));
     pointer4version += 1;
 
     I32 *pointer4magicNumber = (I32 *)pointer4version;
-    memcpy(pointer4magicNumber, &spec->magic_number, sizeof(I32));
+    UNI_MEMCPY(pointer4magicNumber, &spec->magic_number, sizeof(I32));
     pointer4magicNumber += 1;
 
     I8 *pointer4modelName = (I8 *)pointer4magicNumber;
@@ -47,7 +47,7 @@ EE serialize_header(const ModelSpec *spec, std::string *tmp)
     }
 
     TensorDesc *pointer4TensorDesc = (TensorDesc *)pointer4InputNames;
-    memcpy(pointer4TensorDesc, spec->input_dims, sizeof(TensorDesc) * spec->num_inputs);
+    UNI_MEMCPY(pointer4TensorDesc, spec->input_dims, sizeof(TensorDesc) * spec->num_inputs);
     pointer4TensorDesc += spec->num_inputs;
 
     I32 *pointer4numOutputs = (I32 *)pointer4TensorDesc;
@@ -63,7 +63,7 @@ EE serialize_header(const ModelSpec *spec, std::string *tmp)
     tmp->clear();
     CHECK_REQUIREMENT((U32)(pointer4outputNames - data) == bufSize);
     tmp->assign(data, data + bufSize);
-    delete data;
+    mt_free(data);
     return SUCCESS;
 }
 
@@ -72,7 +72,8 @@ U32 operator_memory_size(OperatorSpec *ops)
     // sizeof(U32) * 4 : type + num_inputs + num_output + num_quant_feature
     U32 allocatedBufferSize = sizeof(I8) * NAME_LEN + sizeof(U32) * 4 +
         ops->num_inputs * NAME_LEN * sizeof(I8) + ops->num_outputs * NAME_LEN * sizeof(I8) +
-        (ops->num_inputs + ops->num_outputs) * sizeof(I32) + get_operator_parameter_size(ops->type);
+        (ops->num_inputs + ops->num_outputs) * sizeof(I32) +
+        get_operator_parameter_size(sg_boltVersion, ops->type);
 
     for (U32 i = 0; i < ops->num_quant_feature; i++) {
         allocatedBufferSize += sizeof(int);  // num_scale
@@ -95,7 +96,7 @@ EE serialize_operators(const ModelSpec *spec, std::string *tmp)
         opsTmp++;
     }
 
-    char *data = (char *)mt_new_storage(bufSize);
+    char *data = (char *)mt_malloc(bufSize);
 
     I32 *pointer4numOperatorSpecs = (I32 *)data;
     *pointer4numOperatorSpecs = spec->num_operator_specs - removeOpNum;  // attention
@@ -139,7 +140,7 @@ EE serialize_operators(const ModelSpec *spec, std::string *tmp)
         I32 *pointer4tensorPos = (I32 *)pointer4opsOutputTensorsName;
         U32 numTensors = opsPointer[i].num_inputs + opsPointer[i].num_outputs;
         if (nullptr != opsPointer[i].tensor_positions) {
-            memcpy(pointer4tensorPos, opsPointer[i].tensor_positions, numTensors * sizeof(I32));
+            UNI_MEMCPY(pointer4tensorPos, opsPointer[i].tensor_positions, numTensors * sizeof(I32));
         } else {
             for (U32 j = 0; j < numTensors; j++) {
                 pointer4tensorPos[j] = -1;
@@ -156,13 +157,13 @@ EE serialize_operators(const ModelSpec *spec, std::string *tmp)
             *pointer4quant = opsPointer[i].feature_scale[j].num_scale;
             int num = *pointer4quant;
             pointer4quant++;
-            memcpy(pointer4quant, opsPointer[i].feature_scale[j].scale, num * sizeof(F32));
+            UNI_MEMCPY(pointer4quant, opsPointer[i].feature_scale[j].scale, num * sizeof(F32));
             pointer4quant += num;
         }
 
         char *pointer4parameterSpecs = (char *)pointer4quant;
-        int operatorParameterSize = get_operator_parameter_size(opsPointer[i].type);
-        memcpy(pointer4parameterSpecs, &(opsPointer[i].ps), operatorParameterSize);
+        int operatorParameterSize = get_operator_parameter_size(sg_boltVersion, opsPointer[i].type);
+        UNI_MEMCPY(pointer4parameterSpecs, &(opsPointer[i].ps), operatorParameterSize);
         pointer4parameterSpecs += operatorParameterSize;
         pointer4opsName = (I8 *)pointer4parameterSpecs;
     }
@@ -170,7 +171,7 @@ EE serialize_operators(const ModelSpec *spec, std::string *tmp)
     tmp->clear();
     CHECK_REQUIREMENT((U32)(pointer4opsName - data) == bufSize);
     tmp->assign(data, data + bufSize);
-    delete data;
+    mt_free(data);
     return SUCCESS;
 }
 
@@ -194,7 +195,7 @@ EE serialize_weights(const ModelSpec *spec, std::string *tmp)
 
         weightCount++;
     }
-    char *data = (char *)mt_new_storage(bufSize);
+    char *data = (char *)mt_malloc(bufSize);
 
     I32 *pointer4numWeightSpecs = (I32 *)data;
     *pointer4numWeightSpecs = weightCount;
@@ -225,7 +226,7 @@ EE serialize_weights(const ModelSpec *spec, std::string *tmp)
         pointer4wsBytesOfWeight++;
 
         U8 *pointer4wsWeight = (U8 *)pointer4wsBytesOfWeight;
-        memcpy(pointer4wsWeight, wsPointer[i].weight, wsPointer[i].bytes_of_weight);
+        UNI_MEMCPY(pointer4wsWeight, wsPointer[i].weight, wsPointer[i].bytes_of_weight);
         pointer4wsWeight += wsPointer[i].bytes_of_weight;
 
         U32 *pointer4wsBytesOfVec = (U32 *)pointer4wsWeight;
@@ -233,7 +234,7 @@ EE serialize_weights(const ModelSpec *spec, std::string *tmp)
         pointer4wsBytesOfVec++;
 
         U8 *pointer4wsVec = (U8 *)pointer4wsBytesOfVec;
-        memcpy(pointer4wsVec, wsPointer[i].vec, wsPointer[i].bytes_of_vec);
+        UNI_MEMCPY(pointer4wsVec, wsPointer[i].vec, wsPointer[i].bytes_of_vec);
         pointer4wsVec += wsPointer[i].bytes_of_vec;
 
         U32 *pointer4numquant = (U32 *)pointer4wsVec;
@@ -245,7 +246,7 @@ EE serialize_weights(const ModelSpec *spec, std::string *tmp)
             *pointer4quant = wsPointer[i].weight_scale[j].num_scale;
             int num = *pointer4quant;
             pointer4quant++;
-            memcpy(pointer4quant, wsPointer[i].weight_scale[j].scale, num * sizeof(F32));
+            UNI_MEMCPY(pointer4quant, wsPointer[i].weight_scale[j].scale, num * sizeof(F32));
             pointer4quant += num;
         }
 
@@ -255,7 +256,7 @@ EE serialize_weights(const ModelSpec *spec, std::string *tmp)
     tmp->clear();
     CHECK_REQUIREMENT((U32)(pointer4wsOpName - data) == bufSize);
     tmp->assign(data, data + bufSize);
-    delete data;
+    mt_free(data);
     return SUCCESS;
 }
 
@@ -299,8 +300,10 @@ EE serialize_model_to_file(const ModelSpec *spec, const char *fn)
 {
     UNI_DEBUG_LOG("Write bolt model to %s...\n", fn);
     std::string bytes = "";
-    CHECK_STATUS(serialize_model(spec, &bytes));
-    CHECK_STATUS(write_to_file(&bytes, fn));
+    EE ret = serialize_model(spec, &bytes);
+    if (ret == SUCCESS) {
+        ret = write_to_file(&bytes, fn);
+    }
     UNI_DEBUG_LOG("Write bolt model end.\n");
     return SUCCESS;
 }

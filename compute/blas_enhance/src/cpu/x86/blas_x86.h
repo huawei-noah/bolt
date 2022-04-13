@@ -15,8 +15,9 @@
 #define _H_BLAS_X86
 
 #include "error.h"
-#include "sys.h"
 #include "tensor_desc.h"
+
+EE axpby_x86(U32 len, DataType dt, F32 a, const void *x, F32 b, void *y);
 
 EE matrix_vector_multiply_transform_weight_x86(
     TensorDesc desc, const void *src, TensorDesc *descTran, void *dst, void *offsetCBias);
@@ -34,10 +35,10 @@ EE mvm_x86(U32 row,
     const F32 *scale);
 
 EE matrix_matrix_multiply_tmp_bytes_x86(
-    U32 matrixA_M, U32 matrixA_K, U32 matrixB_K, U32 matrixB_N, DataType dt, U32 *bytes);
+    U32 matrixA_M, U32 matrixA_K, U32 matrixB_K, U32 matrixB_N, DataFormat df, DataType dt, U32 *bytes);
 
 EE matrix_matrix_multiply_transform_rhs_x86(
-    TensorDesc desc, const void *src, TensorDesc *descTran, void *dst, void *offsetCBias);
+    TensorDesc desc, const void *src, TensorDesc *descTran, void *dst);
 
 EE mmm_x86(U32 matrixC_N,
     U32 matrixC_M,

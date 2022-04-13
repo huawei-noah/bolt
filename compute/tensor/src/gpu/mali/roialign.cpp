@@ -43,7 +43,7 @@ inline EE roialign_checkpara_mali(GCLHandle_t handle,
         outputDesc.dims[3] != inputDescs[1].dims[1]) {
         CHECK_STATUS(NOT_MATCH)
     }
-    if (roiAlignParamSpec.coordinateTransformationMode != ROIALIGN_HALF_PIXEL) {
+    if (roiAlignParamSpec.trans_mode != COORDINATE_TRANS_HALF_PIXEL) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
     return SUCCESS;

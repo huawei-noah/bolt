@@ -61,7 +61,7 @@ int powerTest(int argc, char **argv, DataType dt)
     MaliPara maliPara;
     maliPara.handle = handle;
     archInfo.archPara = &maliPara;
-    CHECK_STATUS(power_infer_output_size(&inputTensor, &outputTensor, &archInfo));
+    CHECK_STATUS(power_infer_output_size(&inputTensor, p, &outputTensor, &archInfo));
     TensorDesc output_desc_gpu = outputTensor.get_desc();
     U8 *output_gpu = ut_input_v(on * oc * oh * ow, dt, UT_INIT_RANDOM);
 
@@ -106,7 +106,7 @@ int powerTest(int argc, char **argv, DataType dt)
     Tensor inputTensorCpu;
     inputTensorCpu.resize(input_desc_cpu);
     inputTensorCpu.alloc();
-    memcpy(get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), input_cpu,
+    UNI_MEMCPY(get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), input_cpu,
         tensorNumBytes(input_desc_cpu));
 
     Tensor outputTensorCpu;

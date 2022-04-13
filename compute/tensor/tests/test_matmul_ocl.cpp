@@ -194,13 +194,13 @@ int matmulTest(int argc, char *argv[], DataType dt)
     Tensor matrixATensorCpu;
     matrixATensorCpu.resize(matrixADesc);
     matrixATensorCpu.alloc();
-    memcpy(get_ptr_from_tensor(matrixATensorCpu, CPU_GENERAL), matrixA_cpu,
+    UNI_MEMCPY(get_ptr_from_tensor(matrixATensorCpu, CPU_GENERAL), matrixA_cpu,
         tensorNumBytes(matrixADesc));
 
     Tensor matrixBTensorCpu;
     matrixBTensorCpu.resize(matrixBDesc);
     matrixBTensorCpu.alloc();
-    memcpy(get_ptr_from_tensor(matrixBTensorCpu, CPU_GENERAL), matrixB_cpu,
+    UNI_MEMCPY(get_ptr_from_tensor(matrixBTensorCpu, CPU_GENERAL), matrixB_cpu,
         tensorNumBytes(matrixBDesc));
 
     Tensor matrixCTensorCpu;

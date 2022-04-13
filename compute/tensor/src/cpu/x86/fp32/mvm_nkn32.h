@@ -23,6 +23,7 @@ inline void mvm_nkn32_with_bias(
 #pragma omp parallel for num_threads(OMP_NUM_THREADS)
 #endif
     for (U32 n = 0; n < fn; ++n) {
+        FTZ;
         const F32 *f = filterArray + n * fk * 32;
         F32 *out = output + n * 32;
         const F32 *b = bias + n * 32;

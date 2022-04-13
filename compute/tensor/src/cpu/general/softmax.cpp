@@ -26,7 +26,7 @@ static F32 array_max(const T *input, U32 len, U32 stride)
     return tmp;
 }
 
-template <typename T>
+template <typename T, bool logsoftmax>
 static EE softmax(TensorDesc inputDesc, const T *input, int axis, TensorDesc outputDesc, T *output)
 {
     UNUSED(outputDesc);
@@ -76,14 +76,23 @@ static EE softmax(TensorDesc inputDesc, const T *input, int axis, TensorDesc out
             T *out = output + i * loops * loop_inner + j;
             F32 max_value = array_max<T>(in, loops, loop_inner);
             F32 sum = 0;
-            for (U32 k = 0; k < loops; k++) {
-                F32 tmp = exp(in[k * loop_inner] - max_value);
+            for (U32 k = 0, d = 0; k < loops; k++, d += loop_inner) {
+                F32 tmp = exp(in[d] - max_value);
                 sum += tmp;
-                out[k * loop_inner] = tmp;
+                if (!logsoftmax) {
+                    out[d] = tmp;
+                }
             }
-            sum = 1 / sum;
-            for (U32 k = 0; k < loops; k++) {
-                out[k * loop_inner] *= sum;
+            if (logsoftmax) {
+                sum = max_value + log(sum);
+                for (U32 k = 0, d = 0; k < loops; k++, d += loop_inner) {
+                    out[d] = in[d] - sum;
+                }
+            } else {
+                sum = 1 / sum;
+                for (U32 k = 0, d = 0; k < loops; k++, d += loop_inner) {
+                    out[d] *= sum;
+                }
             }
         }
     }
@@ -93,25 +102,49 @@ static EE softmax(TensorDesc inputDesc, const T *input, int axis, TensorDesc out
 EE softmax_general(
     TensorDesc inputDesc, const void *input, SoftmaxParamSpec p, TensorDesc outputDesc, void *output)
 {
-    DataType idt = inputDesc.dt;
-    EE ret = SUCCESS;
-    switch (idt) {
+    EE ret = NOT_SUPPORTED;
+    switch (inputDesc.dt) {
 #ifdef _USE_FP16
         case DT_F16: {
-            ret = softmax<F16>(inputDesc, (const F16 *)input, p.axis, outputDesc, (F16 *)output);
+            ret = softmax<F16, false>(
+                inputDesc, (const F16 *)input, p.axis, outputDesc, (F16 *)output);
             break;
         }
 #endif
 #ifdef _USE_FP32
         case DT_F32: {
-            ret = softmax<F32>(inputDesc, (const F32 *)input, p.axis, outputDesc, (F32 *)output);
+            ret = softmax<F32, false>(
+                inputDesc, (const F32 *)input, p.axis, outputDesc, (F32 *)output);
             break;
         }
 #endif
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
+    return ret;
+}
 
+EE logsoftmax_general(
+    TensorDesc inputDesc, const void *input, SoftmaxParamSpec p, TensorDesc outputDesc, void *output)
+{
+    EE ret = NOT_SUPPORTED;
+    switch (inputDesc.dt) {
+#ifdef _USE_FP16
+        case DT_F16: {
+            ret = softmax<F16, true>(
+                inputDesc, (const F16 *)input, p.axis, outputDesc, (F16 *)output);
+            break;
+        }
+#endif
+#ifdef _USE_FP32
+        case DT_F32: {
+            ret = softmax<F32, true>(
+                inputDesc, (const F32 *)input, p.axis, outputDesc, (F32 *)output);
+            break;
+        }
+#endif
+        default:
+            break;
+    }
     return ret;
 }

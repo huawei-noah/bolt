@@ -11,8 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string.h>
-
 #include "cpu/arm/fp16/convolution_direct.h"
 
 EE convolution_direct(TensorDesc inputDesc,
@@ -43,10 +41,10 @@ EE convolution_direct(TensorDesc inputDesc,
     CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
     U32 strideH = convParamSpec.stride_h;
     U32 strideW = convParamSpec.stride_w;
-    U32 paddingT = convParamSpec.padding_top;
-    U32 paddingB = convParamSpec.padding_bottom;
-    U32 paddingL = convParamSpec.padding_left;
-    U32 paddingR = convParamSpec.padding_right;
+    U32 paddingT = convParamSpec.pad_top;
+    U32 paddingB = convParamSpec.pad_bottom;
+    U32 paddingL = convParamSpec.pad_left;
+    U32 paddingR = convParamSpec.pad_right;
 
     if (fdf != DF_NCHWN16) {
         CHECK_STATUS(NOT_MATCH);
@@ -67,20 +65,20 @@ EE convolution_direct(TensorDesc inputDesc,
         F16 *inArray_mov = inArray + n * ic * ih * iw * 8;
         for (U32 c = 0; c < ic; c++) {
             for (U32 h = 0; h < paddingT; h++) {
-                memset(inArray_pad_mov, 0, iw_pad * 8 * bytesOf(idt));
+                UNI_MEMSET(inArray_pad_mov, 0, iw_pad * 8 * bytesOf(idt));
                 inArray_pad_mov += iw_pad * 8;
             }
             for (U32 h = paddingT; h < ih_pad - paddingB; h++) {
-                memset(inArray_pad_mov, 0, paddingL * 8 * bytesOf(idt));
+                UNI_MEMSET(inArray_pad_mov, 0, paddingL * 8 * bytesOf(idt));
                 inArray_pad_mov += paddingL * 8;
-                memcpy(inArray_pad_mov, inArray_mov, iw * 8 * bytesOf(idt));
+                UNI_MEMCPY(inArray_pad_mov, inArray_mov, iw * 8 * bytesOf(idt));
                 inArray_pad_mov += iw * 8;
                 inArray_mov += iw * 8;
-                memset(inArray_pad_mov, 0, paddingR * 8 * bytesOf(idt));
+                UNI_MEMSET(inArray_pad_mov, 0, paddingR * 8 * bytesOf(idt));
                 inArray_pad_mov += paddingR * 8;
             }
             for (U32 h = ih_pad - paddingB; h < ih_pad; h++) {
-                memset(inArray_pad_mov, 0, iw_pad * 8 * bytesOf(idt));
+                UNI_MEMSET(inArray_pad_mov, 0, iw_pad * 8 * bytesOf(idt));
                 inArray_pad_mov += iw_pad * 8;
             }
         }
@@ -400,10 +398,9 @@ EE convolution_direct(TensorDesc inputDesc,
                                     : [in_h0w0] "r"(in_h0w0), [in_h0w1] "r"(in_h0w1),
                                     [in_h0w2] "r"(in_h0w2), [in_h0w3] "r"(in_h0w3),
                                     [in_h1w0] "r"(in_h1w0), [in_h1w1] "r"(in_h1w1),
-                                    [in_h1w2] "r"(in_h1w2), [in_h1w3] "r"(in_h1w3),
-                                    [f_c0] "r"(f_c0), [f_c1] "r"(f_c1), [f_c2] "r"(f_c2),
-                                    [f_c3] "r"(f_c3), [f_c4] "r"(f_c4), [f_c5] "r"(f_c5),
-                                    [f_c6] "r"(f_c6), [f_c7] "r"(f_c7)
+                                    [in_h1w2] "r"(in_h1w2), [in_h1w3] "r"(in_h1w3), [f_c0] "r"(f_c0),
+                                    [f_c1] "r"(f_c1), [f_c2] "r"(f_c2), [f_c3] "r"(f_c3),
+                                    [f_c4] "r"(f_c4), [f_c5] "r"(f_c5), [f_c6] "r"(f_c6), [f_c7] "r"(f_c7)
                                     : "memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6",
                                     "v7", "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15",
                                     "v16", "v17", "v18", "v19", "v20", "v21", "v22", "v23", "v24",

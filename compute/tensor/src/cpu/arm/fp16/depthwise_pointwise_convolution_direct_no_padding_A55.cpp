@@ -44,8 +44,8 @@ EE depthwise_pointwise_convolution_direct_no_padding_A55(TensorDesc inputDesc,
     CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
     U32 strideH = convParamSpec.stride_h;
     U32 strideW = convParamSpec.stride_w;
-    U32 paddingT = convParamSpec.padding_top;
-    U32 paddingL = convParamSpec.padding_left;
+    U32 paddingT = convParamSpec.pad_top;
+    U32 paddingL = convParamSpec.pad_left;
 
     if (dwFilterDesc.df != DF_NCHWC8 || pwFilterDesc.df != DF_NHWCN16) {
         CHECK_STATUS(NOT_MATCH);

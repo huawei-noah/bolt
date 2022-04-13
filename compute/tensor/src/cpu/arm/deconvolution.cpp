@@ -66,8 +66,8 @@ EE deconvolution_overlap_crop_arm_kernel(T *input,
     U32 fhfw = fh * fw;
     U32 strideH = convParamSpec.stride_h;
     U32 strideW = convParamSpec.stride_w;
-    U32 paddingT = convParamSpec.padding_top;
-    U32 paddingL = convParamSpec.padding_left;
+    U32 paddingT = convParamSpec.pad_top;
+    U32 paddingL = convParamSpec.pad_left;
     for (U32 kn = 0; kn < in; ++kn) {
 #ifdef _USE_OPENMP
 #pragma omp parallel for num_threads(OMP_NUM_THREADS)
@@ -96,7 +96,7 @@ EE deconvolution_overlap_crop_arm_kernel(T *input,
             }
         }
         output += oc * oh * ow;
-        input += ic * ih * iw;
+        input += oc * fh * fw * ih * iw;
     }
 
     return SUCCESS;

@@ -48,7 +48,7 @@ __kernel void MANGLE_NAME(col2im_, IOM)(const int iw,
     int sidh_j = pidy % sh;
     int in_hx = (sidh_i < ih) ? sidh_i : (ih - 1);
     int in_hy = (sidh_i < ih) ? sidh_j : ((sidh_i - ih + 1) * sh + sidh_j);
-    int in_hl = (fw - in_hy + sh - 1) / sh;
+    int in_hl = (fh - in_hy + sh - 1) / sh;
     if (in_hl > in_hx + 1) {
         in_hl = in_hx + 1;
     }

@@ -15,13 +15,27 @@
 
 #define UNROLL_W 4
 
-typedef void (*pooling_bp_func)(
-    const F32 *input, int hstart, int hend, int wstart, int wend, F32 *output, U32 ow, U32 strideW);
+typedef void (*pooling_bp_func)(const F32 *input,
+    int hstart,
+    int hend,
+    int wstart,
+    int wend,
+    int pool,
+    F32 *output,
+    U32 ow,
+    U32 strideW);
 
-void pooling_bp_c8_w4_fp32(
-    const F32 *input, int hstart, int hend, int wstart, int wend, F32 *output, U32 ow, U32 strideW)
+void pooling_bp_c8_w4_fp32(const F32 *input,
+    int hstart,
+    int hend,
+    int wstart,
+    int wend,
+    int pool,
+    F32 *output,
+    U32 ow,
+    U32 strideW)
 {
-    __m256 poolSize = _mm256_set1_ps((hend - hstart) * (wend - wstart) * 1.0f);
+    __m256 poolSize = _mm256_set1_ps(pool);
     __m256 in0 = _mm256_div_ps(_mm256_loadu_ps(input), poolSize);
     __m256 in1 = _mm256_div_ps(_mm256_loadu_ps(input + 8), poolSize);
     __m256 in2 = _mm256_div_ps(_mm256_loadu_ps(input + 16), poolSize);
@@ -44,10 +58,17 @@ void pooling_bp_c8_w4_fp32(
     }
 }
 
-void pooling_bp_c8_w2_fp32(
-    const F32 *input, int hstart, int hend, int wstart, int wend, F32 *output, U32 ow, U32 strideW)
+void pooling_bp_c8_w2_fp32(const F32 *input,
+    int hstart,
+    int hend,
+    int wstart,
+    int wend,
+    int pool,
+    F32 *output,
+    U32 ow,
+    U32 strideW)
 {
-    __m256 poolSize = _mm256_set1_ps((hend - hstart) * (wend - wstart) * 1.0f);
+    __m256 poolSize = _mm256_set1_ps(pool);
     __m256 in0 = _mm256_div_ps(_mm256_loadu_ps(input), poolSize);
     __m256 in1 = _mm256_div_ps(_mm256_loadu_ps(input + 8), poolSize);
     for (int kernelH = hstart; kernelH < hend; kernelH++) {
@@ -62,10 +83,17 @@ void pooling_bp_c8_w2_fp32(
     }
 }
 
-void pooling_bp_c8_w1_fp32(
-    const F32 *input, int hstart, int hend, int wstart, int wend, F32 *output, U32 ow, U32 strideW)
+void pooling_bp_c8_w1_fp32(const F32 *input,
+    int hstart,
+    int hend,
+    int wstart,
+    int wend,
+    int pool,
+    F32 *output,
+    U32 ow,
+    U32 strideW)
 {
-    __m256 poolSize = _mm256_set1_ps((hend - hstart) * (wend - wstart) * 1.0f);
+    __m256 poolSize = _mm256_set1_ps(pool);
     __m256 in0 = _mm256_div_ps(_mm256_loadu_ps(input), poolSize);
     for (int kernelH = hstart; kernelH < hend; kernelH++) {
         for (int kernelW = wstart; kernelW < wend; kernelW++) {
@@ -98,7 +126,7 @@ EE pooling_bp_fp32(
     if (idf != DF_NCHWC8 || odf != idf) {
         ret = NOT_MATCH;
     }
-    if (p.padding_top >= p.kernel_h || p.padding_left >= p.kernel_w) {
+    if (p.pad_top >= p.kernel_h || p.pad_left >= p.kernel_w) {
         ret = NOT_SUPPORTED;
     }
     PoolingMode pm = p.mode;
@@ -108,11 +136,12 @@ EE pooling_bp_fp32(
 
     ic /= 8;
     U32 wSize = 0;
-    U32 iwInter = (ow + p.padding_left - p.kernel_w) / p.stride_w + 1;
+    U32 iwInter = (ow + p.pad_left - p.kernel_w) / p.stride_w + 1;
     const F32 *curI = input;
     F32 *curO = output;
     pooling_bp_func pooling_bp[3] = {
         pooling_bp_c8_w1_fp32, pooling_bp_c8_w2_fp32, pooling_bp_c8_w4_fp32};
+    int poolSize = p.kernel_t * p.kernel_h * p.kernel_w;
     for (U32 n = 0; n < in; n++) {
         for (U32 c = 0; c < ic; c++) {
             for (U32 h = 0; h < ih; h++) {
@@ -122,8 +151,8 @@ EE pooling_bp_fp32(
                     } else {
                         wSize = 1;
                     }
-                    int hstart = (int)h * (int)p.stride_h - (int)p.padding_top;
-                    int wstart = (int)w * (int)p.stride_w - (int)p.padding_left;
+                    int hstart = (int)h * (int)p.stride_h - (int)p.pad_top;
+                    int wstart = (int)w * (int)p.stride_w - (int)p.pad_left;
                     int hend = UNI_MIN(hstart + p.kernel_h, oh);
                     int wend = UNI_MIN(wstart + p.kernel_w, ow);
                     hstart = UNI_MAX(hstart, 0);
@@ -131,7 +160,11 @@ EE pooling_bp_fp32(
                     if (wend < wstart + (int)p.kernel_w) {
                         wSize = 1;
                     }
-                    pooling_bp[wSize >> 1](curI, hstart, hend, wstart, wend, curO, ow, p.stride_w);
+                    if (!p.count_include_pad) {
+                        poolSize = (hend - hstart) * (wend - wstart);
+                    }
+                    pooling_bp[wSize >> 1](
+                        curI, hstart, hend, wstart, wend, poolSize, curO, ow, p.stride_w);
                     curI += wSize * 8;
                 }
             }

@@ -47,7 +47,7 @@ inline EE bilateral_slice_apply_core_mali_fp16(GCLHandle_t handle,
     tensorSelectGet(gridDesc, NULL, NULL, &gn, &gc, &gh, &gw);
     tensorSelectGet(outputDesc, NULL, NULL, &on, &oc, &oh, &ow);
 
-    U32 coe = bilateralSliceApplyParamSpec.coefficient_len;
+    U32 coe = bilateralSliceApplyParamSpec.coefficient;
     BilateralSliceApplyMode mode = bilateralSliceApplyParamSpec.mode;
     //    bool has_offset = bilateralSliceApplyParamSpec.has_offset;
     U32 dep = gc / coe;
@@ -60,7 +60,7 @@ inline EE bilateral_slice_apply_core_mali_fp16(GCLHandle_t handle,
     gridbuf = grid->mem;
     outbuf = output->mem;
     gridTran = tmpBuf->mem;
-    if (mode == BSliceApply_NULL) {
+    if (mode == BSLICE_APPLY_NULL) {
         guidebuf = guide->mem;
     } else {
         guidebuf = inbuf;
@@ -80,11 +80,11 @@ inline EE bilateral_slice_apply_core_mali_fp16(GCLHandle_t handle,
         gcl_run_kernel_profiling(handle, kernel, dim0, gs0, ls0, "bilateral_slice_apply_pre"));
     CHECK_STATUS(gcl_print_memory<F16>(handle, grid, "bilateral_slice_apply_grid"));
 #endif
-    char kernelname[128];
-    if (mode == BSliceApply_CONV) {
-        sprintf(kernelname, "bilateral_slice_apply_c12_conv");
+    const char *kernelname;
+    if (mode == BSLICE_APPLY_CONV) {
+        kernelname = "bilateral_slice_apply_c12_conv";
     } else {
-        sprintf(kernelname, "bilateral_slice_apply_c12");
+        kernelname = "bilateral_slice_apply_c12";
     }
     U32 gs[2] = {ow, oh};
     U32 ls[2] = {0, 0};
@@ -98,7 +98,7 @@ inline EE bilateral_slice_apply_core_mali_fp16(GCLHandle_t handle,
     CHECK_STATUS(gcl_run_kernel_profiling(handle, kernel, dim, gs, ls, kernelname));
     CHECK_STATUS(gcl_print_memory<F16>(handle, input, "bilateral_slice_apply_input"));
     CHECK_STATUS(gcl_print_memory<F16>(handle, output, "bilateral_slice_apply_output"));
-    if (mode == BSliceApply_NULL) {
+    if (mode == BSLICE_APPLY_NULL) {
         CHECK_STATUS(gcl_print_memory<F16>(handle, guide, "bilateral_slice_apply_guide"));
     }
 #endif

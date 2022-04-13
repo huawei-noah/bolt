@@ -51,7 +51,7 @@ __kernel void MANGLE_NAME(activation_, IOM, FM, AM)(const int w,
     LOAD_MEM_V4_COMMON(val, idx, idy, idz, iw_str, ih_str, i_off, input);
 
     ACTIVATION_V4(val);
-#if defined(USE_TANH) || defined(USE_SIGMOID) || defined(USE_HSIGMOID) || defined(USE_GELU)
+#if defined(USE_TANH) || defined(USE_SIGMOID) || defined(USE_HSIGMOID) || defined(USE_GELU) || defined(USE_EXP)
     char ec = (((idz << 2) + 4) <= c) ? 4 : (c & 3);
     if (ec < 2) {
         val.y = 0;

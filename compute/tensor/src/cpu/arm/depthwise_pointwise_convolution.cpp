@@ -56,10 +56,10 @@ EE depthwise_pointwise_convolution_infer_forward_algorithm_arm(TensorDesc inputD
         case DT_F16: {
             U32 strideH = convParamSpec.stride_h;
             U32 strideW = convParamSpec.stride_w;
-            U32 paddingT = convParamSpec.padding_top;
-            U32 paddingB = convParamSpec.padding_bottom;
-            U32 paddingL = convParamSpec.padding_left;
-            U32 paddingR = convParamSpec.padding_right;
+            U32 paddingT = convParamSpec.pad_top;
+            U32 paddingB = convParamSpec.pad_bottom;
+            U32 paddingL = convParamSpec.pad_left;
+            U32 paddingR = convParamSpec.pad_right;
 
             if (fh == 3 && fw == 3 && strideH == 1 && strideW == 1 && paddingT == 1 &&
                 paddingB == 1 && paddingL == 1 && paddingR == 1 && ow % 4 == 0 && ow >= 12) {
@@ -112,10 +112,10 @@ EE depthwise_pointwise_convolution_infer_forward_tmp_bytes_arm(TensorDesc inputD
     U32 on, oc, oh, ow;
     CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
     CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
-    U32 paddingT = convParamSpec.padding_top;
-    U32 paddingB = convParamSpec.padding_bottom;
-    U32 paddingL = convParamSpec.padding_left;
-    U32 paddingR = convParamSpec.padding_right;
+    U32 paddingT = convParamSpec.pad_top;
+    U32 paddingB = convParamSpec.pad_bottom;
+    U32 paddingL = convParamSpec.pad_left;
+    U32 paddingR = convParamSpec.pad_right;
 
     U32 ih_pad = ih + paddingT + paddingB;
     U32 iw_pad = iw + paddingL + paddingR;

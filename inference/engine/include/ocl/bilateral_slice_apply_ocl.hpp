@@ -41,7 +41,7 @@ public:
         Tensor gridTensor = this->inputTensors[1];
         Tensor outputTensor = this->outputTensors[0];
 
-        if (this->p.mode == BSliceApply_NULL) {
+        if (this->p.mode == BSLICE_APPLY_NULL) {
             this->guideTensor = this->inputTensors[2];
         }
         CHECK_STATUS(bilateral_slice_apply(

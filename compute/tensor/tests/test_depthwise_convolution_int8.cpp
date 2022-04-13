@@ -53,7 +53,7 @@ int main(int argc, char *argv[])
     dwBiasDesc = tensor1d(odt, ic);
     pwBiasDesc = tensor1d(odt, oc);
     ConvolutionParamSpec convParamSpec = createConvolutionParamSpec(group, 1, fh, fw, 1, stride,
-        stride, 0, 0, padding, padding, padding, padding, 1, 1, 1, fn, Convolution_Depthwise);
+        stride, 0, 0, padding, padding, padding, padding, 1, 1, 1, fn, CONVOLUTION_DEPTHWISE);
 
     // setup input, filter, bias
     INT8 *input = (INT8 *)ut_input_v(in * ic * ih * iw, DT_I8, UT_INIT_RANDOM);
@@ -81,13 +81,15 @@ int main(int argc, char *argv[])
     dwFilterTensor.alloc();
     dwFilterTensorRef.alloc();
     dwBiasTensor.alloc();
-    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, bytesOf(dt) * in * ic * ih * iw);
-    memcpy(get_ptr_from_tensor(inputTensorRef, CPU_GENERAL), input, bytesOf(dt) * in * ic * ih * iw);
-    memcpy(
+    UNI_MEMCPY(
+        get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, bytesOf(dt) * in * ic * ih * iw);
+    UNI_MEMCPY(
+        get_ptr_from_tensor(inputTensorRef, CPU_GENERAL), input, bytesOf(dt) * in * ic * ih * iw);
+    UNI_MEMCPY(
         get_ptr_from_tensor(dwFilterTensor, CPU_GENERAL), dwFilter, bytesOf(dt) * 1 * ic * fh * fw);
-    memcpy(get_ptr_from_tensor(dwFilterTensorRef, CPU_GENERAL), dwFilter,
+    UNI_MEMCPY(get_ptr_from_tensor(dwFilterTensorRef, CPU_GENERAL), dwFilter,
         bytesOf(dt) * 1 * ic * fh * fw);
-    memcpy(get_ptr_from_tensor(dwBiasTensor, CPU_GENERAL), dwBias, bytesOf(dt) * ic);
+    UNI_MEMCPY(get_ptr_from_tensor(dwBiasTensor, CPU_GENERAL), dwBias, bytesOf(dt) * ic);
 
     Tensor pwFilterTensor;
     Tensor pwFilterTensorRef;
@@ -98,11 +100,11 @@ int main(int argc, char *argv[])
     pwFilterTensor.alloc();
     pwFilterTensorRef.alloc();
     pwBiasTensor.alloc();
-    memcpy(
+    UNI_MEMCPY(
         get_ptr_from_tensor(pwFilterTensor, CPU_GENERAL), pwFilter, bytesOf(dt) * oc * ic * 1 * 1);
-    memcpy(get_ptr_from_tensor(pwFilterTensorRef, CPU_GENERAL), pwFilter,
+    UNI_MEMCPY(get_ptr_from_tensor(pwFilterTensorRef, CPU_GENERAL), pwFilter,
         bytesOf(dt) * oc * ic * 1 * 1);
-    memcpy(get_ptr_from_tensor(pwBiasTensor, CPU_GENERAL), pwBias, bytesOf(dt) * oc);
+    UNI_MEMCPY(get_ptr_from_tensor(pwBiasTensor, CPU_GENERAL), pwBias, bytesOf(dt) * oc);
 
     // setup output, bias
     CHECK_STATUS(depthwise_pointwise_convolution_infer_output_size(&inputTensor, dwFilterTensor,
@@ -143,15 +145,16 @@ int main(int argc, char *argv[])
     std::vector<Tensor> inputTensors(1, inputTensor);
     std::vector<Tensor> inputTensorsRef(1, inputTensorRef);
     std::vector<Tensor> tmpTensors(1, tmpTensor);
+    F32 scales[3] = {1, 1, 1};
 
     if (UT_CHECK) {
         CHECK_STATUS(depthwise_pointwise_convolution(inputTensors, dwFtmTensor, pwFtmTensor,
-            convParamSpec, alg, dwBiasTensor, pwBiasTensor, tmpTensors, outputTensor,
+            convParamSpec, alg, scales, dwBiasTensor, pwBiasTensor, tmpTensors, outputTensor,
             dwActivationParamSpec, pwActivationParamSpec, &UT_CPU_ARCHINFO));
 
         // naive implement
         CHECK_STATUS(depthwise_pointwise_convolution(inputTensorsRef, dwFilterTensorRef,
-            pwFilterTensorRef, convParamSpec, alg, dwBiasTensor, pwBiasTensor, tmpTensors,
+            pwFilterTensorRef, convParamSpec, alg, scales, dwBiasTensor, pwBiasTensor, tmpTensors,
             outputTensorRef, dwActivationParamSpec, pwActivationParamSpec, &UT_SERIAL_ARCHINFO));
 
         // check
@@ -164,7 +167,7 @@ int main(int argc, char *argv[])
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
         CHECK_STATUS(depthwise_pointwise_convolution(inputTensors, dwFtmTensor, pwFtmTensor,
-            convParamSpec, alg, dwBiasTensor, pwBiasTensor, tmpTensors, outputTensor,
+            convParamSpec, alg, scales, dwBiasTensor, pwBiasTensor, tmpTensors, outputTensor,
             dwActivationParamSpec, pwActivationParamSpec, &UT_CPU_ARCHINFO));
     }
     double time_end = ut_time_ms();

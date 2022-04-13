@@ -20,10 +20,13 @@
 
 #include "data_type.h"
 #include "error.h"
+#include "secure_c_wrapper.h"
 #ifdef _USE_GPU
 #define CL_TARGET_OPENCL_VERSION 200
 #include "CL/cl.h"
 #endif
+
+#define DIM_LEN 6
 
 typedef enum {
     DF_NCHW,
@@ -68,7 +71,8 @@ typedef enum {
     DF_NKN12K4,     // Optimized MMM filter for INT8
     DF_NKNx_NKN32,  // Optimized LSTM filter
     DF_NCHWC16,     // vectorize for C=16, for input and output
-    DF_NCHWC2NxC4
+    DF_NCHWC2NxC4,
+    DF_SCALAR
 } DataFormat;
 
 inline const char *const *DataFormatName()
@@ -79,7 +83,8 @@ inline const char *const *DataFormatName()
         "DF_MKT", "DF_NK", "DF_NKN16", "DF_NKN32", "DF_NKN64", "DF_NKN32K4", "DF_NCHWC4",
         "DF_NCHWC3", "DF_NHWC", "DF_NCHWN4C4", "DF_NCHWN4", "DF_HWCN", "DF_NCWHN4C4", "DF_NHWCN4",
         "DF_CHWNC4", "DF_CHWNC8", "DF_CHWNC16", "DF_CHWC8_NCN8", "DF_RGB", "DF_HWNCN8", "DF_NKN24",
-        "DF_NKN12", "DF_NKN8", "DF_NKN12K4", "DF_NKNx_NKN32", "DF_NCHWC16", "DF_NCHWC2NxC4"};
+        "DF_NKN12", "DF_NKN8", "DF_NKN12K4", "DF_NKNx_NKN32", "DF_NCHWC16", "DF_NCHWC2NxC4",
+        "DF_SCALAR"};
     return names;
 }
 
@@ -87,13 +92,13 @@ typedef struct TensorDesc {
     DataType dt = DT_U8;
     DataFormat df = DF_NCHW;
     U32 nDims = 0;
-    U32 dims[6] = {0};
+    U32 dims[DIM_LEN] = {0};
 } TensorDesc;
 
 inline TensorDesc tensor0d()
 {
     TensorDesc desc;
-    memset(&desc, 0, sizeof(TensorDesc));
+    UNI_MEMSET(&desc, 0, sizeof(TensorDesc));
     return desc;
 }
 
@@ -365,20 +370,38 @@ inline U8 tensorIs5d(TensorDesc desc)
     return 5 == desc.nDims;
 }
 
+// in order to support shape calculation, there is a reserved buffer in TensorDesc.dims to save.
+inline U8 tensorIsShape(TensorDesc desc)
+{
+    U32 length = tensorNumElements(desc);
+    U8 ret = 0;
+    if (desc.dt == DT_U32 && length > 0 && length + desc.nDims <= DIM_LEN) {
+        ret = 1;
+    }
+    return ret;
+}
+
 inline std::string tensorDesc2Str(TensorDesc desc)
 {
     std::string descStr = "dt:" + std::string(DataTypeName()[desc.dt]) +
         " df:" + std::string(DataFormatName()[desc.df]) + " dims:" + std::to_string(desc.nDims);
-
     if (desc.nDims > 0) {
         descStr += "(";
-    }
-    for (I32 i = int(desc.nDims) - 1; i >= 0; i--) {
-        descStr += std::to_string(desc.dims[i]);
-        if (i > 0) {
-            descStr += ",";
-        } else {
-            descStr += ")";
+        for (I32 i = int(desc.nDims) - 1; i > 0; i--) {
+            descStr += std::to_string(desc.dims[i]) + ",";
+        }
+        descStr += std::to_string(desc.dims[0]) + ")";
+        if (tensorIsShape(desc)) {
+            U32 length = tensorNumElements(desc);
+            descStr += " reserve:(";
+            for (U32 i = desc.nDims; i < desc.nDims + length && i < DIM_LEN; i++) {
+                descStr += std::to_string((int)desc.dims[i]);
+                if (i + 1 < desc.nDims + length && i + 1 < DIM_LEN) {
+                    descStr += ",";
+                } else {
+                    descStr += ")";
+                }
+            }
         }
     }
 
@@ -387,15 +410,15 @@ inline std::string tensorDesc2Str(TensorDesc desc)
 
 inline int tensorDescIsValid(TensorDesc desc)
 {
-    if (desc.dt < 0 || desc.dt >= 10) {
+    if (desc.dt < 0 || desc.dt >= DT_NUM) {
         return 0;
     }
 
-    if (desc.df < 0 || desc.df >= 30) {
+    if (desc.df < 0 || desc.df >= 50) {
         return 0;
     }
 
-    if (desc.nDims > 6) {
+    if (desc.nDims > DIM_LEN) {
         return 0;
     }
 
@@ -427,6 +450,7 @@ inline DataFormat getTensorDefaultDataFormat(int nDims)
     return df;
 }
 
+// return format is [w, h, c, n]
 inline std::vector<U32> calculateLocalIndex(U32 index, const U32 *dims, U32 nDims)
 {
     std::vector<U32> indexes(nDims);
@@ -441,7 +465,8 @@ inline U32 calculateGlobalIndex(const U32 *indexes, const U32 *dims, U32 nDims)
 {
     U32 index = 0;
     for (int i = ((int)nDims) - 1; i >= 0; i--) {
-        index = index * dims[i] + indexes[i];
+        U32 value = indexes[i] >= dims[i] ? 0 : indexes[i];
+        index = index * dims[i] + value;
     }
     return index;
 }
@@ -470,13 +495,13 @@ typedef enum {
 } GCLMemType;
 
 struct GCLMemDesc {
-    U32 dims[6];
+    U32 dims[DIM_LEN];
     U32 nDims;
     DataType dt;
     DataFormat df;
 
     U32 stride[3];
-    U32 offset[6];
+    U32 offset[DIM_LEN];
     GCLMemType memType;
     DataFormat memFormat;
     U32 byteSize;

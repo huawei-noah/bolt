@@ -19,28 +19,31 @@
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
 
-inline EE power_infer_output_size_cpu(TensorDesc inputDesc, TensorDesc *outputDesc)
+inline EE power_infer_output_size_cpu(
+    TensorDesc inputDesc, PowerParamSpec p, TensorDesc *outputDesc, Arch arch)
 {
-    if (nullptr == outputDesc) {
-        CHECK_STATUS(NULL_POINTER);
-    }
     *outputDesc = inputDesc;
-    return SUCCESS;
+    EE ret = SUCCESS;
+#ifdef _USE_CPU
+    if (tensorIsShape(inputDesc)) {
+        ret = power_cpu(inputDesc, inputDesc.dims + inputDesc.nDims, p, *outputDesc,
+            outputDesc->dims + outputDesc->nDims, arch);
+    }
+#endif
+    return ret;
 }
 
-EE power_infer_output_size(Tensor *inputTensor, Tensor *outputTensor, ArchInfo_t archInfo)
+EE power_infer_output_size(
+    Tensor *inputTensor, PowerParamSpec p, Tensor *outputTensor, ArchInfo_t archInfo)
 {
-    if (inputTensor == nullptr) {
-        CHECK_STATUS(NULL_POINTER);
-    }
-    if (outputTensor == nullptr) {
-        CHECK_STATUS(NULL_POINTER);
+    if (inputTensor == nullptr || outputTensor == nullptr) {
+        return NULL_POINTER;
     }
     TensorDesc inputDesc = inputTensor->get_desc();
     TensorDesc outputDesc = outputTensor->get_desc();
-    CHECK_STATUS(power_infer_output_size_cpu(inputDesc, &outputDesc));
+    EE ret = power_infer_output_size_cpu(inputDesc, p, &outputDesc, archInfo->arch);
     outputTensor->resize(outputDesc);
-    return SUCCESS;
+    return ret;
 }
 
 EE power(Tensor inputTensor, PowerParamSpec p, Tensor outputTensor, ArchInfo_t archInfo)
@@ -50,7 +53,6 @@ EE power(Tensor inputTensor, PowerParamSpec p, Tensor outputTensor, ArchInfo_t a
     void *input = get_ptr_from_tensor(inputTensor, arch);
     TensorDesc outputDesc = outputTensor.get_desc();
     void *output = get_ptr_from_tensor(outputTensor, arch);
-
     EE ret = NOT_SUPPORTED;
     if (IS_CPU(arch)) {
 #ifdef _USE_CPU

@@ -130,13 +130,14 @@ inline CI8 *map_cl_error_2_string(cl_int err)
     }
 }
 
-#define map_cl_error_2_ee(err)                                                                   \
-    {                                                                                            \
-        if (err == 0)                                                                            \
-            return SUCCESS;                                                                      \
-        UNI_ERROR_LOG("GCLAPI error in:  File: %s  Line: %d  Func name is: %s  GCLERROR = %s\n", \
-            __FILE__, __LINE__, __FUNCTION__, map_cl_error_2_string(err));                       \
-        return GCL_ERROR;                                                                        \
+#define map_cl_error_2_ee(err)                                                \
+    {                                                                         \
+        if (err == 0) {                                                       \
+            return SUCCESS;                                                   \
+        } else {                                                              \
+            UNI_ERROR_LOG("GCLAPI error: %s.\n", map_cl_error_2_string(err)); \
+            return GCL_ERROR;                                                 \
+        }                                                                     \
     }
 
 inline EE has_dedicated_local(Device device, I32 *b)
@@ -171,6 +172,14 @@ struct GCLKernelInfo {
     std::string name;
 };
 
+typedef struct {
+    I32 algorithm;
+    U32 best_h[6];
+    U32 best_c[6];
+    U32 best_k[6];
+} ForwardRunInfoMali;
+typedef ForwardRunInfoMali *ForwardRunInfoMali_t;
+
 struct GCLHandle {
     Platform *platforms;
     U32 numPlatform;
@@ -201,6 +210,8 @@ struct GCLHandle {
     std::string deviceName;
     std::map<std::string, Kernel> kernelMap;
     std::map<std::string, Program> programMap;
+    std::map<std::vector<I32>, ForwardRunInfoMali> runInfoCache;
+    std::map<std::string, std::vector<U32>> kernelLSCache;
     std::vector<GCLKernelInfo> *kernelVec;
     std::string curOpName;
     void *kernel_source;
@@ -220,14 +231,6 @@ struct GCLHandleConfig {
 };
 
 typedef GCLHandleConfig *GCLHandleConfig_t;
-
-typedef struct {
-    I32 algorithm;
-    U32 best_h[6];
-    U32 best_c[6];
-    U32 best_k[6];
-} ForwardRunInfoMali;
-typedef ForwardRunInfoMali *ForwardRunInfoMali_t;
 
 typedef struct {
     GCLHandle_t handle;

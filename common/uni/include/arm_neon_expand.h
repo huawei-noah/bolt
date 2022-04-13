@@ -344,7 +344,7 @@ inline void vst1q_lane_f16_builtin(__fp16 *address, float16x8_t vec, const int l
 #endif
 
 #ifdef _USE_INT8
-#ifdef __aarch64__
+#ifdef _USE_FP16
 inline int32x4_t vdotq_laneq_s32_builtin(int32x4_t c, int8x16_t a, int8x16_t b, const int laneId)
 {
     int32x4_t ret;

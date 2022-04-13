@@ -29,7 +29,7 @@ inline EE depthwise_convolution_transform_filter_kernel_fp32(TensorDesc filterDe
     CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
     if (fdf == ftmDataFormat) {
         *ftmDesc = filterDesc;
-        memcpy(ftmArray, filterArray, fn * fc * fh * fw * bytesOf(fdt));
+        UNI_MEMCPY(ftmArray, filterArray, fn * fc * fh * fw * bytesOf(fdt));
         return SUCCESS;
     }
     if (fdf != DF_NCHW) {
@@ -39,7 +39,7 @@ inline EE depthwise_convolution_transform_filter_kernel_fp32(TensorDesc filterDe
     *ftmDesc = tensor4df(fdt, ftmDataFormat, fc, 1, fh, fw);
     switch (ftmDataFormat) {
         case DF_NCHWC24: {
-            transformNCHWToNCHWCxNx<1, 24>(filterDesc, filterArray, *ftmDesc, ftmArray);
+            transformNCHWToNCHWCxNx<1, 16>(filterDesc, filterArray, *ftmDesc, ftmArray);
             break;
         }
         case DF_NCHWC8: {

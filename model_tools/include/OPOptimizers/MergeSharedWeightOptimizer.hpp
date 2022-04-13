@@ -50,7 +50,7 @@ class MergeSharedWeightOptimizer : public OPOptimizer {
                 // Update matmul to fc
                 spec->ops[matmulOpIndex].type = OT_FC;
                 spec->ops[matmulOpIndex].num_inputs = 1;
-                delete spec->ops[matmulOpIndex].input_tensors_name[1];
+                mt_free(spec->ops[matmulOpIndex].input_tensors_name[1]);
                 spec->ops[matmulOpIndex].ps.fc_spec.num_outputs =
                     spec->ops[sharedWeightIdx].ps.shared_weight_spec.desc.dims[1];
                 spec->ops[matmulOpIndex].ps.fc_spec.num_slices = 1;
@@ -60,10 +60,10 @@ class MergeSharedWeightOptimizer : public OPOptimizer {
                 int matmulWsIndex = searchWeightIndex(spec, spec->ops[matmulOpIndex].name);
                 int sharedWsIndex = searchWeightIndex(spec, spec->ops[sharedWeightIdx].name);
                 U32 weightSize = spec->ws[sharedWsIndex].bytes_of_weight;
-                U8 *weight = (U8 *)mt_new_storage(weightSize);
+                U8 *weight = (U8 *)mt_malloc(weightSize);
 
                 if (transpose_b) {
-                    memcpy(weight, spec->ws[sharedWsIndex].weight, weightSize);
+                    UNI_MEMCPY(weight, spec->ws[sharedWsIndex].weight, weightSize);
                 } else {
                     // transpose
                     U32 row = spec->ops[sharedWeightIdx].ps.shared_weight_spec.desc.dims[1];
@@ -71,7 +71,7 @@ class MergeSharedWeightOptimizer : public OPOptimizer {
                     U32 unit = bytesOf(spec->ws[sharedWsIndex].mdt);
                     for (U32 r = 0; r < row; ++r) {
                         for (U32 c = 0; c < column; ++c) {
-                            memcpy(weight + (c * row + r) * unit,
+                            UNI_MEMCPY(weight + (c * row + r) * unit,
                                 spec->ws[sharedWsIndex].weight + (r * column + c) * unit, unit);
                         }
                     }
@@ -85,7 +85,6 @@ class MergeSharedWeightOptimizer : public OPOptimizer {
                     spec, sharedOut, sharedWeightIdx + 1, spec->num_operator_specs, false);
                 if (nextOpIndexes.size() == 0) {
                     setOperatorInvalid(spec, sharedWeightIdx, true);
-                    setWeightOperatorInvalid(spec, sharedWsIndex);
                 }
 
                 // Merge Eltwise + SharedWeight to FC bias
@@ -114,8 +113,8 @@ class MergeSharedWeightOptimizer : public OPOptimizer {
                 if (spec->ws[sharedWsIndex].bytes_of_weight / bytesOf(spec->ws[sharedWsIndex].mdt) ==
                     spec->ops[matmulOpIndex].ps.fc_spec.num_outputs) {
                     U32 biasSize = spec->ws[sharedWsIndex].bytes_of_weight;
-                    U8 *bias = (U8 *)mt_new_storage(biasSize);
-                    memcpy(bias, spec->ws[sharedWsIndex].weight, biasSize);
+                    U8 *bias = (U8 *)mt_malloc(biasSize);
+                    UNI_MEMCPY(bias, spec->ws[sharedWsIndex].weight, biasSize);
                     spec->ws[matmulWsIndex].vec = bias;
                     spec->ws[matmulWsIndex].bytes_of_vec = biasSize;
 
@@ -124,7 +123,6 @@ class MergeSharedWeightOptimizer : public OPOptimizer {
                         spec, sharedOut, sharedWeightIdx + 1, spec->num_operator_specs, false);
                     if (nextOpIndexes.size() == 1) {
                         setOperatorInvalid(spec, sharedWeightIdx, true);
-                        setWeightOperatorInvalid(spec, sharedWsIndex);
                     }
                     setOperatorInvalid(spec, eltwiseIdx, true);
                 }

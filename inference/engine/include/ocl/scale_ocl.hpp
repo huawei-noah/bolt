@@ -28,7 +28,7 @@ public:
     std::shared_ptr<Operator> clone() override
     {
         std::shared_ptr<ScaleOCL> mem =
-            std::shared_ptr<ScaleOCL>(new ScaleOCL(this->dt, this->p, this->numChannels));
+            std::shared_ptr<ScaleOCL>(new ScaleOCL(this->dt, this->p, 0));
         *mem = *this;
         return mem;
     }
@@ -38,7 +38,6 @@ public:
         auto curOpWs = this->get_weightspec();
         U32 weightNum = 0;
         U32 vecNum = 0;
-        this->numChannels = 0;
         if (0 != curOpWs.bytes_of_weight) {
             weightNum = curOpWs.bytes_of_weight / UNI_MAX(1, bytesOf(curOpWs.mdt));
         }
@@ -72,10 +71,7 @@ public:
         int inputNum = this->inputTensors.size();
         Tensor inputTensor = this->inputTensors[this->dataID];
         Tensor outputTensor = this->outputTensors[0];
-        if (inputNum == 1 && weightTensors.size() == 0 && biasTensors.size() == 0) {
-            CHECK_STATUS(NOT_MATCH);
-        }
-
+        CHECK_REQUIREMENT(inputNum != 1 || weightTensors.size() != 0 || biasTensors.size() != 0);
         if (inputNum > 1) {
             U32 cNum = this->inputTensors[this->dataID].get_desc().dims[2];
             for (int i = 0; i < inputNum; i++) {
@@ -92,8 +88,10 @@ public:
                             desc.offset[1] == 0) {
                             continue;
                         }
+                    } else {
+                        UNI_ERROR_LOG("gpu scale not support %s format input.\n",
+                            DataFormatName()[desc.memFormat]);
                     }
-                    CHECK_STATUS(NOT_MATCH);
                 }
             }
         }

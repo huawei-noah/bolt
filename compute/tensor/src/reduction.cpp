@@ -35,7 +35,6 @@ EE reduction(Tensor inputTensor,
     void *tmp = get_ptr_from_tensor(tmpTensor, arch);
     TensorDesc outputDesc = outputTensor.get_desc();
     void *output = get_ptr_from_tensor(outputTensor, arch);
-
     EE ret = NOT_SUPPORTED;
     if (IS_CPU(arch)) {
 #ifdef _USE_CPU
@@ -55,31 +54,33 @@ EE reduction_infer_forward_tmp_bytes(
     Tensor inputTensor, ReductionParamSpec p, Tensor outputTensor, U32 *bytes, ArchInfo_t archInfo)
 {
     TensorDesc inputDesc = inputTensor.get_desc();
+    EE ret = NOT_SUPPORTED;
     if (IS_GPU(archInfo->arch)) {
 #ifdef _USE_GPU
         TensorDesc outputDesc = outputTensor.get_desc();
         GCLMemDesc gclmemInputDesc = ocl_get_desc(inputTensor);
         GCLMemDesc gclmemOutputDesc = ocl_get_desc(outputTensor);
-        CHECK_STATUS(reduction_infer_forward_tmp_bytes_mali(
-            inputDesc, p, outputDesc, gclmemInputDesc, gclmemOutputDesc, bytes));
-        return SUCCESS;
+        ret = reduction_infer_forward_tmp_bytes_mali(
+            inputDesc, p, outputDesc, gclmemInputDesc, gclmemOutputDesc, bytes);
 #endif
-    }
-    int factor = 0;
-    if (p.axes_num > 1) {
-        factor = 2;
-    }
-    if (inputDesc.df == DF_NCHWC8 || inputDesc.df == DF_NCHWC16) {
-        for (int i = 0; i < p.axes_num; i++) {
-            // channel dimension
-            if (p.axes[i] == 1 || p.axes[i] == -3) {
-                factor = 2;
-                break;
+    } else {
+        int factor = 0;
+        if (p.num_axes > 1) {
+            factor = 2;
+        }
+        if (inputDesc.df == DF_NCHWC8 || inputDesc.df == DF_NCHWC16) {
+            for (int i = 0; i < p.num_axes; i++) {
+                // channel dimension
+                if (p.axes[i] == 1 || p.axes[i] == -3) {
+                    factor = 2;
+                    break;
+                }
             }
         }
+        *bytes = UNI_MAX(inputTensor.bytes(), outputTensor.bytes()) * factor;
+        ret = SUCCESS;
     }
-    *bytes = UNI_MAX(inputTensor.bytes(), outputTensor.bytes()) * factor;
-    return SUCCESS;
+    return ret;
 }
 
 EE reduction_infer_output_size(Tensor *inputTensor,
@@ -88,28 +89,26 @@ EE reduction_infer_output_size(Tensor *inputTensor,
     Tensor *outputTensor,
     ArchInfo_t archInfo)
 {
-    if (inputTensor == nullptr) {
-        CHECK_STATUS(NULL_POINTER);
-    }
-    if (outputTensor == nullptr) {
+    if (inputTensor == nullptr || outputTensor == nullptr) {
         CHECK_STATUS(NULL_POINTER);
     }
     TensorDesc inputDesc = inputTensor->get_desc();
     TensorDesc maskDesc = maskTensor.get_desc();
     TensorDesc outputDesc = outputTensor->get_desc();
-    if (IS_GPU(archInfo->arch)) {
+    Arch arch = archInfo->arch;
+    EE ret = NOT_SUPPORTED;
+    if (IS_GPU(arch)) {
 #ifdef _USE_GPU
         OclMemory *inputMem = (OclMemory *)inputTensor->get_memory();
         OclMemory *outputMem = (OclMemory *)outputTensor->get_memory();
-        CHECK_STATUS(
-            reduction_padding_input_mali(inputDesc, maskDesc, p, &outputDesc, inputMem, outputMem));
+        ret = reduction_padding_input_mali(inputDesc, maskDesc, p, &outputDesc, inputMem, outputMem);
 #endif
     } else {
         int start = 0;
         TensorDesc tmpDesc = inputDesc;
         U32 cx = (inputDesc.df == DF_NCHWC8) ? 8 : 16;
         if (inputDesc.df == DF_NCHWC8 || inputDesc.df == DF_NCHWC16) {
-            for (int i = 0; i < p.axes_num; i++) {
+            for (int i = 0; i < p.num_axes; i++) {
                 // channel dimension
                 if (p.axes[i] == 1 || p.axes[i] == -3) {
                     start = -1;
@@ -124,10 +123,10 @@ EE reduction_infer_output_size(Tensor *inputTensor,
             tmpDesc.nDims += 1;
         }
         outputDesc = tmpDesc;
-        for (int i = start; i < p.axes_num; i++) {
+        for (int i = start; i < p.num_axes; i++) {
             int axis;
             if (i == -1) {
-                axis = 4;
+                axis = inputDesc.nDims;
             } else {
                 axis = p.axes[i];
             }
@@ -179,7 +178,14 @@ EE reduction_infer_output_size(Tensor *inputTensor,
                 }
             }
         }
+        ret = SUCCESS;
     }
+#ifdef _USE_CPU
+    if (tensorIsShape(inputDesc)) {
+        ret = reduction_cpu(inputDesc, inputDesc.dims + inputDesc.nDims, tensor0d(), nullptr, p, 0,
+            nullptr, outputDesc, outputDesc.dims + outputDesc.nDims, arch);
+    }
+#endif
     outputTensor->resize(outputDesc);
-    return SUCCESS;
+    return ret;
 }

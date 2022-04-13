@@ -18,10 +18,9 @@
 
 class PreAllocatedMemory : public Operator {
 public:
-    PreAllocatedMemory(DataType dt, TensorDesc desc)
+    PreAllocatedMemory(PreAllocatedMemoryParamSpec p)
     {
-        this->dt = dt;
-        this->desc = desc;
+        this->p = p;
     }
 
     OperatorType get_type() override
@@ -30,7 +29,7 @@ public:
     }
 
 protected:
-    TensorDesc desc;
+    PreAllocatedMemoryParamSpec p;
 };
 
 #endif  // _PREALLOCATED_MEMORY_H

@@ -41,7 +41,7 @@ EE depthwise_convolution_transform_filter_arm(TensorDesc filterDesc,
     ftmDesc->df = ftmDataFormat;
     EE ret = NOT_SUPPORTED;
     if (filterDesc.df == ftmDataFormat) {
-        memcpy(filterTransformed, filter, tensorNumBytes(filterDesc));
+        UNI_MEMCPY(filterTransformed, filter, tensorNumBytes(filterDesc));
         ret = SUCCESS;
     } else if (filterDesc.df == DF_NCHW) {
         if (ftmDataFormat == DF_NCHWC8) {
@@ -69,10 +69,10 @@ EE depthwise_convolution_infer_forward_tmp_bytes_arm(TensorDesc inputDesc,
     CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
     CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
     CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
-    U32 paddingT = convParamSpec.padding_top;
-    U32 paddingB = convParamSpec.padding_bottom;
-    U32 paddingL = convParamSpec.padding_left;
-    U32 paddingR = convParamSpec.padding_right;
+    U32 paddingT = convParamSpec.pad_top;
+    U32 paddingB = convParamSpec.pad_bottom;
+    U32 paddingL = convParamSpec.pad_left;
+    U32 paddingR = convParamSpec.pad_right;
 
     U32 ih_pad = ih + paddingT + paddingB;
     U32 iw_pad = iw + paddingL + paddingR;

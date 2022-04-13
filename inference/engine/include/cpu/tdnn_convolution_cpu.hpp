@@ -35,9 +35,9 @@ public:
                 UNI_ERROR_LOG("TdnnCPU currently not support time context is decreasing order\n");
             }
         }
-        ConvolutionMode convMode = Convolution_Pointwise;
+        ConvolutionMode convMode = CONVOLUTION_POINTWISE;
         if (dilation > 1) {
-            convMode = Convolution_Dilation;
+            convMode = CONVOLUTION_DILATION;
         }
         this->p = createConvolutionParamSpec(1, 1, this->tdnn.num_context, 1, 1, 1, 1, 0, 0, 0, 0,
             0, 0, 1, dilation, 1, this->tdnn.num_outputs, convMode);

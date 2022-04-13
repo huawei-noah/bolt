@@ -50,7 +50,7 @@ int dilatedConvolutionTest(int argc, char **argv, DataType dt)
     TensorDesc filterDesc = tensor4df(dt, DF_NCHW, oc, ic, fh, fw);
     TensorDesc biasDesc = tensor1d(dt, oc);
     ConvolutionParamSpec convParamSpec = createConvolutionParamSpec(group, 1, fh, fw, 1, stride,
-        stride, 0, 0, padding, padding, padding, padding, 1, rate, rate, fn, Convolution_Dilation);
+        stride, 0, 0, padding, padding, padding, padding, 1, rate, rate, fn, CONVOLUTION_DILATION);
 
     // setup input, filter, bias
     U8 *input = ut_input_v(in * ic * ih * iw, dt, UT_INIT_RANDOM);
@@ -76,11 +76,14 @@ int dilatedConvolutionTest(int argc, char **argv, DataType dt)
     filterTensor.alloc();
     filterTensorRef.alloc();
     biasTensor.alloc();
-    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, bytesOf(dt) * in * ic * ih * iw);
-    memcpy(get_ptr_from_tensor(inputTensorRef, CPU_GENERAL), input, bytesOf(dt) * in * ic * ih * iw);
-    memcpy(get_ptr_from_tensor(filterTensor, CPU_GENERAL), filter, tensorNumBytes(filterDesc));
-    memcpy(get_ptr_from_tensor(filterTensorRef, CPU_GENERAL), filter, tensorNumBytes(filterDesc));
-    memcpy(get_ptr_from_tensor(biasTensor, CPU_GENERAL), bias, tensorNumBytes(biasDesc));
+    UNI_MEMCPY(
+        get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, bytesOf(dt) * in * ic * ih * iw);
+    UNI_MEMCPY(
+        get_ptr_from_tensor(inputTensorRef, CPU_GENERAL), input, bytesOf(dt) * in * ic * ih * iw);
+    UNI_MEMCPY(get_ptr_from_tensor(filterTensor, CPU_GENERAL), filter, tensorNumBytes(filterDesc));
+    UNI_MEMCPY(
+        get_ptr_from_tensor(filterTensorRef, CPU_GENERAL), filter, tensorNumBytes(filterDesc));
+    UNI_MEMCPY(get_ptr_from_tensor(biasTensor, CPU_GENERAL), bias, tensorNumBytes(biasDesc));
 
     // setup output, bias
     CHECK_STATUS(convolution_infer_output_size(

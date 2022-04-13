@@ -32,7 +32,7 @@ inline void rnncell_produce_algos_paras(RNNParamSpec rnnPara,
     rnncellAlgorithms->push_back(CONVOLUTION_ALGORITHM_GEMM);
     CHECK_STATUS(get_gemv_cal_scheme(vecH, vecC, vecK));
     algoNumIndex->push_back(vecH->size());
-    if (rnnPara.numProjection) {
+    if (rnnPara.num_projection) {
         CHECK_STATUS(get_gemv_cal_scheme(vecHP, vecCP, vecKP));
         algoNumIndexP->push_back(vecHP->size());
     }
@@ -61,7 +61,7 @@ inline EE rnncell_checkpara_mali(GCLHandle_t handle,
     if (iB != 1) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
-    U32 hDim = rnnPara.numOutput;
+    U32 hDim = rnnPara.num_outputs;
     if (hDesc.dims[0] != hDim && hDesc.dims[1] != hDim) {
         CHECK_STATUS(NOT_MATCH);
     }
@@ -86,6 +86,11 @@ EE rnncell_infer_forward_algorithm_mali(GCLHandle_t handle,
     }
     ConvolutionForwardAlgorithm algorithm = (ConvolutionForwardAlgorithm)(forwardRunInfo->algorithm);
     if (algorithm != CONVOLUTION_ALGORITHM_NULL) {
+        return SUCCESS;
+    }
+    std::vector<TensorDesc> filterDescVec(1, filterDesc);
+    std::vector<I32> flag = build_rnn_forward_algorithm_flag(xDesc, filterDescVec, rnnPara);
+    if (gcl_get_runInfo_from_cache(handle, flag, forwardRunInfo)) {
         return SUCCESS;
     }
     std::vector<ConvolutionForwardAlgorithm> rnncellAlgorithms;
@@ -118,7 +123,7 @@ EE rnncell_infer_forward_algorithm_mali(GCLHandle_t handle,
     U32 offset[3] = {0, 0, 0};
     U32 maxFilterSize[2] = {0, 0};
     TensorDesc ftmDesc[2];
-    bool useProject = (rnnPara.numProjection > 0) ? true : false;
+    bool useProject = (rnnPara.num_projection > 0) ? true : false;
     U32 filterNum = (useProject) ? 2 : 1;
     ForwardRunInfoMali runInfo;
     runInfo.algorithm = rnncellAlgorithms[0];
@@ -155,7 +160,7 @@ EE rnncell_infer_forward_algorithm_mali(GCLHandle_t handle,
     if (algosNum == 0) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
-    U32 col = (useProject) ? rnnPara.numProjection : rnnPara.numOutput;
+    U32 col = (useProject) ? rnnPara.num_projection : rnnPara.num_outputs;
     stride[0] = col * 4;
     stride[1] = 1;
     stride[2] = 1;
@@ -176,7 +181,7 @@ EE rnncell_infer_forward_algorithm_mali(GCLHandle_t handle,
         stride[2] = ftmDesc[1].dims[2];
         CHECK_STATUS(gclmem_set_desc_padding(
             &filter1->desc, stride, offset, dt, DF_NCHW, GCL_MEM_BUF, CL_MEM_READ_WRITE));
-        stride[0] = rnnPara.numOutput;
+        stride[0] = rnnPara.num_outputs;
         CHECK_STATUS(gclmem_set_desc_padding(
             &bias1->desc, stride, offset, dt, DF_NHWC, GCL_MEM_BUF, CL_MEM_READ_WRITE));
         gcl_create_memory(handle, filter1);
@@ -240,6 +245,7 @@ EE rnncell_infer_forward_algorithm_mali(GCLHandle_t handle,
         CHECK_STATUS(NOT_SUPPORTED);
     }
     *forwardRunInfo = bestRunInfo;
+    gcl_set_runInfo_to_cache(handle, flag, bestRunInfo);
     CHECK_STATUS(gcl_finish(handle));
     gcl_destroy_gclmem(currentX);
     gcl_destroy_gclmem(state);

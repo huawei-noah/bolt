@@ -24,28 +24,23 @@ int checkTest(int argc, char **argv, DataType dt)
 
     DataFormat df = DF_NCHW;
     CheckParamSpec p;
-    p.check_mode = CHECK_EQUAL;
+    p.mode = CHECK_EQUAL;
 
     TensorDesc inDesc = tensor4df(dt, df, in, ic, ih, iw);
     U8 *inputA = ut_input_v(tensorNumElements(inDesc), dt, UT_INIT_RANDOM);
     U8 *inputB = ut_input_v(tensorNumElements(inDesc), dt, UT_INIT_RANDOM);
 
-    Tensor inputTensorA;
-    Tensor inputTensorB;
-    inputTensorA.resize(inDesc);
-    inputTensorB.resize(inDesc);
-    inputTensorA.alloc();
-    inputTensorB.alloc();
-    memcpy(get_ptr_from_tensor(inputTensorA, CPU_GENERAL), inputA, tensorNumBytes(inDesc));
-    memcpy(get_ptr_from_tensor(inputTensorB, CPU_GENERAL), inputB, tensorNumBytes(inDesc));
+    Tensor inputTensorA = Tensor::alloc_sized<CPUMem>(inDesc);
+    Tensor inputTensorB = Tensor::alloc_sized<CPUMem>(inDesc);
+    UNI_MEMCPY(get_ptr_from_tensor(inputTensorA, CPU_GENERAL), inputA, tensorNumBytes(inDesc));
+    UNI_MEMCPY(get_ptr_from_tensor(inputTensorB, CPU_GENERAL), inputB, tensorNumBytes(inDesc));
 
     Tensor outputTensor;
-    Tensor outputTensorRef;
     CHECK_STATUS(
         check_infer_output_size({&inputTensorA, &inputTensorB}, &outputTensor, &UT_CPU_ARCHINFO));
     outputTensor.alloc();
-    outputTensorRef.resize(outputTensor.get_desc());
-    outputTensorRef.alloc();
+    TensorDesc outDesc = outputTensor.get_desc();
+    Tensor outputTensorRef = Tensor::alloc_sized<CPUMem>(outDesc);
 
     if (UT_CHECK) {
         CHECK_STATUS(check(inputTensorA, inputTensorB, p, outputTensor, &UT_CPU_ARCHINFO));
@@ -55,7 +50,7 @@ int checkTest(int argc, char **argv, DataType dt)
 
         // check
         ut_check_v(get_ptr_from_tensor(outputTensor, CPU_GENERAL),
-            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), outputTensor.length(), DT_I32, 0,
+            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), outputTensor.length(), outDesc.dt, 0,
             __FILE__, __LINE__);
     }
 

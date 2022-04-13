@@ -25,9 +25,6 @@ int nonmaxsuppressionTest(int argc, char **argv, DataType dt)
     U32 in1 = atoi(argv[4]);
     U32 ic1 = atoi(argv[5]);
     U32 ilens1 = atoi(argv[6]);
-    // output
-    U32 oh = atoi(argv[7]);
-    U32 ow = atoi(argv[8]);
     // nonMaxSuppressionParamSpec
     U32 max_output_boxes_per_class = atoi(argv[9]);
     F32 iou_threshold = (F32)atof(argv[10]);
@@ -45,11 +42,11 @@ int nonmaxsuppressionTest(int argc, char **argv, DataType dt)
     inputTensors[1] = Tensor::alloc_sized<CPUMem>(input_desc_scores);
     U32 input_len_boxes = tensorNumElements(input_desc_boxes);
     U8 *input_boxes = ut_input_v(input_len_boxes, dt, UT_INIT_RANDOM);
-    memcpy(get_ptr_from_tensor(inputTensors[0], CPU_GENERAL), input_boxes,
+    UNI_MEMCPY(get_ptr_from_tensor(inputTensors[0], CPU_GENERAL), input_boxes,
         tensorNumBytes(input_desc_boxes));
     U32 input_len_scores = tensorNumElements(input_desc_scores);
     U8 *input_scores = ut_input_v(input_len_scores, dt, UT_INIT_RANDOM);
-    memcpy(get_ptr_from_tensor(inputTensors[1], CPU_GENERAL), input_scores,
+    UNI_MEMCPY(get_ptr_from_tensor(inputTensors[1], CPU_GENERAL), input_scores,
         tensorNumBytes(input_desc_scores));
     std::vector<Tensor *> inputTensorsPtr(2);
     inputTensorsPtr[0] = &inputTensors[0];
@@ -60,9 +57,8 @@ int nonmaxsuppressionTest(int argc, char **argv, DataType dt)
         inputTensorsPtr, nonMaxSuppressionParamSpec, &outputTensor, &UT_CPU_ARCHINFO));
     outputTensor.alloc();
     Tensor outputTensorRef = Tensor::alloc_sized<CPUMem>(outputTensor.get_desc());
-    U32 output_len = outputTensor.length();
-    CHECK_REQUIREMENT(input_len_boxes == in0 * ic0 * ilens0 &&
-        input_len_scores == in1 * ic1 * ilens1 && output_len == oh * ow);
+    CHECK_REQUIREMENT(
+        input_len_boxes == in0 * ic0 * ilens0 && input_len_scores == in1 * ic1 * ilens1);
     /*
        You can also change codes and use datas in the following example.
        Command: ./test_non_max_suppression 1 6 4 1 2 6 7 3 3 0.5 0
@@ -90,35 +86,16 @@ int nonmaxsuppressionTest(int argc, char **argv, DataType dt)
             inputTensors, nonMaxSuppressionParamSpec, outputTensorRef, &UT_SERIAL_ARCHINFO));
         // check
         ut_check_v(get_ptr_from_tensor(outputTensor, CPU_GENERAL),
-            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), output_len, dt, 0.05, __FILE__,
-            __LINE__);
+            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), outputTensor.length(), dt, 0.05,
+            __FILE__, __LINE__);
     }
 
-    U32 num_detected_max = max_output_boxes_per_class * ic1;
-    if (dt == DT_F32) {
-        F32 *output_f32 = (F32 *)get_ptr_from_tensor(outputTensor, CPU_GENERAL);
-        int idx = 0;
-        for (U32 i = 0; i < 1 + num_detected_max; i++) {
-            for (int j = 0; j < 3; j++) {
-                printf("%d:%f ", j, output_f32[idx + j]);
-            }
-            printf("\n");
-            idx = idx + 3;
-        }
+    TensorDesc outputDesc = outputTensor.get_desc();
+    I32 *out = (I32 *)get_ptr_from_tensor(outputTensor, CPU_GENERAL);
+    U32 num_detected = outputDesc.dims[1];
+    for (U32 i = 0; i < num_detected; i++) {
+        printf("(%d, %d, %d)\n", out[i * 3], out[i * 3 + 1], out[i * 3 + 2]);
     }
-#ifdef _USE_FP16
-    if (dt == DT_F16) {
-        F16 *output_f16 = (F16 *)get_ptr_from_tensor(outputTensorRef, CPU_GENERAL);
-        int idx = 0;
-        for (U32 i = 0; i < 1 + num_detected_max; i++) {
-            for (int j = 0; j < 3; j++) {
-                printf("%d:%f ", j + 1, output_f16[idx + j]);
-            }
-            printf("\n");
-            idx = idx + 3;
-        }
-    }
-#endif
     free(input_boxes);
     free(input_scores);
     return 0;

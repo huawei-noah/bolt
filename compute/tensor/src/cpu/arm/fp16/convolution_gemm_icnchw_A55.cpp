@@ -42,7 +42,7 @@ EE convolution_gemm_icnchw_A55(TensorDesc inputDesc,
         CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
         it = ft = ot = 1;
         p.dilatedRate_t = p.stride_t = 1;
-        p.padding_before = p.padding_after = 0;
+        p.pad_before = p.pad_after = 0;
     } else if (tensorIs5d(inputDesc)) {
         CHECK_STATUS(tensor5dGet(inputDesc, &idt, &idf, &in, &ic, &it, &ih, &iw));
         CHECK_STATUS(tensor5dGet(filterDesc, &fdt, &fdf, &fn, &fc, &ft, &fh, &fw));
@@ -56,9 +56,9 @@ EE convolution_gemm_icnchw_A55(TensorDesc inputDesc,
     }
 
     oc /= 8;
-    U32 it_pad = it + p.padding_before + p.padding_after;
-    U32 ih_pad = ih + p.padding_top + p.padding_bottom;
-    U32 iw_pad = iw + p.padding_left + p.padding_right;
+    U32 it_pad = it + p.pad_before + p.pad_after;
+    U32 ih_pad = ih + p.pad_top + p.pad_bottom;
+    U32 iw_pad = iw + p.pad_left + p.pad_right;
     I64 K = ic * ft * fh * fw;
     I32 ohow = ot * oh * ow;
     int oc_1 = oc - 1;

@@ -36,13 +36,12 @@ int deconvolutionTest(int argc, char **argv, DataType dt)
     U32 oc = atoi(argv[13]);
     U32 oh = atoi(argv[14]);
     U32 ow = atoi(argv[15]);
-    CHECK_REQUIREMENT(in == 1 && on == 1);
     CHECK_REQUIREMENT(ic % 8 == 0 && oc % 8 == 0);
 
     ActivationParamSpec activationDesc;
     activationDesc.mode = ACTIVATION_NULL;
     ConvolutionParamSpec convParamSpec = createConvolutionParamSpec(group, 1, fh, fw, 1, stride,
-        stride, 0, 0, padding, padding, padding, padding, 1, 1, 1, fn, Convolution_Deconvolution);
+        stride, 0, 0, padding, padding, padding, padding, 1, 1, 1, fn, CONVOLUTION_DECONVOLUTION);
 
     TensorDesc outputDesc;
     TensorDesc inputDesc = tensor4df(dt, DF_NCHWC8, in, ic, ih, iw);
@@ -73,11 +72,14 @@ int deconvolutionTest(int argc, char **argv, DataType dt)
     filterTensor.alloc();
     filterTensorRef.alloc();
     biasTensor.alloc();
-    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, bytesOf(dt) * in * ic * ih * iw);
-    memcpy(get_ptr_from_tensor(inputTensorRef, CPU_GENERAL), input, bytesOf(dt) * in * ic * ih * iw);
-    memcpy(get_ptr_from_tensor(filterTensor, CPU_GENERAL), filter, tensorNumBytes(filterDesc));
-    memcpy(get_ptr_from_tensor(filterTensorRef, CPU_GENERAL), filter, tensorNumBytes(filterDesc));
-    memcpy(get_ptr_from_tensor(biasTensor, CPU_GENERAL), bias, tensorNumBytes(biasDesc));
+    UNI_MEMCPY(
+        get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, bytesOf(dt) * in * ic * ih * iw);
+    UNI_MEMCPY(
+        get_ptr_from_tensor(inputTensorRef, CPU_GENERAL), input, bytesOf(dt) * in * ic * ih * iw);
+    UNI_MEMCPY(get_ptr_from_tensor(filterTensor, CPU_GENERAL), filter, tensorNumBytes(filterDesc));
+    UNI_MEMCPY(
+        get_ptr_from_tensor(filterTensorRef, CPU_GENERAL), filter, tensorNumBytes(filterDesc));
+    UNI_MEMCPY(get_ptr_from_tensor(biasTensor, CPU_GENERAL), bias, tensorNumBytes(biasDesc));
 
     // setup output, bias
     CHECK_STATUS(deconvolution_infer_output_size(

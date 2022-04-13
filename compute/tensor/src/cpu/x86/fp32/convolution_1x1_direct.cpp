@@ -1752,6 +1752,10 @@ EE convolution_1x1_direct(TensorDesc inputDesc,
     CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
     CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
 
+    if (idf == DF_NCHWC16 && ih == 1 && iw == 1) {
+        idf = DF_NCHWC8;
+    }
+
     if ((fdf != DF_NCHWCxN24 && fdf != DF_NCHWCxN32) || (idf != DF_NCHWC8) || (ic % 8 != 0)) {
         CHECK_STATUS(NOT_MATCH);
     }
@@ -1765,13 +1769,16 @@ EE convolution_1x1_direct(TensorDesc inputDesc,
     I32 unrollHwArray[4] = {12, 6, 4, 3};
 
     // get computing params
-    U32 paddingT = convParamSpec.padding_top;
-    U32 paddingB = convParamSpec.padding_bottom;
-    U32 paddingL = convParamSpec.padding_left;
-    U32 paddingR = convParamSpec.padding_right;
+    U32 paddingT = convParamSpec.pad_top;
+    U32 paddingB = convParamSpec.pad_bottom;
+    U32 paddingL = convParamSpec.pad_left;
+    U32 paddingR = convParamSpec.pad_right;
     U32 strideH = convParamSpec.stride_h;
     U32 strideW = convParamSpec.stride_w;
+    U32 phT = (paddingT + strideH - 1) / strideH;
+    U32 phB = (paddingB + strideH - 1) / strideH;
     U32 ohow = oh * ow;
+    U32 ohowMain = (oh - phT - phB) * ow;
     U32 ihiw = ih * iw;
     U32 newIh = (ih + strideH - 1) / strideH;
     U32 newIw = (iw + strideW - 1) / strideW;
@@ -1783,16 +1790,16 @@ EE convolution_1x1_direct(TensorDesc inputDesc,
     U32 ocBlockNums = InferConvDirectOcBlockNum(oc, ocbArray, unrollOc, unrollOcArray);
     U32 ocBBlockNums = BLOCK_OC_DIM / unrollOc;
     U32 alpha = OMP_NUM_THREADS / gcd<U32>(ocBlockNums, OMP_NUM_THREADS);
-    U32 blockHwDim = InferConvBlockHW(ohow, BLOCK_HW_DIM, alpha);
+    U32 blockHwDim = InferConvBlockHW(ohowMain, BLOCK_HW_DIM, alpha);
     blockHwDim = (blockHwDim + unrollHwX - 1) / unrollHwX * unrollHwX;
-    U32 hwBlockNums = CeilDivide(ohow, blockHwDim);
-    if (paddingT != 0 || paddingB != 0 || paddingL != 0 || paddingR != 0) {
+    U32 hwBlockNums = CeilDivide(ohowMain, blockHwDim);
+    if (paddingL != 0 || paddingR != 0) {
         hwBlockNums = oh;
     }
 
-#if defined(_WIN32) && defined(_USE_OPENMP)
+#ifdef _USE_OPENMP
     OpenMPController ompCtr;
-    ompCtr.checkAndSetOpenMP(ohow, BLOCK_HW_DIM, ocBlockNums);
+    ompCtr.checkAndSetOpenMP(ohowMain, BLOCK_HW_DIM, ocBlockNums);
 #endif
 
     // infer kernel params
@@ -1831,7 +1838,7 @@ EE convolution_1x1_direct(TensorDesc inputDesc,
     }
 
 #ifdef _USE_OPENMP
-#pragma omp parallel num_threads(OMP_NUM_THREADS)
+#pragma omp parallel num_threads(OMP_NUM_THREADS) if (ompCtr.useOmp)
     {
 #endif
         F32 *tmpI = inArray;
@@ -1844,14 +1851,15 @@ EE convolution_1x1_direct(TensorDesc inputDesc,
 #ifdef _USE_OPENMP
 #pragma omp for schedule(static)
 #endif
-                for (U32 hc = 0; hc < ih * ic8; hc += strideH) {
-                    U32 c = hc / ih;
-                    U32 h = hc % ih;
-                    for (U32 w = 0; w < iw; w += strideW) {
-                        U32 nh = h / strideH;
-                        U32 nw = w / strideW;
-                        memcpy(tmpI + c * newIw * newIh * SIMDW + (nh * newIw + nw) * SIMDW,
-                            bInArray + c * ihiw * SIMDW + (h * iw + w) * SIMDW, SIMDW * sizeof(F32));
+                for (U32 hc = 0; hc < oh * ic8; ++hc) {
+                    U32 c = hc / oh;
+                    U32 h = hc % oh;
+                    for (U32 w = 0; w < ow; ++w) {
+                        U32 nh = h * strideH;
+                        U32 nw = w * strideW;
+                        UNI_MEMCPY(tmpI + c * ohow * SIMDW + (h * ow + w) * SIMDW,
+                            bInArray + c * ihiw * SIMDW + (nh * iw + nw) * SIMDW,
+                            SIMDW * sizeof(F32));
                     }
                 }
                 paddingT = (paddingT + strideH - 1) / strideH;
@@ -1875,14 +1883,26 @@ EE convolution_1x1_direct(TensorDesc inputDesc,
                     }
 
                     F32 *curI = tmpI + icb * newIw * newIh;
-                    if (paddingT == 0 && paddingB == 0 && paddingL == 0 && paddingR == 0) {
+                    if (phT > 0 || phB > 0) {
+                        U32 minUpper = UNI_MIN((ocbb + ocbSize) * unrollOc, oc);
+                        for (U32 oci = ocbb * unrollOc; oci < minUpper; oci += SIMDW) {
+                            __m256 biasVec = _mm256_load_ps(btmp + oci);
+                            for (U32 hw = 0; hw < phT * ow; ++hw) {
+                                _mm256_storeu_ps(bOutArray + oci * ohow + hw * SIMDW, biasVec);
+                            }
+                            for (U32 hw = (oh - phB) * ow; hw < oh * ow; ++hw) {
+                                _mm256_storeu_ps(bOutArray + oci * ohow + hw * SIMDW, biasVec);
+                            }
+                        }
+                    }
+                    if (paddingL == 0 && paddingR == 0) {
 #ifdef _USE_OPENMP
 #pragma omp for schedule(static)
 #endif
                         for (U32 bIdx = 0; bIdx < hwocBlockNums; ++bIdx) {
                             FTZ;
                             U32 hw = (bIdx / ocbSize) * blockHwDim;
-                            U32 hwSize = UNI_MIN(blockHwDim, ohow - hw);
+                            U32 hwSize = UNI_MIN(blockHwDim, ohowMain - hw);
                             U32 ocBlockIdx = bIdx % ocbSize + ocbb;
                             U32 ocb = GetOcIdx(ocBlockIdx, oc, unrollOc, ocbArray);
                             U32 ocSize = UNI_MIN(unrollOc, oc - ocb);
@@ -1891,8 +1911,8 @@ EE convolution_1x1_direct(TensorDesc inputDesc,
 
                             const F32 *curB = biasArray + ocb;
                             const F32 *curW = filterArray + ocb * ic + icb * ocSize;
-                            F32 *curO = bOutArray + ocb * oh * ow;
-                            F32 *curE = eltwiseInput + ocb * oh * ow;
+                            F32 *curO = bOutArray + ocb * oh * ow + phT * ow * SIMDW;
+                            F32 *curE = eltwiseInput + ocb * oh * ow + phT * ow * SIMDW;
                             U32 ihwSize = 0;
                             for (U32 ihw = hw; ihw < hw + hwSize; ihw += ihwSize) {
                                 if ((hw + hwSize - ihw) >= unrollHw) {
@@ -1913,7 +1933,7 @@ EE convolution_1x1_direct(TensorDesc inputDesc,
 #endif
                         for (U32 bIdx = 0; bIdx < hwocBlockNums; ++bIdx) {
                             FTZ;
-                            U32 h = bIdx / ocbSize;
+                            U32 h = bIdx / ocbSize + phT;
                             U32 ocBlockIdx = bIdx % ocbSize + ocbb;
                             U32 ocb = GetOcIdx(ocBlockIdx, oc, unrollOc, ocbArray);
                             U32 ocSize = UNI_MIN(unrollOc, oc - ocb);
@@ -1952,9 +1972,6 @@ EE convolution_1x1_direct(TensorDesc inputDesc,
         }
 #ifdef _USE_OPENMP
     }
-#ifdef _WIN32
-    ompCtr.resetOpenMP();
-#endif
 #endif
     return SUCCESS;
 }

@@ -61,12 +61,12 @@ public:
         U32 weightBytes = modelWeightTensor.bytes();
         modelWeightTensor.alloc();
         if (modelPtr != nullptr) {
-            memcpy(
+            UNI_MEMCPY(
                 ((CpuMemory *)(modelWeightTensor.get_memory()))->get_ptr(), modelPtr, weightBytes);
             *modelPtrShared = std::shared_ptr<U8>(*modelPtrShared, modelPtr + weightBytes);
         } else {
             auto curOpWs = this->get_weightspec();
-            memcpy(((CpuMemory *)(modelWeightTensor.get_memory()))->get_ptr(), curOpWs.weight,
+            UNI_MEMCPY(((CpuMemory *)(modelWeightTensor.get_memory()))->get_ptr(), curOpWs.weight,
                 weightBytes);
         }
         this->weightTensors.push_back(modelWeightTensor);

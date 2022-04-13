@@ -14,11 +14,10 @@
 #ifndef _H_BLAS_MATRIX_TRANSPOSE
 #define _H_BLAS_MATRIX_TRANSPOSE
 
-#include <string.h>
 #include <arm_neon.h>
 #include "data_type.h"
 
-#ifndef __aarch64__        
+#ifndef _USE_FP16
 inline void matrix1_trans_int8(U32 size, U32 blockK, U32 K, INT8 *src, INT8 *dst)
 {
     INT8 *src1 = src;
@@ -33,7 +32,7 @@ inline void matrix1_trans_int8(U32 size, U32 blockK, U32 K, INT8 *src, INT8 *dst
     }
     U32 K4 = pad_to_4_multiple(blockK);
     for (U32 i = 0; i < K4 - blockK; i++) {
-        memset(dst, 0, size * sizeof(INT8));
+        UNI_MEMSET(dst, 0, size * sizeof(INT8));
         dst += size;
     }
 }
@@ -44,13 +43,13 @@ inline void matrix2_trans_int8(U32 size, U32 blockK, U32 M, INT8 *src, INT8 *dst
         if (i % 16 == 0) {
             __builtin_prefetch(src + 16);
         }
-        memcpy(dst, src, size * sizeof(INT8));
+        UNI_MEMCPY(dst, src, size * sizeof(INT8));
         dst += size;
         src += M;
     }
     U32 K4 = pad_to_4_multiple(blockK);
     for (U32 i = 0; i < K4 - blockK; i++) {
-        memset(dst, 0, size * sizeof(INT8));
+        UNI_MEMSET(dst, 0, size * sizeof(INT8));
         dst += size;
     }
 }
@@ -67,19 +66,19 @@ inline void matrix1_trans_n8(U32 blockK, U32 K, INT8 *src, INT8 *dst)
     U32 k = 0;
     for (; k < blockK - 7; k += 8) {
         if (k % 64 == 0) {
-            asm volatile("prfm pldl2keep, [%[in0], 64]\n"
-                         "prfm pldl2keep, [%[in1], 64]\n"
-                         "prfm pldl2keep, [%[in2], 64]\n"
-                         "prfm pldl2keep, [%[in3], 64]\n"
-                         "prfm pldl2keep, [%[in4], 64]\n"
-                         "prfm pldl2keep, [%[in5], 64]\n"
-                         "prfm pldl2keep, [%[in6], 64]\n"
-                         "prfm pldl2keep, [%[in7], 64]\n"
-                         : [in0] "+r"(in[0]), [in1] "+r"(in[1]), [in2] "+r"(in[2]),
-                         [in3] "+r"(in[3]), [in4] "+r"(in[4]), [in5] "+r"(in[5]), [in6] "+r"(in[6]),
-                         [in7] "+r"(in[7])
-                         :
-                         : "memory", "cc");
+            asm volatile(
+                "prfm pldl2keep, [%[in0], 64]\n"
+                "prfm pldl2keep, [%[in1], 64]\n"
+                "prfm pldl2keep, [%[in2], 64]\n"
+                "prfm pldl2keep, [%[in3], 64]\n"
+                "prfm pldl2keep, [%[in4], 64]\n"
+                "prfm pldl2keep, [%[in5], 64]\n"
+                "prfm pldl2keep, [%[in6], 64]\n"
+                "prfm pldl2keep, [%[in7], 64]\n"
+                : [in0] "+r"(in[0]), [in1] "+r"(in[1]), [in2] "+r"(in[2]), [in3] "+r"(in[3]),
+                [in4] "+r"(in[4]), [in5] "+r"(in[5]), [in6] "+r"(in[6]), [in7] "+r"(in[7])
+                :
+                : "memory", "cc");
         }
         asm volatile("ldr d0, [%[in0]], 8\n"
                      "ldr d1, [%[in1]], 8\n"
@@ -199,27 +198,27 @@ inline void matrix2_trans_m12(U32 blockK, U32 M, INT8 *src, INT8 *dst)
         }
         src1 += offset;
 
-        asm volatile("ldr d0, [%[in0]]\n"
-                     "ldr d1, [%[in1]]\n"
-                     "ldr d2, [%[in2]]\n"
-                     "ldr d3, [%[in3]]\n"
-                     "zip1 v4.8b, v0.8b, v1.8b\n"
-                     "zip2 v5.8b, v0.8b, v1.8b\n"
-                     "zip1 v6.8b, v2.8b, v3.8b\n"
-                     "zip2 v7.8b, v2.8b, v3.8b\n"
+        asm volatile(
+            "ldr d0, [%[in0]]\n"
+            "ldr d1, [%[in1]]\n"
+            "ldr d2, [%[in2]]\n"
+            "ldr d3, [%[in3]]\n"
+            "zip1 v4.8b, v0.8b, v1.8b\n"
+            "zip2 v5.8b, v0.8b, v1.8b\n"
+            "zip1 v6.8b, v2.8b, v3.8b\n"
+            "zip2 v7.8b, v2.8b, v3.8b\n"
 
-                     "zip1 v0.4h, v4.4h, v6.4h\n"
-                     "zip2 v1.4h, v4.4h, v6.4h\n"
-                     "zip1 v2.4h, v5.4h, v7.4h\n"
-                     "zip2 v3.4h, v5.4h, v7.4h\n"
-                     "str d0, [%[out]]\n"
-                     "str d1, [%[out], 8]\n"
-                     "str d2, [%[out], 16]\n"
-                     "str d3, [%[out], 24]\n"
-                     :
-                     : [in0] "r"(in12[0]), [in1] "r"(in12[1]), [in2] "r"(in12[2]),
-                     [in3] "r"(in12[3]), [out] "r"(dst1)
-                     : "memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7");
+            "zip1 v0.4h, v4.4h, v6.4h\n"
+            "zip2 v1.4h, v4.4h, v6.4h\n"
+            "zip1 v2.4h, v5.4h, v7.4h\n"
+            "zip2 v3.4h, v5.4h, v7.4h\n"
+            "str d0, [%[out]]\n"
+            "str d1, [%[out], 8]\n"
+            "str d2, [%[out], 16]\n"
+            "str d3, [%[out], 24]\n"
+            :
+            : [in0] "r"(in12[0]), [in1] "r"(in12[1]), [in2] "r"(in12[2]), [in3] "r"(in12[3]), [out] "r"(dst1)
+            : "memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7");
         for (U32 j = 0; j < 4; j++) {
             for (U32 k = 0; k < 4; k++) {
                 dst1[32 + j * 4 + k] = in12[k][8 + j];
@@ -241,27 +240,27 @@ inline void matrix2_trans_m12(U32 blockK, U32 M, INT8 *src, INT8 *dst)
             }
         }
 
-        asm volatile("ldr d0, [%[in0]]\n"
-                     "ldr d1, [%[in1]]\n"
-                     "ldr d2, [%[in2]]\n"
-                     "ldr d3, [%[in3]]\n"
-                     "zip1 v4.8b, v0.8b, v1.8b\n"
-                     "zip2 v5.8b, v0.8b, v1.8b\n"
-                     "zip1 v6.8b, v2.8b, v3.8b\n"
-                     "zip2 v7.8b, v2.8b, v3.8b\n"
+        asm volatile(
+            "ldr d0, [%[in0]]\n"
+            "ldr d1, [%[in1]]\n"
+            "ldr d2, [%[in2]]\n"
+            "ldr d3, [%[in3]]\n"
+            "zip1 v4.8b, v0.8b, v1.8b\n"
+            "zip2 v5.8b, v0.8b, v1.8b\n"
+            "zip1 v6.8b, v2.8b, v3.8b\n"
+            "zip2 v7.8b, v2.8b, v3.8b\n"
 
-                     "zip1 v0.4h, v4.4h, v6.4h\n"
-                     "zip2 v1.4h, v4.4h, v6.4h\n"
-                     "zip1 v2.4h, v5.4h, v7.4h\n"
-                     "zip2 v3.4h, v5.4h, v7.4h\n"
-                     "str d0, [%[out]]\n"
-                     "str d1, [%[out], 8]\n"
-                     "str d2, [%[out], 16]\n"
-                     "str d3, [%[out], 24]\n"
-                     :
-                     : [in0] "r"(in12[0]), [in1] "r"(in12[1]), [in2] "r"(in12[2]),
-                     [in3] "r"(in12[3]), [out] "r"(dst1)
-                     : "memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7");
+            "zip1 v0.4h, v4.4h, v6.4h\n"
+            "zip2 v1.4h, v4.4h, v6.4h\n"
+            "zip1 v2.4h, v5.4h, v7.4h\n"
+            "zip2 v3.4h, v5.4h, v7.4h\n"
+            "str d0, [%[out]]\n"
+            "str d1, [%[out], 8]\n"
+            "str d2, [%[out], 16]\n"
+            "str d3, [%[out], 24]\n"
+            :
+            : [in0] "r"(in12[0]), [in1] "r"(in12[1]), [in2] "r"(in12[2]), [in3] "r"(in12[3]), [out] "r"(dst1)
+            : "memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7");
         for (U32 j = 0; j < 4; j++) {
             for (U32 k = 0; k < 4; k++) {
                 dst1[32 + j * 4 + k] = in12[k][8 + j];

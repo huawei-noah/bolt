@@ -11,7 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string.h>
 #include "cpu/x86/tensor_computing_x86.h"
 #ifdef _USE_FP32
 #include "cpu/x86/fp32/tensor_computing_fp32.h"
@@ -52,14 +51,23 @@ EE convolution_infer_forward_algorithm_x86(TensorDesc inputDesc,
     U32 group = convParamSpec.group;
     U32 strideH = convParamSpec.stride_h;
     U32 strideW = convParamSpec.stride_w;
-    U32 paddingT = convParamSpec.padding_top;
-    U32 paddingB = convParamSpec.padding_bottom;
-    U32 paddingL = convParamSpec.padding_left;
-    U32 paddingR = convParamSpec.padding_right;
+    U32 paddingT = convParamSpec.pad_top;
+    U32 paddingB = convParamSpec.pad_bottom;
+    U32 paddingL = convParamSpec.pad_left;
+    U32 paddingR = convParamSpec.pad_right;
+    U32 dilateH = convParamSpec.dilatedRate_h;
+    U32 dilateW = convParamSpec.dilatedRate_w;
 
     if ((targetDataType != DT_I8) && (targetDataType != DT_U8_Q) &&
         ((idf != DF_NCHWC8) || (ic / group % 8 != 0))) {
         *algorithm = CONVOLUTION_ALGORITHM_GEMM_ICNCHW;
+        return SUCCESS;
+    }
+
+    if ((targetDataType == DT_F32) && (idf == DF_NCHWC8) && (group == 1) && (fh == 3) &&
+        (fw == 3) && (dilateH == 1) && (dilateW == 1) && (oh > 8) && (ow > 8) && (strideH == 1) &&
+        (strideW == 1)) {
+        *algorithm = CONVOLUTION_ALGORITHM_WINOGRAD;
         return SUCCESS;
     }
 
@@ -100,6 +108,10 @@ EE convolution_transform_filter_bytes_x86(TensorDesc filterDesc,
             break;
         case CONVOLUTION_ALGORITHM_POINTWISE:
             *bytes = fnPadding * fcPadding;
+            break;
+        case CONVOLUTION_ALGORITHM_WINOGRAD:
+            *bytes =
+                fnPadding * fcPadding * 36 + 16 * 32 * 18;  // bolckIc:16, blockOc:32, weight:3*6=18
             break;
         default:
             return NOT_SUPPORTED;
@@ -205,8 +217,7 @@ EE convolution_x86(TensorDesc inputDesc,
     U32 icGroupSize = inputDesc.dims[dataChannelAxis] / group;
 
     void *inputTransform;
-    if ((inputDesc.df == DF_NCHWC8 && icGroupSize % 8 != 0) ||
-        (inputDesc.df == DF_NCHWC16 && icGroupSize % 16 != 0)) {
+    if ((inputDesc.df == DF_NCHWC8 && icGroupSize % 8 != 0)) {
         TensorDesc tmpInputDesc = inputDesc;
         tmpInputDesc.df = DF_NCHW;
         transformToNCHW(inputDesc, input, tmpInputDesc, tmp);
@@ -248,9 +259,10 @@ EE convolution_x86(TensorDesc inputDesc,
 #endif
 #ifdef _USE_INT8
             case DT_I8: {
-                ret = convolution_int8(tmpInputDesc, (UINT8 *)tmpInput, tmpFilterDesc,
-                    (INT8 *)tmpFilter, convParamSpec, algorithm, tmpBiasDesc, (I32 *)tmpBias,
-                    tmpBytes, tmp, tmpOutputDesc, tmpOutput, (F32 *)scale, activationDesc, arch);
+                ret = convolution_int8(tmpInputDesc, (UINT8 *)tmpInput, (F32 *)eltwiseInput,
+                    tmpFilterDesc, (INT8 *)tmpFilter, convParamSpec, algorithm, tmpBiasDesc,
+                    (F32 *)tmpBias, tmpBytes, tmp, tmpOutputDesc, tmpOutput, (F32 *)scale,
+                    activationDesc, arch);
                 break;
             }
 #endif

@@ -80,7 +80,7 @@ public:
                      j < this->outputFrameSize - this->slide_size; j++) {
                     U8 *dst = output + (i * this->outputFrameSize + j) * tileSize;
                     U8 *src = dst + tileSize;
-                    memcpy(dst, src, tileSize);
+                    UNI_MEMCPY(dst, src, tileSize);
                 }
             }
         }
@@ -104,8 +104,8 @@ public:
             ((CpuMemory *)spliceResult.get_memory())->set_shared_ptr(spliceBuffer);
 
             EmbedParamSpec embedParamSpec;
-            embedParamSpec.input_dim = this->inputFrameSize;
-            embedParamSpec.num_output = inputDesc.dims[0];
+            embedParamSpec.num_inputs = this->inputFrameSize;
+            embedParamSpec.num_outputs = inputDesc.dims[0];
             embedParamSpec.transpose = false;
             CHECK_STATUS(embedding(this->index, inputTensor, embedParamSpec, this->temp,
                 spliceResult, &this->archInfo));

@@ -31,72 +31,64 @@ int resizeTest(int argc, char *argv[], DataType dt)
 
     CHECK_REQUIREMENT(in == 1 && on == 1);
 
-    ArchInfo archInfo;
-    archInfo.arch = MALI;
-    ArchInfo archInfo_org;
-    archInfo_org.arch = CPU_GENERAL;
-
-    TensorDesc inputDesc_cpu, inputDesc_gpu, outputDesc_cpu, outputDesc_gpu;
-    inputDesc_cpu = tensor4df(dt, DF_NCHW, in, ic, ih, iw);
-    inputDesc_gpu = tensor4df(dt, DF_NCHW, in, ic, ih, iw);
-
-    DataType paramDT = DT_U32;
-    U32 scales[2];
-    scales[0] = oh;
-    scales[1] = ow;
+    ResizeParamSpec p;
+    //p.mode = RESIZE_LINEAR;
+    p.mode = RESIZE_NEAREST;
+    p.trans_mode = COORDINATE_TRANS_ASYMMETRIC;
+    p.num_scales = 0;
+    p.num_sizes = 2;
+    p.sizes[0] = oh;
+    p.sizes[1] = ow;
 
     // setup input
+    TensorDesc inputDesc = tensor4df(dt, DF_NCHW, in, ic, ih, iw);
     U8 *input_cpu = ut_input_v(in * ic * ih * iw, dt, UT_INIT_RANDOM);
-
-    Tensor inputTensorCpu;
-    inputTensorCpu.resize(inputDesc_cpu);
-    inputTensorCpu.alloc();
-    memcpy(get_ptr_from_tensor(inputTensorCpu, UT_ARCH), input_cpu, tensorNumBytes(inputDesc_cpu));
+    Tensor inputTensorCpu = Tensor::alloc_sized<CPUMem>(inputDesc);
+    UNI_MEMCPY(get_ptr_from_tensor(inputTensorCpu, UT_ARCH), input_cpu, tensorNumBytes(inputDesc));
     Tensor outputTensorCpu;
-    Tensor tmpTensorCpu;
-    U32 outputBytes;
-    CHECK_STATUS(resize_infer_output_size(
-        &inputTensorCpu, paramDT, scales, &outputTensorCpu, &outputBytes, &archInfo_org));
+    CHECK_STATUS(
+        resize_infer_output_size(&inputTensorCpu, p, &outputTensorCpu, &UT_SERIAL_ARCHINFO));
     outputTensorCpu.alloc();
+    U32 cpuTmpBytes = 0;
+    CHECK_STATUS(resize_infer_forward_tmp_bytes(
+        inputTensorCpu, p, outputTensorCpu, &cpuTmpBytes, &UT_SERIAL_ARCHINFO));
+    Tensor tmpTensorCpu = Tensor::alloc_sized<CPUMem>(tensor1d(DT_I8, cpuTmpBytes));
 
-    ResizeParamSpec p;
-    //p.mode = LINEAR;
-    p.mode = NEAREST;
-    p.trans_mode = ASYMMETRIC;
     // CPU output
-    CHECK_STATUS(resize(inputTensorCpu, tmpTensorCpu, outputTensorCpu, p, &archInfo_org));
-    std::shared_ptr<GCLHandle> handleSharedPtr = OCLContext::getInstance().handle;
+    CHECK_STATUS(resize(inputTensorCpu, p, tmpTensorCpu, outputTensorCpu, &UT_SERIAL_ARCHINFO));
 
+    ArchInfo archInfo;
+    archInfo.arch = MALI;
+    std::shared_ptr<GCLHandle> handleSharedPtr = OCLContext::getInstance().handle;
     GCLHandle_t handle = handleSharedPtr.get();
     std::vector<GCLKernelInfo> kernelVec;
     handle->kernelVec = &kernelVec;
-    Tensor inputTensor = Tensor(OCLMem);
-    Tensor outputTensor = Tensor(OCLMem);
-    Tensor tmpTensor = Tensor(OCLMem);
-    inputTensor.resize(inputDesc_gpu);
-
     MaliPara maliPara;
     maliPara.handle = handle;
     archInfo.archPara = &maliPara;
 
-    CHECK_STATUS(resize_infer_output_size(
-        &inputTensor, paramDT, scales, &outputTensor, &outputBytes, &archInfo));
+    Tensor inputTensor = Tensor(OCLMem);
+    Tensor outputTensor = Tensor(OCLMem);
+    Tensor tmpTensor = Tensor(OCLMem);
+    inputTensor.resize(inputDesc);
+
+    CHECK_STATUS(resize_infer_output_size(&inputTensor, p, &outputTensor, &archInfo));
     U32 maxBytes = 0;
     U32 tmpBytes = 0;
 
     GCLMem_t output = alloc(outputTensor);
     GCLMem_t input = alloc(inputTensor);
     CHECK_STATUS(gcl_fill_memory_zero(handle, input));
-    outputDesc_gpu = outputTensor.get_desc();
+    TensorDesc outputDesc_gpu = outputTensor.get_desc();
     U8 *output_gpu = ut_input_v(on * oc * oh * ow, dt, UT_INIT_RANDOM);
-    tmpBytes = tensorNumBytes(inputDesc_gpu);
+    tmpBytes = tensorNumBytes(inputDesc);
     maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
     tmpBytes = tensorNumBytes(outputDesc_gpu);
     maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
     GCLMem_t tmpbuf = alloc_bytes(tmpTensor, maxBytes);
-    CHECK_STATUS(ocl_set_input(handle, input, inputDesc_gpu, input_cpu, tmpbuf, true));
+    CHECK_STATUS(ocl_set_input(handle, input, inputDesc, input_cpu, tmpbuf, true));
 
-    CHECK_STATUS(resize(inputTensor, tmpTensor, outputTensor, p, &archInfo));
+    CHECK_STATUS(resize(inputTensor, p, tmpTensor, outputTensor, &archInfo));
     /*warp up*/
     UNI_INFO_LOG("warm up gpu:\n")
     for (U32 i = 0; i < 2; i++) {

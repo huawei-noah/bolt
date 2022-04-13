@@ -25,20 +25,20 @@ int rnnTest(int argc, char **argv, DataType dt, RNNMode mode)
     RNNParamSpec rnnParamSpec;
     rnnParamSpec.mode = mode;
     rnnParamSpec.steps = step;
-    rnnParamSpec.biDirection = false;
-    rnnParamSpec.numOutput = hDim;
-    rnnParamSpec.numProjection = 0;
-    rnnParamSpec.forgetBias = 1.0;
-    rnnParamSpec.activationMode = ACTIVATION_TANH;
-    rnnParamSpec.zoneoutCell = 0;
-    rnnParamSpec.zoneoutOutput = 0;
+    rnnParamSpec.bi_direction = false;
+    rnnParamSpec.num_outputs = hDim;
+    rnnParamSpec.num_projection = 0;
+    rnnParamSpec.forget_bias = 1.0;
+    rnnParamSpec.activation_type = ACTIVATION_TANH;
+    rnnParamSpec.zoneout_cell = 0;
+    rnnParamSpec.zoneout_output = 0;
 
     U32 weightNum = 1;
     U32 biasNum = 1;
     int factor = 0;
     switch (mode) {
         case RNN_LSTM:
-            rnnParamSpec.numProjection = 1024;
+            rnnParamSpec.num_projection = 1024;
             factor = 4;
             break;
         case RNN_GRU:
@@ -52,39 +52,39 @@ int rnnTest(int argc, char **argv, DataType dt, RNNMode mode)
             return 1;
     }
     F32 threshold = 10;
-    if (rnnParamSpec.numProjection > 0) {
+    if (rnnParamSpec.num_projection > 0) {
         weightNum++;
         biasNum++;
         threshold = 40;
     }
 
     if (rnnParamSpec.mode != RNN_LSTM) {
-        rnnParamSpec.numProjection = 0;
-        rnnParamSpec.forgetBias = 0;
+        rnnParamSpec.num_projection = 0;
+        rnnParamSpec.forget_bias = 0;
     }
 
-    U32 column = (rnnParamSpec.numProjection > 0) ? rnnParamSpec.numProjection
-                                                  : rnnParamSpec.numOutput;
+    U32 column = (rnnParamSpec.num_projection > 0) ? rnnParamSpec.num_projection
+                                                   : rnnParamSpec.num_outputs;
     TensorDesc inputDesc = tensor3df(dt, DF_MTK, batch, step, xDim);
     Tensor inputTensor;
     inputTensor.resize(inputDesc);
     inputTensor.alloc();
     U32 inputLength = batch * step * xDim;
     U8 *input = ut_input_v(inputLength, dt, UT_INIT_RANDOM);
-    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inputDesc));
+    UNI_MEMCPY(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inputDesc));
 
     U32 tmpBytes;
     std::vector<TensorDesc> filterDesc(2), biasDesc(2);
     filterDesc[0] = tensor2df(dt, DF_NK, factor * column, xDim + hDim);
-    filterDesc[1] = tensor2df(dt, DF_NK, rnnParamSpec.numOutput, rnnParamSpec.numProjection);
+    filterDesc[1] = tensor2df(dt, DF_NK, rnnParamSpec.num_outputs, rnnParamSpec.num_projection);
     biasDesc[0] = tensor1d(dt, column * factor);
-    biasDesc[1] = tensor1d(dt, rnnParamSpec.numOutput);
+    biasDesc[1] = tensor1d(dt, rnnParamSpec.num_outputs);
     std::vector<Tensor> filterTensor(weightNum), biasTensor(biasNum);
     for (U32 i = 0; i < weightNum; i++) {
         filterTensor[i].resize(filterDesc[i]);
         filterTensor[i].alloc();
         U8 *filter = ut_input_v(tensorNumBytes(filterDesc[i]) / bytesOf(dt), dt, UT_INIT_RANDOM);
-        memcpy(get_ptr_from_tensor(filterTensor[i], CPU_GENERAL), filter,
+        UNI_MEMCPY(get_ptr_from_tensor(filterTensor[i], CPU_GENERAL), filter,
             tensorNumBytes(filterDesc[i]));
         free(filter);
     }
@@ -93,7 +93,8 @@ int rnnTest(int argc, char **argv, DataType dt, RNNMode mode)
         biasTensor[i].resize(biasDesc[i]);
         biasTensor[i].alloc();
         U8 *bias = ut_input_v(tensorNumBytes(biasDesc[i]) / bytesOf(dt), dt, UT_INIT_RANDOM);
-        memcpy(get_ptr_from_tensor(biasTensor[i], CPU_GENERAL), bias, tensorNumBytes(biasDesc[i]));
+        UNI_MEMCPY(
+            get_ptr_from_tensor(biasTensor[i], CPU_GENERAL), bias, tensorNumBytes(biasDesc[i]));
         free(bias);
     }
 
@@ -140,12 +141,12 @@ int rnnTest(int argc, char **argv, DataType dt, RNNMode mode)
     std::vector<Tensor> outputTensorRefVec(1, outputTensorRef);
     std::vector<Tensor> tmpTensorVec(1, tmpTensor);
     if (UT_CHECK) {
-        memset(get_ptr_from_tensor(tmpTensor, UT_CPU_ARCHINFO.arch), 0, tmpBytes);
+        UNI_MEMSET(get_ptr_from_tensor(tmpTensor, UT_CPU_ARCHINFO.arch), 0, tmpBytes);
         CHECK_STATUS(rnn(inputTensorVec, ftmTensor, biasTensor, rnnParamSpec, tmpTensorVec,
             outputTensorVec, &UT_CPU_ARCHINFO));
 
         // naive implement
-        memset(get_ptr_from_tensor(tmpTensor, UT_CPU_ARCHINFO.arch), 0, tmpBytes);
+        UNI_MEMSET(get_ptr_from_tensor(tmpTensor, UT_CPU_ARCHINFO.arch), 0, tmpBytes);
         CHECK_STATUS(rnn(inputTensorVec, ftmTensorRef, biasTensor, rnnParamSpec, tmpTensorVec,
             outputTensorRefVec, &UT_SERIAL_ARCHINFO));
 
@@ -172,7 +173,7 @@ int rnnTest(int argc, char **argv, DataType dt, RNNMode mode)
     double hxDim = hDim + xDim;
     double ops = 1.0 * batch * step *
         (2.0 * hxDim * column * factor + column * factor +
-            rnnParamSpec.numProjection * rnnParamSpec.numOutput);
+            rnnParamSpec.num_projection * rnnParamSpec.num_outputs);
     ut_log(dt, buffer, ops, time);
 
     free(input);

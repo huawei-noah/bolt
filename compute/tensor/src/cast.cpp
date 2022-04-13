@@ -10,24 +10,25 @@
 // WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 #include "tensor_computing.h"
+#ifdef _USE_CPU
+#include "cpu/tensor_computing_cpu.h"
+#endif
 #ifdef _USE_GPU
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
 
 EE cast_infer_output_size(
-    Tensor *inputTensor, Tensor *outputTensor, CastParamSpec p, ArchInfo_t archInfo)
+    Tensor *inputTensor, CastParamSpec p, Tensor *outputTensor, ArchInfo_t archInfo)
 {
-    if (inputTensor == nullptr) {
-        CHECK_STATUS(NULL_POINTER);
-    }
-    if (outputTensor == nullptr) {
-        CHECK_STATUS(NULL_POINTER);
+    if (inputTensor == nullptr || outputTensor == nullptr) {
+        return NULL_POINTER;
     }
     TensorDesc inputDesc = inputTensor->get_desc();
     TensorDesc outputDesc = outputTensor->get_desc();
     outputDesc = inputDesc;
-    outputDesc.dt = p.targetDt;
+    outputDesc.dt = p.dt;
     if (IS_GPU(archInfo->arch)) {
 #ifdef _USE_GPU
         if (outputDesc.dt != DT_I32 && outputDesc.dt != DT_F16) {
@@ -35,107 +36,29 @@ EE cast_infer_output_size(
         }
 #endif
     }
+#ifdef _USE_CPU
+    if (tensorIsShape(inputDesc)) {
+        outputDesc.dt = DT_U32;
+    }
+#endif
     outputTensor->resize(outputDesc);
     return SUCCESS;
 }
 
-template <typename TI, typename TO>
-static EE diffSourceCastKernel(U32 len, TI *inputPtr, TO *outputPtr)
-{
-    for (U32 i = 0; i < len; ++i) {
-        outputPtr[i] = (TO)(inputPtr[i]);
-    }
-    return SUCCESS;
-}
-
-template <typename T>
-static EE diffSourceCast(TensorDesc inputDesc, T *inputPtr, void *outputPtr, CastParamSpec p)
-{
-    EE ret = SUCCESS;
-    U32 len = tensorNumElements(inputDesc);
-    switch (p.targetDt) {
-        case DT_I32: {
-            diffSourceCastKernel<T, I32>(len, inputPtr, (I32 *)outputPtr);
-            break;
-        }
-        case DT_U32: {
-            diffSourceCastKernel<T, U32>(len, inputPtr, (U32 *)outputPtr);
-            break;
-        }
-#ifdef _USE_FP32
-        case DT_F32: {
-            diffSourceCastKernel<T, F32>(len, inputPtr, (F32 *)outputPtr);
-            break;
-        }
-#endif
-#ifdef _USE_FP16
-        case DT_F16: {
-            diffSourceCastKernel<T, F16>(len, inputPtr, (F16 *)outputPtr);
-            break;
-        }
-#endif
-        case DT_U8: {
-            diffSourceCastKernel<T, U8>(len, inputPtr, (U8 *)outputPtr);
-            break;
-        }
-        case DT_I8: {
-            diffSourceCastKernel<T, INT8>(len, inputPtr, (INT8 *)outputPtr);
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
-}
-
-EE cast(Tensor inputTensor, Tensor outputTensor, CastParamSpec p, ArchInfo_t archInfo)
+EE cast(Tensor inputTensor, CastParamSpec p, Tensor outputTensor, ArchInfo_t archInfo)
 {
     auto arch = archInfo->arch;
     TensorDesc inputDesc = inputTensor.get_desc();
     void *input = get_ptr_from_tensor(inputTensor, arch);
+    TensorDesc outputDesc = outputTensor.get_desc();
     void *output = get_ptr_from_tensor(outputTensor, arch);
-
     EE ret = NOT_SUPPORTED;
     if (IS_CPU(arch)) {
 #ifdef _USE_CPU
-        switch (inputDesc.dt) {
-#ifdef _USE_FP32
-            case DT_F32: {
-                ret = diffSourceCast<F32>(inputDesc, (F32 *)input, output, p);
-                break;
-            }
-#endif
-#ifdef _USE_FP16
-            case DT_F16: {
-                ret = diffSourceCast<F16>(inputDesc, (F16 *)input, output, p);
-                break;
-            }
-#endif
-            case DT_U32: {
-                ret = diffSourceCast<U32>(inputDesc, (U32 *)input, output, p);
-                break;
-            }
-            case DT_I32: {
-                ret = diffSourceCast<I32>(inputDesc, (I32 *)input, output, p);
-                break;
-            }
-            case DT_U8: {
-                ret = diffSourceCast<U8>(inputDesc, (U8 *)input, output, p);
-                break;
-            }
-            case DT_I8: {
-                ret = diffSourceCast<INT8>(inputDesc, (INT8 *)input, output, p);
-                break;
-            }
-            default:
-                ret = NOT_SUPPORTED;
-                break;
-        }
+        ret = cast_cpu(inputDesc, input, outputDesc, output);
 #endif
 #ifdef _USE_GPU
     } else if (IS_GPU(arch)) {
-        TensorDesc outputDesc = outputTensor.get_desc();
         ret = cast_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc, (GCLMem_t)input, p,
             outputDesc, (GCLMem_t)output);
 #endif

@@ -19,4 +19,16 @@
 
 EE resize_nearest_cpu(
     TensorDesc inputDesc, void *input, ResizeParamSpec p, TensorDesc outputDesc, void *output);
+
+EE grid_sample_infer_output_size_cpu(
+    TensorDesc inputDesc, TensorDesc gridDesc, TensorDesc *outputDesc);
+
+EE grid_sample_cpu(TensorDesc inputDesc,
+    void *input,
+    TensorDesc gridDesc,
+    void *grid,
+    GridSampleParamSpec p,
+    void *tmp,
+    TensorDesc outputDesc,
+    void *output);
 #endif

@@ -18,6 +18,9 @@
 #ifdef _USE_NEON
 #include "cpu/arm/blas_arm.h"
 #endif
+#ifdef _USE_X86
+#include "cpu/x86/blas_x86.h"
+#endif
 
 EE vector_vector_axpby(
     F32 a, TensorDesc xDesc, const void *x, F32 b, TensorDesc yDesc, void *y, Arch arch)
@@ -45,8 +48,12 @@ EE vector_vector_axpby(
         ret = axpby_general(yLen, yDataType, a, x, b, y);
 #endif
 #ifdef _USE_NEON
-    } else {
+    } else if (IS_ARM(arch)) {
         ret = axpby_arm(yLen, yDataType, a, x, b, y, arch);
+#endif
+#ifdef _USE_X86
+    } else if (IS_X86(arch)) {
+        ret = axpby_x86(yLen, yDataType, a, x, b, y);
 #endif
     }
     return ret;

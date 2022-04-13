@@ -378,11 +378,7 @@ int main()
     if (boltEnv == NULL) {
         UNI_ERROR_LOG("BOLT_ROOT env value has not been set successfully\n");
     };
-    std::string boltPath = boltEnv;
-    CI8 lastFlag = boltPath[boltPath.length() - 1];
-    if (strcmp(&lastFlag, "/") != 0) {
-        boltPath += "/";
-    }
+    std::string boltPath = boltEnv + std::string("/");
     std::string tensorComputingClPath = "compute/tensor/src/gpu/mali/cl/";
     std::string tensorComputingClPathQc = "compute/tensor/src/gpu/mali/cl/qualcomm/";
     std::string imageClPath = "compute/image/src/gpu/mali/cl/";

@@ -12,7 +12,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include <vector>
-#include <string.h>
 
 #include "cpu/tensor_computing_cpu.h"
 
@@ -33,7 +32,7 @@ EE split_cpu(TensorDesc inputDesc,
         if (nullptr == (*output)[i]) {
             CHECK_STATUS(NULL_POINTER);
         }
-        memcpy((*output)[i], input, tensorNumBytes(outputDesc[i]));
+        UNI_MEMCPY((*output)[i], input, tensorNumBytes(outputDesc[i]));
     }
     return SUCCESS;
 }

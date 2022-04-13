@@ -57,11 +57,11 @@ int detectionoutputTest(int argc, char **argv, DataType dt)
     U8 *input_loc = ut_input_v(input_len_loc, dt, UT_INIT_RANDOM);
     U8 *input_conf = ut_input_v(input_len_conf, dt, UT_INIT_RANDOM);
     U8 *input_priorbox = ut_input_v(input_len_priorbox, dt, UT_INIT_RANDOM);
-    memcpy(get_ptr_from_tensor(inputTensor_loc, CPU_GENERAL), input_loc,
+    UNI_MEMCPY(get_ptr_from_tensor(inputTensor_loc, CPU_GENERAL), input_loc,
         tensorNumBytes(inputDesc_loc));
-    memcpy(get_ptr_from_tensor(inputTensor_conf, CPU_GENERAL), input_conf,
+    UNI_MEMCPY(get_ptr_from_tensor(inputTensor_conf, CPU_GENERAL), input_conf,
         tensorNumBytes(inputDesc_conf));
-    memcpy(get_ptr_from_tensor(inputTensor_priorbox, CPU_GENERAL), input_priorbox,
+    UNI_MEMCPY(get_ptr_from_tensor(inputTensor_priorbox, CPU_GENERAL), input_priorbox,
         tensorNumBytes(inputDesc_priorbox));
     inputTensors[0] = inputTensor_loc;
     inputTensors[1] = inputTensor_conf;

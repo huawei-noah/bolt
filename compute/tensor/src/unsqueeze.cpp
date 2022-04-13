@@ -15,13 +15,13 @@
 #ifdef _USE_GPU
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
-#include <string.h>
 
 EE unsqueeze(Tensor inputTensor, Tensor tmpTensor, Tensor outputTensor, ArchInfo_t archInfo)
 {
     auto arch = archInfo->arch;
     TensorDesc inputDesc = inputTensor.get_desc();
     void *input = get_ptr_from_tensor(inputTensor, arch);
+    TensorDesc outputDesc = outputTensor.get_desc();
     void *output = get_ptr_from_tensor(outputTensor, arch);
 
     EE ret = NOT_SUPPORTED;
@@ -34,8 +34,13 @@ EE unsqueeze(Tensor inputTensor, Tensor tmpTensor, Tensor outputTensor, ArchInfo
 #endif
 #ifdef _USE_CPU
     } else {
-        if (output != input) {
-            memcpy(output, input, tensorNumBytes(inputDesc));
+        if ((inputDesc.df == DF_NCHWC8 || inputDesc.df == DF_NCHWC16) &&
+            inputDesc.df != outputDesc.df) {
+            TensorDesc nchwDesc = inputDesc;
+            nchwDesc.df = DF_NCHW;
+            transformToNCHW(inputDesc, input, nchwDesc, output);
+        } else {
+            UNI_MEMCPY(output, input, tensorNumBytes(inputDesc));
         }
         ret = SUCCESS;
 #endif
@@ -47,11 +52,22 @@ EE unsqueeze_infer_output_size_cpu(
     TensorDesc inputDesc, int *axes, int axesNum, TensorDesc *outputDesc)
 {
     outputDesc->dt = inputDesc.dt;
-    outputDesc->nDims = inputDesc.nDims + axesNum;
-    if (inputDesc.df != DF_NCHWC8) {
-        outputDesc->df = getTensorDefaultDataFormat(outputDesc->nDims);
+    if (inputDesc.df == DF_SCALAR) {
+        outputDesc->nDims = axesNum;
     } else {
-        outputDesc->df = DF_NCHWC8;
+        outputDesc->nDims = inputDesc.nDims + axesNum;
+    }
+    outputDesc->df = getTensorDefaultDataFormat(outputDesc->nDims);
+    if (inputDesc.df == DF_NCHWC8 || inputDesc.df == DF_NCHWC16) {
+        bool changeChannelAxis = false;
+        for (int i = 0; i < axesNum; i++) {
+            if (axes[i] <= 1) {
+                changeChannelAxis = true;
+            }
+        }
+        if (!changeChannelAxis) {
+            outputDesc->df = inputDesc.df;
+        }
     }
     for (U32 i = 0; i < outputDesc->nDims; i++) {
         outputDesc->dims[i] = 0;
@@ -69,22 +85,28 @@ EE unsqueeze_infer_output_size_cpu(
             outputDesc->dims[i] = inputDesc.dims[index++];
         }
     }
-    CHECK_REQUIREMENT(index == inputDesc.nDims);
+    if (inputDesc.df != DF_SCALAR) {
+        CHECK_REQUIREMENT(index == inputDesc.nDims);
+    }
+#ifdef _USE_CPU
+    if (tensorIsShape(inputDesc)) {
+        for (U32 i = 0; outputDesc->nDims + i < DIM_LEN; i++) {
+            outputDesc->dims[outputDesc->nDims + i] = inputDesc.dims[inputDesc.nDims + i];
+        }
+    }
+#endif
     return SUCCESS;
 }
 
 EE unsqueeze_infer_output_size(
     Tensor *inputTensor, UnsqueezeParamSpec p, Tensor *outputTensor, ArchInfo_t archInfo)
 {
-    if (inputTensor == nullptr) {
-        CHECK_STATUS(NULL_POINTER);
-    }
-    if (outputTensor == nullptr) {
-        CHECK_STATUS(NULL_POINTER);
+    if (inputTensor == nullptr || outputTensor == nullptr) {
+        return NULL_POINTER;
     }
     TensorDesc inputDesc = inputTensor->get_desc();
     TensorDesc outputDesc = outputTensor->get_desc();
-    EE ret = unsqueeze_infer_output_size_cpu(inputDesc, p.axes, p.axes_num, &outputDesc);
+    EE ret = unsqueeze_infer_output_size_cpu(inputDesc, p.axes, p.num_axes, &outputDesc);
     outputTensor->resize(outputDesc);
     return ret;
 }

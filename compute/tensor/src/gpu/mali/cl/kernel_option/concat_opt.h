@@ -46,11 +46,12 @@ inline EE set_concat_opt_mali(U32 concatDim,
     char iomName[128] = "";
     CHECK_STATUS(
         set_io_mems_name_and_define_opts(inputMemType, &outputMemType, inputNum, 1, iomName, opt));
-    sprintf(kernelName, "concat_%s%s%s%d", formatName.c_str(), iomName, dimName.c_str(), inputNum);
+    std::string kernel = "concat_" + formatName + iomName + dimName + std::to_string(inputNum);
+    UNI_STRCPY(kernelName, kernel.c_str());
     if (useNchwFormat) {
-        sprintf(kernelOpt->sourceName, "concat_nchw");
+        UNI_STRCPY(kernelOpt->sourceName, "concat_nchw");
     } else {
-        sprintf(kernelOpt->sourceName, "concat");
+        UNI_STRCPY(kernelOpt->sourceName, "concat");
     }
     kernelOpt->kernelDataType = dt;
     CHECK_STATUS(set_value_define_opt(inputNum, "N", opt));

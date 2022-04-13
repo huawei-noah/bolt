@@ -55,7 +55,7 @@ int main(int argc, char *argv[])
     int category = -1;
     int loopTime = 1;
     if (!parse_res.model.second) {
-        exit(-1);
+        return 0;
     }
     if (parse_res.model.second) {
         modelPath = parse_res.model.first;
@@ -137,7 +137,7 @@ int main(int argc, char *argv[])
         cnn->run();
     }
 #ifdef _USE_GPU
-    if (strcmp(affinityPolicyName, "GPU") == 0) {
+    if (std::string(affinityPolicyName) == std::string("GPU")) {
         gcl_finish(OCLContext::getInstance().handle.get());
     }
 #endif

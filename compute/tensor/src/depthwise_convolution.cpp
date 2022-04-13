@@ -48,10 +48,10 @@ inline EE depthwise_convolution_infer_output_size_cpu(TensorDesc inputDesc,
 
     U32 strideH = convParamSpec.stride_h;
     U32 strideW = convParamSpec.stride_w;
-    U32 paddingT = convParamSpec.padding_top;
-    U32 paddingB = convParamSpec.padding_bottom;
-    U32 paddingL = convParamSpec.padding_left;
-    U32 paddingR = convParamSpec.padding_right;
+    U32 paddingT = convParamSpec.pad_top;
+    U32 paddingB = convParamSpec.pad_bottom;
+    U32 paddingL = convParamSpec.pad_left;
+    U32 paddingR = convParamSpec.pad_right;
     U32 dilateH = convParamSpec.dilatedRate_h;
     U32 dilateW = convParamSpec.dilatedRate_w;
 
@@ -64,7 +64,12 @@ inline EE depthwise_convolution_infer_output_size_cpu(TensorDesc inputDesc,
         CHECK_STATUS(NOT_MATCH);
     }
 
-    *outputDesc = tensor4df(targetDataType, DF_NCHWC8, in, ic, oh, ow);
+    DataFormat odf = DF_NCHWC8;
+    if ((idt == DT_U8_Q || idf == DF_NCHWC16) && ic % 16 == 0) {
+        odf = DF_NCHWC16;
+    }
+
+    *outputDesc = tensor4df(targetDataType, odf, in, ic, oh, ow);
     return SUCCESS;
 }
 
@@ -227,9 +232,7 @@ EE depthwise_convolution_infer_forward_tmp_bytes(Tensor inputTensor,
     ArchInfo_t archInfo)
 {
     TensorDesc inputDesc = inputTensor.get_desc();
-#if defined(_USE_NEON) || defined(_USE_GPU)
     TensorDesc filterDesc = filterTensor.get_desc();
-#endif
     TensorDesc outputDesc = outputTensor.get_desc();
 
     EE ret = NOT_SUPPORTED;
@@ -242,7 +245,7 @@ EE depthwise_convolution_infer_forward_tmp_bytes(Tensor inputTensor,
 #ifdef _USE_X86
     } else if (IS_X86(arch)) {
         ret = depthwise_convolution_infer_forward_tmp_bytes_x86(
-            inputDesc, outputDesc, convParamSpec, algorithm, bytes);
+            inputDesc, filterDesc, outputDesc, convParamSpec, algorithm, bytes);
 #endif
 #ifdef _USE_NEON
     } else if (IS_ARM(arch)) {
@@ -263,6 +266,7 @@ EE depthwise_convolution(Tensor inputTensor,
     Tensor filterTensor,
     ConvolutionParamSpec convParamSpec,
     DepthwiseConvolutionForwardAlgorithm algorithm,
+    void *scale,
     Tensor biasTensor,
     Tensor tmpTensor,
     Tensor outputTensor,
@@ -290,7 +294,7 @@ EE depthwise_convolution(Tensor inputTensor,
 #ifdef _USE_X86
     } else if (IS_X86(arch)) {
         ret = depthwise_convolution_x86(inputDesc, input, filterDesc, filter, convParamSpec,
-            algorithm, biasDesc, bias, tmpBytes, tmp, outputDesc, output,
+            algorithm, scale, biasDesc, bias, tmpBytes, tmp, outputDesc, output,
             depthwiseActivationParamSpec, archInfo->arch);
 #endif
 #ifdef _USE_NEON

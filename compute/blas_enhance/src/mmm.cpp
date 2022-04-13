@@ -12,6 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "blas_enhance.h"
+#include "uni.h"
 #ifdef _USE_GENERAL
 #include "cpu/general/blas_general.h"
 #endif
@@ -44,10 +45,10 @@ EE matrix_matrix_multiply_tmp_bytes(
 #ifdef _USE_X86
     } else if (IS_X86(arch)) {
         ret = matrix_matrix_multiply_tmp_bytes_x86(
-            matrixA_M, matrixA_K, matrixB_K, matrixB_N, matrixADataType, bytes);
+            matrixA_M, matrixA_K, matrixB_K, matrixB_N, matrixADataFormat, matrixADataType, bytes);
 #endif
 #ifdef _USE_NEON
-    } else {
+    } else if (IS_ARM(arch)) {
         ret = matrix_matrix_multiply_tmp_bytes_arm(
             matrixA_M, matrixA_K, matrixB_K, matrixB_N, matrixADataType, bytes);
 #endif
@@ -59,23 +60,21 @@ EE matrix_matrix_multiply_transform_rhs(
     TensorDesc desc, const void *src, TensorDesc *descTran, void *dst, Arch arch)
 {
     EE ret = NOT_SUPPORTED;
-#ifdef _USE_NEON
     if (IS_ARM(arch)) {
+#ifdef _USE_NEON
         ret = matrix_matrix_multiply_transform_rhs_arm(desc, src, descTran, dst);
-    }
 #endif
 #ifdef _USE_GENERAL
-    if (IS_GENERAL(arch)) {
-        memcpy(dst, src, tensorNumBytes(desc));
+    } else if (IS_GENERAL(arch)) {
+        UNI_MEMCPY(dst, src, tensorNumBytes(desc));
         (*descTran) = desc;
         ret = SUCCESS;
-    }
 #endif
 #ifdef _USE_X86
-    if (IS_X86(arch)) {
-        ret = matrix_matrix_multiply_transform_rhs_x86(desc, src, descTran, dst, nullptr);
-    }
+    } else if (IS_X86(arch)) {
+        ret = matrix_matrix_multiply_transform_rhs_x86(desc, src, descTran, dst);
 #endif
+    }
     return ret;
 }
 
@@ -142,23 +141,23 @@ EE matrix_matrix_multiply(TensorDesc matrixADesc,
         TensorDesc tranDescB;
         U8 *dataB = (U8 *)matrixBData;
         if (matrixBDataFormat != targetFormat4MatrixB(matrixBDataType)) {
-            U8 *offsetCBias = nullptr;
-            U32 alignedAK = matrixA_K;
             dataB = ((U8 *)tmp);
             if (matrixADataType == DT_U8_Q && matrixBDataType == DT_I8) {
-                offsetCBias = (U8 *)tmp;
-                alignedAK = (matrixA_K + 7) / 8 * 8;
-                dataB += matrixC_N * bytesOf(DT_I32);
+                U32 alignedK = (matrixB_K + 7) / 8 * 8;
+                U32 alignedN = (matrixB_N + 15) / 16 * 16;
+                tmp = (U8 *)tmp + alignedK * alignedN;
+            } else {
+                U32 alignedN = (matrixB_N + 7) / 8 * 8;
+                tmp = (U8 *)tmp + matrixB_K * alignedN;
             }
-            dataB += matrixA_M * alignedAK * bytesOf(matrixADataType);
             ret = matrix_matrix_multiply_transform_rhs_x86(
-                matrixBDesc, matrixBData, &tranDescB, dataB, offsetCBias);
+                matrixBDesc, matrixBData, &tranDescB, dataB);
         }
         ret = mmm_x86(matrixC_N, matrixC_M, matrixA_K, matrixBDataType, matrixADataFormat,
             matrixAData, dataB, tmp, matrixCData, scale);
 #endif
 #ifdef _USE_NEON
-    } else {
+    } else if (IS_ARM(arch)) {
         TensorDesc tranDescB;
         U8 *dataB = (U8 *)matrixBData;
         if (matrixBDataFormat != targetFormat4MatrixB(matrixBDataType)) {

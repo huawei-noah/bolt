@@ -36,7 +36,8 @@ inline EE activation_checkpara_mali(GCLHandle_t handle,
         activationMode != ACTIVATION_H_SWISH && activationMode != ACTIVATION_GELU &&
         activationMode != ACTIVATION_TANH && activationMode != ACTIVATION_SIGMOID &&
         activationMode != ACTIVATION_ABS && activationMode != ACTIVATION_LOG &&
-        activationMode != ACTIVATION_NEG) {
+        activationMode != ACTIVATION_NEG && activationMode != ACTIVATION_EXP &&
+        activationMode != ACTIVATION_SWISH) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
     if (input->desc.memFormat != output->desc.memFormat) {

@@ -60,11 +60,15 @@ EE instance_norm_fp32(TensorDesc inputDesc,
         }
 
         for (I32 i = 0; i < loopOuter; i += 8) {
+            __m256 m1 = _mm256_setzero_ps();
             __m256 m = _mm256_setzero_ps();
             for (I32 j = 0; j < loopInner; ++j) {
-                m = _mm256_add_ps(m, _mm256_loadu_ps(input + i * loopInner + j * 8));
+                m1 = _mm256_add_ps(m1, _mm256_loadu_ps(input + i * loopInner + j * 8));
+                if (((j + 1) % 1024 == 0) || (j == loopInner - 1)) {
+                    m = _mm256_add_ps(m, _mm256_div_ps(m1, loopInner_v));
+                    m1 = _mm256_setzero_ps();
+                }
             }
-            m = _mm256_div_ps(m, loopInner_v);
             __m256 v = _mm256_setzero_ps();
             for (I32 j = 0; j < loopInner; ++j) {
                 __m256 t = _mm256_sub_ps(_mm256_loadu_ps(input + i * loopInner + j * 8), m);

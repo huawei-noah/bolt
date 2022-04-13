@@ -27,8 +27,8 @@ int sliceTest(int argc, char **argv, DataType dt)
     U32 iw = atoi(argv[5]);
     SliceParamSpec p;
     p.axis = atoi(argv[6]);
-    p.slice_size = num - 1;
-    for (U32 i = 0; i < p.slice_size; i++) {
+    p.num_slice = num - 1;
+    for (U32 i = 0; i < p.num_slice; i++) {
         p.slice_points[i] = atoi(argv[7 + i]);
     }
     ArchInfo archInfo;
@@ -45,7 +45,7 @@ int sliceTest(int argc, char **argv, DataType dt)
     Tensor inputTensorCpu;
     inputTensorCpu.resize(inDesc);
     inputTensorCpu.alloc();
-    memcpy(get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), inputCpu, tensorNumBytes(inDesc));
+    UNI_MEMCPY(get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), inputCpu, tensorNumBytes(inDesc));
     std::vector<Tensor> outputTensorsCpu(num);
     std::vector<Tensor *> outputTensorsPtrCpu(num);
     for (I32 i = 0; i < num; i++) {

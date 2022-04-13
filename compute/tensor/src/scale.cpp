@@ -12,14 +12,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "tensor_computing.h"
-#ifdef _USE_GENERAL
-#include "cpu/general/tensor_computing_general.h"
-#endif
-#ifdef _USE_X86
-#include "cpu/x86/tensor_computing_x86.h"
-#endif
-#ifdef _USE_NEON
-#include "cpu/arm/tensor_computing_arm.h"
+#ifdef _USE_CPU
+#include "cpu/tensor_computing_cpu.h"
 #endif
 #ifdef _USE_GPU
 #include "gpu/mali/tensor_computing_mali.h"
@@ -83,17 +77,9 @@ EE scale(Tensor inputTensor,
     void *output = get_ptr_from_tensor(outputTensor, arch);
 
     EE ret = NOT_SUPPORTED;
-    if (IS_GENERAL(arch)) {
-#ifdef _USE_GENERAL
-        ret = scale_general(inputDesc, input, alpha, beta, p, outputDesc, output);
-#endif
-#ifdef _USE_X86
-    } else if (IS_X86(arch)) {
-        ret = scale_x86(inputDesc, input, alpha, beta, p, outputDesc, output);
-#endif
-#ifdef _USE_NEON
-    } else if (IS_ARM(arch)) {
-        ret = scale_arm(inputDesc, input, alpha, beta, p, outputDesc, output);
+    if (IS_CPU(arch)) {
+#ifdef _USE_CPU
+        ret = scale_cpu(inputDesc, input, alpha, beta, p, outputDesc, output, arch);
 #endif
 #ifdef _USE_GPU
     } else if (IS_GPU(arch)) {

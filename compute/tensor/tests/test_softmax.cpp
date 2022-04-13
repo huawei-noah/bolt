@@ -24,7 +24,7 @@ int softmaxTest(int argc, char **argv, DataType dt)
     TensorDesc inDesc = tensor2df(dt, DF_NORMAL, 1, len);
     U8 *input = ut_input_v(len, dt, UT_INIT_RANDOM);
     Tensor inputTensor = Tensor::alloc_sized<CPUMem>(inDesc);
-    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inDesc));
+    UNI_MEMCPY(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inDesc));
 
     Tensor outputTensor;
     CHECK_STATUS(softmax_infer_output_size(&inputTensor, p, &outputTensor, &UT_CPU_ARCHINFO));

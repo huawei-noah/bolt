@@ -98,6 +98,13 @@ EE fully_connected_infer_forward_algorithm_mali(GCLHandle_t handle,
     if (algorithm != CONVOLUTION_ALGORITHM_NULL) {
         return SUCCESS;
     }
+    GCLMemType imt = inputMemDesc.memType;
+    GCLMemType omt = outputMemDesc.memType;
+    std::vector<I32> flag = build_fully_connected_forward_algorithm_flag(
+        inputDesc, filterDesc, imt, omt);
+    if (gcl_get_runInfo_from_cache(handle, flag, forwardRunInfo)) {
+        return SUCCESS;
+    }
     DataType dt = inputDesc.dt;
     U32 fc = filterDesc.dims[0];
     U32 fn = filterDesc.dims[1];
@@ -229,6 +236,7 @@ EE fully_connected_infer_forward_algorithm_mali(GCLHandle_t handle,
         CHECK_STATUS(NOT_SUPPORTED);
     }
     *forwardRunInfo = bestRunInfo;
+    gcl_set_runInfo_to_cache(handle, flag, bestRunInfo);
     CHECK_STATUS(gcl_finish(handle));
     gcl_destroy_gclmem(input);
     gcl_destroy_gclmem(tmpBuf);

@@ -15,11 +15,14 @@
 #ifdef _USE_FP32
 #include "cpu/x86/fp32/tensor_computing_fp32.h"
 #endif
+#ifdef _USE_INT8
+#include "cpu/x86/int8/tensor_computing_int8.h"
+#endif
 
 EE pooling_x86(TensorDesc inputDesc,
     const void *input,
     PoolingParamSpec poolingParamSpec,
-    const void *scale,
+    void *scale,
     TensorDesc outputDesc,
     void *output)
 {
@@ -34,6 +37,20 @@ EE pooling_x86(TensorDesc inputDesc,
             } else if (inputDesc.df == DF_NCHWC16) {
                 ret = pooling_c16_fp32(
                     inputDesc, (const F32 *)input, poolingParamSpec, outputDesc, (F32 *)output);
+            } else if (inputDesc.df == DF_NCHW) {
+                ret = pooling_nchw_fp32(
+                    inputDesc, (const F32 *)input, poolingParamSpec, outputDesc, (F32 *)output);
+            } else {
+                ret = NOT_SUPPORTED;
+            }
+            break;
+        }
+#endif
+#ifdef _USE_INT8
+        case DT_U8_Q: {
+            if (inputDesc.df == DF_NCHWC16) {
+                ret = pooling_c16_uint8(inputDesc, (const UINT8 *)input, poolingParamSpec,
+                    outputDesc, (UINT8 *)output, scale);
             } else {
                 ret = NOT_SUPPORTED;
             }

@@ -23,7 +23,7 @@ int activationFunctionTest(U32 in,
     const char *activationType)
 {
     DataFormat df = DF_NCHWC8;
-    memset(activationDesc.value, 0, sizeof(activationDesc.value));
+    UNI_MEMSET(activationDesc.value, 0, sizeof(activationDesc.value));
 
     TensorDesc dataDesc = tensor4df(dt, df, in, ic, ih, iw);
     U32 len = tensorNumElements(dataDesc);
@@ -32,8 +32,8 @@ int activationFunctionTest(U32 in,
 
     Tensor dataTensor = Tensor::alloc_sized<CPUMem>(dataDesc);
     Tensor dataTensorRef = Tensor::alloc_sized<CPUMem>(dataDesc);
-    memcpy(get_ptr_from_tensor(dataTensor, CPU_GENERAL), data, tensorNumBytes(dataDesc));
-    memcpy(get_ptr_from_tensor(dataTensorRef, CPU_GENERAL), data, tensorNumBytes(dataDesc));
+    UNI_MEMCPY(get_ptr_from_tensor(dataTensor, CPU_GENERAL), data, tensorNumBytes(dataDesc));
+    UNI_MEMCPY(get_ptr_from_tensor(dataTensorRef, CPU_GENERAL), data, tensorNumBytes(dataDesc));
 
     if (UT_CHECK) {
         //check

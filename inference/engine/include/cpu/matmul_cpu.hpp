@@ -32,16 +32,17 @@ public:
     void run() override
     {
         Tensor inputTensorA = this->inputTensors[0];
-        TensorDesc inputDescA = inputTensorA.get_desc();
         Tensor inputTensorB = this->inputTensors[1];
-        TensorDesc inputDescB = inputTensorB.get_desc();
         Tensor inputTensorC;
         if (this->inputTensors.size() > 2) {
             inputTensorC = this->inputTensors[2];
         }
         Tensor outputTensor = this->outputTensors[0];
-        TensorDesc outputDesc = outputTensor.get_desc();
 
+#ifdef _USE_INT8
+        TensorDesc inputDescA = inputTensorA.get_desc();
+        TensorDesc inputDescB = inputTensorB.get_desc();
+        TensorDesc outputDesc = outputTensor.get_desc();
         if (3 == featureScale.size() && featureScale[0][0] > 0 && DT_I8 != inputDescA.dt &&
             DT_U8_Q != inputDescA.dt) {
             inputTensorA.set_scale(featureScale[0][0]);
@@ -53,6 +54,7 @@ public:
         if (featureScale.size() > 0) {
             outputTensor.set_scale((featureScale.back())[0]);
         }
+#endif
         std::vector<Tensor> tmpTensor(1, this->temp);
         CHECK_STATUS(matmul(inputTensors[0], this->p.transpose_a, inputTensors[1],
             this->p.transpose_b, inputTensorC, tmpTensor, outputTensors[0], &this->archInfo));

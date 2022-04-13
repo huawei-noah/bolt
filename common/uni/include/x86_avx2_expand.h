@@ -30,22 +30,31 @@ inline unsigned int _mm256_hadd_u32(__m256i x)
 
 inline __m256 _mm256_log_ps(__m256 x)
 {
-    static const __m256 CONST_one = _mm256_set1_ps(1.0f);
-    static const __m256 CONST_two = _mm256_set1_ps(2.0f);
-    static const __m256 CONST_neg_one = _mm256_set1_ps(-1.0f);
-    F32 i = 30;
-    __m256 n = _mm256_set1_ps(i);
-    __m256 nk = _mm256_add_ps(_mm256_mul_ps(CONST_two, n), CONST_one);
-    x = _mm256_div_ps(_mm256_add_ps(x, CONST_neg_one), _mm256_add_ps(x, CONST_one));
-    __m256 xx = _mm256_mul_ps(x, x);
-    __m256 y = _mm256_div_ps(CONST_one, nk);
-    for (; i > 0; i--) {
-        nk = _mm256_sub_ps(nk, CONST_two);
-        y = _mm256_add_ps(_mm256_div_ps(CONST_one, nk), _mm256_mul_ps(xx, y));
-    }
+    __m256i ux = _mm256_castps_si256(x);
+    __m256 fx = _mm256_cvtepi32_ps(ux);
+    fx = _mm256_mul_ps(fx,
+        _mm256_div_ps(
+            _mm256_set1_ps(1.0f), _mm256_cvtepi32_ps(_mm256_slli_epi32(_mm256_set1_epi32(1), 23))));
 
-    y = _mm256_mul_ps(CONST_two, _mm256_mul_ps(x, y));
-    return y;
+    __m256i umx = _mm256_or_si256(_mm256_and_si256(ux, _mm256_set1_epi32(0x007FFFFF)),
+        _mm256_slli_epi32(_mm256_set1_epi32(0x7e), 23));
+    __m256 mx = _mm256_castsi256_ps(umx);
+
+    const __m256 c_124_22551499 = _mm256_set1_ps(124.22551499f);
+    const __m256 c_1_498030302 = _mm256_set1_ps(1.498030302f);
+    const __m256 c_1_725877999 = _mm256_set1_ps(1.72587999f);
+    const __m256 c_0_3520087068 = _mm256_set1_ps(0.3520887068f);
+
+    __m256 tmp = _mm256_div_ps(c_1_725877999, _mm256_add_ps(c_0_3520087068, mx));
+    tmp = _mm256_add_ps(c_124_22551499, tmp);
+    tmp = _mm256_fmadd_ps(c_1_498030302, mx, tmp);
+    const __m256 c_0_69314718 = _mm256_set1_ps(0.69314718f);
+    __m256 result_v = _mm256_mul_ps(_mm256_sub_ps(fx, tmp), c_0_69314718);
+    result_v = _mm256_blendv_ps(
+        result_v, _mm256_set1_ps(NAN), _mm256_cmp_ps(x, _mm256_set1_ps(0), _CMP_LT_OS));
+    result_v = _mm256_blendv_ps(
+        result_v, _mm256_set1_ps(-INFINITY), _mm256_cmp_ps(x, _mm256_set1_ps(0), _CMP_EQ_OS));
+    return result_v;
 }
 
 inline __m256 _mm256_exp_ps(__m256 x)
@@ -119,6 +128,17 @@ inline F32 _mm256_sum_ps(__m256 x)
     high = _mm_permute_ps(low, 0b01);
     sum = _mm_add_ss(low, high);
     return _mm_cvtss_f32(sum);
+}
+
+inline I32 _mm256_sum_epi32(__m256i x)
+{
+    __m128i low = _mm256_extractf128_si256(x, 0);
+    __m128i high = _mm256_extractf128_si256(x, 1);
+    __m128i sum = _mm_hadd_epi32(low, high);
+    low = _mm_hadd_epi32(sum, sum);
+    high = _mm_shuffle_epi32(low, 0b01);
+    sum = _mm_add_epi32(low, high);
+    return _mm_cvtsi128_si32(sum);
 }
 
 // horizontal min

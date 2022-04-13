@@ -39,7 +39,7 @@ public:
         if (this->inputTensors.size() > 1) {
             Tensor inputTensor = this->inputTensors[1];
             TensorDesc inputDesc = inputTensor.get_desc();
-            I32 *ptr = (I32 *)(((CpuMemory *)(inputTensor.get_memory()))->get_ptr());
+            U8 *ptr = (U8 *)(((CpuMemory *)(inputTensor.get_memory()))->get_ptr());
             U32 length = tensorNumElements(inputDesc);
             for (U32 i = 0; i < length; i++) {
                 // end loop

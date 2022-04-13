@@ -36,17 +36,17 @@ public:
         U8 *state = (U8 *)get_ptr_from_tensor(this->temp, this->archInfo.arch);
         TensorDesc desc = inputTensor.get_desc();
         int batch = desc.dims[desc.nDims - 1];
-        I32 num = p.biDirection ? 2 : 1;
-        I32 column = this->p.numProjection > 0 ? this->p.numProjection : this->p.numOutput;
-        U32 ch_size = (this->p.numOutput + column) * bytesOf(desc.dt);
+        I32 num = p.bi_direction ? 2 : 1;
+        I32 column = this->p.num_projection > 0 ? this->p.num_projection : this->p.num_outputs;
+        U32 ch_size = (this->p.num_outputs + column) * bytesOf(desc.dt);
         if (this->inputTensors.size() == 1) {
             // bi-direction rnn has forward-states and backward-states
-            memset(state, 0, batch * num * ch_size);
+            UNI_MEMSET(state, 0, batch * num * ch_size);
         } else if (this->inputTensors.size() == 2) {
             if (num != 1) {
                 UNI_ERROR_LOG("currently not support to set bi-direction RNN's h or c.\n");
             }
-            memcpy(state, get_ptr_from_tensor(this->inputTensors[1], this->archInfo.arch),
+            UNI_MEMCPY(state, get_ptr_from_tensor(this->inputTensors[1], this->archInfo.arch),
                 tensorNumBytes(this->inputTensors[1].get_desc()));
         } else if (this->inputTensors.size() == 3) {
             if (num != 1) {
@@ -59,8 +59,8 @@ public:
             U32 input_c_tile = tensorNumBytes(this->inputTensors[2].get_desc()) / batch;
             for (int i = 0; i < batch; i++) {
                 U8 *ptr = state + i * ch_size;
-                memcpy(ptr, c + input_c_tile * i, input_c_tile);
-                memcpy(ptr + c_size, h + input_h_tile * i, input_h_tile);
+                UNI_MEMCPY(ptr, c + input_c_tile * i, input_c_tile);
+                UNI_MEMCPY(ptr + c_size, h + input_h_tile * i, input_h_tile);
             }
         }
 
@@ -69,7 +69,7 @@ public:
             tmpTensor, this->outputTensors, &this->archInfo));
 
         if (this->outputTensors.size() == 2) {
-            memcpy(get_ptr_from_tensor(this->outputTensors[1], this->archInfo.arch), state,
+            UNI_MEMCPY(get_ptr_from_tensor(this->outputTensors[1], this->archInfo.arch), state,
                 tensorNumBytes(this->outputTensors[1].get_desc()));
         } else if (this->outputTensors.size() == 3) {
             U8 *h = (U8 *)get_ptr_from_tensor(this->outputTensors[1], this->archInfo.arch);
@@ -79,8 +79,8 @@ public:
             U32 output_c_tile = tensorNumBytes(this->outputTensors[2].get_desc()) / batch;
             for (int i = 0; i < batch; i++) {
                 U8 *ptr = state + i * ch_size;
-                memcpy(c + output_c_tile * i, ptr, output_c_tile);
-                memcpy(h + output_h_tile * i, ptr + c_size, output_h_tile);
+                UNI_MEMCPY(c + output_c_tile * i, ptr, output_c_tile);
+                UNI_MEMCPY(h + output_h_tile * i, ptr + c_size, output_h_tile);
             }
         }
     }
@@ -89,16 +89,12 @@ public:
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
         TensorDesc inputDesc = inTensors[0]->get_desc();
-
-        if (inputDesc.nDims < 3) {
-            CHECK_STATUS(NOT_MATCH);
-        }
+        CHECK_REQUIREMENT(inputDesc.nDims >= 3);
         this->xDim = inputDesc.dims[inputDesc.nDims - 3];
         for (U32 i = 0; i < inputDesc.nDims - 3; ++i) {
             xDim *= inputDesc.dims[i];
         }
-        CHECK_STATUS(rnn_infer_output_size(inTensors, this->p, outTensors, &this->archInfo));
-        return SUCCESS;
+        return rnn_infer_output_size(inTensors, this->p, outTensors, &this->archInfo);
     }
 
     U32 infer_tmp_memory_size() override

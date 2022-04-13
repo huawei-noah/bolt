@@ -62,33 +62,33 @@ class ConvolutionSliceOptimizer : public OPOptimizer {
                 int p = 0;
                 int cropLength = 0;
                 if (spec->ops[sliceIndex].ps.tfslice_spec.begin[dims - 1] > 0) {
-                    p = spec->ops[i].ps.conv_spec.padding_left;
+                    p = spec->ops[i].ps.conv_spec.pad_left;
                     set_padding(&spec->ops[sliceIndex].ps.tfslice_spec.begin_mask[dims - 1],
                         &spec->ops[sliceIndex].ps.tfslice_spec.begin[dims - 1], &p,
                         spec->ops[i].ps.conv_spec.stride_w);
-                    spec->ops[i].ps.conv_spec.padding_left = p;
+                    spec->ops[i].ps.conv_spec.pad_left = p;
                 }
                 if (spec->ops[sliceIndex].ps.tfslice_spec.begin[dims - 2] > 0) {
-                    p = spec->ops[i].ps.conv_spec.padding_top;
+                    p = spec->ops[i].ps.conv_spec.pad_top;
                     set_padding(&spec->ops[sliceIndex].ps.tfslice_spec.begin_mask[dims - 2],
                         &spec->ops[sliceIndex].ps.tfslice_spec.begin[dims - 2], &p,
                         spec->ops[i].ps.conv_spec.stride_h);
-                    spec->ops[i].ps.conv_spec.padding_top = p;
+                    spec->ops[i].ps.conv_spec.pad_top = p;
                 }
                 if (spec->ops[sliceIndex].ps.tfslice_spec.end[dims - 1] < 0) {
-                    p = spec->ops[i].ps.conv_spec.padding_right;
+                    p = spec->ops[i].ps.conv_spec.pad_right;
                     cropLength = -spec->ops[sliceIndex].ps.tfslice_spec.end[dims - 1];
                     set_padding(&spec->ops[sliceIndex].ps.tfslice_spec.end_mask[dims - 1],
                         &cropLength, &p, spec->ops[i].ps.conv_spec.stride_w);
                     spec->ops[sliceIndex].ps.tfslice_spec.end[dims - 1] = -cropLength;
-                    spec->ops[i].ps.conv_spec.padding_right = p;
+                    spec->ops[i].ps.conv_spec.pad_right = p;
                 }
                 if (spec->ops[sliceIndex].ps.tfslice_spec.end[dims - 2] < 0) {
-                    p = spec->ops[i].ps.conv_spec.padding_bottom;
+                    p = spec->ops[i].ps.conv_spec.pad_bottom;
                     cropLength = -spec->ops[sliceIndex].ps.tfslice_spec.end[dims - 2];
                     set_padding(&spec->ops[sliceIndex].ps.tfslice_spec.end_mask[dims - 2],
                         &cropLength, &p, spec->ops[i].ps.conv_spec.stride_h);
-                    spec->ops[i].ps.conv_spec.padding_bottom = p;
+                    spec->ops[i].ps.conv_spec.pad_bottom = p;
                     spec->ops[sliceIndex].ps.tfslice_spec.end[dims - 2] = -cropLength;
                 }
 

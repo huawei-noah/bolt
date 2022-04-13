@@ -36,24 +36,19 @@ class ActivationOptimizer : public OPOptimizer {
                 // tensor relationship rewrite
                 if (spec->ops[prevOpIndex].type == OT_Conv) {
                     switch (spec->ops[prevOpIndex].ps.conv_spec.convolution_type) {
-                        case Convolution_Pointwise: {
+                        case CONVOLUTION_POINTWISE:
+                        case CONVOLUTION_DECONVOLUTION:
+                        case CONVOLUTION_DILATION: {
                             spec->ops[prevOpIndex].ps.conv_spec.pw_activation_type = ACTIVATION_RELU;
                             break;
                         }
-                        case Convolution_Deconvolution: {
-                            spec->ops[prevOpIndex].ps.conv_spec.pw_activation_type = ACTIVATION_RELU;
-                            break;
-                        }
-                        case Convolution_Depthwise: {
+                        case CONVOLUTION_DEPTHWISE: {
                             spec->ops[prevOpIndex].ps.conv_spec.dw_activation_type = ACTIVATION_RELU;
                             break;
                         }
-                        case Convolution_Dilation: {
-                            spec->ops[prevOpIndex].ps.conv_spec.pw_activation_type = ACTIVATION_RELU;
-                            break;
-                        }
                         default: {
-                            CHECK_REQUIREMENT(0);
+                            UNI_ERROR_LOG(
+                                "not support to fuse %s + activation.\n", spec->ops[i].name);
                             break;
                         }
                     }

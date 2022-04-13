@@ -84,9 +84,7 @@ public:
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
         this->needSetKernelVec = true;
-        if (inTensors.size() > 2) {
-            CHECK_STATUS(NOT_SUPPORTED);
-        }
+        CHECK_REQUIREMENT(inTensors.size() == 2);
         CHECK_STATUS(matmul_infer_output_size(inTensors[0], this->p.transpose_a, inTensors[1],
             this->p.transpose_b, outTensors[0], &this->archInfo));
         if (check_tensors_image(inTensors)) {

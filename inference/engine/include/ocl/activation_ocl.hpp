@@ -18,7 +18,7 @@
 
 class ActivationOCL : public Activation {
 public:
-    ActivationOCL(ActivationParamSpec activationDesc) : Activation(activationDesc)
+    ActivationOCL(ActivationParamSpec p) : Activation(p)
     {
         INIT_GPU_INFO(nullptr)
     }
@@ -28,7 +28,7 @@ public:
     std::shared_ptr<Operator> clone() override
     {
         std::shared_ptr<ActivationOCL> mem =
-            std::shared_ptr<ActivationOCL>(new ActivationOCL(this->activationDesc));
+            std::shared_ptr<ActivationOCL>(new ActivationOCL(this->p));
         *mem = *this;
         return mem;
     }
@@ -38,7 +38,7 @@ public:
         OCLContext::getInstance().handle.get()->curOpName = this->get_name();
         Tensor inputTensor = this->inputTensors[0];
         Tensor outputTensor = this->outputTensors[0];
-        CHECK_STATUS(activation(inputTensor, this->activationDesc, outputTensor, &this->archInfo));
+        CHECK_STATUS(activation(inputTensor, this->p, outputTensor, &this->archInfo));
     }
 
     EE infer_output_tensors_size(

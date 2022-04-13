@@ -25,14 +25,14 @@ EE attention_fp32(U32 batch,
     }
 
     F32 mask_s = -10000.0;
-    I32 count = array_sum_f32(input, toSequenceLength);
-    I32 valid = UNI_MIN(count, fromSequenceLength);
     __m256 mask_v = _mm256_set1_ps(mask_s);
     __m256 one_v = _mm256_set1_ps(1.0);
     for (U32 n = 0; n < batch; n++) {
+        U32 count = array_sum_f32(input, toSequenceLength);
+        U32 valid = UNI_MIN(count, (U32)fromSequenceLength);
         for (U32 i = 0; i < numHeads; i++) {
             if (i == 0) {
-                for (I32 j = 0; j < valid; j++) {
+                for (U32 j = 0; j < valid; j++) {
                     if (j == 0) {
                         I32 k = 0;
                         for (; k < toSequenceLength - 7; k += 8) {
@@ -46,12 +46,12 @@ EE attention_fp32(U32 batch,
                             output[k] = value;
                         }
                     } else {
-                        memcpy(
+                        UNI_MEMCPY(
                             output + j * toSequenceLength, output, toSequenceLength * sizeof(F32));
                     }
                 }
 
-                for (I32 j = valid; j < fromSequenceLength; j++) {
+                for (U32 j = valid; j < (U32)fromSequenceLength; j++) {
                     if (j == valid) {
                         I32 k = 0;
                         for (; k < toSequenceLength - 7; k += 8) {
@@ -61,12 +61,12 @@ EE attention_fp32(U32 batch,
                             output[j * toSequenceLength + k] = mask_s;
                         }
                     } else {
-                        memcpy(output + j * toSequenceLength, output + valid * toSequenceLength,
+                        UNI_MEMCPY(output + j * toSequenceLength, output + valid * toSequenceLength,
                             toSequenceLength * sizeof(F32));
                     }
                 }
             } else {
-                memcpy(output + i * fromSequenceLength * toSequenceLength, output,
+                UNI_MEMCPY(output + i * fromSequenceLength * toSequenceLength, output,
                     fromSequenceLength * toSequenceLength * sizeof(F32));
             }
         }

@@ -14,10 +14,11 @@
 #include <math.h>
 #include "cpu/arm/fp32/tensor_computing_fp32.h"
 
-inline void array_norm_scale_fp32(
+static float eps = 1e-6;
+
+inline static void array_norm_scale_fp32(
     F32 *input, F32 *output, I32 len, F32 mean, F32 var, F32 *alpha, F32 *beta)
 {
-    F32 eps = 1e-6;
     F32 std_value = sqrt(var + eps);
     float32x4_t mean_v = vdupq_n_f32(mean);
     float32x4_t std_v = vdupq_n_f32(std_value);
@@ -38,14 +39,10 @@ inline void array_norm_scale_fp32(
     }
 }
 
-EE layer_normalization_fp32(
+static EE layer_normalization_nhwc(
     TensorDesc inputDesc, F32 *input, F32 *alpha, F32 *beta, TensorDesc outputDesc, F32 *output)
 {
     UNUSED(outputDesc);
-    if (nullptr == alpha || nullptr == beta || nullptr == input || nullptr == output) {
-        CHECK_STATUS(NULL_POINTER);
-    }
-
     U32 size = tensorNumElements(inputDesc);
     I32 size_inner = inputDesc.dims[0];
     I32 size_outer = size / size_inner;
@@ -57,6 +54,87 @@ EE layer_normalization_fp32(
 
         array_norm_scale_fp32(current_input, current_output, size_inner, mean, var, alpha, beta);
     }
-
     return SUCCESS;
+}
+
+static EE layer_normalization_nchwc8(
+    TensorDesc inputDesc, F32 *input, F32 *alpha, F32 *beta, TensorDesc outputDesc, F32 *output)
+{
+    UNUSED(outputDesc);
+    int n = inputDesc.dims[inputDesc.nDims - 1];
+    int c = inputDesc.dims[inputDesc.nDims - 2];
+    int hw = 1;
+    for (unsigned int i = 0; i < inputDesc.nDims - 2; i++) {
+        hw *= inputDesc.dims[i];
+    }
+    int c8 = c / 8;
+    for (int i = 0; i < n; i++) {
+        for (int j = 0; j < hw; j++) {
+            float32x4_t sum_v = vdupq_n_f32(0);
+            for (int k = 0; k < c8; k++) {
+                int id = ((i * c8 + k) * hw + j) * 8;
+                sum_v = vaddq_f32(sum_v, vld1q_f32(input + id));
+                sum_v = vaddq_f32(sum_v, vld1q_f32(input + id + 4));
+            }
+            F32 mean = vaddvq_f32(sum_v) / c;
+            float32x4_t mean_v = vdupq_n_f32(mean);
+
+            sum_v = vdupq_n_f32(0);
+            for (int k = 0; k < c8; k++) {
+                int id = ((i * c8 + k) * hw + j) * 8;
+                float32x4_t tmp_v = vsubq_f32(vld1q_f32(input + id), mean_v);
+                sum_v = vfmaq_f32(sum_v, tmp_v, tmp_v);
+                tmp_v = vsubq_f32(vld1q_f32(input + id + 4), mean_v);
+                sum_v = vfmaq_f32(sum_v, tmp_v, tmp_v);
+            }
+            F32 var = vaddvq_f32(sum_v) / c;
+            F32 std_value = sqrt(var + eps);
+
+            float32x4_t std_v = vdupq_n_f32(std_value);
+            for (int k = 0, kk = 0; k < c8; k++, kk += 8) {
+                int id = ((i * c8 + k) * hw + j) * 8;
+                float32x4_t in = vld1q_f32(input + id);
+                float32x4_t alpha_v = vld1q_f32(alpha + kk);
+                float32x4_t beta_v = vld1q_f32(beta + kk);
+                float32x4_t tmp_v = vsubq_f32(in, mean_v);
+                tmp_v = vdivq_f32(tmp_v, std_v);
+                tmp_v = vfmaq_f32(beta_v, alpha_v, tmp_v);
+                vst1q_f32(output + id, tmp_v);
+
+                in = vld1q_f32(input + id + 4);
+                alpha_v = vld1q_f32(alpha + kk + 4);
+                beta_v = vld1q_f32(beta + kk + 4);
+                tmp_v = vsubq_f32(in, mean_v);
+                tmp_v = vdivq_f32(tmp_v, std_v);
+                tmp_v = vfmaq_f32(beta_v, alpha_v, tmp_v);
+                vst1q_f32(output + id + 4, tmp_v);
+            }
+        }
+    }
+    return SUCCESS;
+}
+
+EE layer_normalization_fp32(TensorDesc inputDesc,
+    F32 *input,
+    LayerNormParamSpec p,
+    F32 *alpha,
+    F32 *beta,
+    TensorDesc outputDesc,
+    F32 *output)
+{
+    if (nullptr == alpha || nullptr == beta || nullptr == input || nullptr == output) {
+        CHECK_STATUS(NULL_POINTER);
+    }
+
+    EE ret = NOT_SUPPORTED;
+    if (inputDesc.df == DF_NCHWC8) {
+        if (p.axis == 1) {
+            ret = layer_normalization_nchwc8(inputDesc, input, alpha, beta, outputDesc, output);
+        }
+    } else {
+        if (p.axis == -1) {
+            ret = layer_normalization_nhwc(inputDesc, input, alpha, beta, outputDesc, output);
+        }
+    }
+    return ret;
 }

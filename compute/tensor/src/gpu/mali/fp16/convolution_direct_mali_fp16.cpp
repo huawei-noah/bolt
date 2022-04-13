@@ -17,20 +17,29 @@
 #include "gpu/mali/cl/kernel_option/conv_direct_opt.h"
 #include "gpu/mali/cl/kernel_option/gemv_opt.h"
 
-inline TensorDesc get_nchw_desc_for_img(TensorDesc inputDesc, ConvolutionParamSpec convParamSpec) {
+inline TensorDesc get_nchw_desc_for_img(TensorDesc inputDesc, ConvolutionParamSpec convParamSpec)
+{
     TensorDesc desc = inputDesc;
-    desc.dims[0] += convParamSpec.padding_left + convParamSpec.padding_right;
-    desc.dims[1] += convParamSpec.padding_bottom;
+    desc.dims[0] += convParamSpec.pad_left + convParamSpec.pad_right;
+    desc.dims[1] += convParamSpec.pad_bottom;
     return desc;
 }
 
-inline EE trans_input_nchw_to_img(GCLHandle_t handle, TensorDesc inputDesc, GCLMem_t input, 
-    ConvolutionParamSpec convParamSpec, GCLMem_t tmp, U32 *iw_str, U32 *ih_str, I32 *iw_off, I32 *ih_off) {
+inline EE trans_input_nchw_to_img(GCLHandle_t handle,
+    TensorDesc inputDesc,
+    GCLMem_t input,
+    ConvolutionParamSpec convParamSpec,
+    GCLMem_t tmp,
+    U32 *iw_str,
+    U32 *ih_str,
+    I32 *iw_off,
+    I32 *ih_off)
+{
     TensorDesc descNchwImg = get_nchw_desc_for_img(inputDesc, convParamSpec);
     GCLMem inputTran = *input;
-    inputTran.desc.dims[0] = descNchwImg.dims[0];//move left padding zero into img
+    inputTran.desc.dims[0] = descNchwImg.dims[0];  //move left padding zero into img
     inputTran.desc.dims[1] = descNchwImg.dims[1];
-    inputTran.desc.offset[0] -= convParamSpec.padding_left;
+    inputTran.desc.offset[0] -= convParamSpec.pad_left;
     if (inputTran.desc.offset[0] < 0) {
         CHECK_STATUS(NOT_MATCH);
     }
@@ -47,7 +56,7 @@ inline EE trans_input_nchw_to_img(GCLHandle_t handle, TensorDesc inputDesc, GCLM
     *iw_str = inputImg.desc.stride[0];
     *ih_str = inputImg.desc.stride[1];
     *iw_off = 0;
-    *ih_off = -convParamSpec.padding_top;
+    *ih_off = -convParamSpec.pad_top;
     return SUCCESS;
 }
 
@@ -84,9 +93,9 @@ inline EE direct_core_nchw_to_nchwc4_mali_fp16(GCLHandle_t handle,
     sw = convParamSpec.stride_w;
     sh = convParamSpec.stride_h;
     st = convParamSpec.stride_t;
-    ph = convParamSpec.padding_top;
-    pw = convParamSpec.padding_left;
-    pt = convParamSpec.padding_before;
+    ph = convParamSpec.pad_top;
+    pw = convParamSpec.pad_left;
+    pt = convParamSpec.pad_before;
 
     tensorSelectGet(inputDesc, NULL, &df, NULL, &ic, &ih, &iw, &it);
     tensorSelectGet(outputDesc, NULL, NULL, &on, &oc, &oh, &ow, &ot);
@@ -104,14 +113,14 @@ inline EE direct_core_nchw_to_nchwc4_mali_fp16(GCLHandle_t handle,
     o_off = oh_off * ow_str + ow_off;
 
     if (tmpBuf->desc.memType != GCL_MEM_BUF) {
-        CHECK_STATUS(trans_input_nchw_to_img(handle, inputDesc, input, convParamSpec,
-            tmpBuf, &iw_str, &ih_str, &iw_off, &ih_off));
+        CHECK_STATUS(trans_input_nchw_to_img(
+            handle, inputDesc, input, convParamSpec, tmpBuf, &iw_str, &ih_str, &iw_off, &ih_off));
         iwh_str = iw_str * ih_str;
         inbuf = tmpBuf->mem;
         imt = tmpBuf->desc.memType;
     }
 
-    U32 item_w = forwardRunInfo->best_h[0];//for nchw, reuse on w
+    U32 item_w = forwardRunInfo->best_h[0];  //for nchw, reuse on w
     char kernelName[128];
     KernelOpt kernelOpt;
     Kernel kernel;
@@ -125,8 +134,7 @@ inline EE direct_core_nchw_to_nchwc4_mali_fp16(GCLHandle_t handle,
         CHECK_STATUS(NOT_SUPPORTED);
     }
     CHECK_STATUS(set_conv_direct_nchw_to_nchwc4_opt_mali(
-        fw, fh, ft, sw, item_w, activationMode, 
-        DT_F16, imt, omt, kernelName, &kernelOpt));
+        fw, fh, ft, sw, item_w, activationMode, DT_F16, imt, omt, kernelName, &kernelOpt));
     CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
     if (ot > 1) {
         CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, iwh_str, ic_str, iw_off, ih_off, ow_str,
@@ -177,8 +185,8 @@ inline EE direct_core_fn_spe(GCLHandle_t handle,
     fh = convParamSpec.kernel_h;
     sw = convParamSpec.stride_w;
     sh = convParamSpec.stride_h;
-    ph = convParamSpec.padding_top;
-    pw = convParamSpec.padding_left;
+    ph = convParamSpec.pad_top;
+    pw = convParamSpec.pad_left;
     tensorSelectGet(inputDesc, NULL, NULL, NULL, NULL, &ih, &iw);
     tensorSelectGet(outputDesc, NULL, NULL, &on, &oc, &oh, &ow);
     fn = oc;
@@ -269,9 +277,9 @@ inline EE direct_core_mali_fp16(GCLHandle_t handle,
     sw = convParamSpec.stride_w;
     sh = convParamSpec.stride_h;
     st = convParamSpec.stride_t;
-    ph = convParamSpec.padding_top;
-    pw = convParamSpec.padding_left;
-    pt = convParamSpec.padding_before;
+    ph = convParamSpec.pad_top;
+    pw = convParamSpec.pad_left;
+    pt = convParamSpec.pad_before;
     tensorSelectGet(inputDesc, NULL, NULL, &in, &ic, &ih, &iw, &it);
     tensorSelectGet(outputDesc, NULL, NULL, &on, &oc, &oh, &ow, &ot);
     if (on > 1 && ot > 1) {
@@ -389,8 +397,8 @@ inline EE direct_dila_core_mali_fp16(GCLHandle_t handle,
     fh = convParamSpec.kernel_h;
     sw = convParamSpec.stride_w;
     sh = convParamSpec.stride_h;
-    pw = convParamSpec.padding_left;
-    ph = convParamSpec.padding_top;
+    pw = convParamSpec.pad_left;
+    ph = convParamSpec.pad_top;
     dw = convParamSpec.dilatedRate_w;
     dh = convParamSpec.dilatedRate_h;
     tensorSelectGet(inputDesc, NULL, NULL, &in, &ic, &ih, &iw);
@@ -572,7 +580,8 @@ EE convolution_direct_infer_forward_tmp_bytes_mali_fp16(TensorDesc inputDesc,
     bool useGemvMode = useGemvCalMode(inputDesc, convParamSpec, GCL_MEM_BUF, GCL_MEM_BUF);
     bool useNchwMode = useNchwCalMode(idf, fw, ic, dw, dh);
     if (useGemvMode) {
-        CHECK_STATUS(gemv_infer_forward_tmp_bytes_mali_fp16(inputDesc, outputDesc, bytes, forwardRunInfo));
+        CHECK_STATUS(
+            gemv_infer_forward_tmp_bytes_mali_fp16(inputDesc, outputDesc, bytes, forwardRunInfo));
     } else if (useNchwMode) {
         bool useImg = check_qualcomm_device();
         if (useImg) {
@@ -589,9 +598,9 @@ EE convolution_direct_infer_forward_tmp_bytes_mali_fp16(TensorDesc inputDesc,
                 bytes[3] = depth;
             }
         }
-    } else if (idf == DF_NCHW) {//use tran c1 to c4
-        GCLMemDesc desc = convolution_get_input_nchwc4_desc(inputDesc, filterDesc,
-            convParamSpec, outputDesc, useNchwMode, forwardRunInfo);
+    } else if (idf == DF_NCHW) {  //use tran c1 to c4
+        GCLMemDesc desc = convolution_get_input_nchwc4_desc(
+            inputDesc, filterDesc, convParamSpec, outputDesc, useNchwMode, forwardRunInfo);
         if (desc.memType == GCL_MEM_IMG_3D) {
             bytes[1] = desc.stride[0];
             bytes[2] = desc.stride[1];

@@ -24,11 +24,11 @@ int reductionTest(int argc, char **argv, DataType dt)
     ReductionParamSpec p;
     p.keep_dim = atoi(argv[5]);
     bool use_c4 = atoi(argv[6]);
-    p.axes_num = atoi(argv[7]);
-    for (int i = 0; i < p.axes_num; i++) {
+    p.num_axes = atoi(argv[7]);
+    for (int i = 0; i < p.num_axes; i++) {
         p.axes[i] = atoi(argv[8 + i]);
     }
-    p.reduction_mode = REDUCTION_MEAN;
+    p.mode = REDUCTION_MEAN;
     p.coeff = 1.0;
     TensorDesc maskDesc;
     maskDesc.nDims = 0;
@@ -45,7 +45,8 @@ int reductionTest(int argc, char **argv, DataType dt)
     Tensor inputTensorCpu;
     inputTensorCpu.resize(inputDesc);
     inputTensorCpu.alloc();
-    memcpy(get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), input_cpu, tensorNumBytes(inputDesc));
+    UNI_MEMCPY(
+        get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), input_cpu, tensorNumBytes(inputDesc));
 
     Tensor maskTensorCpu;
     maskTensorCpu.resize(maskDesc);
@@ -117,7 +118,7 @@ int reductionTest(int argc, char **argv, DataType dt)
 
     char buffer[150];
     char params[120];
-    sprintf(params, "(%u %u %u %u) %d =(%u %u %u %u)", in, ic, ih, iw, p.axes_num, on, oc, oh, ow);
+    sprintf(params, "(%u %u %u %u) %d =(%u %u %u %u)", in, ic, ih, iw, p.num_axes, on, oc, oh, ow);
     sprintf(buffer, "%20s, %80s", "Reduction", params);
 #ifdef _DEBUG
     double ops = len;

@@ -66,8 +66,8 @@ inline EE depthwise_pointwise_convolution(TensorDesc inputDesc,
     CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
     U32 strideH = convParamSpec.stride_h;
     U32 strideW = convParamSpec.stride_w;
-    U32 paddingT = convParamSpec.padding_top;
-    U32 paddingL = convParamSpec.padding_left;
+    U32 paddingT = convParamSpec.pad_top;
+    U32 paddingL = convParamSpec.pad_left;
     U32 dilatedRateH = convParamSpec.dilatedRate_h;
     U32 dilatedRateW = convParamSpec.dilatedRate_w;
 
@@ -80,8 +80,24 @@ inline EE depthwise_pointwise_convolution(TensorDesc inputDesc,
     } else {
         pwArray = outArray;
     }
-    U32 ic8 = ic / 8;
-    U32 oc8 = oc / 8;
+    U32 ic8 = ic;
+    U32 oc8 = oc;
+    U32 icx = 1;
+    U32 ocx = 1;
+    if (idf == DF_NCHWC16) {
+        icx = 16;
+        ic8 /= 16;
+    } else if (idf == DF_NCHWC8) {
+        icx = 8;
+        ic8 /= 8;
+    }
+    if (odf == DF_NCHWC16) {
+        ocx = 16;
+        oc8 /= 16;
+    } else if (odf == DF_NCHWC8) {
+        ocx = 8;
+        oc8 /= 8;
+    }
     for (U32 n = 0, pw_off = 0; n < in; n++) {
         // dw conv
         for (U32 c = 0; c < ic; c++) {
@@ -94,11 +110,12 @@ inline EE depthwise_pointwise_convolution(TensorDesc inputDesc,
                             I32 iw_idx = w * strideW - paddingL + fw_idx * dilatedRateW;
                             if (ih_idx >= 0 && ih_idx < (I32)ih && iw_idx >= 0 && iw_idx < (I32)iw) {
                                 U32 i_off;
-                                if (idf != DF_NCHWC8) {
-                                    i_off = ((n * ic + c) * ih + ih_idx) * iw + iw_idx;
+                                if (idf == DF_NCHWC8 || idf == DF_NCHWC16) {
+                                    i_off = (((n * ic8 + (c / icx)) * ih + ih_idx) * iw + iw_idx) *
+                                            icx +
+                                        c % icx;
                                 } else {
-                                    i_off = (((n * ic8 + (c / 8)) * ih + ih_idx) * iw + iw_idx) * 8 +
-                                        c % 8;
+                                    i_off = ((n * ic + c) * ih + ih_idx) * iw + iw_idx;
                                 }
                                 value += inArray[i_off] *
                                     dwFilterArray[c * fh * fw + fh_idx * fw + fw_idx];
@@ -108,10 +125,10 @@ inline EE depthwise_pointwise_convolution(TensorDesc inputDesc,
                     CHECK_STATUS(
                         activation_template<T3>(depthwiseActivationParamSpec, value, &value));
 
-                    if (fuseDepthwisePointwise || odf != DF_NCHWC8) {
+                    if (fuseDepthwisePointwise || (odf != DF_NCHWC8 && odf != DF_NCHWC16)) {
                         pwArray[pw_off] = value;
                     } else {
-                        pwArray[(((n * ic8 + (c / 8)) * oh + h) * ow + w) * 8 + c % 8] = value;
+                        pwArray[(((n * ic8 + (c / ocx)) * oh + h) * ow + w) * ocx + c % ocx] = value;
                     }
                 }
             }
@@ -128,10 +145,10 @@ inline EE depthwise_pointwise_convolution(TensorDesc inputDesc,
                     CHECK_STATUS(
                         activation_template<T3>(pointwiseActivationParamSpec, value, &value));
                     U32 o_off;
-                    if (odf != DF_NCHWC8) {
-                        o_off = (n * oc + o) * oh * ow + hw;
+                    if (odf == DF_NCHWC8 || odf == DF_NCHWC16) {
+                        o_off = ((n * oc8 + (o / ocx)) * oh * ow + hw) * ocx + o % ocx;
                     } else {
-                        o_off = ((n * oc8 + (o / 8)) * oh * ow + hw) * 8 + o % 8;
+                        o_off = (n * oc + o) * oh * ow + hw;
                     }
                     outArray[o_off] += value;
                 }
@@ -161,9 +178,9 @@ EE depthwise_pointwise_convolution_general(TensorDesc inputDesc,
     ActivationParamSpec pointwiseActivationParamSpec)
 {
     if (eltwiseInput == nullptr) {
-        memset(output, 0, tensorNumBytes(outputDesc));
+        UNI_MEMSET(output, 0, tensorNumBytes(outputDesc));
     } else {
-        memcpy(output, eltwiseInput, tensorNumBytes(outputDesc));
+        UNI_MEMCPY(output, eltwiseInput, tensorNumBytes(outputDesc));
     }
     EE ret = SUCCESS;
     switch (inputDesc.dt) {

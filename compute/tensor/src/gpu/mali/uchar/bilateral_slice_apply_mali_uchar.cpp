@@ -50,7 +50,7 @@ inline EE bilateral_slice_apply_core_mali_uchar(GCLHandle_t handle,
     tensorSelectGet(gridDesc, NULL, NULL, &gn, &gc, &gh, &gw);
     tensorSelectGet(outputDesc, NULL, NULL, &on, &oc, &oh, &ow);
 
-    U32 coe = bilateralSliceApplyParamSpec.coefficient_len;
+    U32 coe = bilateralSliceApplyParamSpec.coefficient;
     BilateralSliceApplyMode mode = bilateralSliceApplyParamSpec.mode;
     U32 dep = gc / coe;
     U32 gcw = gc * gw;
@@ -62,7 +62,7 @@ inline EE bilateral_slice_apply_core_mali_uchar(GCLHandle_t handle,
     gridbuf = grid->mem;
     outbuf = output->mem;
     gridTran = tmpBuf->mem;
-    if (mode == BSliceApply_NULL) {
+    if (mode == BSLICE_APPLY_NULL) {
         guidebuf = guide->mem;
     } else {
         guidebuf = inbuf;
@@ -85,11 +85,12 @@ inline EE bilateral_slice_apply_core_mali_uchar(GCLHandle_t handle,
     U32 gs[2] = {ow, oh};
     U32 ls[2] = {0, 0};
     U32 dim = 2;
-    char kernelname[128];
-    if (mode == BSliceApply_CONV) {
-        sprintf(kernelname, "bilateral_slice_apply_c12_conv_uchar");
+    const char *kernelname;
+    if (mode == BSLICE_APPLY_CONV) {
+        kernelname = "bilateral_slice_apply_c12_conv_uchar";
+        ;
     } else {
-        sprintf(kernelname, "bilateral_slice_apply_c12_uchar");
+        kernelname = "bilateral_slice_apply_c12_uchar";
     }
     CHECK_STATUS(gcl_create_kernel(handle, kernelname, &kernel));
     CHECK_STATUS(gcl_set_kernelArgs(kernel, iw, wh, gc, gw, gh, gcw, dep, coe, gs[0], gs[1],
@@ -100,7 +101,7 @@ inline EE bilateral_slice_apply_core_mali_uchar(GCLHandle_t handle,
     CHECK_STATUS(gcl_run_kernel_profiling(handle, kernel, dim, gs, ls, kernelname));
     CHECK_STATUS(gcl_print_memory<F16>(handle, input, "bilateral_slice_apply_input"));
     CHECK_STATUS(gcl_print_memory<F16>(handle, output, "bilateral_slice_apply_output"));
-    if (mode == BSliceApply_NULL) {
+    if (mode == BSLICE_APPLY_NULL) {
         CHECK_STATUS(gcl_print_memory<F16>(handle, guide, "bilateral_slice_apply_guide"));
     }
 #endif

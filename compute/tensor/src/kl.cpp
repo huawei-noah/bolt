@@ -143,8 +143,6 @@ std::vector<F32> compute_scale_with_KL(std::vector<F32> &histogram, F32 interval
                 }
             }
         }
-        F32 qSum = sum_func(DT_F32, qExpand.data(), i);
-        scale_func(DT_F32, qExpand.data(), qExpand.data(), i, 1 / qSum, 0);
         F32 kld = compute_KLD(i, clipDist.data(), qExpand.data());
 
         if (kld < minKLD) {

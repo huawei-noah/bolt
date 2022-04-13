@@ -12,14 +12,15 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "tensor_computing.h"
+#ifdef _USE_CPU
+#include "cpu/tensor_computing_cpu.h"
+#endif
 #ifdef _USE_GPU
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
 
-EE space2depth_infer_output_size(Tensor *inputTensor,
-    Space2DepthParamSpec space2DepthPara,
-    Tensor *outputTensor,
-    ArchInfo_t archInfo)
+EE space2depth_infer_output_size(
+    Tensor *inputTensor, Space2DepthParamSpec p, Tensor *outputTensor, ArchInfo_t archInfo)
 {
     if (inputTensor == nullptr) {
         CHECK_STATUS(NULL_POINTER);
@@ -29,35 +30,42 @@ EE space2depth_infer_output_size(Tensor *inputTensor,
     }
     auto arch = archInfo->arch;
     TensorDesc inputDesc = inputTensor->get_desc();
-    TensorDesc outputDesc = outputTensor->get_desc();
+    TensorDesc outputDesc = inputDesc;
+    EE ret = NOT_SUPPORTED;
     if (IS_GPU(arch)) {
 #ifdef _USE_GPU
         OclMemory *inputMem = (OclMemory *)inputTensor->get_memory();
         OclMemory *outputMem = (OclMemory *)outputTensor->get_memory();
-        CHECK_STATUS(space2depth_padding_input_mali(
-            inputDesc, space2DepthPara, &outputDesc, inputMem, outputMem));
+        ret = space2depth_padding_input_mali(inputDesc, p, &outputDesc, inputMem, outputMem);
 #endif
+    } else {
+        for (int i = 0; i < (int)outputDesc.nDims - 2; i++) {
+            outputDesc.dims[i] /= p.block_size;
+            outputDesc.dims[outputDesc.nDims - 2] *= p.block_size;
+        }
+        outputDesc.df = getTensorDefaultDataFormat(outputDesc.nDims);
+        ret = SUCCESS;
     }
     outputTensor->resize(outputDesc);
-    return SUCCESS;
+    return ret;
 }
 
-EE space2depth(Tensor inputTensor,
-    Space2DepthParamSpec space2DepthPara,
-    Tensor outputTensor,
-    ArchInfo_t archInfo)
+EE space2depth(Tensor inputTensor, Space2DepthParamSpec p, Tensor outputTensor, ArchInfo_t archInfo)
 {
     auto arch = archInfo->arch;
+    TensorDesc inputDesc = inputTensor.get_desc();
+    void *input = get_ptr_from_tensor(inputTensor, arch);
+    TensorDesc outputDesc = outputTensor.get_desc();
+    void *output = get_ptr_from_tensor(outputTensor, arch);
     EE ret = NOT_SUPPORTED;
     if (IS_GPU(arch)) {
 #ifdef _USE_GPU
-        TensorDesc inputDesc = inputTensor.get_desc();
-        void *input = get_ptr_from_tensor(inputTensor, arch);
-        TensorDesc outputDesc = outputTensor.get_desc();
-        void *output = get_ptr_from_tensor(outputTensor, arch);
-
         ret = space2depth_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc,
-            (GCLMem_t)input, space2DepthPara, outputDesc, (GCLMem_t)output);
+            (GCLMem_t)input, p, outputDesc, (GCLMem_t)output);
+#endif
+    } else {
+#ifdef _USE_CPU
+        ret = space2depth_cpu(inputDesc, input, p, outputDesc, output);
 #endif
     }
     return ret;

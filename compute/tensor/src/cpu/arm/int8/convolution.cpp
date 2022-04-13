@@ -12,10 +12,10 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "cpu/arm/int8/tensor_computing_int8.h"
-#ifdef __aarch64__
-#include "cpu/arm/int8/v8/convolution_winograd.h"
-#include "cpu/arm/int8/v8/convolution_gemm.h"
-#else
+#if defined(_USE_FP16)
+#include "cpu/arm/int8/v8.2/convolution_winograd.h"
+#include "cpu/arm/int8/v8.2/convolution_gemm.h"
+#elif !defined(__aarch64__)
 #include "cpu/arm/int8/v7/convolution_gemm.h"
 #endif
 #include "tensor_transpose.h"
@@ -74,23 +74,25 @@ EE convolution_int8(TensorDesc inputDesc,
         inputPtr = tmpPtr;
         tmpPtr += tensorNumBytes(inputDesc);
         tmpBytes -= tensorNumBytes(inputDesc);
-        algorithm = CONVOLUTION_ALGORITHM_GEMM;
+        //algorithm = CONVOLUTION_ALGORITHM_GEMM;
     }
 
     EE ret = SUCCESS;
     switch (algorithm) {
-#ifdef __aarch64__
+#if defined(_USE_FP16)
         case CONVOLUTION_ALGORITHM_WINOGRAD:
             ret = convolution_winograd(inputDesc, inputPtr, scales, filterDesc, filter, scales + 2,
                 convParamSpec, biasDesc, bias, tmpBytes, tmpPtr, outputDesc, output, scales + 1,
                 activationDesc, arch);
             break;
 #endif
+#if defined(_USE_FP16) || !defined(__aarch64__)
         case CONVOLUTION_ALGORITHM_GEMM:
             ret = convolution_gemm(inputDesc, inputPtr, scales, filterDesc, filter, scales + 2,
                 convParamSpec, biasDesc, bias, tmpBytes, tmpPtr, outputDesc, output, scales + 1,
                 activationDesc, arch);
             break;
+#endif
         default:
             ret = NOT_SUPPORTED;
             break;

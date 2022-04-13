@@ -49,14 +49,14 @@ EE depth2space_padding_input_mali(TensorDesc inputDesc,
     U32 ow, oh, oc, on;
     tensorSelectGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw);
     on = in;
-    oc = ic / (p.blockSize * p.blockSize);
-    oh = ih * p.blockSize;
-    ow = iw * p.blockSize;
-    if (ic % (p.blockSize * p.blockSize) != 0) {
+    oc = ic / (p.block_size * p.block_size);
+    oh = ih * p.block_size;
+    ow = iw * p.block_size;
+    if (ic % (p.block_size * p.block_size) != 0) {
         return NOT_MATCH;
     }
     DataFormat odf = idf;
-    if ((p.blockSize == 2 && oc < 4) || p.blockSize != 2) {
+    if ((p.block_size == 2 && oc < 4) || p.block_size != 2) {
         odf = DF_NCHW;
     }
     *outputDesc = tensor4df(idt, odf, on, oc, oh, ow);

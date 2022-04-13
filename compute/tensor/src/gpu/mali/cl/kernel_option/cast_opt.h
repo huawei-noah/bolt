@@ -36,8 +36,9 @@ inline EE set_cast_opt_mali(bool useNchwFormat,
     } else {
         CHECK_STATUS(NOT_SUPPORTED);
     }
-    sprintf(kernelName, "cast_%s%s_to_%s", formatName.c_str(), idtName.c_str(), odtName.c_str());
-    sprintf(kernelOpt->sourceName, "cast");
+    std::string kernel = std::string("cast_") + formatName + idtName + std::string("_to_") + odtName;
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, "cast");
     if (useNchwFormat) {
         CHECK_STATUS(set_chars_define_opt("USE_NCHW", opt));
     }

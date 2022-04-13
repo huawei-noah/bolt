@@ -110,12 +110,12 @@ EE depthwise_pointwise_convolution_padding_input_mali(TensorDesc inputDesc,
         }
         ih_align *= sh;
         U32 fhd = (fh - 1) * dh + 1;
-        U32 pl = convParamSpec.padding_left;
-        U32 pr = convParamSpec.padding_right;
-        U32 pt = convParamSpec.padding_top;
+        U32 pl = convParamSpec.pad_left;
+        U32 pr = convParamSpec.pad_right;
+        U32 pt = convParamSpec.pad_top;
         U32 pb = ih_align + (fhd / 2 * 2) - pt - ih;
-        if (pb < convParamSpec.padding_bottom) {
-            pb = convParamSpec.padding_bottom;
+        if (pb < convParamSpec.pad_bottom) {
+            pb = convParamSpec.pad_bottom;
         }
         inputMem->padding(pl, pr, pt, pb);
     }
@@ -148,6 +148,14 @@ EE depthwise_pointwise_convolution_infer_forward_algorithm_mali(GCLHandle_t hand
     }
     if (policy == CONVOLUTION_FASTEST) {
         CHECK_STATUS(NOT_SUPPORTED);
+    }
+    GCLMemType imt = inputMemDesc.memType;
+    GCLMemType omt = outputMemDesc.memType;
+    std::vector<TensorDesc> filterDescVec = {dwFilterDesc, pwFilterDesc};
+    std::vector<I32> flag = build_conv_forward_algorithm_flag(
+        inputDesc, filterDescVec, OT_Conv, imt, omt, convParamSpec);
+    if (gcl_get_runInfo_from_cache(handle, flag, forwardRunInfo)) {
+        return SUCCESS;
     }
     std::vector<DepthwiseConvolutionForwardAlgorithm> depthwisePointwiseConvAlgorithms;
     std::vector<U32> algoNumIndexD;
@@ -372,6 +380,7 @@ EE depthwise_pointwise_convolution_infer_forward_algorithm_mali(GCLHandle_t hand
         }
 
         *forwardRunInfo = bestRunInfo[0];
+        gcl_set_runInfo_to_cache(handle, flag, bestRunInfo[0]);
         CHECK_STATUS(gcl_finish(handle));
         gcl_destroy_gclmem(input);
         gcl_destroy_gclmem(dwFilter);

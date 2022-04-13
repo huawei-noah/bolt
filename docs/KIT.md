@@ -5,6 +5,11 @@
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Android Overview](#android-overview)  
 &nbsp;&nbsp;&nbsp;&nbsp;[Examples](#examples)  
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Image Classification](#image-classification)  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Camera Enlarge](#camera-enlarge)  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Semantics Analysis](#semantics-analysis)  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Chinese Speech Recognition](#chinese-speech-recognition)  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Face Detection](#face-detection)  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Reading Comprehension](#reading-comprehension)  
 
 # Overview
 ---
@@ -31,7 +36,7 @@ In the [kit](../kit) directory, you can find the available demo project. In orde
 
 - ### Image Classification
 
-  <div align=center><img src="images/ImageClassification.PNG" width = 30% height = 30% /></div>
+  <div align=center><img src="images/ImageClassification.gif" width = 20% height = 20% /></div>
 
   The demo takes video input from camera, and uses [GhostNet](https://github.com/huawei-noah/ghostnet) model trained on ImageNet. Given the same FLOPs, GhostNet shows a clear advantage over other lightweight CNNs. The models that we provide are trained with width as 1.0 on TensorFlow, which reaches a TOP1 accuracy of 74%.
 
@@ -73,15 +78,15 @@ In the [kit](../kit) directory, you can find the available demo project. In orde
 
 - ### Camera Enlarge
 
-  <div align=center><img src="images/CameraEnlarge.PNG" width = 30% height = 30% /></div>
+  <div align=center><img src="images/CameraEnlarge.PNG" width = 20% height = 20% /></div>
 
   The demo takes video input from camera, 32 pixels x 32 pixels, and uses [ESR_EA](https://github.com/huawei-noah/vega/blob/master/docs/en/algorithms/esr_ea.md) model to enlarge input image to 64 pixels x 64 pixels.
 
   You can easily switch to other models trained on other datasets, following the steps below. As a tutorial, we will show how to change the model to the FP16 ESR_EA that is also included in the project (kit/models).
 
-  0. Similar with Image Classification
+  0. Similar with Image Classification.
 
-  1. Similar with Image Classification
+  1. Similar with Image Classification.
   
   2. Adjust the pixelProcess function, which is registered as the preprocessing function for the Inference node. For FP16 inference, actual input to the model should be in FP16:
 
@@ -118,9 +123,9 @@ In the [kit](../kit) directory, you can find the available demo project. In orde
      }
      ```
 
-- ### Semantics
+- ### Semantics Analysis
 
-  <div align=center><img src="images/Semantics.PNG" width = 30% height = 30% /></div>
+  <div align=center><img src="images/SemanticsAnalysis.gif" width = 20% height = 20% /></div>
 
   The demo tokenize input words, and use [tinybert](https://github.com/huawei-noah/Pretrained-Language-Model/tree/master/TinyBERT) model to do senmantic analysis.
    
@@ -160,7 +165,7 @@ In the [kit](../kit) directory, you can find the available demo project. In orde
      float[][] result = boltResult.getResultData();
      ```
   
-  3. Obtain the analysis result by comparing the size of the two probabilities in the result array
+  3. Obtain the analysis result by comparing the size of the two probabilities in the result array.
   
      ```
      if (result[0][0]>result[0][1]) {
@@ -170,17 +175,17 @@ In the [kit](../kit) directory, you can find the available demo project. In orde
      }
      ```
   
-- ### ChineseSpeechRecognition
+- ### Chinese Speech Recognition
 
-  <div align=center><img src="images/ChineseSpeechRecognition.PNG" width = 30% height = 30% /></div>
+  <div align=center><img src="images/ChineseSpeechRecognition.gif" width = 20% height = 20% /></div>
 
   The demo recognizes the input Chinese speech, and uses the [ASR](https://github.com/huawei-noah/xxx) model to convert Chinese text.
     
   You can easily switch to other models trained on other datasets, following the steps below. As a tutorial, we will show how to change the model to the FP32 ASR that is also included in the project.
     
-  0. Call the copyAssetAndWrite method to copy the path, and then change the path of the bin file and bolt model in the prototxt file to the copied path
+  0. Call the copyAssetAndWrite method to copy the path, and then change the path of the bin file and bolt model in the prototxt file to the copied path.
     
-  1. Import flow_asr.h in native-lib, flow_asr defines the pre- and post-processing methods and the initialization of flow and the acquisition of results,add init method and get result method in native-lib.cpp
+  1. Import flow_asr.h in native-lib, flow_asr defines the pre- and post-processing methods and the initialization of flow and the acquisition of results,add init method and get result method in native-lib.cpp.
 
      ```
      extern "C"
@@ -206,7 +211,7 @@ In the [kit](../kit) directory, you can find the available demo project. In orde
      }
      ```
     
-  2. Call Jni method  initFlow
+  2. Call Jni method  initFlow.
   
      ```
      initFlow(getCacheDir()+"/encoder_flow.prototxt",getCacheDir()+"/prediction_flow.prototxt",
@@ -214,28 +219,67 @@ In the [kit](../kit) directory, you can find the available demo project. In orde
      
      ```
     
-  3. Call Jni method  runFlow Incoming audio files in wav format get result
+  3. Call Jni method  runFlow Incoming audio files in wav format get result.
   
      ```
      runFlow(wavFileName)
      ```
   
-- ### FaceDetection
+- ### Face Detection
 
-  <div align=center><img src="images/FaceDetection.PNG" width = 30% height = 30% /></div>
+  <div align=center><img src="images/20_bolt_face_detection.gif" width = 20% height = 20% /></div>
     
   The demo detects the input picture, and outputs A photo framed a human face.
     
-  0. bolt path get Similar with Semantics
+  0. bolt path get Similar with Semantics.
     
-  1. Call the getDetectionImgPath method Bitmap and model path to go directly to the detection result picture path
+  1. Call the getDetectionImgPath method Bitmap and model path to go directly to the detection result picture path.
   
      ```
      resultImgPath=boltResult.getDetectionImgPath(bitmap,boltPath);
      ```
     
-  2. The parameters in the prior_boxes_generator method in the jni method initBolt are fixed input parameters of the model and cannot be changed
+  2. The parameters in the prior_boxes_generator method in the jni method initBolt are fixed input parameters of the model and cannot be changed.
 
      ```
      prior_boxes_generator(320,240,0.7,0.3);
      ```
+     
+- ### Reading Comprehension
+
+<div align=center><img src="images/ReadingComprehension.gif" width = 20% height = 20% /></div>
+
+
+The demo is to input a piece of content, and input a content-related question will output the corresponding answer
+
+0. Call the copyAssetAndWrite method to copy the path, and the model path is used in the BoltModel class.
+
+1. Incoming content and questions to obtain the input data required by the dynamic library.
+
+ ```
+ float[][] tokenizers = appTokenizer.runTokenizer(content.getText().toString(), question.getText().toString());
+ ```
+ 
+ 2. set the input and output names and other input parameters according to your model to initialize BoltModel.
+ 
+    ```
+    BoltModel boltModel = new BoltModel(modelPath, AffinityType.CPU_HIGH_PERFORMANCE, inputNum, inputName, inputN,inputCMax, inputH, inputW, inputDatatype, inputDataFormat, outputNum, outputName);
+    BoltResult boltResult = boltModel.run(inputNum, inputName, inputN, inputCActual, inputH, inputW,
+                                    inputDatatype, inputDataFormat, tokenizers);
+                                    
+    ```
+    
+    3. Call the run method of the BoltModel class to obtain the output result. Tokenizers are the processed input data, and inputCActual is the actual length of the input data. Call getResultData of BoltResult class to get the analysis result, get the result array, two float data.
+    
+       ```
+       BoltResult boltResult = boltModel.run(inputNum, inputName, inputN, inputCActual, inputH, inputW,
+                                       inputDatatype, inputDataFormat, tokenizers);
+       float[][] result = boltResult.getResultData();
+       ```
+       
+       4. Call the getResultAnswer method to get the answer of the output result conversion
+       
+       ```
+       String resultStr = getResultAnswer(result);
+       
+       ```

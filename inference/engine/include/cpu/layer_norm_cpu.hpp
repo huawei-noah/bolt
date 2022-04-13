@@ -18,13 +18,13 @@
 
 class LayerNormCPU : public LayerNorm {
 public:
-    LayerNormCPU(DataType dt, U32 weightNum) : LayerNorm(dt, weightNum)
+    LayerNormCPU(DataType dt, LayerNormParamSpec p, U32 weightNum) : LayerNorm(dt, p, weightNum)
     {}
 
     std::shared_ptr<Operator> clone() override
     {
         std::shared_ptr<LayerNormCPU> mem =
-            std::shared_ptr<LayerNormCPU>(new LayerNormCPU(this->dt, this->weightNum));
+            std::shared_ptr<LayerNormCPU>(new LayerNormCPU(this->dt, this->p, this->weightNum));
         *mem = *this;
         return mem;
     }
@@ -32,7 +32,7 @@ public:
     EE infer_weight_desc() override
     {
         auto curOpWs = this->get_weightspec();
-        DataType dtNoQ = (DT_F16_8Q == this->dt) ? DT_F16 : this->dt;
+        DataType dtNoQ = (dt == DT_F16_8Q) ? DT_F16 : ((dt == DT_F32_8Q) ? DT_F32 : dt);
         if (0 != curOpWs.bytes_of_weight) {
             this->weightNum = curOpWs.bytes_of_weight / bytesOf(curOpWs.mdt);
         }
@@ -67,14 +67,14 @@ public:
         Tensor biasTensor = this->biasTensors[0];
         Tensor outputTensor = this->outputTensors[0];
 
-        CHECK_STATUS(layer_normalization(
-            inputTensor, weightTensor, biasTensor, this->temp, outputTensor, &this->archInfo));
+        CHECK_STATUS(layer_normalization(inputTensor, this->p, weightTensor, biasTensor, this->temp,
+            outputTensor, &this->archInfo));
     }
 
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
-        CHECK_STATUS(normalization_infer_output_size(inTensors[0], outTensors[0], &this->archInfo));
+        EE ret = normalization_infer_output_size(inTensors[0], outTensors[0], &this->archInfo);
 #ifdef _USE_INT8
         if (DT_F16_8Q == this->dt || DT_F32_8Q == this->dt) {
             if (featureScale.size() > 0 && -1 == (featureScale.back())[0]) {
@@ -88,7 +88,7 @@ public:
             }
         }
 #endif
-        return SUCCESS;
+        return ret;
     }
 };
 

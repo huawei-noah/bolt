@@ -49,7 +49,7 @@ class HSigmoidOptimizer : public OPOptimizer {
                         if (tmpVec.size() != 1) {
                             continue;
                         }
-                        memcpy(spec->ops[div6Index].input_tensors_name[0],
+                        UNI_MEMCPY(spec->ops[div6Index].input_tensors_name[0],
                             spec->ops[add3Index].input_tensors_name[0], NAME_LEN);
                         spec->ops[div6Index].type = OT_HSigmoid;
                         setOperatorInvalid(spec, add3Index);

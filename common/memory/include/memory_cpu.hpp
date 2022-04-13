@@ -18,7 +18,7 @@
 
 inline void *CPUMemoryAlignedAlloc(size_t alignment, size_t bytes)
 {
-    void *ptr = (void **)operator new(bytes + sizeof(void *) + alignment - 1);
+    void *ptr = (void **)UNI_OPERATOR_NEW(bytes + sizeof(void *) + alignment - 1);
     CHECK_REQUIREMENT(ptr != NULL);
     void **aligned_ptr =
         (void **)(((uintptr_t)(ptr) + sizeof(void *) + alignment - 1) & ~(alignment - 1));
@@ -28,7 +28,7 @@ inline void *CPUMemoryAlignedAlloc(size_t alignment, size_t bytes)
 
 inline void CPUMemoryAlignedfree(void *aligned_ptr)
 {
-    operator delete(((void **)aligned_ptr)[-1]);
+    UNI_OPERATOR_DELETE(((void **)aligned_ptr)[-1]);
 }
 
 class CpuMemory : public Memory {
@@ -39,7 +39,8 @@ public:
         this->allocated = false;
     }
 
-    ~CpuMemory() = default;
+    ~CpuMemory()
+    {}
 
     std::shared_ptr<Memory> clone(bool allocate) override
     {
@@ -71,13 +72,13 @@ public:
             this->capacitySize = size;
             try {
 #ifndef _USE_X86
-                this->val = std::shared_ptr<U8>((U8 *)operator new(size));
+                this->val = std::shared_ptr<U8>((U8 *)UNI_OPERATOR_NEW(size), UNI_OPERATOR_DELETE);
 #else
                 this->val = std::shared_ptr<U8>(
                     (U8 *)CPUMemoryAlignedAlloc(64, size), CPUMemoryAlignedfree);
 #endif
             } catch (const std::bad_alloc &e) {
-                UNI_ERROR_LOG("CPU memory alloc %d bytes failed\n", (int)size);
+                UNI_ERROR_LOG("CPU memory alloc %d bytes failed.\n", (int)size);
             }
         }
         this->allocated = true;
@@ -179,7 +180,7 @@ public:
     std::string string(U32 num, F32 factor) override
     {
         U32 capacityNum = this->capacitySize / bytesOf(this->desc.dt);
-        std::string line = "desc: " + tensorDesc2Str(this->desc) + " data:";
+        std::string line = "desc:" + tensorDesc2Str(this->desc) + " data:";
         for (U32 i = 0; i < num && i < capacityNum; i++) {
             line = line + std::to_string(this->element(i) / factor) + " ";
         }
@@ -187,7 +188,7 @@ public:
         for (U32 i = 0; i < UNI_MIN(tensorNumElements(this->desc), capacityNum); i++) {
             sum += this->element(i) / factor;
         }
-        line += " sum: " + std::to_string(sum);
+        line += " sum:" + std::to_string(sum);
         return line;
     }
 

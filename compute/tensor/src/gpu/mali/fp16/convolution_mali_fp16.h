@@ -16,11 +16,7 @@
 
 #include "gpu/mali/fp16/tensor_computing_fp16.h"
 #include "gpu/mali/cl/kernel_option/common_opt.h"
-inline bool useNchwCalMode(DataFormat idf,
-    U32 fw,
-    U32 ic,
-    U32 dw,
-    U32 dh)
+inline bool useNchwCalMode(DataFormat idf, U32 fw, U32 ic, U32 dw, U32 dh)
 {
     bool useNchwMode = false;
     bool qualCommDev = check_qualcomm_device();
@@ -54,8 +50,18 @@ inline bool useGemvCalMode(
 }
 
 inline void calPaddingVal(TensorDesc inputDesc,
-    TensorDesc filterDesc, ConvolutionParamSpec convParamSpec, U32 w_align, U32 h_align, U32 n_align,
-    bool useNchwMode, U32 *pl, U32 *pr, U32 *pt, U32 *pb, U32 *pa, U32 *pf)
+    TensorDesc filterDesc,
+    ConvolutionParamSpec convParamSpec,
+    U32 w_align,
+    U32 h_align,
+    U32 n_align,
+    bool useNchwMode,
+    U32 *pl,
+    U32 *pr,
+    U32 *pt,
+    U32 *pb,
+    U32 *pa,
+    U32 *pf)
 {
     U32 iw, ih, ic, it, in;
     tensorSelectGet(inputDesc, NULL, NULL, &in, &ic, &ih, &iw, &it);
@@ -63,10 +69,10 @@ inline void calPaddingVal(TensorDesc inputDesc,
     U32 fh = convParamSpec.kernel_h;
     U32 sh = convParamSpec.stride_h;
     U32 dh = convParamSpec.dilatedRate_h;
-    U32 fhd = (fh - 1) * dh + 1; 
+    U32 fhd = (fh - 1) * dh + 1;
     h_align *= sh;
-    plv = convParamSpec.padding_left;
-    ptv = convParamSpec.padding_top; 
+    plv = convParamSpec.pad_left;
+    ptv = convParamSpec.pad_top;
     if (useNchwMode) {
         U32 fw = convParamSpec.kernel_w;
         U32 sw = convParamSpec.stride_w;
@@ -74,18 +80,18 @@ inline void calPaddingVal(TensorDesc inputDesc,
         U32 fwd = (fw - 1) * dw + 1;
         w_align *= sw;
         prv = w_align + (fwd / 2 * 2) - plv - iw;
-        if (prv < convParamSpec.padding_right) {
-            prv = convParamSpec.padding_right;
+        if (prv < convParamSpec.pad_right) {
+            prv = convParamSpec.pad_right;
         }
         pbv = h_align + (fhd / 2 * 2) - ptv - ih;
-        if (pbv < convParamSpec.padding_bottom) {
-            pbv = convParamSpec.padding_bottom;
+        if (pbv < convParamSpec.pad_bottom) {
+            pbv = convParamSpec.pad_bottom;
         }
-    } else  {
-        prv = convParamSpec.padding_right;
+    } else {
+        prv = convParamSpec.pad_right;
         pbv = h_align + (fhd / 2 * 2) - ptv - ih;
-        if (pbv < convParamSpec.padding_bottom) {
-            pbv = convParamSpec.padding_bottom;
+        if (pbv < convParamSpec.pad_bottom) {
+            pbv = convParamSpec.pad_bottom;
         }
         ic = (ic + 3) / 4;
     }

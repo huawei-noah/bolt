@@ -12,8 +12,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "sys.h"
-#include "error.h"
-
 #include "cpu/x86/fp32/tensor_computing_fp32.h"
 
 EE convolution_infer_forward_tmp_bytes_fp32(TensorDesc inputDesc,
@@ -34,10 +32,10 @@ EE convolution_infer_forward_tmp_bytes_fp32(TensorDesc inputDesc,
     CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
     CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
     CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
-    U32 paddingT = convParamSpec.padding_top;
-    U32 paddingB = convParamSpec.padding_bottom;
-    U32 paddingL = convParamSpec.padding_left;
-    U32 paddingR = convParamSpec.padding_right;
+    U32 paddingT = convParamSpec.pad_top;
+    U32 paddingB = convParamSpec.pad_bottom;
+    U32 paddingL = convParamSpec.pad_left;
+    U32 paddingR = convParamSpec.pad_right;
 
     U32 ih_pad = ih + paddingT + paddingB;
     U32 iw_pad = iw + paddingL + paddingR;
@@ -64,6 +62,13 @@ EE convolution_infer_forward_tmp_bytes_fp32(TensorDesc inputDesc,
         case CONVOLUTION_ALGORITHM_GEMM_ICNCHW:
             *bytes = 0;
             break;
+        case CONVOLUTION_ALGORITHM_WINOGRAD: {
+            U32 wSize = 3;
+            U32 blockIcDim = 32;
+            U32 blockOcDim = 32;
+            *bytes = 36 * blockIcDim * ((ow + 3) / 4 + 1) + (36 * blockOcDim + 36 * 36) * wSize;
+            break;
+        }
         default:
             ret = NOT_MATCH;
             break;
@@ -132,6 +137,10 @@ EE convolution_fp32(TensorDesc inputDesc,
             break;
         case CONVOLUTION_ALGORITHM_GEMM_ICNCHW:
             ret = convolution_direct_nchw(inputDesc, input, filterDesc, filter, convParamSpec,
+                biasDesc, bias, tmpBytes, tmp, outputDesc, output, activationDesc);
+            break;
+        case CONVOLUTION_ALGORITHM_WINOGRAD:
+            ret = convolution_winograd(inputDesc, input, eltwiseInput, filterDesc, filter, convParamSpec,
                 biasDesc, bias, tmpBytes, tmp, outputDesc, output, activationDesc);
             break;
         default:

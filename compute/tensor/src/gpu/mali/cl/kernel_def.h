@@ -245,36 +245,36 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
 #define LOAD_BUF_ARRAY5(v, off, buf)   \
     {                                  \
         T4 tmp = vload4(0, buf + off); \
-        v[0] = tmp.s0;                 \
-        v[1] = tmp.s1;                 \
-        v[2] = tmp.s2;                 \
-        v[3] = tmp.s3;                 \
+        v[0] = tmp.x;                  \
+        v[1] = tmp.y;                  \
+        v[2] = tmp.z;                  \
+        v[3] = tmp.w;                  \
         v[4] = buf[off + 4];           \
     }
 
 #define LOAD_BUF_ARRAY6(v, off, buf)         \
-    {                                        \ 
+    {                                        \
         T4 tmp = vload4(0, buf + off);       \
+        v[0] = tmp.x;                        \
+        v[1] = tmp.y;                        \
+        v[2] = tmp.z;                        \
+        v[3] = tmp.w;                        \
         T2 tmpex = vload2(0, buf + off + 4); \
-        v[0] = tmp.s0;                       \
-        v[1] = tmp.s1;                       \
-        v[2] = tmp.s2;                       \
-        v[3] = tmp.s3;                       \
-        v[4] = tmpex.s0;                     \
-        v[5] = tmpex.s1;                     \
+        v[4] = tmpex.x;                      \
+        v[5] = tmpex.y;                      \
     }
 
 #define LOAD_BUF_ARRAY7(v, off, buf)         \
     {                                        \
         T4 tmp = vload4(0, buf + off);       \
+        v[0] = tmp.x;                        \
+        v[1] = tmp.y;                        \
+        v[2] = tmp.z;                        \
+        v[3] = tmp.w;                        \
         T3 tmpex = vload3(0, buf + off + 4); \
-        v[0] = tmp.s0;                       \
-        v[1] = tmp.s1;                       \
-        v[2] = tmp.s2;                       \
-        v[3] = tmp.s3;                       \
-        v[4] = tmpex.s0;                     \
-        v[5] = tmpex.s1;                     \
-        v[6] = tmpex.s2;                     \
+        v[4] = tmpex.x;                      \
+        v[5] = tmpex.y;                      \
+        v[6] = tmpex.z;                      \
     }
 
 #define LOAD_BUF_ARRAY8(v, off, buf)   \
@@ -1341,6 +1341,14 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         v.s2 = 1.0 / (1.0 + exp(-1.0 * v.s2)); \
         v.s3 = 1.0 / (1.0 + exp(-1.0 * v.s3)); \
     }
+#elif defined(USE_SWISH)
+#define ACTIVATION_V4(v)                        \
+    {                                           \
+        v.s0 = v.s0 / (1.0 + exp(-1.0 * v.s0)); \
+        v.s1 = v.s1 / (1.0 + exp(-1.0 * v.s1)); \
+        v.s2 = v.s2 / (1.0 + exp(-1.0 * v.s2)); \
+        v.s3 = v.s3 / (1.0 + exp(-1.0 * v.s3)); \
+    }
 #elif defined(USE_ABS)
 #define ACTIVATION_V4(v)   \
     {                      \
@@ -1364,6 +1372,14 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         v.s1 = -v.s1;    \
         v.s2 = -v.s2;    \
         v.s3 = -v.s3;    \
+    }
+#elif defined(USE_EXP)
+#define ACTIVATION_V4(v)  \
+    {                     \
+        v.s0 = exp(v.s0); \
+        v.s1 = exp(v.s1); \
+        v.s2 = exp(v.s2); \
+        v.s3 = exp(v.s3); \
     }
 #else
 #define ACTIVATION_V1(v) \

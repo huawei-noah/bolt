@@ -45,8 +45,8 @@ inline EE depthwise_core_mali_fp16(GCLHandle_t handle,
     U32 ow, oh, oc, on;
     sw = convParamSpec.stride_w;
     sh = convParamSpec.stride_h;
-    pw = convParamSpec.padding_left;
-    ph = convParamSpec.padding_top;
+    pw = convParamSpec.pad_left;
+    ph = convParamSpec.pad_top;
     dw = convParamSpec.dilatedRate_w;
     dh = convParamSpec.dilatedRate_h;
     fw = convParamSpec.kernel_w;

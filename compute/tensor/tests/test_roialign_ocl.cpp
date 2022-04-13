@@ -58,7 +58,7 @@ int roialignTest(int argc, char *argv[], DataType dt)
     }
 
     RoIAlignParamSpec p;
-    p.coordinateTransformationMode = ROIALIGN_HALF_PIXEL;
+    p.trans_mode = COORDINATE_TRANS_HALF_PIXEL;
     p.mode = POOLING_MEAN;
     p.output_w = ow;
     p.output_h = oh;
@@ -88,7 +88,7 @@ int roialignTest(int argc, char *argv[], DataType dt)
             inTensorsCpu[i].resize(roiDesc);
         }
         inTensorsCpu[i].alloc();
-        memcpy(get_ptr_from_tensor(inTensorsCpu[i], CPU_GENERAL), inputCpu[i],
+        UNI_MEMCPY(get_ptr_from_tensor(inTensorsCpu[i], CPU_GENERAL), inputCpu[i],
             tensorNumBytes(inTensorsCpu[i].get_desc()));
         inTensorPtrCpu[i] = &inTensorsCpu[i];
     }

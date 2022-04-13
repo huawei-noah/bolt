@@ -23,7 +23,7 @@
 #include "gcl_engine.h"
 #include "image_container.hpp"
 #endif
-#include "parameter_spec.h"
+#include "tensor_computing.h"
 
 class Operator {
 public:
@@ -155,7 +155,7 @@ public:
         featureScale.resize(num);
         for (U32 i = 0; i < num; i++) {
             featureScale[i].resize(qs[i].num_scale);
-            memcpy(featureScale[i].data(), qs[i].scale, qs[i].num_scale * bytesOf(DT_F32));
+            UNI_MEMCPY(featureScale[i].data(), qs[i].scale, qs[i].num_scale * bytesOf(DT_F32));
         }
 #endif
     }
@@ -251,7 +251,7 @@ public:
             if (size[0] == 0 && size[1] == 0 && size[2] == 0) {
                 return false;
             } else if (size[0] == 0 || size[1] == 0 || size[2] == 0) {
-                CHECK_STATUS(NOT_MATCH);
+                UNI_ERROR_LOG("gpu tmp buffer(on image buffer) parameter is wrong.\n");
             }
             *tensor = this->tempImages->get(slot, size[0], size[1], size[2]);
             findMatchImage = true;
@@ -301,6 +301,25 @@ public:
         return SUCCESS;
     }
 #endif
+
+    int is_shape(std::vector<Tensor *> tensors)
+    {
+        int count = 0;
+        for (U32 i = 0; i < tensors.size(); i++) {
+            count += tensorIsShape(tensors[i]->get_desc());
+        }
+        return count;
+    }
+
+    TensorDesc tensor_shape(Tensor tensor)
+    {
+        TensorDesc desc = tensor.get_desc();
+        U32 *ptr = (U32 *)((CpuMemory *)(tensor.get_memory()))->get_ptr();
+        for (U32 i = 0; i < tensor.length() && desc.nDims + i < DIM_LEN; i++) {
+            desc.dims[desc.nDims + i] = ptr[i];
+        }
+        return desc;
+    }
 
 protected:
     ArchInfo archInfo;

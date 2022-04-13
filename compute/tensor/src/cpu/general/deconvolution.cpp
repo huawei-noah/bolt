@@ -36,12 +36,12 @@ inline EE deconvolution(TensorDesc inputDesc,
     U32 group = convParamSpec.group;
     U32 strideH = convParamSpec.stride_h;
     U32 strideW = convParamSpec.stride_w;
-    U32 paddingT = convParamSpec.padding_top;
-    U32 paddingL = convParamSpec.padding_left;
+    U32 paddingT = convParamSpec.pad_top;
+    U32 paddingL = convParamSpec.pad_left;
     U32 ocGroupSize = oc / group;
 
     // initialize outputs to 0
-    memset(outArray, 0, tensorNumBytes(outputDesc));
+    UNI_MEMSET(outArray, 0, tensorNumBytes(outputDesc));
     U32 ic8 = ic / 8;
     U32 oc8 = oc / 8;
     for (U32 n = 0; n < in; n++) {

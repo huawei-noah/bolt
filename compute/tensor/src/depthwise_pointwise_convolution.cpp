@@ -50,10 +50,10 @@ inline EE depthwise_pointwise_convolution_infer_output_size_cpu(TensorDesc input
 
     U32 strideH = convParamSpec.stride_h;
     U32 strideW = convParamSpec.stride_w;
-    U32 paddingT = convParamSpec.padding_top;
-    U32 paddingB = convParamSpec.padding_bottom;
-    U32 paddingL = convParamSpec.padding_left;
-    U32 paddingR = convParamSpec.padding_right;
+    U32 paddingT = convParamSpec.pad_top;
+    U32 paddingB = convParamSpec.pad_bottom;
+    U32 paddingL = convParamSpec.pad_left;
+    U32 paddingR = convParamSpec.pad_right;
     U32 dilateH = convParamSpec.dilatedRate_h;
     U32 dilateW = convParamSpec.dilatedRate_w;
 
@@ -66,7 +66,12 @@ inline EE depthwise_pointwise_convolution_infer_output_size_cpu(TensorDesc input
         CHECK_STATUS(NOT_MATCH);
     }
 
-    *outputDesc = tensor4df(targetDataType, DF_NCHWC8, in, fn2, oh, ow);
+    DataFormat odf = DF_NCHWC8;
+    if ((idt == DT_U8_Q || idf == DF_NCHWC16) && ic % 16 == 0) {
+        odf = DF_NCHWC16;
+    }
+
+    *outputDesc = tensor4df(targetDataType, odf, in, fn2, oh, ow);
     return SUCCESS;
 }
 
@@ -103,6 +108,15 @@ EE depthwise_pointwise_convolution_infer_output_size(Tensor *inputTensor,
         if (fn % 8 != 0) {
             CHECK_STATUS(NOT_SUPPORTED);
         }
+#ifdef _USE_INT8
+        if (IS_X86_AVX512(archInfo->arch) && (inputDesc.dt == DT_U8_Q))
+        {
+            outputDesc.df = DF_NCHWC16;
+            if (fn % 16 != 0) {
+                CHECK_STATUS(NOT_SUPPORTED);
+            }
+        }
+#endif
     }
     outputTensor->resize(outputDesc);
     return SUCCESS;
@@ -180,7 +194,17 @@ EE depthwise_pointwise_convolution_transform_filter_bytes(Tensor dwFilterTensor,
 #ifdef _USE_X86
     } else if (IS_X86(arch)) {
         U32 *size = (U32 *)dwBytes;
-        *size = tensorNumBytes(dwFilterDesc) + 32;
+        if (DT_I8 == dwFilterDesc.dt) {
+            DataType fdt;
+            DataFormat fdf;
+            U32 fn, fc, fh, fw;
+            CHECK_STATUS(tensor4dGet(dwFilterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
+            U32 alignSize = 4;
+            U32 filterSize = (fh * fw + alignSize - 1) / alignSize * alignSize;
+            *size = filterSize * fn * fc + 32 + fc * 4;
+        } else {
+            *size = tensorNumBytes(dwFilterDesc) + 32;
+        }
         size = (U32 *)pwBytes;
         *size = tensorNumBytes(pwFilterDesc) + 32;
         ret = SUCCESS;
@@ -281,7 +305,7 @@ EE depthwise_pointwise_convolution_infer_forward_tmp_bytes(Tensor inputTensor,
 #ifdef _USE_X86
     } else if (IS_X86(arch)) {
         ret = depthwise_convolution_infer_forward_tmp_bytes_x86(
-            inputDesc, outputDesc, convParamSpec, algorithm, bytes);
+            inputDesc, dwFilterDesc, outputDesc, convParamSpec, algorithm, bytes);
 #endif
 #ifdef _USE_NEON
     } else if (IS_ARM(arch)) {
@@ -303,6 +327,7 @@ EE depthwise_pointwise_convolution(std::vector<Tensor> inputTensors,
     Tensor pwFilterTensor,
     ConvolutionParamSpec convParamSpec,
     DepthwiseConvolutionForwardAlgorithm algorithm,
+    void *scale,
     Tensor dwBiasTensor,
     Tensor pwBiasTensor,
     std::vector<Tensor> tmpTensors,
@@ -358,7 +383,7 @@ EE depthwise_pointwise_convolution(std::vector<Tensor> inputTensors,
 #ifdef _USE_X86
     } else if (IS_X86(arch)) {
         ret = depthwise_pointwise_convolution_x86(inputDesc, input, eltwiseInput, dwFilterDesc,
-            dwFilter, pwFilterDesc, pwFilter, convParamSpec, algorithm, dwBiasDesc, dwBias,
+            dwFilter, pwFilterDesc, pwFilter, convParamSpec, algorithm, scale, dwBiasDesc, dwBias,
             pwBiasDesc, pwBias, tmpBytes, tmp, outputDesc, output, depthwiseActivationParamSpec,
             pointwiseActivationParamSpec, archInfo->arch);
 #endif
@@ -388,7 +413,7 @@ EE depthwise_pointwise_convolution(std::vector<Tensor> inputTensors,
     if (inputTensors.size() > 1 && isEltwiseSeperate) {
         std::vector<Tensor> eltwiseInputTensors = {outputTensor, inputTensors[1]};
         EltwiseParamSpec eltwiseDesc;
-        eltwiseDesc.elt_mode = ELTWISE_SUM;
+        eltwiseDesc.mode = ELTWISE_SUM;
         eltwiseDesc.activation_type = eltwiseActDesc.mode;
         eltwiseDesc.activation_spec = convParamSpec.activation_spec;
         ret = eltwise(eltwiseInputTensors, eltwiseDesc, tmpTensors[0], outputTensor, archInfo);

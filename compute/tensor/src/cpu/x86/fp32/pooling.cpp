@@ -12,6 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "cpu/x86/fp32/tensor_computing_fp32.h"
+#include "cpu/x86/fp32/pooling_kernel.h"
 
 #define UNROLL_W 4
 
@@ -19,255 +20,8 @@ typedef void (*pooling_max_func)(const F32 *curI, F32 *curO, U32 kw, U32 kh, U32
 typedef void (*pooling_mean_func)(
     const F32 *curI, F32 *curO, U32 kw, U32 kh, U32 iStep, U32 stride, F32 poolSize);
 
-void pooling_max_w4(const F32 *curI, F32 *curO, U32 kw, U32 kh, U32 iStep, U32 stride)
-{
-    __asm__ __volatile__("mov %%eax, %%eax                                  \n\t"
-                         "mov %4, %%eax                                  \n\t"
-                         "mov %%rax, %%rdi                                  \n\t"
-                         "mov %%eax, %%eax                                  \n\t"
-                         "mov %5, %%eax                                  \n\t"
-                         "mov %%rax, %%r9                                  \n\t"
-                         "add %%r9, %%r9                                  \n\t"
-                         "mov %%rax, %%r10                                  \n\t"
-                         "add %%r9, %%r10                                  \n\t"
-                         "add %0, %%rax                                  \n\t"
-                         "add %0, %%r9                                  \n\t"
-                         "add %0, %%r10                                  \n\t"
-
-                         "vmovups (%0), %%ymm0                     \n\t"
-                         "vmovups (%%rax), %%ymm1                     \n\t"
-                         "vmovups (%%r9), %%ymm2                     \n\t"
-                         "vmovups (%%r10), %%ymm3                     \n\t"
-
-                         ".align 16                                         \n\t"
-                         "0:                                                \n\t"
-
-                         "mov %2, %%ecx                                     \n\t"
-                         ".align 16                                         \n\t"
-                         "1:                                                \n\t"
-
-                         "vmovups (%0), %%ymm4                     \n\t"
-                         "vmovups (%%rax), %%ymm5                     \n\t"
-                         "vmovups (%%r9), %%ymm6                     \n\t"
-                         "vmovups (%%r10), %%ymm7                     \n\t"
-
-                         "vmaxps %%ymm0, %%ymm4, %%ymm0                     \n\t"
-                         "vmaxps %%ymm1, %%ymm5, %%ymm1                     \n\t"
-                         "vmaxps %%ymm2, %%ymm6, %%ymm2                     \n\t"
-                         "vmaxps %%ymm3, %%ymm7, %%ymm3                     \n\t"
-
-                         "add $0x20, %0                                      \n\t"
-                         "add $0x20, %%rax                                      \n\t"
-                         "add $0x20, %%r9                                      \n\t"
-                         "add $0x20, %%r10                                      \n\t"
-                         "dec %%ecx                                         \n\t"
-                         "jg 1b                                             \n\t"
-
-                         "add %%rdi, %0                                      \n\t"
-                         "add %%rdi, %%rax                                      \n\t"
-                         "add %%rdi, %%r9                                      \n\t"
-                         "add %%rdi, %%r10                                      \n\t"
-                         "dec %%ebx                                         \n\t"
-                         "jg 0b                                             \n\t"
-
-                         "vmovups %%ymm0, (%1)                              \n\t"
-                         "vmovups %%ymm1, 0x20(%1)                          \n\t"
-                         "vmovups %%ymm2, 0x40(%1)                          \n\t"
-                         "vmovups %%ymm3, 0x60(%1)                          \n\t"
-                         :
-                         : "r"(curI), "r"(curO), "r"(kw), "b"(kh), "r"(iStep), "r"(stride)
-                         : "%eax", "%rax", "%ecx", "%r10", "%r9", "%rdi", "%ymm0", "%ymm1", "%ymm2",
-                         "%ymm3", "%ymm4", "%ymm5", "%ymm6", "%ymm7", "memory", "cc");
-}
-
-void pooling_max_w2(const F32 *curI, F32 *curO, U32 kw, U32 kh, U32 iStep, U32 stride)
-{
-    __asm__ __volatile__(
-        "mov %%eax, %%eax                                  \n\t"
-        "mov %4, %%eax                                  \n\t"
-        "mov %%rax, %%rdi                                  \n\t"
-        "mov %%eax, %%eax                                  \n\t"
-        "mov %5, %%eax                                  \n\t"
-        "add %0, %%rax                                  \n\t"
-        "vmovups (%0), %%ymm0                     \n\t"
-        "vmovups (%%rax), %%ymm1                     \n\t"
-        ".align 16                                         \n\t"
-        "0:                                                \n\t"
-        "mov %2, %%ecx                                     \n\t"
-        ".align 16                                         \n\t"
-        "1:                                                \n\t"
-        "vmovups (%0), %%ymm4                     \n\t"
-        "vmovups (%%rax), %%ymm5                     \n\t"
-        "vmaxps %%ymm0, %%ymm4, %%ymm0                     \n\t"
-        "vmaxps %%ymm1, %%ymm5, %%ymm1                     \n\t"
-        "add $0x20, %0                                      \n\t"
-        "add $0x20, %%rax                                      \n\t"
-        "dec %%ecx                                         \n\t"
-        "jg 1b                                             \n\t"
-        "add %%rdi, %0                                      \n\t"
-        "add %%rdi, %%rax                                      \n\t"
-        "dec %%ebx                                         \n\t"
-        "jg 0b                                             \n\t"
-        "vmovups %%ymm0, (%1)                              \n\t"
-        "vmovups %%ymm1, 0x20(%1)                          \n\t"
-        :
-        : "r"(curI), "r"(curO), "r"(kw), "b"(kh), "r"(iStep), "r"(stride)
-        : "%eax", "%rax", "%ecx", "%rdi", "%ymm0", "%ymm1", "%ymm4", "%ymm5", "memory", "cc");
-}
-
-void pooling_max_w1(const F32 *curI, F32 *curO, U32 kw, U32 kh, U32 iStep, U32 stride)
-{
-    __asm__ __volatile__("mov %%eax, %%eax                                  \n\t"
-                         "mov %4, %%eax                                  \n\t"
-                         "mov %%rax, %%rdi                                  \n\t"
-                         "vmovups (%0), %%ymm0                     \n\t"
-                         ".align 16                                         \n\t"
-                         "0:                                                \n\t"
-                         "mov %2, %%ecx                                     \n\t"
-                         ".align 16                                         \n\t"
-                         "1:                                                \n\t"
-                         "vmovups (%0), %%ymm4                     \n\t"
-                         "vmaxps %%ymm0, %%ymm4, %%ymm0                     \n\t"
-                         "add $0x20, %0                                      \n\t"
-                         "dec %%ecx                                         \n\t"
-                         "jg 1b                                             \n\t"
-                         "add %%rdi, %0                                      \n\t"
-                         "dec %%ebx                                         \n\t"
-                         "jg 0b                                             \n\t"
-                         "vmovups %%ymm0, (%1)                              \n\t"
-                         :
-                         : "r"(curI), "r"(curO), "r"(kw), "b"(kh), "r"(iStep), "r"(stride)
-                         : "%eax", "%rax", "%ecx", "%rdi", "%ymm0", "%ymm4", "memory", "cc");
-}
-
-void pooling_mean_w4(const F32 *curI, F32 *curO, U32 kw, U32 kh, U32 iStep, U32 stride, F32 poolSize)
-{
-    __asm__ __volatile__(
-        "mov %%eax, %%eax                                  \n\t"
-        "mov %4, %%eax                                  \n\t"
-        "mov %%rax, %%rdi                                  \n\t"
-        "mov %5, %%eax                                  \n\t"
-        "mov %%rax, %%r9                                  \n\t"
-        "add %%r9, %%r9                                  \n\t"
-        "mov %%rax, %%r10                                  \n\t"
-        "add %%r9, %%r10                                  \n\t"
-        "add %0, %%rax                                  \n\t"
-        "add %0, %%r9                                  \n\t"
-        "add %0, %%r10                                  \n\t"
-        "vxorps %%ymm0, %%ymm0, %%ymm0                     \n\t"
-        "vxorps %%ymm1, %%ymm1, %%ymm1                     \n\t"
-        "vxorps %%ymm2, %%ymm2, %%ymm2                     \n\t"
-        "vxorps %%ymm3, %%ymm3, %%ymm3                     \n\t"
-        ".align 16                                         \n\t"
-        "0:                                                \n\t"
-        "mov %2, %%ecx                                     \n\t"
-        ".align 16                                         \n\t"
-        "1:                                                \n\t"
-        "vmovups (%0), %%ymm4                     \n\t"
-        "vmovups (%%rax), %%ymm5                     \n\t"
-        "vmovups (%%r9), %%ymm6                     \n\t"
-        "vmovups (%%r10), %%ymm7                     \n\t"
-        "vaddps %%ymm0, %%ymm4, %%ymm0                     \n\t"
-        "vaddps %%ymm1, %%ymm5, %%ymm1                     \n\t"
-        "vaddps %%ymm2, %%ymm6, %%ymm2                     \n\t"
-        "vaddps %%ymm3, %%ymm7, %%ymm3                     \n\t"
-        "add $0x20, %0                                      \n\t"
-        "add $0x20, %%rax                                      \n\t"
-        "add $0x20, %%r9                                      \n\t"
-        "add $0x20, %%r10                                      \n\t"
-        "dec %%ecx                                         \n\t"
-        "jg 1b                                             \n\t"
-        "add %%rdi, %0                                      \n\t"
-        "add %%rdi, %%rax                                      \n\t"
-        "add %%rdi, %%r9                                      \n\t"
-        "add %%rdi, %%r10                                      \n\t"
-        "dec %%ebx                                         \n\t"
-        "jg 0b                                             \n\t"
-        "vbroadcastss (%6), %%ymm4                     \n\t"
-        "vdivps %%ymm4, %%ymm0, %%ymm0                     \n\t"
-        "vdivps %%ymm4, %%ymm1, %%ymm1                     \n\t"
-        "vdivps %%ymm4, %%ymm2, %%ymm2                     \n\t"
-        "vdivps %%ymm4, %%ymm3, %%ymm3                     \n\t"
-        "vmovups %%ymm0, (%1)                              \n\t"
-        "vmovups %%ymm1, 0x20(%1)                          \n\t"
-        "vmovups %%ymm2, 0x40(%1)                          \n\t"
-        "vmovups %%ymm3, 0x60(%1)                          \n\t"
-        :
-        : "r"(curI), "r"(curO), "r"(kw), "b"(kh), "r"(iStep), "r"(stride), "r"(&poolSize)
-        : "%eax", "%rax", "%ecx", "%r10", "%r9", "%rdi", "%ymm0", "%ymm1", "%ymm2", "%ymm3",
-        "%ymm4", "%ymm5", "%ymm6", "%ymm7", "memory", "cc");
-}
-
-void pooling_mean_w2(const F32 *curI, F32 *curO, U32 kw, U32 kh, U32 iStep, U32 stride, F32 poolSize)
-{
-    __asm__ __volatile__(
-        "mov %%eax, %%eax                                  \n\t"
-        "mov %4, %%eax                                  \n\t"
-        "mov %%rax, %%rdi                                  \n\t"
-        "mov %5, %%eax                                  \n\t"
-        "add %0, %%rax                                  \n\t"
-        "vxorps %%ymm0, %%ymm0, %%ymm0                     \n\t"
-        "vxorps %%ymm1, %%ymm1, %%ymm1                     \n\t"
-        ".align 16                                         \n\t"
-        "0:                                                \n\t"
-        "mov %2, %%ecx                                     \n\t"
-        ".align 16                                         \n\t"
-        "1:                                                \n\t"
-        "vmovups (%0), %%ymm4                     \n\t"
-        "vmovups (%%rax), %%ymm5                     \n\t"
-        "vaddps %%ymm0, %%ymm4, %%ymm0                     \n\t"
-        "vaddps %%ymm1, %%ymm5, %%ymm1                     \n\t"
-        "add $0x20, %0                                      \n\t"
-        "add $0x20, %%rax                                      \n\t"
-        "dec %%ecx                                         \n\t"
-        "jg 1b                                             \n\t"
-        "add %%rdi, %0                                      \n\t"
-        "add %%rdi, %%rax                                      \n\t"
-        "dec %%ebx                                         \n\t"
-        "jg 0b                                             \n\t"
-        "vbroadcastss (%6), %%ymm4                     \n\t"
-        "vdivps %%ymm4, %%ymm0, %%ymm0                     \n\t"
-        "vdivps %%ymm4, %%ymm1, %%ymm1                     \n\t"
-        "vmovups %%ymm0, (%1)                              \n\t"
-        "vmovups %%ymm1, 0x20(%1)                          \n\t"
-        :
-        : "r"(curI), "r"(curO), "r"(kw), "b"(kh), "r"(iStep), "r"(stride), "r"(&poolSize)
-        : "%eax", "%rax", "%ecx", "%rdi", "%ymm0", "%ymm1", "%ymm4", "%ymm5", "memory", "cc");
-}
-
-void pooling_mean_w1(const F32 *curI, F32 *curO, U32 kw, U32 kh, U32 iStep, U32 stride, F32 poolSize)
-{
-    __asm__ __volatile__(
-        "mov %%eax, %%eax                                  \n\t"
-        "mov %4, %%eax                                  \n\t"
-        "mov %%rax, %%rdi                                  \n\t"
-        "vxorps %%ymm0, %%ymm0, %%ymm0                     \n\t"
-        ".align 16                                         \n\t"
-        "0:                                                \n\t"
-        "mov %2, %%ecx                                     \n\t"
-        ".align 16                                         \n\t"
-        "1:                                                \n\t"
-        "vmovups (%0), %%ymm4                     \n\t"
-        "vaddps %%ymm0, %%ymm4, %%ymm0                     \n\t"
-        "add $0x20, %0                                      \n\t"
-        "dec %%ecx                                         \n\t"
-        "jg 1b                                             \n\t"
-        "add %%rdi, %0                                      \n\t"
-        "dec %%ebx                                         \n\t"
-        "jg 0b                                             \n\t"
-        "vbroadcastss (%6), %%ymm4                     \n\t"
-        "vdivps %%ymm4, %%ymm0, %%ymm0                     \n\t"
-        "vmovups %%ymm0, (%1)                              \n\t"
-        :
-        : "r"(curI), "r"(curO), "r"(kw), "b"(kh), "r"(iStep), "r"(stride), "r"(&poolSize)
-        : "%eax", "%rax", "%ecx", "%rdi", "%ymm0", "%ymm4", "memory", "cc");
-}
-
-EE pooling_fp32(TensorDesc inputDesc,
-    const F32 *input,
-    PoolingParamSpec poolingParamSpec,
-    TensorDesc outputDesc,
-    F32 *output)
+EE pooling_fp32(
+    TensorDesc inputDesc, const F32 *input, PoolingParamSpec p, TensorDesc outputDesc, F32 *output)
 {
     if (nullptr == input || nullptr == output) {
         CHECK_STATUS(NULL_POINTER);
@@ -288,15 +42,15 @@ EE pooling_fp32(TensorDesc inputDesc,
         CHECK_STATUS(NOT_MATCH);
     }
 
-    PoolingMode pm = poolingParamSpec.mode;
-    U32 strideH = poolingParamSpec.stride_h;
-    U32 strideW = poolingParamSpec.stride_w;
-    U32 paddingT = poolingParamSpec.padding_top;
-    U32 paddingL = poolingParamSpec.padding_left;
-    U32 kernelSizeH = poolingParamSpec.kernel_h;
-    U32 kernelSizeW = poolingParamSpec.kernel_w;
+    PoolingMode pm = p.mode;
+    U32 strideH = p.stride_h;
+    U32 strideW = p.stride_w;
+    U32 paddingT = p.pad_top;
+    U32 paddingL = p.pad_left;
+    U32 kernelSizeH = p.kernel_h;
+    U32 kernelSizeW = p.kernel_w;
     U32 wSize, kh, kw, iStep;
-    F32 poolSize, *curO;
+    F32 *curO;
     const F32 *curI;
     if (paddingT >= kernelSizeH || paddingL >= kernelSizeW) {
         CHECK_STATUS(NOT_SUPPORTED);
@@ -307,6 +61,7 @@ EE pooling_fp32(TensorDesc inputDesc,
     U32 wSizes[3] = {1, 2, 4};
     pooling_max_func pooling_max[3] = {pooling_max_w1, pooling_max_w2, pooling_max_w4};
     pooling_mean_func pooling_mean[3] = {pooling_mean_w1, pooling_mean_w2, pooling_mean_w4};
+    F32 poolSize = kernelSizeH * kernelSizeW;
     for (U32 n = 0; n < in; n++) {
         for (U32 c = 0; c < ic; c++) {
             for (U32 h = 0; h < oh; h++) {
@@ -329,7 +84,9 @@ EE pooling_fp32(TensorDesc inputDesc,
                     kh = hend - hstart;
                     kw = wend - wstart;
                     iStep = (iw - kw) * 32;
-                    poolSize = kw * kh * 1.0f;
+                    if (!p.count_include_pad) {
+                        poolSize = kh * kw;
+                    }
                     if (kw < kernelSizeW) {
                         wSize = 1;
                     }
@@ -344,7 +101,7 @@ EE pooling_fp32(TensorDesc inputDesc,
                             break;
                         }
                         default:
-                            CHECK_STATUS(NOT_SUPPORTED);
+                            return NOT_SUPPORTED;
                     }
                 }
             }

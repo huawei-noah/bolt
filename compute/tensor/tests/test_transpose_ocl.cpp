@@ -31,13 +31,13 @@ int transposeTest(int argc, char **argv, DataType dt)
         inputDesc_cpu.df = DF_NCHW;
     }
     CHECK_REQUIREMENT(argc == (int)(nDims * 2 + 2));
-    p.trans_size = nDims;
-    p_inv.trans_size = nDims;
+    p.num_axes = nDims;
+    p_inv.num_axes = nDims;
     for (U32 i = 0; i < nDims; i++) {
         inputDesc_cpu.dims[nDims - 1 - i] = atoi(argv[2 + i]);
         I32 value = atoi(argv[2 + nDims + i]);
-        p.trans_dims[i] = value;
-        p_inv.trans_dims[value] = i;
+        p.axes[i] = value;
+        p_inv.axes[value] = i;
     }
     inputDesc_gpu = inputDesc_cpu;
 
@@ -52,7 +52,7 @@ int transposeTest(int argc, char **argv, DataType dt)
     Tensor inputTensorCpu;
     inputTensorCpu.resize(inputDesc_cpu);
     inputTensorCpu.alloc();
-    memcpy(
+    UNI_MEMCPY(
         get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), input_cpu, tensorNumBytes(inputDesc_cpu));
     Tensor outputTensorCpu;
     Tensor tmpTensorCpu;

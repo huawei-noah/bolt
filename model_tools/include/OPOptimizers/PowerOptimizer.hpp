@@ -76,7 +76,7 @@ class PowerOptimizer : public OPOptimizer {
                 if (nextOpIndexes.size() != 1 ||
                     OT_Eltwise != spec->ops[nextOpIndexes[0].first].type ||
                     spec->ops[nextOpIndexes[0].first].num_inputs != 2 ||
-                    spec->ops[nextOpIndexes[0].first].ps.eltwise_spec.elt_mode != ELTWISE_SUM) {
+                    spec->ops[nextOpIndexes[0].first].ps.eltwise_spec.mode != ELTWISE_SUM) {
                     continue;
                 }
                 int eltwiseIndex = nextOpIndexes[0].first;
@@ -110,8 +110,7 @@ class PowerOptimizer : public OPOptimizer {
                     spec->ops[eltwiseIndex].num_inputs = 1;
                     str_copy(spec->ops[eltwiseIndex].input_tensors_name[0],
                         spec->ops[i].input_tensors_name[0], NAME_LEN);
-                    delete spec->ops[eltwiseIndex].input_tensors_name[1];
-                    spec->ops[eltwiseIndex].input_tensors_name[1] = nullptr;
+                    mt_free(spec->ops[eltwiseIndex].input_tensors_name[1]);
                     ReLUParamSpec reluParam =
                         spec->ops[eltwiseIndex].ps.eltwise_spec.activation_spec.relu_spec;
                     spec->ops[eltwiseIndex].ps.relu_spec = reluParam;
@@ -129,7 +128,7 @@ class PowerOptimizer : public OPOptimizer {
     {
         bool hasOptimized = false;
         for (int i = 0; i < spec->num_operator_specs - 1; i++) {
-            if (spec->ops[i].type == OT_Power) {
+            if (spec->ops[i].type == OT_Power && spec->ops[i].ps.power_spec.shift == 0) {
                 std::vector<std::pair<int, int>> nextOpIndexes = searchOperatorIndexByInput(
                     spec, spec->ops[i].output_tensors_name[0], i + 1, spec->num_operator_specs);
                 if (nextOpIndexes.size() != 1 || OT_Power != spec->ops[nextOpIndexes[0].first].type) {
@@ -153,7 +152,7 @@ class PowerOptimizer : public OPOptimizer {
         bool hasOptimized = false;
         for (int i = 0; i < spec->num_operator_specs; i++) {
             if (spec->ops[i].type == OT_Eltwise && spec->ops[i].num_inputs == 2 &&
-                spec->ops[i].ps.eltwise_spec.elt_mode == ELTWISE_PROD &&
+                spec->ops[i].ps.eltwise_spec.mode == ELTWISE_PROD &&
                 std::string(spec->ops[i].input_tensors_name[0]) ==
                     spec->ops[i].input_tensors_name[1]) {
                 spec->ops[i].type = OT_Power;
@@ -161,7 +160,7 @@ class PowerOptimizer : public OPOptimizer {
                 spec->ops[i].ps.power_spec.shift = 0;
                 spec->ops[i].ps.power_spec.power = 2;
                 spec->ops[i].num_inputs = 1;
-                delete spec->ops[i].input_tensors_name[1];
+                mt_free(spec->ops[i].input_tensors_name[1]);
                 hasOptimized = true;
             }
         }
@@ -181,6 +180,6 @@ class PowerOptimizer : public OPOptimizer {
     }
 
 private:
-    float eps = 0.0001;
+    float eps = 1e-16;
 };
 #endif

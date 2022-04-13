@@ -14,39 +14,21 @@
 #ifndef _H_UNI
 #define _H_UNI
 
-#include <string.h>
-#include <math.h>
-
 #include "sys.h"
 #include "data_type.h"
 #include "operator_type.h"
 #include "parameter_spec.h"
 #include "error.h"
 #include "array_transpose.h"
+#include "memory_cpu.h"
+#include "affinity_policy.h"
 
 #define UNUSED(x) (void)x
 #define UNI_MIN(a, b) (((a) < (b)) ? (a) : (b))
 #define UNI_MAX(a, b) (((a) > (b)) ? (a) : (b))
 #define UNI_ABS(a) (((a) > 0) ? (a) : (-1 * (a)))
 #define UNI_SIGN(a) (((a) > 0) ? 1 : (((a) < 0) ? -1 : 0))
+#define UNI_ALIGN(a, b) (((a + b - 1) / b) * b)
 #define UNI_F16_MIN -65504.0f
 #define UNI_F16_MAX 65504.0f
-
-inline int UNI_ISNAN(float x)
-{
-    return isnan(x);
-}
-
-inline int UNI_ISINF(float x)
-{
-    return isinf(x);
-}
-
-inline void UNI_MEMCPY(void *dst, const void *src, int size)
-{
-    if (src == dst || size <= 0 || dst == nullptr || src == nullptr) {
-        return;
-    }
-    memcpy(dst, src, size);
-}
 #endif

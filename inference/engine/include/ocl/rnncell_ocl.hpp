@@ -41,13 +41,13 @@ public:
         Tensor hTensor = this->outputTensors[0];
 
         CHECK_STATUS(rnncell(xTensor, this->weightTensors, this->biasTensors, stateTensor, this->p,
-            this->xDim, this->p.numOutput, 0, this->temp, hTensor, &this->archInfo));
+            this->xDim, this->p.num_outputs, 0, this->temp, hTensor, &this->archInfo));
     }
 
     EE infer_forward_algorithm(std::shared_ptr<AlgorithmMap> algorithmMap) override
     {
-        if (this->p.biDirection) {
-            CHECK_STATUS(NOT_SUPPORTED);
+        if (this->p.bi_direction) {
+            UNI_ERROR_LOG("gpu not support bi-direction rnn.\n");
         }
         OCLContext::getInstance().handle.get()->kernelVec = &this->opKernelVec;
         Tensor xTensor = this->inputTensors[0];
@@ -58,8 +58,8 @@ public:
         ((MaliPara_t)(this->archInfo.archPara))->forwardRunInfo->algorithm =
             CONVOLUTION_ALGORITHM_NULL;
         I32 algo[7];
-        U32 algoNum = (this->p.numProjection > 0) ? 7 : 4;
-        std::string name = this->name + std::to_string(get_type()); 
+        U32 algoNum = (this->p.num_projection > 0) ? 7 : 4;
+        std::string name = this->name + std::to_string(get_type());
         if (algorithmMap->getAlgorithmInfoFromMap(name, algo, algoNum)) {
             this->runInfo.algorithm = (ConvolutionForwardAlgorithm)algo[0];
             this->runInfo.best_h[0] = algo[1];
@@ -72,7 +72,7 @@ public:
             }
         } else {
             CHECK_STATUS(rnncell_infer_forward_algorithm(xTensor, filterTensor, biasTensor,
-                stateTensor, this->p, this->xDim, this->p.numOutput, hTensor, &this->archInfo));
+                stateTensor, this->p, this->xDim, this->p.num_outputs, hTensor, &this->archInfo));
             algo[0] = this->runInfo.algorithm;
             algo[1] = this->runInfo.best_h[0];
             algo[2] = this->runInfo.best_c[0];
@@ -118,7 +118,7 @@ public:
         this->wtm = std::shared_ptr<Tensor>(new Tensor(this->wtmType));
         this->wtm->resize(ftmDesc[0]);
         this->wtm->alloc();
-        if (this->p.numProjection > 0) {
+        if (this->p.num_projection > 0) {
             this->wtm_pro = std::shared_ptr<Tensor>(new Tensor(this->wtmType));
             this->wtm_pro->resize(ftmDesc[1]);
             this->wtm_pro->alloc();
@@ -133,13 +133,13 @@ public:
         std::vector<Tensor *> ftmTensors;
         filterTensors.push_back(this->weightTensors[0]);
         ftmTensors.push_back(this->wtm.get());
-        if (this->p.numProjection > 0) {
+        if (this->p.num_projection > 0) {
             filterTensors.push_back(this->weightTensors[1]);
             ftmTensors.push_back(this->wtm_pro.get());
         }
         CHECK_STATUS(rnncell_transform_filter(filterTensors, this->p, ftmTensors, &this->archInfo));
         this->weightTensors[0] = *this->get_wtm();
-        if (this->p.numProjection > 0) {
+        if (this->p.num_projection > 0) {
             this->weightTensors[1] = *wtm_pro.get();
         }
         return SUCCESS;
@@ -147,20 +147,20 @@ public:
 
     EE infer_weight_desc() override
     {
-        U32 column = (this->p.numProjection > 0) ? this->p.numProjection : this->p.numOutput;
+        U32 column = (this->p.num_projection > 0) ? this->p.num_projection : this->p.num_outputs;
         U32 filterRow = 4 * column;
-        U32 filterCol = this->p.numOutput + this->xDim;
+        U32 filterCol = this->p.num_outputs + this->xDim;
         TensorDesc weightDesc[2];
         TensorDesc biasDesc[2];
         weightDesc[0] = tensor2df(this->dt, DF_NK, filterRow, filterCol);
-        weightDesc[1] = tensor2df(this->dt, DF_NK, this->p.numOutput, this->p.numProjection);
+        weightDesc[1] = tensor2df(this->dt, DF_NK, this->p.num_outputs, this->p.num_projection);
         biasDesc[0] = tensor1d(this->dt, filterRow);
-        biasDesc[1] = tensor1d(this->dt, this->p.numOutput);
-        U32 weightNum = (this->p.numProjection > 0) ? 2 : 1;
+        biasDesc[1] = tensor1d(this->dt, this->p.num_outputs);
+        U32 weightNum = (this->p.num_projection > 0) ? 2 : 1;
         U32 biasNum = weightNum;
-        U32 diretions = (this->p.biDirection) ? 2 : 1;
+        U32 diretions = (this->p.bi_direction) ? 2 : 1;
         if (this->p.mode != RNN_LSTM) {
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("gpu rnn only support lstm.\n");
         }
 
         for (U32 d = 0; d < diretions; d++) {

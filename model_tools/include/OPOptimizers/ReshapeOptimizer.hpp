@@ -41,49 +41,49 @@ class ReshapeOptimizer : public OPOptimizer {
                 int nextOpIndex = nextOpIndexes[0].first;
                 if (spec->ops[nextOpIndex].type == OT_Squeeze) {
                     int index = 0;
-                    for (int j = 0; j < spec->ops[i].ps.reshape_spec.shape_size; j++) {
+                    for (int j = 0; j < spec->ops[i].ps.reshape_spec.num_shape; j++) {
                         bool flag = false;
-                        for (int k = 0; k < spec->ops[nextOpIndex].ps.squeeze_spec.axes_num; k++) {
+                        for (int k = 0; k < spec->ops[nextOpIndex].ps.squeeze_spec.num_axes; k++) {
                             if (j == spec->ops[nextOpIndex].ps.squeeze_spec.axes[k]) {
                                 flag = true;
                                 break;
                             }
                         }
-                        if (UNI_ABS(spec->ops[i].ps.reshape_spec.shape_dims[j]) > 1 || !flag) {
+                        if (UNI_ABS(spec->ops[i].ps.reshape_spec.shape[j]) > 1 || !flag) {
                             if (flag) {
                                 UNI_WARNING_LOG("try to squeeze an non-1 axis.\n");
                             }
-                            spec->ops[i].ps.reshape_spec.shape_dims[index] =
-                                spec->ops[i].ps.reshape_spec.shape_dims[j];
+                            spec->ops[i].ps.reshape_spec.shape[index] =
+                                spec->ops[i].ps.reshape_spec.shape[j];
                             index++;
                         }
                     }
-                    spec->ops[i].ps.reshape_spec.shape_size = index;
+                    spec->ops[i].ps.reshape_spec.num_shape = index;
                     setOperatorInvalid(spec, nextOpIndex, true);
                     hasOptimized = true;
                 }
                 if (spec->ops[nextOpIndex].type == OT_Unsqueeze) {
                     const int dim_max = 8;
                     int shapes[dim_max];
-                    memset(shapes, 0, sizeof(int) * dim_max);
-                    for (int k = 0; k < spec->ops[nextOpIndex].ps.unsqueeze_spec.axes_num; k++) {
+                    UNI_MEMSET(shapes, 0, sizeof(int) * dim_max);
+                    for (int k = 0; k < spec->ops[nextOpIndex].ps.unsqueeze_spec.num_axes; k++) {
                         shapes[spec->ops[nextOpIndex].ps.unsqueeze_spec.axes[k]] = 1;
                     }
                     int index = 0;
                     int j;
                     for (j = 0; j < dim_max; j++) {
                         if (shapes[j] == 0) {
-                            if (index < spec->ops[i].ps.reshape_spec.shape_size) {
-                                shapes[j] = spec->ops[i].ps.reshape_spec.shape_dims[index];
+                            if (index < spec->ops[i].ps.reshape_spec.num_shape) {
+                                shapes[j] = spec->ops[i].ps.reshape_spec.shape[index];
                                 index++;
                             } else {
                                 break;
                             }
                         }
                     }
-                    spec->ops[i].ps.reshape_spec.shape_size = j;
-                    for (int j = 0; j < spec->ops[i].ps.reshape_spec.shape_size; j++) {
-                        spec->ops[i].ps.reshape_spec.shape_dims[j] = shapes[j];
+                    spec->ops[i].ps.reshape_spec.num_shape = j;
+                    for (int j = 0; j < spec->ops[i].ps.reshape_spec.num_shape; j++) {
+                        spec->ops[i].ps.reshape_spec.shape[j] = shapes[j];
                     }
                     setOperatorInvalid(spec, nextOpIndex, true);
                     hasOptimized = true;

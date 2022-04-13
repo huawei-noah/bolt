@@ -21,14 +21,15 @@ EE clip_fp32(F32 *input, F32 *output, I32 len, F32 minValue, F32 maxValue)
 
     float32x4_t min_v = vdupq_n_f32(minValue);
     float32x4_t max_v = vdupq_n_f32(maxValue);
-
-    I32 i = 0;
-    for (i = 0; i < len - 3; i += 4) {
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
+    for (int i = 0; i < len - 3; i += 4) {
         float32x4_t in = vld1q_f32(input + i);
         float32x4_t tmp_v = vminq_f32(max_v, vmaxq_f32(min_v, in));
         vst1q_f32(output + i, tmp_v);
     }
-    for (; i < len; i++) {
+    for (int i = len / 4 * 4; i < len; i++) {
         F32 value = input[i];
         value = (value > minValue) ? value : minValue;
         value = (value < maxValue) ? value : maxValue;

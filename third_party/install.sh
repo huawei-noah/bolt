@@ -361,7 +361,7 @@ if [[ ${cmake_options} =~ USE_FLOW=ON && ${cmake_options} =~ BUILD_TEST=ON ]]; t
         mkdir -p ffts-master/build
         cd ffts-master/build
         # change static library name on windows
-	check_sed
+        check_sed
         sed '509c if (ON)' ../CMakeLists.txt > CMakeLists.txt.new
         mv CMakeLists.txt.new ../CMakeLists.txt
         sed '512c endif ()' ../CMakeLists.txt > CMakeLists.txt.new
@@ -431,7 +431,7 @@ if [[ ${cmake_options} =~ BUILD_TEST=ON && "${CC}" != "arm-apple-darwin11-clang"
             opencv_cmake_options="${opencv_cmake_options} -DBUILD_ZLIB=ON"
         fi
         if [[ ${target} =~ linux-arm_himix100  ]]; then
-	    check_sed
+            check_sed
             sed -i "s/std::cbrt/cbrt/g" `grep "std::cbrt" -rl ./`
             sed -i "s/std::copysign/copysign/g" `grep "std::copysign" -rl ./`
         fi
@@ -454,10 +454,50 @@ if [[ \"\${search_opencv_cmake}\" == \"\" ]]; then
     exit 1
 fi
 array=(\${search_opencv_cmake// / })
-echo \$array
 export OpenCV_CMAKE_PATH=\${array[\${#array[@]}-1]}
 cmake_env_options=\"\${cmake_env_options} -DOpenCV_CMAKE_PATH=\${OpenCV_CMAKE_PATH}\"
 " >> ${env_file}
+fi
+
+if [[ ${cmake_options} =~ USE_SECURE_C=ON ]]; then
+    SecureC_ROOT=${work_dir}/secure_c
+    # download and install Huawei Secure C
+    if [[ ! -d "${SecureC_ROOT}/include" || ! -d "${SecureC_ROOT}/lib" ]]; then
+        echo "[INFO] build Huawei Secure C in ${SecureC_ROOT}..."
+        mkdir -p ${SecureC_ROOT}
+        cd ${SecureC_ROOT}
+        if [ ! -d "./huawei_secure_c" ]; then
+            if [ ! -f "${script_dir}/sources/huawei_secure_c-master.zip" ]; then
+                wget --no-check-certificate  > ${log_file} || exit 1
+                git clone https://gitee.com/Janisa/huawei_secure_c || exit 1
+            else
+                cp ${script_dir}/sources/huawei_secure_c-master.zip . || exit 1
+                unzip huawei_secure_c-master.zip > ${log_file} || exit 1
+                rm huawei_secure_c-master.zip
+                mv huawei_secure_c-master huawei_secure_c
+            fi
+        fi
+        cd huawei_secure_c
+        rm -rf build
+        mkdir -p build
+        cd build
+        cmake -G"${CMAKE_GENERATOR}" .. -DCMAKE_INSTALL_PREFIX=${SecureC_ROOT} ${CMAKE_OPTIONS} > ${log_file} || exit 1
+        ${MAKE} -j ${build_threads} >> ${log_file} || exit 1
+        ${MAKE} install >> ${log_file} || exit 1
+        cd ${SecureC_ROOT}
+        rm -rf huawei_secure_c
+    fi
+    echo "
+export SecureC_ROOT=${SecureC_ROOT}" >> ${env_file}
+    if [[ ! -d "${SecureC_ROOT}/include" || ! -d "${SecureC_ROOT}/lib" ]]; then
+        echo "
+if [[ ! -d \"\${SecureC_ROOT}/include\" || ! -d \"\${SecureC_ROOT}/lib\" ]]; then
+    echo \"[ERROR] Huawei Secure C not install success\"
+    exit 1
+fi
+cmake_env_options=\"\${cmake_env_options} -DSecureC_ROOT=\${SecureC_ROOT}\"
+" >> ${env_file}
+    fi
 fi
 
 rm -rf ${log_file}

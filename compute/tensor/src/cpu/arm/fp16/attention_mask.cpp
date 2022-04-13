@@ -11,7 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string.h>
 #include "cpu/arm/fp16/tensor_computing_fp16.h"
 
 EE attention_mask_fp16(TensorDesc inputDesc,
@@ -56,7 +55,7 @@ EE attention_mask_fp16(TensorDesc inputDesc,
             if (start + loops > klen) {
                 loops = UNI_MAX(klen - start, 0);
             }
-            memset(&mask[i * klen + start], 0, sizeof(F16) * loops);
+            UNI_MEMSET(&mask[i * klen + start], 0, sizeof(F16) * loops);
         }
     }
     I32 loops = tensorNumElements(inputDesc) / length;

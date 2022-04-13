@@ -17,6 +17,7 @@ build_dir=${11}
 
 CXXFLAGS=`echo ${CXXFLAGS} | sed 's/-fPIC//g'`
 NEWCXXFLAGS=`echo ${CXXFLAGS} | sed 's/-static-libstdc++//g'`
+NEWCXXFLAGS=`echo ${NEWCXXFLAGS} | sed 's/-static-libgcc//g'`
 NEWCXXFLAGS=`echo ${NEWCXXFLAGS} | sed 's/-static//g'`
 
 apple_toolchain=false
@@ -93,6 +94,13 @@ LDFLAGS=""
 if [[ ${CXXFLAGS} =~ -D_USE_ANDROID_LOG ]]; then
     LDFLAGS="${LDFLAGS} -llog"
 fi
+if [[ ${CXXFLAGS} =~ "-D_USE_SECURE_C" ]]; then
+    if [[ "${SecureC_ROOT}" == "" ]]; then
+        echo "[ERROR] please source third_party/<target>.sh before make."
+        exit 1
+    fi
+    LDFLAGS="${LDFLAGS} -L${SecureC_ROOT}/lib -lsecurec"
+fi
 if [[ ${CXXFLAGS} =~ -D_USE_OPENMP ]]; then
     LDFLAGS="${LDFLAGS} -fopenmp"
 fi
@@ -116,15 +124,15 @@ if [[ ${SYSTEM} =~ Windows ]]; then
     BoltModel_write_so_name="${BoltModel_write_so_name} -Wl,--out-implib=BoltModel.lib"
     bolt_write_so_name="${bolt_write_so_name} -Wl,--out-implib=bolt.lib"
 fi
-${CXX} ${CXXFLAGS} -shared -o ${BoltModel_shared_library} ${jniLibraryObjs} ${LDFLAGS} ${BoltModel_write_so_name} &> log.txt
+${CXX} ${CXXFLAGS} -shared -o ${BoltModel_shared_library} ${jniLibraryObjs} ${LDFLAGS} ${BoltModel_write_so_name} &> .build_log.txt
 if [[ $? -ne 0 ]]; then
     ${CXX} ${NEWCXXFLAGS} -shared -o ${BoltModel_shared_library} ${jniLibraryObjs} ${LDFLAGS} ${BoltModel_write_so_name} || exit 1
 fi
-${CXX} ${CXXFLAGS} -shared -o ${bolt_shared_library} ${sharedLibraryObjs} ${LDFLAGS} ${bolt_write_so_name} &> log.txt
+${CXX} ${CXXFLAGS} -shared -o ${bolt_shared_library} ${sharedLibraryObjs} ${LDFLAGS} ${bolt_write_so_name} &> .build_log.txt
 if [[ $? -ne 0 ]]; then
     ${CXX} ${NEWCXXFLAGS} -shared -o ${bolt_shared_library} ${sharedLibraryObjs} ${LDFLAGS} ${bolt_write_so_name} || exit 1
 fi
-rm log.txt
+rm .build_log.txt
 ${AR} -rc ${bolt_static_library} ${staticLibraryObjs} || exit 1
 
 if [[ ! ${CXXFLAGS} =~ -D_DEBUG && ${apple_toolchain} == "false" ]]; then

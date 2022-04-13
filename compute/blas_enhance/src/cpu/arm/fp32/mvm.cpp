@@ -28,7 +28,7 @@ EE matrix_vector_multiply_transform_weight_fp32(TensorDesc desc, F32 *src, F32 *
                 matrix1_trans(16, K, K, src + i * K, dst + i * K);
             }
             if (i < (int)N) {
-                memcpy(dst + i * K, src + i * K, (N - i) * K * bytesOf(DT_F32));
+                UNI_MEMCPY(dst + i * K, src + i * K, (N - i) * K * bytesOf(DT_F32));
             }
             break;
         }

@@ -75,10 +75,12 @@ int gatherTest(int argc, char **argv, DataType dt)
     Tensor inputTensorCpu, indexTensorCpu, outputTensorCpu;
     inputTensorCpu.resize(inputDesc);
     inputTensorCpu.alloc();
-    memcpy(get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), inputCpu, tensorNumBytes(inputDesc));
+    UNI_MEMCPY(
+        get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), inputCpu, tensorNumBytes(inputDesc));
     indexTensorCpu.resize(indexDesc);
     indexTensorCpu.alloc();
-    memcpy(get_ptr_from_tensor(indexTensorCpu, CPU_GENERAL), indexCpu, tensorNumBytes(indexDesc));
+    UNI_MEMCPY(
+        get_ptr_from_tensor(indexTensorCpu, CPU_GENERAL), indexCpu, tensorNumBytes(indexDesc));
     CHECK_STATUS(gather_infer_output_size(
         &inputTensorCpu, &indexTensorCpu, p, &outputTensorCpu, &UT_SERIAL_ARCHINFO));
     outputTensorCpu.alloc();

@@ -53,7 +53,7 @@ int eltwiseTest(int argc, char *argv[], DataType dt)
 
     EltwiseMode eltwiseMode = ELTWISE_SUM;
     EltwiseParamSpec eltwiseDesc;
-    eltwiseDesc.elt_mode = eltwiseMode;
+    eltwiseDesc.mode = eltwiseMode;
     eltwiseDesc.activation_type = ACTIVATION_NULL;
 
     std::vector<void *> inputCpu(num);
@@ -71,7 +71,7 @@ int eltwiseTest(int argc, char *argv[], DataType dt)
             inTensorsCpu[i].resize(inDesc);
         }
         inTensorsCpu[i].alloc();
-        memcpy(get_ptr_from_tensor(inTensorsCpu[i], CPU_GENERAL), inputCpu[i],
+        UNI_MEMCPY(get_ptr_from_tensor(inTensorsCpu[i], CPU_GENERAL), inputCpu[i],
             tensorNumBytes(inTensorsCpu[i].get_desc()));
         inTensorPtrCpu[i] = &inTensorsCpu[i];
     }

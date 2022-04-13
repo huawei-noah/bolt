@@ -65,7 +65,8 @@ int scaleTest(int argc, char **argv, DataType dt)
     Tensor inputTensorCpu, outputTensorCpu;
     inputTensorCpu.resize(inputDesc);
     inputTensorCpu.alloc();
-    memcpy(get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), inputCpu, tensorNumBytes(inputDesc));
+    UNI_MEMCPY(
+        get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), inputCpu, tensorNumBytes(inputDesc));
     CHECK_STATUS(
         scale_infer_output_size(&inputTensorCpu, p, axisLen, &outputTensorCpu, &UT_SERIAL_ARCHINFO));
     outputTensorCpu.alloc();

@@ -39,14 +39,7 @@ public:
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
-        CHECK_STATUS(slice_infer_output_size(inTensors[0], this->p, outTensors, &this->archInfo));
-        auto outDesc = outTensors[0]->get_desc();
-        if (outDesc.nDims == 3 && outDesc.dims[1] == 1 && outDesc.dims[2] == 1) {
-            outDesc.nDims = 2;
-            outDesc.df = DF_NORMAL;
-            outTensors[0]->resize(outDesc);
-        }
-        return SUCCESS;
+        return slice_infer_output_size(inTensors[0], this->p, outTensors, &this->archInfo);
     }
 };
 

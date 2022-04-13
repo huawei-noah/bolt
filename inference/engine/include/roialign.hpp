@@ -15,12 +15,12 @@
 #define _ROIALIGN_H
 
 #include "operator.hpp"
-#include "tensor_computing.h"
 
 class RoIAlign : public Operator {
 public:
-    RoIAlign(RoIAlignParamSpec p)
+    RoIAlign(DataType dt, RoIAlignParamSpec p)
     {
+        this->dt = dt;
         this->p = p;
     }
 

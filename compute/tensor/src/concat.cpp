@@ -22,15 +22,16 @@
 
 inline void processInputDescs(std::vector<TensorDesc> *inputDesc, I32 axis)
 {
-    int inputNum = inputDesc->size();
-    int axisInfo = (axis > 0) ? axis : ((*inputDesc)[0].nDims + axis);
-    axisInfo = (*inputDesc)[0].nDims - 1 - axisInfo;
-    for (int i = 0; i < (int)(*inputDesc)[0].nDims; i++) {
-        if (i == axisInfo) {
+    int num = inputDesc->size();
+    int dim = (*inputDesc)[0].nDims;
+    axis = (axis + dim) % dim;
+    axis = dim - 1 - axis;
+    for (int i = 0; i < dim; i++) {
+        if (i == axis) {
             continue;
         }
         U32 minDim = (*inputDesc)[0].dims[i];
-        for (int j = 1; j < inputNum; j++) {
+        for (int j = 1; j < num; j++) {
             if ((*inputDesc)[j].dims[i] < minDim) {
                 minDim = (*inputDesc)[j].dims[i];
             }
@@ -38,7 +39,7 @@ inline void processInputDescs(std::vector<TensorDesc> *inputDesc, I32 axis)
         if (minDim == 0) {
             continue;
         }
-        for (int j = 0; j < inputNum; j++) {
+        for (int j = 0; j < num; j++) {
             (*inputDesc)[j].dims[i] = minDim;
         }
     }
@@ -48,7 +49,7 @@ inline EE concat_infer_output_size_cpu(
     std::vector<TensorDesc> inputDesc, ConcatParamSpec p, TensorDesc *outputDesc)
 {
     if (inputDesc.size() < 1) {
-        CHECK_STATUS(NOT_MATCH);
+        return NOT_MATCH;
     }
     if (inputDesc.size() == 1) {
         *outputDesc = inputDesc[0];
@@ -70,11 +71,13 @@ inline EE concat_infer_output_size_cpu(
     axis = dim - 1 - axis;
     outputDesc->dims[axis] = 0;
 
+    int shapeCount = 0;
     for (U32 i = 0; i < inputDesc.size(); i++) {
         if (inputDesc[i].nDims == 0) {
             continue;
         }
 
+        shapeCount += tensorIsShape(inputDesc[i]);
         if (inputDesc[i].nDims != (U32)dim) {
             return NOT_MATCH;
         }
@@ -101,7 +104,18 @@ inline EE concat_infer_output_size_cpu(
         outputDesc->df = DF_NCHW;
     }
 
-    return SUCCESS;
+    EE ret = SUCCESS;
+#ifdef _USE_CPU
+    if (shapeCount > 0) {
+        std::vector<void *> input(inputDesc.size());
+        for (U32 i = 0; i < inputDesc.size(); i++) {
+            input[i] = inputDesc[i].dims + inputDesc[i].nDims;
+        }
+        ret = concat_cpu(inputDesc, input, nullptr, p, nullptr, *outputDesc,
+            outputDesc->dims + outputDesc->nDims, nullptr);
+    }
+#endif
+    return ret;
 }
 
 EE concat_infer_output_size(
@@ -130,9 +144,11 @@ EE concat_infer_output_size(
     return ret;
 }
 
-EE concat_infer_forward_tmp_bytes(std::vector<Tensor> inputTensor, U32 *bytes, ArchInfo_t archInfo)
+EE concat_infer_forward_tmp_bytes(
+    std::vector<Tensor> inputTensor, Tensor outputTensor, U32 *bytes, ArchInfo_t archInfo)
 {
     std::vector<TensorDesc> inputDesc = get_desc_from_tensors(inputTensor);
+    TensorDesc outputDesc = outputTensor.get_desc();
     EE ret = NOT_SUPPORTED;
     if (IS_GPU(archInfo->arch)) {
 #ifdef _USE_GPU
@@ -142,7 +158,9 @@ EE concat_infer_forward_tmp_bytes(std::vector<Tensor> inputTensor, U32 *bytes, A
     } else {
         *bytes = 0;
         for (auto p : inputDesc) {
-            *bytes += tensorNumBytes(p);
+            if (p.df != outputDesc.df) {
+                *bytes += tensorNumBytes(p);
+            }
         }
         ret = SUCCESS;
     }

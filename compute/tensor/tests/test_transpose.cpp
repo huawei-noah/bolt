@@ -24,12 +24,12 @@ int transposeTest(int argc, char **argv, DataType dt)
     U32 ih = atoi(argv[3]);
     U32 iw = atoi(argv[4]);
     TransposeParamSpec p, p_inv;
-    p.trans_size = 4;
-    p_inv.trans_size = 4;
-    for (int i = 0; i < 4; i++) {
+    p.num_axes = 4;
+    p_inv.num_axes = 4;
+    for (U32 i = 0; i < p_inv.num_axes; i++) {
         I32 value = atoi(argv[5 + i]);
-        p.trans_dims[i] = value;
-        p_inv.trans_dims[value] = i;
+        p.axes[i] = value;
+        p_inv.axes[value] = i;
     }
 
     DataFormat df = DF_NCHW;
@@ -39,7 +39,7 @@ int transposeTest(int argc, char **argv, DataType dt)
     Tensor inputTensor;
     inputTensor.resize(inDesc);
     inputTensor.alloc();
-    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inDesc));
+    UNI_MEMCPY(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inDesc));
 
     Tensor outputTensor1;
     Tensor outputTensor2;

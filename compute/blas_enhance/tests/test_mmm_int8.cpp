@@ -11,17 +11,16 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+#include <string.h>
 #include "blas_enhance.h"
 #include "ut_util.h"
+#include "thread_affinity.h"
 
-int main(int argc, char **argv)
+//#define COVER_TEST
+
+int testMMM(U32 m, U32 k, U32 n)
 {
 #ifdef _USE_INT8
-    CHECK_REQUIREMENT(argc == 4);
-    U32 m = atoi(argv[1]);
-    U32 k = atoi(argv[2]);
-    U32 n = atoi(argv[3]);
-
     DataType dt = DT_I8;
     DataType odt = DT_I32;
     TensorDesc A_desc = tensor2df(dt, DF_NORMAL, m, k);
@@ -31,17 +30,22 @@ int main(int argc, char **argv)
 
     U32 bytes = 0;
     U32 k8 = k;
+    U32 n8 = n;
     if (k8 % 8 != 0) {
         k8 = (k8 / 8) * 8 + 8;
     }
+    if (n8 % 16 != 0) {
+        n8 = (n8 / 16) * 16 + 16;
+    }
     INT8 *A = (INT8 *)ut_input_v(m * k, DT_I8, UT_INIT_RANDOM);
     INT8 *A_ref = (INT8 *)ut_input_v(m * k, DT_I8, UT_INIT_RANDOM);
-    memcpy(A_ref, A, m * k);
+    UNI_MEMCPY(A_ref, A, m * k);
     INT8 *B = (INT8 *)ut_input_v(k * n, DT_I8, UT_INIT_RANDOM);
-    INT8 *B_tran = (INT8 *)ut_input_v(k8 * n + 64 + n * 4, DT_I8, UT_INIT_ZERO);
+    INT8 *B_tran = (INT8 *)ut_input_v(k8 * n8 + 64 + n8 * 4, DT_I8, UT_INIT_ZERO);
     I32 *C = (I32 *)ut_input_v(m * n, DT_I32, UT_INIT_ZERO);
     I32 *C_ref = (I32 *)ut_input_v(m * n, DT_I32, UT_INIT_ZERO);
     CHECK_STATUS(matrix_matrix_multiply_tmp_bytes(A_desc, B_desc, &bytes, UT_ARCH));
+    bytes += m * n;
     INT8 *tmp = (INT8 *)ut_input_v(bytes, DT_I8, UT_INIT_ZERO);
 
     matrix_matrix_multiply_transform_rhs(B_desc, B, &tranDescB, B_tran, UT_ARCH);
@@ -51,15 +55,15 @@ int main(int argc, char **argv)
     for (U32 i = 0; i < m * k; ++i) {
         uA[i] = (UINT8)((I32)A[i] + 128);
     }
-    memcpy(tmp, B_tran, n * bytesOf(DT_I32));
+    UNI_MEMCPY(tmp, B_tran + n8 * k8, n * bytesOf(DT_I32));
 #endif
 
     if (UT_CHECK) {
-        CHECK_STATUS(matrix_matrix_multiply(
-            A_desc, A, tranDescB, B_tran, bytes, tmp, C_desc, C, nullptr, UT_ARCH));
+        CHECK_STATUS(
+            matrix_matrix_multiply(A_desc, A, tranDescB, B_tran, bytes, tmp, C_desc, C, nullptr, UT_ARCH));
 
-        CHECK_STATUS(matrix_matrix_multiply(
-            A_desc, A_ref, B_desc, B, bytes, tmp, C_desc, C_ref, nullptr, CPU_GENERAL));
+        CHECK_STATUS(
+            matrix_matrix_multiply(A_desc, A_ref, B_desc, B, bytes, tmp, C_desc, C_ref, nullptr, CPU_GENERAL));
 
         // check
         ut_check_v(C, C_ref, m * n, DT_I32, 1, __FILE__, __LINE__);
@@ -68,8 +72,7 @@ int main(int argc, char **argv)
     // benchmark
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        matrix_matrix_multiply(
-            A_desc, A, tranDescB, B_tran, bytes, tmp, C_desc, C, nullptr, UT_ARCH);
+        matrix_matrix_multiply(A_desc, A, tranDescB, B_tran, bytes, tmp, C_desc, C, nullptr, UT_ARCH);
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;
@@ -90,4 +93,22 @@ int main(int argc, char **argv)
     free(tmp);
 #endif
     return 0;
+}
+
+int main(int argc, char **argv)
+{
+#ifdef COVER_TEST
+    int ret = 0;
+    for (U32 m = 1; m < 48; ++m) {
+        for (U32 k = 1; k < 48; ++k) {
+            for (U32 n = 1; n < 48; ++n) {
+                ret = testMMM(m, k, n);
+            }
+        }
+    }
+    return ret;
+#else
+    CHECK_REQUIREMENT(argc == 4);
+    return testMMM(atoi(argv[1]), atoi(argv[2]), atoi(argv[3]));
+#endif
 }

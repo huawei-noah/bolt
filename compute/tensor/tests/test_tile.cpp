@@ -23,8 +23,8 @@ int tileTest(int argc, char **argv, DataType dt)
     //input axis and tiles
     TileParamSpec tileParamSpec;
     tileParamSpec.axis = atoi(argv[5]);
-    tileParamSpec.dimsSize = 1;
-    tileParamSpec.repeatsInfo[0] = atoi(argv[6]);
+    tileParamSpec.num_repeats = 1;
+    tileParamSpec.repeats[0] = atoi(argv[6]);
 
     //set input
     DataFormat df = DF_NCHW;
@@ -32,7 +32,7 @@ int tileTest(int argc, char **argv, DataType dt)
     U32 len = tensorNumElements(inDesc);
     U8 *input = ut_input_v(len, dt, UT_INIT_RANDOM);
     Tensor inputTensor = Tensor::alloc_sized<CPUMem>(inDesc);
-    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, inputTensor.bytes());
+    UNI_MEMCPY(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, inputTensor.bytes());
 
     //set output
     Tensor outputTensor;
@@ -43,7 +43,7 @@ int tileTest(int argc, char **argv, DataType dt)
         Tensor tmpTensor;
         CHECK_STATUS(tile(inputTensor, tileParamSpec, tmpTensor, outputTensor, &UT_CPU_ARCHINFO));
 
-        CHECK_REQUIREMENT(outputTensor.length() == (len * tileParamSpec.repeatsInfo[0]));
+        CHECK_REQUIREMENT(outputTensor.length() == (len * tileParamSpec.repeats[0]));
     }
 
     return 0;

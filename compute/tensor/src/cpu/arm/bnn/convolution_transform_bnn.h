@@ -15,8 +15,8 @@
 #define _H_CONVOLUTION_TRANSFORM_BNN
 
 #include <bitset>
-#include <string.h>
 
+#include "uni.h"
 #include "tensor_desc.h"
 
 inline void bitwise_copy(BIN8 srcVal, U32 srcBit, BIN8 *dest, U32 destBit)
@@ -46,7 +46,7 @@ inline EE convolution_transform_filter_bnn(
     switch (fdf) {
         case DF_NCHWN16C8:
             // Everything is ready
-            memcpy(ftmArray, filterArray, fn * fc * fh * fw / 8 * bytesOf(fdt));
+            UNI_MEMCPY(ftmArray, filterArray, fn * fc * fh * fw / 8 * bytesOf(fdt));
             break;
         case DF_NCHW: {
             /*

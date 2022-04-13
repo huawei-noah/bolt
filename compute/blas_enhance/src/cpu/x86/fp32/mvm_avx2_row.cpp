@@ -238,13 +238,13 @@ void mvm_row_avx_4_32(U32 bk, U32 lda, F32 *matrix, F32 *vector, F32 *result)
 
                          ".align 16                                         \n\t"
                          ".k_loop_remain_1_end:                             \n\t"
-                         "vaddps (%3), %%xmm0, %%xmm0                       \n\t"
+                         "addss (%3), %%xmm0                       \n\t"
                          "vmovss %%xmm0, (%3)                               \n\t"
-                         "vaddps 0x4(%3), %%xmm1, %%xmm1                    \n\t"
+                         "addss 0x4(%3), %%xmm1                    \n\t"
                          "vmovss %%xmm1, 0x4(%3)                            \n\t"
-                         "vaddps 0x8(%3), %%xmm2, %%xmm2                    \n\t"
+                         "addss 0x8(%3), %%xmm2                    \n\t"
                          "vmovss %%xmm2, 0x8(%3)                            \n\t"
-                         "vaddps 0xC(%3), %%xmm3, %%xmm3                    \n\t"
+                         "addss 0xC(%3), %%xmm3                    \n\t"
                          "vmovss %%xmm3, 0xC(%3)                            \n\t"
                          :
                          : "r"(bk), "r"(matrix), "r"(vector), "r"(result), "r"(lda)
@@ -398,9 +398,9 @@ void mvm_row_avx_2_32(U32 bk, U32 lda, F32 *matrix, F32 *vector, F32 *result)
 
                          ".align 16                                         \n\t"
                          ".n2_k_loop_remain_1_end:                          \n\t"
-                         "vaddps (%3), %%xmm0, %%xmm0                       \n\t"
+                         "addss (%3), %%xmm0                       \n\t"
                          "vmovss %%xmm0, (%3)                               \n\t"
-                         "vaddps 0x4(%3), %%xmm1, %%xmm1                    \n\t"
+                         "addss 0x4(%3), %%xmm1                    \n\t"
                          "vmovss %%xmm1, 0x4(%3)                            \n\t"
                          :
                          : "r"(bk), "r"(matrix), "r"(vector), "r"(result), "r"(lda)
@@ -513,7 +513,7 @@ void mvm_row_avx_1_32(U32 bk, U32 lda, F32 *matrix, F32 *vector, F32 *result)
 
                          ".align 16                                         \n\t"
                          ".n1_k_loop_remain_1_end:                          \n\t"
-                         "vaddps (%3), %%xmm0, %%xmm0                       \n\t"
+                         "addss (%3), %%xmm0                       \n\t"
                          "vmovss %%xmm0, (%3)                               \n\t"
                          :
                          : "r"(bk), "r"(matrix), "r"(vector), "r"(result), "r"(lda)
@@ -528,7 +528,8 @@ void mvm_row_fp32(U32 numRows, U32 numColumns, F32 *matrix, F32 *vector, F32 *re
     U32 unrollNSize[3] = {1, 2, 4};
     U32 blockNum = numRows / 4 + (numRows % 4 + 1) / 2;
 #ifdef _USE_OPENMP
-#pragma omp parallel num_threads(OMP_NUM_THREADS)
+    int in_parallel = omp_in_parallel();
+#pragma omp parallel num_threads(OMP_NUM_THREADS) if (in_parallel == 0)
     {
 #endif
         U32 private_blockKSize = 0;

@@ -29,11 +29,6 @@ public:
         return OT_Cast;
     }
 
-    bool can_input_output_the_same() override
-    {
-        return false;
-    }
-
 public:
     CastParamSpec p;
 };

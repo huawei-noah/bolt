@@ -22,7 +22,7 @@ class TransposeMulToScaleOptimizer : public OPOptimizer {
         bool hasOptimized = false;
         for (int i = 1; i < spec->num_operator_specs; i++) {
             if (spec->ops[i].type == OT_Eltwise && spec->ops[i].num_inputs == 2 &&
-                spec->ops[i].ps.eltwise_spec.elt_mode == ELTWISE_PROD) {
+                spec->ops[i].ps.eltwise_spec.mode == ELTWISE_PROD) {
                 int mulOpIndex = i;
                 std::vector<std::pair<int, int>> prevOpIndexes = searchOperatorIndexByOutput(
                     spec, spec->ops[mulOpIndex].input_tensors_name[0], 0, mulOpIndex);

@@ -31,25 +31,15 @@ public:
         return mem;
     }
 
-    DataType get_float_precision()
-    {
-        DataType ret = this->dt;
-        if (this->dt == DT_F16_8Q) {
-            ret = DT_F16;
-        } else if (this->dt == DT_F32_8Q) {
-            ret = DT_F32;
-        }
-        return ret;
-    }
-
     EE infer_weight_desc() override
     {
-        DataType dtNoQ = this->get_float_precision();
+        DataType dtNoQ = (dt == DT_F16_8Q) ? DT_F16 : ((dt == DT_F32_8Q) ? DT_F32 : dt);
         auto curOpWs = this->get_weightspec();
+        DataType weightDt = curOpWs.mdt;
         if (curOpWs.bytes_of_weight > 0) {
             this->weightTensors = std::vector<Tensor>(1);
             this->weightTensors[0].resize(
-                tensor2df(dtNoQ, DF_TRANSPOSE, this->p.num_outputs, this->numInput));
+                tensor2df(weightDt, DF_TRANSPOSE, this->p.num_outputs, this->numInput));
         }
         if (curOpWs.bytes_of_vec > 0) {
             this->biasTensors = std::vector<Tensor>(1);
@@ -60,53 +50,50 @@ public:
 
     Tensor get_weight_tensor()
     {
-        Tensor weightTensor;
         if (weightTensors.size() > 0) {
-            weightTensor = this->weightTensors[0];
+            return this->weightTensors[0];
         } else {
             CHECK_REQUIREMENT(1 < this->inputTensors.size());
-            weightTensor = this->inputTensors[1];
-            TensorDesc desc = weightTensor.get_desc();
+            TensorDesc desc = this->inputTensors[1].get_desc();
             if (this->mvm) {
                 desc.df = DF_TRANSPOSE;
             } else {
                 desc.df = DF_NORMAL;
             }
+            Tensor weightTensor = this->inputTensors[1];
             weightTensor.resize(desc);
+            return weightTensor;
         }
-        return weightTensor;
     }
 
     Tensor get_bias_tensor()
     {
-        Tensor biasTensor;
-        U32 inputCount = 1;
-        if (weightTensors.size() == 0) {
-            inputCount++;
-        }
         if (biasTensors.size() > 0) {
-            biasTensor = this->biasTensors[0];
+            return this->biasTensors[0];
         } else {
-            if (inputCount < this->inputTensors.size()) {
-                biasTensor = this->inputTensors[inputCount++];
+            U32 inputCount = 1;
+            if (weightTensors.size() == 0) {
+                inputCount++;
             }
+            if (inputCount < this->inputTensors.size()) {
+                return this->inputTensors[inputCount++];
+            }
+            Tensor biasTensor;
+            return biasTensor;
         }
-        return biasTensor;
     }
 
     void run() override
     {
-        Tensor inputTensor = this->inputTensors[0];
-        TensorDesc inputDesc = inputTensor.get_desc();
-
         Tensor weightTensor = get_weight_tensor();
         Tensor biasTensor = get_bias_tensor();
         Tensor outputTensor = this->outputTensors[0];
+#ifdef _USE_INT8
+        TensorDesc inputDesc = this->inputTensors[0].get_desc();
         TensorDesc outputDesc = outputTensor.get_desc();
-
         if (featureScale.size() > 1 && featureScale[0][0] > 0 && DT_I8 != inputDesc.dt &&
             DT_U8_Q != inputDesc.dt) {
-            inputTensor.set_scale(featureScale[0][0]);
+            this->inputTensors[0].set_scale(featureScale[0][0]);
         }
         if (DT_I8 == outputDesc.dt || DT_U8_Q == outputDesc.dt) {
             if (featureScale.size() > 0) {
@@ -115,10 +102,10 @@ public:
                 outputTensor.set_scale(-1);
             }
         }
-
+#endif
         std::vector<Tensor> tmpTensor(1, this->temp);
-        CHECK_STATUS(fully_connected(
-            inputTensor, weightTensor, biasTensor, tmpTensor, outputTensor, &this->archInfo));
+        CHECK_STATUS(fully_connected(this->inputTensors[0], weightTensor, biasTensor, tmpTensor,
+            outputTensor, &this->archInfo));
     }
 
     EE infer_output_tensors_size(
@@ -146,8 +133,8 @@ public:
         tmpFilter.resize(weightDesc);
         CHECK_STATUS(fully_connected_infer_output_size(
             inTensors[0], tmpFilter, outTensors[0], &this->archInfo));
-        TensorDesc outputDesc = outTensors[0]->get_desc();
         if (1 == this->p.num_slices) {
+            TensorDesc outputDesc = outTensors[0]->get_desc();
             if (DT_F16_8Q == this->dt || DT_F32_8Q == this->dt) {
                 if (featureScale.size() > 0 && -2 == (featureScale.back())[0]) {
                     outputDesc.dt = (DT_F16_8Q == this->dt) ? DT_F16 : DT_F32;
@@ -161,9 +148,11 @@ public:
             }
             outTensors[0]->resize(outputDesc);
         } else {
-            UNI_ERROR_LOG("FC merge is deprecated\n");
+            //UNI_ERROR_LOG("FC merge is deprecated\n");
             for (U32 i = 0; i < this->p.num_slices; i++) {
+                TensorDesc outputDesc = outTensors[i]->get_desc();
                 outputDesc.dims[0] = this->p.slice_point[i];
+                UNI_INFO_LOG("-- %d %d\n", p.num_slices, p.slice_point[i]);
                 if (DT_F16_8Q == this->dt || DT_F32_8Q == this->dt) {
                     if (featureScale.size() > 0 && -2 == (featureScale.back())[0]) {
                         outputDesc.dt = (DT_F16_8Q == this->dt) ? DT_F16 : DT_F32;
@@ -175,6 +164,7 @@ public:
 #endif
                     }
                 }
+                outTensors[i]->resize(outputDesc);
             }
         }
         return SUCCESS;
@@ -241,7 +231,7 @@ public:
 
 #ifdef _USE_INT8
         bool thisIsNoQuant = (featureScale.size() > 1 && featureScale[0].back() == 0);
-        if ((DT_F16_8Q == this->dt || DT_F32_8Q == this->dt) && !thisIsNoQuant) {
+        if ((DT_F16_8Q == this->dt || DT_F32_8Q == this->dt) && !thisIsNoQuant && (tmpDesc.dt != DT_I8)) {
             tmpDesc.dt = DT_I8;
             Tensor qFilter = Tensor::alloc_sized<CPUMem>(tmpDesc);
             F32 scale = -1;

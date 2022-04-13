@@ -26,9 +26,6 @@ inline EE deconvolution_infer_output_size_cpu(TensorDesc inputDesc,
     TensorDesc *outputDesc,
     DataType targetDataType)
 {
-    if (nullptr == outputDesc) {
-        CHECK_STATUS(NULL_POINTER);
-    }
     DataType idt, fdt;
     DataFormat idf, fdf;
     U32 in, ic, ih, iw;
@@ -37,23 +34,22 @@ inline EE deconvolution_infer_output_size_cpu(TensorDesc inputDesc,
     CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
     CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
     CHECK_REQUIREMENT(1 == fn || ic == fn);
-
     if (fh < 1 || fw < 1) {
-        CHECK_STATUS(NOT_SUPPORTED);
+        return NOT_SUPPORTED;
     }
 
     U32 strideH = convParamSpec.stride_h;
     U32 strideW = convParamSpec.stride_w;
-    if (convParamSpec.rm == TF_SAME) {
+    if (convParamSpec.round_mode == ROUND_TF_SAME) {
         oh = strideH * ih;
         ow = strideW * iw;
     } else {
-        U32 paddingT = convParamSpec.padding_top;
-        U32 paddingB = convParamSpec.padding_bottom;
-        U32 paddingL = convParamSpec.padding_left;
-        U32 paddingR = convParamSpec.padding_right;
-        oh = fh + strideH * (ih - 1) - paddingT - paddingB;
-        ow = fw + strideW * (iw - 1) - paddingL - paddingR;
+        U32 paddingT = convParamSpec.pad_top;
+        U32 paddingB = convParamSpec.pad_bottom;
+        U32 paddingL = convParamSpec.pad_left;
+        U32 paddingR = convParamSpec.pad_right;
+        oh = fh + strideH * (ih - 1) - paddingT - paddingB + convParamSpec.output_pad_h;
+        ow = fw + strideW * (iw - 1) - paddingL - paddingR + convParamSpec.output_pad_w;
     }
 
     *outputDesc = tensor4df(targetDataType, DF_NCHWC8, in, fc, oh, ow);
@@ -67,32 +63,29 @@ EE deconvolution_infer_output_size(Tensor *inputTensor,
     DataType targetDataType,
     ArchInfo_t archInfo)
 {
-    if (inputTensor == nullptr) {
-        CHECK_STATUS(NULL_POINTER);
-    }
-    if (outputTensor == nullptr) {
-        CHECK_STATUS(NULL_POINTER);
+    if (inputTensor == nullptr || outputTensor == nullptr) {
+        return NULL_POINTER;
     }
     TensorDesc inputDesc = inputTensor->get_desc();
     TensorDesc filterDesc = filterTensor.get_desc();
     TensorDesc outputDesc = outputTensor->get_desc();
-    CHECK_STATUS(deconvolution_infer_output_size_cpu(
-        inputDesc, filterDesc, convParamSpec, &outputDesc, targetDataType));
+    EE ret = deconvolution_infer_output_size_cpu(
+        inputDesc, filterDesc, convParamSpec, &outputDesc, targetDataType);
     if (IS_GPU(archInfo->arch)) {
 #ifdef _USE_GPU
         OclMemory *inputMem = (OclMemory *)inputTensor->get_memory();
         OclMemory *outputMem = (OclMemory *)outputTensor->get_memory();
-        CHECK_STATUS(deconvolution_padding_input_mali(
-            inputDesc, filterDesc, convParamSpec, &outputDesc, inputMem, outputMem));
+        ret = deconvolution_padding_input_mali(
+            inputDesc, filterDesc, convParamSpec, &outputDesc, inputMem, outputMem);
 #endif
     } else {
         U32 fc = filterDesc.dims[filterDesc.nDims - 2];
         if (fc % 8 != 0) {
-            CHECK_STATUS(NOT_SUPPORTED);
+            ret = NOT_SUPPORTED;
         }
     }
     outputTensor->resize(outputDesc);
-    return SUCCESS;
+    return ret;
 }
 
 EE deconvolution_infer_forward_algorithm(Tensor inputTensor,
@@ -108,7 +101,6 @@ EE deconvolution_infer_forward_algorithm(Tensor inputTensor,
     TensorDesc inputDesc = inputTensor.get_desc();
     TensorDesc filterDesc = filterTensor.get_desc();
     TensorDesc outputDesc = outputTensor.get_desc();
-
     EE ret = NOT_SUPPORTED;
     auto arch = archInfo->arch;
     if (IS_GENERAL(arch)) {

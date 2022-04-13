@@ -15,7 +15,9 @@
 #ifdef _USE_FP32
 #include "cpu/x86/fp32/tensor_computing_fp32.h"
 #endif
-#include "blas_enhance.h"
+#ifdef _USE_INT8
+#include "cpu/x86/int8/tensor_computing_int8.h"
+#endif
 
 EE rnncell_x86(TensorDesc xDesc,
     const void *currentX,
@@ -23,6 +25,7 @@ EE rnncell_x86(TensorDesc xDesc,
     const void **filter,
     const TensorDesc *biasDesc,
     const void **bias,
+    float *scale,
     void *state,
     U32 tmpBytes,
     void *tmp,
@@ -33,17 +36,25 @@ EE rnncell_x86(TensorDesc xDesc,
     void *output,
     Arch arch)
 {
-    EE ret = SUCCESS;
+    EE ret = NOT_SUPPORTED;
     switch (xDesc.dt) {
 #ifdef _USE_FP32
         case DT_F32: {
-            ret = rnncell_fp32(xDesc, currentX, filterDesc, filter, biasDesc, bias, state, tmpBytes,
-                tmp, rnnParamSpec, batchStrideX, batchStrideH, hDesc, output, arch);
+            if (0) {
+#if defined(_USE_INT8) && defined(_USE_ULTRA_OPTIMIZATION)
+            } else if (arch == X86_AVX512 && rnnParamSpec.mode == RNN_LSTM &&
+                rnnParamSpec.num_projection == 0) {
+                ret = rnncell_int8(xDesc, currentX, filterDesc, filter, biasDesc, bias, scale, state,
+                    tmpBytes, tmp, rnnParamSpec, batchStrideX, batchStrideH, hDesc, output, arch);
+#endif
+            } else {
+                ret = rnncell_fp32(xDesc, currentX, filterDesc, filter, biasDesc, bias, state,
+                    tmpBytes, tmp, rnnParamSpec, batchStrideX, batchStrideH, hDesc, output, arch);
+            }
             break;
         }
 #endif
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
     return ret;

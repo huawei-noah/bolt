@@ -50,7 +50,7 @@ public:
         U32 length = inputDesc.dims[tmpAxis];
         if (tmpAxis + 1 >= (I32)inputDesc.nDims) {
             U32 bytes = inputTensor.bytes();
-            memcpy(outputPtr, inputPtr, bytes);
+            UNI_MEMCPY(outputPtr, inputPtr, bytes);
             return;
         }
         U32 loops = inputDesc.dims[tmpAxis + 1];
@@ -72,13 +72,13 @@ public:
                     (loops - this->p.shift_length) * (this->p.shift_length + length);
                 U32 start = this->p.shift_length * length - num;
                 U32 srcIndex = start * tileSize;
-                memcpy(dstPtr, srcPtr + srcIndex, num * tileSize);
+                UNI_MEMCPY(dstPtr, srcPtr + srcIndex, num * tileSize);
                 dstPtr += num * tileSize;
                 srcIndex += num * tileSize;
                 for (U32 j = this->p.shift_length; j < loops; j++) {
-                    memset(dstPtr, 0, this->p.shift_length * tileSize);
+                    UNI_MEMSET(dstPtr, 0, this->p.shift_length * tileSize);
                     dstPtr += this->p.shift_length * tileSize;
-                    memcpy(dstPtr, srcPtr + srcIndex, chunkSize);
+                    UNI_MEMCPY(dstPtr, srcPtr + srcIndex, chunkSize);
                     dstPtr += chunkSize;
                     srcIndex += chunkSize;
                 }
@@ -87,7 +87,7 @@ public:
                 srcPtr += this->p.shift_length * loops * tileSize;
                 for (U32 j = 0; j < loops; j++) {
                     for (U32 k = 0; k < klen; k++) {
-                        memcpy(dstPtr, srcPtr, tileSize);
+                        UNI_MEMCPY(dstPtr, srcPtr, tileSize);
                         srcPtr += tileSize;
                         dstPtr += tileSize;
                     }

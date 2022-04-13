@@ -92,7 +92,7 @@ int main(int argc, char *argv[])
         std::cout << "output_eoq: " << eoq.element(0) << " " << eoq.element(1) << std::endl;
         falseResult += verify(vad, eoq);
         Tensor outCache = pipeline->get_tensor_by_name("output_cache");
-        memcpy(cache.data(), (U8 *)((CpuMemory *)(outCache.get_memory()))->get_ptr(),
+        UNI_MEMCPY(cache.data(), (U8 *)((CpuMemory *)(outCache.get_memory()))->get_ptr(),
             tensorNumBytes(cacheDesc));
     }
     UNI_TIME_STATISTICS

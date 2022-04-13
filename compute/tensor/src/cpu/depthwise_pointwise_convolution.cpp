@@ -53,7 +53,7 @@ EE depthwise_pointwise_convolution_cpu(TensorDesc inputDesc,
 #ifdef _USE_X86
     } else if (IS_X86(arch)) {
         ret = depthwise_pointwise_convolution_x86(inputDesc, input, nullptr, dwFilterDesc, dwFilter,
-            pwFilterDesc, pwFilter, convParamSpec, algorithm, dwBiasDesc, dwBias, pwBiasDesc,
+            pwFilterDesc, pwFilter, convParamSpec, algorithm, nullptr, dwBiasDesc, dwBias, pwBiasDesc,
             pwBias, tmpBytes, tmp, outputDesc, output, depthwiseActivationParamSpec,
             pointwiseActivationParamSpec, arch);
 #endif

@@ -26,7 +26,7 @@ EE concat_int8(std::vector<TensorDesc> inputDesc,
         CHECK_STATUS(NOT_MATCH);
     }
     if (inputDesc.size() == 1) {
-        memcpy(output, input[0], tensorNumBytes(outputDesc));
+        UNI_MEMCPY(output, input[0], tensorNumBytes(outputDesc));
         return SUCCESS;
     }
     if (concatDim != 0 && concatDim != 1) {
@@ -113,7 +113,7 @@ EE concat_int8(std::vector<TensorDesc> inputDesc,
             for (U32 i = 0; i < inputDesc.size(); i++) {
                 copySize = tensorNumElements(inputDesc[i]) * sizeof(INT8);
 
-                memcpy(out_ptr, input[i], copySize);
+                UNI_MEMCPY(out_ptr, input[i], copySize);
                 out_ptr = out_ptr + copySize;
             }
             return SUCCESS;
@@ -129,7 +129,7 @@ EE concat_int8(std::vector<TensorDesc> inputDesc,
 
                     copySize = tensorNumElements(inputDesc[i]) / in * sizeof(INT8);
 
-                    memcpy(out_ptr, (INT8 *)input[i] + j * copySize, copySize);
+                    UNI_MEMCPY(out_ptr, (INT8 *)input[i] + j * copySize, copySize);
                     out_ptr = out_ptr + copySize;
                 }
             }

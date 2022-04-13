@@ -24,9 +24,7 @@ inline EE activation_offset_int8(
 {
     U32 num32 = len / 32;
     U32 resMask = pow(2, len % 32) - 1;
-
     EE ret = SUCCESS;
-
     switch (activationDesc.mode) {
         case ACTIVATION_NULL: {
             break;

@@ -55,10 +55,10 @@ int convolutionCPUFloatAlgorithmSearch(Arch arch, DataType dt, std::string path)
                             }
                             convParamSpec.stride_h = sv;
                             convParamSpec.stride_w = sv;
-                            convParamSpec.padding_left = pl;
-                            convParamSpec.padding_right = pr;
-                            convParamSpec.padding_top = pt;
-                            convParamSpec.padding_bottom = pb;
+                            convParamSpec.pad_left = pl;
+                            convParamSpec.pad_right = pr;
+                            convParamSpec.pad_top = pt;
+                            convParamSpec.pad_bottom = pb;
                             filterDesc = tensor4df(dt, DF_NCHW, fn, ic, fv, fv);
                             Tensor inputTensor;
                             Tensor outputTensor;

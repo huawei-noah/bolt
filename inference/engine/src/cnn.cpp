@@ -11,6 +11,7 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
+#include <unordered_map>
 #include "cnn.h"
 #ifdef _USE_CPU
 #include "cpu/factory_cpu.hpp"
@@ -31,6 +32,22 @@ bool is_same_tensor(Tensor a, Tensor b)
         ret = false;
     }
     return ret;
+}
+
+void CNN::check_dynamic_output_size(OperatorType type)
+{
+    std::set<OperatorType> types = {OT_Shape, OT_NonMaxSuppression};
+    if (types.find(type) != types.end()) {
+        this->dynamicOutputSize = true;
+    }
+    if (type == OT_Shape) {
+        UNI_WARNING_LOG("model contains Shape operator, this will use dynamic output size "
+                        "inference(may encounter error). If you don't want to use it, you can use "
+                        "onnx-simplifier to simplify original onnx model.\n");
+        if (IS_GPU(this->deviceInfo.schedule)) {
+            UNI_ERROR_LOG("gpu currently not support dynamic output size inference.\n");
+        }
+    }
 }
 
 CNN CNN::clone()
@@ -166,8 +183,7 @@ void CNN::initialize_ops(const ModelSpec *ms)
     std::shared_ptr<Factory> factory;
     if (IS_GPU(this->deviceInfo.schedule)) {
 #ifdef _USE_GPU
-        auto factory_ocl = (Factory *)(new FactoryOCL());
-        factory = std::shared_ptr<Factory>(factory_ocl);
+        factory = std::shared_ptr<Factory>(new FactoryOCL());
         this->tmpTensor = Tensor(OCLMem);
 #else
         UNI_ERROR_LOG("This library not support ARM GPU, please rebuild library with --gpu "
@@ -175,17 +191,18 @@ void CNN::initialize_ops(const ModelSpec *ms)
         exit(1);
 #endif
     } else {
-        auto factory_cpu = (Factory *)(new FactoryCPU());
-        factory = std::shared_ptr<Factory>(factory_cpu);
+        factory = std::shared_ptr<Factory>(new FactoryCPU());
         this->tmpTensor = Tensor();
     }
 
     for (int i = 0; i < opNum; i++) {
         OperatorSpec curOps = ms->ops[i];
         std::string opName = curOps.name;
+        UNI_DEBUG_LOG("create operator:%s type:%s.\n", curOps.name, OperatorTypeName()[curOps.type]);
         if (opName.compare("data") == 0) {
             continue;
         }
+        this->check_dynamic_output_size(curOps.type);
         std::vector<std::string> inputTensorsName;
         std::vector<std::string> outputTensorsName;
         for (U32 j = 0; j < curOps.num_inputs; j++) {
@@ -212,6 +229,7 @@ void CNN::initialize_ops(const ModelSpec *ms)
     for (int i = 0; i < ms->num_weight_specs; i++) {
         WeightSpec curOpWs = ms->ws[i];
         std::string opName = curOpWs.op_name;
+        UNI_DEBUG_LOG("set operator:%s's weight parameter.\n", curOpWs.op_name);
         if (this->operatorMap.find(opName) == this->operatorMap.end()) {
             UNI_WARNING_LOG("unsed weight %s in model.\n", opName.c_str());
             continue;
@@ -238,7 +256,7 @@ void CNN::ready(std::map<std::string, TensorDesc> inputDescMap)
                 if (op->is_weight()) {
                     UNI_DEBUG_LOG("op: %s init weight\n", op->get_name().c_str());
                     auto weightOpPtr = dynamic_cast<WeightOperator *>(op.get());
-                    CHECK_STATUS(weightOpPtr->init_weight_bias_from_model(nullptr));
+                    CHECK_STATUS(weightOpPtr->init_weight_bias_from_model());
                 }
                 UNI_DEBUG_LOG("op: %s infer forward algorithm\n", op->get_name().c_str());
                 //need process for qualcomm
@@ -277,7 +295,6 @@ void CNN::reready(std::map<std::string, TensorDesc> inputDescMap)
 
 EE CNN::mark_input_output()
 {
-    EE ret = SUCCESS;
     for (auto &iter : this->inputTensors) {
         std::string str = iter.first;
         if (tensorMap.find(str) != tensorMap.end()) {
@@ -285,8 +302,7 @@ EE CNN::mark_input_output()
         } else {
             UNI_ERROR_LOG(
                 "can not find tensor(name: %s) to be marked as model input.\n", str.c_str());
-            ret = NOT_MATCH;
-            break;
+            return NOT_MATCH;
         }
     }
     for (auto &iter : this->outputTensors) {
@@ -297,11 +313,10 @@ EE CNN::mark_input_output()
             UNI_ERROR_LOG("can not find tensor(name: %s) to be marked as model output. Maybe this "
                           "tensor is removed by graph optimizer.\n",
                 str.c_str());
-            ret = NOT_MATCH;
-            break;
+            return NOT_MATCH;
         }
     }
-    return ret;
+    return SUCCESS;
 }
 
 void CNN::set_input_by_copy(std::map<std::string, U8 *> modelTensorsInput)
@@ -312,14 +327,16 @@ void CNN::set_input_by_copy(std::map<std::string, U8 *> modelTensorsInput)
         UNI_DEBUG_LOG("    Copy input %s...\n", inputName.c_str());
         U8 *data = modelTensorInput.second;
         if (this->inputTensors.find(inputName) == this->inputTensors.end()) {
-            CHECK_STATUS(NOT_MATCH);
+            UNI_ERROR_LOG("Can not find input:%s to set.\n", inputName.c_str());
+            return;
         }
         auto tensorPtr = this->inputTensors[inputName];
         Tensor input;
         input.resize(tensorPtr->get_desc());
         std::shared_ptr<U8> shared_data(data, [](U8 *ptr) {});
         ((CpuMemory *)(input.get_memory()))->set_shared_ptr(shared_data);
-        tensorPtr->copy_from(&input);
+        UNI_PROFILE(
+            { tensorPtr->copy_from(&input); }, "copy " + inputName, std::string("input::copy"));
         UNI_DEBUG_LOG("    Copy input: %s %s\n", inputName.c_str(), tensorPtr->string(8).c_str());
     }
     UNI_DEBUG_LOG("Copy input end.\n");
@@ -332,15 +349,20 @@ void CNN::set_input_by_assign(std::map<std::string, std::shared_ptr<U8>> modelTe
         std::string inputName = modelTensorInput.first;
         std::shared_ptr<U8> data = modelTensorInput.second;
         if (this->inputTensors.find(inputName) == this->inputTensors.end()) {
-            CHECK_STATUS(NOT_MATCH);
+            UNI_ERROR_LOG("Can not find input:%s to set.\n", inputName.c_str());
+            return;
         }
         auto tensorPtr = this->inputTensors[inputName];
-        if (data != ((CpuMemory *)(tensorPtr->get_memory()))->get_shared_ptr()) {
-            Tensor input;
-            input.resize(tensorPtr->get_desc());
-            ((CpuMemory *)(input.get_memory()))->set_shared_ptr(data);
-            tensorPtr->reuse(&input);
-        }
+        UNI_PROFILE(
+            {
+                if (data != ((CpuMemory *)(tensorPtr->get_memory()))->get_shared_ptr()) {
+                    Tensor input;
+                    input.resize(tensorPtr->get_desc());
+                    ((CpuMemory *)(input.get_memory()))->set_shared_ptr(data);
+                    tensorPtr->reuse(&input);
+                }
+            },
+            "copy " + inputName, std::string("input::copy"));
         UNI_DEBUG_LOG("    Set input: %s %s\n", inputName.c_str(), tensorPtr->string(8).c_str());
     }
     UNI_DEBUG_LOG("Set input end.\n");
@@ -371,10 +393,13 @@ std::map<std::string, std::shared_ptr<Tensor>> CNN::get_output()
 
 Tensor CNN::get_tensor_by_name(std::string tensorName)
 {
+    Tensor ret;
     if (this->tensorMap.find(tensorName) == this->tensorMap.end()) {
-        CHECK_STATUS(NOT_MATCH);
+        UNI_ERROR_LOG("Can not find output:%s to get.\n", tensorName.c_str());
+    } else {
+        ret = *(this->tensorMap[tensorName].get());
     }
-    return *(this->tensorMap[tensorName].get());
+    return ret;
 }
 
 TensorDesc CNN::get_tensor_desc_by_name(std::string tensorName)
@@ -404,6 +429,52 @@ std::map<std::string, TensorDesc> CNN::get_output_desc()
     return descs;
 }
 
+void CNN::update_tensor_positions()
+{
+    std::unordered_map<std::string, I32> m;
+    for (auto &opName : this->sortedOps) {
+        auto op = this->operatorMap[opName];
+        if (op->get_type() == OT_Reshape) {
+            std::vector<std::string> curOpInputTensorName = this->operatorTensorMap[opName][0];
+            std::vector<std::string> curOpOutputTensorName = this->operatorTensorMap[opName][1];
+            auto tensor = this->tensorMap[curOpInputTensorName[0]];
+            if ((tensor->get_desc().df != DF_NCHWC8) &&
+                (tensor->get_desc().df != DF_NCHWC16))
+            {
+                std::vector<I32> tensorPositions = op->get_tensor_positions();
+                m[curOpInputTensorName[0]] = m[curOpOutputTensorName[0]] = tensorPositions[0] = -1;
+                tensorPositions[1] = -3;
+                // when slot is -3, reuse the input tensor mem.
+                op->set_tensor_positions(tensorPositions);
+            }
+        }
+    }
+    if (!m.empty()) {
+        for (auto &opName : this->sortedOps) {
+            auto op = this->operatorMap[opName];
+            std::vector<I32> tensorPositions = op->get_tensor_positions();
+            if (tensorPositions.size() > 1 && tensorPositions[1] == -3) {
+                continue;
+            }
+            bool update = false;
+            for (U32 i = 0, tensorIter = 0; i < 2; ++i) {
+                U32 iterSize = this->operatorTensorMap[opName][i].size();
+                for (U32 j = 0; j < iterSize; ++j) {
+                    std::string tensorName = this->operatorTensorMap[opName][i][j];
+                    if (m.count(tensorName)) {
+                        tensorPositions[tensorIter] = m[tensorName];
+                        update = true;
+                    }
+                    ++tensorIter;
+                }
+            }
+            if (update) {
+                op->set_tensor_positions(tensorPositions);
+            }
+        }
+    }
+}
+
 EE CNN::infer_output_tensors_size(std::map<std::string, TensorDesc> inputDescMap)
 {
     UNI_DEBUG_LOG("Infer tensor dimension...\n");
@@ -413,6 +484,9 @@ EE CNN::infer_output_tensors_size(std::map<std::string, TensorDesc> inputDescMap
             "model input: %s desc %s\n", iter.first.c_str(), tensorDesc2Str(iter.second).c_str());
     }
     this->infer_layout_desc();
+#ifndef _USE_GPU
+    this->update_tensor_positions();
+#endif
     this->update_op_tensors();
     UNI_DEBUG_LOG("Infer tensor dimension end.\n");
     return SUCCESS;
@@ -452,7 +526,7 @@ void CNN::assign_output_tensor()
                 //    tensorPositions[tensorIter]);
                 auto tensor = this->tensorMap[tensorName];
                 bool needAssign = true;
-                if (i == 0 && this->inputTensors.find(tensorName) == this->inputTensors.end()) {
+                if (i == 0 && (this->inputTensors.find(tensorName) == this->inputTensors.end())) {
                     needAssign = false;
                 }
                 if (this->weightOpOutputNames.find(tensorName) != this->weightOpOutputNames.end()) {
@@ -462,6 +536,7 @@ void CNN::assign_output_tensor()
                     I32 slot = tensorPositions[tensorIter];
                     if (slot >= 0) {
                         tensor->reuse(get_reuse_memory(slot, tensor.get()));
+
                     } else if (slot == -1) {
                         tensor->alloc();
 #ifdef _USE_GPU
@@ -469,6 +544,9 @@ void CNN::assign_output_tensor()
                         auto mem = (OclMemory *)tensor->get_memory();
                         mem->mapped_alloc();
 #endif
+                    } else if (slot == -3) {
+                        // when slot is -3, reuse the input tensor mem.
+                        tensor->reuse(&(tensors[0][0]));
                     }
                 }
                 tensorIter++;
@@ -489,7 +567,37 @@ void CNN::run()
         if (op->get_type() == OT_Repeat || op->get_type() == OT_Jump) {
             opIndex = op->get_next_operator_index();
         } else {
-            UNI_PROFILE(op->run(), op->get_name(),
+            if (this->dynamicOutputSize) {
+                std::vector<Tensor> inputs = op->get_input_tensors();
+                std::vector<Tensor> outputs = op->get_output_tensors();
+                std::vector<Tensor *> in, out;
+                for (U32 i = 0; i < inputs.size(); i++) {
+                    in.push_back(&inputs[i]);
+                }
+                for (U32 i = 0; i < outputs.size(); i++) {
+                    out.push_back(&outputs[i]);
+                }
+                op->infer_output_tensors_size(in, out);
+            }
+#ifdef _DEBUG
+            std::vector<Tensor> inputTensors = op->get_input_tensors();
+            std::vector<std::string> inputNames = operatorTensorMap[op->get_name()][0];
+            for (U32 i = 0; i < inputTensors.size(); i++) {
+                Tensor inputTensor = inputTensors[i];
+                std::string line = inputTensor.string(8);
+                UNI_DEBUG_LOG("    input:%s %s\n", inputNames[i].c_str(), line.c_str());
+            }
+#endif
+            UNI_PROFILE(
+                {
+                    op->run();
+#if defined(_USE_GPU) && defined(_PROFILE)
+                    if (IS_GPU(this->deviceInfo.schedule)) {
+                        gcl_finish(OCLContext::getInstance().handle.get());
+                    }
+#endif
+                },
+                op->get_name(),
                 std::string(OperatorTypeName()[op->get_type()]) + std::string("::run"));
             opIndex++;
         }
@@ -562,7 +670,7 @@ void CNN::set_op_tensors_positions(std::shared_ptr<Operator> op,
     U32 outputTensorsNum = outputTensorsName.size();
     U32 numTensors = inputTensorsNum + outputTensorsNum;
     std::vector<I32> tensorPositions(numTensors);
-    memcpy(tensorPositions.data(), tensor_positions, numTensors * bytesOf(DT_I32));
+    UNI_MEMCPY(tensorPositions.data(), tensor_positions, numTensors * bytesOf(DT_I32));
     if (IS_GPU(this->deviceInfo.schedule)) {
         for (U32 j = 0; j < numTensors; j++) {
             std::string curTensorName;
@@ -636,7 +744,7 @@ void CNN::set_input_desc(std::map<std::string, TensorDesc> inputDescMap)
 {
     for (auto &iter : inputDescMap) {
         if (tensorMap.find(iter.first) == tensorMap.end()) {
-            UNI_WARNING_LOG("Unused model input node: %s\n", iter.first.c_str());
+            UNI_WARNING_LOG("unused model input node: %s\n", iter.first.c_str());
             continue;
         }
         TensorDesc desc = iter.second;

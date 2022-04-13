@@ -36,7 +36,7 @@ inline EE reduction_core_mali_fp16(GCLHandle_t handle,
 {
     int axisTran[6];
     int axis;
-    for (int i = 0; i < p.axes_num; i++) {
+    for (int i = 0; i < p.num_axes; i++) {
         axis = p.axes[i];
         if (axis < 0) {
             axis = inputDesc.nDims + axis;
@@ -97,8 +97,8 @@ inline EE reduction_core_mali_fp16(GCLHandle_t handle,
         useNchw = true;
         edge = ow;
     }
-    CHECK_STATUS(set_reduction_opt_mali(useNchw, useOc4, axis, p.reduction_mode, DT_F16,
-        GCL_MEM_BUF, GCL_MEM_BUF, kernelName, &kernelOpt));
+    CHECK_STATUS(set_reduction_opt_mali(
+        useNchw, useOc4, axis, p.mode, DT_F16, GCL_MEM_BUF, GCL_MEM_BUF, kernelName, &kernelOpt));
     CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
     CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, ow_str, oh_str, i_off, o_off, iw, ih,
         ic, edge, keep_dim, od, gs[0], gs[1], inbuf, outbuf));

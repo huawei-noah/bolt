@@ -33,9 +33,9 @@ class ScaleWeightOptimizer : public OPOptimizer {
                 int convOpIndex = nextOpIndexes[0].first;
                 if (!(OT_Conv == spec->ops[convOpIndex].type &&
                         (spec->ops[convOpIndex].ps.conv_spec.convolution_type ==
-                                Convolution_Pointwise ||
+                                CONVOLUTION_POINTWISE ||
                             spec->ops[convOpIndex].ps.conv_spec.convolution_type ==
-                                Convolution_Dilation))) {
+                                CONVOLUTION_DILATION))) {
                     continue;
                 }
 
@@ -65,17 +65,15 @@ class ScaleWeightOptimizer : public OPOptimizer {
                 if (betaPtr == nullptr) {
                     setOperatorInvalid(spec, scaleOpIndex, true);
                 } else {
-                    F32 *vecTemp = (F32 *)mt_new_storage(spec->ws[scaleWeightIndex].bytes_of_vec);
+                    F32 *vecTemp = (F32 *)mt_malloc(spec->ws[scaleWeightIndex].bytes_of_vec);
                     for (U32 m = 0; m < channelCur; m++) {
                         vecTemp[m] = betaPtr[m] / alphaPtr[m];
                     }
-                    if (outOfFileMapRange(spec->ws[scaleWeightIndex].vec, spec->mfd)) {
-                        delete spec->ws[scaleWeightIndex].vec;
-                    }
+                    mt_free(spec->ws[scaleWeightIndex].vec, spec);
                     spec->ws[scaleWeightIndex].vec = (U8 *)vecTemp;
                 }
                 F32 *oldWeight = (F32 *)spec->ws[convWeightIndex].weight;
-                F32 *weightTemp = (F32 *)mt_new_storage(spec->ws[convWeightIndex].bytes_of_weight);
+                F32 *weightTemp = (F32 *)mt_malloc(spec->ws[convWeightIndex].bytes_of_weight);
                 int weightPerChannel = spec->ops[convOpIndex].ps.conv_spec.kernel_t *
                     spec->ops[convOpIndex].ps.conv_spec.kernel_h *
                     spec->ops[convOpIndex].ps.conv_spec.kernel_w;
@@ -86,15 +84,11 @@ class ScaleWeightOptimizer : public OPOptimizer {
                         }
                     }
                 }
-                if (outOfFileMapRange(spec->ws[convWeightIndex].weight, spec->mfd)) {
-                    delete spec->ws[convWeightIndex].weight;
-                }
+                mt_free(spec->ws[convWeightIndex].weight, spec);
                 spec->ws[convWeightIndex].weight = (U8 *)weightTemp;
-                if (outOfFileMapRange(spec->ws[scaleWeightIndex].weight, spec->mfd)) {
-                    delete spec->ws[scaleWeightIndex].weight;
-                }
-                spec->ws[scaleWeightIndex].weight = nullptr;
+
                 spec->ws[scaleWeightIndex].bytes_of_weight = 0;
+                mt_free(spec->ws[scaleWeightIndex].weight, spec);
                 hasOptimized = true;
             }
         }

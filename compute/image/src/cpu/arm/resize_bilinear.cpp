@@ -16,7 +16,8 @@
 #include "uni.h"
 
 #ifdef _USE_FP16
-EE resize_bilinear_fp16(TensorDesc inputDesc, F16 *inArray, TensorDesc outputDesc, F16 *outArray)
+EE resize_bilinear_fp16(
+    TensorDesc inputDesc, F16 *inArray, ResizeParamSpec p, TensorDesc outputDesc, F16 *outArray)
 {
     DataType idt, odt;
     DataFormat idf, odf;
@@ -28,8 +29,14 @@ EE resize_bilinear_fp16(TensorDesc inputDesc, F16 *inArray, TensorDesc outputDes
     if (idf != DF_NCHWC8 || odf != DF_NCHWC8) {
         CHECK_STATUS(NOT_MATCH);
     }
-    F32 strideH = ((F32)ih) / oh;
-    F32 strideW = ((F32)iw) / ow;
+    F32 strideH, strideW;
+    if (p.trans_mode == COORDINATE_TRANS_ALIGN_CORNERS) {
+        strideH = ((F32)ih - 1) / (oh - 1);
+        strideW = ((F32)iw - 1) / (ow - 1);
+    } else {
+        strideH = ((F32)ih) / oh;
+        strideW = ((F32)iw) / ow;
+    }
     U32 ic_align = 8, oc_align = 8;
     ic /= ic_align;
     oc /= oc_align;
@@ -78,7 +85,8 @@ EE resize_bilinear_fp16(TensorDesc inputDesc, F16 *inArray, TensorDesc outputDes
 #endif
 
 #ifdef _USE_FP32
-EE resize_bilinear_fp32(TensorDesc inputDesc, F32 *inArray, TensorDesc outputDesc, F32 *outArray)
+EE resize_bilinear_fp32(
+    TensorDesc inputDesc, F32 *inArray, ResizeParamSpec p, TensorDesc outputDesc, F32 *outArray)
 {
     DataType idt, odt;
     DataFormat idf, odf;
@@ -90,8 +98,14 @@ EE resize_bilinear_fp32(TensorDesc inputDesc, F32 *inArray, TensorDesc outputDes
     if (idf != DF_NCHWC8 || odf != DF_NCHWC8) {
         CHECK_STATUS(NOT_MATCH);
     }
-    F32 strideH = ((F32)ih) / oh;
-    F32 strideW = ((F32)iw) / ow;
+    F32 strideH, strideW;
+    if (p.trans_mode == COORDINATE_TRANS_ALIGN_CORNERS) {
+        strideH = ((F32)ih - 1) / (oh - 1);
+        strideW = ((F32)iw - 1) / (ow - 1);
+    } else {
+        strideH = ((F32)ih) / oh;
+        strideW = ((F32)iw) / ow;
+    }
     U32 ic_align = 8, oc_align = 8;
     ic /= ic_align;
     oc /= oc_align;
@@ -148,18 +162,19 @@ EE resize_bilinear_fp32(TensorDesc inputDesc, F32 *inArray, TensorDesc outputDes
 }
 #endif
 
-EE resize_bilinear_arm(TensorDesc inputDesc, void *input, TensorDesc outputDesc, void *output)
+EE resize_bilinear_arm(
+    TensorDesc inputDesc, void *input, ResizeParamSpec p, TensorDesc outputDesc, void *output)
 {
     EE ret = SUCCESS;
     switch (inputDesc.dt) {
 #ifdef _USE_FP16
         case DT_F16:
-            ret = resize_bilinear_fp16(inputDesc, (F16 *)input, outputDesc, (F16 *)output);
+            ret = resize_bilinear_fp16(inputDesc, (F16 *)input, p, outputDesc, (F16 *)output);
             break;
 #endif
 #ifdef _USE_FP32
         case DT_F32:
-            ret = resize_bilinear_fp32(inputDesc, (F32 *)input, outputDesc, (F32 *)output);
+            ret = resize_bilinear_fp32(inputDesc, (F32 *)input, p, outputDesc, (F32 *)output);
             break;
 #endif
         default:

@@ -45,7 +45,7 @@ public:
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
         this->needSetKernelVec = true;
-        CHECK_STATUS(power_infer_output_size(inTensors[0], outTensors[0], &this->archInfo));
+        CHECK_STATUS(power_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo));
         if (check_tensors_image(inTensors) && inTensors[0] != outTensors[0]) {
             CHECK_STATUS(set_tensors_image(outTensors, inTensors.size()));
         }

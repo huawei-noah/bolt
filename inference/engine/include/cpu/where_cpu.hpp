@@ -14,7 +14,6 @@
 #ifndef _WHERE_CPU_H
 #define _WHERE_CPU_H
 
-#include <math.h>
 #include "where.hpp"
 
 class WhereCPU : public Where {
@@ -31,31 +30,14 @@ public:
 
     void run() override
     {
-        CHECK_STATUS(where(this->inputTensors[1], this->inputTensors[0], this->biasTensors[0],
+        CHECK_STATUS(where(this->inputTensors[0], this->inputTensors[1], this->inputTensors[2],
             this->outputTensors[0], &this->archInfo));
     }
 
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
-        //inTensors[0] is condition now, 2021/2/3
-        CHECK_STATUS(where_infer_output_size(
-            inTensors[inTensors.size() - 1], outTensors[0], &this->archInfo));
-        return SUCCESS;
-    }
-
-    EE infer_weight_desc() override
-    {
-        auto curOpWs = this->get_weightspec();
-        int weightBytes = curOpWs.bytes_of_weight;
-        int Lw = sqrt(weightBytes / bytesOf(curOpWs.mdt));
-        int biasBytes = curOpWs.bytes_of_vec;
-        int Lb = biasBytes / bytesOf(curOpWs.mdt);
-        this->weightTensors = std::vector<Tensor>(1);
-        this->weightTensors[0].resize(tensor4d(this->dt, 1, 1, Lw, Lw));
-        this->biasTensors = std::vector<Tensor>(1);
-        this->biasTensors[0].resize(tensor2d(this->dt, 1, Lb));
-        return SUCCESS;
+        return where_infer_output_size(inTensors[1], inTensors[2], outTensors[0], &this->archInfo);
     }
 };
 

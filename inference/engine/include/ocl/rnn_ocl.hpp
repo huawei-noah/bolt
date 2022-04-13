@@ -47,8 +47,8 @@ public:
         ((MaliPara_t)(this->archInfo.archPara))->forwardRunInfo->algorithm =
             CONVOLUTION_ALGORITHM_NULL;
         I32 algo[10];
-        U32 algoNum = (this->p.numProjection > 0) ? 10 : 7;
-        std::string name = this->name + std::to_string(get_type()); 
+        U32 algoNum = (this->p.num_projection > 0) ? 10 : 7;
+        std::string name = this->name + std::to_string(get_type());
         if (algorithmMap->getAlgorithmInfoFromMap(name, algo, algoNum)) {
             this->runInfo.algorithm = (ConvolutionForwardAlgorithm)algo[0];
             this->runInfo.best_h[0] = algo[1];
@@ -119,13 +119,13 @@ public:
         this->wtm_gemv = std::shared_ptr<Tensor>(new Tensor(this->wtmType));
         this->wtm_gemv->resize(ftmDesc[1]);
         this->wtm_gemv->alloc();
-        if (this->p.numProjection > 0) {
+        if (this->p.num_projection > 0) {
             this->wtm_pro = std::shared_ptr<Tensor>(new Tensor(this->wtmType));
             this->wtm_pro->resize(ftmDesc[2]);
             this->wtm_pro->alloc();
         }
 
-        if (this->p.biDirection) {
+        if (this->p.bi_direction) {
             this->wtm_bi = std::shared_ptr<Tensor>(new Tensor(this->wtmType));
             this->wtm_bi->resize(ftmDesc[0]);
             CHECK_STATUS(set_wtm_image(ftmDesc[0], &wtm_bi));
@@ -133,7 +133,7 @@ public:
             this->wtm_gemv_bi = std::shared_ptr<Tensor>(new Tensor(this->wtmType));
             this->wtm_gemv_bi->resize(ftmDesc[1]);
             this->wtm_gemv_bi->alloc();
-            if (this->p.numProjection > 0) {
+            if (this->p.num_projection > 0) {
                 this->wtm_pro_bi = std::shared_ptr<Tensor>(new Tensor(this->wtmType));
                 this->wtm_pro_bi->resize(ftmDesc[2]);
                 this->wtm_pro_bi->alloc();
@@ -147,8 +147,8 @@ public:
         CHECK_STATUS(alloc_wtm_memory());
         std::vector<Tensor> filterTensors;
         std::vector<Tensor *> ftmTensors;
-        U32 weightNum = (this->p.numProjection > 0) ? 2 : 1;
-        U32 directions = (this->p.biDirection) ? 2 : 1;
+        U32 weightNum = (this->p.num_projection > 0) ? 2 : 1;
+        U32 directions = (this->p.bi_direction) ? 2 : 1;
         for (U32 i = 0; i < directions; i++) {
             for (U32 j = 0; j < weightNum; j++) {
                 filterTensors.push_back(this->weightTensors[i * weightNum + j]);
@@ -157,13 +157,13 @@ public:
 
         ftmTensors.push_back(this->wtm.get());
         ftmTensors.push_back(this->wtm_gemv.get());
-        if (this->p.numProjection > 0) {
+        if (this->p.num_projection > 0) {
             ftmTensors.push_back(this->wtm_pro.get());
         }
-        if (this->p.biDirection) {
+        if (this->p.bi_direction) {
             ftmTensors.push_back(this->wtm_bi.get());
             ftmTensors.push_back(this->wtm_gemv_bi.get());
-            if (this->p.numProjection > 0) {
+            if (this->p.num_projection > 0) {
                 ftmTensors.push_back(this->wtm_pro_bi.get());
             }
         }
@@ -178,16 +178,16 @@ public:
         weightNumCount++;
         this->weightTensors[weightNumCount] = *this->wtm_gemv.get();
         weightNumCount++;
-        if (this->p.numProjection > 0) {
+        if (this->p.num_projection > 0) {
             this->weightTensors[weightNumCount] = (*this->wtm_pro.get());
             weightNumCount++;
         }
-        if (this->p.biDirection) {
+        if (this->p.bi_direction) {
             this->weightTensors[weightNumCount] = *this->wtm_bi.get();
             weightNumCount++;
             this->weightTensors[weightNumCount] = *this->wtm_gemv_bi.get();
             weightNumCount++;
-            if (this->p.numProjection > 0) {
+            if (this->p.num_projection > 0) {
                 this->weightTensors[weightNumCount] = (*this->wtm_pro_bi.get());
                 weightNumCount++;
             }

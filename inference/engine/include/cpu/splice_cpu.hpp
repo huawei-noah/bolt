@@ -44,8 +44,8 @@ public:
             this->transform_filter();
         }
         EmbedParamSpec embedParamSpec;
-        embedParamSpec.input_dim = this->inputFrameSize;
-        embedParamSpec.num_output = inputDesc.dims[0];
+        embedParamSpec.num_inputs = this->inputFrameSize;
+        embedParamSpec.num_outputs = inputDesc.dims[0];
         embedParamSpec.transpose = false;
         CHECK_STATUS(embedding(this->weightTensors[0], inputTensor, embedParamSpec, this->temp,
             outputTensor, &this->archInfo));

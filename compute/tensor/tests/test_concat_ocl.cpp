@@ -85,7 +85,7 @@ int concatTest(int argc, char **argv, DataType dt)
 
     U32 maxBytes = 0;
     U32 tmpBytes = 0;
-    CHECK_STATUS(concat_infer_forward_tmp_bytes(inputTensor, &tmpBytes, &archInfo));
+    CHECK_STATUS(concat_infer_forward_tmp_bytes(inputTensor, outputTensor, &tmpBytes, &archInfo));
     maxBytes = (tmpBytes > maxBytes) ? tmpBytes : maxBytes;
 
     GCLMem_t output = alloc(outputTensor);
@@ -129,7 +129,7 @@ int concatTest(int argc, char **argv, DataType dt)
     for (int i = 0; i < num; i++) {
         inputTensorCpu[i].alloc();
         inputDesc[i].df = DF_NCHW;
-        memcpy(get_ptr_from_tensor(inputTensorCpu[i], CPU_GENERAL), input_cpu[i],
+        UNI_MEMCPY(get_ptr_from_tensor(inputTensorCpu[i], CPU_GENERAL), input_cpu[i],
             tensorNumBytes(inputDesc[i]));
     }
 

@@ -16,8 +16,13 @@
 #include "cpu/x86/fp32/tensor_computing_fp32.h"
 #endif
 
-EE layer_normalization_x86(
-    TensorDesc inputDesc, void *input, void *alpha, void *beta, TensorDesc outputDesc, void *output)
+EE layer_normalization_x86(TensorDesc inputDesc,
+    void *input,
+    LayerNormParamSpec p,
+    void *alpha,
+    void *beta,
+    TensorDesc outputDesc,
+    void *output)
 {
     DataType idt = inputDesc.dt;
     EE ret = SUCCESS;
@@ -25,7 +30,7 @@ EE layer_normalization_x86(
 #ifdef _USE_FP32
         case DT_F32: {
             ret = layer_normalization_fp32(
-                inputDesc, (F32 *)input, (F32 *)alpha, (F32 *)beta, outputDesc, (F32 *)output);
+                inputDesc, (F32 *)input, p, (F32 *)alpha, (F32 *)beta, outputDesc, (F32 *)output);
             break;
         }
 #endif

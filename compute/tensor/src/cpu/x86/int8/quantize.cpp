@@ -20,6 +20,7 @@
 
 inline void getSymmetricQuantizeScale(U32 num16, U32 resMask, const F32 *data, F32 *scale)
 {
+    F32 maxVal = 0;
     __asm__ __volatile__("vxorps %%zmm0, %%zmm0, %%zmm0            \n\t"
                          "mov $0x7FFFFFFF, %%ebx \n\t"
                          "vmovd %%ebx, %%xmm1                      \n\t"
@@ -55,17 +56,20 @@ inline void getSymmetricQuantizeScale(U32 num16, U32 resMask, const F32 *data, F
                          "vmaxps %%xmm1, %%xmm0, %%xmm0            \n\t"
                          "vpermilps $0b00000001, %%xmm0, %%xmm1    \n\t"
                          "vmaxps %%xmm1, %%xmm0, %%xmm0            \n\t"
-                         "mov $0x42FE0000, %%ebx  \n\t"
-                         "vmovd %%ebx, %%xmm1                      \n\t"
-                         "vdivps %%xmm0, %%xmm1, %%xmm2            \n\t"
-                         "vmovss %%xmm2, (%1)                      \n\t"
-                         : "+r"(data), "+r"(scale)
+                         "vmovd %%xmm0, %1                      \n\t"
+                         : "+r"(data), "+r"(maxVal)
                          : "r"(num16), "a"(resMask)
                          : "%k2", "%ebx", "%zmm0", "%zmm1", "%zmm2", "memory", "cc");
+    if (maxVal == 0) {
+        *scale = 1;
+    } else {
+        *scale = 127 / maxVal;
+    }
 }
 
 inline void getSymmetricQuantizeScaleI32(U32 num16, U32 resMask, const I32 *data, F32 *scale)
 {
+    F32 maxVal = 0;
     __asm__ __volatile__("vxorps %%zmm0, %%zmm0, %%zmm0            \n\t"
                          "mov %2, %%ebx \n\t"
                          "cmp $0x0, %%ebx                         \n\t"
@@ -98,14 +102,16 @@ inline void getSymmetricQuantizeScaleI32(U32 num16, U32 resMask, const I32 *data
                          "vpmaxsd %%xmm1, %%xmm0, %%xmm0            \n\t"
                          "vpermilps $0b00000001, %%xmm0, %%xmm1    \n\t"
                          "vpmaxsd %%xmm1, %%xmm0, %%xmm0            \n\t"
-                         "mov $0x42FE0000, %%ebx  \n\t"
-                         "vmovd %%ebx, %%xmm1                      \n\t"
                          "vcvtdq2ps %%xmm0, %%xmm0                       \n\t"
-                         "vdivps %%xmm0, %%xmm1, %%xmm2            \n\t"
-                         "vmovss %%xmm2, (%1)                      \n\t"
-                         : "+r"(data), "+r"(scale)
+                         "vmovd %%xmm0, %1                     \n\t"
+                         : "+r"(data), "+r"(maxVal)
                          : "r"(num16), "a"(resMask)
                          : "%k2", "%ebx", "%zmm0", "%zmm1", "%zmm2", "memory", "cc");
+    if (maxVal == 0) {
+        *scale = 1;
+    } else {
+        *scale = 127 / maxVal;
+    }
 }
 
 EE quantizeF32ToU8(TensorDesc dDesc, const F32 *data, TensorDesc *qDesc, UINT8 *qData, F32 *scale)
@@ -223,7 +229,7 @@ EE quantizeF32ToI8(TensorDesc dDesc, const F32 *data, TensorDesc *qDesc, INT8 *q
     return SUCCESS;
 }
 
-EE quantizeBiasOffsetCI32(F32 *bias,
+EE quantizeBiasOffsetCI32(const F32 *bias,
     TensorDesc biasDesc,
     INT8 *filter,
     TensorDesc filterDesc,
@@ -233,17 +239,20 @@ EE quantizeBiasOffsetCI32(F32 *bias,
     U32 N = tensorNumElements(biasDesc);
     std::set<DataFormat> nativeFormat = {DF_NCHW, DF_NHWC, DF_MTK, DF_NORMAL, DF_TRANSPOSE};
     I32 *offsetC = (I32 *)filter;
-    if (bias == nullptr || N == 0) {
+    if ((bias == nullptr) && (filter == nullptr)) {
+        return SUCCESS;
+    }
+    if ((bias == nullptr) || (N == 0)) {
         N = UNI_MAX(filterDesc.dims[0], filterDesc.dims[1]);
         if (nativeFormat.count(filterDesc.df)) {
-            memset(offsetCBias, 0, N * bytesOf(DT_I32));
+            UNI_MEMSET(offsetCBias, 0, N * bytesOf(DT_I32));
         } else {
-            memcpy(offsetCBias, offsetC, N * bytesOf(DT_I32));
+            UNI_MEMCPY(offsetCBias, offsetC, N * bytesOf(DT_I32));
         }
         return SUCCESS;
     }
 
-    if (nativeFormat.count(filterDesc.df)) {
+    if ((filter == nullptr) || nativeFormat.count(filterDesc.df)) {
         for (U32 i = 0; i < N; ++i) {
             offsetCBias[i] = round(bias[i] * scale[0]);
         }
@@ -259,7 +268,12 @@ EE transformU8ToI8(TensorDesc dDesc, const UINT8 *data, TensorDesc *qDesc, INT8 
 {
     U32 dataNum = tensorNumElements(dDesc);
     U32 num16 = dataNum / 64;
-    I64 resMask = pow(2, dataNum % 64) - 1;
+    U64 resMask = dataNum % 64;
+    if (resMask == 63) {
+        resMask = 0xFFFFFFFFFFFFFFFF;
+    } else {
+        resMask = (1LL << resMask) - 1;
+    }
 
     __asm__ __volatile__("mov $0x80, %%ebx \n\t"
                          "vmovd %%ebx, %%xmm1                    \n\t"

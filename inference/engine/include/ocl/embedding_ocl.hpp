@@ -52,20 +52,16 @@ public:
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
         this->needSetKernelVec = true;
-        if (this->p.num_output <= 0) {
-            if (inTensors.size() <= 1) {
-                CHECK_STATUS(NOT_SUPPORTED);
-            }
+        if (this->p.num_outputs <= 0) {
+            CHECK_REQUIREMENT(inTensors.size() > 1);
             TensorDesc desc = inTensors[1]->get_desc();
-            if (desc.nDims != 2) {
-                CHECK_STATUS(NOT_MATCH);
-            }
+            CHECK_REQUIREMENT(desc.nDims == 2);
             if (this->p.transpose) {
-                this->p.input_dim = desc.dims[0];
-                this->p.num_output = desc.dims[1];
+                this->p.num_inputs = desc.dims[0];
+                this->p.num_outputs = desc.dims[1];
             } else {
-                this->p.input_dim = desc.dims[1];
-                this->p.num_output = desc.dims[0];
+                this->p.num_inputs = desc.dims[1];
+                this->p.num_outputs = desc.dims[0];
             }
         }
         CHECK_STATUS(embedding_infer_output_size(
@@ -81,9 +77,9 @@ public:
         }
         TensorDesc weightDesc;
         if (this->p.transpose) {
-            weightDesc = tensor2df(this->dt, DF_TRANSPOSE, this->p.num_output, this->p.input_dim);
+            weightDesc = tensor2df(this->dt, DF_TRANSPOSE, this->p.num_outputs, this->p.num_inputs);
         } else {
-            weightDesc = tensor2df(this->dt, DF_NORMAL, this->p.input_dim, this->p.num_output);
+            weightDesc = tensor2df(this->dt, DF_NORMAL, this->p.num_inputs, this->p.num_outputs);
         }
         Tensor modelWeightTensor = Tensor(OCLMem);
         modelWeightTensor.resize(weightDesc);

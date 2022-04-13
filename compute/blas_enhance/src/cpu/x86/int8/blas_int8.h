@@ -21,15 +21,15 @@
 #include "uni.h"
 
 #define SIMDW 8
-#define align_size(size, unit) ((size + unit - 1) / unit * unit)
 
 void matrix_matrix_multiply_tmp_bytes_int8(
-    U32 row1, U32 col1, U32 row2, U32 col2, DataType dt, U32 *bytes);
+    U32 row1, U32 col1, U32 row2, U32 col2, DataFormat df, DataType dt, U32 *bytes);
 
 // transform no-transposed B to K4, offline
-inline void matrix1_trans_l(int size, int blockK, int K, int alignSize, INT8 *src, INT8 *dst)
+inline void matrix1_trans_l(
+    int size, int alignedN, int blockK, int K, int alignSize, INT8 *src, INT8 *dst)
 {
-    int alignedBlockK = align_size(blockK, alignSize);
+    int alignedBlockK = UNI_ALIGN(blockK, alignSize);
     int blockKF32 = blockK / 4;
     __m256i vindex = _mm256_set_epi32(K * 7, K * 6, K * 5, K * 4, K * 3, K * 2, K, 0);
     int i;
@@ -52,13 +52,18 @@ inline void matrix1_trans_l(int size, int blockK, int K, int alignSize, INT8 *sr
         }
         j *= 8;
         for (; j < size; ++j) {
-            memcpy(dst, src + i * 4 + j * K, 4);
+            UNI_MEMCPY(dst, src + i * 4 + j * K, 4);
             dst += 4;
+        }
+        if (j < alignedN) {
+            UNI_MEMSET(dst, 0, 4 * (alignedN - size));
+            dst += 4 * (alignedN - size);
         }
     }
     i *= 4;
     for (; i < alignedBlockK; i += 4) {
-        for (int j = 0; j < size; ++j) {
+        int j = 0;
+        for (; j < size; ++j) {
             for (int ii = i; ii < i + 4; ++ii) {
                 if (ii < blockK) {
                     *(dst++) = src[ii + j * K];
@@ -67,15 +72,21 @@ inline void matrix1_trans_l(int size, int blockK, int K, int alignSize, INT8 *sr
                 }
             }
         }
+        if (j < alignedN) {
+            UNI_MEMSET(dst, 0, 4 * (alignedN - size));
+            dst += 4 * (alignedN - size);
+        }
     }
 }
 
 // transform transposed B to K4, offline
-inline void matrix2_trans_l(int size, int blockK, int N, int alignSize, INT8 *src, INT8 *dst)
+inline void matrix2_trans_l(
+    int size, int alignedN, int blockK, int N, int alignSize, INT8 *src, INT8 *dst)
 {
-    int alignedBlockK = align_size(blockK, alignSize);
+    int alignedBlockK = UNI_ALIGN(blockK, alignSize);
     for (int i = 0; i < alignedBlockK; i += 4) {
-        for (int j = 0; j < size; ++j) {
+        int j = 0;
+        for (; j < size; ++j) {
             for (int ii = i; ii < (i + 4); ++ii) {
                 if (ii < blockK) {
                     *(dst++) = src[ii * N + j];
@@ -84,6 +95,10 @@ inline void matrix2_trans_l(int size, int blockK, int N, int alignSize, INT8 *sr
                 }
             }
         }
+        if (j < alignedN) {
+            UNI_MEMSET(dst, 0, 4 * (alignedN - size));
+            dst += 4 * (alignedN - size);
+        }
     }
 }
 
@@ -91,7 +106,7 @@ inline void matrix2_trans_l(int size, int blockK, int N, int alignSize, INT8 *sr
 inline void matrix2_trans_r(int size, int blockK, int M, int alignSize, UINT8 *src, UINT8 *dst)
 {
     // TODO: optimize
-    int alignedBlockK = align_size(blockK, alignSize);
+    int alignedBlockK = UNI_ALIGN(blockK, alignSize);
     for (int j = 0; j < size; ++j) {
         int i = 0;
         for (i = 0; i < blockK; ++i) {
@@ -101,7 +116,7 @@ inline void matrix2_trans_r(int size, int blockK, int M, int alignSize, UINT8 *s
             *(dst++) = *(src + i * M + j);
         }
         for (; i < alignedBlockK; ++i) {
-            *(dst++) = 0;
+            *(dst++) = 128;
         }
     }
 }
@@ -109,23 +124,21 @@ inline void matrix2_trans_r(int size, int blockK, int M, int alignSize, UINT8 *s
 // transpose A, online
 inline void matrix1_trans_r(int size, int blockK, int K, int alignSize, UINT8 *src, UINT8 *dst)
 {
-    int alignedBlockK = align_size(blockK, alignSize);
+    int alignedBlockK = UNI_ALIGN(blockK, alignSize);
     if (alignedBlockK != blockK) {
-        memset(dst, 0, alignedBlockK * size);
+        UNI_MEMSET(dst, 0, alignedBlockK * size);
     }
     for (int j = 0; j < size; ++j) {
-        memcpy(dst + j * alignedBlockK, src + j * K, blockK);
+        UNI_MEMCPY(dst + j * alignedBlockK, src + j * K, blockK);
     }
 }
 
 EE matrix_vector_multiply_transform_weight_int8(
     TensorDesc desc, INT8 *src, INT8 *packB, I32 *offsetCBias);
 
-EE matrix_matrix_multiply_transform_rhsN_int8(
-    TensorDesc desc, INT8 *src, INT8 *dst, I32 *offsetCBias);
+EE matrix_matrix_multiply_transform_rhsN_int8(TensorDesc desc, INT8 *src, INT8 *dst);
 
-EE matrix_matrix_multiply_transform_rhsT_int8(
-    TensorDesc desc, INT8 *src, INT8 *dst, I32 *offsetCBias);
+EE matrix_matrix_multiply_transform_rhsT_int8(TensorDesc desc, INT8 *src, INT8 *dst);
 
 EE mmm_avx512_vnni_int8(U32 M,
     U32 N,

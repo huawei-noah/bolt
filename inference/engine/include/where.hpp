@@ -14,9 +14,9 @@
 #ifndef _WHERE_H
 #define _WHERE_H
 
-#include "weight_operator.hpp"
+#include "operator.hpp"
 
-class Where : public WeightOperator {
+class Where : public Operator {
 public:
     Where(DataType dt)
     {
@@ -26,11 +26,6 @@ public:
     OperatorType get_type() override
     {
         return OT_Where;
-    }
-
-    bool can_input_output_the_same() override
-    {
-        return false;
     }
 };
 

@@ -156,9 +156,10 @@ public:
         return std::shared_ptr<Operator>(cep);
     }
 
-    std::shared_ptr<Operator> createLayerNorm(DataType dt, U32 weightNum) override
+    std::shared_ptr<Operator> createLayerNorm(
+        DataType dt, LayerNormParamSpec p, U32 weightNum) override
     {
-        auto cep = (LayerNorm *)new LayerNormOCL(dt, weightNum);
+        auto cep = (LayerNorm *)new LayerNormOCL(dt, p, weightNum);
         return std::shared_ptr<Operator>(cep);
     }
 
@@ -168,11 +169,9 @@ public:
         return std::shared_ptr<Operator>(cep);
     }
 
-    std::shared_ptr<Operator> createResize(DataType paramDT, ResizeParamSpec p) override
+    std::shared_ptr<Operator> createResize(DataType dt, ResizeParamSpec p) override
     {
-        // auto cep = new Resize(paramDT, paramPtr);
-        // OP_UNSUP(2, paramDT, paramPtr);
-        auto cep = (Resize *)(new ResizeOCL(paramDT, p));
+        auto cep = (Resize *)(new ResizeOCL(dt, p));
         return std::shared_ptr<Operator>(cep);
     }
 
@@ -250,9 +249,9 @@ public:
         return std::shared_ptr<Operator>(cep);
     }
 
-    std::shared_ptr<Operator> createPreAllocatedMemory(DataType dt, TensorDesc desc) override
+    std::shared_ptr<Operator> createPreAllocatedMemory(PreAllocatedMemoryParamSpec p) override
     {
-        auto cep = (PreAllocatedMemory *)new PreAllocatedMemoryOCL(dt, desc);
+        auto cep = (PreAllocatedMemory *)new PreAllocatedMemoryOCL(p);
         return std::shared_ptr<Operator>(cep);
     }
 
@@ -393,12 +392,6 @@ public:
         return std::shared_ptr<Operator>(cep);
     }
 
-    std::shared_ptr<Operator> createEqual(DataType dt, EqualParamSpec p) override
-    {
-        OP_UNSUP(2, dt, p);
-        return std::shared_ptr<Operator>(cep);
-    }
-
     std::shared_ptr<Operator> createInstanceNorm(DataType dt, InstanceNormParamSpec p) override
     {
         OP_UNSUP(2, dt, p);
@@ -435,9 +428,9 @@ public:
         return std::shared_ptr<Operator>(cep);
     }
 
-    std::shared_ptr<Operator> createRoIAlign(RoIAlignParamSpec p) override
+    std::shared_ptr<Operator> createRoIAlign(DataType dt, RoIAlignParamSpec p) override
     {
-        auto cep = (RoIAlign *)new RoIAlignOCL(p);
+        auto cep = (RoIAlign *)new RoIAlignOCL(dt, p);
         return std::shared_ptr<Operator>(cep);
     }
 
@@ -449,6 +442,54 @@ public:
     }
 
     std::shared_ptr<Operator> createGAT(DataType dt, GATParamSpec p) override
+    {
+        OP_UNSUP(2, dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+    std::shared_ptr<Operator> createQuantizeLinear(DataType dt, QuantizeLinearParamSpec p) override
+    {
+        OP_UNSUP(2, dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createGridSample(DataType dt, GridSampleParamSpec p) override
+    {
+        OP_UNSUP(2, dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createOneHot(DataType dt, OneHotParamSpec p) override
+    {
+        OP_UNSUP(2, dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createCumSum(DataType dt, CumSumParamSpec p) override
+    {
+        OP_UNSUP(2, dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createNonMaxSuppression(
+        DataType dt, NonMaxSuppressionParamSpec p) override
+    {
+        OP_UNSUP(2, dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createConstantOfShape(DataType dt, ConstantOfShapeParamSpec p) override
+    {
+        OP_UNSUP(2, dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createNonZero(DataType dt) override
+    {
+        OP_UNSUP(1, dt);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createRange(DataType dt, RangeParamSpec p) override
     {
         OP_UNSUP(2, dt, p);
         return std::shared_ptr<Operator>(cep);

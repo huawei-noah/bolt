@@ -29,7 +29,7 @@ public:
     }
 
 protected:
-    PReLUParamSpec preluDesc;
+    PReLUParamSpec p;
 };
 
 #endif  // _PADDING_H

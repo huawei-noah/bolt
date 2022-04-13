@@ -22,8 +22,9 @@ inline EE set_pooling_opt_mali(PoolingMode mode,
     }
     char ioMemName[128] = "";
     CHECK_STATUS(set_io_mem_name(inputMemType, outputMemType, ioMemName));
-    sprintf(kernelName, "pooling_%s%s", ioMemName, modeName.c_str());
-    sprintf(kernelOpt->sourceName, "pooling");
+    std::string kernel = std::string("pooling_") + ioMemName + modeName;
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, "pooling");
     kernelOpt->kernelDataType = dt;
     CHECK_STATUS(set_io_mem_define_opt(inputMemType, outputMemType, opt));
     return SUCCESS;

@@ -3,6 +3,9 @@ file(GLOB srcs ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
 # shared library
 add_library(${PROJECT_NAME} SHARED ${srcs})
 target_link_libraries(${PROJECT_NAME} LINK_PUBLIC uni)
+if (USE_SECURE_C)
+    target_link_libraries(${PROJECT_NAME} LINK_PUBLIC ${SecureC_SHARED_LIBRARY})
+endif ()
 
 # static library
 add_library(${PROJECT_NAME}_static STATIC ${srcs})
