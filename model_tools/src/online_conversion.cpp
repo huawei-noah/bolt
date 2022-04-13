@@ -83,7 +83,7 @@ void *OnlineModelConversion(const char *storagePath,
     } else {
         UNI_ERROR_LOG("Can not find %s.prototxt/caffemodel, %s.onnx, %s.tflite or %s.json model or %s.mindir"
                       "file.\n",
-            prefix.c_str(), prefix.c_str(), prefix.c_str(), prefix.c_str());
+            prefix.c_str(), prefix.c_str(), prefix.c_str(), prefix.c_str(), prefix.c_str());
         return nullptr;
     }
 
