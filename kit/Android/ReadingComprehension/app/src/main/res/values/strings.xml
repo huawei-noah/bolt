@@ -1,0 +1,11 @@
+<resources>
+    <string name="app_name">ReadingComprehension</string>
+
+    <string name="Demo1">On a sunny day, Xiao Ming goes to the beach to swim, he likes swimming very much</string>
+    <string name="Ques1">What is the weather today</string>
+
+    <string name="Demo2">It takes four hours to take the high-speed train from Shenzhen to Changsha. Shenzhen is high-speed train station is Shenzhen North,
+        Changsha is high-speed train station is Changsha South, and Xiao Ming is in Shenzhen preparing to go to Changsha.</string>
+    <string name="Ques2">How long does it take Xiao Ming to go to Changsha by high-speed rail</string>
+
+</resources>
