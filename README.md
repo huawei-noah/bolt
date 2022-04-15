@@ -168,6 +168,7 @@ Everything you want to know about bolt is recorded in the detailed documentation
 - [Bolt GPU性能优化，让上帝帮忙掷骰子](https://zhuanlan.zhihu.com/p/336218879)
 - [Bolt助力HMS机器翻译，自然语言处理又下一城](https://zhuanlan.zhihu.com/p/337887620)
 - [ARM CPU 1-bit推理，走向极致的道路](https://zhuanlan.zhihu.com/p/158161592)
+- [基于深度学习加速库Bolt的声音克隆技术](https://zhuanlan.zhihu.com/p/498919929)
 
 # 教程
 ---
@@ -176,7 +177,8 @@ Everything you want to know about bolt is recorded in the detailed documentation
 - 情感分类: [Android Demo](https://zhuanlan.zhihu.com/p/414971037)
 - 中文语音识别: [Android Demo](https://zhuanlan.zhihu.com/p/414978782), [iOS Demo](https://zhuanlan.zhihu.com/p/414981121)
 - 人脸检测: [Android Demo](https://zhuanlan.zhihu.com/p/414975102), [iOS Demo](https://zhuanlan.zhihu.com/p/414971375)
-
+- 阅读理解: [Android Demo](https://zhuanlan.zhihu.com/p/498906834)
+- 
 # Acknowledgement
 ---
 Bolt refers to the following projects: [caffe](https://github.com/BVLC/caffe), [onnx](https://github.com/onnx/onnx), [tensorflow](https://github.com/tensorflow/tensorflow), [ncnn](https://github.com/Tencent/ncnn), [mnn](https://github.com/alibaba/MNN), [dabnn](https://github.com/JDAI-CV/dabnn).
