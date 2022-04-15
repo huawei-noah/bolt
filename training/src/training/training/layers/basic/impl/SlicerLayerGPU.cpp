@@ -1,0 +1,196 @@
+// Copyright (C) 2021. Huawei Technologies Co., Ltd. All rights reserved.
+
+// Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+// The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+// WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+// COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+#include "SlicerLayerGPU.h"
+#include "../SlicerLayer.h"
+
+#include <training/opencl/GPUCommon.h>
+
+namespace raul
+{
+
+SlicerLayerGPU::SlicerLayerGPU(SlicerLayer& layer)
+    : mLayer(layer)
+{
+}
+
+void SlicerLayerGPU::forwardComputeImpl(NetworkMode)
+{
+    auto& work = mLayer.mNetworkParams.mWorkflow;
+
+    const auto& input = work.getMemoryManager<MemoryManagerGPU>()(mLayer.mInputs[0]);
+    const auto iDepth = work.getDepth(mLayer.mInputs[0]);
+    const auto iHeight = work.getHeight(mLayer.mInputs[0]);
+    const auto iWidth = work.getWidth(mLayer.mInputs[0]);
+    const auto numOfSlices = mLayer.mSlices.size();
+    const auto axisNum = 2 - mLayer.mDimIndex;
+    std::array<cl::Buffer, 4> outBuffs;
+    std::array<size_t, 4> oWidth;
+    std::array<size_t, 4> oHeight;
+    std::array<size_t, 4> oOffset;
+    std::array<size_t, 4> axisLen;
+    size_t batchOff = 0;
+    for (size_t b = 0; b < work.getBatchSize(); ++b)
+    {
+        size_t inSize = 0;
+        for (size_t i = 0; i < numOfSlices; i += 4)
+        {
+            const size_t sliceNum = ((i + 4) <= numOfSlices) ? 4 : (numOfSlices & 3);
+            size_t axisMax = 0;
+            size_t axisTotal = 0;
+            size_t sliceLen = 0;
+            for (size_t j = 0; j < sliceNum; ++j)
+            {
+                auto& output = work.getMemoryManager<MemoryManagerGPU>()(mLayer.mOutputs[j + i]);
+                oWidth[j] = work.getWidth(mLayer.mOutputs[j + i]);
+                oHeight[j] = work.getHeight(mLayer.mOutputs[j + i]);
+                oOffset[j] = b * work.getDepth(mLayer.mOutputs[j + i]) * oHeight[j] * oWidth[j];
+                outBuffs[j] = output.getBuffer();
+
+                axisLen[j] = mLayer.mSlices[j + i];
+                sliceLen += axisLen[j];
+                if (mLayer.mDirection == Dimension::Width)
+                {
+                    axisLen[j] = (axisLen[j] + 3) / 4;
+                }
+                axisTotal += axisLen[j];
+            }
+            axisMax = axisTotal - axisLen[sliceNum - 1];
+            gpu::slice(work.getKernelManager(),
+                       mLayer.mTypeName + "[" + mLayer.mName + "forwardComputeImpl]",
+                       axisNum,
+                       iDepth,
+                       iHeight,
+                       iWidth,
+                       axisMax,
+                       sliceNum,
+                       inSize,
+                       batchOff,
+                       axisTotal,
+                       oWidth,
+                       oHeight,
+                       oOffset,
+                       axisLen,
+                       input.getBuffer(),
+                       outBuffs);
+
+            switch (mLayer.mDirection)
+            {
+                case Dimension::Depth:
+                    inSize += sliceLen * iWidth * iHeight;
+                    break;
+                case Dimension::Height:
+                    inSize += sliceLen * iWidth;
+                    break;
+                case Dimension::Width:
+                    inSize += sliceLen;
+                    break;
+                default:
+                    throw std::runtime_error("SlicerLayer[forwardCompute]: unknown dim");
+            }
+        }
+        batchOff += iDepth * iHeight * iWidth;
+    }
+}
+
+void SlicerLayerGPU::backwardComputeImpl()
+{
+    auto& work = mLayer.mNetworkParams.mWorkflow;
+
+    // if (mLayer.mNetworkParams.isGradNeeded(mLayer.mInputs[0]))
+    {
+        auto& prevLayerDelta = work.getMemoryManager<MemoryManagerGPU>()(mLayer.mInputs[0].grad());
+        auto& tmp = work.getMemoryManager<MemoryManagerGPU>()(mLayer.mBackwardTmpBufferName);
+        const size_t oDepth = work.getDepth(mLayer.mInputs[0].grad());
+        const size_t oHeight = work.getHeight(mLayer.mInputs[0].grad());
+        const size_t oWidth = work.getWidth(mLayer.mInputs[0].grad());
+        const size_t concatDim = 2 - mLayer.mDimIndex;
+        std::array<cl::Buffer, 4> inBuffs;
+        std::array<size_t, 4> iWidth;
+        std::array<size_t, 4> iHeight;
+        std::array<size_t, 4> iOffset;
+        std::array<size_t, 4> axisLen;
+        const size_t num = mLayer.mOutputs.size();
+        const size_t bn = (num + 3) / 4;
+        size_t batchOff = 0;
+        for (size_t b = 0; b < work.getBatchSize(); ++b)
+        {
+            size_t outSize = 0;
+            for (size_t i = 0; i < bn; ++i)
+            {
+                const size_t en = (i * 4 + 4 <= num) ? 4 : (num & 3);
+                size_t axisMax = 0;
+                for (size_t j = 0; j < en; ++j)
+                {
+                    const auto& delta = work.getMemoryManager<MemoryManagerGPU>()(mLayer.mOutputs[i * 4 + j].grad());
+                    inBuffs[j] = delta.getBuffer();
+                    iWidth[j] = work.getWidth(mLayer.mOutputs[i * 4 + j].grad());
+                    iHeight[j] = work.getHeight(mLayer.mOutputs[i * 4 + j].grad());
+                    iOffset[j] = b * work.getDepth(mLayer.mOutputs[i * 4 + j].grad()) * iHeight[j] * iWidth[j];
+                    axisLen[j] = delta.getShape()[mLayer.mDimIndex + 1];
+
+                    if (concatDim == 0)
+                    {
+                        axisLen[j] = (axisLen[j] + 3) / 4;
+                    }
+                    axisMax += axisLen[j];
+                }
+                axisMax -= axisLen[en - 1];
+                gpu::concat(work.getKernelManager(),
+                            mLayer.mTypeName + "[" + mLayer.mName + "backwardComputeImpl]",
+                            concatDim,
+                            oDepth,
+                            oHeight,
+                            oWidth,
+                            axisMax,
+                            en,
+                            outSize,
+                            batchOff,
+                            iWidth,
+                            iHeight,
+                            iOffset,
+                            axisLen,
+                            inBuffs,
+                            tmp.getBuffer());
+
+                switch (mLayer.mDirection)
+                {
+                    case Dimension::Width:
+                        outSize += std::accumulate(iWidth.begin(), iWidth.begin() + en, static_cast<size_t>(0));
+                        break;
+                    case Dimension::Height:
+                        outSize += oWidth * (axisMax + axisLen[en - 1]);
+                        break;
+                    case Dimension::Depth:
+                        outSize += oHeight * oWidth * (axisMax + axisLen[en - 1]);
+                        break;
+                    default:
+                        throw std::runtime_error("ConcatenationLayer[forwardCompute]: unknown dim");
+                }
+            }
+            batchOff += oDepth * oHeight * oWidth;
+        }
+        Common::axpy(&work.getKernelManager(),
+                     mLayer.mTypeName + "[" + mLayer.mName + "::backwardComputeImpl]",
+                     prevLayerDelta.getShape().total_size(),
+                     1.0_dt,
+                     tmp.getBuffer(),
+                     1U,
+                     prevLayerDelta.getBuffer(),
+                     1U,
+                     0U,
+                     0U);
+    }
+}
+
+} // namespace raul

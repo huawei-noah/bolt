@@ -1,0 +1,96 @@
+/**
+ * @file
+ * @brief Flow graph defination
+ *
+ * @copyright
+ * @code
+ * Copyright (C) 2019. Huawei Technologies Co., Ltd. All rights reserved.
+ *
+ * Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"),
+ * to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense,
+ * and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+ *
+ * The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+ * WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+ * COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+ * OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+ * @endcode
+ */
+
+syntax = "proto2";
+
+package flow;
+
+/** flow graph defination */
+message GraphParameter {
+    /** graph name */
+    optional string name = 1;
+    /** graph input names */
+    repeated string input = 2;
+    /** graph output names */
+    repeated string output = 3;
+    /** node parameter */
+    repeated NodeParameter node = 4;
+}
+
+/** flow node defination */
+message NodeParameter {
+    /** node name */
+    optional string name = 1;
+    /**
+    * node type
+    * type='Input' to mark node as an input node
+    * type='Inference' to mark node as an inference node
+    */
+    optional string type = 2;
+
+    /**
+    * node input data type, only input node use this information
+    * candidates are FLOAT32, FLOAT16, UINT32, INT8
+    */
+    optional string input_type = 3;
+    /**
+    * node input data format, only input node use this information
+    * candidates are NCHW, NCHWC8, MTK, NORMAL
+    */
+    optional string input_format = 4;
+    /** node input dimension, only input node use this information */
+    repeated int32 input_dim = 5;
+
+    /** node input names */
+    repeated string input = 6;
+    /** node output names */
+    repeated string output = 7;
+
+    /** preprocess and postprocess tmp bufer size, element number, not bytes */
+    optional uint32 tmp = 8 [default = 0];
+    /** node inference precision, support prefered process precision */
+    optional string precision = 9 [default = "FLOAT32"];
+
+    /**
+    * self-defined infer node output size function parameter
+    * parameter use array to manage, [function name, other parameters]
+    * other paramaters are optional
+    */
+    repeated string infer_output_size_parameter = 10;
+    /**
+    * self-defined preprocess function parameter
+    * parameter use array to manage, [preprocess function name, other parameters]
+    * other paramaters are optional
+    */
+    repeated string preprocess_parameter = 11;
+    /**
+    * self-defined inference parameter
+    * parameter use array to manage, [inference model path, model output]
+    * model output paramaters are optional when there is no postprocess function.
+    */
+    repeated string inference_parameter = 12;
+    /**
+    * self-defined postprocess function parameter
+    * parameter use array to manage, [postprocess function name, other parameters]
+    * other paramaters are optional
+    */
+    repeated string postprocess_parameter = 13;
+}

@@ -1,0 +1,66 @@
+// Copyright (C) 2019. Huawei Technologies Co., Ltd. All rights reserved.
+
+// Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"),
+// to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense,
+// and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
+
+// The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
+
+// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
+// WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
+// COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#ifndef _OCL_DATA_TRANS
+#define _OCL_DATA_TRANS
+
+#include "tensor_desc.h"
+#include "gcl_common.h"
+#include "mem_trans_opt.h"
+#include "padding_opt.h"
+
+EE ocl_data_trans_form(GCLHandle_t handle,
+    GCLMem_t input,
+    GCLMem_t output,
+    U32 in_off,
+    U32 out_off,
+    MemTransFormType type,
+    bool setKernelVec = true);
+
+EE ocl_data_trans_form_3d(GCLHandle_t handle,
+    GCLMem_t input,
+    GCLMem_t output,
+    U32 in_off,
+    U32 out_off,
+    MemTransFormType type,
+    bool setKernelVec = true);
+
+EE ocl_data_trans_c(GCLHandle_t handle,
+    GCLMem_t input,
+    GCLMem_t output,
+    U32 in_off,
+    U32 out_off,
+    MemTransCType type,
+    bool setKernelVec = true);
+
+EE ocl_set_input(GCLHandle_t handle,
+    GCLMem_t dst,
+    TensorDesc hostDesc,
+    const U8 *hostPtr,
+    GCLMem_t tmpBuf,
+    bool blocking);
+
+EE ocl_get_output(GCLHandle_t handle,
+    const GCLMem_t src,
+    TensorDesc hostDesc,
+    const U8 *hostPtr,
+    GCLMem_t tmpBuf,
+    bool blocking);
+
+EE ocl_trans_mem(
+    GCLHandle_t handle, GCLMem_t src, GCLMemDesc srcDesc, GCLMem_t dst, GCLMemDesc dstDesc);
+
+EE ocl_map_mem_write(
+    GCLHandle_t handle, GCLMem_t gclMem, GCLMemDesc desc, TensorDesc hostDesc, U8 *host_ptr);
+
+EE ocl_map_mem_read(GCLHandle_t handle, GCLMem_t gclMem, GCLMemDesc desc);
+#endif

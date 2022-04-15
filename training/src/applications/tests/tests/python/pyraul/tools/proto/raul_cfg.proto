@@ -1,0 +1,92 @@
+syntax = "proto3";
+
+package raul;
+
+enum Loss {
+  CROSS_ENTROPY = 0;
+  KULLBACK_LEIBLER_DIVERGENCE = 1;
+  NEGATIVE_LOG_LIKELIHOOD = 2;
+}
+
+enum LossReduction {
+  MEAN = 0;
+  SUM = 1;
+}
+
+enum Optimizer {
+  SGD = 0;
+  MOMENTUM = 1;
+  NESTEROV = 2;
+  ADAGRAD = 3;
+  ADADELTA = 4;
+  ADAMAX= 5;
+  ADAM = 6;
+}
+
+message SgdConfig {
+  double lr = 1;
+}
+
+message MomentumConfig {
+  double lr = 1;
+  double momentum = 2;
+}
+
+message NesterovConfig {
+  double lr = 1;
+  double momentum = 2;
+}
+
+message AdagradConfig {
+  double lr = 1;
+  double epsilon = 2;
+}
+
+message AdadeltaConfig {
+  double lr = 1;
+  double epsilon = 2;
+}
+
+message AdamaxConfig {
+  double lr = 1;
+  double beta_1 = 2;
+  double beta_2 = 3;
+  double epsilon = 4;
+}
+
+message AdamConfig {
+  double lr = 1;
+  double beta_1 = 2;
+  double beta_2 = 3;
+  double epsilon = 4;
+}
+
+enum PreprocessingOperation {
+  RESIZE = 0;
+}
+
+message PreprocessingStep {
+  PreprocessingOperation type = 1;
+  map<string, double> options = 2;
+}
+
+message TrainConfig {
+  string name = 1;
+  int32 batch_size = 2;
+  Optimizer optimizer = 3;
+  oneof optimizer_config {
+    SgdConfig sgd = 4;
+    MomentumConfig momentum = 5;
+    NesterovConfig nesterov = 6;
+    AdadeltaConfig adadelta = 7;
+    AdagradConfig adagrad = 8;
+    AdamaxConfig adamax = 9;
+    AdamConfig adam = 10;
+  }
+  string dataset = 11;
+  Loss loss = 12;
+  LossReduction loss_reduction = 13;
+  bool bias = 14; 
+  repeated PreprocessingStep preprocessing_pipeline = 15;
+  map<string, double> options = 16;
+}

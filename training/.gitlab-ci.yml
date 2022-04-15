@@ -1,0 +1,54 @@
+image: "127.0.0.1:5000/raul-build:latest"
+
+stages:
+  - formating
+  - publishing
+
+format-cpp:
+  stage: formating
+  before_script:
+    - git config user.email "ci-pipeline@huawei.com"
+    - git config user.name "CI pipeline"
+    - git remote set-url --push origin "http://${GITLAB_USER_LOGIN}:${ACCESS_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}"
+    - git config --global http.sslverify "false"
+    - export CC=clang
+    - export CXX=clang++ 
+  script:
+    - cmake . -DRAUL_USE_CLANG_FORMAT=ON
+    - make format
+  after_script:
+    - git add -u .
+    - git commit -m "fix[skip ci] reformat cpp code with Mozilla-based code style"
+    - http_proxy= git push origin HEAD:$CI_COMMIT_REF_NAME || true
+  only:
+    - Develop
+
+format-python:
+  stage: formating
+  before_script:
+    - git config user.email "ci-pipeline@huawei.com"
+    - git config user.name "CI pipeline"
+    - git remote set-url --push origin "http://${GITLAB_USER_LOGIN}:${ACCESS_TOKEN}@${CI_SERVER_HOST}/${CI_PROJECT_PATH}"
+    - git config --global http.sslverify "false"
+  script:
+    - python -m black -t py38 .
+  after_script:
+    - git add -u .
+    - git commit -m "fix[skip ci] reformat python code with PEP8 code style"
+    - http_proxy= git push origin HEAD:$CI_COMMIT_REF_NAME || true
+  only:
+    - Develop
+    
+pages:
+  stage: publishing
+  script:
+    - cmake . -DRAUL_USE_DOCS=ON
+    - make docs
+    - mv docs/html public/
+  
+  artifacts:
+    paths:
+      - public
+
+  only:
+    - Docs

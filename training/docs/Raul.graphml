@@ -1,0 +1,2182 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<graphml xmlns="http://graphml.graphdrawing.org/xmlns" xmlns:java="http://www.yworks.com/xml/yfiles-common/1.0/java" xmlns:sys="http://www.yworks.com/xml/yfiles-common/markup/primitives/2.0" xmlns:x="http://www.yworks.com/xml/yfiles-common/markup/2.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:y="http://www.yworks.com/xml/graphml" xmlns:yed="http://www.yworks.com/xml/yed/3" xsi:schemaLocation="http://graphml.graphdrawing.org/xmlns http://www.yworks.com/xml/schema/graphml/1.1/ygraphml.xsd">
+  <!--Created by yEd 3.19-->
+  <key attr.name="Description" attr.type="string" for="graph" id="d0"/>
+  <key for="port" id="d1" yfiles.type="portgraphics"/>
+  <key for="port" id="d2" yfiles.type="portgeometry"/>
+  <key for="port" id="d3" yfiles.type="portuserdata"/>
+  <key attr.name="url" attr.type="string" for="node" id="d4"/>
+  <key attr.name="description" attr.type="string" for="node" id="d5"/>
+  <key for="node" id="d6" yfiles.type="nodegraphics"/>
+  <key for="graphml" id="d7" yfiles.type="resources"/>
+  <key attr.name="url" attr.type="string" for="edge" id="d8"/>
+  <key attr.name="description" attr.type="string" for="edge" id="d9"/>
+  <key for="edge" id="d10" yfiles.type="edgegraphics"/>
+  <graph edgedefault="directed" id="G">
+    <data key="d0" xml:space="preserve"/>
+    <node id="n0" yfiles.foldertype="group">
+      <data key="d4" xml:space="preserve"/>
+      <data key="d6">
+        <y:ProxyAutoBoundsNode>
+          <y:Realizers active="0">
+            <y:GroupNode>
+              <y:Geometry height="426.3500071853141" width="733.4791822159068" x="753.3688975362713" y="469.7979735076233"/>
+              <y:Fill color="#F5F5F5" transparent="false"/>
+              <y:BorderStyle color="#000000" type="dashed" width="1.0"/>
+              <y:NodeLabel alignment="right" autoSizePolicy="node_width" backgroundColor="#EBEBEB" borderDistance="0.0" fontFamily="Dialog" fontSize="15" fontStyle="plain" hasLineColor="false" height="22.37646484375" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="t" textColor="#000000" verticalTextPosition="bottom" visible="true" width="733.4791822159068" x="0.0" xml:space="preserve" y="0.0">Relations description:</y:NodeLabel>
+              <y:Shape type="roundrectangle"/>
+              <y:State closed="false" closedHeight="426.3500071853141" closedWidth="733.4791822159068" innerGraphDisplayEnabled="false"/>
+              <y:Insets bottom="15" bottomF="15.0" left="15" leftF="15.0" right="15" rightF="15.0" top="15" topF="15.0"/>
+              <y:BorderInsets bottom="101" bottomF="101.3500071853141" left="0" leftF="0.0" right="101" rightF="101.30635748455916" top="3" topF="2.6235351562509095"/>
+            </y:GroupNode>
+            <y:GroupNode>
+              <y:Geometry height="50.0" width="176.76501598579057" x="4042.260559074197" y="7101.991042179014"/>
+              <y:Fill color="#F5F5F5" transparent="false"/>
+              <y:BorderStyle color="#000000" type="dashed" width="1.0"/>
+              <y:NodeLabel alignment="right" autoSizePolicy="node_width" backgroundColor="#EBEBEB" borderDistance="0.0" fontFamily="Dialog" fontSize="15" fontStyle="plain" hasLineColor="false" height="22.37646484375" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="t" textColor="#000000" verticalTextPosition="bottom" visible="true" width="176.76501598579057" x="0.0" xml:space="preserve" y="0.0">Relations description:</y:NodeLabel>
+              <y:Shape type="roundrectangle"/>
+              <y:State closed="true" closedHeight="50.0" closedWidth="176.76501598579057" innerGraphDisplayEnabled="false"/>
+              <y:Insets bottom="15" bottomF="15.0" left="15" leftF="15.0" right="15" rightF="15.0" top="15" topF="15.0"/>
+              <y:BorderInsets bottom="0" bottomF="0.0" left="0" leftF="0.0" right="0" rightF="0.0" top="0" topF="0.0"/>
+            </y:GroupNode>
+          </y:Realizers>
+        </y:ProxyAutoBoundsNode>
+      </data>
+      <graph edgedefault="directed" id="n0:">
+        <node id="n0::n0">
+          <data key="d6">
+            <y:ShapeNode>
+              <y:Geometry height="30.0" width="51.51163907637647" x="810.6141268120828" y="509.79797350762783"/>
+              <y:Fill color="#FFCC00" transparent="false"/>
+              <y:BorderStyle color="#000000" type="line" width="1.0"/>
+              <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="31.3515625" x="10.080038288188234" xml:space="preserve" y="5.6494140625">Base</y:NodeLabel>
+              <y:Shape type="rectangle"/>
+            </y:ShapeNode>
+          </data>
+        </node>
+        <node id="n0::n1">
+          <data key="d6">
+            <y:ShapeNode>
+              <y:Geometry height="30.0" width="57.65782166962663" x="807.5410355154581" y="599.7979735076242"/>
+              <y:Fill color="#FFCC00" transparent="false"/>
+              <y:BorderStyle color="#000000" type="line" width="1.0"/>
+              <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="45.349609375" x="6.154106147313314" xml:space="preserve" y="5.6494140625">Derived</y:NodeLabel>
+              <y:Shape type="rectangle"/>
+            </y:ShapeNode>
+          </data>
+        </node>
+        <node id="n0::n2">
+          <data key="d6">
+            <y:ShapeNode>
+              <y:Geometry height="30.0" width="49.975093428064156" x="1025.301876597283" y="509.79797350762783"/>
+              <y:Fill color="#FFCC00" transparent="false"/>
+              <y:BorderStyle color="#000000" type="line" width="1.0"/>
+              <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="39.34375" x="5.315671714032078" xml:space="preserve" y="5.6494140625">Owner</y:NodeLabel>
+              <y:Shape type="rectangle"/>
+            </y:ShapeNode>
+          </data>
+        </node>
+        <node id="n0::n3">
+          <data key="d6">
+            <y:ShapeNode>
+              <y:Geometry height="30.0" width="49.975093428064156" x="1025.301876597283" y="599.7979735076242"/>
+              <y:Fill color="#FFCC00" transparent="false"/>
+              <y:BorderStyle color="#000000" type="line" width="1.0"/>
+              <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="42.021484375" x="3.976804526532078" xml:space="preserve" y="5.6494140625">Owned</y:NodeLabel>
+              <y:Shape type="rectangle"/>
+            </y:ShapeNode>
+          </data>
+        </node>
+        <node id="n0::n4">
+          <data key="d6">
+            <y:ShapeNode>
+              <y:Geometry height="30.0" width="58.27243992895228" x="1207.1135017482611" y="509.7979735076242"/>
+              <y:Fill color="#FFCC00" transparent="false"/>
+              <y:BorderStyle color="#000000" type="line" width="1.0"/>
+              <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="53.359375" x="2.4565324644761404" xml:space="preserve" y="5.6494140625">Instancer</y:NodeLabel>
+              <y:Shape type="rectangle"/>
+            </y:ShapeNode>
+          </data>
+        </node>
+        <node id="n0::n5">
+          <data key="d6">
+            <y:ShapeNode>
+              <y:Geometry height="30.0" width="58.27243992895228" x="1207.1135017482611" y="599.7979735076242"/>
+              <y:Fill color="#FFCC00" transparent="false"/>
+              <y:BorderStyle color="#000000" type="line" width="1.0"/>
+              <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="56.037109375" x="1.1176652769761404" xml:space="preserve" y="5.6494140625">Instanced</y:NodeLabel>
+              <y:Shape type="rectangle"/>
+            </y:ShapeNode>
+          </data>
+        </node>
+        <node id="n0::n6">
+          <data key="d6">
+            <y:ShapeNode>
+              <y:Geometry height="30.0" width="37.02213001776204" x="1297.7511099898238" y="509.7979735076242"/>
+              <y:Fill color="#FFCC00" transparent="false"/>
+              <y:BorderStyle color="#000000" type="line" width="1.0"/>
+              <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="35.341796875" x="0.8401665713809052" xml:space="preserve" y="5.6494140625">Caller</y:NodeLabel>
+              <y:Shape type="rectangle"/>
+            </y:ShapeNode>
+          </data>
+        </node>
+        <node id="n0::n7">
+          <data key="d6">
+            <y:ShapeNode>
+              <y:Geometry height="30.0" width="39.83098202486667" x="1296.3466839862685" y="599.7979735076242"/>
+              <y:Fill color="#FFCC00" transparent="false"/>
+              <y:BorderStyle color="#000000" type="line" width="1.0"/>
+              <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="38.01953125" x="0.9057253874334492" xml:space="preserve" y="5.6494140625">Called</y:NodeLabel>
+              <y:Shape type="rectangle"/>
+            </y:ShapeNode>
+          </data>
+        </node>
+        <node id="n0::n8">
+          <data key="d6">
+            <y:ShapeNode>
+              <y:Geometry height="30.0" width="121.35025790408531" x="807.5410355154581" y="689.7979735076233"/>
+              <y:Fill color="#00CCFF" transparent="false"/>
+              <y:BorderStyle color="#FF0000" type="line" width="1.0"/>
+              <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="108.73046875" x="6.309894577042655" xml:space="preserve" y="5.6494140625">Singleton (Phoenix)</y:NodeLabel>
+              <y:Shape type="rectangle"/>
+            </y:ShapeNode>
+          </data>
+        </node>
+        <node id="n0::n9">
+          <data key="d6">
+            <y:ShapeNode>
+              <y:Geometry height="30.0" width="121.35025790408531" x="807.5410355154545" y="749.7979735076233"/>
+              <y:Fill color="#3366FF" transparent="false"/>
+              <y:BorderStyle color="#FF0000" type="line" width="1.0"/>
+              <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="125.3828125" x="-2.0162772979573447" xml:space="preserve" y="5.6494140625">Singleton (No Destroy)</y:NodeLabel>
+              <y:Shape type="rectangle"/>
+            </y:ShapeNode>
+          </data>
+        </node>
+        <node id="n0::n10">
+          <data key="d6">
+            <y:ShapeNode>
+              <y:Geometry height="30.0" width="90.33542706927142" x="973.072005320073" y="689.7979735076233"/>
+              <y:Fill color="#CC99FF" transparent="false"/>
+              <y:BorderStyle color="#000000" type="line" width="1.0"/>
+              <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="81.35546875" x="4.489979159635709" xml:space="preserve" y="5.6494140625">Abstract Class</y:NodeLabel>
+              <y:Shape type="rectangle"/>
+            </y:ShapeNode>
+          </data>
+        </node>
+        <node id="n0::n11">
+          <data key="d6">
+            <y:ShapeNode>
+              <y:Geometry height="30.0" width="90.33542706927142" x="973.072005320073" y="749.7979735076233"/>
+              <y:Fill color="#999999" transparent="false"/>
+              <y:BorderStyle color="#000000" type="line" width="1.0"/>
+              <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="86.03125" x="2.152088534635709" xml:space="preserve" y="5.6494140625">Concrete Class</y:NodeLabel>
+              <y:Shape type="rectangle"/>
+            </y:ShapeNode>
+          </data>
+        </node>
+        <node id="n0::n12">
+          <data key="d6">
+            <y:ShapeNode>
+              <y:Geometry height="30.0" width="83.42485407602123" x="1207.1135017482611" y="689.7979735076233"/>
+              <y:Fill color="#00FF00" transparent="false"/>
+              <y:BorderStyle color="#000000" type="line" width="1.0"/>
+              <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="55.33984375" x="14.042505163010674" xml:space="preserve" y="5.6494140625">Far Class</y:NodeLabel>
+              <y:Shape type="rectangle"/>
+            </y:ShapeNode>
+          </data>
+        </node>
+        <node id="n0::n13">
+          <data key="d6">
+            <y:ShapeNode>
+              <y:Geometry height="15.841430280639543" width="42.459541353037366" x="777.5961581097527" y="561.8772583673035"/>
+              <y:Fill hasColor="false" transparent="false"/>
+              <y:BorderStyle hasColor="false" type="line" width="1.0"/>
+              <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="8" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="23.6015625" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="60.9140625" x="-9.227260573481317" xml:space="preserve" y="-3.8800661096802287">Inheritance
+(Generalization)</y:NodeLabel>
+              <y:Shape type="rectangle"/>
+            </y:ShapeNode>
+          </data>
+        </node>
+        <node id="n0::n14">
+          <data key="d6">
+            <y:ShapeNode>
+              <y:Geometry height="15.841430280639543" width="42.459541353037366" x="1323.9682015911003" y="562.0279851879077"/>
+              <y:Fill hasColor="false" transparent="false"/>
+              <y:BorderStyle hasColor="false" type="line" width="1.0"/>
+              <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="8" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="13.80078125" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="50.6875" x="-4.113979323481317" xml:space="preserve" y="1.0203245153197713">Function Call</y:NodeLabel>
+              <y:Shape type="rectangle"/>
+            </y:ShapeNode>
+          </data>
+        </node>
+        <node id="n0::n15">
+          <data key="d6">
+            <y:ShapeNode>
+              <y:Geometry height="15.841430280639543" width="30.0" x="1007.6977759638266" y="562.0279851879077"/>
+              <y:Fill hasColor="false" transparent="false"/>
+              <y:BorderStyle hasColor="false" type="line" width="1.0"/>
+              <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="8" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="13.80078125" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="47.14453125" x="-8.572265625" xml:space="preserve" y="1.0203245153197713">Aggregation</y:NodeLabel>
+              <y:Shape type="rectangle"/>
+            </y:ShapeNode>
+          </data>
+        </node>
+        <node id="n0::n16">
+          <data key="d6">
+            <y:ShapeNode>
+              <y:Geometry height="15.841430280639543" width="27.734628844902545" x="1201.2372684267666" y="562.0279851879077"/>
+              <y:Fill hasColor="false" transparent="false"/>
+              <y:BorderStyle hasColor="false" type="line" width="1.0"/>
+              <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="8" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="13.80078125" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="34.23828125" x="-3.2518262025487275" xml:space="preserve" y="1.0203245153197713">Creation</y:NodeLabel>
+              <y:Shape type="rectangle"/>
+            </y:ShapeNode>
+          </data>
+        </node>
+        <node id="n0::n17">
+          <data key="d6">
+            <y:ShapeNode>
+              <y:Geometry height="30.0" width="90.33542706927142" x="1089.9521458927175" y="749.7979735076233"/>
+              <y:Fill color="#FF6600" transparent="false"/>
+              <y:BorderStyle color="#000000" type="line" width="1.0"/>
+              <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="67.3515625" x="11.491932284635823" xml:space="preserve" y="5.6494140625">Static Class</y:NodeLabel>
+              <y:Shape type="rectangle"/>
+            </y:ShapeNode>
+          </data>
+        </node>
+        <node id="n0::n18">
+          <data key="d6">
+            <y:ShapeNode>
+              <y:Geometry height="30.0" width="83.42485407602123" x="1093.4074323893456" y="689.7979735076233"/>
+              <y:Fill color="#FFFF00" transparent="false"/>
+              <y:BorderStyle color="#000000" type="line" width="1.0"/>
+              <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="71.353515625" x="6.035669225510674" xml:space="preserve" y="5.6494140625">Virtual Class</y:NodeLabel>
+              <y:Shape type="rectangle"/>
+            </y:ShapeNode>
+          </data>
+        </node>
+        <node id="n0::n19">
+          <data key="d6">
+            <y:ShapeNode>
+              <y:Geometry height="30.0" width="49.975093428064156" x="1121.262174998703" y="509.7979735076242"/>
+              <y:Fill color="#FFCC00" transparent="false"/>
+              <y:BorderStyle color="#000000" type="line" width="1.0"/>
+              <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="39.34375" x="5.315671714032078" xml:space="preserve" y="5.6494140625">Owner</y:NodeLabel>
+              <y:Shape type="rectangle"/>
+            </y:ShapeNode>
+          </data>
+        </node>
+        <node id="n0::n20">
+          <data key="d6">
+            <y:ShapeNode>
+              <y:Geometry height="30.0" width="49.975093428064156" x="1121.262174998703" y="599.7979735076242"/>
+              <y:Fill color="#FFCC00" transparent="false"/>
+              <y:BorderStyle color="#000000" type="line" width="1.0"/>
+              <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="42.021484375" x="3.976804526532078" xml:space="preserve" y="5.6494140625">Owned</y:NodeLabel>
+              <y:Shape type="rectangle"/>
+            </y:ShapeNode>
+          </data>
+        </node>
+        <node id="n0::n21">
+          <data key="d6">
+            <y:ShapeNode>
+              <y:Geometry height="15.841430280639543" width="30.0" x="1100.4093844384315" y="561.8772583673035"/>
+              <y:Fill hasColor="false" transparent="false"/>
+              <y:BorderStyle hasColor="false" type="line" width="1.0"/>
+              <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="8" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="23.6015625" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="54.6875" x="-12.34375" xml:space="preserve" y="-3.8800661096802287">Composition
+(Containment)</y:NodeLabel>
+              <y:Shape type="rectangle"/>
+            </y:ShapeNode>
+          </data>
+        </node>
+        <node id="n0::n22">
+          <data key="d6">
+            <y:ShapeNode>
+              <y:Geometry height="30.0" width="83.42485407602123" x="1210.28757296199" y="749.7979735076233"/>
+              <y:Fill color="#FF00FF" transparent="false"/>
+              <y:BorderStyle color="#000000" type="line" width="1.0"/>
+              <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="30.009765625" x="26.707544225510674" xml:space="preserve" y="5.6494140625">Main</y:NodeLabel>
+              <y:Shape type="rectangle"/>
+            </y:ShapeNode>
+          </data>
+        </node>
+        <node id="n0::n23">
+          <data key="d6">
+            <y:ShapeNode>
+              <y:Geometry height="30.0" width="51.51163907637647" x="922.8965364878841" y="509.7979735076242"/>
+              <y:Fill color="#FFCC00" transparent="false"/>
+              <y:BorderStyle color="#000000" type="line" width="1.0"/>
+              <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="31.3515625" x="10.080038288188234" xml:space="preserve" y="5.6494140625">Base</y:NodeLabel>
+              <y:Shape type="rectangle"/>
+            </y:ShapeNode>
+          </data>
+        </node>
+        <node id="n0::n24">
+          <data key="d6">
+            <y:ShapeNode>
+              <y:Geometry height="30.0" width="57.65782166962663" x="919.8234451912595" y="599.7979735076242"/>
+              <y:Fill color="#FFCC00" transparent="false"/>
+              <y:BorderStyle color="#000000" type="line" width="1.0"/>
+              <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="45.349609375" x="6.154106147313314" xml:space="preserve" y="5.6494140625">Derived</y:NodeLabel>
+              <y:Shape type="rectangle"/>
+            </y:ShapeNode>
+          </data>
+        </node>
+        <node id="n0::n25">
+          <data key="d6">
+            <y:ShapeNode>
+              <y:Geometry height="15.841430280639543" width="42.459541353037366" x="889.878567785554" y="561.8772583673035"/>
+              <y:Fill hasColor="false" transparent="false"/>
+              <y:BorderStyle hasColor="false" type="line" width="1.0"/>
+              <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="8" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="23.6015625" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="76.93359375" x="-17.237026198481317" xml:space="preserve" y="-3.8800661096802287">Disabled Inheritance
+(Generalization)</y:NodeLabel>
+              <y:Shape type="rectangle"/>
+            </y:ShapeNode>
+          </data>
+        </node>
+      </graph>
+    </node>
+    <node id="n1">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="583.5764868528324" width="1269.4130653844725" x="-1114.7065326922361" y="-1251.7882434264163"/>
+          <y:Fill color="#FF6600" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="562.64453125" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="1217.78125" x="25.815907692236124" xml:space="preserve" y="10.46597780141633">&lt;&lt;Common.h&gt;&gt;
+
+Common
+
+public:
+
+static int readArrayFromTextFile(const std::string&amp; filename, dtVec&amp; array, size_t width, size_t height, size_t depth = 1)
+
+static dtVec loadData(const std::string&amp; filename, size_t width, size_t height, size_t depth = 1)
+
+static std::vector&lt;dtVec&gt; buildOneHotVector(const stVec&amp; labels, size_t labelsCount)
+
+
+static std::vector&lt;dtVec&gt; reshape3DTo2D(const std::vector&lt;std::vector&lt;dtVec&gt;&gt;&amp; input, size_t inputDepth, size_t batchSize)
+static dtVec reshape2DTo1D(const std::vector&lt;dtVec&gt;&amp; input, size_t batchSize, size_t batchesOffset = 0)
+static std::vector&lt;dtVec&gt; reshape1DTo2D(const dtVec&amp; input, size_t inputSize, size_t batchSize, size_t offset = 0)
+
+static size_t getMaxIndex(const dtVec&amp; vec)
+
+static int printArray(const dtVec&amp; data, const size_t rows = 1, const size_t start = 0, const size_t end = 0, const size_t divider = 1)
+
+static int gemm(OPENBLAS_CONST CBLAS_TRANSPOSE transA, OPENBLAS_CONST CBLAS_TRANSPOSE transB,
+    OPENBLAS_CONST blasint m, OPENBLAS_CONST blasint n, OPENBLAS_CONST blasint k,
+    OPENBLAS_CONST dtype alpha, OPENBLAS_CONST dtVec&amp; a,
+    OPENBLAS_CONST dtVec&amp; b, OPENBLAS_CONST dtype beta,
+    dtVec&amp; c,
+    size_t bOffset = 0)
+
+static int axpy(OPENBLAS_CONST blasint n, OPENBLAS_CONST dtype sa, OPENBLAS_CONST dtVec&amp; sx, OPENBLAS_CONST blasint incx, dtVec&amp; sy, OPENBLAS_CONST blasint incy, size_t xOffset = 0, size_t yOffset = 0)
+
+static dtype dot(OPENBLAS_CONST blasint n, OPENBLAS_CONST dtVec&amp; sx, OPENBLAS_CONST blasint incx, OPENBLAS_CONST dtVec&amp; sy, OPENBLAS_CONST blasint incy)
+
+static int scal(OPENBLAS_CONST blasint n, OPENBLAS_CONST dtype sa, dtVec&amp; sx, OPENBLAS_CONST blasint incx)
+
+static void transpose(dtVec&amp; matrix, size_t cols)
+
+static void im2col(const std::vector&lt;dtVec&gt;&amp; image, size_t imageWidth, size_t imageHeight, size_t filterWidth, size_t filterHeight, size_t stride, dtVec&amp; matrix, bool isAllocate = true)
+static void col2im(const dtVec&amp; matrix, size_t imageWidth, size_t imageHeight, size_t imageChannels, size_t filterWidth, size_t filterHeight, size_t stride, std::vector&lt;dtVec&gt;&amp; image, bool isAllocate = true)</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n2">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="624.4347159193212" width="305.63163471733196" x="927.184182641334" y="-1992.2173579596606"/>
+          <y:Fill color="#C0C0C0" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="533.2421875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="290.107421875" x="7.762106421165981" xml:space="preserve" y="45.5962642096606">&lt;&lt;layers/AveragePoolLayer.h&gt;&gt;
+
+AveragePoolLayer
+
+public:
+
+void forwardCompute(NetworkMode mMode) override
+void backwardCompute() override
+
+void save(std::ostream&amp; stream) const override
+void load(std::istream&amp; stream) override
+
+private:
+
+size_t mInputWidth
+size_t mInputHeight
+size_t mInputDepth
+
+size_t mOutputWidth
+size_t mOutputHeight
+size_t mBatchSize
+size_t mStrideW
+size_t mStrideH
+size_t mKernelWidth
+size_t mKernelHeight
+
+size_t mPaddingW
+size_t mPaddingH
+
+Tensor* mOutput
+
+dtVec* mPrevLayerDelta
+
+std::string mInputName
+std::string mOutputName
+std::string mPrevLayerDeltaName</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n3">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="30.0" width="105.99280032692639" x="1027.0035998365368" y="-2055.0"/>
+          <y:Fill color="#00FF00" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="102.044921875" x="1.9739392259632496" xml:space="preserve" y="5.6494140625">BasicLayerNamed</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n4">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="349.552861557122" width="458.01664176280997" x="1210.9916791185951" y="-2934.776430778561"/>
+          <y:Fill color="#CC99FF" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="312.724609375" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="447.501953125" x="5.25734431890487" xml:space="preserve" y="18.414126091061007">&lt;&lt;layers/BasicLayer.h&gt;&gt;
+
+BasicLayer
+
+public:
+
+virtual void forwardCompute(NetworkMode mMode = raul::NetworkMode::Train) = 0
+virtual void backwardCompute() = 0
+
+virtual void save(std::ostream &amp;stream) const = 0
+virtual void load(std::istream&amp; stream) = 0
+
+virtual std::string getTypeName() const = 0
+virtual const std::string&amp; getName() const
+
+virtual std::vector&lt;ParamAndGrad&gt; getParamsAndGradients() const
+
+virtual bool neededForInference() const
+
+protected:
+std::string mName</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n5">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="315.2484124111879" width="424.62697792743415" x="1227.6865110362828" y="-2527.624206205594"/>
+          <y:Fill color="#CC99FF" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="312.724609375" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="378.173828125" x="23.22657490121719" xml:space="preserve" y="1.2619015180939641">&lt;&lt;layers/BasicLayer.h&gt;&gt;
+
+BasicLayerNamed
+
+public:
+
+virtual std::string getTypeName() const override
+
+std::vector&lt;ParamAndGrad&gt; getParamsAndGradients() const override
+
+protected:
+
+std::string mTypeName
+std::vector&lt;std::string&gt; mInputs
+std::vector&lt;std::string&gt; mOutputs
+
+std::string mWeightsName
+std::string mBiasesName
+std::string mWeightsGradientName
+std::string mBiasesGradientName
+MemoryManager&amp; mMemoryManager</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n6">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="185.18066875257273" width="307.2259379630309" x="2546.387031018485" y="-3032.5903343762866"/>
+          <y:Fill color="#C0C0C0" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="136.310546875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="244.08203125" x="31.571953356515223" xml:space="preserve" y="24.43506093878659">&lt;&lt;layers/BasicLayerParams.h&gt;&gt;
+
+BasicLayerParams
+
+virtual void save(std::ostream&amp; stream) const
+virtual void load(std::istream&amp; stream)
+
+std::vector&lt;std::string&gt; inputs
+std::vector&lt;std::string&gt; outputs</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n7">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="192.3110935393338" width="272.76221816034877" x="1693.6188909198256" y="-2556.155546769667"/>
+          <y:Fill color="#C0C0C0" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="180.4140625" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="255.42578125" x="8.668218455174383" xml:space="preserve" y="5.948515519667126">&lt;&lt;layers/BasicLayerParams.h&gt;&gt;
+
+DataLayerParams
+
+void save(std::ostream&amp; stream) const override
+void load(std::istream&amp; stream) override
+
+size_t width
+size_t height
+size_t depth
+size_t labelsCount
+size_t batchSize</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n8">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="188.74588114595417" width="263.2549851113331" x="2058.3725074443337" y="-2554.3729405729773"/>
+          <y:Fill color="#C0C0C0" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="121.609375" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="255.42578125" x="3.914601930666322" xml:space="preserve" y="33.56825307297731">&lt;&lt;layers/BasicLayerParams.h&gt;&gt;
+
+OutputsParams
+
+void save(std::ostream&amp; stream) const override
+void load(std::istream&amp; stream) override
+
+size_t outputsCount</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n9">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="176.8618398346839" width="253.15354999675355" x="2393.423225001623" y="-2548.4309199173417"/>
+          <y:Fill color="#C0C0C0" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="151.01171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="255.42578125" x="-1.1361156266229955" xml:space="preserve" y="12.925060542341726">&lt;&lt;layers/BasicLayerParams.h&gt;&gt;
+
+MaxPool2DParams
+
+void save(std::ostream&amp; stream) const override
+void load(std::istream&amp; stream) override
+
+size_t kernelWidth, kernelHeight
+size_t strideW, strideH
+size_t paddingW, paddingH</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n10">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="1205.1315178990617" width="533.9982111430156" x="333.24987308230186" y="-1712.5657589495308"/>
+          <y:Fill color="#C0C0C0" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="1062.484375" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="430.193359375" x="51.90242588400781" xml:space="preserve" y="71.32357144953085">&lt;&lt;Common.h&gt;&gt;
+
+Tensor
+
+public:
+
+dtype&amp; operator[](size_t index)
+const dtype&amp; operator[](size_t index) const
+
+operator const dtVec&amp;() const
+
+Tensor&amp; operator=(const dtVec&amp; data)
+Tensor&amp; operator=(const Tensor&amp;) = delete
+
+Tensor&amp; operator=(dtVec&amp;&amp; data)
+Tensor&amp; operator=(Tensor&amp;&amp;) = delete
+
+Tensor&amp; operator+=(const Tensor&amp; rhs)
+Tensor&amp; operator-=(const Tensor&amp; rhs)
+Tensor&amp; operator*=(const Tensor&amp; rhs)
+Tensor&amp; operator/=(const Tensor&amp; rhs)
+
+Tensor&amp; operator+=(dtype rhs)
+Tensor&amp; operator-=(dtype rhs)
+Tensor&amp; operator*=(dtype rhs)
+Tensor&amp; operator/=(dtype rhs)
+
+size_t size() const
+bool empty() const
+
+void compress()
+void decompress()
+
+void clear()
+void clearForce()
+void allocate()
+
+dtVec::const_iterator begin() const
+dtVec::iterator begin()
+dtVec::const_iterator end()
+dtVec::iterator end()
+
+template&lt;size_t NewDimsNum&gt;
+auto reshape(const yato::dimensionality&lt;NewDimsNum, size_t&gt;&amp; extents) const
+
+template&lt;size_t NewDimsNum&gt;
+auto reshape(const yato::dimensionality&lt;NewDimsNum, size_t&gt;&amp; extents)
+
+const std::string&amp; getName() const
+
+size_t getBatchSize() const
+size_t getDepth() const
+size_t getHeight() const
+size_t getWidth() const
+
+shape getShape() const
+
+void setReadyToClear(bool val)
+
+private:
+
+std::string mName
+
+dtVec mData
+std::vector&lt;uint16_t&gt; mCompressedData
+
+size_t mBatchSize
+size_t mDepth
+size_t mHeight
+size_t mWidth
+
+bool mReadyToClear</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n11">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="720.3178984502315" width="322.8067755050952" x="1248.5966122474524" y="-2040.1589492251157"/>
+          <y:Fill color="#C0C0C0" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="592.046875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="290.107421875" x="16.349676815047587" xml:space="preserve" y="64.13551172511575">&lt;&lt;layers/AveragePoolLayer.h&gt;&gt;
+
+BatchNormLayer
+
+public:
+
+void forwardCompute(NetworkMode mMode) override
+void backwardCompute() override
+
+void save(std::ostream&amp; stream) const override
+void load(std::istream&amp; stream) override
+
+private:
+
+size_t mInputWidth
+size_t mInputHeight
+
+size_t mOutputWidth
+size_t mOutputHeight
+size_t mOutputSize
+size_t mBatchSize
+size_t mInputDepth
+
+Tensor* mOutput
+NetworkMode mMode
+
+dtVec* mPrevLayerDelta
+
+std::string mInputName
+std::string mOutputName
+std::string mPrevLayerDeltaName
+
+dtVec&amp; mXhat
+dtVec&amp; mSqrtVar
+
+dtVec&amp; mBeta
+dtVec&amp; mGamma
+dtVec&amp; mNablaGamma
+dtVec&amp; mNablaBeta
+const dtype Eps = TODTYPE(1e-5)</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n12">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="30.0" width="105.99280032692639" x="1357.0035998365368" y="-2115.0"/>
+          <y:Fill color="#00FF00" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="102.044921875" x="1.9739392259632496" xml:space="preserve" y="5.6494140625">BasicLayerNamed</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n13">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="374.9825012439983" width="620.5976742595637" x="-1510.2988371297818" y="-2557.491250621999"/>
+          <y:Fill color="#00CCFF" transparent="false"/>
+          <y:BorderStyle color="#FF0000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="371.529296875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="608.248046875" x="6.174813692281873" xml:space="preserve" y="1.7266021844989154">&lt;&lt;network/Factory.h&gt;&gt;
+
+typedef std::shared_ptr&lt;BasicLayer&gt; LayerMem
+typedef std::shared_ptr&lt;BasicLayerParams&gt; LayerParamsMem
+
+Factory
+
+public:
+
+static Factory&amp; getInstance()
+
+typedef LayerMem(*Creator)(const BasicLayerParams&amp; params)
+
+void addCreator(const std::string&amp; type, Creator creator)
+void removeCreator(const std::string&amp; type)
+LayerMem createLayer(const std::string&amp; name, const std::string&amp; type, const BasicLayerParams&amp; params) const
+
+void addParamsCreator(const std::string&amp; type, CreatorParams creator)
+void removeParamsCreator(const std::string&amp; type)
+LayerParamsMem createParameters(const std::string&amp; type) const
+
+private:
+
+typedef std::unordered_map&lt;std::string, Creator&gt; CreatorRegistry
+CreatorRegistry mRegistry</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n14">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="30.0" width="105.99280032692639" x="-1642.9964001634632" y="-2385.0"/>
+          <y:Fill color="#00FF00" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="33.40234375" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="104.705078125" x="0.6438611009632496" xml:space="preserve" y="-1.701171875">BasicLayer
+BasicLayerParams</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n15">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="242.40844843106242" width="382.9603087106327" x="-2111.4801543553162" y="-1902.6355267586623"/>
+          <y:Fill color="#C0C0C0" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="151.01171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="222.12109375" x="80.41960748031624" xml:space="preserve" y="45.69836484053121">&lt;&lt;network/Graph.h&gt;&gt;
+
+OperatorDef
+
+void addInput(const std::string&amp; input)
+void addOutput(const std::string&amp; output)
+
+std::string mName
+std::string mType
+LayerParamsMem mParams</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n16">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="175.5575699697497" width="262.65166925684684" x="-1691.3258346284235" y="-1869.210087528006"/>
+          <y:Fill color="#C0C0C0" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="136.310546875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="174.736328125" x="43.95767056592342" xml:space="preserve" y="19.623511547374846">&lt;&lt;network/Graph.h&gt;&gt;
+
+NetDef
+
+OperatorDef* addOp()
+
+void insertSplitters()
+
+std::vector&lt;OperatorDef&gt; mOps</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n17">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="546.0800781307425" width="306.6275493325709" x="-933.3137746662854" y="-2054.4713416085024"/>
+          <y:Fill color="#C0C0C0" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="503.83984375" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="265.4453125" x="20.59111841628544" xml:space="preserve" y="21.120117190371275">&lt;&lt;network/Graph.h&gt;&gt;
+
+typedef std::shared_ptr&lt;BasicLayer&gt; LayerMem
+
+Node
+
+public:
+
+const TensorNames&amp; getParents() const
+const TensorNames&amp; getChildrens() const
+
+const TensorNames&amp; getExternalInputs() const
+const TensorNames&amp; getExternalOutputs() const
+
+TensorNames getInputs()
+TensorNames getOutputs()
+
+const LayerMem getLayer() const
+
+const std::string getName() const
+
+private:
+
+std::string mName
+
+TensorNames mParents
+TensorNames mChildrens
+
+TensorNames mExternalInputs
+TensorNames mExternalOutputs
+
+LayerMem mLayer
+
+friend class Graph</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n18">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="30.0" width="105.99280032692639" x="-832.9964001634632" y="-2127.2717635960616"/>
+          <y:Fill color="#00FF00" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="63.361328125" x="21.315736100963193" xml:space="preserve" y="5.6494140625">BasicLayer</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n19">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="593.6869563568057" width="354.75037589700105" x="-1377.3751879485005" y="-2078.2747807215337"/>
+          <y:Fill color="#C0C0C0" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="577.345703125" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="321.466796875" x="16.641789511000525" xml:space="preserve" y="8.170626615902847">&lt;&lt;network/Graph.h&gt;&gt;
+
+Graph
+
+public:
+
+const std::vector&lt;Node&gt;&amp; getNodes() const
+std::vector&lt;Node&gt;&amp; getNodes()
+
+const Node&amp; operator[](size_t index) const
+Node&amp; operator[](size_t index)
+
+const Node&amp; operator[](const std::string&amp; name) const
+Node&amp; operator[](const std::string&amp; name)
+
+const BasicLayer* operator()(const std::string&amp; name) const
+BasicLayer* operator()(const std::string&amp; name)
+
+void forward()
+void backward()
+
+void save(std::ostream&amp; stream) const
+
+const std::set&lt;std::string&gt;&amp; getExternalInputs() const
+const std::set&lt;std::string&gt;&amp; getExternalOutputs() const
+
+private:
+
+void createTopology()
+
+bool isGraphCorrected() const
+
+std::set&lt;std::string&gt; mExternalInputs
+std::set&lt;std::string&gt; mExternalOutputs
+
+std::vector&lt;Node&gt; mNodes
+std::unordered_map&lt;std::string, Node*&gt; mNodesDict
+
+NetDef mNetDef</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n20">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="169.80935663127548" width="687.8764942697383" x="-2893.938247134869" y="-1866.3359808587688"/>
+          <y:Fill color="#C0C0C0" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="151.01171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="679.626953125" x="4.124770572369016" xml:space="preserve" y="9.398818940637739">&lt;&lt;network/Graph.h&gt;&gt;
+
+typedef std::shared_ptr&lt;BasicLayerParams&gt; LayerParamsMem
+
+typedef std::vector&lt;std::string&gt; TensorNames
+
+template&lt;typename T&gt;
+LayerParamsMem createParam(const T&amp; param)
+
+OperatorDef* AddOp(NetDef&amp; netdef_ptr, const std::string&amp; opName, const std::string&amp; opType, LayerParamsMem&amp;&amp; params)</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n21">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="815.7515251478362" width="326.0478063890141" x="1636.976096805493" y="-2087.875762573918"/>
+          <y:Fill color="#C0C0C0" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="680.25390625" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="290.107421875" x="17.970192257007056" xml:space="preserve" y="67.74880944891811">&lt;&lt;layers/ConvolutionLayer.h&gt;&gt;
+
+ConvolutionLayer
+
+public:
+
+void forwardCompute(NetworkMode mMode) override
+void backwardCompute() override
+
+void save(std::ostream&amp; stream) const override
+void load(std::istream&amp; stream) override
+
+protected:
+
+size_t mInputWidth
+size_t mInputHeight
+size_t mInputDepth
+
+size_t mOutputWidth
+size_t mOutputHeight
+
+size_t mKernelWidth
+size_t mKernelHeight
+size_t mKernelsCount
+
+size_t mHorizontalStep
+size_t mVerticalStep
+
+size_t mHorizontalPadding
+size_t mVerticalPadding
+
+size_t mBatchSize
+
+dtVec&amp; mKernelsWeights
+dtVec&amp; mKernelsBiases
+
+Tensor* mOutput
+
+dtVec&amp; mGradWeights
+dtVec&amp; mGradBiases
+
+dtVec* mPrevLayerDelta
+
+std::string mInputName
+std::string mOutputName
+std::string mPrevLayerDeltaName</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n22">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="30.0" width="105.99280032692639" x="1747.0035998365368" y="-2145.0"/>
+          <y:Fill color="#00FF00" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="102.044921875" x="1.9739392259632496" xml:space="preserve" y="5.6494140625">BasicLayerNamed</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n23">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="151.84108141082788" width="326.0478063890141" x="1636.976096805493" y="-1155.920540705414"/>
+          <y:Fill color="#C0C0C0" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="121.609375" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="290.107421875" x="17.970192257007056" xml:space="preserve" y="15.115853205413941">&lt;&lt;layers/ConvolutionDepthwiseLayer.h&gt;&gt;
+
+ConvolutionDepthwiseLayer
+
+public:
+
+void forwardCompute(NetworkMode mMode) override
+void backwardCompute() override</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n24">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="266.87214164823354" width="303.5725632259032" x="2008.2137183870484" y="-1813.4360708241168"/>
+          <y:Fill color="#C0C0C0" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="165.712890625" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="290.107421875" x="6.732570675451598" xml:space="preserve" y="50.57962551161677">&lt;&lt;layers/DataLayer.h&gt;&gt;
+
+DataLayer
+
+public:
+
+void forwardCompute(NetworkMode mMode) override
+void backwardCompute() override
+
+void save(std::ostream&amp; stream) const override
+void load(std::istream&amp; stream) override</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n25">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="30.0" width="105.99280032692639" x="2107.0035998365365" y="-1875.0"/>
+          <y:Fill color="#00FF00" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="63.361328125" x="21.315736100963022" xml:space="preserve" y="5.6494140625">BasicLayer</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n26">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="557.2396984858515" width="306.82905691661335" x="2336.5854715416936" y="-1958.6198492429257"/>
+          <y:Fill color="#C0C0C0" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="459.736328125" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="290.107421875" x="8.36081752080645" xml:space="preserve" y="48.75168518042574">&lt;&lt;layers/DropoutLayer.h&gt;&gt;
+
+DropoutLayer
+
+public:
+
+typedef std::vector&lt;bool&gt; Random
+
+void forwardCompute(NetworkMode mMode) override
+void backwardCompute() override
+
+void save(std::ostream&amp; stream) const override
+void load(std::istream&amp; stream) override
+
+private:
+
+size_t mInputsCount
+size_t mOutputsCount
+dtVec* mOutput
+Random mRandom
+dtVec* mPrevLayerDelta
+std::random_device mGenerator
+std::bernoulli_distribution mDistribution
+NetworkMode mMode
+dtype mScale
+dtype mProbablity
+size_t mBatchSize
+
+std::string mInputName
+std::string mOutputName
+std::string mPrevLayerDeltaName</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n27">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="30.0" width="105.99280032692639" x="2437.0035998365365" y="-2025.0"/>
+          <y:Fill color="#00FF00" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="102.044921875" x="1.9739392259630222" xml:space="preserve" y="5.6494140625">BasicLayerNamed</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n28">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="268.63128089921065" width="291.4424594542256" x="2674.2787702728874" y="-1814.3156404496053"/>
+          <y:Fill color="#C0C0C0" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="165.712890625" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="290.107421875" x="0.6675187896125863" xml:space="preserve" y="51.459195137105326">&lt;&lt;layers/ElementWiseLayer.h&gt;&gt;
+
+ElementWiseLayer
+
+public:
+
+void forwardCompute(NetworkMode mMode) override
+void backwardCompute() override
+
+void save(std::ostream&amp; stream) const override
+void load(std::istream&amp; stream) override</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n29">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="30.0" width="105.99280032692639" x="2767.003599836537" y="-1875.0"/>
+          <y:Fill color="#00FF00" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="102.044921875" x="1.9739392259630222" xml:space="preserve" y="5.6494140625">BasicLayerNamed</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n30">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="552.3028574278683" width="289.9763304337198" x="2975.0118347831403" y="-1956.1514287139341"/>
+          <y:Fill color="#C0C0C0" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="459.736328125" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="290.107421875" x="-0.06554572064032982" xml:space="preserve" y="46.28326465143414">&lt;&lt;layers/FullyConnectedLayer.h&gt;&gt;
+
+FullyConnectedLayer
+
+public:
+
+void forwardCompute(NetworkMode mMode) override
+void backwardCompute() override
+
+void save(std::ostream&amp; stream) const override
+void load(std::istream&amp; stream) override
+
+private:
+
+size_t mInputsCount
+size_t mOutputsCount
+size_t mBatchSize
+
+dtVec&amp; mWeights
+dtVec&amp; mBiases
+
+Tensor* mOutput
+
+dtVec&amp; mGradWeights
+dtVec&amp; mGradBiases
+
+dtVec* mPrevLayerDelta
+
+std::string mInputName
+std::string mOutputName
+std::string mPrevLayerDeltaName</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n31">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="30.0" width="105.99280032692639" x="3067.0035998365365" y="-2025.0"/>
+          <y:Fill color="#00FF00" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="102.044921875" x="1.9739392259630222" xml:space="preserve" y="5.6494140625">BasicLayerNamed</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n32">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="682.2387302053999" width="295.93877040432244" x="3302.030614797839" y="-2021.1193651027"/>
+          <y:Fill color="#C0C0C0" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="592.046875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="290.107421875" x="2.9156742646609928" xml:space="preserve" y="45.09592760269993">&lt;&lt;layers/MaxPoolLayer.h&gt;&gt;
+
+MaxPoolLayer2D
+
+public:
+
+typedef std::vector&lt;size_t&gt; Indexes
+
+void forwardCompute(NetworkMode mMode) override
+void backwardCompute() override
+
+void save(std::ostream&amp; stream) const override
+void load(std::istream&amp; stream) override
+
+private:
+
+size_t mInputWidth
+size_t mInputHeight
+size_t mInputDepth
+
+size_t mOutputWidth
+size_t mOutputHeight
+size_t mBatchSize
+size_t mStrideW
+size_t mStrideH
+size_t mKernelWidth
+size_t mKernelHeight
+
+size_t mPaddingW
+size_t mPaddingH
+
+Tensor* mOutput
+
+Indexes mIndexes
+
+dtVec* mPrevLayerDelta
+
+std::string mInputName
+std::string mOutputName
+std::string mPrevLayerDeltaName</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n33">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="30.0" width="105.99280032692639" x="3397.0035998365365" y="-2085.0"/>
+          <y:Fill color="#00FF00" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="102.044921875" x="1.9739392259630222" xml:space="preserve" y="5.6494140625">BasicLayerNamed</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n34">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="413.4835443880215" width="286.6931778705589" x="3636.6534110647217" y="-1916.7417721940108"/>
+          <y:Fill color="#C0C0C0" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="312.724609375" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="290.107421875" x="-1.7071220022207854" xml:space="preserve" y="50.379467506510764">&lt;&lt;layers/ReLUActivation.h&gt;&gt;
+
+ReLUActivation
+
+public:
+
+void forwardCompute(NetworkMode mMode) override
+void backwardCompute() override
+
+void save(std::ostream&amp; stream) const override
+void load(std::istream&amp; stream) override
+
+private:
+
+Tensor* mOutput
+
+dtVec* mPrevLayerDelta
+
+std::string mInputName
+std::string mOutputName
+std::string mPrevLayerDeltaName</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n35">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="30.0" width="105.99280032692639" x="3727.003599836537" y="-1965.0"/>
+          <y:Fill color="#00FF00" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="102.044921875" x="1.9739392259630222" xml:space="preserve" y="5.6494140625">BasicLayerNamed</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n36">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="397.88574016697976" width="297.56008205499666" x="3961.2199589725014" y="-1908.9428700834899"/>
+          <y:Fill color="#C0C0C0" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="312.724609375" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="290.107421875" x="3.726330089998555" xml:space="preserve" y="42.58056539598988">&lt;&lt;layers/SigmoidActivation.h&gt;&gt;
+
+SigmoidActivation
+
+public:
+
+void forwardCompute(NetworkMode mMode) override
+void backwardCompute() override
+
+void save(std::ostream&amp; stream) const override
+void load(std::istream&amp; stream) override
+
+private:
+
+Tensor* mOutput
+
+dtVec* mPrevLayerDelta
+
+std::string mInputName
+std::string mOutputName
+std::string mPrevLayerDeltaName</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n37">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="30.0" width="105.99280032692639" x="4057.003599836536" y="-1965.0"/>
+          <y:Fill color="#00FF00" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="102.044921875" x="1.9739392259630222" xml:space="preserve" y="5.6494140625">BasicLayerNamed</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n38">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="452.0448713616911" width="307.612766055086" x="4286.193616972457" y="-1936.0224356808455"/>
+          <y:Fill color="#C0C0C0" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="356.828125" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="290.107421875" x="8.752672090043234" xml:space="preserve" y="47.60837318084555">&lt;&lt;layers/SoftMaxActivation.h&gt;&gt;
+
+SoftMaxActivation
+
+public:
+
+void forwardCompute(NetworkMode mMode) override
+void backwardCompute() override
+
+void save(std::ostream&amp; stream) const override
+void load(std::istream&amp; stream) override
+
+private:
+
+size_t mInputsCount
+size_t mBatchSize
+
+Tensor* mOutput
+
+dtVec* mPrevLayerDelta
+
+std::string mInputName
+std::string mOutputName
+std::string mPrevLayerDeltaName</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n39">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="30.0" width="105.99280032692639" x="4387.0035998365365" y="-1995.0"/>
+          <y:Fill color="#00FF00" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="102.044921875" x="1.973939225963477" xml:space="preserve" y="5.6494140625">BasicLayerNamed</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n40">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="415.3404258429073" width="295.6623619701745" x="4622.1688190149125" y="-1917.6702129214536"/>
+          <y:Fill color="#C0C0C0" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="312.724609375" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="290.107421875" x="2.777470047587485" xml:space="preserve" y="51.30790823395364">&lt;&lt;layers/TanhActivation.h&gt;&gt;
+
+TanhActivation
+
+public:
+
+void forwardCompute(NetworkMode mMode) override
+void backwardCompute() override
+
+void save(std::ostream&amp; stream) const override
+void load(std::istream&amp; stream) override
+
+private:
+
+Tensor* mOutput
+
+dtVec* mPrevLayerDelta
+
+std::string mInputName
+std::string mOutputName
+std::string mPrevLayerDeltaName</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n41">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="30.0" width="105.99280032692639" x="4717.0035998365365" y="-1965.0"/>
+          <y:Fill color="#00FF00" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="102.044921875" x="1.973939225963477" xml:space="preserve" y="5.6494140625">BasicLayerNamed</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n42">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="272.51515428906396" width="301.66922904743797" x="4949.165385476281" y="-1846.257577144532"/>
+          <y:Fill color="#C0C0C0" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="165.712890625" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="290.107421875" x="5.78090358621921" xml:space="preserve" y="53.40113183203198">&lt;&lt;layers/SplitterLayer.h&gt;&gt;
+
+SplitterLayer
+
+public:
+
+void forwardCompute(NetworkMode mMode) override
+void backwardCompute() override
+
+void save(std::ostream&amp; stream) const override
+void load(std::istream&amp; stream) override</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n43">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="30.0" width="105.99280032692639" x="5047.0035998365365" y="-1905.0"/>
+          <y:Fill color="#00FF00" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="102.044921875" x="1.973939225963477" xml:space="preserve" y="5.6494140625">BasicLayerNamed</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n44">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="476.13781750496855" width="294.120703690101" x="5282.939648154949" y="-1948.0689087524843"/>
+          <y:Fill color="#C0C0C0" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="371.529296875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="290.107421875" x="2.006640907550718" xml:space="preserve" y="52.304260314984276">&lt;&lt;loss/CrossEntropyLoss.h&gt;&gt;
+
+CrossEntropyLoss
+
+public:
+
+void forwardCompute(NetworkMode mMode) override
+void backwardCompute() override
+
+void save(std::ostream&amp; stream) const override
+void load(std::istream&amp; stream) override
+
+private:
+
+size_t mInputsCount
+size_t mBatchSize
+
+dtVec* mOutput
+
+dtVec* mPrevLayerDelta
+
+std::string mInputName
+std::string mLabelName
+std::string mOutputName
+std::string mPrevLayerDeltaName</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n45">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="30.0" width="105.99280032692639" x="5377.0035998365365" y="-1995.0"/>
+          <y:Fill color="#00FF00" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="102.044921875" x="1.973939225963477" xml:space="preserve" y="5.6494140625">BasicLayerNamed</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n46">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="30.0" width="105.99280032692639" x="-1972.996400163463" y="-1976.431302543131"/>
+          <y:Fill color="#00FF00" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="104.705078125" x="0.6438611009632496" xml:space="preserve" y="5.6494140625">BasicLayerParams</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n47">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="138.23870557305736" width="272.6096891749571" x="2383.6951554125217" y="-2319.1193527865285"/>
+          <y:Fill color="#C0C0C0" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="121.609375" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="255.42578125" x="8.591953962478328" xml:space="preserve" y="8.314665286528452">&lt;&lt;layers/BasicLayerParams.h&gt;&gt;
+
+Convolution2DParams
+
+void save(std::ostream&amp; stream) const override
+void load(std::istream&amp; stream) override
+
+size_t kernelsCount
+</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n48">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="188.74588114595417" width="263.2549851113331" x="2688.3725074443337" y="-2554.372940572977"/>
+          <y:Fill color="#C0C0C0" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="121.609375" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="255.42578125" x="3.914601930666322" xml:space="preserve" y="33.56825307297686">&lt;&lt;layers/BasicLayerParams.h&gt;&gt;
+
+DropoutParams
+
+void save(std::ostream&amp; stream) const override
+void load(std::istream&amp; stream) override
+
+float probability</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n49">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="188.74588114595417" width="263.2549851113331" x="2988.3725074443337" y="-2554.3729405729773"/>
+          <y:Fill color="#C0C0C0" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="121.609375" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="255.42578125" x="3.914601930666322" xml:space="preserve" y="33.56825307297731">&lt;&lt;layers/BasicLayerParams.h&gt;&gt;
+
+NLLLossParams
+
+void save(std::ostream&amp; stream) const override
+void load(std::istream&amp; stream) override
+
+Reduction reduction = Reduction::Mean</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n50">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="188.74588114595417" width="263.2549851113331" x="3288.372507444333" y="-2554.3729405729773"/>
+          <y:Fill color="#C0C0C0" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="121.609375" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="255.42578125" x="3.9146019306667768" xml:space="preserve" y="33.56825307297731">&lt;&lt;layers/BasicLayerParams.h&gt;&gt;
+
+BatchnormParams
+
+void save(std::ostream&amp; stream) const override
+void load(std::istream&amp; stream) override
+
+float momentum</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n51">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="151.84108141082788" width="304.96219512078096" x="3627.5189024396095" y="-1455.920540705414"/>
+          <y:Fill color="#C0C0C0" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="121.609375" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="290.107421875" x="7.427386622890481" xml:space="preserve" y="15.115853205413941">&lt;&lt;layers/ReLUActivation.h&gt;&gt;
+
+ReLU6Activation
+
+public:
+
+void forwardCompute(NetworkMode mMode) override
+void backwardCompute() override</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n52">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="204.85087791937985" width="501.95185014321294" x="349.2730535822032" y="-3192.42543895969"/>
+          <y:Fill color="#C0C0C0" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="195.115234375" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="461.892578125" x="20.02963600910647" xml:space="preserve" y="4.867821772189927">&lt;&lt;network/MemoryManager.h&gt;&gt;
+
+using MemoryDict = std::unordered_map&lt;std::string, std::shared_ptr&lt;Tensor&gt;&gt;
+using AliasesDict = std::unordered_map&lt;std::string, std::string&gt;
+using TensorToAliasesDict = std::unordered_map&lt;std::string, std::vector&lt;std::string&gt;&gt;
+
+TensorsNamespace
+
+MemoryDict tensors
+AliasesDict aliaseToTensor
+TensorToAliasesDict tensorToAliases
+
+using NamespaceDict = std::unordered_map&lt;std::string, TensorsNamespace&gt;</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n53">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="825.3511746399345" width="697.2945361478318" x="251.60171057989385" y="-2872.6755873199672"/>
+          <y:Fill color="#C0C0C0" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="739.05859375" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="658.978515625" x="19.158010261415882" xml:space="preserve" y="43.146290444967235">&lt;&lt;network/MemoryManager.h&gt;&gt;
+
+MemoryManager
+
+public:
+
+bool isTensorExists(const std::string&amp; name) const
+
+Tensor&amp; createTensor(const std::string&amp; name, size_t batchSize, size_t depth, size_t height, size_t width)
+Tensor&amp; createTensor(size_t batchSize, size_t depth, size_t height, size_t width)
+Tensor&amp; createTensor(const std::string&amp; name, size_t batchSize, size_t depth, size_t height, size_t width, const dtype filler)
+Tensor&amp; createTensor(size_t batchSize, size_t depth, size_t height, size_t width, const dtype filler)
+
+Tensor* createShape(const std::string&amp; name, size_t batchSize, size_t depth, size_t height, size_t width)
+Tensor* createShape(const std::string&amp; name, const Tensor&amp; tensor)
+Tensor* createShape(const Tensor&amp; tensor)
+
+void createAlias(const std::string&amp; name, const std::string&amp; aliasName)
+
+Tensor&amp; getTensor(const std::string&amp; name)
+const Tensor&amp; getTensor(const std::string&amp; name) const
+const Tensor&amp; operator[](const std::string&amp; name) const
+
+void deleteTensor(const std::string&amp; name)
+
+void clear()
+
+size_t size() const
+
+static bool namespaceExists(const std::string&amp; name)
+
+bool tensorExists(const std::string&amp; name) const
+
+size_t getNamespaceMemory() const
+const std::string&amp; getNamespaceName() const
+
+size_t getTotalMemory() const
+
+private:
+
+void checkName(const std::string&amp; name, const char* caller, bool shouldExist = true) const
+bool checkTensorExists(const std::string&amp; name) const
+bool checkAliasExists(const std::string&amp; name) const
+
+MemoryManager(const MemoryManager&amp;) = delete
+MemoryManager&amp; operator=(const MemoryManager&amp;) = delete
+MemoryManager* operator&amp;() = delete
+
+const std::string mNamespace;
+static NamespaceDict mNamespaceDict</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n54">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="534.8651098048304" width="719.356768920118" x="-629.6783844600591" y="-2727.432554902415"/>
+          <y:Fill color="#C0C0C0" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="459.736328125" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="690.021484375" x="14.667642272559021" xml:space="preserve" y="37.56439083991518">&lt;&lt;network/ActivationsManager.h&gt;&gt;
+
+ActivationsManager
+
+public:
+
+void declareTensor(const std::string&amp; name, const activationShape shape, DeclarationType declType, bool readyToClear = false)
+void clearDeclarations()
+
+void setNotReadyToClear(const std::string&amp; name)
+
+activationShape getTensorShape(const std::string&amp; name) const
+
+void setBatchSize(size_t size)
+size_t getBatchSize() const
+
+void createTensors()
+void destroyTensors()
+
+static size_t getDepth(const activationShape shape)
+static size_t getHeight(const activationShape shape)
+static size_t getWidth(const activationShape shape)
+
+private:
+
+typedef std::unordered_map&lt;std::string, TensorParameters&gt; DeclarationsMem
+
+DeclarationsMem mDeclarations
+size_t mBatchSize
+
+MemoryManager&amp; mMemoryManager</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n55">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="152.4530750852" width="289.8786376196098" x="-414.93931880980494" y="-3016.2265375426"/>
+          <y:Fill color="#C0C0C0" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="left" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="106.908203125" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="192.77734375" x="48.55064693480489" xml:space="preserve" y="22.7724359801">&lt;&lt;network/ActivationsManager.h&gt;&gt;
+
+TensorParameters
+
+activationShape shape
+DeclarationType declType
+bool isReadyToClear</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <node id="n56">
+      <data key="d6">
+        <y:ShapeNode>
+          <y:Geometry height="30.0" width="105.99280032692639" x="-322.99640016346325" y="-2127.2717635960616"/>
+          <y:Fill color="#00FF00" transparent="false"/>
+          <y:BorderStyle color="#000000" type="line" width="1.0"/>
+          <y:NodeLabel alignment="center" autoSizePolicy="content" fontFamily="Dialog" fontSize="12" fontStyle="plain" hasBackgroundColor="false" hasLineColor="false" height="18.701171875" horizontalTextPosition="center" iconTextGap="4" modelName="internal" modelPosition="c" textColor="#000000" verticalTextPosition="bottom" visible="true" width="41.34765625" x="32.32257203846319" xml:space="preserve" y="5.6494140625">Tensor</y:NodeLabel>
+          <y:Shape type="rectangle"/>
+        </y:ShapeNode>
+      </data>
+    </node>
+    <edge id="n0::e0" source="n0::n0" target="n0::n1">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="white_delta" target="none"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="n0::e1" source="n0::n2" target="n0::n3">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="white_diamond" target="none"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="n0::e2" source="n0::n4" target="n0::n5">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="dashed" width="1.0"/>
+          <y:Arrows source="none" target="standard"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="n0::e3" source="n0::n6" target="n0::n7">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="none" target="standard"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="n0::e4" source="n0::n19" target="n0::n20">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="diamond" target="none"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="n0::e5" source="n0::n23" target="n0::n24">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="dashed" width="1.0"/>
+          <y:Arrows source="white_delta" target="none"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e0" source="n5" target="n4">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="none" target="white_delta"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e1" source="n7" target="n6">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="none" target="white_delta"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e2" source="n8" target="n6">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="none" target="white_delta"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e3" source="n9" target="n6">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="none" target="white_delta"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e4" source="n2" target="n3">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="none" target="white_delta"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e5" source="n11" target="n12">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="none" target="white_delta"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e6" source="n13" target="n14">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="none" target="none"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e7" source="n15" target="n16">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="none" target="diamond"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e8" source="n18" target="n17">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="none" target="diamond"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e9" source="n16" target="n19">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="none" target="diamond"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e10" source="n17" target="n19">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="none" target="diamond"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e11" source="n19" target="n13">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="none" target="standard"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e12" source="n21" target="n22">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="none" target="white_delta"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e13" source="n23" target="n21">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="none" target="white_delta"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e14" source="n24" target="n25">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="none" target="white_delta"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e15" source="n26" target="n27">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="none" target="white_delta"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e16" source="n28" target="n29">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="none" target="white_delta"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e17" source="n30" target="n31">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="none" target="white_delta"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e18" source="n32" target="n33">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="none" target="white_delta"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e19" source="n34" target="n35">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="none" target="white_delta"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e20" source="n36" target="n37">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="none" target="white_delta"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e21" source="n38" target="n39">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="none" target="white_delta"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e22" source="n40" target="n41">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="none" target="white_delta"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e23" source="n42" target="n43">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="none" target="white_delta"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e24" source="n44" target="n45">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="none" target="white_delta"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e25" source="n46" target="n15">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="none" target="diamond"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e26" source="n47" target="n9">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="none" target="white_delta"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e27" source="n48" target="n6">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="none" target="white_delta"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e28" source="n49" target="n6">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="none" target="white_delta"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e29" source="n50" target="n6">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="none" target="white_delta"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e30" source="n51" target="n34">
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="none" target="white_delta"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e31" source="n53" target="n52">
+      <data key="d9"/>
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="none" target="standard"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e32" source="n53" target="n10">
+      <data key="d9"/>
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="diamond" target="standard"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e33" source="n54" target="n53">
+      <data key="d9"/>
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="white_diamond" target="standard"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e34" source="n54" target="n55">
+      <data key="d9"/>
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="line" width="1.0"/>
+          <y:Arrows source="diamond" target="none"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+    <edge id="e35" source="n54" target="n56">
+      <data key="d9"/>
+      <data key="d10">
+        <y:PolyLineEdge>
+          <y:Path sx="0.0" sy="0.0" tx="0.0" ty="0.0"/>
+          <y:LineStyle color="#000000" type="dashed" width="1.0"/>
+          <y:Arrows source="none" target="standard"/>
+          <y:BendStyle smoothed="false"/>
+        </y:PolyLineEdge>
+      </data>
+    </edge>
+  </graph>
+  <data key="d7">
+    <y:Resources/>
+  </data>
+</graphml>

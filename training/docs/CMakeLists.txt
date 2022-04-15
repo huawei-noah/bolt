@@ -1,0 +1,31 @@
+cmake_minimum_required(VERSION 3.12)
+
+project(RaulDocs)
+
+find_package(Doxygen REQUIRED dot OPTIONAL_COMPONENTS mscgen dia)
+
+if(NOT Doxygen_FOUND)
+    message(FATAL_ERROR  "Doxygen not found")
+endif()
+
+message("Doxygen used")
+
+SET(DOXYGEN_EXTRACT_ALL YES)
+SET(DOXYGEN_EXTRACT_PRIVATE YES)
+SET(DOXYGEN_BUILTIN_STL_SUPPORT YES)
+SET(DOXYGEN_CREATE_SUBDIRS YES)
+SET(DOXYGEN_HTML_TIMESTAMP YES)
+SET(DOXYGEN_GENERATE_TREEVIEW YES)
+SET(DOXYGEN_USE_MATHJAX YES)
+SET(DOXYGEN_DOT_NUM_THREADS 32)
+SET(DOXYGEN_USE_MDFILE_AS_MAINPAGE README.md)
+SET(DOXYGEN_PROJECT_LOGO "raul_logo.png")
+SET(DOXYGEN_PROJECT_NAME "Raul: on-device training library")
+
+doxygen_add_docs(docs
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/common
+    ${CMAKE_CURRENT_SOURCE_DIR}/../src/libs
+    ${CMAKE_CURRENT_SOURCE_DIR}/../README.md
+    ALL
+    WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
+    COMMENT "Generating html documentation with Doxygen")

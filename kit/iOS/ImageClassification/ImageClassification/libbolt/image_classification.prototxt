@@ -1,0 +1,24 @@
+name: "imageClassification_flow"
+input: "input:1"
+output: "output"
+node {
+  name: "input:1"
+  type: "Input"
+  output: "input:1"
+  input_type: "UINT8"
+  input_format: "NCHW"
+  input_dim: 1
+  input_dim: 224
+  input_dim: 224
+  input_dim: 4
+}
+node {
+  name: "imageClassification_inference"
+  type: "Inference"
+  input: "input:1"
+  output: "output"
+  preprocess_parameter: "pixelProcess"
+  postprocess_parameter: "postProcess"
+  inference_parameter: "/private/var/containers/Bundle/Application/B3BB416D-1160-4B8E-BF44-E92AFC9DECD3/ImageClassificationDemo.app/ghostnet_f32.bolt"
+  inference_parameter:""
+}

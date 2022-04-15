@@ -1,0 +1,24 @@
+name: "imageClassification_flow"
+input: "input"
+output: "output"
+node {
+  name: "input"
+  type: "Input"
+  output: "input"
+  input_type: "UINT8"
+  input_format: "NCHW"
+  input_dim: 1
+  input_dim: 4
+  input_dim: 32
+  input_dim: 32
+}
+node {
+  name: "imageClassification_inference"
+  type: "Inference"
+  input: "input"
+  output: "output"
+  preprocess_parameter: "pixelProcess"
+  postprocess_parameter: "postProcess"
+  inference_parameter: "/private/var/containers/Bundle/Application/B3BB416D-1160-4B8E-BF44-E92AFC9DECD3/ImageClassificationDemo.app/esr_1_f32.bolt"
+  inference_parameter:""
+}

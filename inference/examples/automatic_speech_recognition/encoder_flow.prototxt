@@ -1,0 +1,350 @@
+name: "encoder"
+input: "sounds"
+input: "encoder_block0_trunk0_layer0_mem"
+input: "encoder_block0_trunk0_layer1_mem"
+input: "encoder_block1_trunk1_layer0_kmem"
+input: "encoder_block1_trunk1_layer0_vmem"
+input: "encoder_block1_trunk1_layer1_kmem"
+input: "encoder_block1_trunk1_layer1_vmem"
+input: "encoder_block2_trunk0_layer0_mem"
+input: "encoder_block2_trunk0_layer1_mem"
+input: "encoder_block2_trunk1_layer0_kmem"
+input: "encoder_block2_trunk1_layer0_vmem"
+input: "encoder_block2_trunk1_layer1_kmem"
+input: "encoder_block2_trunk1_layer1_vmem"
+input: "encoder_block3_trunk0_layer0_mem"
+input: "encoder_block3_trunk0_layer1_mem"
+input: "encoder_block3_trunk1_layer0_kmem"
+input: "encoder_block3_trunk1_layer0_vmem"
+input: "encoder_block3_trunk1_layer1_kmem"
+input: "encoder_block3_trunk1_layer1_vmem"
+input: "encoder_block3_trunk1_layer2_kmem"
+input: "encoder_block3_trunk1_layer2_vmem"
+input: "encoder_block3_trunk1_layer3_kmem"
+input: "encoder_block3_trunk1_layer3_vmem"
+output: "encoder_block3_transformer_ln"
+output: "encoder_block0_conv0_neg_slice"
+output: "encoder_block0_conv1_neg_slice"
+output: "encoder_block1_transformer_layer0_k_neg_slice"
+output: "encoder_block1_transformer_layer0_v_neg_slice"
+output: "encoder_block1_transformer_layer1_k_neg_slice"
+output: "encoder_block1_transformer_layer1_v_neg_slice"
+output: "encoder_block2_conv0_neg_slice"
+output: "encoder_block2_conv1_neg_slice"
+output: "encoder_block2_transformer_layer0_k_neg_slice"
+output: "encoder_block2_transformer_layer0_v_neg_slice"
+output: "encoder_block2_transformer_layer1_k_neg_slice"
+output: "encoder_block2_transformer_layer1_v_neg_slice"
+output: "encoder_block3_conv0_neg_slice"
+output: "encoder_block3_conv1_neg_slice"
+output: "encoder_block3_transformer_layer0_k_neg_slice"
+output: "encoder_block3_transformer_layer0_v_neg_slice"
+output: "encoder_block3_transformer_layer1_k_neg_slice"
+output: "encoder_block3_transformer_layer1_v_neg_slice"
+output: "encoder_block3_transformer_layer2_k_neg_slice"
+output: "encoder_block3_transformer_layer2_v_neg_slice"
+output: "encoder_block3_transformer_layer3_k_neg_slice"
+output: "encoder_block3_transformer_layer3_v_neg_slice"
+node {
+  name: "sounds"
+  type: "Input"
+  output: "sounds"
+  input_type: "FLOAT32"
+  input_format: "NCHW"
+  input_dim: 1
+  input_dim: 15
+  input_dim: 128
+}
+node {
+  name: "encoder_block0_trunk0_layer0_mem"
+  type: "Input"
+  output: "encoder_block0_trunk0_layer0_mem"
+  input_type: "FLOAT32"
+  input_format: "NCHW"
+  input_dim: 1
+  input_dim: 2
+  input_dim: 128
+  input_dim: 1
+}
+node {
+  name: "encoder_block0_trunk0_layer1_mem"
+  type: "Input"
+  output: "encoder_block0_trunk0_layer1_mem"
+  input_type: "FLOAT32"
+  input_format: "NCHWC8"
+  input_dim: 1
+  input_dim: 32
+  input_dim: 1
+  input_dim: 64
+}
+node {
+  name: "encoder_block1_trunk1_layer0_kmem"
+  type: "Input"
+  output: "encoder_block1_trunk1_layer0_kmem"
+  input_type: "FLOAT32"
+  input_format: "NCHW"
+  input_dim: 1
+  input_dim: 5
+  input_dim: 6
+  input_dim: 64
+}
+node {
+  name: "encoder_block1_trunk1_layer0_vmem"
+  type: "Input"
+  output: "encoder_block1_trunk1_layer0_vmem"
+  input_type: "FLOAT32"
+  input_format: "NCHW"
+  input_dim: 1
+  input_dim: 5
+  input_dim: 6
+  input_dim: 64
+}
+node {
+  name: "encoder_block1_trunk1_layer1_kmem"
+  type: "Input"
+  output: "encoder_block1_trunk1_layer1_kmem"
+  input_type: "FLOAT32"
+  input_format: "NCHW"
+  input_dim: 1
+  input_dim: 7
+  input_dim: 6
+  input_dim: 64
+}
+node {
+  name: "encoder_block1_trunk1_layer1_vmem"
+  type: "Input"
+  output: "encoder_block1_trunk1_layer1_vmem"
+  input_type: "FLOAT32"
+  input_format: "NCHW"
+  input_dim: 1
+  input_dim: 7
+  input_dim: 6
+  input_dim: 64
+}
+node {
+  name: "encoder_block2_trunk0_layer0_mem"
+  type: "Input"
+  output: "encoder_block2_trunk0_layer0_mem"
+  input_type: "FLOAT32"
+  input_format: "NCHW"
+  input_dim: 1
+  input_dim: 2
+  input_dim: 384
+}
+node {
+  name: "encoder_block2_trunk0_layer1_mem"
+  type: "Input"
+  output: "encoder_block2_trunk0_layer1_mem"
+  input_type: "FLOAT32"
+  input_format: "NCHWC8"
+  input_dim: 1
+  input_dim: 1024
+  input_dim: 1
+  input_dim: 1
+}
+node {
+  name: "encoder_block2_trunk1_layer0_kmem"
+  type: "Input"
+  output: "encoder_block2_trunk1_layer0_kmem"
+  input_type: "FLOAT32"
+  input_format: "NCHW"
+  input_dim: 1
+  input_dim: 7
+  input_dim: 8
+  input_dim: 64
+}
+node {
+  name: "encoder_block2_trunk1_layer0_vmem"
+  type: "Input"
+  output: "encoder_block2_trunk1_layer0_vmem"
+  input_type: "FLOAT32"
+  input_format: "NCHW"
+  input_dim: 1
+  input_dim: 7
+  input_dim: 8
+  input_dim: 64
+}
+node {
+  name: "encoder_block2_trunk1_layer1_kmem"
+  type: "Input"
+  output: "encoder_block2_trunk1_layer1_kmem"
+  input_type: "FLOAT32"
+  input_format: "NCHW"
+  input_dim: 1
+  input_dim: 9
+  input_dim: 8
+  input_dim: 64
+}
+node {
+  name: "encoder_block2_trunk1_layer1_vmem"
+  type: "Input"
+  output: "encoder_block2_trunk1_layer1_vmem"
+  input_type: "FLOAT32"
+  input_format: "NCHW"
+  input_dim: 1
+  input_dim: 9
+  input_dim: 8
+  input_dim: 64
+}
+node {
+  name: "encoder_block3_trunk0_layer0_mem"
+  type: "Input"
+  output: "encoder_block3_trunk0_layer0_mem"
+  input_type: "FLOAT32"
+  input_format: "NCHW"
+  input_dim: 1
+  input_dim: 2
+  input_dim: 512
+}
+node {
+  name: "encoder_block3_trunk0_layer1_mem"
+  type: "Input"
+  output: "encoder_block3_trunk0_layer1_mem"
+  input_type: "FLOAT32"
+  input_format: "NCHWC8"
+  input_dim: 1
+  input_dim: 1024
+  input_dim: 1
+  input_dim: 1
+}
+node {
+  name: "encoder_block3_trunk1_layer0_kmem"
+  type: "Input"
+  output: "encoder_block3_trunk1_layer0_kmem"
+  input_type: "FLOAT32"
+  input_format: "NCHW"
+  input_dim: 1
+  input_dim: 9
+  input_dim: 8
+  input_dim: 64
+}
+node {
+  name: "encoder_block3_trunk1_layer0_vmem"
+  type: "Input"
+  output: "encoder_block3_trunk1_layer0_vmem"
+  input_type: "FLOAT32"
+  input_format: "NCHW"
+  input_dim: 1
+  input_dim: 9
+  input_dim: 8
+  input_dim: 64
+}
+node {
+  name: "encoder_block3_trunk1_layer1_kmem"
+  type: "Input"
+  output: "encoder_block3_trunk1_layer1_kmem"
+  input_type: "FLOAT32"
+  input_format: "NCHW"
+  input_dim: 1
+  input_dim: 15
+  input_dim: 8
+  input_dim: 64
+}
+node {
+  name: "encoder_block3_trunk1_layer1_vmem"
+  type: "Input"
+  output: "encoder_block3_trunk1_layer1_vmem"
+  input_type: "FLOAT32"
+  input_format: "NCHW"
+  input_dim: 1
+  input_dim: 15
+  input_dim: 8
+  input_dim: 64
+}
+node {
+  name: "encoder_block3_trunk1_layer2_kmem"
+  type: "Input"
+  output: "encoder_block3_trunk1_layer2_kmem"
+  input_type: "FLOAT32"
+  input_format: "NCHW"
+  input_dim: 1
+  input_dim: 23
+  input_dim: 8
+  input_dim: 64
+}
+node {
+  name: "encoder_block3_trunk1_layer2_vmem"
+  type: "Input"
+  output: "encoder_block3_trunk1_layer2_vmem"
+  input_type: "FLOAT32"
+  input_format: "NCHW"
+  input_dim: 1
+  input_dim: 23
+  input_dim: 8
+  input_dim: 64
+}
+node {
+  name: "encoder_block3_trunk1_layer3_kmem"
+  type: "Input"
+  output: "encoder_block3_trunk1_layer3_kmem"
+  input_type: "FLOAT32"
+  input_format: "NCHW"
+  input_dim: 1
+  input_dim: 31
+  input_dim: 8
+  input_dim: 64
+}
+node {
+  name: "encoder_block3_trunk1_layer3_vmem"
+  type: "Input"
+  output: "encoder_block3_trunk1_layer3_vmem"
+  input_type: "FLOAT32"
+  input_format: "NCHW"
+  input_dim: 1
+  input_dim: 31
+  input_dim: 8
+  input_dim: 64
+}
+node {
+  name: "encoder_inference"
+  type: "Inference"
+  input: "sounds"
+  input: "encoder_block0_trunk0_layer0_mem"
+  input: "encoder_block0_trunk0_layer1_mem"
+  input: "encoder_block1_trunk1_layer0_kmem"
+  input: "encoder_block1_trunk1_layer0_vmem"
+  input: "encoder_block1_trunk1_layer1_kmem"
+  input: "encoder_block1_trunk1_layer1_vmem"
+  input: "encoder_block2_trunk0_layer0_mem"
+  input: "encoder_block2_trunk0_layer1_mem"
+  input: "encoder_block2_trunk1_layer0_kmem"
+  input: "encoder_block2_trunk1_layer0_vmem"
+  input: "encoder_block2_trunk1_layer1_kmem"
+  input: "encoder_block2_trunk1_layer1_vmem"
+  input: "encoder_block3_trunk0_layer0_mem"
+  input: "encoder_block3_trunk0_layer1_mem"
+  input: "encoder_block3_trunk1_layer0_kmem"
+  input: "encoder_block3_trunk1_layer0_vmem"
+  input: "encoder_block3_trunk1_layer1_kmem"
+  input: "encoder_block3_trunk1_layer1_vmem"
+  input: "encoder_block3_trunk1_layer2_kmem"
+  input: "encoder_block3_trunk1_layer2_vmem"
+  input: "encoder_block3_trunk1_layer3_kmem"
+  input: "encoder_block3_trunk1_layer3_vmem"
+  output: "encoder_block3_transformer_ln"
+  output: "encoder_block0_conv0_neg_slice"
+  output: "encoder_block0_conv1_neg_slice"
+  output: "encoder_block1_transformer_layer0_k_neg_slice"
+  output: "encoder_block1_transformer_layer0_v_neg_slice"
+  output: "encoder_block1_transformer_layer1_k_neg_slice"
+  output: "encoder_block1_transformer_layer1_v_neg_slice"
+  output: "encoder_block2_conv0_neg_slice"
+  output: "encoder_block2_conv1_neg_slice"
+  output: "encoder_block2_transformer_layer0_k_neg_slice"
+  output: "encoder_block2_transformer_layer0_v_neg_slice"
+  output: "encoder_block2_transformer_layer1_k_neg_slice"
+  output: "encoder_block2_transformer_layer1_v_neg_slice"
+  output: "encoder_block3_conv0_neg_slice"
+  output: "encoder_block3_conv1_neg_slice"
+  output: "encoder_block3_transformer_layer0_k_neg_slice"
+  output: "encoder_block3_transformer_layer0_v_neg_slice"
+  output: "encoder_block3_transformer_layer1_k_neg_slice"
+  output: "encoder_block3_transformer_layer1_v_neg_slice"
+  output: "encoder_block3_transformer_layer2_k_neg_slice"
+  output: "encoder_block3_transformer_layer2_v_neg_slice"
+  output: "encoder_block3_transformer_layer3_k_neg_slice"
+  output: "encoder_block3_transformer_layer3_v_neg_slice"
+  infer_output_size_parameter: "encoderInferOutputSize"
+  preprocess_parameter: "encoderPreProcess"
+  inference_parameter: "/data/local/tmp/CI/model_zoo/caffe_models/asr_convolution_transformer_encoder/asr_convolution_transformer_encoder_f32.bolt"
+}
