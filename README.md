@@ -168,7 +168,7 @@ Everything you want to know about bolt is recorded in the detailed documentation
 - [Bolt GPU性能优化，让上帝帮忙掷骰子](https://zhuanlan.zhihu.com/p/336218879)
 - [Bolt助力HMS机器翻译，自然语言处理又下一城](https://zhuanlan.zhihu.com/p/337887620)
 - [ARM CPU 1-bit推理，走向极致的道路](https://zhuanlan.zhihu.com/p/158161592)
-- [基于深度学习加速库Bolt的声音克隆技术](https://zhuanlan.zhihu.com/p/498919929)
+- [基于深度学习加速库Bolt的声音克隆技术(Voice Cloning)](https://zhuanlan.zhihu.com/p/498919929)
 
 # 教程
 ---
