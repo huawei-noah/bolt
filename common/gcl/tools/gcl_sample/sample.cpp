@@ -10,7 +10,6 @@
 // WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-#ifdef _USE_FP16
 #include "gcl.h"
 
 #include "ocl_context.h"
@@ -128,22 +127,22 @@ int main()
     oc_str = oc_str / (ot * on);
     on_str = owh_str * oc_str;
 
-    //    F16* input_val = (F16*)malloc(inputGclDesc.byteSize);
-    //    F16* filter_val = (F16*)malloc(filterGclDesc.byteSize);
-    //    F16* bias_val = (F16*)malloc(biasGclDesc.byteSize);
-    //    for (U32 i = 0; i < inputGclDesc.num; i++) input_val[i] = (i % 16) * 0.1;
-    //    for (U32 i = 0; i < filterGclDesc.num; i++) filter_val[i] = (i % 16) * 0.1;
-    //    for (U32 i = 0; i < biasGclDesc.num * 4; i++) bias_val[i] = 1.0;
-    //    U32 size[3] = {1, 1, 1};
-    //    size[0] = inputGclDesc.byteSize;
-    //    CHECK_STATUS(gcl_trans_memory(handle, input_val, input, size, HOST_TO_DEVICE_BUF, CL_TRUE));
-    //    size[0] = filterGclDesc.byteSize;
-    //    CHECK_STATUS(gcl_trans_memory(handle, filter_val, flt, size, HOST_TO_DEVICE_BUF, CL_TRUE));
-    //    size[0] = biasGclDesc.num;
-    //    CHECK_STATUS(gcl_trans_memory(handle, bias_val, bias, size, HOST_TO_DEVICE_IMG, CL_TRUE));
+    // F16* input_val = (F16*)malloc(inputGclDesc.byteSize);
+    // F16* filter_val = (F16*)malloc(filterGclDesc.byteSize);
+    // F16* bias_val = (F16*)malloc(biasGclDesc.byteSize);
+    // for (U32 i = 0; i < inputGclDesc.num; i++) input_val[i] = (i % 16) * 0.1;
+    // for (U32 i = 0; i < filterGclDesc.num; i++) filter_val[i] = (i % 16) * 0.1;
+    // for (U32 i = 0; i < biasGclDesc.num * 4; i++) bias_val[i] = 1.0;
+    // U32 size[3] = {1, 1, 1};
+    // size[0] = inputGclDesc.byteSize;
+    // CHECK_STATUS(gcl_trans_memory(handle, input_val, input, size, HOST_TO_DEVICE_BUF, CL_TRUE));
+    // size[0] = filterGclDesc.byteSize;
+    // CHECK_STATUS(gcl_trans_memory(handle, filter_val, flt, size, HOST_TO_DEVICE_BUF, CL_TRUE));
+    // size[0] = biasGclDesc.num;
+    // CHECK_STATUS(gcl_trans_memory(handle, bias_val, bias, size, HOST_TO_DEVICE_IMG, CL_TRUE));
     //
-    //    CHECK_STATUS(gcl_check_buf<F16>(handle, input->mem, inputGclDesc.byteSize, false, "input"));
-    //    CHECK_STATUS(gcl_check_buf<F16>(handle, flt->mem, filterGclDesc.byteSize, false, "filter"));
+    // CHECK_STATUS(gcl_check_buf<F16>(handle, input->mem, inputGclDesc.byteSize, false, "input"));
+    // CHECK_STATUS(gcl_check_buf<F16>(handle, flt->mem, filterGclDesc.byteSize, false, "filter"));
     gcl_finish(handle);
     for (U32 item_bn = 2; item_bn <= 4; item_bn++) {
         for (U32 item_kn = 1; item_kn <= 2; item_kn = item_kn * 2) {
@@ -160,10 +159,10 @@ int main()
                 }
 
                 Kernel kernel;
-                char kernelName[1024];
-                sprintf(kernelName, "conv_direct_multi_batch_s1_%d%d%d%d%d", fw, fh, item_w,
-                    item_kn, item_bn);
-                CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel));
+                std::string kernelName = std::string("conv_direct_multi_batch_s1_") +
+                    std::to_string(fw) + std::to_string(fh) + std::to_string(item_w) +
+                    std::to_string(item_kn) + std::to_string(item_bn);
+                CHECK_STATUS(gcl_create_kernel(handle, kernelName.c_str(), &kernel));
                 if (oc_str % item_kn != 0) {
                     continue;
                 }
@@ -174,7 +173,7 @@ int main()
                 CHECK_STATUS(gcl_set_kernelArgs(kernel, ih_str, iwh_str, ic_str, ih_off, iw_off,
                     oh_str, owh_str, oh_off, ow_off, ow, oc, on, sh, in_str, on_str, gs[0], gs[1],
                     input->mem, flt->mem, bias->mem, output->mem));
-                gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
+                gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName.c_str());
                 CHECK_STATUS(gcl_run_kernel_select_ls(handle, &kernelVec[0]));
 #ifdef _DEBUG
                 CHECK_STATUS(gcl_run_kernelVec_timing(handle, 0, handle->kernelVec->size()));
@@ -185,12 +184,11 @@ int main()
 #else
                 CHECK_STATUS(gcl_run_kernelVec(handle));
 #endif
-                //                CHECK_STATUS(gcl_check_buf<F16>(handle, output->mem, outputGclDesc.byteSize, false, "output"));
-                //                CHECK_STATUS(gcl_fill_memory_zero(handle, output));
+                // CHECK_STATUS(gcl_check_buf<F16>(handle, output->mem, outputGclDesc.byteSize, false, "output"));
+                // CHECK_STATUS(gcl_fill_memory_zero(handle, output));
                 CHECK_STATUS(gcl_clean_kernelVec(handle));
                 gcl_finish(handle);
             }
         }
     }
 }
-#endif

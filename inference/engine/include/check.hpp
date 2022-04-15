@@ -14,9 +14,9 @@
 #ifndef _CHECK_H
 #define _CHECK_H
 
-#include "operator.hpp"
+#include "weight_operator.hpp"
 
-class Check : public Operator {
+class Check : public WeightOperator {
 public:
     Check(DataType dt, CheckParamSpec p)
     {

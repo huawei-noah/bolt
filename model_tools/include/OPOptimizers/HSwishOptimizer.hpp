@@ -38,7 +38,7 @@ class HSwishOptimizer : public OPOptimizer {
                         continue;
                     }
                     if (spec->ops[mulIndex].type == OT_Eltwise &&
-                        spec->ops[mulIndex].ps.eltwise_spec.elt_mode == ELTWISE_PROD &&
+                        spec->ops[mulIndex].ps.eltwise_spec.mode == ELTWISE_PROD &&
                         spec->ops[mulIndex].num_inputs == 2 &&
                         ((std::string(spec->ops[add3Index].input_tensors_name[0]) ==
                                  std::string(spec->ops[mulIndex].input_tensors_name[0]) &&
@@ -63,14 +63,14 @@ class HSwishOptimizer : public OPOptimizer {
                             spec->ops[tmpVec[0].first].ps.power_spec.shift == 0 &&
                             spec->ops[tmpVec[0].first].ps.power_spec.power == 1) {
                             int div6Index = tmpVec[0].first;
-                            memcpy(spec->ops[div6Index].input_tensors_name[0],
+                            UNI_MEMCPY(spec->ops[div6Index].input_tensors_name[0],
                                 spec->ops[add3Index].input_tensors_name[0], NAME_LEN);
                             spec->ops[div6Index].type = OT_HSwish;
                             setOperatorInvalid(spec, mulIndex);
                         } else {
                             spec->ops[mulIndex].num_inputs = 1;
-                            delete spec->ops[mulIndex].input_tensors_name[1];
-                            memcpy(spec->ops[mulIndex].input_tensors_name[0],
+                            mt_free(spec->ops[mulIndex].input_tensors_name[1]);
+                            UNI_MEMCPY(spec->ops[mulIndex].input_tensors_name[0],
                                 spec->ops[add3Index].input_tensors_name[0], NAME_LEN);
                             spec->ops[mulIndex].type = OT_HSwishNoDiv;
                         }
@@ -86,7 +86,7 @@ class HSwishOptimizer : public OPOptimizer {
                         int div6Index = mulIndex;
                         mulIndex++;
                         if (spec->ops[mulIndex].type == OT_Eltwise &&
-                            spec->ops[mulIndex].ps.eltwise_spec.elt_mode == ELTWISE_PROD &&
+                            spec->ops[mulIndex].ps.eltwise_spec.mode == ELTWISE_PROD &&
                             spec->ops[mulIndex].num_inputs == 2 &&
                             ((std::string(spec->ops[add3Index].input_tensors_name[0]) ==
                                      std::string(spec->ops[mulIndex].input_tensors_name[0]) &&
@@ -97,8 +97,8 @@ class HSwishOptimizer : public OPOptimizer {
                                     std::string(spec->ops[div6Index].output_tensors_name[0]) ==
                                         std::string(spec->ops[mulIndex].input_tensors_name[0])))) {
                             spec->ops[mulIndex].num_inputs = 1;
-                            delete spec->ops[mulIndex].input_tensors_name[1];
-                            memcpy(spec->ops[mulIndex].input_tensors_name[0],
+                            mt_free(spec->ops[mulIndex].input_tensors_name[1]);
+                            UNI_MEMCPY(spec->ops[mulIndex].input_tensors_name[0],
                                 spec->ops[add3Index].input_tensors_name[0], NAME_LEN);
                             setOperatorInvalid(spec, add3Index);
                             setOperatorInvalid(spec, relu6Index);

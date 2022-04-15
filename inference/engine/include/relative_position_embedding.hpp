@@ -53,29 +53,29 @@ public:
         U32 batch = inputDesc.dims[inputDesc.nDims - 1];
         U32 length = inputDesc.dims[inputDesc.nDims - 1 - tmpAxis];
         for (U32 in = 0; in < batch; in++) {
-            U8 *ptr = outputPtr + in * length * this->p.num_output * bytesOf(this->dt);
-            if (length > this->p.input_dim) {
-                U32 size = (length - this->p.input_dim) * this->p.num_output * bytesOf(this->dt);
-                memset(ptr, 0, size);
+            U8 *ptr = outputPtr + in * length * this->p.num_outputs * bytesOf(this->dt);
+            if (length > this->p.num_inputs) {
+                U32 size = (length - this->p.num_inputs) * this->p.num_outputs * bytesOf(this->dt);
+                UNI_MEMSET(ptr, 0, size);
                 ptr += size;
             }
             U32 start = 0;
-            U32 copyLength = this->p.input_dim;
-            if (length < this->p.input_dim) {
-                start = this->p.input_dim - length;
+            U32 copyLength = this->p.num_inputs;
+            if (length < this->p.num_inputs) {
+                start = this->p.num_inputs - length;
                 copyLength = length;
             }
             if (this->p.transpose) {
                 for (U32 i = 0; i < copyLength; i++) {
-                    for (U32 j = 0; j < this->p.num_output; j++) {
-                        memcpy(ptr,
-                            weightPtr + (j * this->p.input_dim + start + i) * bytesOf(this->dt),
+                    for (U32 j = 0; j < this->p.num_outputs; j++) {
+                        UNI_MEMCPY(ptr,
+                            weightPtr + (j * this->p.num_inputs + start + i) * bytesOf(this->dt),
                             bytesOf(this->dt));
                     }
                 }
             } else {
-                memcpy(ptr, weightPtr + start * this->p.num_output * bytesOf(this->dt),
-                    copyLength * this->p.num_output * bytesOf(this->dt));
+                UNI_MEMCPY(ptr, weightPtr + start * this->p.num_outputs * bytesOf(this->dt),
+                    copyLength * this->p.num_outputs * bytesOf(this->dt));
             }
         }
     }
@@ -87,7 +87,7 @@ public:
         I32 tmpAxis = (this->p.axis + inDim.nDims) % inDim.nDims;
         U32 batch = inDim.dims[inDim.nDims - 1];
         U32 length = inDim.dims[inDim.nDims - 1 - tmpAxis];
-        TensorDesc outDim = tensor3df(this->dt, DF_MTK, batch, length, this->p.num_output);
+        TensorDesc outDim = tensor3df(this->dt, DF_MTK, batch, length, this->p.num_outputs);
         outTensors[0]->resize(outDim);
         return SUCCESS;
     }

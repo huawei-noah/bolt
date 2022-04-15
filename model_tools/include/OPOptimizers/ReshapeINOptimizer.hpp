@@ -37,7 +37,7 @@ class ReshapeINOptimizer : public OPOptimizer {
                 }
 
                 int reshapeIndex = prevOpIndexes[0].first;
-                int *reshape0Shape = spec->ops[reshapeIndex].ps.reshape_spec.shape_dims;
+                int *reshape0Shape = spec->ops[reshapeIndex].ps.reshape_spec.shape;
 
                 bool thisOptimized = true;
                 for (int j = 0; j < axis; ++j) {

@@ -12,14 +12,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "tensor_computing.h"
-#ifdef _USE_GENERAL
-#include "cpu/general/tensor_computing_general.h"
-#endif
-#ifdef _USE_X86
-#include "cpu/x86/tensor_computing_x86.h"
-#endif
-#ifdef _USE_NEON
-#include "cpu/arm/tensor_computing_arm.h"
+#ifdef _USE_CPU
+#include "cpu/tensor_computing_cpu.h"
 #endif
 #ifdef _USE_GPU
 #include "gpu/mali/tensor_computing_mali.h"
@@ -39,17 +33,9 @@ EE check(Tensor inputTensorA,
     TensorDesc outputDesc = outputTensor.get_desc();
     void *output = get_ptr_from_tensor(outputTensor, arch);
     EE ret = NOT_SUPPORTED;
-    if (IS_GENERAL(arch)) {
+    if (IS_CPU(arch)) {
 #ifdef _USE_GENERAL
-        ret = check_general(inputDescA, inputA, inputDescB, inputB, p, outputDesc, output);
-#endif
-#ifdef _USE_X86
-    } else if (IS_X86(arch)) {
-        ret = check_x86(inputDescA, inputA, inputDescB, inputB, p, outputDesc, output);
-#endif
-#ifdef _USE_NEON
-    } else if (IS_ARM(arch)) {
-        ret = check_arm(inputDescA, inputA, inputDescB, inputB, p, outputDesc, output);
+        ret = check_cpu(inputDescA, inputA, inputDescB, inputB, p, outputDesc, output);
 #endif
 #ifdef _USE_GPU
     } else if (IS_GPU(arch)) {
@@ -63,27 +49,16 @@ EE check(Tensor inputTensorA,
 EE check_infer_output_size(
     std::vector<Tensor *> inputTensor, Tensor *outputTensor, ArchInfo_t archInfo)
 {
-    EE ret = NOT_SUPPORTED;
     if (outputTensor == nullptr) {
         CHECK_STATUS(NULL_POINTER);
     }
-    for (auto p : inputTensor) {
-        if (p == nullptr) {
-            CHECK_STATUS(NULL_POINTER);
-        }
+    TensorDesc outputDesc = inputTensor[0]->get_desc();
+    if (inputTensor.size() > 1 && inputTensor[0]->length() < inputTensor[1]->length()) {
+        outputDesc = inputTensor[1]->get_desc();
     }
-    TensorDesc inputDesc = inputTensor[0]->get_desc();
-    TensorDesc outputDesc = outputTensor->get_desc();
-    outputDesc.dt = DT_I32;
-    outputDesc.nDims = 1;
-    outputDesc.df = DF_NORMAL;
-    outputDesc.dims[0] = inputDesc.dims[inputDesc.nDims - 1];
+    outputDesc.dt = DT_U8;
     if (IS_GPU(archInfo->arch)) {
-#ifdef _USE_GPU
-        if (outputDesc.dims[0] > 1) {
-            CHECK_STATUS(NOT_SUPPORTED);
-        }
-#endif
+        outputDesc.dt = DT_I32;
     }
     outputTensor->resize(outputDesc);
     return SUCCESS;

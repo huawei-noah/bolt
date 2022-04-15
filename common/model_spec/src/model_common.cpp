@@ -17,7 +17,7 @@
 OperatorSpec mt_create_operator(const char *name, OperatorType type, U32 num_inputs, U32 num_outputs)
 {
     OperatorSpec newOperator;
-    memset(&(newOperator), 0, sizeof(OperatorSpec));
+    UNI_MEMSET(&(newOperator), 0, sizeof(OperatorSpec));
     U32 length = UNI_MIN(strlen(name), NAME_LEN - 1);
     str_copy(newOperator.name, name, length);
     if (length < NAME_LEN) {
@@ -25,14 +25,14 @@ OperatorSpec mt_create_operator(const char *name, OperatorType type, U32 num_inp
     }
     newOperator.type = type;
     newOperator.num_inputs = num_inputs;
-    newOperator.input_tensors_name = (I8 **)mt_new_storage(num_inputs * sizeof(I8 *));
+    newOperator.input_tensors_name = (I8 **)mt_malloc(num_inputs * sizeof(I8 *));
     for (U32 i = 0; i < num_inputs; i++) {
-        newOperator.input_tensors_name[i] = (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
+        newOperator.input_tensors_name[i] = (I8 *)mt_malloc(NAME_LEN * sizeof(I8));
     }
     newOperator.num_outputs = num_outputs;
-    newOperator.output_tensors_name = (I8 **)mt_new_storage(num_outputs * sizeof(I8 *));
+    newOperator.output_tensors_name = (I8 **)mt_malloc(num_outputs * sizeof(I8 *));
     for (U32 i = 0; i < num_outputs; i++) {
-        newOperator.output_tensors_name[i] = (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
+        newOperator.output_tensors_name[i] = (I8 *)mt_malloc(NAME_LEN * sizeof(I8));
     }
     newOperator.tensor_positions = NULL;
     newOperator.num_quant_feature = 0;
@@ -46,7 +46,7 @@ EE mt_insert_operator(ModelSpec *ms, int index, OperatorSpec newOperator)
         return NULL_POINTER;
     }
     OperatorSpec *operatorList =
-        (OperatorSpec *)mt_new_storage(sizeof(OperatorSpec) * (ms->num_operator_specs + 1));
+        (OperatorSpec *)mt_malloc(sizeof(OperatorSpec) * (ms->num_operator_specs + 1));
     for (int i = 0; i < index; i++) {
         operatorList[i] = ms->ops[i];
     }
@@ -54,7 +54,7 @@ EE mt_insert_operator(ModelSpec *ms, int index, OperatorSpec newOperator)
     for (int i = index; i < ms->num_operator_specs; i++) {
         operatorList[i + 1] = ms->ops[i];
     }
-    delete ms->ops;
+    mt_free(ms->ops);
     ms->ops = operatorList;
     ms->num_operator_specs++;
     return SUCCESS;
@@ -64,7 +64,7 @@ WeightSpec mt_create_weight(
     const char *name, DataType dataType, U32 bytesOfWeight, U32 bytesOfVec, U32 numQuantScale)
 {
     WeightSpec newWeight;
-    memset(&(newWeight), 0, sizeof(WeightSpec));
+    UNI_MEMSET(&(newWeight), 0, sizeof(WeightSpec));
     U32 length = UNI_MIN(strlen(name), NAME_LEN - 1);
     str_copy(newWeight.op_name, name, length);
     if (length < NAME_LEN) {
@@ -72,11 +72,11 @@ WeightSpec mt_create_weight(
     }
     newWeight.mdt = dataType;
     newWeight.bytes_of_weight = bytesOfWeight;
-    newWeight.weight = (U8 *)mt_new_storage(bytesOfWeight);
+    newWeight.weight = (U8 *)mt_malloc(bytesOfWeight);
     newWeight.bytes_of_vec = bytesOfVec;
-    newWeight.vec = (U8 *)mt_new_storage(bytesOfVec);
+    newWeight.vec = (U8 *)mt_malloc(bytesOfVec);
     newWeight.num_quant_scale = numQuantScale;
-    newWeight.weight_scale = (QuantSpec *)mt_new_storage(sizeof(QuantSpec) * numQuantScale);
+    newWeight.weight_scale = (QuantSpec *)mt_malloc(sizeof(QuantSpec) * numQuantScale);
     return newWeight;
 }
 
@@ -100,29 +100,16 @@ bool isDeprecatedOpWeight(const ModelSpec *spec, int index)
 
 EE str_copy(I8 *dst, const I8 *src, I32 srcLen, I32 dstLen)
 {
-    //memset(dst, 0, dstLen);
+    //UNI_MEMSET(dst, 0, dstLen);
     //I32 copyLen = UNI_MIN(srcLen, dstLen);
-    //memcpy(dst, src, copyLen);
-    memset(dst, 0, dstLen);
+    //UNI_MEMCPY(dst, src, copyLen);
+    UNI_MEMSET(dst, 0, dstLen);
     I32 copyLen = NAME_LEN - 1;
     if (copyLen > srcLen) {
         copyLen = srcLen;
     }
-    memcpy(dst, src, copyLen * sizeof(I8));
+    UNI_MEMCPY(dst, src, copyLen * sizeof(I8));
     return SUCCESS;
-}
-
-void *mt_new_storage(size_t size)
-{
-    void *ret = nullptr;
-    if (size > 0) {
-        try {
-            ret = operator new(size);
-        } catch (const std::bad_alloc &e) {
-            UNI_ERROR_LOG("%s alloc %d bytes failed\n", __FUNCTION__, (int)size);
-        }
-    }
-    return ret;
 }
 
 std::string concat_dir_file(std::string dir, std::string file)
@@ -142,4 +129,67 @@ std::string concat_dir_file(std::string dir, std::string file)
     }
 
     return ret;
+}
+
+std::vector<std::string> string_parser(std::string s, std::string delimiter)
+{
+    std::vector<std::string> res;
+    size_t pos = 0;
+    std::string token;
+    while ((pos = s.find(delimiter)) != std::string::npos) {
+        token = s.substr(0, pos);
+        res.push_back(token);
+        s.erase(0, pos + delimiter.length());
+    }
+    res.push_back(s);
+    return res;
+}
+
+void modify_ms_inputs_and_outputs(
+    ModelSpec *ms, std::string modifiedInputs, std::string modifiedOutputs)
+{
+    std::map<std::string, std::string> modifiedStrMap;
+    if (modifiedInputs.length() > 0) {
+        std::vector<std::string> modified_input_names = string_parser(modifiedInputs, ",");
+        if ((I32)(modified_input_names.size()) != ms->num_inputs) {
+            UNI_ERROR_LOG("input names not match, please check your params meticulously.\n");
+        }
+        for (int i = 0; i < ms->num_inputs; i++) {
+            std::string tmpStr = modified_input_names[i];
+            modifiedStrMap[std::string(ms->input_names[i])] = tmpStr;
+            str_copy(ms->input_names[i], tmpStr.c_str(), tmpStr.length());
+        }
+    }
+    if (modifiedOutputs.length() > 0) {
+        std::vector<std::string> modified_output_names = string_parser(modifiedOutputs, ",");
+        if ((I32)(modified_output_names.size()) != ms->num_outputs) {
+            UNI_ERROR_LOG("output names not match, please check your params meticulously.\n");
+        }
+        for (int i = 0; i < ms->num_outputs; i++) {
+            std::string tmpStr = modified_output_names[i];
+            modifiedStrMap[std::string(ms->output_names[i])] = tmpStr;
+            str_copy(ms->output_names[i], tmpStr.c_str(), tmpStr.length());
+        }
+    }
+
+    if (modifiedStrMap.size() > 0) {
+        for (I32 i = 0; i < ms->num_operator_specs; i++) {
+            for (U32 j = 0; j < ms->ops[i].num_inputs; j++) {
+                std::string curStr = std::string(ms->ops[i].input_tensors_name[j]);
+                if (modifiedStrMap.find(curStr) != modifiedStrMap.end()) {
+                    std::string modifiedStr = modifiedStrMap[curStr];
+                    str_copy(ms->ops[i].input_tensors_name[j], modifiedStr.c_str(),
+                        modifiedStr.length());
+                }
+            }
+            for (U32 j = 0; j < ms->ops[i].num_outputs; j++) {
+                std::string curStr = std::string(ms->ops[i].output_tensors_name[j]);
+                if (modifiedStrMap.find(curStr) != modifiedStrMap.end()) {
+                    std::string modifiedStr = modifiedStrMap[curStr];
+                    str_copy(ms->ops[i].output_tensors_name[j], modifiedStr.c_str(),
+                        modifiedStr.length());
+                }
+            }
+        }
+    }
 }

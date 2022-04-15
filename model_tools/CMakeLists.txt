@@ -10,6 +10,8 @@ FATAL: can not find bolt.cmake in <BOLT_ROOT>/common/cmakes directory,
     ")
 endif (BOLT_CONFIGURE_FILE)
 
+include_directories(${JSONCPP_INCLUDE_DIR})
+
 project(model_tools)
 
 set_policy()

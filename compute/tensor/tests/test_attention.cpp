@@ -56,7 +56,7 @@ int attentionTest(int argc, char **argv, DataType dt)
         }
     }
 
-    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inDesc));
+    UNI_MEMCPY(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inDesc));
 
     if (UT_CHECK) {
         CHECK_STATUS(attention(inputTensor, outputTensor, &UT_CPU_ARCHINFO));

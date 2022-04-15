@@ -20,7 +20,9 @@
   - [engine](../inference/engine) hosts the inference engine of neural networks.
   - [flow](../inference/flow) hosts the multi-backends(CPU+GPU) heterogeneous device schedule for time series data.
   - [examples](../inference/examples) gives some application examples (Network Benchmark, ImageNet classification).
-- [kit](../kit)  
+- [kit](../kit)
   - kit provides some application demos.
+- [Training](../training)
+  - training provides all on-device training modules and examples.
 
 For API, Flow and operator development, please refer to [DEVELOPER.md](DEVELOPER.md).

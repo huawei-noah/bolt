@@ -49,7 +49,8 @@ int tfsliceTest(int argc, char **argv, DataType dt)
     Tensor inputTensorCpu;
     inputTensorCpu.resize(inputDesc);
     inputTensorCpu.alloc();
-    memcpy(get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), input_cpu, tensorNumBytes(inputDesc));
+    UNI_MEMCPY(
+        get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), input_cpu, tensorNumBytes(inputDesc));
 
     Tensor outputTensorCpu;
     Tensor tmpTensorCpu;
@@ -110,7 +111,7 @@ int tfsliceTest(int argc, char **argv, DataType dt)
 
     char buffer[150];
     char params[120];
-    memset(params, 0, 120);
+    UNI_MEMSET(params, 0, 120);
     sprintf(params, "(%u %u %u %u)=(%u %u %u %u)", in, ic, ih, iw, on, oc, oh, ow);
     sprintf(buffer, "%20s, %80s", "tfslice", params);
 #ifdef _DEBUG

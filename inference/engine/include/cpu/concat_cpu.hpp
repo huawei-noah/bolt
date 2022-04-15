@@ -44,7 +44,8 @@ public:
     U32 infer_tmp_memory_size() override
     {
         U32 bytes = 0;
-        CHECK_STATUS(concat_infer_forward_tmp_bytes(this->inputTensors, &bytes, &this->archInfo));
+        CHECK_STATUS(concat_infer_forward_tmp_bytes(
+            this->inputTensors, this->outputTensors[0], &bytes, &this->archInfo));
         return bytes;
     }
 };

@@ -51,7 +51,7 @@ int convolutionTest(int argc, char *argv[], DataType dt)
     TensorDesc filterDesc = tensor4df(dt, DF_NCHW, fn, fc, fh, fw);
     TensorDesc biasDesc = tensor1d(dt, oc);
     ConvolutionParamSpec p = createConvolutionParamSpec(group, 1, fh, fw, 1, stride, stride, 0, 0,
-        padding, padding, padding, padding, 1, 1, 1, fn, Convolution_Depthwise_Pointwise);
+        padding, padding, padding, padding, 1, 1, 1, fn, CONVOLUTION_DEPTHWISE_POINTWISE);
 
     // setup input, filter, bias
     U8 *input = ut_input_v(in * ic * ih * iw, dt, UT_INIT_RANDOM);
@@ -76,12 +76,15 @@ int convolutionTest(int argc, char *argv[], DataType dt)
     filterTensor.alloc();
     filterTensorRef.alloc();
     biasTensor.alloc();
-    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, bytesOf(dt) * in * ic * ih * iw);
-    memcpy(get_ptr_from_tensor(inputTensorRef, CPU_GENERAL), input, bytesOf(dt) * in * ic * ih * iw);
-    memcpy(get_ptr_from_tensor(filterTensor, CPU_GENERAL), filter, bytesOf(dt) * fn * fc * fh * fw);
-    memcpy(
+    UNI_MEMCPY(
+        get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, bytesOf(dt) * in * ic * ih * iw);
+    UNI_MEMCPY(
+        get_ptr_from_tensor(inputTensorRef, CPU_GENERAL), input, bytesOf(dt) * in * ic * ih * iw);
+    UNI_MEMCPY(
+        get_ptr_from_tensor(filterTensor, CPU_GENERAL), filter, bytesOf(dt) * fn * fc * fh * fw);
+    UNI_MEMCPY(
         get_ptr_from_tensor(filterTensorRef, CPU_GENERAL), filter, bytesOf(dt) * fn * fc * fh * fw);
-    memcpy(get_ptr_from_tensor(biasTensor, CPU_GENERAL), bias, bytesOf(dt) * oc);
+    UNI_MEMCPY(get_ptr_from_tensor(biasTensor, CPU_GENERAL), bias, bytesOf(dt) * oc);
 
     // setup output, bias
     CHECK_STATUS(convolution_infer_output_size(

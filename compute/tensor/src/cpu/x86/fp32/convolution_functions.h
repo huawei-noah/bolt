@@ -175,19 +175,17 @@ T gcd(T u, T v)
     return u;
 }
 
-#if defined(_WIN32) && defined(_USE_OPENMP)
+#ifdef _USE_OPENMP
 struct OpenMPController {
-    I32 ompThread;
+    bool useOmp;
     void checkAndSetOpenMP(I32 ohow, I32 threshold, I32 blockNums)
     {
-        ompThread = OMP_NUM_THREADS;
+#ifdef _WIN32 
         if (ohow < threshold && blockNums < OMP_NUM_THREADS) {
-            OMP_NUM_THREADS = 1;
+            useOmp = false;
         }
+#endif
     }
-    void resetOpenMP()
-    {
-        OMP_NUM_THREADS = ompThread;
-    }
+    OpenMPController(): useOmp(true) {}
 };
 #endif

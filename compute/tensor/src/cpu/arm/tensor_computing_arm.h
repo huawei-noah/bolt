@@ -179,8 +179,13 @@ EE rnncell_arm(TensorDesc xDesc,
     void *currentH,
     Arch arch);
 
-EE layer_normalization_arm(
-    TensorDesc inputDesc, void *input, void *alpha, void *beta, TensorDesc outputDesc, void *output);
+EE layer_normalization_arm(TensorDesc inputDesc,
+    void *input,
+    LayerNormParamSpec p,
+    void *alpha,
+    void *beta,
+    TensorDesc outputDesc,
+    void *output);
 
 EE pooling_arm(TensorDesc inputDesc,
     const void *input,
@@ -206,6 +211,9 @@ EE scale_arm(TensorDesc inputDesc,
     void *output);
 
 EE softmax_arm(
+    TensorDesc inputDesc, const void *input, SoftmaxParamSpec p, TensorDesc outputDesc, void *output);
+
+EE logsoftmax_arm(
     TensorDesc inputDesc, const void *input, SoftmaxParamSpec p, TensorDesc outputDesc, void *output);
 
 EE check_arm(TensorDesc inputDescA,

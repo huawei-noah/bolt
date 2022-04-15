@@ -110,7 +110,7 @@ inline EE convolution_transform_filter_kernel_int8(TensorDesc filterDesc,
     CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
     if (fdf == ftmDataFormat) {
         *ftmDesc = filterDesc;
-        memcpy(ftmArray, filterArray, fn * fc * fh * fw * bytesOf(fdt));
+        UNI_MEMCPY(ftmArray, filterArray, fn * fc * fh * fw * bytesOf(fdt));
         return SUCCESS;
     }
     if (fdf != DF_NCHW) {

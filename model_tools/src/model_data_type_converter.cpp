@@ -135,16 +135,15 @@ inline DataType get_storage_type(
     for (int i = 0; i < ms->num_operator_specs; i++) {
         std::string name = ms->ops[i].name;
         if (name == opName) {
-            auto opType = ms->ops[i].type;
-            if (OT_LayerNorm == opType || OT_Scale == opType || OT_PRelu == opType) {
-                return originalType;
-            }
-            if ("INT8" == storageMode) {
-                return DT_I8;
-            }
             if (1 == ms->ops[i].num_quant_feature && 1 == ms->ops[i].feature_scale[0].num_scale &&
                 0 == ms->ops[i].feature_scale[0].scale[0]) {
-                return originalType;
+                if ("INT8" == storageMode) {
+                    return (originalType == DT_F16) ? DT_F16_8Q : DT_F32_8Q;
+                } else if ("MIX" == storageMode) {
+                    return originalType;
+                } else {
+                    CHECK_STATUS(NOT_SUPPORTED);
+                }
             } else {
                 return DT_I8;
             }
@@ -162,51 +161,54 @@ EE ms_datatype_converter(
     CHECK_STATUS(getTargetDataType(convertMode, &(targetMs->dt)));
 
     targetMs->num_inputs = originalMs->num_inputs;
-    targetMs->input_names = (I8 **)mt_new_storage(targetMs->num_inputs * sizeof(I8 *));
+    targetMs->input_names = (I8 **)mt_malloc(targetMs->num_inputs * sizeof(I8 *));
     for (I32 j = 0; j < targetMs->num_inputs; j++) {
-        targetMs->input_names[j] = (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
+        targetMs->input_names[j] = (I8 *)mt_malloc(NAME_LEN * sizeof(I8));
         str_copy(targetMs->input_names[j], originalMs->input_names[j], NAME_LEN);
     }
-    targetMs->input_dims = (TensorDesc *)mt_new_storage(targetMs->num_inputs * sizeof(TensorDesc));
-    memcpy(targetMs->input_dims, originalMs->input_dims, targetMs->num_inputs * sizeof(TensorDesc));
+    targetMs->input_dims = (TensorDesc *)mt_malloc(targetMs->num_inputs * sizeof(TensorDesc));
+    UNI_MEMCPY(
+        targetMs->input_dims, originalMs->input_dims, targetMs->num_inputs * sizeof(TensorDesc));
     for (I32 i = 0; i < targetMs->num_inputs; i++) {
         CHECK_STATUS(getTargetDataType(convertMode, &(targetMs->input_dims[i].dt)));
     }
 
     targetMs->num_outputs = originalMs->num_outputs;
-    targetMs->output_names = (I8 **)mt_new_storage(targetMs->num_outputs * sizeof(I8 *));
+    targetMs->output_names = (I8 **)mt_malloc(targetMs->num_outputs * sizeof(I8 *));
     for (int j = 0; j < targetMs->num_outputs; j++) {
-        targetMs->output_names[j] = (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
+        targetMs->output_names[j] = (I8 *)mt_malloc(NAME_LEN * sizeof(I8));
         str_copy(targetMs->output_names[j], originalMs->output_names[j], NAME_LEN);
     }
 
     targetMs->num_operator_specs = originalMs->num_operator_specs;
     OperatorSpec *opsPtr =
-        (OperatorSpec *)mt_new_storage(targetMs->num_operator_specs * sizeof(OperatorSpec));
+        (OperatorSpec *)mt_malloc(targetMs->num_operator_specs * sizeof(OperatorSpec));
     std::map<std::string, DataType> weightDataTypeMap, vecDataTypeMap;
     for (int i = 0; i < targetMs->num_operator_specs; i++) {
         str_copy(opsPtr[i].name, originalMs->ops[i].name, NAME_LEN);
         opsPtr[i].type = originalMs->ops[i].type;
         opsPtr[i].num_inputs = originalMs->ops[i].num_inputs;
-        opsPtr[i].input_tensors_name = (I8 **)mt_new_storage(opsPtr[i].num_inputs * sizeof(I8 *));
+        opsPtr[i].input_tensors_name = (I8 **)mt_malloc(opsPtr[i].num_inputs * sizeof(I8 *));
         for (U32 j = 0; j < opsPtr[i].num_inputs; j++) {
-            opsPtr[i].input_tensors_name[j] = (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
-            memcpy(opsPtr[i].input_tensors_name[j], originalMs->ops[i].input_tensors_name[j],
+            opsPtr[i].input_tensors_name[j] = (I8 *)mt_malloc(NAME_LEN * sizeof(I8));
+            UNI_MEMCPY(opsPtr[i].input_tensors_name[j], originalMs->ops[i].input_tensors_name[j],
                 NAME_LEN);
         }
         opsPtr[i].num_outputs = originalMs->ops[i].num_outputs;
-        opsPtr[i].output_tensors_name = (I8 **)mt_new_storage(opsPtr[i].num_outputs * sizeof(I8 *));
+        opsPtr[i].output_tensors_name = (I8 **)mt_malloc(opsPtr[i].num_outputs * sizeof(I8 *));
         for (U32 j = 0; j < opsPtr[i].num_outputs; j++) {
-            opsPtr[i].output_tensors_name[j] = (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
-            memcpy(opsPtr[i].output_tensors_name[j], originalMs->ops[i].output_tensors_name[j],
+            opsPtr[i].output_tensors_name[j] = (I8 *)mt_malloc(NAME_LEN * sizeof(I8));
+            UNI_MEMCPY(opsPtr[i].output_tensors_name[j], originalMs->ops[i].output_tensors_name[j],
                 NAME_LEN);
         }
 
         if (OT_None != opsPtr[i].type) {
             U32 numTensors = opsPtr[i].num_inputs + opsPtr[i].num_outputs;
-            opsPtr[i].tensor_positions = (I32 *)mt_new_storage(numTensors * sizeof(I32));
-            memcpy(opsPtr[i].tensor_positions, originalMs->ops[i].tensor_positions,
-                numTensors * sizeof(I32));
+            opsPtr[i].tensor_positions = (I32 *)mt_malloc(numTensors * sizeof(I32));
+            if (originalMs->ops[i].tensor_positions != nullptr) {
+                UNI_MEMCPY(opsPtr[i].tensor_positions, originalMs->ops[i].tensor_positions,
+                    numTensors * sizeof(I32));
+            }
         } else {
             opsPtr[i].tensor_positions = nullptr;
         }
@@ -216,14 +218,14 @@ EE ms_datatype_converter(
             opsPtr[i].feature_scale = nullptr;
         } else {
             opsPtr[i].feature_scale =
-                (QuantSpec *)mt_new_storage(opsPtr[i].num_quant_feature * sizeof(QuantSpec));
+                (QuantSpec *)mt_malloc(opsPtr[i].num_quant_feature * sizeof(QuantSpec));
             for (U32 j = 0; j < opsPtr[i].num_quant_feature; j++) {
                 opsPtr[i].feature_scale[j].num_scale = originalMs->ops[i].feature_scale[j].num_scale;
                 int num = opsPtr[i].feature_scale[j].num_scale;
 
-                opsPtr[i].feature_scale[j].scale = (F32 *)mt_new_storage(num * sizeof(F32));
-                memcpy(opsPtr[i].feature_scale[j].scale, originalMs->ops[i].feature_scale[j].scale,
-                    num * sizeof(F32));
+                opsPtr[i].feature_scale[j].scale = (F32 *)mt_malloc(num * sizeof(F32));
+                UNI_MEMCPY(opsPtr[i].feature_scale[j].scale,
+                    originalMs->ops[i].feature_scale[j].scale, num * sizeof(F32));
             }
         }
 
@@ -236,13 +238,18 @@ EE ms_datatype_converter(
                     getTargetDataType(convertMode, &(opsPtr[i].ps.shared_weight_spec.desc.dt)));
                 break;
             }
+            case OT_ConstantOfShape: {
+                CHECK_STATUS(
+                    getTargetDataType(convertMode, &(opsPtr[i].ps.constant_of_shape_spec.dt)));
+                break;
+            }
             case OT_PreAllocatedMemory: {
                 CHECK_STATUS(getTargetDataType(
                     convertMode, &(opsPtr[i].ps.preallocated_memory_spec.desc.dt)));
                 break;
             }
             case OT_Cast: {
-                CHECK_STATUS(getTargetDataType(convertMode, &(opsPtr[i].ps.cast_spec.targetDt)));
+                CHECK_STATUS(getTargetDataType(convertMode, &(opsPtr[i].ps.cast_spec.dt)));
                 break;
             }
             case OT_Gather: {
@@ -265,8 +272,7 @@ EE ms_datatype_converter(
     }
     targetMs->ops = opsPtr;
     targetMs->num_weight_specs = originalMs->num_weight_specs;
-    WeightSpec *wsPtr =
-        (WeightSpec *)mt_new_storage(targetMs->num_weight_specs * sizeof(WeightSpec));
+    WeightSpec *wsPtr = (WeightSpec *)mt_malloc(targetMs->num_weight_specs * sizeof(WeightSpec));
     F32 maxQuantizationError = 0;
     char *environmentSetting = getenv("BOLT_INT8_STORAGE_ERROR_THRESHOLD");
     F32 quantizationErrorThreshold = (environmentSetting != NULL) ? atof(environmentSetting) : 0.002;
@@ -289,7 +295,8 @@ EE ms_datatype_converter(
             if (wdt == DT_F32 || wdt == DT_F16) {
                 wsPtr[i].mdt = get_storage_type(targetMs, wsPtr[i].op_name, storageMode, wdt);
             }
-            if (wsPtr[i].mdt == DT_I8 && (convertMode == F32_to_F32 || convertMode == F32_to_F16) &&
+            if ((wsPtr[i].mdt == DT_F32_8Q || wsPtr[i].mdt == DT_F16_8Q) &&
+                (convertMode == F32_to_F32 || convertMode == F32_to_F16) &&
                 originalMs->ws[i].mdt == DT_F32) {
                 F32 error = quantizationError(originalMs, originalMs->ws[i].op_name);
                 maxQuantizationError = UNI_MAX(maxQuantizationError, error);
@@ -305,22 +312,26 @@ EE ms_datatype_converter(
             }
 
             weightNum = originalMs->ws[i].bytes_of_weight / bytesOf(originalMs->ws[i].mdt);
-            wsPtr[i].bytes_of_weight = weightNum * bytesOf(wsPtr[i].mdt);
+            if ((wsPtr[i].mdt == DT_F32_8Q || wsPtr[i].mdt == DT_F16_8Q)) {
+                wsPtr[i].bytes_of_weight = weightNum;
+            } else {
+                wsPtr[i].bytes_of_weight = weightNum * bytesOf(wsPtr[i].mdt);
+            }
         }
-        wsPtr[i].weight = (U8 *)mt_new_storage(wsPtr[i].bytes_of_weight);
+        wsPtr[i].weight = (U8 *)mt_malloc(wsPtr[i].bytes_of_weight);
 
         wsPtr[i].num_quant_scale = originalMs->ws[i].num_quant_scale;
         if (0 == wsPtr[i].num_quant_scale) {
             wsPtr[i].weight_scale = nullptr;
         } else {
             wsPtr[i].weight_scale =
-                (QuantSpec *)mt_new_storage(wsPtr[i].num_quant_scale * sizeof(QuantSpec));
+                (QuantSpec *)mt_malloc(wsPtr[i].num_quant_scale * sizeof(QuantSpec));
             for (U32 j = 0; j < wsPtr[i].num_quant_scale; j++) {
                 wsPtr[i].weight_scale[j].num_scale = originalMs->ws[i].weight_scale[j].num_scale;
                 int num = wsPtr[i].weight_scale[j].num_scale;
 
-                wsPtr[i].weight_scale[j].scale = (F32 *)mt_new_storage(num * sizeof(F32));
-                memcpy(wsPtr[i].weight_scale[j].scale, originalMs->ws[i].weight_scale[j].scale,
+                wsPtr[i].weight_scale[j].scale = (F32 *)mt_malloc(num * sizeof(F32));
+                UNI_MEMCPY(wsPtr[i].weight_scale[j].scale, originalMs->ws[i].weight_scale[j].scale,
                     num * sizeof(F32));
             }
         }
@@ -335,22 +346,27 @@ EE ms_datatype_converter(
             vdt = DT_F16;
         }
         wsPtr[i].bytes_of_vec = biasNum * bytesOf(vdt);
-        wsPtr[i].vec = (U8 *)mt_new_storage(wsPtr[i].bytes_of_vec);
+        wsPtr[i].vec = (U8 *)mt_malloc(wsPtr[i].bytes_of_vec);
 
         if (vecDataTypeMap.find(wsPtr[i].op_name) != vecDataTypeMap.end()) {
             if (wsPtr[i].bytes_of_vec > 0) {
-                memcpy(wsPtr[i].vec, originalMs->ws[i].vec, originalMs->ws[i].bytes_of_vec);
+                UNI_MEMCPY(wsPtr[i].vec, originalMs->ws[i].vec, originalMs->ws[i].bytes_of_vec);
             }
         }
-        if (DT_I32 == originalMs->ws[i].mdt || DT_U32 == originalMs->ws[i].mdt) {
+        if (DT_I32 == originalMs->ws[i].mdt ||
+            DT_U32 == originalMs->ws[i].mdt ||
+            DT_U8 == originalMs->ws[i].mdt)
+        {
             if (wsPtr[i].bytes_of_weight > 0) {
-                memcpy(wsPtr[i].weight, originalMs->ws[i].weight, originalMs->ws[i].bytes_of_weight);
+                UNI_MEMCPY(
+                    wsPtr[i].weight, originalMs->ws[i].weight, originalMs->ws[i].bytes_of_weight);
             }
             if (wsPtr[i].bytes_of_vec > 0) {
-                memcpy(wsPtr[i].vec, originalMs->ws[i].vec, originalMs->ws[i].bytes_of_vec);
+                UNI_MEMCPY(wsPtr[i].vec, originalMs->ws[i].vec, originalMs->ws[i].bytes_of_vec);
             }
         } else {
             switch (wsPtr[i].mdt) {
+                case DT_I64:
                 case DT_I32:
                 case DT_U32:
                 case DT_F32:
@@ -363,13 +379,15 @@ EE ms_datatype_converter(
                     }
                     break;
                 }
+                case DT_F32_8Q:
+                case DT_F16_8Q:
                 case DT_I8: {
                     F32 scale = ws_datatype_converter_int8(
                         originalMs->ws[i].weight, wsPtr[i].weight, weightNum);
                     wsPtr[i].num_quant_scale = 1;
-                    wsPtr[i].weight_scale = (QuantSpec *)mt_new_storage(sizeof(QuantSpec));
+                    wsPtr[i].weight_scale = (QuantSpec *)mt_malloc(sizeof(QuantSpec));
                     wsPtr[i].weight_scale[0].num_scale = 1;
-                    wsPtr[i].weight_scale[0].scale = (F32 *)mt_new_storage(sizeof(F32));
+                    wsPtr[i].weight_scale[0].scale = (F32 *)mt_malloc(sizeof(F32));
                     wsPtr[i].weight_scale[0].scale[0] = scale;
 
                     if (vecDataTypeMap.find(wsPtr[i].op_name) == vecDataTypeMap.end()) {
@@ -405,7 +423,7 @@ EE ms_datatype_converter(
 
     if (nullptr != originalMs->op_relationship_entries) {
         targetMs->num_op_tensor_entries = originalMs->num_op_tensor_entries;
-        targetMs->op_relationship_entries = (OperatorRelationshipMapEntry *)mt_new_storage(
+        targetMs->op_relationship_entries = (OperatorRelationshipMapEntry *)mt_malloc(
             targetMs->num_op_tensor_entries * sizeof(OperatorRelationshipMapEntry));
         for (int i = 0; i < targetMs->num_op_tensor_entries; i++) {
             str_copy(targetMs->op_relationship_entries[i].op,
@@ -413,22 +431,22 @@ EE ms_datatype_converter(
 
             targetMs->op_relationship_entries[i].num_inputs =
                 originalMs->op_relationship_entries[i].num_inputs;
-            targetMs->op_relationship_entries[i].input_op_names = (I8 **)mt_new_storage(
-                targetMs->op_relationship_entries[i].num_inputs * sizeof(I8 *));
+            targetMs->op_relationship_entries[i].input_op_names =
+                (I8 **)mt_malloc(targetMs->op_relationship_entries[i].num_inputs * sizeof(I8 *));
             for (U32 j = 0; j < targetMs->op_relationship_entries[i].num_inputs; j++) {
                 targetMs->op_relationship_entries[i].input_op_names[j] =
-                    (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
+                    (I8 *)mt_malloc(NAME_LEN * sizeof(I8));
                 str_copy(targetMs->op_relationship_entries[i].input_op_names[j],
                     originalMs->op_relationship_entries[i].input_op_names[j], NAME_LEN);
             }
 
             targetMs->op_relationship_entries[i].num_outputs =
                 originalMs->op_relationship_entries[i].num_outputs;
-            targetMs->op_relationship_entries[i].output_op_names = (I8 **)mt_new_storage(
-                targetMs->op_relationship_entries[i].num_outputs * sizeof(I8 *));
+            targetMs->op_relationship_entries[i].output_op_names =
+                (I8 **)mt_malloc(targetMs->op_relationship_entries[i].num_outputs * sizeof(I8 *));
             for (U32 j = 0; j < targetMs->op_relationship_entries[i].num_outputs; j++) {
                 targetMs->op_relationship_entries[i].output_op_names[j] =
-                    (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
+                    (I8 *)mt_malloc(NAME_LEN * sizeof(I8));
                 str_copy(targetMs->op_relationship_entries[i].output_op_names[j],
                     originalMs->op_relationship_entries[i].output_op_names[j], NAME_LEN);
             }

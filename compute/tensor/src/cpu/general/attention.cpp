@@ -23,9 +23,9 @@ EE attention(
     }
 
     T minValue = -10000.0;
-    U32 count = array_sum_template<T>(input, toSequenceLength);
-    U32 valid = UNI_MIN(count, fromSequenceLength);
     for (U32 n = 0; n < batch; n++) {
+        U32 count = array_sum_template<T>(input + n * toSequenceLength, toSequenceLength);
+        U32 valid = UNI_MIN(count, fromSequenceLength);
         for (U32 i = 0; i < numHeads; i++) {
             for (U32 j = 0; j < valid; j++) {
                 for (U32 k = 0; k < toSequenceLength; k++) {

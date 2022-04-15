@@ -16,17 +16,32 @@
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
 
-EE preallocated_memory_infer_output_size(Tensor *outputTensor, ArchInfo_t archInfo)
+EE preallocated_memory_infer_output_size(std::vector<Tensor *> inputTensors,
+    PreAllocatedMemoryParamSpec p,
+    Tensor *outputTensor,
+    ArchInfo_t archInfo)
 {
     if (outputTensor == nullptr) {
         CHECK_STATUS(NULL_POINTER);
     }
-    TensorDesc outputDesc = outputTensor->get_desc();
-    outputTensor->resize(outputDesc);
+    TensorDesc outDesc = p.desc;
+    if (inputTensors.size() > 0) {
+        TensorDesc inDesc = inputTensors[0]->get_desc();
+        if (outDesc.nDims == 0) {
+            outDesc = inDesc;
+        } else {
+            for (U32 i = 0; i < UNI_MIN(inDesc.nDims, outDesc.nDims); i++) {
+                if (outDesc.dims[outDesc.nDims - 1 - i] <= 0) {
+                    outDesc.dims[outDesc.nDims - 1 - i] = inDesc.dims[inDesc.nDims - 1 - i];
+                }
+            }
+        }
+    }
+    outputTensor->resize(outDesc);
     return SUCCESS;
 }
 
-EE preallocated_memory(Tensor outputTensor, ArchInfo_t archInfo)
+EE preallocated_memory(PreAllocatedMemoryParamSpec p, Tensor outputTensor, ArchInfo_t archInfo)
 {
     auto arch = archInfo->arch;
     TensorDesc outputDesc = outputTensor.get_desc();
@@ -40,7 +55,7 @@ EE preallocated_memory(Tensor outputTensor, ArchInfo_t archInfo)
 #endif
 #ifdef _USE_CPU
     } else {
-        memset(output, 0, tensorNumBytes(outputDesc));
+        UNI_INIT(tensorNumElements(outputDesc), outputDesc.dt, p.value, output);
         ret = SUCCESS;
 #endif
     }

@@ -34,7 +34,7 @@ class SpliceFCOptimizer : public OPOptimizer {
                     continue;
                 }
 
-                // delete splice weight(forward indexes)
+                // remove splice weight(forward indexes)
                 int spliceWeightIndex = searchWeightIndex(spec, spec->ops[i].name);
                 CHECK_REQUIREMENT(spliceWeightIndex >= 0);
                 setWeightOperatorInvalid(spec, spliceWeightIndex);

@@ -15,6 +15,7 @@
 #define _H_IMAGE_GENERAL
 
 #include "tensor_desc.h"
+#include "parameter_spec.h"
 
-EE resize_bilinear_general(TensorDesc inputDesc, void *input, TensorDesc outputDesc, void *output);
+EE resize_bilinear_general(TensorDesc inputDesc, void *input, ResizeParamSpec p, TensorDesc outputDesc, void *output);
 #endif

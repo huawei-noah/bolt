@@ -11,8 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string.h>
-
 #include "tensor_computing.h"
 #include "blas_enhance.h"
 #ifdef _USE_GPU
@@ -196,10 +194,12 @@ EE fully_connected_transform_filter_bytes(Tensor filterTensor, void *bytes, Arch
         } else if (IS_X86(archInfo->arch)) {
             alignments = 8;
 #ifdef _USE_INT8
+            alignments = 16;
+            fh = (fh + 8 - 1) / 8 * 8;
             *size += UNI_MAX(fw, fh) * 4;
 #endif
         }
-        fh = (fh + alignments - 1) / alignments * alignments;
+        fw = (fw + alignments - 1) / alignments * alignments;
         *size += fw * fh + 32;
         *size *= bytesOf(fdt);
     }
@@ -248,7 +248,7 @@ EE fully_connected_transform_filter_kernel(TensorDesc inputDesc,
             }
         }
     } else {
-        memcpy(filterTransformed, filter, tensorNumBytes(filterDesc));
+        UNI_MEMCPY(filterTransformed, filter, tensorNumBytes(filterDesc));
     }
 
     U32 fh_after = fh;
@@ -391,13 +391,7 @@ EE fully_connected(Tensor inputTensor,
                 qIDesc.dt = DT_I8;
                 qODesc.dt = DT_I32;
             }
-            if (qIDesc.dt != idt) {
-                CHECK_STATUS(quantize_cpu(inputDesc, input, &qIDesc, tmp, &scaleI, arch));
-                inputDesc = qIDesc;
-                idt = qIDesc.dt;
-                input = (U8 *)tmp;
-                tmp = (U8 *)tmp + tensorNumBytes(inputDesc);
-            }
+            CHECK_REQUIREMENT(idt == qIDesc.dt);
             scaleO = scaleI * filterTensor.get_scale();
 
             if (IS_X86(arch)) {
@@ -406,8 +400,10 @@ EE fully_connected(Tensor inputTensor,
                 if (outputDesc.dt != qODesc.dt) {
                     offsetC += tensorNumBytes(qODesc);
                 }
+                void *transOffsetC = (void *)((U8 *)filter +
+                    UNI_ALIGN(filterDesc.dims[0], 16) * UNI_ALIGN(filterDesc.dims[1], 8));
                 CHECK_STATUS(quantize_bias_offsetC(
-                    bias, biasDesc, DT_I32, filter, filterDesc, &scaleO, offsetC));
+                    bias, biasDesc, DT_I32, transOffsetC, filterDesc, &scaleO, offsetC));
                 bias = nullptr;
                 if (outputDesc.dt == DT_U8_Q && outputTensor.get_scale() > 0) {
                     scale[1] = scale[1] / scaleO;
@@ -421,7 +417,7 @@ EE fully_connected(Tensor inputTensor,
                     CHECK_REQUIREMENT(DT_I8 == outputDesc.dt);
                     biasDesc.dt = DT_I32;
                     I32 *biasI = (I32 *)tmp;
-#ifdef __aarch64__
+#ifdef _USE_FP16
                     F16 *biasF = (F16 *)bias;
 #else
                     F32 *biasF = (F32 *)bias;
@@ -452,11 +448,11 @@ EE fully_connected(Tensor inputTensor,
                 U8 *outArray = (U8 *)output;
                 U32 size = tensorNumBytes(biasDesc);
                 for (U32 i = 0; i < M; i++) {
-                    memcpy(outArray + i * size, bias, size);
+                    UNI_MEMCPY(outArray + i * size, bias, size);
                 }
             }
         } else {
-            memset(output, 0, tensorNumBytes(outputDesc));
+            UNI_MEMSET(output, 0, tensorNumBytes(outputDesc));
         }
 
         // If weight is transformed for mmm, don't run as mvm

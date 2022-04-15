@@ -15,8 +15,10 @@ inline EE set_deconv_gemm_trans_fltbuf(U32 workChannelsPerThread,
     char *opt = kernelOpt->option;
     CHECK_STATUS(set_io_mem_name(GCL_MEM_BUF, outputMemType, ioMemName));
 
-    sprintf(kernelName, "deconv_gemm_trans_fltbuf_%d%d", item_c, item_k);
-    sprintf(kernelOpt->sourceName, "deconv_gemm_trans_fltbuf");
+    std::string kernel =
+        std::string("deconv_gemm_trans_fltbuf_") + std::to_string(item_c) + std::to_string(item_k);
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, "deconv_gemm_trans_fltbuf");
     CHECK_STATUS(set_value_define_opt(item_c, "C", opt));
     CHECK_STATUS(set_value_define_opt(item_k, "K", opt));
     CHECK_STATUS(set_io_mem_define_opt(GCL_MEM_BUF, outputMemType, opt));
@@ -131,9 +133,11 @@ inline EE set_deconv_gemm_f2s2_opt(U32 workChannelsPerThread,
     if (reuseOnW) {
         reuseOnWName = "w_";
     }
-    sprintf(kernelName, "deconv_gemm_f2s2%s_%s%s%s%d%d", devName, reuseOnWName.c_str(), ioMemName,
-        modeName, ON, KN);
-    sprintf(kernelOpt->sourceName, "deconv_gemm_f2s2%s", devName);
+    std::string source = std::string("deconv_gemm_f2s2") + devName;
+    std::string kernel = source + std::string("_") + reuseOnWName + ioMemName + modeName +
+        std::to_string(ON) + std::to_string(KN);
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, source.c_str());
     U32 IN = ON;
     U32 LN = ON;
     CHECK_STATUS(set_value_define_opt(ON, "ON", opt));

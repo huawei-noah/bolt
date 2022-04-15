@@ -88,7 +88,7 @@ int depthwisePointwiseConvolutionTest(
     pwActivationParamSpec.mode = ACTIVATION_NULL;
     ConvolutionParamSpec convParamSpec = createConvolutionParamSpec(group, 1, fh, fw, 1, stride,
         stride, 0, 0, pt, pb, pl, pr, dilation, dilation, dilation, fn,
-        Convolution_Depthwise_Pointwise);
+        CONVOLUTION_DEPTHWISE_POINTWISE);
 
     U32 dwFilterLen = 1 * fc * fh * fw;
     U32 pwFilterLen = fn * fc * 1 * 1;
@@ -181,14 +181,14 @@ int depthwisePointwiseConvolutionTest(
     if ((ic & 3) != 0) {
         U32 icAlign = (ic + 3) / 4 * 4;
         U8 *tmp = ut_input_v(icAlign, dt, UT_INIT_ZERO);
-        memcpy(tmp, dw_bias_cpu, ic * bytesOf(dt));
+        UNI_MEMCPY(tmp, dw_bias_cpu, ic * bytesOf(dt));
         free(dw_bias_cpu);
         dw_bias_cpu = tmp;
     }
     alloc_host_ptr(dwBiasTensor, dw_bias_cpu);
 
     U8 *pw_bias_val = ut_input_v(oc + 8, dt, UT_INIT_ZERO);
-    memcpy(pw_bias_val, pw_bias_cpu, oc * bytesOf(dt));
+    UNI_MEMCPY(pw_bias_val, pw_bias_cpu, oc * bytesOf(dt));
     free(pw_bias_cpu);
     pw_bias_cpu = pw_bias_val;
     alloc_host_ptr(pwBiasTensorImg, pw_bias_cpu);
@@ -216,7 +216,7 @@ int depthwisePointwiseConvolutionTest(
 
     std::vector<Tensor> inputTensors(1, inputTensor);
     CHECK_STATUS(depthwise_pointwise_convolution(inputTensors, dwFilterTensor, pwFilterTensor,
-        convParamSpec, alg, dwBiasTensor, pwBiasTensor, tmpTensors, outputTensor,
+        convParamSpec, alg, nullptr, dwBiasTensor, pwBiasTensor, tmpTensors, outputTensor,
         dwActivationParamSpec, pwActivationParamSpec, &archInfo));
     /*warp up*/
     UNI_INFO_LOG("warm up gpu:\n")
@@ -246,30 +246,31 @@ int depthwisePointwiseConvolutionTest(
     Tensor inputTensorCpu;
     inputTensorCpu.resize(inputDesc);
     inputTensorCpu.alloc();
-    memcpy(get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), input_cpu, tensorNumBytes(inputDesc));
+    UNI_MEMCPY(
+        get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), input_cpu, tensorNumBytes(inputDesc));
 
     Tensor dwFilterTensorCpu;
     dwFilterTensorCpu.resize(dwFilterDesc);
     dwFilterTensorCpu.alloc();
-    memcpy(get_ptr_from_tensor(dwFilterTensorCpu, CPU_GENERAL), dw_filter_cpu,
+    UNI_MEMCPY(get_ptr_from_tensor(dwFilterTensorCpu, CPU_GENERAL), dw_filter_cpu,
         tensorNumBytes(dwFilterDesc));
 
     Tensor pwFilterTensorCpu;
     pwFilterTensorCpu.resize(pwFilterDesc);
     pwFilterTensorCpu.alloc();
-    memcpy(get_ptr_from_tensor(pwFilterTensorCpu, CPU_GENERAL), pw_filter_cpu,
+    UNI_MEMCPY(get_ptr_from_tensor(pwFilterTensorCpu, CPU_GENERAL), pw_filter_cpu,
         tensorNumBytes(pwFilterDesc));
 
     Tensor dwBiasTensorCpu;
     dwBiasTensorCpu.resize(dwBiasDesc);
     dwBiasTensorCpu.alloc();
-    memcpy(
+    UNI_MEMCPY(
         get_ptr_from_tensor(dwBiasTensorCpu, CPU_GENERAL), dw_bias_cpu, tensorNumBytes(dwBiasDesc));
 
     Tensor pwBiasTensorCpu;
     pwBiasTensorCpu.resize(pwBiasDesc);
     pwBiasTensorCpu.alloc();
-    memcpy(
+    UNI_MEMCPY(
         get_ptr_from_tensor(pwBiasTensorCpu, CPU_GENERAL), pw_bias_cpu, tensorNumBytes(pwBiasDesc));
 
     Tensor outputTensorCpu;
@@ -287,8 +288,8 @@ int depthwisePointwiseConvolutionTest(
     std::vector<Tensor> inputTensorsCpu(1, inputTensorCpu);
     std::vector<Tensor> tmpTensorsCpu(1, tmpTensorCpu);
     CHECK_STATUS(depthwise_pointwise_convolution(inputTensorsCpu, dwFilterTensorCpu,
-        pwFilterTensorCpu, convParamSpec, DEPTHWISE_CONVOLUTION_ALGORITHM_DIRECT, dwBiasTensorCpu,
-        pwBiasTensorCpu, tmpTensorsCpu, outputTensorCpu, dwActivationParamSpec,
+        pwFilterTensorCpu, convParamSpec, DEPTHWISE_CONVOLUTION_ALGORITHM_DIRECT, nullptr,
+        dwBiasTensorCpu, pwBiasTensorCpu, tmpTensorsCpu, outputTensorCpu, dwActivationParamSpec,
         pwActivationParamSpec, &UT_SERIAL_ARCHINFO));
     ut_check_a(output_gpu, get_ptr_from_tensor(outputTensorCpu, CPU_GENERAL), on * oc * ow * oh, dt);
 

@@ -32,16 +32,16 @@ class TransposeOptimizer : public OPOptimizer {
                 if (spec->ops[next].type == OT_Transpose && spec->ops[next].num_inputs == 1) {
                     auto ps1 = spec->ops[i].ps.transpose_spec;
                     auto ps2 = spec->ops[next].ps.transpose_spec;
-                    if (ps1.trans_size != ps2.trans_size) {
+                    if (ps1.num_axes != ps2.num_axes) {
                         UNI_ERROR_LOG("neighbor two transpose operators(%s, %s) dimensions not "
                                       "equal.\n",
                             spec->ops[i].name, spec->ops[next].name);
                         continue;
                     }
                     bool invalid = true;
-                    for (U32 j = 0; j < ps2.trans_size; j++) {
-                        ps2.trans_dims[j] = ps1.trans_dims[ps2.trans_dims[j]];
-                        if (ps2.trans_dims[j] != j) {
+                    for (U32 j = 0; j < ps2.num_axes; j++) {
+                        ps2.axes[j] = ps1.axes[ps2.axes[j]];
+                        if (ps2.axes[j] != j) {
                             invalid = false;
                         }
                     }

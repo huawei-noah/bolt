@@ -58,9 +58,7 @@ public:
             if (i == 96) {
                 continue;
             }
-            char j[8];
-            sprintf(j, "%c", i);
-            charSet.insert(j);
+            charSet.insert(std::string(1, i));
         }
 
         std::string name = modelName;

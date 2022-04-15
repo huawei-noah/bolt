@@ -14,20 +14,31 @@
 #include <float.h>
 #include "cpu/tensor_computing_cpu.h"
 #include "cpu/cpu_functions.h"
-#if defined(_USE_INT8) && defined(__aarch64__)
-#include "cpu/arm/int8/v8/convolution_gemm.h"
+#if defined(_USE_NEON) && defined(_USE_FP16) && defined(_USE_INT8)
+#include "cpu/arm/int8/v8.2/convolution_gemm.h"
 #endif
 #ifdef _USE_X86
 #include "cpu/x86/tensor_computing_x86.h"
 #endif
+
+typedef EE (*scaleFunc)(
+    DataType dt, const void *input, INT8 *output, U32 length, F32 scale, bool clamp);
 
 template <typename T>
 inline static void apply_scale_round_template(
     const T *input, INT8 *output, U32 length, F32 scale, bool clamp)
 {
     for (U32 i = 0; i < length; i++) {
-        //output[i] = round_towards_zero(input[i] * scale, clamp);
         output[i] = round(input[i] * scale);
+    }
+}
+
+template <typename T>
+inline static void apply_scale_truncate_template(
+    const T *input, INT8 *output, U32 length, F32 scale, bool clamp)
+{
+    for (U32 i = 0; i < length; i++) {
+        output[i] = round_towards_zero(input[i] * scale, clamp);
     }
 }
 
@@ -48,6 +59,31 @@ inline EE apply_scale_round(
 #endif
         case DT_I32:
             apply_scale_round_template<I32>((const I32 *)input, output, length, scale, clamp);
+            break;
+        default:
+            ret = NOT_SUPPORTED;
+            break;
+    }
+    return ret;
+}
+
+inline EE apply_scale_truncate(
+    DataType dt, const void *input, INT8 *output, U32 length, F32 scale, bool clamp)
+{
+    EE ret = SUCCESS;
+    switch (dt) {
+#ifdef _USE_FP32
+        case DT_F32:
+            apply_scale_truncate_template<F32>((const F32 *)input, output, length, scale, clamp);
+            break;
+#endif
+#ifdef _USE_FP16
+        case DT_F16:
+            apply_scale_truncate_template<F16>((const F16 *)input, output, length, scale, clamp);
+            break;
+#endif
+        case DT_I32:
+            apply_scale_truncate_template<I32>((const I32 *)input, output, length, scale, clamp);
             break;
         default:
             ret = NOT_SUPPORTED;
@@ -131,16 +167,14 @@ EE quantize_cpu(
     F32 min = minmax[0];
     F32 max = minmax[1];
     EE ret = SUCCESS;
-    ;
+    scaleFunc arrayScale = apply_scale_round;
+
     if (max == 0 && min == 0) {
         *scale = 1;
-        memset(qData, 0, tensorNumBytes(*qDesc));
+        UNI_MEMSET(qData, 0, tensorNumBytes(*qDesc));
     } else {
         F32 absMax = UNI_MAX(UNI_ABS(max), UNI_ABS(min));
         F32 scaleRaw = 127.0 / absMax;
-        if (*scale > 0 && dt != DT_I32) {
-            scaleRaw = *scale;
-        }
 
         bool clamp = false;
         INT8 *qArray = (INT8 *)qData;
@@ -152,9 +186,9 @@ EE quantize_cpu(
             }
             const I32 *array = (const I32 *)data;
             I32 factor = 127 * 16777216 / (int)absMax;
-            // *scale *= scaleRaw;
+
             U32 main = 0;
-#if defined(_USE_INT8) && defined(__aarch64__)
+#if defined(_USE_NEON) && defined(_USE_FP16) && defined(_USE_INT8)
             if (arch == ARM_A76 || arch == ARM_A55) {
                 main = numData / 16;
                 ret = quantize_I32(main * 4, (I32 *)data, factor, scaleRaw, qArray);
@@ -167,7 +201,7 @@ EE quantize_cpu(
             if (*scale < scaleRaw) {
                 *scale = scaleRaw;
             }
-            ret = apply_scale_round(dt, data, qArray, numData, *scale, (*scale) != scaleRaw);
+            ret = arrayScale(dt, data, qArray, numData, *scale, (*scale) != scaleRaw);
         }
     }
     UNI_DEBUG_LOG("tensor min value is %f, max value is %f, scale value is %f.\n", min, max, *scale);

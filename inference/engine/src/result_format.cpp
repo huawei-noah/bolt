@@ -23,7 +23,7 @@ std::vector<int> topK_index(U8 *res, TensorDesc desc, U32 topK)
     }
 
     switch (desc.dt) {
-#ifdef __aarch64__
+#ifdef _USE_FP16
         case DT_F16: {
             F16 *dataPtr = (F16 *)res;
             sort(index.begin(), index.end(),

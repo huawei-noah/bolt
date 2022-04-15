@@ -16,36 +16,36 @@
 
 int rnncellTest(int argc, char **argv, DataType dt, RNNMode mode)
 {
-    U32 xDim, hDim, numProjection;
+    U32 xDim, hDim, num_projection;
     xDim = atoi(argv[1]);
     hDim = atoi(argv[2]);
     if (argc == 4) {
-        numProjection = atoi(argv[3]);
+        num_projection = atoi(argv[3]);
     } else {
-        numProjection = 0;
+        num_projection = 0;
     }
     ArchInfo archInfo;
     archInfo.arch = MALI;
 
     RNNParamSpec rnnParamSpec;
     rnnParamSpec.mode = RNN_LSTM;
-    rnnParamSpec.numOutput = hDim;
-    rnnParamSpec.numProjection = numProjection;
-    rnnParamSpec.forgetBias = 1.0;
-    rnnParamSpec.zoneoutCell = 0;
-    rnnParamSpec.zoneoutOutput = 0;
+    rnnParamSpec.num_outputs = hDim;
+    rnnParamSpec.num_projection = num_projection;
+    rnnParamSpec.forget_bias = 1.0;
+    rnnParamSpec.zoneout_cell = 0;
+    rnnParamSpec.zoneout_output = 0;
     rnnParamSpec.steps = -1;
-    rnnParamSpec.biDirection = false;
-    rnnParamSpec.activationMode = ACTIVATION_TANH;
+    rnnParamSpec.bi_direction = false;
+    rnnParamSpec.activation_type = ACTIVATION_TANH;
 
-    U32 col = (numProjection > 0) ? numProjection : hDim;
+    U32 col = (num_projection > 0) ? num_projection : hDim;
     TensorDesc inputDesc = tensor2df(dt, DF_NORMAL, 1, xDim);
     TensorDesc stateDesc = tensor2df(dt, DF_NORMAL, 1, col + hDim);
 
     std::vector<TensorDesc> biasDesc(2);
     std::vector<TensorDesc> filterDesc(2);
     filterDesc[0] = tensor2df(dt, DF_NK, 4 * col, xDim + hDim);
-    filterDesc[1] = tensor2df(dt, DF_NK, hDim, numProjection);
+    filterDesc[1] = tensor2df(dt, DF_NK, hDim, num_projection);
     biasDesc[0] = tensor1d(dt, 4 * col);
     biasDesc[1] = tensor1d(dt, hDim);
 
@@ -69,10 +69,10 @@ int rnncellTest(int argc, char **argv, DataType dt, RNNMode mode)
     U32 inputLen = tensorNumElements(inputDesc);
     U32 stateLen = tensorNumElements(stateDesc);
     U8 *input_cpu = ut_input_v(inputLen, dt, UT_INIT_RANDOM);
-    memcpy(get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), input_cpu, inputLen * bytesOf(dt));
+    UNI_MEMCPY(get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), input_cpu, inputLen * bytesOf(dt));
 
     U8 *state_cpu = ut_input_v(stateLen, dt, UT_INIT_RANDOM);
-    memcpy(get_ptr_from_tensor(stateTensorCpu, CPU_GENERAL), state_cpu, stateLen * bytesOf(dt));
+    UNI_MEMCPY(get_ptr_from_tensor(stateTensorCpu, CPU_GENERAL), state_cpu, stateLen * bytesOf(dt));
     U8 *state_gpu_host = ut_input_v(stateLen, dt, UT_INIT_ZERO);
 
     std::vector<U8 *> bias_cpu(2);
@@ -80,11 +80,12 @@ int rnncellTest(int argc, char **argv, DataType dt, RNNMode mode)
     for (U32 i = 0; i < 2; i++) {
         U32 len = tensorNumElements(biasDesc[i]);
         bias_cpu[i] = ut_input_v(len, dt, UT_INIT_RANDOM);
-        memcpy(get_ptr_from_tensor(biasTensorCpu[i], CPU_GENERAL), bias_cpu[i], len * bytesOf(dt));
+        UNI_MEMCPY(
+            get_ptr_from_tensor(biasTensorCpu[i], CPU_GENERAL), bias_cpu[i], len * bytesOf(dt));
 
         len = tensorNumElements(filterDesc[i]);
         filter_cpu[i] = ut_input_v(len, dt, UT_INIT_RANDOM);
-        memcpy(
+        UNI_MEMCPY(
             get_ptr_from_tensor(filterTensorCpu[i], CPU_GENERAL), filter_cpu[i], len * bytesOf(dt));
     }
 
@@ -102,7 +103,7 @@ int rnncellTest(int argc, char **argv, DataType dt, RNNMode mode)
     TensorDesc tmpDesc = tensor1d(DT_U8, tmpBytes);
     tmpTensorCpu.resize(tmpDesc);
     tmpTensorCpu.alloc();
-    memset(get_ptr_from_tensor(tmpTensorCpu, CPU_GENERAL), 0, tmpBytes);
+    UNI_MEMSET(get_ptr_from_tensor(tmpTensorCpu, CPU_GENERAL), 0, tmpBytes);
 
     std::vector<U32> ftmBytes(2);
     CHECK_STATUS(rnn_transform_filter_bytes(
@@ -235,7 +236,7 @@ int rnncellTest(int argc, char **argv, DataType dt, RNNMode mode)
 #ifdef _DEBUG
     double hxDim = hDim + xDim;
     double ops = 1.0 *
-        (2.0 * hxDim * col * 4 + col * 4 + rnnParamSpec.numProjection * rnnParamSpec.numOutput);
+        (2.0 * hxDim * col * 4 + col * 4 + rnnParamSpec.num_projection * rnnParamSpec.num_outputs);
     ut_log(dt, buffer, ops, time);
 #endif
     ut_check_a(output_gpu, get_ptr_from_tensor(outputTensorCpu, CPU_GENERAL),

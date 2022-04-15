@@ -15,7 +15,6 @@
 #define _WEIGHTOPERATOR_H
 
 #include "operator.hpp"
-#include "tensor_computing.h"
 #include "model_spec.h"
 
 class WeightOperator : public Operator {
@@ -118,7 +117,7 @@ public:
         return SUCCESS;
     }
 
-    virtual EE init_weight_bias_from_model(std::shared_ptr<U8> *modelPtr)
+    virtual EE init_weight_bias_from_model(std::shared_ptr<U8> *modelPtr = nullptr)
     {
         EE ret = this->infer_weight_desc();
         if (ret != SUCCESS) {
@@ -151,6 +150,15 @@ public:
             weight_offset += tensorNumBytes(desc);
         }
 
+        if (curOpWs.num_quant_scale == this->weightTensors.size()) {
+            for (U32 i = 0; i < this->weightTensors.size(); ++i) {
+                if (curOpWs.weight_scale[i].num_scale > 0) {
+                    this->weightTensors[i].set_scale_ptr(
+                        std::shared_ptr<F32>(curOpWs.weight_scale[i].scale, [](F32 *) {}));
+                }
+            }
+        }
+
         U32 bias_offset = (modelPtr != nullptr) ? weight_offset : 0;
         if (this->hasBias) {
             for (auto bias_tensor : this->biasTensors) {
@@ -169,7 +177,7 @@ public:
                 bias_mem_src.resize(desc);
                 bias_mem_src.alloc();
                 U8 *tmp = (U8 *)bias_mem_src.get_ptr();
-                memset(tmp, 0, bias_mem_src.bytes());
+                UNI_MEMSET(tmp, 0, bias_mem_src.bytes());
                 bias_mem_dst->reuse(&bias_mem_src);
             }
         }

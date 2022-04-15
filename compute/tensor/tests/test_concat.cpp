@@ -60,7 +60,7 @@ int concatTest(int argc, char **argv, DataType dt)
 
     // setup tmp
     U32 tmpBytes;
-    CHECK_STATUS(concat_infer_forward_tmp_bytes(inTensors, &tmpBytes, &UT_CPU_ARCHINFO));
+    CHECK_STATUS(concat_infer_forward_tmp_bytes(inTensors, outTensor, &tmpBytes, &UT_CPU_ARCHINFO));
     Tensor tmpTensor;
     tmpTensor.resize(tensor1d(DT_U8, tmpBytes));
     tmpTensor.alloc();
@@ -85,7 +85,7 @@ int concatTest(int argc, char **argv, DataType dt)
             transformToNCHW(inputDesc, srcPtr, tmpDesc, tmpPtr);
             srcPtr = tmpPtr;
         }
-        memcpy(outputRef + count, srcPtr, bytes);
+        UNI_MEMCPY(outputRef + count, srcPtr, bytes);
         count += bytes;
         tmpPtr += bytes;
     }

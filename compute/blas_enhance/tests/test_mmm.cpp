@@ -31,7 +31,9 @@ int mmmTestKernel(U32 m, U32 k, U32 n, DataType dt)
     U32 bytes = 0;
     U8 *A = ut_input_v(m * k, dt, UT_INIT_RANDOM);
     U8 *B = ut_input_v(k * n, dt, UT_INIT_RANDOM);
-    U8 *B_tran = ut_input_v(k * n + 32, dt, UT_INIT_ZERO);
+
+    U32 alignedN = (n + 7) / 8 * 8;
+    U8 *B_tran = ut_input_v(k * alignedN + 32, dt, UT_INIT_ZERO);
     U8 *C = ut_input_v(m * n, dt, UT_INIT_ZERO);
     U8 *C_ref = ut_input_v(m * n, dt, UT_INIT_ZERO);
     CHECK_STATUS(matrix_matrix_multiply_tmp_bytes(A_desc, B_desc, &bytes, UT_ARCH));

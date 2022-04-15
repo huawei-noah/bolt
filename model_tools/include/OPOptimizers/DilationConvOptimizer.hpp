@@ -46,52 +46,35 @@ class DilationConvolutionOptimizer : public OPOptimizer {
             if (mergeDilation) {
                 int spaceToBatchIndex = searchWeightIndex(spec, spec->ops[spaceToBatchOpIndex].name);
                 int batchToSpaceIndex = searchWeightIndex(spec, spec->ops[batchToSpaceOpIndex].name);
-                float *vecPtr = (float *)(spec->ws[spaceToBatchIndex].vec);
-                float *vecPtr2 = (float *)(spec->ws[batchToSpaceIndex].vec);
-                if (spec->ws[spaceToBatchIndex].bytes_of_vec != 16 &&
-                    spec->ws[batchToSpaceIndex].bytes_of_vec != 16) {
-                    UNI_ERROR_LOG("not support");
-                }
+                float *dilations = (float *)(spec->ws[spaceToBatchIndex].weight);
+                float *pad1 = (float *)(spec->ws[spaceToBatchIndex].vec);
+                float *pad2 = (float *)(spec->ws[batchToSpaceIndex].vec);
+                int dim = spec->ws[spaceToBatchIndex].bytes_of_weight /
+                    bytesOf(spec->ws[spaceToBatchIndex].mdt);
 
-                spec->ops[convOpIndex].ps.conv_spec.convolution_type = Convolution_Dilation;
-                spec->ops[convOpIndex].ps.conv_spec.padding_top = vecPtr[0] - vecPtr2[0];
-                spec->ops[convOpIndex].ps.conv_spec.padding_bottom = vecPtr[1] - vecPtr2[1];
-                spec->ops[convOpIndex].ps.conv_spec.padding_left = vecPtr[2] - vecPtr2[2];
-                spec->ops[convOpIndex].ps.conv_spec.padding_right = vecPtr[3] - vecPtr2[3];
-                spec->ops[convOpIndex].ps.conv_spec.dilatedRate_h = 2;
-                spec->ops[convOpIndex].ps.conv_spec.dilatedRate_w = 2;
+                spec->ops[convOpIndex].ps.conv_spec.dilatedRate_h = dilations[0];
+                spec->ops[convOpIndex].ps.conv_spec.pad_top = pad1[0] - pad2[0];
+                spec->ops[convOpIndex].ps.conv_spec.pad_bottom = pad1[1] - pad2[1];
+                if (dim > 1) {
+                    spec->ops[convOpIndex].ps.conv_spec.dilatedRate_w = dilations[1];
+                    spec->ops[convOpIndex].ps.conv_spec.pad_left = pad1[2] - pad2[2];
+                    spec->ops[convOpIndex].ps.conv_spec.pad_right = pad1[3] - pad2[3];
+                }
+                if (dim == 3) {
+                    spec->ops[convOpIndex].ps.conv_spec.dilatedRate_t = dilations[0];
+                    spec->ops[convOpIndex].ps.conv_spec.pad_before = pad1[0] - pad2[0];
+                    spec->ops[convOpIndex].ps.conv_spec.pad_after = pad1[1] - pad2[1];
+                    spec->ops[convOpIndex].ps.conv_spec.dilatedRate_h = dilations[1];
+                    spec->ops[convOpIndex].ps.conv_spec.pad_top = pad1[2] - pad2[2];
+                    spec->ops[convOpIndex].ps.conv_spec.pad_bottom = pad1[3] - pad2[3];
+                    spec->ops[convOpIndex].ps.conv_spec.dilatedRate_w = dilations[2];
+                    spec->ops[convOpIndex].ps.conv_spec.pad_left = pad1[4] - pad2[4];
+                    spec->ops[convOpIndex].ps.conv_spec.pad_right = pad1[5] - pad2[5];
+                }
 
                 setOperatorInvalid(spec, spaceToBatchOpIndex, true);
                 setOperatorInvalid(spec, batchToSpaceOpIndex, true);
-
-                if (spec->ws[spaceToBatchIndex].weight != nullptr) {
-                    spec->ws[spaceToBatchIndex].bytes_of_weight = 0;
-                    if (outOfFileMapRange(spec->ws[spaceToBatchIndex].weight, spec->mfd)) {
-                        delete spec->ws[spaceToBatchIndex].weight;
-                    }
-                    spec->ws[spaceToBatchIndex].weight = nullptr;
-                }
-                if (spec->ws[spaceToBatchIndex].vec != nullptr) {
-                    spec->ws[spaceToBatchIndex].bytes_of_vec = 0;
-                    if (outOfFileMapRange(spec->ws[spaceToBatchIndex].vec, spec->mfd)) {
-                        delete spec->ws[spaceToBatchIndex].vec;
-                    }
-                    spec->ws[spaceToBatchIndex].vec = nullptr;
-                }
-                if (spec->ws[batchToSpaceIndex].weight != nullptr) {
-                    spec->ws[batchToSpaceIndex].bytes_of_weight = 0;
-                    if (outOfFileMapRange(spec->ws[batchToSpaceIndex].weight, spec->mfd)) {
-                        delete spec->ws[batchToSpaceIndex].weight;
-                    }
-                    spec->ws[batchToSpaceIndex].weight = nullptr;
-                }
-                if (spec->ws[batchToSpaceIndex].vec != nullptr) {
-                    spec->ws[batchToSpaceIndex].bytes_of_vec = 0;
-                    if (outOfFileMapRange(spec->ws[batchToSpaceIndex].vec, spec->mfd)) {
-                        delete spec->ws[batchToSpaceIndex].vec;
-                    }
-                    spec->ws[batchToSpaceIndex].vec = nullptr;
-                }
+                hasOptimized = true;
             }
         }
         return hasOptimized;

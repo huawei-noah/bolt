@@ -26,37 +26,24 @@
 inline EE eltwise_infer_output_size_cpu(std::vector<TensorDesc> inputDesc, TensorDesc *outputDesc)
 {
     if (nullptr == outputDesc) {
-        CHECK_STATUS(NULL_POINTER);
+        return NULL_POINTER;
     }
     U32 num = inputDesc.size();
-    if (num <= 0) {
+    if (num <= 1) {
         return NOT_MATCH;
     }
 
-    if (num == 1) {
-        *outputDesc = inputDesc[0];
-        return SUCCESS;
-    }
-
     U32 arrayDimMax = 0;
-    U32 minDims = inputDesc[0].nDims;
     for (U32 i = 1; i < num; i++) {
         if (inputDesc[i].nDims > inputDesc[arrayDimMax].nDims) {
             arrayDimMax = i;
-        }
-        if (inputDesc[i].nDims < minDims) {
-            minDims = inputDesc[i].nDims;
         }
     }
     U32 nchwc8Count = 0;
     U32 nchwc16Count = 0;
     U32 nhwcCount = 0;
+    bool sameDim = true;
     for (U32 i = 0; i < num; i++) {
-        // Output from 1D-conv + 3D tensors
-        //if (inputDesc[i].nDims == 4 && inputDesc[i].dims[0] == 1 && minDims == 3) {
-        //    inputDesc[i] = tensor3df(inputDesc[i].dt, inputDesc[i].df, inputDesc[i].dims[3],
-        //        inputDesc[i].dims[2], inputDesc[i].dims[1]);
-        //}
         if (inputDesc[i].df == DF_NCHWC8) {
             nchwc8Count++;
         }
@@ -68,12 +55,13 @@ inline EE eltwise_infer_output_size_cpu(std::vector<TensorDesc> inputDesc, Tenso
             nhwcCount++;
             std::swap(inputDesc[i].dims[0], inputDesc[i].dims[1]);
         }
+        if (tensorNumElements(inputDesc[i]) != tensorNumElements(inputDesc[0])) {
+            sameDim = false;
+        }
     }
 
-    U32 dim = inputDesc[arrayDimMax].nDims;
     *outputDesc = inputDesc[arrayDimMax];
-
-    for (U32 i = 0; i < dim; i++) {
+    for (U32 i = 0; i < outputDesc->nDims; i++) {
         for (U32 j = 0; j < num; j++) {
             if (inputDesc[j].nDims > i) {
                 int max_value = UNI_MAX(outputDesc->dims[i], inputDesc[j].dims[i]);
@@ -92,13 +80,9 @@ inline EE eltwise_infer_output_size_cpu(std::vector<TensorDesc> inputDesc, Tenso
     if (nchwc16Count > 0 && nchwc16Count != num) {
         outputDesc->df = DF_NCHWC16;
     }
-    //if (nchwc8Count > 0 && nhwcCount > 0) {
-    //    outputDesc->df = DF_NCHWC8;
-    //    if (outputDesc->nDims == 3) {
-    //        *outputDesc = tensor4df(outputDesc->dt, DF_NCHWC8, outputDesc->dims[2],
-    //            outputDesc->dims[1], outputDesc->dims[0], 1);
-    //    }
-    //}
+    if (!sameDim && (nchwc8Count > 0 || nchwc16Count > 0)) {
+        outputDesc->df = DF_NCHW;
+    }
     return SUCCESS;
 }
 
@@ -167,8 +151,11 @@ EE eltwise(std::vector<Tensor> inputTensor,
     void *tmp = get_ptr_from_tensor(tmpTensor, arch);
     TensorDesc outputDesc = outputTensor.get_desc();
     void *output = get_ptr_from_tensor(outputTensor, arch);
+
+    EE ret = NOT_SUPPORTED;
+    if (IS_CPU(arch)) {
+#ifdef _USE_CPU
 #if defined(_USE_NEON) && defined(_USE_INT8)
-    if (!IS_GPU(arch)) {
         for (U32 i = 0; i < inputTensor.size(); i++) {
             if (inputDesc[i].dt == DT_I8) {
                 F32 scale = inputTensor[i].get_scale();
@@ -182,12 +169,7 @@ EE eltwise(std::vector<Tensor> inputTensor,
                 tmp = (U8 *)tmp + dTensor.bytes();
             }
         }
-    }
 #endif
-
-    EE ret = NOT_SUPPORTED;
-    if (IS_CPU(arch)) {
-#ifdef _USE_CPU
         ret = eltwise_cpu(inputDesc, input, eltwiseDesc, tmpBytes, tmp, outputDesc, output, arch);
 #endif
 #ifdef _USE_GPU

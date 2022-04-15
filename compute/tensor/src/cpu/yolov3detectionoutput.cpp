@@ -12,85 +12,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "cpu/tensor_computing_cpu.h"
+#include "cpu/non_max_suppression.h"
 #include "tensor_transpose.h"
-
-inline EE qsort_descent(std::vector<BoxRect> &boxes, std::vector<F32> &scores, int left, int right)
-{
-    if (boxes.empty() || scores.empty()) {
-        return NOT_SUPPORTED;
-    }
-
-    int i = left;
-    int j = right;
-    F32 temp = scores[(left + right) / 2];
-
-    while (i <= j) {
-        while (scores[i] > temp) {
-            i++;
-        }
-        while (scores[j] < temp) {
-            j--;
-        }
-        if (i <= j) {
-            std::swap(boxes[i], boxes[j]);
-            std::swap(scores[i], scores[j]);
-            i++;
-            j--;
-        }
-    }
-
-    if (left < j) {
-        qsort_descent(boxes, scores, left, j);
-    }
-    if (i < right) {
-        qsort_descent(boxes, scores, i, right);
-    }
-
-    return SUCCESS;
-}
-
-inline F32 intersectionarea(BoxRect a, BoxRect b)
-{
-    if (a.xmin > b.xmax || a.xmax < b.xmin || a.ymin > b.ymax || a.ymax < b.ymin) {
-        return 0.f;
-    }
-    F32 inter_width = std::min(a.xmax, b.xmax) - std::max(a.xmin, b.xmin);
-    F32 inter_height = std::min(a.ymax, b.ymax) - std::max(a.ymin, b.ymin);
-
-    return inter_width * inter_height;
-}
-
-inline EE nms_pickedboxes(std::vector<BoxRect> boxes, std::vector<I64> &picked, F32 nms_threshold)
-{
-    I64 n = boxes.size();
-
-    std::vector<F32> areas(n);
-    for (I64 i = 0; i < n; i++) {
-        BoxRect box = boxes[i];
-
-        F32 width = box.xmax - box.xmin;
-        F32 height = box.ymax - box.ymin;
-
-        areas[i] = width * height;
-    }
-    for (I64 i = 0; i < n; i++) {
-        BoxRect a = boxes[i];
-        int keep = 1;
-        for (int j = 0; j < (int)picked.size(); j++) {
-            BoxRect b = boxes[picked[j]];
-            F32 inter_area = intersectionarea(a, b);
-            F32 union_area = areas[i] + areas[picked[j]] - inter_area;
-
-            if (inter_area / union_area > nms_threshold) {
-                keep = 0;
-            }
-        }
-        if (keep) {
-            picked.push_back(i);
-        }
-    }
-    return SUCCESS;
-}
 
 template <typename T>
 EE yolov3detectionoutput(std::vector<void *> input,
@@ -123,7 +46,6 @@ EE yolov3detectionoutput(std::vector<void *> input,
     }
 
     std::vector<BoxRect> all_boxrects;
-    std::vector<F32> all_boxscores;
     I64 input_size = inputDesc.size();
     U32 info_per_box = 4 + 1 + num_class;
     ActivationParamSpec activationdesc_sigmoid;
@@ -134,14 +56,11 @@ EE yolov3detectionoutput(std::vector<void *> input,
         CHECK_REQUIREMENT(inputDesc[i].df == DF_NCHWC8 || inputDesc[i].df == DF_NCHW);
         if (inputDesc[i].df == DF_NCHWC8) {
             T *tmp = (T *)malloc(tensorNumBytes(inputDesc[0]));
-            memcpy(tmp, in, tensorNumBytes(inputDesc[0]));
+            UNI_MEMCPY(tmp, in, tensorNumBytes(inputDesc[0]));
             CHECK_STATUS(transformToNCHW(inputDesc[0], tmp, inputDesc[0], in));
             free(tmp);
         }
-        std::vector<std::vector<BoxRect>> allbox_boxrects;
-        std::vector<std::vector<F32>> allbox_boxscores;
-        allbox_boxrects.resize(num_box);
-        allbox_boxscores.resize(num_box);
+        std::vector<std::vector<BoxRect>> allbox_boxrects(num_box);
 
         U32 w = inputDesc[i].dims[0];
         U32 h = inputDesc[i].dims[1];
@@ -190,9 +109,9 @@ EE yolov3detectionoutput(std::vector<void *> input,
                         F32 box_ymin = box_cy - box_h * 0.5;
                         F32 box_xmax = box_cx + box_w * 0.5;
                         F32 box_ymax = box_cy + box_h * 0.5;
-                        BoxRect box = {box_xmin, box_ymin, box_xmax, box_ymax, label};
+                        BoxRect box = {
+                            box_xmin, box_ymin, box_xmax, box_ymax, label, score_conf, INT_MAX};
                         allbox_boxrects[b].push_back(box);
-                        allbox_boxscores[b].push_back(score_conf);
                     }
                     idx++;
                 }
@@ -202,34 +121,28 @@ EE yolov3detectionoutput(std::vector<void *> input,
         for (U32 b = 0; b < num_box; b++) {
             all_boxrects.insert(
                 all_boxrects.end(), allbox_boxrects[b].begin(), allbox_boxrects[b].end());
-            all_boxscores.insert(
-                all_boxscores.end(), allbox_boxscores[b].begin(), allbox_boxscores[b].end());
         }
     }
     // sort boxes
-    qsort_descent(all_boxrects, all_boxscores, 0, static_cast<int>(all_boxscores.size() - 1));
+    std::stable_sort(all_boxrects.begin(), all_boxrects.end(),
+        [&](const BoxRect &a, const BoxRect &b) { return (a.score > b.score); });
     // apply nms
-    std::vector<I64> picked;
-    nms_pickedboxes(all_boxrects, picked, nms_threshold);
+    std::vector<I32> picked = nms_pickedboxes(all_boxrects, nms_threshold);
 
     std::vector<BoxRect> boxrects;
-    std::vector<F32> boxscores;
-    for (I64 p = 0; p < (I64)picked.size(); p++) {
+    for (U32 p = 0; p < picked.size(); p++) {
         I64 picked_box = picked[p];
         boxrects.push_back(all_boxrects[picked_box]);
-        boxscores.push_back(all_boxscores[picked_box]);
     }
 
-    U32 num_detected = static_cast<U32>(boxrects.size());
+    U32 num_detected = boxrects.size();
     // the first box contains the number of availble boxes
     output[0] = num_detected;
     output[1] = output[2] = output[3] = output[4] = output[5] = 0;
     for (U32 i = 0; i < num_detected; i++) {
         BoxRect b = boxrects[i];
-        F32 score = boxscores[i];
-
         output[(i + 1) * 6] = b.label + 1;
-        output[(i + 1) * 6 + 1] = score;
+        output[(i + 1) * 6 + 1] = b.score;
         output[(i + 1) * 6 + 2] = b.xmin;
         output[(i + 1) * 6 + 3] = b.ymin;
         output[(i + 1) * 6 + 4] = b.xmax;

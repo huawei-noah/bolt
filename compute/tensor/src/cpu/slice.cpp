@@ -11,17 +11,17 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string.h>
+#include <set>
 #include <vector>
 #include "cpu/tensor_computing_cpu.h"
 
 EE slice_cpu(TensorDesc inputDesc,
     void *input,
     SliceParamSpec p,
-    std::vector<TensorDesc> outputDesc,
-    std::vector<void *> *output)
+    std::vector<TensorDesc> &outputDesc,
+    std::vector<void *> &output)
 {
-    if (nullptr == input || nullptr == output) {
+    if (nullptr == input) {
         CHECK_STATUS(NULL_POINTER);
     }
     U32 num = outputDesc.size();
@@ -41,23 +41,66 @@ EE slice_cpu(TensorDesc inputDesc,
         loops *= inputDesc.dims[i];
     }
 
-    if (inputDesc.df == DF_NCHWC8) {
-        if (axis < 2) {
+    bool sameFormat = true;
+    for (U32 j = 0; j < num; j++) {
+        if (inputDesc.df != outputDesc[j].df) {
+            sameFormat = false;
+            break;
+        }
+    }
+
+    if (sameFormat && inputDesc.df == DF_NCHWC8) {
+        if (axis < dim - 2) {
             tileSize *= 8;
             loops /= 8;
         }
     }
 
-    U8 *ptr = (U8 *)input;
-    for (U32 i = 0; i < loops; i++) {
-        for (U32 j = 0; j < num; j++) {
-            U32 blockSize = outputDesc[j].dims[axis] * tileSize;
-            if (blockSize > 0 && nullptr == (*output)[j]) {
-                CHECK_STATUS(NULL_POINTER);
+    if (sameFormat) {
+        U8 *ptr = (U8 *)input;
+        for (U32 i = 0; i < loops; i++) {
+            for (U32 j = 0; j < num; j++) {
+                U32 blockSize = outputDesc[j].dims[axis] * tileSize;
+                if (blockSize > 0 && nullptr == output[j]) {
+                    CHECK_STATUS(NULL_POINTER);
+                }
+                U8 *dstPtr = (U8 *)(output[j]) + i * blockSize;
+                UNI_MEMCPY(dstPtr, ptr, blockSize);
+                ptr += blockSize;
             }
-            U8 *dstPtr = (U8 *)((*output)[j]) + i * blockSize;
-            memcpy(dstPtr, ptr, blockSize);
-            ptr += blockSize;
+        }
+    } else {
+        if (axis != dim - 2) {
+            return NOT_SUPPORTED;
+        }
+        U8 *iPtr = (U8 *)input;
+        U32 eleSize = bytesOf(inputDesc.dt);
+        tileSize /= eleSize;
+        U32 startDims = 0;
+        U32 endDims = 0;
+        std::set<DataFormat> nativeFormat = {DF_NCHW, DF_MTK, DF_NORMAL};
+
+        for (U32 j = 0; j < num; j++) {
+            endDims += outputDesc[j].dims[axis];
+            U8 *oPtr = (U8 *)output[j];
+            if (inputDesc.df == DF_NCHWC8 && nativeFormat.count(outputDesc[j].df)) {
+                for (U32 i = 0; i < loops; i++) {
+                    for (U32 d = startDims; d < endDims; ++d) {
+                        U32 c8 = d % 8;
+                        U32 c = d - c8;
+                        for (U32 t = 0; t < tileSize; ++t) {
+                            U32 oIdx = i * tileSize * (endDims - startDims) +
+                                (d - startDims) * tileSize + t;
+                            U32 iIdx =
+                                i * tileSize * inputDesc.dims[axis] + c * tileSize + t * 8 + c8;
+                            UNI_MEMCPY(oPtr + oIdx * eleSize, iPtr + iIdx * eleSize, eleSize);
+                        }
+                    }
+                }
+            } else {
+                return NOT_SUPPORTED;
+            }
+            startDims = endDims;
         }
     }
     return SUCCESS;

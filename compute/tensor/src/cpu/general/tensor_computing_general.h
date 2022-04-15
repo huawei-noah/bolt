@@ -94,6 +94,7 @@ EE depthwise_convolution_general(TensorDesc inputDesc,
 EE pooling_general(TensorDesc inputDesc,
     const void *input,
     PoolingParamSpec poolingParamSpec,
+    void *scale,
     TensorDesc outputDesc,
     void *output);
 
@@ -145,6 +146,9 @@ EE scale_general(TensorDesc inputDesc,
 EE softmax_general(
     TensorDesc inputDesc, const void *input, SoftmaxParamSpec p, TensorDesc outputDesc, void *output);
 
+EE logsoftmax_general(
+    TensorDesc inputDesc, const void *input, SoftmaxParamSpec p, TensorDesc outputDesc, void *output);
+
 EE check_general(TensorDesc inputDescA,
     const void *inputA,
     TensorDesc inputDescB,
@@ -153,8 +157,13 @@ EE check_general(TensorDesc inputDescA,
     TensorDesc outputDesc,
     void *output);
 
-EE layer_normalization_general(
-    TensorDesc inputDesc, void *input, void *alpha, void *beta, TensorDesc outputDesc, void *output);
+EE layer_normalization_general(TensorDesc inputDesc,
+    void *input,
+    LayerNormParamSpec p,
+    void *alpha,
+    void *beta,
+    TensorDesc outputDesc,
+    void *output);
 
 EE attention_mask_general(TensorDesc inputDesc,
     const void *input,
@@ -176,4 +185,7 @@ EE dequantize_general(TensorDesc qDesc,
     void *bData,
     TensorDesc dDesc,
     void *data);
+
+EE cumsum_general(
+    TensorDesc inputDesc, const void *input, CumSumParamSpec p, TensorDesc outputDesc, void *output);
 #endif

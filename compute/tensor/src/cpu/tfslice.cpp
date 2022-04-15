@@ -37,12 +37,15 @@ EE tfslice_infer_output_size_cpu(TensorDesc inputDesc, TfSliceParamSpec p, Tenso
         }
         if (axisEnd < 0) {
             axisEnd = inputDesc.dims[axis] + axisEnd;
+            axisEnd = UNI_MAX(axisEnd, -1);
         } else if (axisEnd > (int)(inputDesc.dims[axis])) {
             axisEnd = inputDesc.dims[axis];
         }
-        CHECK_REQUIREMENT(axisBegin >= 0 && axisEnd >= 0);
-        int num = (axisEnd - axisBegin) / strides[i];
-        outputDesc->dims[axis] = num;
+        if (strides[i] > 0) {
+            outputDesc->dims[axis] = (axisEnd - axisBegin + strides[i] - 1) / strides[i];
+        } else {
+            outputDesc->dims[axis] = (axisEnd - axisBegin + strides[i] + 1) / strides[i];
+        }
         begin[i] = axisBegin;
         end[i] = axisEnd;
     }
@@ -73,20 +76,31 @@ inline static void recursive_tfslice(U8 *src,
     U32 tileSize)
 {
     if (i == bound) {
-        memcpy(dst, src, tileSize);
+        UNI_MEMCPY(dst, src, tileSize);
         return;
     }
     U32 newSrcNum = srcNum / srcDims[dimNum - 1 - i];
     U32 newDstNum = dstNum / dstDims[dimNum - 1 - i];
-    if (i + 1 == bound && strides[i] == 1) {
-        memcpy(dst, src + begin[i] * newSrcNum, tileSize * (end[i] - begin[i]));
-        return;
+    if (i + 1 == bound) {
+        if (strides[i] == 1) {
+            UNI_MEMCPY(dst, src + begin[i] * newSrcNum, tileSize * (end[i] - begin[i]));
+            return;
+        }
     }
-    for (int j = begin[i]; j < end[i]; j += strides[i]) {
-        U8 *newSrc = src + j * newSrcNum;
-        recursive_tfslice(newSrc, srcDims, newSrcNum, dst, dstDims, newDstNum, begin, end, strides,
-            i + 1, bound, dimNum, tileSize);
-        dst += newDstNum;
+    if (strides[i] > 0) {
+        for (int j = begin[i]; j < end[i]; j += strides[i]) {
+            U8 *newSrc = src + j * newSrcNum;
+            recursive_tfslice(newSrc, srcDims, newSrcNum, dst, dstDims, newDstNum, begin, end,
+                strides, i + 1, bound, dimNum, tileSize);
+            dst += newDstNum;
+        }
+    } else {
+        for (int j = begin[i]; j > end[i]; j += strides[i]) {
+            U8 *newSrc = src + j * newSrcNum;
+            recursive_tfslice(newSrc, srcDims, newSrcNum, dst, dstDims, newDstNum, begin, end,
+                strides, i + 1, bound, dimNum, tileSize);
+            dst += newDstNum;
+        }
     }
 }
 #endif
@@ -110,10 +124,10 @@ EE tfslice_cpu(
         }
         if (axisEnd < 0) {
             axisEnd = inputDesc.dims[axis] + axisEnd;
+            axisEnd = UNI_MAX(axisEnd, -1);
         } else if (axisEnd > (int)(inputDesc.dims[axis])) {
             axisEnd = inputDesc.dims[axis];
         }
-        CHECK_REQUIREMENT(axisBegin >= 0 && axisEnd >= 0);
         begin[i] = axisBegin;
         end[i] = axisEnd;
     }
@@ -124,8 +138,8 @@ EE tfslice_cpu(
     int channelAxis = inputDesc.nDims - 2;
     if (inputDesc.df == outputDesc.df) {
         std::vector<U32> tmpInputDims(inputDesc.nDims), tmpOutputDims(outputDesc.nDims);
-        memcpy(tmpInputDims.data(), inputDesc.dims, inputDesc.nDims * sizeof(U32));
-        memcpy(tmpOutputDims.data(), outputDesc.dims, outputDesc.nDims * sizeof(U32));
+        UNI_MEMCPY(tmpInputDims.data(), inputDesc.dims, inputDesc.nDims * sizeof(U32));
+        UNI_MEMCPY(tmpOutputDims.data(), outputDesc.dims, outputDesc.nDims * sizeof(U32));
         int startAxis = 0;
         int elementNum = 1;
         if (inputDesc.df == DF_NCHWC8) {
@@ -167,7 +181,7 @@ EE tfslice_cpu(
             U32 srcIndex =
                 calculateGlobalIndex(localIndex.data(), tmpInputDims.data(), tmpInputDims.size());
             U8 *src = (U8 *)input + srcIndex * elementSize;
-            memcpy(dst, src, tileSize);
+            UNI_MEMCPY(dst, src, tileSize);
         }
 #endif
         if (inputDesc.df == DF_NCHWC8) {
@@ -179,7 +193,7 @@ EE tfslice_cpu(
         U32 tmpNDims = inputDesc.nDims + 1;
         std::vector<U32> tmpDims(tmpNDims);
         tmpDims[0] = 8;
-        memcpy(&(tmpDims[1]), inputDesc.dims, inputDesc.nDims * sizeof(U32));
+        UNI_MEMCPY(&(tmpDims[1]), inputDesc.dims, inputDesc.nDims * sizeof(U32));
         for (U32 i = 0; i < num; i++, dst += elementSize) {
             std::vector<U32> localIndex = calculateLocalIndex(i, outputDesc.dims, outputDesc.nDims);
             for (U32 j = 0; j < dimSize; j++) {
@@ -191,7 +205,7 @@ EE tfslice_cpu(
             localIndex.insert(localIndex.begin(), c8);
             U32 index = calculateGlobalIndex(localIndex.data(), tmpDims.data(), tmpNDims);
             U8 *src = (U8 *)input + index * elementSize;
-            memcpy(dst, src, elementSize);
+            UNI_MEMCPY(dst, src, elementSize);
         }
     }
     return SUCCESS;

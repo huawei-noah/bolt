@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="utf-8"?> 
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+  <Type Name="raul::TensorImpl&lt;*&gt;">
+    <Expand>
+      <Item Name="[name]">mName</Item>
+      <Item Name="[size]">mData.size()</Item>
+	  <Item Name="[data]">mData</Item>
+      <Synthetic Name="[shape]">
+        <DisplayString>[{mShape.m_extents[0]}, {mShape.m_extents[1]}, {mShape.m_extents[2]}, {mShape.m_extents[3]}]</DisplayString>
+      </Synthetic>
+    </Expand>
+  </Type>
+  <Type Name="raul::TensorDeclarator::TensorParameters">
+    <Expand>
+      <Synthetic Name="[shape]">
+        <DisplayString>[{shape.m_extents[0]}, {shape.m_extents[1]}, {shape.m_extents[2]}]</DisplayString>
+      </Synthetic>
+    </Expand>
+  </Type>
+  <Type Name="raul::activationShape">
+    <DisplayString>[{m_extents[0]}, {m_extents[1]}, {m_extents[2]}]</DisplayString>
+    <Expand>
+      <Item Name="[depth]">m_extents[0]</Item>
+      <Item Name="[height]">m_extents[1]</Item>
+      <Item Name="[width]">m_extents[2]</Item>
+    </Expand>
+  </Type>
+  <Type Name="raul::shape">
+    <DisplayString>[{m_extents[0]}, {m_extents[1]}, {m_extents[2]}, {m_extents[3]}]</DisplayString>
+	<Expand>
+	  <Item Name="[batch]">m_extents[0]</Item>
+      <Item Name="[depth]">m_extents[1]</Item>
+	  <Item Name="[height]">m_extents[2]</Item>
+	  <Item Name="[width]">m_extents[3]</Item>
+	</Expand>
+  </Type>
+  <Type Name="raul::Name">
+    <DisplayString>{string}</DisplayString>
+  </Type>
+  <Type Name="raul::BasicLayer">
+    <Expand>
+      <Item Name="[name]">mName</Item>
+      <Item Name="[type]">mTypeName</Item>
+      <Synthetic Name="[inputs]">
+        <DisplayString>[size={mInputs.size()}]</DisplayString>
+        <Expand>
+          <ArrayItems>
+            <Size>mInputs.size()</Size>
+            <ValuePointer>&amp;mInputs[0]</ValuePointer>
+          </ArrayItems>
+        </Expand>
+      </Synthetic>
+      <Synthetic Name="[outputs]">
+        <DisplayString>[size={mOutputs.size()}]</DisplayString>
+        <Expand>
+          <ArrayItems>
+            <Size>mOutputs.size()</Size>
+            <ValuePointer>&amp;mOutputs[0]</ValuePointer>
+          </ArrayItems>
+        </Expand>
+      </Synthetic>
+    </Expand>
+  </Type>
+</AutoVisualizer>

@@ -1,0 +1,16 @@
+set(CPUINFO "null")
+file(GLOB CPUINFO_FILE /proc/cpuinfo)
+if (CPUINFO_FILE)
+    exec_program(cat ARGS ${CPUINFO_FILE} OUTPUT_VARIABLE CPUINFO)
+else ()
+    message(STATUS "can not find /proc/cpuinfo")
+endif ()
+
+macro(check_cpuinfo feature)
+    string(REGEX REPLACE "^.*(${feature}).*$" "\\1" _FEATURE_THERE ${CPUINFO})
+    string(COMPARE EQUAL "${feature}" "${_FEATURE_THERE}" cpuinfo_${feature})
+endmacro()
+
+check_cpuinfo(avx2)
+check_cpuinfo(avx512)
+check_cpuinfo(avx512_vnni)

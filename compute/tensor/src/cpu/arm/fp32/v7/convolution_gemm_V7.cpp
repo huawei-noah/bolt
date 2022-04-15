@@ -42,7 +42,7 @@ EE convolution_gemm_V7(TensorDesc inputDesc,
         CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
         it = ft = ot = 1;
         p.dilatedRate_t = p.stride_t = 1;
-        p.padding_before = p.padding_after = 0;
+        p.pad_before = p.pad_after = 0;
     } else if (tensorIs5d(inputDesc)) {
         CHECK_STATUS(tensor5dGet(inputDesc, &idt, &idf, &in, &ic, &it, &ih, &iw));
         CHECK_STATUS(tensor5dGet(filterDesc, &fdt, &fdf, &fn, &fc, &ft, &fh, &fw));
@@ -56,9 +56,9 @@ EE convolution_gemm_V7(TensorDesc inputDesc,
     }
 
     oc /= 8;
-    U32 it_pad = it + p.padding_before + p.padding_after;
-    U32 ih_pad = ih + p.padding_top + p.padding_bottom;
-    U32 iw_pad = iw + p.padding_left + p.padding_right;
+    U32 it_pad = it + p.pad_before + p.pad_after;
+    U32 ih_pad = ih + p.pad_top + p.pad_bottom;
+    U32 iw_pad = iw + p.pad_left + p.pad_right;
     I64 K = ic * ft * fh * fw;
     I32 ohow = ot * oh * ow;
     F32 *in_pack = ((F32 *)tmp) + ic * it_pad * ih_pad * iw_pad;
@@ -116,53 +116,52 @@ EE convolution_gemm_V7(TensorDesc inputDesc,
                             // NHWChw6
                             F32 *in_pack_c8hw6 = thread_in_pack + (id * params[0] + c) * 8 * 6;
 
-                            __asm__ __volatile__("vld1.f32 {d0-d3}, [%[in_0]]\n"
-                                                 "vld1.f32 {d4-d7}, [%[in_1]]\n"
-                                                 "vld1.f32 {d8-d11}, [%[in_2]]\n"
-                                                 "vld1.f32 {d12-d15}, [%[in_3]]\n"
-                                                 "vld1.f32 {d16-d19}, [%[in_4]]\n"
-                                                 "vld1.f32 {d20-d23}, [%[in_5]]\n"
+                            __asm__ __volatile__(
+                                "vld1.f32 {d0-d3}, [%[in_0]]\n"
+                                "vld1.f32 {d4-d7}, [%[in_1]]\n"
+                                "vld1.f32 {d8-d11}, [%[in_2]]\n"
+                                "vld1.f32 {d12-d15}, [%[in_3]]\n"
+                                "vld1.f32 {d16-d19}, [%[in_4]]\n"
+                                "vld1.f32 {d20-d23}, [%[in_5]]\n"
 
-                                                 "vzip.32 q0, q2\n"
-                                                 "vzip.32 q4, q6\n"
-                                                 "vzip.32 q8, q10\n"
+                                "vzip.32 q0, q2\n"
+                                "vzip.32 q4, q6\n"
+                                "vzip.32 q8, q10\n"
 
-                                                 "vst1.f32 {d0}, [%[pack]]!\n"
-                                                 "vst1.f32 {d8}, [%[pack]]!\n"
-                                                 "vst1.f32 {d16}, [%[pack]]!\n"
-                                                 "vst1.f32 {d1}, [%[pack]]!\n"
-                                                 "vst1.f32 {d9}, [%[pack]]!\n"
-                                                 "vst1.f32 {d17}, [%[pack]]!\n"
-                                                 "vst1.f32 {d4}, [%[pack]]!\n"
-                                                 "vst1.f32 {d12}, [%[pack]]!\n"
-                                                 "vst1.f32 {d20}, [%[pack]]!\n"
-                                                 "vst1.f32 {d5}, [%[pack]]!\n"
-                                                 "vst1.f32 {d13}, [%[pack]]!\n"
-                                                 "vst1.f32 {d21}, [%[pack]]!\n"
+                                "vst1.f32 {d0}, [%[pack]]!\n"
+                                "vst1.f32 {d8}, [%[pack]]!\n"
+                                "vst1.f32 {d16}, [%[pack]]!\n"
+                                "vst1.f32 {d1}, [%[pack]]!\n"
+                                "vst1.f32 {d9}, [%[pack]]!\n"
+                                "vst1.f32 {d17}, [%[pack]]!\n"
+                                "vst1.f32 {d4}, [%[pack]]!\n"
+                                "vst1.f32 {d12}, [%[pack]]!\n"
+                                "vst1.f32 {d20}, [%[pack]]!\n"
+                                "vst1.f32 {d5}, [%[pack]]!\n"
+                                "vst1.f32 {d13}, [%[pack]]!\n"
+                                "vst1.f32 {d21}, [%[pack]]!\n"
 
-                                                 "vzip.32 q1, q3\n"
-                                                 "vzip.32 q5, q7\n"
-                                                 "vzip.32 q9, q11\n"
+                                "vzip.32 q1, q3\n"
+                                "vzip.32 q5, q7\n"
+                                "vzip.32 q9, q11\n"
 
-                                                 "vst1.f32 {d2}, [%[pack]]!\n"
-                                                 "vst1.f32 {d10}, [%[pack]]!\n"
-                                                 "vst1.f32 {d18}, [%[pack]]!\n"
-                                                 "vst1.f32 {d3}, [%[pack]]!\n"
-                                                 "vst1.f32 {d11}, [%[pack]]!\n"
-                                                 "vst1.f32 {d19}, [%[pack]]!\n"
-                                                 "vst1.f32 {d6}, [%[pack]]!\n"
-                                                 "vst1.f32 {d14}, [%[pack]]!\n"
-                                                 "vst1.f32 {d22}, [%[pack]]!\n"
-                                                 "vst1.f32 {d7}, [%[pack]]!\n"
-                                                 "vst1.f32 {d15}, [%[pack]]!\n"
-                                                 "vst1.f32 {d23}, [%[pack]]!\n"
-                                                 : [pack] "+r"(in_pack_c8hw6), [in_0] "+r"(in_0),
-                                                 [in_1] "+r"(in_1), [in_2] "+r"(in_2),
-                                                 [in_3] "+r"(in_3), [in_4] "+r"(in_4),
-                                                 [in_5] "+r"(in_5)
-                                                 :
-                                                 : "memory", "cc", "q0", "q1", "q2", "q3", "q4",
-                                                 "q5", "q6", "q7", "q8", "q9", "q10", "q11");
+                                "vst1.f32 {d2}, [%[pack]]!\n"
+                                "vst1.f32 {d10}, [%[pack]]!\n"
+                                "vst1.f32 {d18}, [%[pack]]!\n"
+                                "vst1.f32 {d3}, [%[pack]]!\n"
+                                "vst1.f32 {d11}, [%[pack]]!\n"
+                                "vst1.f32 {d19}, [%[pack]]!\n"
+                                "vst1.f32 {d6}, [%[pack]]!\n"
+                                "vst1.f32 {d14}, [%[pack]]!\n"
+                                "vst1.f32 {d22}, [%[pack]]!\n"
+                                "vst1.f32 {d7}, [%[pack]]!\n"
+                                "vst1.f32 {d15}, [%[pack]]!\n"
+                                "vst1.f32 {d23}, [%[pack]]!\n"
+                                : [pack] "+r"(in_pack_c8hw6), [in_0] "+r"(in_0), [in_1] "+r"(in_1),
+                                [in_2] "+r"(in_2), [in_3] "+r"(in_3), [in_4] "+r"(in_4), [in_5] "+r"(in_5)
+                                :
+                                : "memory", "cc", "q0", "q1", "q2", "q3", "q4", "q5", "q6", "q7",
+                                "q8", "q9", "q10", "q11");
                         }
                     }
                 }

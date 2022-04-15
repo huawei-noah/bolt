@@ -48,23 +48,21 @@ EE matrix_vector_multiply_transform_weight(
     TensorDesc desc, const void *src, TensorDesc *descTran, void *dst, Arch arch)
 {
     EE ret = NOT_SUPPORTED;
-#ifdef _USE_NEON
     if (IS_ARM(arch)) {
+#ifdef _USE_NEON
         ret = matrix_vector_multiply_transform_weight_arm(desc, src, descTran, dst);
-    }
 #endif
 #ifdef _USE_GENERAL
-    if (IS_GENERAL(arch)) {
-        memcpy(dst, src, tensorNumBytes(desc));
+    } else if (IS_GENERAL(arch)) {
+        UNI_MEMCPY(dst, src, tensorNumBytes(desc));
         (*descTran) = desc;
         ret = SUCCESS;
-    }
 #endif
 #ifdef _USE_X86
-    if (IS_X86(arch)) {
+    } else if (IS_X86(arch)) {
         ret = matrix_vector_multiply_transform_weight_x86(desc, src, descTran, dst, nullptr);
-    }
 #endif
+    }
     return ret;
 }
 
@@ -140,7 +138,7 @@ EE matrix_vector_multiply(TensorDesc matrixDesc,
             result, tmp, scale);
 #endif
 #ifdef _USE_NEON
-    } else {
+    } else if (IS_ARM(arch)) {
         ret = mvm_arm(matrixRow, matrixColumn, matrixDataType, matrixDataFormat, matrix, vector,
             tmp, result, arch);
 #endif

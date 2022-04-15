@@ -36,9 +36,9 @@ inline EE set_prelu_opt_mali(bool propagate_down,
     }
     char ioMemName[128] = "";
     CHECK_STATUS(set_io_mem_name(inputMemType, outputMemType, ioMemName));
-    sprintf(kernelName, "prelu_%s%s%s%s", ioMemName, formatName.c_str(), reluAxisName.c_str(),
-        progName.c_str());
-    sprintf(kernelOpt->sourceName, "prelu");
+    std::string kernel = std::string("prelu_") + ioMemName + formatName + reluAxisName + progName;
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, "prelu");
     kernelOpt->kernelDataType = dt;
     if (useNchwFormat) {
         CHECK_STATUS(set_chars_define_opt("USE_NCHW", opt));

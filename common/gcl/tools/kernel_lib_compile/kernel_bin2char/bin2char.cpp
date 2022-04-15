@@ -12,11 +12,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include <fstream>
-#include <iostream>
 #include <sstream>
 #include <sys/stat.h>
 #include <string>
-#include <string.h>
 
 int main(int argc, char *argv[])
 {
@@ -55,57 +53,47 @@ int main(int argc, char *argv[])
         }
         binMapName = argv[3];
     } else {
-        printf("please input .bin name + binmapname or input .bin name + .cpp name + binmapname\n");
+        printf("[ERROR] please pass xxx.bin name + binmapname or xxx.bin name + xxx.cpp name + "
+               "binmapname.\n");
+        return 1;
     }
 
     FILE *fpbin = fopen(binFile.c_str(), "rb");
     if (fpbin == NULL) {
-        printf("file %s open error\n", binFile.c_str());
+        printf("[ERROR] can not open file %s.\n", binFile.c_str());
         return 1;
     }
 
     struct stat f_stat;
     if (stat(binFile.c_str(), &f_stat) == -1) {
-        printf("file %s get size error\n", binFile.c_str());
+        printf("[ERROR] can not get file %s size.\n", binFile.c_str());
         fclose(fpbin);
         return 1;
     }
     int filelen = f_stat.st_size;
-    std::stringstream templen;
-    templen << filelen;
-    std::string filelen_st = templen.str();
-
     std::string str = "#include \"inline_" + std::string(binMapName) + ".h\"\n\nCU32 " +
-        std::string(charName) + "_len = " + filelen_st + ";\nCU8 " + std::string(charName) +
-        "[] = {";
-
-    unsigned char charRead;
-    std::string appendBuf;
-
+        std::string(charName) + "_len = " + std::to_string(filelen_st) + ";\nCU8 " +
+        std::string(charName) + "[] = {";
+    std::stringstream ss;
     for (int i = 0; i < filelen; i++) {
-        appendBuf.clear();
+        unsigned char c;
         if (i % 20 == 0) {
-            appendBuf += "\n";
+            ss << "\n";
         }
-        if (1 != fread(&charRead, 1, 1, fpbin)) {
-            printf("file %s read error\n", binFile.c_str());
+        if (1 != fread(&c, 1, 1, fpbin)) {
+            printf("[ERROR] can not read file %s content.\n", binFile.c_str());
             fclose(fpbin);
             return 1;
         }
-        char tempstr[4];
-        sprintf(tempstr, "0x%02x", charRead);
-        appendBuf += std::string(tempstr);
-
+        ss << "0x" << std::hex << std::setw(2) << std::setfill('0') << i;
         if (i == filelen - 1) {
         } else if (i % 20 == 19) {
-            appendBuf += ",";
+            ss << ",";
         } else {
-            appendBuf += ", ";
+            ss << ", ";
         }
-        str += appendBuf;
     }
-
-    str += "};";
+    str += ss.str() + "};";
 
     std::ofstream file;
     file.open(cppFile.c_str());
@@ -113,6 +101,5 @@ int main(int argc, char *argv[])
     file.close();
 
     fclose(fpbin);
-
     return 0;
 }

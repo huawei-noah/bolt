@@ -12,8 +12,10 @@ inline EE set_conv_depthwise_trans_flt(U32 workFiltersPerThread,
     kernelOpt->kernelDataType = dt;
     char *opt = kernelOpt->option;
     CHECK_STATUS(set_io_mem_name(GCL_MEM_BUF, outputMemType, ioMemName));
-    sprintf(kernelName, "conv_depthwise_trans_fltbuf_%s%d", ioMemName, item_k);
-    sprintf(kernelOpt->sourceName, "conv_depthwise_trans_fltbuf");
+    std::string kernel =
+        std::string("conv_depthwise_trans_fltbuf_") + ioMemName + std::to_string(item_k);
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, "conv_depthwise_trans_fltbuf");
     CHECK_STATUS(set_value_define_opt(item_k, "K", opt));
     CHECK_STATUS(set_io_mem_define_opt(GCL_MEM_BUF, outputMemType, opt));
     return SUCCESS;
@@ -54,10 +56,11 @@ inline EE set_conv_depthwise_opt_mali(U32 fw,
     if (outputNchwMode) {
         formatName = "nchw_";
     }
-    sprintf(kernelName, "conv_depthwise_sh%d%s_%s%s%s%d%d%d", sh, devName, ioMemName, modeName,
-        formatName.c_str(), fw, fh, ON);
-
-    sprintf(kernelOpt->sourceName, "conv_depthwise_sh%d%s", sh, devName);
+    std::string source = std::string("conv_depthwise_sh") + std::to_string(sh) + devName;
+    std::string kernel = source + std::string("_") + ioMemName + modeName + formatName +
+        std::to_string(fw) + std::to_string(fh) + std::to_string(ON);
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, source.c_str());
     kernelOpt->kernelDataType = dt;
     char *opt = kernelOpt->option;
     if (ON < 1 || ON > 8) {
@@ -152,10 +155,13 @@ inline EE set_conv_depthwise_dila_opt_mali(U32 fw,
     if (outputNchwMode) {
         formatName = "nchw_";
     }
-    sprintf(kernelName, "conv_depthwise_sh%d_%s%s%s%s%d%d%d", sh, dilaMode.c_str(), ioMemName,
-        modeName, formatName.c_str(), fw, fh, ON);
-
-    sprintf(kernelOpt->sourceName, "conv_depthwise_sh%d_dila", sh);
+    std::string kernel = std::string("conv_depthwise_sh") + std::to_string(sh) + std::string("_") +
+        dilaMode + ioMemName + modeName + formatName + std::to_string(fw) + std::to_string(fh) +
+        std::to_string(ON);
+    UNI_STRCPY(kernelName, kernel.c_str());
+    std::string source =
+        std::string("conv_depthwise_sh") + std::to_string(sh) + std::string("_dila");
+    UNI_STRCPY(kernelOpt->sourceName, source.c_str());
     kernelOpt->kernelDataType = dt;
     char *opt = kernelOpt->option;
     if (ON < 1 || ON > 8) {

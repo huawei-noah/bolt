@@ -34,9 +34,7 @@ public:
         bool findId = false;
         this->anchorBlockDim = 4;
         U32 tensorNum = inTensors.size();
-        if (tensorNum != 3) {
-            CHECK_STATUS(NOT_MATCH);
-        }
+        CHECK_REQUIREMENT(tensorNum == 3);
         for (U32 i = 0; i < tensorNum; i++) {
             U32 j = (i + 1) % tensorNum;
             TensorDesc iDesc = inTensors[i]->get_desc();
@@ -60,13 +58,10 @@ public:
                 }
             }
         }
-        if (!findId) {
-            CHECK_STATUS(NOT_MATCH);
-        }
+        CHECK_REQUIREMENT(findId);
     }
 
 protected:
-    DataType dt;
     GenerateProposalsParamSpec p;
     U8 deltaTensorId;
     U8 logitTensorId;

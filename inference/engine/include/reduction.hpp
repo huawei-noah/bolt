@@ -15,7 +15,6 @@
 #define _REDUCTION_H
 
 #include "operator.hpp"
-#include "tensor_computing.h"
 
 class Reduction : public Operator {
 public:
@@ -41,10 +40,10 @@ public:
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
-        if (this->p.axes_num == 0) {
+        if (this->p.num_axes == 0) {
             TensorDesc desc = inTensors[0]->get_desc();
-            this->p.axes_num = desc.nDims;
-            for (int i = 0; i < this->p.axes_num; i++) {
+            this->p.num_axes = desc.nDims;
+            for (int i = 0; i < this->p.num_axes; i++) {
                 this->p.axes[i] = i;
             }
         }

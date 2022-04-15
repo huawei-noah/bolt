@@ -57,9 +57,9 @@ inline EE convolution_infer_output_size_cpu(TensorDesc inputDesc,
     U32 ftDilated = (ft - 1) * p.dilatedRate_t + 1;
     U32 fhDilated = (fh - 1) * p.dilatedRate_h + 1;
     U32 fwDilated = (fw - 1) * p.dilatedRate_w + 1;
-    ot = (it + p.padding_before + p.padding_after - ftDilated) / p.stride_t + 1;
-    oh = (ih + p.padding_top + p.padding_bottom - fhDilated) / p.stride_h + 1;
-    ow = (iw + p.padding_left + p.padding_right - fwDilated) / p.stride_w + 1;
+    ot = (it + p.pad_before + p.pad_after - ftDilated) / p.stride_t + 1;
+    oh = (ih + p.pad_top + p.pad_bottom - fhDilated) / p.stride_h + 1;
+    ow = (iw + p.pad_left + p.pad_right - fwDilated) / p.stride_w + 1;
     if (ot < 0 || oh < 0 || ow < 0) {
         ret = NOT_MATCH;
     }
@@ -377,9 +377,8 @@ EE convolution(std::vector<Tensor> inputTensors,
         }
         ret = convolution_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc,
             (GCLMem_t)input, filterDesc, (GCLMem_t)filter, convParamSpec,
-            ((MaliPara_t)(archInfo->archPara))->forwardRunInfo, scaleDesc, (GCLMem_t)scale,
-            biasDesc, (GCLMem_t)bias, tmpBytes, tmpVec, outputDesc, (GCLMem_t)output,
-            activationDesc.mode);
+            ((MaliPara_t)(archInfo->archPara))->forwardRunInfo, scaleDesc, (GCLMem_t)scale, biasDesc,
+            (GCLMem_t)bias, tmpBytes, tmpVec, outputDesc, (GCLMem_t)output, activationDesc.mode);
 #endif
     }
 
@@ -388,7 +387,7 @@ EE convolution(std::vector<Tensor> inputTensors,
     if (inputTensors.size() > 1 && isEltwiseSeperate) {
         std::vector<Tensor> eltwiseInputTensors = {outputTensor, inputTensors[1]};
         EltwiseParamSpec eltwiseDesc;
-        eltwiseDesc.elt_mode = ELTWISE_SUM;
+        eltwiseDesc.mode = ELTWISE_SUM;
         eltwiseDesc.activation_type = eltwiseActDesc.mode;
         eltwiseDesc.activation_spec = convParamSpec.activation_spec;
         ret = eltwise(eltwiseInputTensors, eltwiseDesc, tmpTensors[0], outputTensor, archInfo);

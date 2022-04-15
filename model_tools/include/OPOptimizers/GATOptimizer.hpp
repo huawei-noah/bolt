@@ -59,36 +59,36 @@ class GATOptimizer : public OPOptimizer {
                 }
 
                 OperatorSpec p;
-                memset(&p, 0, sizeof(OperatorSpec));
+                UNI_MEMSET(&p, 0, sizeof(OperatorSpec));
                 std::string opName = "gat" + std::to_string(gat_layer++);
-                memcpy(p.name, opName.c_str(), opName.size());
+                UNI_MEMCPY(p.name, opName.c_str(), opName.size());
                 p.type = OT_GAT;
                 p.num_inputs = 5;
-                p.input_tensors_name = (I8 **)mt_new_storage(p.num_inputs * sizeof(I8 *));
+                p.input_tensors_name = (I8 **)mt_malloc(p.num_inputs * sizeof(I8 *));
                 for (int j = i, n = 0; j < i + 2; j++) {
                     for (U32 k = 0; k < spec->ops[j].num_inputs; k++, n++) {
-                        p.input_tensors_name[n] = (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
-                        strcpy(p.input_tensors_name[n], spec->ops[j].input_tensors_name[k]);
+                        p.input_tensors_name[n] = (I8 *)mt_malloc(NAME_LEN * sizeof(I8));
+                        UNI_STRCPY(p.input_tensors_name[n], spec->ops[j].input_tensors_name[k]);
                     }
                 }
-                p.input_tensors_name[4] = (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
-                strcpy(p.input_tensors_name[4], spec->ops[i + 4].output_tensors_name[0]);
+                p.input_tensors_name[4] = (I8 *)mt_malloc(NAME_LEN * sizeof(I8));
+                UNI_STRCPY(p.input_tensors_name[4], spec->ops[i + 4].output_tensors_name[0]);
                 p.num_outputs = 1;
-                p.output_tensors_name = (I8 **)mt_new_storage(p.num_outputs * sizeof(I8 *));
-                p.output_tensors_name[0] = (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
-                strcpy(p.output_tensors_name[0], spec->ops[k - 1].output_tensors_name[0]);
+                p.output_tensors_name = (I8 **)mt_malloc(p.num_outputs * sizeof(I8 *));
+                p.output_tensors_name[0] = (I8 *)mt_malloc(NAME_LEN * sizeof(I8));
+                UNI_STRCPY(p.output_tensors_name[0], spec->ops[k - 1].output_tensors_name[0]);
 
                 p.ps.gat_spec.num_heads = num_heads;
-                p.ps.gat_spec.activation = activation;
+                p.ps.gat_spec.activation_type = activation;
                 int n = i + 5;
                 for (U32 j = 0; j < spec->ops[n].num_inputs; j++) {
-                    delete spec->ops[n].input_tensors_name[j];
+                    mt_free(spec->ops[n].input_tensors_name[j]);
                 }
-                delete spec->ops[n].input_tensors_name;
+                mt_free(spec->ops[n].input_tensors_name);
                 for (U32 j = 0; j < spec->ops[n].num_outputs; j++) {
-                    delete spec->ops[n].output_tensors_name[j];
+                    mt_free(spec->ops[n].output_tensors_name[j]);
                 }
-                delete spec->ops[n].output_tensors_name;
+                mt_free(spec->ops[n].output_tensors_name);
                 spec->ops[n] = p;
 
                 setOperatorInvalid(spec, i, false);

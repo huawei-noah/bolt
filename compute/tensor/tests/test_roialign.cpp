@@ -39,6 +39,7 @@ int roialignTest(int argc, char **argv, DataType dt)
     F32 spatial_scale = (F32)atof(argv[15]);
 
     RoIAlignParamSpec p;
+    p.mode = POOLING_MEAN;
     p.output_h = output_h;
     p.output_w = output_w;
     p.sampling_ratio = sampling_ratio;
@@ -58,11 +59,11 @@ int roialignTest(int argc, char **argv, DataType dt)
     U8 *input_feat = ut_input_v(input_len_feat, dt, UT_INIT_RANDOM);
     U8 *input_rois = ut_input_v(input_len_rois, dt, UT_INIT_RANDOM);
     U8 *input_batch = ut_input_v(input_len_batch, dt, UT_INIT_ZERO);
-    memcpy(get_ptr_from_tensor(inputTensor_feat, CPU_GENERAL), input_feat,
+    UNI_MEMCPY(get_ptr_from_tensor(inputTensor_feat, CPU_GENERAL), input_feat,
         tensorNumBytes(inputDesc_feat));
-    memcpy(get_ptr_from_tensor(inputTensor_rois, CPU_GENERAL), input_rois,
+    UNI_MEMCPY(get_ptr_from_tensor(inputTensor_rois, CPU_GENERAL), input_rois,
         tensorNumBytes(inputDesc_rois));
-    memcpy(get_ptr_from_tensor(inputTensor_batch, CPU_GENERAL), input_batch,
+    UNI_MEMCPY(get_ptr_from_tensor(inputTensor_batch, CPU_GENERAL), input_batch,
         tensorNumBytes(inputDesc_batch));
     inputTensors[0] = inputTensor_feat;
     inputTensors[1] = inputTensor_rois;

@@ -85,6 +85,11 @@ public:
         *(this->scale) = scale;
     }
 
+    void set_scale_ptr(std::shared_ptr<F32> scale)
+    {
+        this->scale = scale;
+    }
+
     F32 get_scale()
     {
         return *(this->scale);
@@ -97,7 +102,7 @@ public:
 
     void copy_from(Tensor *other)
     {
-        memcpy(this->scale.get(), other->scale.get(), sizeof(F32));
+        UNI_MEMCPY(this->scale.get(), other->scale.get(), sizeof(F32));
         this->val->copy_from(other->val.get());
     }
 

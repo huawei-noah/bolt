@@ -28,8 +28,9 @@ inline EE set_copy_opt_mali(bool useBlockIndex, DataType dt, char *kernelName, K
             CHECK_STATUS(NOT_SUPPORTED);
     }
 
-    sprintf(kernelName, "copy_%s%s", BINDName.c_str(), dtName.c_str());
-    sprintf(kernelOpt->sourceName, "copy");
+    std::string kernel = std::string("copy_") + BINDName + dtName;
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, "copy");
     kernelOpt->kernelDataType = dt;
     if (useBlockIndex) {
         CHECK_STATUS(set_chars_define_opt("USE_BLOCK_INDEX", opt));

@@ -66,7 +66,6 @@
 #include "cpu/tdnn_fully_connected_cpu.hpp"
 #include "cpu/batch_norm_cpu.hpp"
 #include "cpu/cast_cpu.hpp"
-#include "cpu/equal_cpu.hpp"
 #include "cpu/instance_norm_cpu.hpp"
 #include "cpu/expand_cpu.hpp"
 #include "cpu/scatter_cpu.hpp"
@@ -74,6 +73,17 @@
 #include "cpu/select_cpu.hpp"
 #include "cpu/topk_cpu.hpp"
 #include "cpu/gat_cpu.hpp"
+#include "cpu/quantizelinear_cpu.hpp"
+#include "cpu/grid_sample_cpu.hpp"
+#include "cpu/onehot_cpu.hpp"
+#include "cpu/cumsum_cpu.hpp"
+#include "cpu/non_max_suppression_cpu.hpp"
+#include "cpu/constant_of_shape_cpu.hpp"
+#include "cpu/non_zero_cpu.hpp"
+#include "cpu/roialign_cpu.hpp"
+#include "cpu/range_cpu.hpp"
+#include "cpu/depth2space_cpu.hpp"
+#include "cpu/space2depth_cpu.hpp"
 
 class FactoryCPU : public Factory {
 public:
@@ -173,9 +183,10 @@ public:
         return std::shared_ptr<Operator>(cep);
     }
 
-    std::shared_ptr<Operator> createLayerNorm(DataType dt, U32 weightNum) override
+    std::shared_ptr<Operator> createLayerNorm(
+        DataType dt, LayerNormParamSpec p, U32 weightNum) override
     {
-        auto cep = (LayerNorm *)(new LayerNormCPU(dt, weightNum));
+        auto cep = (LayerNorm *)(new LayerNormCPU(dt, p, weightNum));
         return std::shared_ptr<Operator>(cep);
     }
 
@@ -264,9 +275,9 @@ public:
         return std::shared_ptr<Operator>(cep);
     }
 
-    std::shared_ptr<Operator> createPreAllocatedMemory(DataType dt, TensorDesc desc) override
+    std::shared_ptr<Operator> createPreAllocatedMemory(PreAllocatedMemoryParamSpec p) override
     {
-        auto cep = (PreAllocatedMemory *)new PreAllocatedMemoryCPU(dt, desc);
+        auto cep = (PreAllocatedMemory *)new PreAllocatedMemoryCPU(p);
         return std::shared_ptr<Operator>(cep);
     }
 
@@ -288,13 +299,13 @@ public:
 
     std::shared_ptr<Operator> createSpace2Depth(DataType dt, Space2DepthParamSpec p) override
     {
-        OP_UNSUP(2, dt, p);
+        auto cep = new Space2DepthCPU(dt, p);
         return std::shared_ptr<Operator>(cep);
     }
 
     std::shared_ptr<Operator> createDepth2Space(DataType dt, Depth2SpaceParamSpec p) override
     {
-        OP_UNSUP(2, dt, p);
+        auto cep = new Depth2SpaceCPU(dt, p);
         return std::shared_ptr<Operator>(cep);
     }
 
@@ -414,12 +425,6 @@ public:
         return std::shared_ptr<Operator>(cep);
     }
 
-    std::shared_ptr<Operator> createEqual(DataType dt, EqualParamSpec p) override
-    {
-        auto cep = new EqualCPU(dt, p);
-        return std::shared_ptr<Operator>(cep);
-    }
-
     std::shared_ptr<Operator> createInstanceNorm(DataType dt, InstanceNormParamSpec p) override
     {
         auto cep = new InstanceNormCPU(dt, p);
@@ -450,9 +455,9 @@ public:
         return std::shared_ptr<Operator>(cep);
     }
 
-    std::shared_ptr<Operator> createRoIAlign(RoIAlignParamSpec p) override
+    std::shared_ptr<Operator> createRoIAlign(DataType dt, RoIAlignParamSpec p) override
     {
-        OP_UNSUP(1, p);
+        auto cep = new RoIAlignCPU(dt, p);
         return std::shared_ptr<Operator>(cep);
     }
 
@@ -466,6 +471,55 @@ public:
     std::shared_ptr<Operator> createGAT(DataType dt, GATParamSpec p) override
     {
         auto cep = new GATCPU(dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createQuantizeLinear(DataType dt, QuantizeLinearParamSpec p) override
+    {
+        auto cep = new QuantizeLinearCPU(dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createGridSample(DataType dt, GridSampleParamSpec p) override
+    {
+        auto cep = new GridSampleCPU(dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createOneHot(DataType dt, OneHotParamSpec p) override
+    {
+        auto cep = new OneHotCPU(dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createCumSum(DataType dt, CumSumParamSpec p) override
+    {
+        auto cep = new CumSumCPU(dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createNonMaxSuppression(
+        DataType dt, NonMaxSuppressionParamSpec p) override
+    {
+        auto cep = new NonMaxSuppressionCPU(dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createConstantOfShape(DataType dt, ConstantOfShapeParamSpec p) override
+    {
+        auto cep = new ConstantOfShapeCPU(dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createNonZero(DataType dt) override
+    {
+        auto cep = new NonZeroCPU(dt);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createRange(DataType dt, RangeParamSpec p) override
+    {
+        auto cep = new RangeCPU(dt, p);
         return std::shared_ptr<Operator>(cep);
     }
 };

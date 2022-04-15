@@ -28,10 +28,10 @@ int powerTest(int argc, char **argv, DataType dt)
     inputTensor.resize(inputDesc);
     inputTensor.alloc();
     U8 *input = ut_input_v(len, dt, UT_INIT_RANDOM);
-    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inputDesc));
+    UNI_MEMCPY(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inputDesc));
     // set output
     Tensor outputTensor, outputTensorRef;
-    CHECK_STATUS(power_infer_output_size(&inputTensor, &outputTensor, &UT_CPU_ARCHINFO));
+    CHECK_STATUS(power_infer_output_size(&inputTensor, p, &outputTensor, &UT_CPU_ARCHINFO));
     outputTensor.alloc();
     TensorDesc outputDesc_ref = outputTensor.get_desc();
     outputTensorRef.resize(outputDesc_ref);

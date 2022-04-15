@@ -1,0 +1,146 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    tools:context=".MainActivity"
+    android:background="#aaaaaa">
+
+    <RelativeLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@android:color/transparent">
+
+        <TextView
+            android:id="@+id/answer"
+            android:layout_width="match_parent"
+            android:layout_height="160dp"
+            android:background="@color/white"
+            android:textColor="#333333"
+            android:hint="Press Ask Button to get answer"
+            android:paddingLeft="10dp"
+            android:layout_alignParentBottom="true"/>
+
+        <TextView
+            android:id="@+id/head_title2"
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:background="@color/purple_200"
+            android:textColor="@color/white"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:text="Answer"
+            android:layout_above="@id/answer"
+            android:gravity="center_vertical"
+            android:paddingLeft="20dp"/>
+
+        <RelativeLayout
+            android:id="@+id/question_bg"
+            android:layout_width="match_parent"
+            android:layout_height="160dp"
+            android:layout_above="@id/head_title2"
+            android:background="@android:color/transparent">
+
+            <RelativeLayout
+                android:id="@+id/text_bg"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:layout_marginRight="80dp"
+                android:background="@color/white">
+                <EditText
+                    android:id="@+id/question"
+                    android:layout_width="match_parent"
+                    android:layout_height="match_parent"
+                    android:textSize="15sp"
+                    android:textColor="#333333"
+                    android:text="how old is lili"
+                    android:hint="Please input readubf material"
+                    android:gravity="top"
+                    android:paddingHorizontal="10dp"
+                    android:background="@null"/>
+            </RelativeLayout>
+
+            <Button
+                android:id="@+id/ask_button"
+                android:layout_height="40dp"
+                android:layout_width="60dp"
+                android:layout_marginLeft="10dp"
+                android:layout_marginRight="10dp"
+                android:layout_alignParentRight="true"
+                android:layout_centerVertical="true"
+                android:text="Ask"
+                android:textColor="@color/white"
+                android:background="@color/teal_700"/>
+        </RelativeLayout>
+
+        <TextView
+            android:id="@+id/head_title1"
+            android:layout_width="match_parent"
+            android:layout_height="50dp"
+            android:layout_above="@id/question_bg"
+            android:background="@color/teal_700"
+            android:textColor="@color/white"
+            android:textSize="20sp"
+            android:textStyle="bold"
+            android:text="Question"
+            android:gravity="center_vertical"
+            android:paddingLeft="20dp"/>
+
+        <RelativeLayout
+            android:id="@+id/content_bg"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:layout_alignParentRight="true"
+            android:layout_marginRight="80dp"
+            android:layout_alignParentTop="true"
+            android:layout_above="@id/head_title1"
+            android:background="@color/white">
+            <EditText
+                android:id="@+id/content"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:textSize="15sp"
+                android:textColor="#333333"
+                android:text="lili is 4 years old,she is beautiful"
+                android:hint="Please input readubf material"
+                android:paddingHorizontal="10dp"
+                android:gravity="top"
+                android:background="@null"/>
+        </RelativeLayout>
+
+        <Button
+            android:id="@+id/demo1"
+            android:layout_height="40dp"
+            android:layout_width="60dp"
+            android:layout_marginLeft="10dp"
+            android:layout_marginRight="10dp"
+            android:layout_alignParentRight="true"
+            android:layout_marginTop="20dp"
+            android:text="demo1"
+            android:textColor="@color/white"
+            android:background="@color/oringe"/>
+
+        <Button
+            android:id="@+id/demo2"
+            android:layout_height="40dp"
+            android:layout_width="60dp"
+            android:layout_marginLeft="10dp"
+            android:layout_marginRight="10dp"
+            android:layout_alignParentRight="true"
+            android:layout_below="@id/demo1"
+            android:layout_marginTop="20dp"
+            android:text="demo2"
+            android:textColor="@color/white"
+            android:background="@color/oringe"/>
+
+        <ProgressBar
+            android:id="@+id/progress"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_centerInParent="true"
+            android:visibility="gone"/>
+    </RelativeLayout>
+
+
+</androidx.constraintlayout.widget.ConstraintLayout>

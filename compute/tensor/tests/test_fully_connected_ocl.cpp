@@ -111,7 +111,7 @@ int fullyConnectedTest(int argc, char *argv[], DataType dt)
     biasNum = (fn + item_m - 1) / item_m * item_m;
     if (biasNum > fn) {
         U8 *bias_val = ut_input_v(biasNum, dt, UT_INIT_ZERO);
-        memcpy(bias_val, bias_cpu, fn * bytesOf(dt));
+        UNI_MEMCPY(bias_val, bias_cpu, fn * bytesOf(dt));
         free(bias_cpu);
         bias_cpu = bias_val;
     }
@@ -169,18 +169,19 @@ int fullyConnectedTest(int argc, char *argv[], DataType dt)
     Tensor inputTensorCpu;
     inputTensorCpu.resize(inputDesc);
     inputTensorCpu.alloc();
-    memcpy(get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), input_cpu, tensorNumBytes(inputDesc));
+    UNI_MEMCPY(
+        get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), input_cpu, tensorNumBytes(inputDesc));
 
     Tensor filterTensorCpu;
     filterTensorCpu.resize(filterDesc);
     filterTensorCpu.alloc();
-    memcpy(
+    UNI_MEMCPY(
         get_ptr_from_tensor(filterTensorCpu, CPU_GENERAL), filter_cpu, tensorNumBytes(filterDesc));
 
     Tensor biasTensorCpu;
     biasTensorCpu.resize(biasDesc);
     biasTensorCpu.alloc();
-    memcpy(get_ptr_from_tensor(biasTensorCpu, CPU_GENERAL), bias_cpu, tensorNumBytes(biasDesc));
+    UNI_MEMCPY(get_ptr_from_tensor(biasTensorCpu, CPU_GENERAL), bias_cpu, tensorNumBytes(biasDesc));
 
     Tensor outputTensorCpu;
     outputTensorCpu.resize(outputDesc_cpu);

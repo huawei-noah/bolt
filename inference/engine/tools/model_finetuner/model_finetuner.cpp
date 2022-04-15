@@ -58,7 +58,7 @@ void load_cifar10(U8 *dataset, U32 batchIdx, TensorDesc inDesc, float *pixels, T
     archInfo.arch = CPU_GENERAL;
 
     if (training) {
-        memset(labels, 0, BATCH_SIZE * 10 * sizeof(float));
+        UNI_MEMSET(labels, 0, BATCH_SIZE * 10 * sizeof(float));
     }
     Tensor tmp, output;
     output.resize(inDesc);

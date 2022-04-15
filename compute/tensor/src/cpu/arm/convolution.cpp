@@ -60,7 +60,7 @@ EE convolution_infer_forward_algorithm_arm(TensorDesc inputDesc,
             CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
             it = ft = 1;
             p.dilatedRate_t = p.stride_t = 1;
-            p.padding_before = p.padding_after = 0;
+            p.pad_before = p.pad_after = 0;
         } else if (tensorIs5d(inputDesc)) {
             CHECK_STATUS(tensor5dGet(inputDesc, &idt, &idf, &in, &ic, &it, &ih, &iw));
             CHECK_STATUS(tensor5dGet(filterDesc, &fdt, &fdf, &fn, &fc, &ft, &fh, &fw));
@@ -75,8 +75,8 @@ EE convolution_infer_forward_algorithm_arm(TensorDesc inputDesc,
         if ((idf != DF_NCHWC8 || ic / p.group % 8 != 0) && DT_I8 != idt) {
             *algorithm = CONVOLUTION_ALGORITHM_GEMM_ICNCHW;
         } else if (ft == 1 && fh == 3 && fw == 3 && p.stride_t == 1 && p.stride_h == 1 &&
-            p.stride_w == 1 && p.padding_before == 0 && p.padding_after == 0 && p.padding_top == 1 &&
-            p.padding_bottom == 1 && p.padding_left == 1 && p.padding_right == 1) {
+            p.stride_w == 1 && p.pad_before == 0 && p.pad_after == 0 && p.pad_top == 1 &&
+            p.pad_bottom == 1 && p.pad_left == 1 && p.pad_right == 1) {
             *algorithm = CONVOLUTION_ALGORITHM_WINOGRAD;
         } else {
             *algorithm = CONVOLUTION_ALGORITHM_GEMM;
@@ -141,7 +141,7 @@ EE convolution_infer_forward_algorithm_arm(TensorDesc inputDesc,
             CHECK_STATUS(convolution_transform_filter_arm(
                 filterDesc, filter, p, convolutionAlgorithms[i], &ftmDesc, filterTransformed));
 
-            memset(tmp, 0, tmpBytes);
+            UNI_MEMSET(tmp, 0, tmpBytes);
             double timeStart = ut_time_ms();
             CHECK_STATUS(convolution_arm(inputDesc, input, ftmDesc, filterTransformed, p,
                 convolutionAlgorithms[i], scaleDesc, scale, biasDesc, bias, tmpBytes, tmp,
@@ -306,7 +306,7 @@ EE convolution_infer_forward_tmp_bytes_arm(TensorDesc inputDesc,
         CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
         it = ft = ot = 1;
         p.dilatedRate_t = p.stride_t = 1;
-        p.padding_before = p.padding_after = 0;
+        p.pad_before = p.pad_after = 0;
     } else if (tensorIs5d(inputDesc)) {
         CHECK_STATUS(tensor5dGet(inputDesc, &idt, &idf, &in, &ic, &it, &ih, &iw));
         CHECK_STATUS(tensor5dGet(filterDesc, &fdt, &fdf, &fn, &fc, &ft, &fh, &fw));
@@ -314,9 +314,9 @@ EE convolution_infer_forward_tmp_bytes_arm(TensorDesc inputDesc,
     } else {
         return NOT_SUPPORTED;
     }
-    U32 it_pad = it + p.padding_before + p.padding_after;
-    U32 ih_pad = ih + p.padding_top + p.padding_bottom;
-    U32 iw_pad = iw + p.padding_left + p.padding_right;
+    U32 it_pad = it + p.pad_before + p.pad_after;
+    U32 ih_pad = ih + p.pad_top + p.pad_bottom;
+    U32 iw_pad = iw + p.pad_left + p.pad_right;
     U32 tile_size = 0;
     switch (fdt) {
         case DT_F32:
@@ -360,10 +360,10 @@ EE convolution_infer_forward_tmp_bytes_arm(TensorDesc inputDesc,
         case CONVOLUTION_ALGORITHM_WINOGRAD: {
             U32 tile_h = (oh + 3) / 4;
             U32 tile_w = (ow + 3) / 4;
-            U32 pad_left = p.padding_left;
-            U32 pad_right = p.padding_right + (tile_w * 4 - ow);
-            U32 pad_top = p.padding_top;
-            U32 pad_bottom = p.padding_bottom + (tile_h * 4 - oh);
+            U32 pad_left = p.pad_left;
+            U32 pad_right = p.pad_right + (tile_w * 4 - ow);
+            U32 pad_top = p.pad_top;
+            U32 pad_bottom = p.pad_bottom + (tile_h * 4 - oh);
             ih_pad = ih + pad_top + pad_bottom;
             iw_pad = iw + pad_left + pad_right;
             *bytes = ic * ih_pad * iw_pad * element_size;

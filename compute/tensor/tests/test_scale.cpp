@@ -35,8 +35,8 @@ int scaleTest(int argc, char **argv, DataType dt)
     dataTensorRef.resize(inDesc);
     dataTensor.alloc();
     dataTensorRef.alloc();
-    memcpy(get_ptr_from_tensor(dataTensor, CPU_GENERAL), data, tensorNumBytes(inDesc));
-    memcpy(get_ptr_from_tensor(dataTensorRef, CPU_GENERAL), data, tensorNumBytes(inDesc));
+    UNI_MEMCPY(get_ptr_from_tensor(dataTensor, CPU_GENERAL), data, tensorNumBytes(inDesc));
+    UNI_MEMCPY(get_ptr_from_tensor(dataTensorRef, CPU_GENERAL), data, tensorNumBytes(inDesc));
 
     U8 *alpha = ut_input_v(ic, dt, UT_INIT_RANDOM);
     U8 *beta = ut_input_v(ic, dt, UT_INIT_RANDOM);

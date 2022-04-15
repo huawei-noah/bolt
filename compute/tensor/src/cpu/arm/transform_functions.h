@@ -163,12 +163,12 @@ template <typename T, U32 CAlignSize>
 inline T *convolution_input_padding_per_channel(
     U32 n, U32 ic, U32 it, U32 ih, U32 iw, const ConvolutionParamSpec &p, T *src, T *dst)
 {
-    U32 it_pad = it + p.padding_before + p.padding_after;
-    U32 ih_pad = ih + p.padding_top + p.padding_bottom;
-    U32 iw_pad = iw + p.padding_left + p.padding_right;
+    U32 it_pad = it + p.pad_before + p.pad_after;
+    U32 ih_pad = ih + p.pad_top + p.pad_bottom;
+    U32 iw_pad = iw + p.pad_left + p.pad_right;
     T *inArray_pad;
-    if (p.padding_before == 0 && p.padding_after == 0 && p.padding_top == 0 &&
-        p.padding_bottom == 0 && p.padding_left == 0 && p.padding_right == 0) {
+    if (p.pad_before == 0 && p.pad_after == 0 && p.pad_top == 0 && p.pad_bottom == 0 &&
+        p.pad_left == 0 && p.pad_right == 0) {
         T *inArray_mov = src + n * ic * it * ih * iw * CAlignSize;
         inArray_pad = inArray_mov;
     } else {
@@ -179,25 +179,25 @@ inline T *convolution_input_padding_per_channel(
         for (U32 c = 0; c < ic; c++) {
             T *inArray_mov = src + (n * ic + c) * it * ih * iw * CAlignSize;
             T *inArray_pad_mov = inArray_pad + c * it_pad * ih_pad * iw_pad * CAlignSize;
-            memset(inArray_pad_mov, 0, p.padding_before * ih_pad * iw_pad * CAlignSize * sizeof(T));
-            inArray_pad_mov += p.padding_before * ih_pad * iw_pad * CAlignSize;
-            for (U32 t = p.padding_before; t < it_pad - p.padding_after; t++) {
-                memset(inArray_pad_mov, 0, p.padding_top * iw_pad * CAlignSize * sizeof(T));
-                inArray_pad_mov += p.padding_top * iw_pad * CAlignSize;
-                for (U32 h = p.padding_top; h < ih_pad - p.padding_bottom; h++) {
-                    memset(inArray_pad_mov, 0, p.padding_left * CAlignSize * sizeof(T));
-                    inArray_pad_mov += p.padding_left * CAlignSize;
-                    memcpy(inArray_pad_mov, inArray_mov, iw * CAlignSize * sizeof(T));
+            UNI_MEMSET(inArray_pad_mov, 0, p.pad_before * ih_pad * iw_pad * CAlignSize * sizeof(T));
+            inArray_pad_mov += p.pad_before * ih_pad * iw_pad * CAlignSize;
+            for (U32 t = p.pad_before; t < it_pad - p.pad_after; t++) {
+                UNI_MEMSET(inArray_pad_mov, 0, p.pad_top * iw_pad * CAlignSize * sizeof(T));
+                inArray_pad_mov += p.pad_top * iw_pad * CAlignSize;
+                for (U32 h = p.pad_top; h < ih_pad - p.pad_bottom; h++) {
+                    UNI_MEMSET(inArray_pad_mov, 0, p.pad_left * CAlignSize * sizeof(T));
+                    inArray_pad_mov += p.pad_left * CAlignSize;
+                    UNI_MEMCPY(inArray_pad_mov, inArray_mov, iw * CAlignSize * sizeof(T));
                     inArray_pad_mov += iw * CAlignSize;
                     inArray_mov += iw * CAlignSize;
-                    memset(inArray_pad_mov, 0, p.padding_right * CAlignSize * sizeof(T));
-                    inArray_pad_mov += p.padding_right * CAlignSize;
+                    UNI_MEMSET(inArray_pad_mov, 0, p.pad_right * CAlignSize * sizeof(T));
+                    inArray_pad_mov += p.pad_right * CAlignSize;
                 }
-                memset(inArray_pad_mov, 0, p.padding_bottom * iw_pad * CAlignSize * sizeof(T));
-                inArray_pad_mov += p.padding_bottom * iw_pad * CAlignSize;
+                UNI_MEMSET(inArray_pad_mov, 0, p.pad_bottom * iw_pad * CAlignSize * sizeof(T));
+                inArray_pad_mov += p.pad_bottom * iw_pad * CAlignSize;
             }
-            memset(inArray_pad_mov, 0, p.padding_after * ih_pad * iw_pad * CAlignSize * sizeof(T));
-            inArray_pad_mov += p.padding_after * ih_pad * iw_pad * CAlignSize;
+            UNI_MEMSET(inArray_pad_mov, 0, p.pad_after * ih_pad * iw_pad * CAlignSize * sizeof(T));
+            inArray_pad_mov += p.pad_after * ih_pad * iw_pad * CAlignSize;
         }
     }
     return inArray_pad;

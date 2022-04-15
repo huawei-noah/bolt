@@ -55,10 +55,12 @@ int MatmulTest(int argc, char **argv, DataType dt, DataType filterDataType)
     }
     matrixBTensor.set_scale(1);
     matrixBTensorRef.set_scale(1);
-    memcpy(get_ptr_from_tensor(matrixATensor, CPU_GENERAL), A, tensorNumBytes(matrixADesc));
-    memcpy(get_ptr_from_tensor(matrixATensorRef, CPU_GENERAL), ARef, tensorNumBytes(matrixADescRef));
-    memcpy(get_ptr_from_tensor(matrixBTensor, CPU_GENERAL), B, tensorNumBytes(matrixBDesc));
-    memcpy(get_ptr_from_tensor(matrixBTensorRef, CPU_GENERAL), BRef, tensorNumBytes(matrixBDescRef));
+    UNI_MEMCPY(get_ptr_from_tensor(matrixATensor, CPU_GENERAL), A, tensorNumBytes(matrixADesc));
+    UNI_MEMCPY(
+        get_ptr_from_tensor(matrixATensorRef, CPU_GENERAL), ARef, tensorNumBytes(matrixADescRef));
+    UNI_MEMCPY(get_ptr_from_tensor(matrixBTensor, CPU_GENERAL), B, tensorNumBytes(matrixBDesc));
+    UNI_MEMCPY(
+        get_ptr_from_tensor(matrixBTensorRef, CPU_GENERAL), BRef, tensorNumBytes(matrixBDescRef));
 
     bool transposeA = (matrixADesc.df == DF_TRANSPOSE);
     bool transposeB = (matrixBDesc.df == DF_TRANSPOSE);

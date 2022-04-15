@@ -6,24 +6,19 @@ Before you try any step described in this document, please make sure you have in
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Model Conversion](#model-conversion)   
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Model Inference](#model-inference)  
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[API](#api)   
-&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Performance Profiling](#performance-profiling)  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Performance Profiling](#performance-profiling)   
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Model Visualization](#model-visualization)  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Model Protection](#model-protection)  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Environment variables](#environment-variables)  
 &nbsp;&nbsp;&nbsp;&nbsp;[Advanced Features](#advanced-features)  
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[INT8 Post Training Quantization](#int8-post-training-quantization)  
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[BNN Network Support](#bnn-network-support)  
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Algorithm Tuning for Key Layers](#algorithm-tuning-for-key-layers)  
 &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[Time-Series Data Acceleration](#time-series-data-acceleration)  
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;[How to reduce gpu inference overhead](#how-to-reduce-gpu-inference-overhead) 
 
 # Basic Usage
 ---
-
-### Environment variables
-
-Some Linux shell environment variables are reserved for Bolt.
-
-- *BOLT_MEMORY_REUSE_OPTIMIZATION*: whether to use memory reuse optimization. The default value is ON, You can set it *OFF* before model conversion to disable memory reuse optimization. Note that this setting takes effect during the model conversion. Once the model (.bolt) is stored, the memory reuse behavior is fixed.
-- *BOLT_PADDING*: Bolt only supports RNN/GRU/LSTM hidden states number mod 32 = 0 case, If you want to run number mod 32 != 0 case, please set it to *ON* before model conversion. The default value is ON.
-- *BOLT_INT8_STORAGE_ERROR_THRESHOLD*: Bolt supports storage precision and computation precision independent. You can use int8 model storage, FP32/FP16 computation. There will be a huge accuracy error when you quantize all float weight to int8 storage. So we provide a configure parameter to control only quantize < *BOLT_INT8_STORAGE_ERROR_THRESHOLD* weight.
-- *Bolt_TensorComputing_LibraryAlgoritmMap*: a path on the target device set by user to save tensor_computing library performance tuning result.
 
 ### Model Conversion
 
@@ -40,9 +35,11 @@ Some Linux shell environment variables are reserved for Bolt.
 * [X2bolt](../model_tools/tools/X2bolt/X2bolt.cpp) is a general converter, which focuses on converting different deep learning model to bolt model.
 
  
-Here we list the examples of two typical model conversions for Android backend, for X86 backend the ADB tool is not required.
+*Here we list the examples of two typical model conversions for Android backend, for X86 backend the ADB tool is not required.*
 
 #### Caffe/ONNX/Tflite Model Conversion
+
+Here we give an example of Caffe model conversion. ONNX and Tflite Model Conversions are similar to Caffe. The only difference is the suffix and number of model files. **If you want to convert ONNX model, you would better simplify ONNX model with [onnx-sim](https://github.com/daquexian/onnx-simplifier)**.
 
 resnet50(caffe) model contains two model files : [resnet50.prototxt](https://github.com/KaimingHe/deep-residual-networks/blob/master/prototxt/ResNet-50-deploy.prototxt) and [resnet50.caffemodel](https://deepdetect.com/models/resnet/ResNet-50-model.caffemodel). Prepare these two model files on */home/resnet/* in advance.
 
@@ -66,20 +63,22 @@ resnet50(caffe) model contains two model files : [resnet50.prototxt](https://git
    adb shell "./X2bolt --help"    
    ```
 
-3. Execute ***X2bolt*** to convert a model from caffe model to bolt model. Here shows the example of float16 model conversion.
+3. Execute ***X2bolt*** to convert a model from caffe model to bolt model. Here shows the example of float32 model conversion.
 
    ```
-   adb shell "/data/local/tmp/bolt/tools/X2bolt -d /data/local/tmp/models/resnet50/ -m resnet50 -i FP16"
+   adb shell "/data/local/tmp/bolt/tools/X2bolt -d /data/local/tmp/models/resnet50/ -m resnet50 -i FP32"
      
    adb shell "ls /data/local/tmp/models/resnet50"
-   # command output$ resnet50_fp16.bolt
+   # command output$ resnet50_fp32.bolt
    ```
 
 Note : Model conversion procedure of onnx and tflite is similar to caffe. 
 
 #### Tensorflow Model Conversion
 
-Save your mobilenet_v1 to frozen .pb model. And preprocess your model using [tf2json](../model_tools/tools/tensorflow2json/tf2json.py) which can convert the .pb to .json. Then use **X2bolt** to convert .json to .bolt model.
+Save your mobilenet_v1 to frozened .pb model. 
+Preprocess .pb model using [tf2json](../model_tools/tools/tensorflow2json/tf2json.py) which can convert the .pb to .json.
+Convert .json to .bolt model with **X2bolt**.
 
 Here is the example of mobilenet_v1_frozen.pb converted to mobilenet_v1.bolt. 
 
@@ -322,6 +321,36 @@ Bolt provides a program performance visualization interface to help user identif
 4. Use Google Chrome browser to open <chrome://tracing/> extension. Load the JSON file. You can see the program execution time.
 ![](images/PerformanceProfiling.PNG)
 
+### Model Visualization
+
+Bolt provides two ways to see model structure.
+
+- #### Using **-V** option in X2bolt or post_training_quantization to print model structure
+   
+<div align=center><img src="images/X2bolt.PNG" width = 60% height = 60%  style="border:1px solid rgba(151,151,151,0.50)"/></div>
+
+- #### [Using netron to visualise bolt model](https://github.com/huawei-noah/bolt/issues/97)
+
+<div align=center><img src="images/netron.PNG" width = 10% height = 10%  style="border:1px solid rgba(151,151,151,0.50)"/></div>
+
+
+### Model Protection
+
+If you don't want others to know your model structure, you can follow these steps to achieve goal.
+
+1. modify enum type *OperatorType*'s order and *OperatorTypeName* function in [common/uni/include/operator_type.h](common/uni/include/operator_type.h).
+2. set cmake option *USE_MODEL_PRINT* to *OFF* in [common/cmakes/bolt.cmake](common/cmakes/bolt.cmake).
+
+### Environment variables
+
+Some Linux shell environment variables are reserved for Bolt.
+
+- *BOLT_MEMORY_REUSE_OPTIMIZATION*: whether to use memory reuse optimization. The default value is ON, You can set it *OFF* before model conversion to disable memory reuse optimization. Note that this setting takes effect during the model conversion. Once the model (.bolt) is stored, the memory reuse behavior is fixed.
+- *BOLT_PADDING*: Bolt only supports RNN/GRU/LSTM hidden states number mod 32 = 0 case, If you want to run number mod 32 != 0 case, please set it to *ON* before model conversion. The default value is ON.
+- *BOLT_INT8_STORAGE_ERROR_THRESHOLD*: Bolt supports storage precision and computation precision independent. You can use int8 model storage, FP32/FP16 computation. There will be a huge accuracy error when you quantize all float weight to int8 storage. So we provide a configure parameter to control only quantize < *BOLT_INT8_STORAGE_ERROR_THRESHOLD* weight.
+- *Bolt_TensorComputing_LibraryAlgoritmMap*: a path on the target device set by user to save tensor_computing library performance tuning result.
+
+
 # Advanced Features
 ---
 
@@ -368,3 +397,10 @@ Flow is the time-series data acceleration module for Bolt. Flow simplifies the a
 Flow provides flexible CPU multi-core parallelism and heterogeneous scheduling (CPU + GPU). User don't need to pay excessive attention to heterogeneous management and write lots of non-reusable code to implement a heterogeneous application. User can get the best end-to-end performance with the help of Flow. Flow supports data parallelism and subgraph parallelism, with a simple API.
 
 More usage information can be find in [DEVELOPER.md](./DEVELOPER.md#time-series-data-acceleration-by-using-flow).
+
+### How to reduce gpu inference overhead
+
+Bolt support ARM GPU inference with OpenCL, but there are a big overhead that is caused by compiling OpenCL kernel source code and selecting optimal algorithm.
+
+They can be optimized by preparing some files in advance. Inference can directly use prepared files. 
+You can refer [REDUCE_GPU_PREPARE_TIME.md](./REDUCE_GPU_PREPARE_TIME.md) for more details.

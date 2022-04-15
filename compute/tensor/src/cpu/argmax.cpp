@@ -77,6 +77,10 @@ EE argmax_cpu(
             break;
         }
 #endif
+        case DT_I32: {
+            ret = argmax<I32>(inputDesc, (const I32 *)input, axis, outputDesc, (U32 *)output);
+            break;
+        }
         default:
             ret = NOT_SUPPORTED;
             break;

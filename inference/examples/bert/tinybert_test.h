@@ -146,7 +146,7 @@ inline void tinybertTest(int argc,
         loopTime = parse_res.loopTime.first;
     }
 
-    bool useGPU = (strcmp(affinityPolicyName, "GPU") == 0) ? true : false;
+    bool useGPU = std::string(affinityPolicyName) == std::string("GPU");
     std::shared_ptr<CNN> pipelineBase;
     UNI_PROFILE(pipelineBase = createPipeline(affinityPolicyName, modelPath, algorithmMapPath),
         std::string("bolt::prepare"), std::string("prepare"));

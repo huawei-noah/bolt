@@ -20,12 +20,9 @@
 #endif
 
 inline EE slice_infer_output_size_cpu(
-    TensorDesc inputDesc, SliceParamSpec p, std::vector<TensorDesc> *outputDesc)
+    TensorDesc inputDesc, SliceParamSpec p, std::vector<TensorDesc>& outputDesc)
 {
-    if (nullptr == outputDesc) {
-        CHECK_STATUS(NULL_POINTER);
-    }
-    U32 num = (*outputDesc).size();
+    U32 num = outputDesc.size();
     int axis = (p.axis + inputDesc.nDims) % inputDesc.nDims;
     I32 *slice_points = p.slice_points;
 
@@ -37,12 +34,13 @@ inline EE slice_infer_output_size_cpu(
         }
     }
     I32 target_axis = inputDesc.nDims - 1 - axis;
+    I32 cDim = (I32)inputDesc.nDims - 2;
     if (splitEqual) {
         CHECK_REQUIREMENT(0 == inputDesc.dims[target_axis] % num);
         inputDesc.dims[target_axis] /= num;
     }
     for (U32 i = 0; i < num; i++) {
-        (*outputDesc)[i] = inputDesc;
+        outputDesc[i] = inputDesc;
         if (splitEqual) {
             continue;
         }
@@ -55,7 +53,7 @@ inline EE slice_infer_output_size_cpu(
         if (i < num - 1) {
             next_point = slice_points[i];
         }
-        if (i == 0 && num == 1 && p.slice_size == 1) {  // Could happen in onnx
+        if (i == 0 && num == 1 && p.num_slice == 1) {  // Could happen in onnx
             next_point = slice_points[0];
         }
         if (prev_point < 0) {
@@ -70,20 +68,45 @@ inline EE slice_infer_output_size_cpu(
                 next_point = 0;
             }
         }
-        (*outputDesc)[i].dims[target_axis] = next_point - prev_point;
+        outputDesc[i].dims[target_axis] = next_point - prev_point;
     }
-    return SUCCESS;
+
+    for (U32 i = 0; i < num; i++) {
+        if ((cDim >= 0) && (outputDesc[i].dims[cDim] % 8 != 0)) {
+            if (outputDesc[i].nDims >= 4) {
+                outputDesc[i].df = DF_NCHW;
+            } else if (outputDesc[i].nDims == 3) {
+                outputDesc[i].df = DF_MTK;
+            } else if (outputDesc[i].nDims == 2) {
+                outputDesc[i].df = DF_NORMAL;
+            } else {
+                return NOT_SUPPORTED;
+            }
+        }
+    }
+
+    EE ret = SUCCESS;
+#ifdef _USE_CPU
+    if (tensorIsShape(inputDesc)) {
+        std::vector<void *> output(num);
+        for (U32 i = 0; i < num; i++) {
+            output[i] = outputDesc[i].dims + outputDesc[i].nDims;
+        }
+        ret = slice_cpu(inputDesc, inputDesc.dims + inputDesc.nDims, p, outputDesc, output);
+    }
+#endif
+    return ret;
 }
 
 EE slice_infer_output_size(
     Tensor *inputTensor, SliceParamSpec p, std::vector<Tensor *> outputTensor, ArchInfo_t archInfo)
 {
     if (inputTensor == nullptr) {
-        CHECK_STATUS(NULL_POINTER);
+        return NULL_POINTER;
     }
     TensorDesc inputDesc = inputTensor->get_desc();
     std::vector<TensorDesc> outputDesc = get_desc_from_tensor_ptrs(outputTensor);
-    CHECK_STATUS(slice_infer_output_size_cpu(inputDesc, p, &outputDesc));
+    EE ret = slice_infer_output_size_cpu(inputDesc, p, outputDesc);
     if (IS_GPU(archInfo->arch)) {
 #ifdef _USE_GPU
         OclMemory *inputMem = (OclMemory *)inputTensor->get_memory();
@@ -91,13 +114,13 @@ EE slice_infer_output_size(
         for (U32 i = 0; i < outputTensor.size(); i++) {
             outputMems.push_back((OclMemory *)outputTensor[i]->get_memory());
         }
-        CHECK_STATUS(slice_padding_input_mali(inputDesc, p, &outputDesc, inputMem, outputMems));
+        ret = slice_padding_input_mali(inputDesc, p, &outputDesc, inputMem, outputMems);
 #endif
     }
     for (U32 i = 0; i < outputTensor.size(); i++) {
         outputTensor[i]->resize(outputDesc[i]);
     }
-    return SUCCESS;
+    return ret;
 }
 
 EE slice_infer_forward_tmp_bytes(Tensor inputTensor,
@@ -139,7 +162,7 @@ EE slice(Tensor inputTensor,
     EE ret = NOT_SUPPORTED;
     if (IS_CPU(arch)) {
 #ifdef _USE_CPU
-        ret = slice_cpu(inputDesc, input, p, outputDesc, &output);
+        ret = slice_cpu(inputDesc, input, p, outputDesc, output);
 #endif
 #ifdef _USE_GPU
     } else if (IS_GPU(arch)) {

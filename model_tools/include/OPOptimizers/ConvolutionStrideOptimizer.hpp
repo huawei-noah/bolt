@@ -166,13 +166,13 @@ class ConvolutionStrideOptimizer : public OPOptimizer {
                         poolOperator.ps.pooling_spec.stride_h = thisStideH;
                         poolOperator.ps.pooling_spec.stride_w = thisStideW;
                         poolOperator.ps.pooling_spec.stride_t = 1;
-                        poolOperator.ps.pooling_spec.padding_before = 0;
-                        poolOperator.ps.pooling_spec.padding_after = 0;
-                        poolOperator.ps.pooling_spec.padding_top = 0;
-                        poolOperator.ps.pooling_spec.padding_bottom = 0;
-                        poolOperator.ps.pooling_spec.padding_left = 0;
-                        poolOperator.ps.pooling_spec.padding_right = 0;
-                        poolOperator.ps.pooling_spec.rm = FLOOR;
+                        poolOperator.ps.pooling_spec.pad_before = 0;
+                        poolOperator.ps.pooling_spec.pad_after = 0;
+                        poolOperator.ps.pooling_spec.pad_top = 0;
+                        poolOperator.ps.pooling_spec.pad_bottom = 0;
+                        poolOperator.ps.pooling_spec.pad_left = 0;
+                        poolOperator.ps.pooling_spec.pad_right = 0;
+                        poolOperator.ps.pooling_spec.round_mode = ROUND_FLOOR;
                         poolOperator.ps.pooling_spec.mode = POOLING_MAX;
 
                         str_copy(poolOperator.output_tensors_name[0], poolingName.data(),

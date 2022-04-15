@@ -27,46 +27,46 @@ int resizeTest(int argc, char *argv[], DataType dt)
     U32 oc = atoi(argv[6]);
     U32 oh = atoi(argv[7]);
     U32 ow = atoi(argv[8]);
-    ArchInfo archInfo;
-    archInfo.arch = UT_ARCH;
-    ArchInfo archInfo_org;
-    archInfo_org.arch = CPU_GENERAL;
-
     CHECK_REQUIREMENT(in == 1 && on == 1);
 
-    TensorDesc inputDesc, outputDesc;
-    inputDesc = tensor4df(dt, DF_NCHW, in, ic, ih, iw);
+    ArchInfo archInfo;
+    archInfo.arch = UT_ARCH;
 
-    DataType paramDT = DT_F32;
-    F32 scales[2];
-    scales[0] = (F32)oh / (F32)ih;
-    scales[1] = (F32)ow / (F32)iw;
+    ResizeParamSpec p;
+    p.mode = RESIZE_LINEAR;
+    p.trans_mode = COORDINATE_TRANS_ASYMMETRIC;
+    p.num_sizes = 0;
+    p.num_scales = 4;
+    p.scales[0] = oh;
+    p.scales[1] = ow;
+    p.scales[2] = (F32)oh / (F32)ih;
+    p.scales[3] = (F32)ow / (F32)iw;
 
     // setup input
+    TensorDesc inputDesc = tensor4df(dt, DF_NCHW, in, ic, ih, iw);
     U8 *input = ut_input_v(in * ic * ih * iw, dt, UT_INIT_RANDOM);
-    Tensor inputTensor;
-    inputTensor.resize(inputDesc);
-    inputTensor.alloc();
-    memcpy(get_ptr_from_tensor(inputTensor, UT_ARCH), input, tensorNumBytes(inputDesc));
+    Tensor inputTensor = Tensor::alloc_sized<CPUMem>(inputDesc);
+    UNI_MEMCPY(get_ptr_from_tensor(inputTensor, UT_ARCH), input, tensorNumBytes(inputDesc));
 
     // setup output
-    U32 outputBytes;
     Tensor outputTensor;
-    CHECK_STATUS(resize_infer_output_size(
-        &inputTensor, paramDT, scales, &outputTensor, &outputBytes, &archInfo));
-    outputDesc = outputTensor.get_desc();
+    CHECK_STATUS(resize_infer_output_size(&inputTensor, p, &outputTensor, &archInfo));
+    TensorDesc outputDesc = outputTensor.get_desc();
     CHECK_REQUIREMENT(tensorNumElements(outputDesc) == on * oc * oh * ow);
     outputTensor.alloc();
     Tensor outputTensorRef = Tensor::alloc_sized<CPUMem>(outputDesc);
-    Tensor tmpTensor = Tensor::alloc_sized<CPUMem>(tensor1d(DT_U8, 8 * tensorNumBytes(inputDesc)));
-
-    ResizeParamSpec p;
-    p.mode = LINEAR;
+    U32 cpuTmpBytes = 0, cpuTmpBytesSerial = 0;
+    CHECK_STATUS(
+        resize_infer_forward_tmp_bytes(inputTensor, p, outputTensor, &cpuTmpBytes, &archInfo));
+    CHECK_STATUS(resize_infer_forward_tmp_bytes(
+        inputTensor, p, outputTensorRef, &cpuTmpBytesSerial, &UT_SERIAL_ARCHINFO));
+    Tensor tmpTensor = Tensor::alloc_sized<CPUMem>(tensor1d(DT_I8, cpuTmpBytes));
+    Tensor tmpTensorSerial = Tensor::alloc_sized<CPUMem>(tensor1d(DT_I8, cpuTmpBytesSerial));
     if (UT_CHECK) {
-        CHECK_STATUS(resize(inputTensor, tmpTensor, outputTensor, p, &archInfo));
+        CHECK_STATUS(resize(inputTensor, p, tmpTensor, outputTensor, &archInfo));
 
         // naive implement
-        CHECK_STATUS(resize(inputTensor, tmpTensor, outputTensorRef, p, &archInfo_org));
+        CHECK_STATUS(resize(inputTensor, p, tmpTensorSerial, outputTensorRef, &UT_SERIAL_ARCHINFO));
 
         // check
         ut_check_v(get_ptr_from_tensor(outputTensor, UT_ARCH),
@@ -77,7 +77,7 @@ int resizeTest(int argc, char *argv[], DataType dt)
     // benchmark
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        CHECK_STATUS(resize(inputTensor, tmpTensor, outputTensor, p, &archInfo));
+        CHECK_STATUS(resize(inputTensor, p, tmpTensor, outputTensor, &archInfo));
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;

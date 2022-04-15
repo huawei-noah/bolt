@@ -23,8 +23,9 @@ inline EE set_rnncell_update_res_opt_mali(bool useProjection,
         CHECK_STATUS(set_chars_define_opt("USE_RNN_MODE", opt));
     }
     kernelOpt->kernelDataType = dt;
-    sprintf(kernelName, "rnncell_update_res_%s%s", proName.c_str(), modeName.c_str());
-    sprintf(kernelOpt->sourceName, "rnncell_update_res");
+    std::string kernel = std::string("rnncell_update_res_") + proName + modeName;
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, "rnncell_update_res");
     CHECK_STATUS(set_io_mem_define_opt(inputMemType, outputMemType, opt));
     return SUCCESS;
 }

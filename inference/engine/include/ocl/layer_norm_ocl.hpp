@@ -18,7 +18,7 @@
 
 class LayerNormOCL : public LayerNorm {
 public:
-    LayerNormOCL(DataType dt, U32 weightNum) : LayerNorm(dt, weightNum)
+    LayerNormOCL(DataType dt, LayerNormParamSpec p, U32 weightNum) : LayerNorm(dt, p, weightNum)
     {
         INIT_GPU_INFO(nullptr)
     }
@@ -28,7 +28,7 @@ public:
     std::shared_ptr<Operator> clone() override
     {
         std::shared_ptr<LayerNormOCL> mem =
-            std::shared_ptr<LayerNormOCL>(new LayerNormOCL(this->dt, this->weightNum));
+            std::shared_ptr<LayerNormOCL>(new LayerNormOCL(this->dt, this->p, this->weightNum));
         *mem = *this;
         return mem;
     }
@@ -66,8 +66,8 @@ public:
         Tensor weightTensor = this->weightTensors[0];
         Tensor biasTensor = this->biasTensors[0];
         Tensor outputTensor = this->outputTensors[0];
-        CHECK_STATUS(layer_normalization(
-            inputTensor, weightTensor, biasTensor, this->temp, outputTensor, &this->archInfo));
+        CHECK_STATUS(layer_normalization(inputTensor, this->p, weightTensor, biasTensor, this->temp,
+            outputTensor, &this->archInfo));
     }
 
     EE infer_output_tensors_size(

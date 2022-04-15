@@ -14,7 +14,6 @@
 #ifndef _H_DEPTHWISE_POINTWISE_CONVOLUTION_DIRECT_NO_PADDING
 #define _H_DEPTHWISE_POINTWISE_CONVOLUTION_DIRECT_NO_PADDING
 
-#include <string.h>
 #include "sys.h"
 #include "tensor_desc.h"
 #include "parameter_spec.h"

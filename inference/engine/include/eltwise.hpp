@@ -18,9 +18,9 @@
 
 class Eltwise : public Operator {
 public:
-    Eltwise(EltwiseParamSpec eltwiseDesc)
+    Eltwise(EltwiseParamSpec p)
     {
-        this->eltwiseDesc = eltwiseDesc;
+        this->p = p;
     }
 
     OperatorType get_type() override
@@ -37,6 +37,6 @@ public:
     }
 
 protected:
-    EltwiseParamSpec eltwiseDesc;
+    EltwiseParamSpec p;
 };
 #endif  // _ELTWISE_H

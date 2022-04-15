@@ -33,10 +33,10 @@ inline EE pooling_checkpara_mali_fp16(GCLHandle_t handle,
     if (inputDesc.dims[2] != outputDesc.dims[2] || inputDesc.dims[3] != outputDesc.dims[3]) {
         return NOT_SUPPORTED;
     }
-    if (poolingParamSpec.padding_top >= poolingParamSpec.kernel_h) {
+    if (poolingParamSpec.pad_top >= poolingParamSpec.kernel_h) {
         return NOT_SUPPORTED;
     }
-    if (poolingParamSpec.padding_bottom >= poolingParamSpec.kernel_w) {
+    if (poolingParamSpec.pad_bottom >= poolingParamSpec.kernel_w) {
         return NOT_SUPPORTED;
     }
     if (input->desc.memFormat != output->desc.memFormat || input->desc.memFormat != DF_NCHWC4) {
@@ -74,9 +74,9 @@ inline EE pooling_core_mali_fp16(GCLHandle_t handle,
     sw = poolingParamSpec.stride_w;
     sh = poolingParamSpec.stride_h;
     st = poolingParamSpec.stride_t;
-    pw = poolingParamSpec.padding_left;
-    ph = poolingParamSpec.padding_top;
-    pt = poolingParamSpec.padding_before;
+    pw = poolingParamSpec.pad_left;
+    ph = poolingParamSpec.pad_top;
+    pt = poolingParamSpec.pad_before;
     kw = poolingParamSpec.kernel_w;
     kh = poolingParamSpec.kernel_h;
     kt = poolingParamSpec.kernel_t;
@@ -134,7 +134,8 @@ inline EE pooling_core_mali_fp16(GCLHandle_t handle,
             mode, DT_F16, input->desc.memType, output->desc.memType, kernelName, &kernelOpt));
         CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
         CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, iw_off, ih_off, ow_str, oh_str,
-            o_off, iw, ih, ow, oh, sw, sh, pw, ph, kw, kh, inbuf, outbuf));
+            o_off, iw, ih, ow, oh, sw, sh, pw, ph, kw, kh, (int)poolingParamSpec.count_include_pad,
+            inbuf, outbuf));
         CHECK_STATUS(gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName));
 #ifdef _DEBUG
         CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));

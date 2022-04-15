@@ -18,13 +18,13 @@
 
 class ActivationCPU : public Activation {
 public:
-    ActivationCPU(ActivationParamSpec activationDesc) : Activation(activationDesc)
+    ActivationCPU(ActivationParamSpec p) : Activation(p)
     {}
 
     std::shared_ptr<Operator> clone() override
     {
         std::shared_ptr<ActivationCPU> mem =
-            std::shared_ptr<ActivationCPU>(new ActivationCPU(this->activationDesc));
+            std::shared_ptr<ActivationCPU>(new ActivationCPU(this->p));
         *mem = *this;
         return mem;
     }
@@ -33,15 +33,14 @@ public:
     {
         Tensor inputTensor = this->inputTensors[0];
         Tensor outputTensor = this->outputTensors[0];
-        CHECK_STATUS(activation(inputTensor, this->activationDesc, outputTensor, &this->archInfo));
+        CHECK_STATUS(activation(inputTensor, this->p, outputTensor, &this->archInfo));
         outputTensor.set_scale(inputTensor.get_scale());
     }
 
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
-        CHECK_STATUS(activation_infer_output_size(inTensors[0], outTensors[0], &this->archInfo));
-        return SUCCESS;
+        return activation_infer_output_size(inTensors[0], outTensors[0], &this->archInfo);
     }
 };
 

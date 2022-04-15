@@ -40,7 +40,7 @@ static void transformToNCHWKernel(
         case DF_NCHW: {
             if (in == on && ic == oc && ih == oh && iw == ow) {
                 if (output != input) {
-                    memcpy(output, input, tensorNumBytes(outputDesc));
+                    UNI_MEMCPY(output, input, tensorNumBytes(outputDesc));
                 }
             } else {
                 U32 tileSize = UNI_MIN(iw, ow) * bytesOf(idt);
@@ -49,7 +49,7 @@ static void transformToNCHWKernel(
                         for (U32 h = 0; h < oh && h < ih; h++) {
                             U32 srcIndex = ((n * ic + c) * ih + h) * iw;
                             U32 dstIndex = ((n * oc + c) * oh + h) * ow;
-                            memcpy(output + dstIndex, input + srcIndex, tileSize);
+                            UNI_MEMCPY(output + dstIndex, input + srcIndex, tileSize);
                         }
                     }
                 }
@@ -169,7 +169,7 @@ static void transformToNHWCKernel(
         case DF_NHWC: {
             CHECK_REQUIREMENT(tensorNumElements(inputDesc) == size);
             if (input != output) {
-                memcpy(output, input, tensorNumBytes(inputDesc));
+                UNI_MEMCPY(output, input, tensorNumBytes(inputDesc));
             }
             break;
         }
@@ -262,9 +262,9 @@ EE transformNCHWToNCHWC8(
                         // support channel padding
                         if (c_i < ic) {
                             U32 srcIndex = (((n * ic + c_i) * ih + h) * iw + w) * elementSize;
-                            memcpy(outputPtr + dstIndex, inputPtr + srcIndex, elementSize);
+                            UNI_MEMCPY(outputPtr + dstIndex, inputPtr + srcIndex, elementSize);
                         } else {
-                            memset(outputPtr + dstIndex, 0, elementSize);
+                            UNI_MEMSET(outputPtr + dstIndex, 0, elementSize);
                         }
                     }
                 }
@@ -299,9 +299,9 @@ EE transformNHWCToNCHWC8(
                         // support channel padding
                         if (c_i < ic) {
                             U32 srcIndex = (((n * ih + h) * iw + w) * ic + c_i) * elementSize;
-                            memcpy(outputPtr + dstIndex, inputPtr + srcIndex, elementSize);
+                            UNI_MEMCPY(outputPtr + dstIndex, inputPtr + srcIndex, elementSize);
                         } else {
-                            memset(outputPtr + dstIndex, 0, elementSize);
+                            UNI_MEMSET(outputPtr + dstIndex, 0, elementSize);
                         }
                     }
                 }
@@ -318,7 +318,7 @@ EE transformNCHWC8ToNCHWC8ByGroup(
     U32 outputSize = tensorNumElements(outputDesc);
     if (group <= 1 || inputSize == outputSize) {
         if (input != output) {
-            memcpy(output, input, outputSize);
+            UNI_MEMCPY(output, input, outputSize);
         }
         return SUCCESS;
     }
@@ -354,10 +354,10 @@ EE transformNCHWC8ToNCHWC8ByGroup(
                             U32 srcIndex =
                                 ((((n * ict + id_a) * ih + h) * iw + w) * channelAlignSize + id_b) *
                                 elementSize;
-                            memcpy(
+                            UNI_MEMCPY(
                                 (U8 *)output + dstIndex, (const U8 *)input + srcIndex, elementSize);
                         } else {
-                            memset((U8 *)output + dstIndex, 0, elementSize);
+                            UNI_MEMSET((U8 *)output + dstIndex, 0, elementSize);
                         }
                     }
                 }
@@ -417,7 +417,7 @@ EE transposeFilter(TensorDesc inputDesc, const void *input, TensorDesc outputDes
                 for (U32 hw = 0; hw < ih * iw; hw++) {
                     U32 srcIndex = o * ih * iw * innerSize + hw * innerSize;
                     U32 dstIndex = o * ih * iw * innerSize + (hwMax - hw) * innerSize;
-                    memcpy(outputPtr + dstIndex, inputPtr + srcIndex, innerSize);
+                    UNI_MEMCPY(outputPtr + dstIndex, inputPtr + srcIndex, innerSize);
                 }
             }
             break;
@@ -475,7 +475,7 @@ EE array_transpose(DataType dt,
             inputIndex = (inputIndex + inputLocalIndex[j]) * inputDims[j - 1];
         }
         inputIndex += inputLocalIndex[sizeInnerIndex];
-        memcpy(outputPtr + i * tileSize, inputPtr + inputIndex * tileSize, tileSize);
+        UNI_MEMCPY(outputPtr + i * tileSize, inputPtr + inputIndex * tileSize, tileSize);
     }
 
     return SUCCESS;
@@ -513,7 +513,7 @@ EE array_transpose_naive(DataType dt,
             inputIndex = (inputIndex + inputLocalIndex[j]) * inputDims[j - 1];
         }
         inputIndex += inputLocalIndex[0];
-        memcpy(outputPtr + i * tileSize, inputPtr + inputIndex * tileSize, tileSize);
+        UNI_MEMCPY(outputPtr + i * tileSize, inputPtr + inputIndex * tileSize, tileSize);
     }
 
     return SUCCESS;

@@ -16,10 +16,10 @@
 
 #include "tensor_desc.h"
 #include "uni.h"
-#include "thread_affinity.h"
+#include "affinity_policy.h"
 
 template <typename T>
-inline static void transformToNCHWKernel(
+inline static EE transformToNCHWKernel(
     TensorDesc inputDesc, const T *input, TensorDesc outputDesc, T *output)
 {
     DataType idt, odt;
@@ -40,24 +40,30 @@ inline static void transformToNCHWKernel(
     } else if (tensorIs4d(inputDesc)) {
         CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
     } else {
-        UNI_ERROR_LOG("not support transform %d-dim tensor to NCHW format\n", (int)inputDesc.nDims);
-        return;
+        UNI_ERROR_LOG("not support transform %d-dim tensor to NCHW format.\n", (int)inputDesc.nDims);
+        return NOT_SUPPORTED;
     }
-    if (tensorIs3d(outputDesc)) {
+    if (tensorIs2d(outputDesc)) {
+        CHECK_STATUS(tensor2dGet(outputDesc, &odt, &odf, &on, &oc));
+        oh = ow = 1;
+    } else if (tensorIs3d(outputDesc)) {
         CHECK_STATUS(tensor3dGet(outputDesc, &odt, &odf, &on, &oc, &oh));
         ow = 1;
     } else if (tensorIs4d(outputDesc)) {
         CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
     } else {
-        UNI_ERROR_LOG("not support transform to %d-dim NCHW tensor\n", (int)outputDesc.nDims);
-        return;
+        UNI_ERROR_LOG("not support transform to %d-dim NCHW tensor.\n", (int)outputDesc.nDims);
+        return NOT_SUPPORTED;
     }
     CHECK_REQUIREMENT(idt == odt);
+    EE ret = SUCCESS;
     switch (idf) {
+        case DF_NORMAL:
+        case DF_MTK:
         case DF_NCHW: {
             if (in == on && ic == oc && ih == oh && iw == ow) {
                 if (output != input) {
-                    memcpy(output, input, tensorNumBytes(outputDesc));
+                    UNI_MEMCPY(output, input, tensorNumBytes(outputDesc));
                 }
             } else {
                 U32 tileSize = UNI_MIN(iw, ow) * bytesOf(idt);
@@ -66,7 +72,7 @@ inline static void transformToNCHWKernel(
                         for (U32 h = 0; h < oh && h < ih; h++) {
                             U32 srcIndex = ((n * ic + c) * ih + h) * iw;
                             U32 dstIndex = ((n * oc + c) * oh + h) * ow;
-                            memcpy(output + dstIndex, input + srcIndex, tileSize);
+                            UNI_MEMCPY(output + dstIndex, input + srcIndex, tileSize);
                         }
                     }
                 }
@@ -160,49 +166,56 @@ inline static void transformToNCHWKernel(
             break;
         }
         default: {
-            UNI_ERROR_LOG("not support transform %s format to NCHW format\n", DataFormatName()[idf]);
+            UNI_ERROR_LOG(
+                "not support transform %s format to NCHW format.\n", DataFormatName()[idf]);
+            ret = NOT_SUPPORTED;
+            break;
         }
     }
+    return ret;
 }
 
 inline EE transformToNCHW(
     TensorDesc inputDesc, const void *input, TensorDesc outputDesc, void *output)
 {
     if (nullptr == input || nullptr == output) {
-        return NULL_POINTER;
+        CHECK_STATUS(NULL_POINTER);
     }
+    EE ret = NOT_SUPPORTED;
     switch (inputDesc.dt) {
 #ifdef _USE_FP32
         case DT_F32: {
-            transformToNCHWKernel<F32>(inputDesc, (F32 *)input, outputDesc, (F32 *)output);
+            ret = transformToNCHWKernel<F32>(inputDesc, (F32 *)input, outputDesc, (F32 *)output);
             break;
         }
 #endif
 #ifdef _USE_FP16
         case DT_F16: {
-            transformToNCHWKernel<F16>(inputDesc, (F16 *)input, outputDesc, (F16 *)output);
+            ret = transformToNCHWKernel<F16>(inputDesc, (F16 *)input, outputDesc, (F16 *)output);
             break;
         }
 #endif
 #ifdef _USE_INT8
         case DT_I8: {
-            transformToNCHWKernel<INT8>(inputDesc, (INT8 *)input, outputDesc, (INT8 *)output);
+            ret = transformToNCHWKernel<INT8>(inputDesc, (INT8 *)input, outputDesc, (INT8 *)output);
             break;
         }
         case DT_U8_Q: {
-            transformToNCHWKernel<UINT8>(inputDesc, (UINT8 *)input, outputDesc, (UINT8 *)output);
+            ret = transformToNCHWKernel<UINT8>(
+                inputDesc, (UINT8 *)input, outputDesc, (UINT8 *)output);
             break;
         }
 #endif
         default: {
-            return NOT_SUPPORTED;
+            UNI_ERROR_LOG("not support transform %s type tensor.\n", DataTypeName()[inputDesc.dt]);
+            break;
         }
     }
-    return SUCCESS;
+    return ret;
 }
 
 template <typename T>
-inline static void transformToNHWCKernel(
+inline static EE transformToNHWCKernel(
     TensorDesc inputDesc, const T *input, TensorDesc outputDesc, T *output)
 {
     DataType idt, odt;
@@ -219,19 +232,27 @@ inline static void transformToNHWCKernel(
         CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
     } else {
         UNI_ERROR_LOG("not support transform %d-dim tensor to NHWC format\n", (int)inputDesc.nDims);
-        return;
+        return NOT_SUPPORTED;
     }
-    CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
+    if (tensorIs4d(outputDesc)) {
+        CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
+    } else {
+        UNI_ERROR_LOG("not support transform to %d-dim NHWC tensor.\n", (int)outputDesc.nDims);
+        return NOT_SUPPORTED;
+    }
     U32 size = tensorNumElements(outputDesc);
     U32 ihiw = ih * iw;
+    EE ret = SUCCESS;
     switch (idf) {
         case DF_NHWC: {
             CHECK_REQUIREMENT(tensorNumElements(inputDesc) == size);
             if (input != output) {
-                memcpy(output, input, tensorNumBytes(inputDesc));
+                UNI_MEMCPY(output, input, tensorNumBytes(inputDesc));
             }
             break;
         }
+        case DF_NORMAL:
+        case DF_MTK:
         case DF_NCHW: {
             CHECK_REQUIREMENT(tensorNumElements(inputDesc) == size);
             for (U32 o = 0, srcIndex = 0; o < in; o++) {
@@ -244,14 +265,16 @@ inline static void transformToNHWCKernel(
             }
             break;
         }
-        case DF_NCHWC8: {
-            CHECK_REQUIREMENT(ic % 8 == 0);
-            ic /= 8;
+        case DF_NCHWC8:
+        case DF_NCHWC16: {
+            U32 align = (idf == DF_NCHWC16) ? 16 : 8;
+            CHECK_REQUIREMENT(ic % align == 0);
+            ic /= align;
             for (U32 n = 0, srcIndex = 0; n < in; n++) {
                 for (U32 c = 0; c < ic; c++) {
                     for (U32 hw = 0; hw < ihiw; hw++) {
-                        for (U32 c8 = 0; c8 < 8; c8++, srcIndex++) {
-                            U32 dstIndex = ((n * ihiw + hw) * ic + c) * 8 + c8;
+                        for (U32 cx = 0; cx < align; cx++, srcIndex++) {
+                            U32 dstIndex = ((n * ihiw + hw) * ic + c) * align + cx;
                             output[dstIndex] = input[srcIndex];
                         }
                     }
@@ -262,8 +285,11 @@ inline static void transformToNHWCKernel(
         default: {
             UNI_ERROR_LOG(
                 "not support transform %s format tensor to NHWC format\n", DataFormatName()[idf]);
+            ret = NOT_SUPPORTED;
+            break;
         }
     }
+    return ret;
 }
 
 inline EE transformToNHWC(
@@ -272,30 +298,32 @@ inline EE transformToNHWC(
     if (nullptr == input || nullptr == output) {
         return NULL_POINTER;
     }
+    EE ret = NOT_SUPPORTED;
     switch (inputDesc.dt) {
 #ifdef _USE_FP32
         case DT_F32: {
-            transformToNHWCKernel<F32>(inputDesc, (F32 *)input, outputDesc, (F32 *)output);
+            ret = transformToNHWCKernel<F32>(inputDesc, (F32 *)input, outputDesc, (F32 *)output);
             break;
         }
 #endif
 #ifdef _USE_FP16
         case DT_F16: {
-            transformToNHWCKernel<F16>(inputDesc, (F16 *)input, outputDesc, (F16 *)output);
+            ret = transformToNHWCKernel<F16>(inputDesc, (F16 *)input, outputDesc, (F16 *)output);
             break;
         }
 #endif
 #ifdef _USE_INT8
         case DT_I8: {
-            transformToNHWCKernel<INT8>(inputDesc, (INT8 *)input, outputDesc, (INT8 *)output);
+            ret = transformToNHWCKernel<INT8>(inputDesc, (INT8 *)input, outputDesc, (INT8 *)output);
             break;
         }
 #endif
         default: {
-            return NOT_SUPPORTED;
+            UNI_ERROR_LOG("not support transform %s type tensor.\n", DataTypeName()[inputDesc.dt]);
+            break;
         }
     }
-    return SUCCESS;
+    return ret;
 }
 
 inline EE transformNCHWC16ToNCHWC8(
@@ -309,7 +337,7 @@ inline EE transformNCHWC16ToNCHWC8(
     U32 in, ic, ih, iw, on, oc, oh, ow;
     if (tensorIs2d(inputDesc)) {
         if (input != output) {
-            memcpy(output, input, tensorNumBytes(inputDesc));
+            UNI_MEMCPY(output, input, tensorNumBytes(inputDesc));
         }
         return SUCCESS;
     } else if (tensorIs3d(inputDesc)) {
@@ -333,7 +361,7 @@ inline EE transformNCHWC16ToNCHWC8(
                         U32 srcIndex =
                             n * ic * ih * iw + c * ih * iw * 8 + (h * iw + w) * 16 + c8 * 8;
                         U32 dstIndex = n * ic * ih * iw + (c + c8) * ih * iw * 8 + (h * iw + w) * 8;
-                        memcpy(outputPtr + dstIndex * elementSize,
+                        UNI_MEMCPY(outputPtr + dstIndex * elementSize,
                             inputPtr + srcIndex * elementSize, elementSize * 8);
                     }
                 }
@@ -354,7 +382,7 @@ inline EE transformNCHWToNCHWC8(
     U32 in, ic, ih, iw, on, oc, oh, ow;
     if (tensorIs2d(inputDesc)) {
         if (input != output) {
-            memcpy(output, input, tensorNumBytes(inputDesc));
+            UNI_MEMCPY(output, input, tensorNumBytes(inputDesc));
         }
         return SUCCESS;
     } else if (tensorIs3d(inputDesc)) {
@@ -379,9 +407,9 @@ inline EE transformNCHWToNCHWC8(
                         // support channel padding
                         if (c_i < ic) {
                             U32 srcIndex = (((n * ic + c_i) * ih + h) * iw + w) * elementSize;
-                            memcpy(outputPtr + dstIndex, inputPtr + srcIndex, elementSize);
+                            UNI_MEMCPY(outputPtr + dstIndex, inputPtr + srcIndex, elementSize);
                         } else {
-                            memset(outputPtr + dstIndex, 0, elementSize);
+                            UNI_MEMSET(outputPtr + dstIndex, 0, elementSize);
                         }
                     }
                 }
@@ -416,9 +444,9 @@ inline EE transformNHWCToNCHWC8(
                         // support channel padding
                         if (c_i < ic) {
                             U32 srcIndex = (((n * ih + h) * iw + w) * ic + c_i) * elementSize;
-                            memcpy(outputPtr + dstIndex, inputPtr + srcIndex, elementSize);
+                            UNI_MEMCPY(outputPtr + dstIndex, inputPtr + srcIndex, elementSize);
                         } else {
-                            memset(outputPtr + dstIndex, 0, elementSize);
+                            UNI_MEMSET(outputPtr + dstIndex, 0, elementSize);
                         }
                     }
                 }
@@ -435,7 +463,7 @@ inline EE transformNCHWC8ToNCHWC8ByGroup(
     U32 outputSize = tensorNumElements(outputDesc);
     if (group <= 1 || inputSize == outputSize) {
         if (input != output) {
-            memcpy(output, input, outputSize);
+            UNI_MEMCPY(output, input, outputSize);
         }
         return SUCCESS;
     }
@@ -471,10 +499,10 @@ inline EE transformNCHWC8ToNCHWC8ByGroup(
                             U32 srcIndex =
                                 ((((n * ict + id_a) * ih + h) * iw + w) * channelAlignSize + id_b) *
                                 elementSize;
-                            memcpy(
+                            UNI_MEMCPY(
                                 (U8 *)output + dstIndex, (const U8 *)input + srcIndex, elementSize);
                         } else {
-                            memset((U8 *)output + dstIndex, 0, elementSize);
+                            UNI_MEMSET((U8 *)output + dstIndex, 0, elementSize);
                         }
                     }
                 }
@@ -485,7 +513,7 @@ inline EE transformNCHWC8ToNCHWC8ByGroup(
 }
 
 template <typename T>
-inline static void transformToNCHWC16Kernel(
+inline static EE transformToNCHWC16Kernel(
     TensorDesc inputDesc, const T *input, TensorDesc outputDesc, T *output)
 {
     DataType idt, odt;
@@ -508,7 +536,7 @@ inline static void transformToNCHWC16Kernel(
     } else {
         UNI_ERROR_LOG(
             "not support transform %d-dim tensor to NCHWC16 format\n", (int)inputDesc.nDims);
-        return;
+        return NOT_SUPPORTED;
     }
     if (tensorIs3d(outputDesc)) {
         CHECK_STATUS(tensor3dGet(outputDesc, &odt, &odf, &on, &oc, &oh));
@@ -517,10 +545,12 @@ inline static void transformToNCHWC16Kernel(
         CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
     } else {
         UNI_ERROR_LOG("not support transform to %d-dim NCHWC16 tensor\n", (int)outputDesc.nDims);
-        return;
+        return NOT_SUPPORTED;
     }
     CHECK_REQUIREMENT(idt == odt);
+    EE ret = SUCCESS;
     switch (idf) {
+        case DF_NORMAL:
         case DF_MTK:
         case DF_NCHW: {
             U32 ic16 = ic / 16;
@@ -593,8 +623,11 @@ inline static void transformToNCHWC16Kernel(
         default: {
             UNI_ERROR_LOG(
                 "not support transform %s format to NCHWC16 format\n", DataFormatName()[idf]);
+            ret = NOT_SUPPORTED;
+            break;
         }
     }
+    return ret;
 }
 
 inline EE transformToNCHWC16(
@@ -603,37 +636,40 @@ inline EE transformToNCHWC16(
     if (nullptr == input || nullptr == output) {
         return NULL_POINTER;
     }
+    EE ret = NOT_SUPPORTED;
     switch (inputDesc.dt) {
 #ifdef _USE_FP32
         case DT_F32: {
-            transformToNCHWC16Kernel<F32>(inputDesc, (F32 *)input, outputDesc, (F32 *)output);
+            ret = transformToNCHWC16Kernel<F32>(inputDesc, (F32 *)input, outputDesc, (F32 *)output);
             break;
         }
 #endif
 #ifdef _USE_INT8
         case DT_U8_Q: {
-            transformToNCHWC16Kernel<UINT8>(inputDesc, (UINT8 *)input, outputDesc, (UINT8 *)output);
+            ret = transformToNCHWC16Kernel<UINT8>(
+                inputDesc, (UINT8 *)input, outputDesc, (UINT8 *)output);
             break;
         }
 #endif
         default: {
-            return NOT_SUPPORTED;
+            UNI_ERROR_LOG("not support transform %s type tensor.\n", DataTypeName()[inputDesc.dt]);
+            break;
         }
     }
-    return SUCCESS;
+    return ret;
 }
 
 inline EE transformFormat(
     TensorDesc inputDesc, const void *input, TensorDesc outputDesc, void *output)
 {
     EE ret = NOT_SUPPORTED;
-    if (outputDesc.df == DF_NCHW) {
+    if (outputDesc.df == DF_NCHW || outputDesc.df == DF_MTK || outputDesc.df == DF_NORMAL) {
         ret = transformToNCHW(inputDesc, input, outputDesc, output);
     } else if (outputDesc.df == DF_NCHWC8) {
         if (inputDesc.df == DF_NORMAL) {
-            memcpy(output, input, tensorNumBytes(inputDesc));
+            UNI_MEMCPY(output, input, tensorNumBytes(inputDesc));
             ret = SUCCESS;
-        } else if (inputDesc.df == DF_NCHW || inputDesc.df == DF_MTK) {
+        } else if (inputDesc.df == DF_NCHW || inputDesc.df == DF_MTK || inputDesc.df == DF_NORMAL) {
             ret = transformNCHWToNCHWC8(inputDesc, input, outputDesc, output);
         } else if (inputDesc.df == DF_NHWC) {
             ret = transformNHWCToNCHWC8(inputDesc, input, outputDesc, output);
@@ -648,6 +684,8 @@ inline EE transformFormat(
         }
     } else if (outputDesc.df == DF_NCHWC16) {
         ret = transformToNCHWC16(inputDesc, input, outputDesc, output);
+    } else if (outputDesc.df == DF_NHWC) {
+        ret = transformToNHWC(inputDesc, input, outputDesc, output);
     } else {
         UNI_ERROR_LOG("layout transpose can not support transform to %s format.\n",
             DataFormatName()[outputDesc.df]);
@@ -664,34 +702,39 @@ inline EE transposeFilter(
     DataType idt, odt;
     DataFormat idf, odf;
     U32 in, ic, ih, iw, on, oc, oh, ow;
-    CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
+    if (tensorIs4d(inputDesc) && tensorIs4d(outputDesc)) {
+        CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+        CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
+    } else {
+        UNI_ERROR_LOG("currently only support to transpose 4-dim filter.\n");
+        return NOT_SUPPORTED;
+    }
     CHECK_REQUIREMENT(idf == odf);
-    const U8 *inputPtr = (const U8 *)input;
-    U8 *outputPtr = (U8 *)output;
-
+    const U8 *src = (const U8 *)input;
+    U8 *dst = (U8 *)output;
+    EE ret = SUCCESS;
     switch (idf) {
         case DF_NHWCN8: {
             CHECK_REQUIREMENT(in % 8 == 0);
             in /= 8;
             U32 hwMax = ih * iw - 1;
-
             U32 innerSize = bytesOf(idt) * ic * 8;
-
             for (U32 o = 0; o < in; o++) {
                 for (U32 hw = 0; hw < ih * iw; hw++) {
                     U32 srcIndex = o * ih * iw * innerSize + hw * innerSize;
                     U32 dstIndex = o * ih * iw * innerSize + (hwMax - hw) * innerSize;
-                    memcpy(outputPtr + dstIndex, inputPtr + srcIndex, innerSize);
+                    UNI_MEMCPY(dst + dstIndex, src + srcIndex, innerSize);
                 }
             }
             break;
         }
         default: {
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG(
+                "currently not support to transpose %s format filter.\n", DataFormatName()[idf]);
+            ret = NOT_SUPPORTED;
+            break;
         }
     }
-    return SUCCESS;
+    return ret;
 }
-
 #endif

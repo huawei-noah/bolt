@@ -376,7 +376,7 @@ bolt::ResultHandle bolt::AllocResult(
     for (size_t i = 0; i < outputs.size(); i++) {
         U32 length = outputs[i].name.length();
         outputNames[i] = (char *)malloc(length + 1);
-        memcpy(outputNames[i], outputs[i].name.c_str(), length);
+        UNI_MEMCPY(outputNames[i], outputs[i].name.c_str(), length);
         outputNames[i][length] = '\0';
     }
     bolt::ResultHandle rh = (bolt::ResultHandle)AllocSpecificResultHandle(

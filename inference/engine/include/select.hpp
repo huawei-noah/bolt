@@ -27,10 +27,5 @@ public:
     {
         return OT_Select;
     }
-
-    bool can_input_output_the_same() override
-    {
-        return false;
-    }
 };
 #endif  // _SELECT_H

@@ -8,8 +8,8 @@ kit_flow=$2
 project_dir=""
 
 # inference demos
-demos=("ImageClassification" "Semantics")
-xdemos=("SimpleImageClassification" "Semantics")
+demos=("ImageClassification" "Semantics" "ReadingComprehension")
+xdemos=("SimpleImageClassification" "Semantics" "ReadingComprehension")
 if [[ ${CXX} =~ android ]]; then
     for((i=0; i<${#demos[@]}; i++)) do
         demo=${demos[$i]};

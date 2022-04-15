@@ -23,9 +23,9 @@ class InvariantSliceOptimizer : public OPOptimizer {
         for (int i = 1; i < spec->num_operator_specs; i++) {
             if (spec->ops[i].type == OT_Slice) {
                 int sliceOpIndex = i;
-                int curSliceSize = spec->ops[sliceOpIndex].ps.slice_spec.slice_size;
+                int curSliceSize = spec->ops[sliceOpIndex].ps.slice_spec.num_slice;
                 if (curSliceSize == 0) {
-                    memcpy(spec->ops[sliceOpIndex - 1].output_tensors_name[0],
+                    UNI_MEMCPY(spec->ops[sliceOpIndex - 1].output_tensors_name[0],
                         spec->ops[sliceOpIndex].output_tensors_name[0], NAME_LEN);
                     setOperatorInvalid(spec, sliceOpIndex);
                     hasOptimized = true;

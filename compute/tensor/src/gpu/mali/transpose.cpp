@@ -27,7 +27,7 @@ EE transpose_padding_input_mali(TensorDesc inputDesc,
     if (outputDesc == nullptr || inputMem == nullptr || outputMem == nullptr) {
         CHECK_STATUS(NULL_POINTER);
     }
-    U32 *dim = p.trans_dims;
+    U32 *dim = p.axes;
     U32 dimTran[6] = {1, 1, 1, 1, 1, 1};
     U32 nDims = inputDesc.nDims;
     for (U32 i = 0; i < nDims; ++i) {
@@ -88,8 +88,7 @@ EE transpose_mali(GCLHandle_t handle,
     CHECK_STATUS(transpose_checkpara_mali(handle, inputDesc, input, outputDesc, output));
     switch (inputDesc.dt) {
         case DT_F16: {
-            ret = transpose_mali_fp16(
-                handle, inputDesc, input, outputDesc, output, tmpbuf, p.trans_dims);
+            ret = transpose_mali_fp16(handle, inputDesc, input, outputDesc, output, tmpbuf, p.axes);
             break;
         }
         default:

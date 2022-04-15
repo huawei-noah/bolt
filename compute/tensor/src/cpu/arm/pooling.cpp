@@ -54,7 +54,7 @@ EE pooling_arm(TensorDesc inputDesc,
         CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
         CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
         it = ot = 1;
-        p.padding_before = p.padding_after = 0;
+        p.pad_before = p.pad_after = 0;
         p.kernel_t = p.stride_t = 1;
     } else if (tensorIs5d(inputDesc)) {
         CHECK_STATUS(tensor5dGet(inputDesc, &idt, &idf, &in, &ic, &it, &ih, &iw));
@@ -72,13 +72,11 @@ EE pooling_arm(TensorDesc inputDesc,
     if (idf != DF_NCHWC8 || odf != idf) {
         ret = NOT_MATCH;
     }
-    if (p.padding_before >= p.kernel_t || p.padding_top >= p.kernel_h ||
-        p.padding_left >= p.kernel_w) {
+    if (p.pad_before >= p.kernel_t || p.pad_top >= p.kernel_h || p.pad_left >= p.kernel_w) {
         return NOT_SUPPORTED;
     }
 
     ic /= 8;
-    int kernelSize = p.kernel_t * p.kernel_h * p.kernel_w;
     ArmPoolingFunction func = nullptr;
     if (p.mode == POOLING_MAX) {
         switch (idt) {
@@ -124,29 +122,40 @@ EE pooling_arm(TensorDesc inputDesc,
         return NOT_SUPPORTED;
     }
 
-    const U8 *inputPtr = (const U8 *)input;
-    U8 *outputPtr = (U8 *)output;
-    for (U32 n = 0; n < in; n++) {
-        for (U32 c = 0; c < ic; c++) {
+#ifdef _USE_OPENMP
+#pragma omp parallel num_threads(OMP_NUM_THREADS)
+#endif
+    {
+        int kernelSize = p.kernel_t * p.kernel_h * p.kernel_w;
+#ifdef _USE_OPENMP
+#pragma omp for
+#endif
+        for (U32 o = 0; o < in * ic; o++) {
+            U32 n = o / ic;
+            U32 c = o % ic;
+            const U8 *src = (const U8 *)input + o * it * ih * iw * 8 * bytesOf(idt);
+            U8 *dst = (U8 *)output + o * ot * oh * ow * 8 * bytesOf(idt);
             for (U32 t = 0; t < ot; t++) {
-                int tstart = t * (int)p.stride_t - (int)p.padding_before;
+                int tstart = t * (int)p.stride_t - (int)p.pad_before;
                 int tend = UNI_MIN(tstart + p.kernel_t, it);
                 tstart = UNI_MAX(tstart, 0);
                 for (U32 h = 0; h < oh; h++) {
-                    int hstart = h * (int)p.stride_h - (int)p.padding_top;
+                    int hstart = h * (int)p.stride_h - (int)p.pad_top;
                     int hend = UNI_MIN(hstart + p.kernel_h, ih);
                     hstart = UNI_MAX(hstart, 0);
-                    for (U32 w = 0; w < ow; w++, outputPtr += 8 * bytesOf(odt)) {
-                        int wstart = w * (int)p.stride_w - (int)p.padding_left;
+                    for (U32 w = 0; w < ow; w++, dst += 8 * bytesOf(idt)) {
+                        int wstart = w * (int)p.stride_w - (int)p.pad_left;
                         int wend = UNI_MIN(wstart + p.kernel_w, iw);
                         wstart = UNI_MAX(wstart, 0);
-                        int poolSize = (tend - tstart) * (hend - hstart) * (wend - wstart);
+                        int poolSize = kernelSize;
+                        if (!p.count_include_pad) {
+                            poolSize = (tend - tstart) * (hend - hstart) * (wend - wstart);
+                        }
                         ret = func(tstart, tend, hstart, hend, wstart, wend, kernelSize, poolSize,
-                            inputPtr, it, ih, iw, outputPtr, scale);
+                            src, it, ih, iw, dst, scale);
                     }
                 }
             }
-            inputPtr += it * ih * iw * 8 * bytesOf(idt);
         }
     }
     return ret;
@@ -174,37 +183,47 @@ EE pooling_bp_arm(
     if (idf != DF_NCHWC8 || odf != idf) {
         ret = NOT_MATCH;
     }
-    if (p.padding_top >= p.kernel_h || p.padding_left >= p.kernel_w) {
+    if (p.pad_top >= p.kernel_h || p.pad_left >= p.kernel_w) {
         ret = NOT_SUPPORTED;
     }
 
     ic /= 8;
-    const U8 *inputPtr = (const U8 *)input;
-    U8 *outputPtr = (U8 *)output;
-    for (U32 n = 0; n < in; n++) {
-        for (U32 c = 0; c < ic; c++) {
-            for (U32 h = 0; h < ih; h++) {
-                for (U32 w = 0; w < iw; w++, inputPtr += 8 * bytesOf(idt)) {
-                    int hstart = (int)h * (int)p.stride_h - (int)p.padding_top;
-                    int wstart = (int)w * (int)p.stride_w - (int)p.padding_left;
-                    int hend = UNI_MIN(hstart + p.kernel_h, oh);
-                    int wend = UNI_MIN(wstart + p.kernel_w, ow);
-                    hstart = UNI_MAX(hstart, 0);
-                    wstart = UNI_MAX(wstart, 0);
-                    switch (idt) {
-#ifdef _USE_FP32
-                        case DT_F32:
-                            ret = pooling_bp_c8_fp32((const F32 *)inputPtr, hstart, hend, wstart,
-                                wend, (F32 *)outputPtr, ow, p);
-                            break;
+    const U8 *src = (const U8 *)input;
+    U8 *dst = (U8 *)output;
+    int poolSize = p.kernel_t * p.kernel_h * p.kernel_w;
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
 #endif
-                        default:
-                            ret = NOT_SUPPORTED;
-                            break;
-                    }
+    for (U32 o = 0; o < in * ic; o++) {
+        U32 n = o / ic;
+        U32 c = o % ic;
+        //for (U32 n = 0; n < in; n++) {
+        //    for (U32 c = 0; c < ic; c++) {
+        const U8 *src = (const U8 *)input + o * ih * iw * 8 * bytesOf(idt);
+        U8 *dst = (U8 *)output + o * oh * ow * 8 * bytesOf(idt);
+        for (U32 h = 0; h < ih; h++) {
+            for (U32 w = 0; w < iw; w++, src += 8 * bytesOf(idt)) {
+                int hstart = (int)h * (int)p.stride_h - (int)p.pad_top;
+                int wstart = (int)w * (int)p.stride_w - (int)p.pad_left;
+                int hend = UNI_MIN(hstart + p.kernel_h, oh);
+                int wend = UNI_MIN(wstart + p.kernel_w, ow);
+                hstart = UNI_MAX(hstart, 0);
+                wstart = UNI_MAX(wstart, 0);
+                if (!p.count_include_pad) {
+                    poolSize = (hend - hstart) * (wend - wstart);
+                }
+                switch (idt) {
+#ifdef _USE_FP32
+                    case DT_F32:
+                        ret = pooling_bp_c8_fp32((const F32 *)src, hstart, hend, wstart, wend,
+                            poolSize, (F32 *)dst, ow, p);
+                        break;
+#endif
+                    default:
+                        ret = NOT_SUPPORTED;
+                        break;
                 }
             }
-            outputPtr += oh * ow * 8 * bytesOf(odt);
         }
     }
     return ret;

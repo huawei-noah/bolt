@@ -40,10 +40,10 @@ EE convolution_winograd_A76(TensorDesc inputDesc,
     CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
     CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
     CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
-    U32 paddingT = convParamSpec.padding_top;
-    U32 paddingB = convParamSpec.padding_bottom;
-    U32 paddingL = convParamSpec.padding_left;
-    U32 paddingR = convParamSpec.padding_right;
+    U32 paddingT = convParamSpec.pad_top;
+    U32 paddingB = convParamSpec.pad_bottom;
+    U32 paddingL = convParamSpec.pad_left;
+    U32 paddingR = convParamSpec.pad_right;
 
     if (fdf != DF_HWNCN16) {
         CHECK_STATUS(NOT_MATCH);
@@ -78,8 +78,8 @@ EE convolution_winograd_A76(TensorDesc inputDesc,
     EE ret = SUCCESS;
     // copy input into a input with padding
     for (U32 n = 0; n < in; n++) {
-        convParamSpec.padding_bottom = pad_bottom;
-        convParamSpec.padding_right = pad_right;
+        convParamSpec.pad_bottom = pad_bottom;
+        convParamSpec.pad_right = pad_right;
         F16 *inArray_pad = convolution_input_padding_per_channel<F16, 8>(
             n, ic, 1, ih, iw, convParamSpec, inArray, (F16 *)tmp);
 
@@ -413,15 +413,15 @@ EE convolution_winograd_A76(TensorDesc inputDesc,
                     //     itm[c8*4 + 2] = Iw2[i][c8];
                     //     itm[c8*4 + 3] = Iw3[i][c8];
                     // }
-                    __asm__ __volatile__("ldr q0, [%[in_0]]\n"
-                                         "ldr q1, [%[in_1]]\n"
-                                         "ldr q2, [%[in_2]]\n"
-                                         "ldr q3, [%[in_3]]\n"
-                                         "st4 {v0.8h, v1.8h, v2.8h, v3.8h}, [%[itm]]\n"
-                                         : [itm] "+r"(itm)
-                                         : [in_0] "r"(Iw0[i]), [in_1] "r"(Iw1[i]),
-                                         [in_2] "r"(Iw2[i]), [in_3] "r"(Iw3[i])
-                                         : "memory", "cc", "v0", "v1", "v2", "v3");
+                    __asm__ __volatile__(
+                        "ldr q0, [%[in_0]]\n"
+                        "ldr q1, [%[in_1]]\n"
+                        "ldr q2, [%[in_2]]\n"
+                        "ldr q3, [%[in_3]]\n"
+                        "st4 {v0.8h, v1.8h, v2.8h, v3.8h}, [%[itm]]\n"
+                        : [itm] "+r"(itm)
+                        : [in_0] "r"(Iw0[i]), [in_1] "r"(Iw1[i]), [in_2] "r"(Iw2[i]), [in_3] "r"(Iw3[i])
+                        : "memory", "cc", "v0", "v1", "v2", "v3");
                 }
             }
             for (I32 o = 0; o < oc_1; o += 2) {
@@ -603,7 +603,7 @@ EE convolution_winograd_A76(TensorDesc inputDesc,
                     // for (U32 c8 = 0; c8 < 8; c8++) {
                     //     itm[c8] = Iw0[i][c8];
                     // }
-                    memcpy(itm, Iw0[i], 8 * bytesOf(idt));
+                    UNI_MEMCPY(itm, Iw0[i], 8 * bytesOf(idt));
                 }
             }
             for (I32 o = 0; o < oc_1; o += 2) {

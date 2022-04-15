@@ -20,11 +20,98 @@ class ConvConvOptimizer : public OPOptimizer {
     bool optimize(ModelSpec *spec) override
     {
         bool hasOptimized = false;
-        hasOptimized |= horizontal_optimize(spec);
+        hasOptimized |= conv_concat_optimize(spec);
+        //hasOptimized |= conv_conv_optimize(spec);
         return hasOptimized;
     }
 
-    bool horizontal_optimize(ModelSpec *spec)
+    bool conv_conv_optimize(ModelSpec *spec)
+    {
+        bool hasOptimized = false;
+        for (int i = 0; i < spec->num_operator_specs - 1; i++) {
+            if (spec->ops[i].num_outputs > 0) {
+                auto nextOps = searchOperatorIndexByInput(
+                    spec, spec->ops[i].output_tensors_name[0], i + 1, spec->num_operator_specs);
+                if (nextOps.size() <= 1) {
+                    continue;
+                }
+                int weightSize = 0;
+                int vecSize = 0;
+                std::vector<int> convOps;
+                std::vector<int> convWeights;
+                std::set<std::string> convParams;
+                for (U32 j = 0; j < nextOps.size(); j++) {
+                    int k = nextOps[j].first;
+                    if (spec->ops[k].type == OT_Conv &&
+                        (spec->ops[k].ps.conv_spec.convolution_type == CONVOLUTION_POINTWISE ||
+                            spec->ops[k].ps.conv_spec.convolution_type == CONVOLUTION_DILATION)) {
+                        int id = searchWeightIndex(spec, spec->ops[k].name);
+                        if (id < 0 || spec->ws[id].mdt != DT_F32 ||
+                            spec->ws[id].bytes_of_weight == 0 || spec->ws[id].bytes_of_vec == 0) {
+                            continue;
+                        }
+                        convOps.push_back(k);
+                        convWeights.push_back(id);
+                        convParams.insert(copyBuffer<1024>(&(spec->ops[k].ps),
+                            get_operator_parameter_size(sg_boltVersion, spec->ops[k].type)));
+                        weightSize += spec->ws[id].bytes_of_weight;
+                        vecSize += spec->ws[id].bytes_of_vec;
+                    }
+                }
+
+                if (convOps.size() <= 1 || convParams.size() != 1) {
+                    continue;
+                }
+                U8 *weight = (U8 *)mt_malloc(weightSize);
+                U8 *vec = (U8 *)mt_malloc(vecSize);
+                int k = convOps[0];
+                int id = convWeights[0];
+                UNI_MEMCPY(weight, spec->ws[id].weight, spec->ws[id].bytes_of_weight);
+                mt_free(spec->ws[id].weight, spec);
+                spec->ws[id].weight = weight;
+                weight += spec->ws[id].bytes_of_weight;
+                spec->ws[id].bytes_of_weight = weightSize;
+                UNI_MEMCPY(vec, spec->ws[id].vec, spec->ws[id].bytes_of_vec);
+                mt_free(spec->ws[id].vec, spec);
+                spec->ws[id].vec = vec;
+                vec += spec->ws[id].bytes_of_vec;
+                spec->ws[id].bytes_of_vec = vecSize;
+
+                std::string name = "slice_" + std::to_string(i);
+                OperatorSpec sliceOperator =
+                    mt_create_operator(name.c_str(), OT_Slice, 1, convOps.size());
+                UNI_STRCPY(sliceOperator.input_tensors_name[0], name.c_str());
+                UNI_STRCPY(sliceOperator.output_tensors_name[0], spec->ops[k].output_tensors_name[0]);
+                UNI_STRCPY(spec->ops[k].output_tensors_name[0], name.c_str());
+                sliceOperator.ps.slice_spec.axis = 1;
+                sliceOperator.ps.slice_spec.num_slice = convOps.size() - 1;
+                sliceOperator.ps.slice_spec.slice_points[0] = spec->ops[k].ps.conv_spec.num_outputs;
+                for (unsigned int j = 1; j < convOps.size(); j++) {
+                    int k = convOps[j];
+                    sliceOperator.ps.slice_spec.slice_points[j] =
+                        sliceOperator.ps.slice_spec.slice_points[j - 1] +
+                        spec->ops[k].ps.conv_spec.num_outputs;
+                    UNI_STRCPY(
+                        sliceOperator.output_tensors_name[j], spec->ops[k].output_tensors_name[0]);
+                    spec->ops[convOps[0]].ps.conv_spec.num_outputs +=
+                        spec->ops[k].ps.conv_spec.num_outputs;
+
+                    int id = convWeights[j];
+                    UNI_MEMCPY(weight, spec->ws[id].weight, spec->ws[id].bytes_of_weight);
+                    weight += spec->ws[id].bytes_of_weight;
+                    UNI_MEMCPY(vec, spec->ws[id].vec, spec->ws[id].bytes_of_vec);
+                    vec += spec->ws[id].bytes_of_vec;
+
+                    setOperatorInvalid(spec, k, false);
+                    hasOptimized = true;
+                }
+                mt_insert_operator(spec, convOps[0] + 1, sliceOperator);
+            }
+        }
+        return hasOptimized;
+    }
+
+    bool conv_concat_optimize(ModelSpec *spec)
     {
         bool hasOptimized = false;
         for (int i = 2; i < spec->num_operator_specs; i++) {
@@ -46,8 +133,8 @@ class ConvConvOptimizer : public OPOptimizer {
                     }
                     int k = prevOps[0].first;
                     if (spec->ops[k].type == OT_Conv &&
-                        (spec->ops[k].ps.conv_spec.convolution_type == Convolution_Pointwise ||
-                            spec->ops[k].ps.conv_spec.convolution_type == Convolution_Dilation)) {
+                        (spec->ops[k].ps.conv_spec.convolution_type == CONVOLUTION_POINTWISE ||
+                            spec->ops[k].ps.conv_spec.convolution_type == CONVOLUTION_DILATION)) {
                         int id = searchWeightIndex(spec, spec->ops[k].name);
                         auto nextOps = searchOperatorIndexByInput(spec,
                             spec->ops[i].input_tensors_name[j], k + 1, spec->num_operator_specs);
@@ -60,8 +147,8 @@ class ConvConvOptimizer : public OPOptimizer {
                         convInputs.insert(spec->ops[k].input_tensors_name[0]);
                         convOps.push_back(k);
                         convWeights.push_back(id);
-                        convParams.insert(
-                            copyBuffer<1024>(&(spec->ops[k].ps), sizeof(ParameterSpec)));
+                        convParams.insert(copyBuffer<1024>(&(spec->ops[k].ps),
+                            get_operator_parameter_size(sg_boltVersion, spec->ops[k].type)));
                         weightSize += spec->ws[id].bytes_of_weight;
                         vecSize += spec->ws[id].bytes_of_vec;
                         channels += spec->ops[k].ps.conv_spec.num_outputs;
@@ -72,29 +159,25 @@ class ConvConvOptimizer : public OPOptimizer {
                 }
                 if (fuseConv && convInputs.size() == 1 && convParams.size() == 1 &&
                     convOps.size() > 1) {
-                    U8 *weight = (U8 *)mt_new_storage(weightSize);
-                    U8 *vec = (U8 *)mt_new_storage(vecSize);
+                    U8 *weight = (U8 *)mt_malloc(weightSize);
+                    U8 *vec = (U8 *)mt_malloc(vecSize);
                     int id = convWeights[0];
-                    memcpy(weight, spec->ws[id].weight, spec->ws[id].bytes_of_weight);
-                    if (outOfFileMapRange(spec->ws[id].weight, spec->mfd)) {
-                        delete spec->ws[id].weight;
-                    }
+                    UNI_MEMCPY(weight, spec->ws[id].weight, spec->ws[id].bytes_of_weight);
+                    mt_free(spec->ws[id].weight, spec);
                     spec->ws[id].weight = weight;
                     weight += spec->ws[id].bytes_of_weight;
                     spec->ws[id].bytes_of_weight = weightSize;
-                    memcpy(vec, spec->ws[id].vec, spec->ws[id].bytes_of_vec);
-                    if (outOfFileMapRange(spec->ws[id].vec, spec->mfd)) {
-                        delete spec->ws[id].vec;
-                    }
+                    UNI_MEMCPY(vec, spec->ws[id].vec, spec->ws[id].bytes_of_vec);
+                    mt_free(spec->ws[id].vec, spec);
                     spec->ws[id].vec = vec;
                     vec += spec->ws[id].bytes_of_vec;
                     spec->ws[id].bytes_of_vec = vecSize;
                     spec->ops[convOps[0]].ps.conv_spec.num_outputs = channels;
                     for (unsigned int j = 1; j < convOps.size(); j++) {
                         int id = convWeights[j];
-                        memcpy(weight, spec->ws[id].weight, spec->ws[id].bytes_of_weight);
+                        UNI_MEMCPY(weight, spec->ws[id].weight, spec->ws[id].bytes_of_weight);
                         weight += spec->ws[id].bytes_of_weight;
-                        memcpy(vec, spec->ws[id].vec, spec->ws[id].bytes_of_vec);
+                        UNI_MEMCPY(vec, spec->ws[id].vec, spec->ws[id].bytes_of_vec);
                         vec += spec->ws[id].bytes_of_vec;
 
                         setOperatorInvalid(spec, convOps[j]);

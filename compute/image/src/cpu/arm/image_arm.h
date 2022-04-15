@@ -16,6 +16,7 @@
 
 #include "error.h"
 #include "tensor_desc.h"
+#include "parameter_spec.h"
 
-EE resize_bilinear_arm(TensorDesc inputDesc, void *input, TensorDesc outputDesc, void *output);
+EE resize_bilinear_arm(TensorDesc inputDesc, void *input, ResizeParamSpec p, TensorDesc outputDesc, void *output);
 #endif

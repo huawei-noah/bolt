@@ -18,7 +18,7 @@
 
 class RoIAlignOCL : public RoIAlign {
 public:
-    RoIAlignOCL(RoIAlignParamSpec p) : RoIAlign(p)
+    RoIAlignOCL(DataType dt, RoIAlignParamSpec p) : RoIAlign(dt, p)
     {
         INIT_GPU_INFO(nullptr)
     }
@@ -27,7 +27,8 @@ public:
 
     std::shared_ptr<Operator> clone() override
     {
-        std::shared_ptr<RoIAlignOCL> mem = std::shared_ptr<RoIAlignOCL>(new RoIAlignOCL(this->p));
+        std::shared_ptr<RoIAlignOCL> mem =
+            std::shared_ptr<RoIAlignOCL>(new RoIAlignOCL(this->dt, this->p));
         *mem = *this;
         return mem;
     }

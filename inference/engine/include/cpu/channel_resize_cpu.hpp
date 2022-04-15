@@ -43,7 +43,7 @@ public:
         if (!this->valid) {
             if (inputPtr != outputPtr) {
                 CHECK_REQUIREMENT(inputSize == outputSize);
-                memcpy(outputPtr, inputPtr, inputSize);
+                UNI_MEMCPY(outputPtr, inputPtr, inputSize);
             }
         } else if (this->rearrange && DF_NCHWC8 == inputDesc.df && DF_NCHWC8 == outputDesc.df) {
             transformNCHWC8ToNCHWC8ByGroup(

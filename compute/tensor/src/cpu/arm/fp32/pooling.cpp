@@ -94,6 +94,7 @@ EE pooling_bp_c8_fp32(const F32 *input,
     int hend,
     int wstart,
     int wend,
+    int pool,
     F32 *output,
     U32 stride,
     PoolingParamSpec poolingParamSpec)
@@ -103,7 +104,7 @@ EE pooling_bp_c8_fp32(const F32 *input,
     if (pm != POOLING_MEAN) {
         ret = NOT_SUPPORTED;
     }
-    float32x4_t poolSize = vdupq_n_f32((hend - hstart) * (wend - wstart));
+    float32x4_t poolSize = vdupq_n_f32(pool);
     float32x4_t in0 = vdivq_f32(vld1q_f32(input), poolSize);
     float32x4_t in1 = vdivq_f32(vld1q_f32(input + 4), poolSize);
     for (int kernelH = hstart; kernelH < hend; kernelH++) {

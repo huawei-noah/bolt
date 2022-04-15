@@ -64,10 +64,8 @@ inline EE argmax_core_mali_fp16(GCLHandle_t handle,
         Mem inv1 = input->mem;
         Mem ini1 = input->mem;
         Mem outv1024, outi1024, outv128, outi128;
-        char kernelName[128];
-        char kernelNameIndex[128];
-        sprintf(kernelName, "argmax_x");
-        sprintf(kernelNameIndex, "argmax_x_index");
+        const char *kernelName = "argmax_x";
+        const char *kernelNameIndex = "argmax_x_index";
         bool use_index = false;
         U32 offset = 0;
         U32 len = iw;

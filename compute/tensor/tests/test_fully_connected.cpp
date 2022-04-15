@@ -29,15 +29,15 @@ int fullyConnectedTest(int argc, char **argv, DataType dt)
 
     Tensor inputTensor = Tensor::alloc_sized<CPUMem>(inputDesc);
     U8 *input = ut_input_v(m * k, dt, UT_INIT_RANDOM);
-    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inputDesc));
+    UNI_MEMCPY(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inputDesc));
 
     Tensor filterTensor = Tensor::alloc_sized<CPUMem>(filterDesc);
     U8 *filter = ut_input_v(k * n, dt, UT_INIT_RANDOM);
-    memcpy(get_ptr_from_tensor(filterTensor, CPU_GENERAL), filter, tensorNumBytes(filterDesc));
+    UNI_MEMCPY(get_ptr_from_tensor(filterTensor, CPU_GENERAL), filter, tensorNumBytes(filterDesc));
 
     Tensor biasTensor = Tensor::alloc_sized<CPUMem>(biasDesc);
     U8 *bias = ut_input_v(n, dt, UT_INIT_RANDOM);
-    memcpy(get_ptr_from_tensor(biasTensor, CPU_GENERAL), bias, tensorNumBytes(biasDesc));
+    UNI_MEMCPY(get_ptr_from_tensor(biasTensor, CPU_GENERAL), bias, tensorNumBytes(biasDesc));
     // set output
     Tensor outputTensor;
     CHECK_STATUS(fully_connected_infer_output_size(

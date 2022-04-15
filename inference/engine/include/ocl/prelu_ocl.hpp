@@ -39,13 +39,11 @@ public:
         if (curOpWs.weight != nullptr) {
             weightNum = curOpWs.bytes_of_weight / UNI_MAX(1, bytesOf(curOpWs.mdt));
         }
-        if (weightNum == 0) {
-            CHECK_STATUS(NOT_SUPPORTED);
-        }
+        CHECK_REQUIREMENT(weightNum != 0);
         if (weightNum == 1) {
-            this->preluDesc.propagate_down = true;
+            this->p.propagate_down = true;
         } else {
-            this->preluDesc.propagate_down = false;
+            this->p.propagate_down = false;
         }
         Tensor modelWeightTensor = Tensor(OCLMem);
         TensorDesc weightDesc = tensor1d(this->dt, weightNum);
@@ -57,7 +55,7 @@ public:
     inline void run_prepare()
     {
         OCLContext::getInstance().handle.get()->curOpName = this->get_name();
-        CHECK_STATUS(prelu(this->inputTensors[0], this->weightTensors[0], this->preluDesc,
+        CHECK_STATUS(prelu(this->inputTensors[0], this->weightTensors[0], this->p,
             this->outputTensors[0], &this->archInfo));
     }
 

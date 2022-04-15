@@ -18,7 +18,7 @@
 
 class EltwiseOCL : public Eltwise {
 public:
-    EltwiseOCL(EltwiseParamSpec eltwiseDesc) : Eltwise(eltwiseDesc)
+    EltwiseOCL(EltwiseParamSpec p) : Eltwise(p)
     {
         INIT_GPU_INFO(nullptr)
     }
@@ -27,8 +27,7 @@ public:
 
     std::shared_ptr<Operator> clone() override
     {
-        std::shared_ptr<EltwiseOCL> mem =
-            std::shared_ptr<EltwiseOCL>(new EltwiseOCL(this->eltwiseDesc));
+        std::shared_ptr<EltwiseOCL> mem = std::shared_ptr<EltwiseOCL>(new EltwiseOCL(this->p));
         *mem = *this;
         return mem;
     }
@@ -36,8 +35,8 @@ public:
     inline void run_prepare()
     {
         OCLContext::getInstance().handle.get()->curOpName = this->get_name();
-        CHECK_STATUS(eltwise(this->inputTensors, this->eltwiseDesc, this->temp,
-            this->outputTensors[0], &this->archInfo));
+        CHECK_STATUS(eltwise(
+            this->inputTensors, this->p, this->temp, this->outputTensors[0], &this->archInfo));
     }
 
     EE infer_output_tensors_size(

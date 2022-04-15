@@ -14,7 +14,8 @@
 #ifndef _H_ARRAY_TRANSPOSE
 #define _H_ARRAY_TRANSPOSE
 
-#include "string.h"
+#include "secure_c_wrapper.h"
+#include "affinity_policy.h"
 
 template <int branch, typename T>
 static inline void inner_transpose_template(unsigned int tileSize,
@@ -26,25 +27,33 @@ static inline void inner_transpose_template(unsigned int tileSize,
     int inputDimsNum,
     int outputDimsNum,
     unsigned int outputSize,
-    int sizeInnerIndex,
-    unsigned int *inputLocalIndex)
+    int sizeInnerIndex)
 {
-    for (unsigned int i = 0; i < outputSize; i++) {
-        unsigned int outputIndex = i;
-        for (int j = sizeInnerIndex; j < outputDimsNum; j++) {
-            unsigned int value = outputIndex % outputDims[j];
-            outputIndex /= outputDims[j];
-            inputLocalIndex[inputDimsNum - 1 - transposeDims[outputDimsNum - 1 - j]] = value;
-        }
-        unsigned int inputIndex = 0;
-        for (int j = inputDimsNum - 1; j > sizeInnerIndex; j--) {
-            inputIndex = (inputIndex + inputLocalIndex[j]) * inputDims[j - 1];
-        }
-        inputIndex += inputLocalIndex[sizeInnerIndex];
-        if (branch == 0) {
-            *(output + i) = *(input + inputIndex);
-        } else {
-            memcpy(output + i * tileSize, input + inputIndex * tileSize, tileSize);
+#ifdef _USE_OPENMP
+#pragma omp parallel num_threads(OMP_NUM_THREADS)
+#endif
+    {
+        std::vector<unsigned int> inputLocalIndex(inputDimsNum);
+#ifdef _USE_OPENMP
+#pragma omp for
+#endif
+        for (unsigned int i = 0; i < outputSize; i++) {
+            unsigned int outputIndex = i;
+            for (int j = sizeInnerIndex; j < outputDimsNum; j++) {
+                unsigned int value = outputIndex % outputDims[j];
+                outputIndex /= outputDims[j];
+                inputLocalIndex[inputDimsNum - 1 - transposeDims[outputDimsNum - 1 - j]] = value;
+            }
+            unsigned int inputIndex = 0;
+            for (int j = inputDimsNum - 1; j > sizeInnerIndex; j--) {
+                inputIndex = (inputIndex + inputLocalIndex[j]) * inputDims[j - 1];
+            }
+            inputIndex += inputLocalIndex[sizeInnerIndex];
+            if (branch == 0) {
+                *(output + i) = *(input + inputIndex);
+            } else {
+                UNI_MEMCPY(output + i * tileSize, input + inputIndex * tileSize, tileSize);
+            }
         }
     }
 }
@@ -58,15 +67,6 @@ inline void array_transpose(unsigned int elementSize,
     int inputDimsNum,
     int outputDimsNum)
 {
-    unsigned int inputSize = 1, outputSize = 1;
-    for (int i = 0; i < inputDimsNum; i++) {
-        inputSize *= inputDims[i];
-    }
-    for (int i = 0; i < outputDimsNum; i++) {
-        outputSize *= outputDims[i];
-    }
-    CHECK_REQUIREMENT(inputSize == outputSize);
-
     unsigned int sizeInner = 1;
     int sizeInnerIndex = 0;
     for (int i = outputDimsNum - 1; i >= 0; i--) {
@@ -77,23 +77,55 @@ inline void array_transpose(unsigned int elementSize,
             break;
         }
     }
+    int tileSize = elementSize * sizeInner;
+    int in = inputDims[inputDimsNum - 1], ihiw = 0, ic = 0;
+    if (outputDimsNum - sizeInnerIndex == 3 && transposeDims[0] == 0 && transposeDims[1] == 2 &&
+        transposeDims[2] == 1) {
+        ic = inputDims[inputDimsNum - 2];
+        ihiw = inputDims[inputDimsNum - 3];
+    }
+    if (outputDimsNum - sizeInnerIndex == 4 && transposeDims[0] == 0 && transposeDims[1] == 2 &&
+        transposeDims[2] == 3 && transposeDims[3] == 1) {
+        ic = inputDims[inputDimsNum - 2];
+        ihiw = inputDims[inputDimsNum - 3] * inputDims[inputDimsNum - 4];
+    }
+    if (ic > 0 && ihiw > 0 && input != output) {
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
+        for (int o = 0; o < in * ihiw; o++) {
+            int n = o / ihiw;
+            int hw = o % ihiw;
+            U8 *dst = (U8 *)output + o * ic * tileSize;
+            for (int c = 0; c < ic; c++, dst += tileSize) {
+                const U8 *src = (const U8 *)input + ((n * ic + c) * ihiw + hw) * tileSize;
+                UNI_MEMCPY(dst, src, tileSize);
+            }
+        }
+        return;
+    }
+
+    unsigned int inputSize = 1, outputSize = 1;
+    for (int i = 0; i < inputDimsNum; i++) {
+        inputSize *= inputDims[i];
+    }
+    for (int i = 0; i < outputDimsNum; i++) {
+        outputSize *= outputDims[i];
+    }
+    CHECK_REQUIREMENT(inputSize == outputSize);
     outputSize = outputSize / sizeInner;
 
-    std::vector<unsigned int> inputLocalIndex(inputDimsNum, 0);
     const char *inputPtr = (const char *)input;
     char *outputPtr = (char *)output;
     if (sizeInner == 1 && elementSize == 4) {
         inner_transpose_template<0, int>(elementSize, inputDims, (const int *)input, outputDims,
-            (int *)output, transposeDims, inputDimsNum, outputDimsNum, outputSize, sizeInnerIndex,
-            inputLocalIndex.data());
+            (int *)output, transposeDims, inputDimsNum, outputDimsNum, outputSize, sizeInnerIndex);
     } else if (sizeInner == 1 && elementSize == 2) {
         inner_transpose_template<0, short>(elementSize, inputDims, (const short *)input, outputDims,
-            (short *)output, transposeDims, inputDimsNum, outputDimsNum, outputSize, sizeInnerIndex,
-            inputLocalIndex.data());
+            (short *)output, transposeDims, inputDimsNum, outputDimsNum, outputSize, sizeInnerIndex);
     } else {
-        inner_transpose_template<1, char>(sizeInner * elementSize, inputDims, (const char *)input,
-            outputDims, (char *)output, transposeDims, inputDimsNum, outputDimsNum, outputSize,
-            sizeInnerIndex, inputLocalIndex.data());
+        inner_transpose_template<1, char>(tileSize, inputDims, (const char *)input, outputDims,
+            (char *)output, transposeDims, inputDimsNum, outputDimsNum, outputSize, sizeInnerIndex);
     }
 }
 
@@ -113,22 +145,31 @@ inline void array_transpose_naive(unsigned int elementSize,
         inputSize *= inputDims[i];
         outputSize *= outputDims[i];
     }
-    std::vector<unsigned int> inputLocalIndex(dimsNum);
     const char *inputPtr = (const char *)input;
     char *outputPtr = (char *)output;
-    for (unsigned int i = 0; i < outputSize; i++) {
-        unsigned int outputIndex = i;
-        for (int j = 0; j < dimsNum; j++) {
-            unsigned int value = outputIndex % outputDims[j];
-            outputIndex /= outputDims[j];
-            inputLocalIndex[dimsNum - 1 - transposeDims[dimsNum - 1 - j]] = value;
+#ifdef _USE_OPENMP
+#pragma omp parallel num_threads(OMP_NUM_THREADS)
+#endif
+    {
+        std::vector<unsigned int> inputLocalIndex(dimsNum);
+#ifdef _USE_OPENMP
+#pragma omp for
+#endif
+        for (unsigned int i = 0; i < outputSize; i++) {
+            unsigned int outputIndex = i;
+            for (int j = 0; j < dimsNum; j++) {
+                unsigned int value = outputIndex % outputDims[j];
+                outputIndex /= outputDims[j];
+                inputLocalIndex[dimsNum - 1 - transposeDims[dimsNum - 1 - j]] = value;
+            }
+            unsigned int inputIndex = 0;
+            for (int j = dimsNum - 1; j > 0; j--) {
+                inputIndex = (inputIndex + inputLocalIndex[j]) * inputDims[j - 1];
+            }
+            inputIndex += inputLocalIndex[0];
+            UNI_MEMCPY(
+                outputPtr + i * elementSize, inputPtr + inputIndex * elementSize, elementSize);
         }
-        unsigned int inputIndex = 0;
-        for (int j = dimsNum - 1; j > 0; j--) {
-            inputIndex = (inputIndex + inputLocalIndex[j]) * inputDims[j - 1];
-        }
-        inputIndex += inputLocalIndex[0];
-        memcpy(outputPtr + i * elementSize, inputPtr + inputIndex * elementSize, elementSize);
     }
 }
 #endif

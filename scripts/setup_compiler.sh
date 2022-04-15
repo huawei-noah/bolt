@@ -61,7 +61,7 @@ if [[ "${host_system}" == "" ]]; then
     exit 1
 fi
 host_hardware=""
-if [[ ${system_info} =~ "x86_64" ]]; then
+if [[ ${system_info} =~ "x86_64" || ${system_info} =~ "amd64" || ${system_info} =~ "i686" ]]; then
     host_hardware="x86_64"
 fi
 if [[ ${system_info} =~ "aarch64" || ${system_info} =~ "arm64" ]]; then
@@ -71,7 +71,7 @@ if [[ ${system_info} =~ "armv7" ]]; then
     host_hardware="armv7"
 fi
 if [[ "${host_hardware}" == "" ]]; then
-    echo "[ERROR] can not recognize host hardware information(${system_info}), we currently support x86_64/aarch64."
+    echo "[ERROR] can not recognize host hardware information(${system_info}), we currently support x86_64/amd64/aarch64/armv7."
     exit 1
 fi
 host="${host_system}-${host_hardware}"
@@ -241,7 +241,7 @@ if [[ "${host}" != "${target}" ]]; then
     if [[ ${target} =~ windows ]]; then
         CMAKE_OPTIONS="${CMAKE_OPTIONS} -DCMAKE_SYSTEM_NAME=Windows"
     fi
-    if [[ ${target} =~ armv7 || ${target} =~ arm_himix100 || ${target} =~ arm_musleabi ]]; then
+    if [[ ! ${use_neon} =~ "off" && ( ${target} =~ armv7 || ${target} =~ arm_himix100 || ${target} =~ arm_musleabi ) ]]; then
         CMAKE_OPTIONS="${CMAKE_OPTIONS} -DCMAKE_SYSTEM_PROCESSOR=armv7-a"
         CCFLAGS="${CCFLAGS} -mfpu=neon-vfpv4"
         if [[ ${target} =~ hardfp ]]; then

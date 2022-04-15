@@ -61,7 +61,7 @@ EE matrix_vector_multiply_transform_weight_fp32(TensorDesc desc, F32 *src, F32 *
                     unrollSizeN = unrollSize[unrollSizeN / 16 - (unrollSizeN >= 48)];
                     if (N - un < unrollSizeN) {
                         for (U32 k = 0; k < blockKSize; ++k) {
-                            memcpy(packB + k * (N - un), src + (k + bk) * N + un,
+                            UNI_MEMCPY(packB + k * (N - un), src + (k + bk) * N + un,
                                 (N - un) * sizeof(F32));
                         }
                         packB += (N - un) * blockKSize;
@@ -265,7 +265,8 @@ void mvm_pack_fp32(U32 numRows, U32 numColumns, F32 *packB, F32 *vector, F32 *re
         blockNum += 1;
     }
 #ifdef _USE_OPENMP
-#pragma omp parallel num_threads(OMP_NUM_THREADS)
+    int in_parallel = omp_in_parallel();
+#pragma omp parallel num_threads(OMP_NUM_THREADS) if (in_parallel == 0)
     {
 #endif
         U32 private_blockKSize = 0;

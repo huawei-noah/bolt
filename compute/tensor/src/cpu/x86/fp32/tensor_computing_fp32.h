@@ -78,6 +78,20 @@ EE convolution_direct(TensorDesc inputDesc,
     F32 *outArray,
     ActivationParamSpec activationDesc);
 
+EE convolution_winograd(TensorDesc inputDesc,
+    F32 *inArray,
+    F32 *eltwiseInput,
+    TensorDesc filterDesc,
+    const F32 *filterArray,
+    ConvolutionParamSpec convParamSpec,
+    TensorDesc biasDesc,
+    const F32 *biasArray,
+    U32 tmpBytes,
+    void *tmp,
+    TensorDesc outputDesc,
+    F32 *outArray,
+    ActivationParamSpec activationDesc);
+
 EE convolution_1x1_direct(TensorDesc inputDesc,
     F32 *inArray,
     F32 *eltwiseInput,
@@ -110,7 +124,7 @@ EE check_fp32(TensorDesc inputDescA,
     const F32 *inputB,
     CheckMode checkMode,
     TensorDesc outputDesc,
-    I32 *output);
+    U8 *output);
 
 EE clip_fp32(F32 *input, F32 *output, I32 len, F32 minValue, F32 maxValue);
 
@@ -223,8 +237,13 @@ EE eltwise_u8(std::vector<void *> input,
     void *output,
     EltwiseMode eltwiseMode);
 
-EE layer_normalization_fp32(
-    TensorDesc inputDesc, F32 *input, F32 *alpha, F32 *beta, TensorDesc outputDesc, F32 *output);
+EE layer_normalization_fp32(TensorDesc inputDesc,
+    F32 *input,
+    LayerNormParamSpec p,
+    F32 *alpha,
+    F32 *beta,
+    TensorDesc outputDesc,
+    F32 *output);
 
 EE l2normalization_fp32(TensorDesc inputDesc, const F32 *input, TensorDesc outputDesc, F32 *output);
 
@@ -276,6 +295,12 @@ EE grucell_fp32(TensorDesc xDesc,
     void *output,
     Arch arch);
 
+EE pooling_nchw_fp32(TensorDesc inputDesc,
+    const F32 *input,
+    PoolingParamSpec poolingParamSpec,
+    TensorDesc outputDesc,
+    F32 *output);
+
 EE pooling_fp32(TensorDesc inputDesc,
     const F32 *input,
     PoolingParamSpec poolingParamSpec,
@@ -303,6 +328,9 @@ EE scale_fp32(F32 *input,
     F32 *output);
 
 EE softmax_fp32(
+    TensorDesc inputDesc, const F32 *input, int axis, TensorDesc outputDesc, F32 *output);
+
+EE logsoftmax_fp32(
     TensorDesc inputDesc, const F32 *input, int axis, TensorDesc outputDesc, F32 *output);
 
 EE deconvolution_transform_filter_fp32(TensorDesc filterDesc,

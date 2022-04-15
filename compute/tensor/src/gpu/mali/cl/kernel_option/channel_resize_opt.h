@@ -15,8 +15,9 @@ inline EE set_channel_resize_opt_mali(bool useNchwFormat,
     char ioMemName[128] = "";
     CHECK_STATUS(set_io_mem_name(inputMemType, outputMemType, ioMemName));
 
-    sprintf(kernelName, "channel_resize_%s%s", ioMemName, formatName.c_str());
-    sprintf(kernelOpt->sourceName, "channel_resize");
+    std::string kernel = std::string("channel_resize_") + ioMemName + formatName;
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, "channel_resize");
     kernelOpt->kernelDataType = dt;
     char *opt = kernelOpt->option;
     if (useNchwFormat) {

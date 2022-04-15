@@ -12,8 +12,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "sys.h"
-#include "error.h"
-
 #include "cpu/x86/int8/tensor_computing_int8.h"
 
 EE convolution_infer_forward_tmp_bytes_int8(TensorDesc inputDesc,
@@ -34,10 +32,10 @@ EE convolution_infer_forward_tmp_bytes_int8(TensorDesc inputDesc,
     CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
     CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
     CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
-    U32 paddingT = convParamSpec.padding_top;
-    U32 paddingB = convParamSpec.padding_bottom;
-    U32 paddingL = convParamSpec.padding_left;
-    U32 paddingR = convParamSpec.padding_right;
+    U32 paddingT = convParamSpec.pad_top;
+    U32 paddingB = convParamSpec.pad_bottom;
+    U32 paddingL = convParamSpec.pad_left;
+    U32 paddingR = convParamSpec.pad_right;
 
     U32 ih_pad = ih + paddingT + paddingB;
     U32 iw_pad = iw + paddingL + paddingR;
@@ -61,6 +59,9 @@ EE convolution_infer_forward_tmp_bytes_int8(TensorDesc inputDesc,
             }
             if (idf != DF_NCHWC16) {
                 *bytes += icPadding * ih_pad * iw_pad;
+            }
+            if (paddingT > 1 || paddingB > 1 || paddingL > 1 || paddingR > 1) {
+                *bytes += oc * 4;
             }
             break;
         }
@@ -95,12 +96,13 @@ EE convolution_infer_forward_tmp_bytes_int8(TensorDesc inputDesc,
 
 EE convolution_int8(TensorDesc inputDesc,
     UINT8 *input,
+    F32 *eltwiseInput,
     TensorDesc filterDesc,
     const INT8 *filter,
     ConvolutionParamSpec convParamSpec,
     ConvolutionForwardAlgorithm algorithm,
     TensorDesc biasDesc,
-    const I32 *bias,
+    const F32 *bias,
     U32 tmpBytes,
     void *tmp,
     TensorDesc outputDesc,
@@ -132,11 +134,11 @@ EE convolution_int8(TensorDesc inputDesc,
     EE ret = SUCCESS;
     switch (algorithm) {
         case CONVOLUTION_ALGORITHM_DIRECT:
-            ret = convolution_direct(inputDesc, input, filterDesc, filter, convParamSpec, biasDesc,
+            ret = convolution_direct(inputDesc, input, eltwiseInput, filterDesc, filter, convParamSpec, biasDesc,
                 bias, tmpBytes, tmp, outputDesc, output, scale, activationDesc);
             break;
         case CONVOLUTION_ALGORITHM_POINTWISE:
-            ret = convolution_1x1_direct(inputDesc, input, filterDesc, filter, convParamSpec,
+            ret = convolution_1x1_direct(inputDesc, input, eltwiseInput, filterDesc, filter, convParamSpec,
                 biasDesc, bias, tmpBytes, tmp, outputDesc, output, scale, activationDesc);
             break;
         default:

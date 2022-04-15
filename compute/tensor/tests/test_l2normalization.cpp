@@ -29,7 +29,7 @@ int l2normalizationTest(int argc, char **argv, DataType dt)
     Tensor inputTensor;
     inputTensor.resize(inputDesc);
     inputTensor.alloc();
-    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inputDesc));
+    UNI_MEMCPY(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inputDesc));
 
     // set output
     Tensor outputTensor, outputTensorRef;

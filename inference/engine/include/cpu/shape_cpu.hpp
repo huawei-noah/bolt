@@ -33,15 +33,23 @@ public:
         Tensor inputTensor = this->inputTensors[0];
         TensorDesc inputDesc = inputTensor.get_desc();
         Tensor outputTensor = this->outputTensors[0];
-        UNI_MEMCPY(((CpuMemory *)(outputTensor.get_memory()))->get_ptr(), inputDesc.dims,
-            inputDesc.nDims * sizeof(U32));
+        U32 *ptr = (U32 *)((CpuMemory *)(outputTensor.get_memory()))->get_ptr();
+        for (U32 i = 0; i < inputDesc.nDims; i++) {
+            ptr[i] = inputDesc.dims[inputDesc.nDims - 1 - i];
+        }
     }
 
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
         TensorDesc inputDesc = inTensors[0]->get_desc();
-        TensorDesc outputDesc = tensor1d(DT_U32, inputDesc.nDims);
+        TensorDesc outputDesc;
+        outputDesc.dt = DT_U32;
+        outputDesc.nDims = 1;
+        outputDesc.dims[0] = inputDesc.nDims;
+        for (U32 i = 0; i < inputDesc.nDims; i++) {
+            outputDesc.dims[outputDesc.nDims + i] = inputDesc.dims[inputDesc.nDims - 1 - i];
+        }
         outTensors[0]->resize(outputDesc);
         return SUCCESS;
     }

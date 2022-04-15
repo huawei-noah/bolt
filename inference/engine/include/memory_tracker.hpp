@@ -96,7 +96,7 @@ public:
     {
         I32 subSlot = imageManager.getImageVecsId(slot, str[0], str[1], str[2]);
         if (subSlot < 0) {
-            CHECK_STATUS(NOT_MATCH);
+            UNI_ERROR_LOG("gpu image buffer reuse parameter is wrong.\n");
         }
         return subSlot;
     }

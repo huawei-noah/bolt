@@ -28,7 +28,7 @@ int axpbyTest(int argc, char **argv, DataType dt)
     U8 *y = ut_input_v(len, dt, UT_INIT_RANDOM);
     U8 *y_ref = ut_input_v(len, dt, UT_INIT_ZERO);
 
-    memcpy(y_ref, y, tensorNumBytes(yDesc));
+    UNI_MEMCPY(y_ref, y, tensorNumBytes(yDesc));
     // check
     if (UT_CHECK) {
         CHECK_STATUS(vector_vector_axpby(a, xDesc, x, b, yDesc, y, UT_CPU_ARCH));

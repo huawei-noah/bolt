@@ -11,7 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string.h>
 #include "cpu/arm/fp16/tensor_computing_fp16.h"
 
 EE attention_fp16(U32 batch,
@@ -26,14 +25,14 @@ EE attention_fp16(U32 batch,
     }
 
     F16 mask_s = -10000.0;
-    I32 count = array_sum_f16(input, toSequenceLength);
-    I32 valid = UNI_MIN(count, fromSequenceLength);
     float16x8_t mask_v = vdupq_n_f16(float16_t(mask_s));
     float16x8_t one_v = vdupq_n_f16(float16_t(1.0));
     for (U32 n = 0; n < batch; n++) {
+        U32 count = array_sum_f16(input, toSequenceLength);
+        U32 valid = UNI_MIN(count, (U32)fromSequenceLength);
         for (U32 i = 0; i < numHeads; i++) {
             if (i == 0) {
-                for (I32 j = 0; j < valid; j++) {
+                for (U32 j = 0; j < valid; j++) {
                     if (j == 0) {
                         I32 k = 0;
                         for (; k < toSequenceLength - 7; k += 8) {
@@ -47,12 +46,12 @@ EE attention_fp16(U32 batch,
                             output[k] = value;
                         }
                     } else {
-                        memcpy(
+                        UNI_MEMCPY(
                             output + j * toSequenceLength, output, toSequenceLength * sizeof(F16));
                     }
                 }
 
-                for (I32 j = valid; j < fromSequenceLength; j++) {
+                for (U32 j = valid; j < (U32)fromSequenceLength; j++) {
                     if (j == valid) {
                         I32 k = 0;
                         for (; k < toSequenceLength - 7; k += 8) {
@@ -62,12 +61,12 @@ EE attention_fp16(U32 batch,
                             output[j * toSequenceLength + k] = mask_s;
                         }
                     } else {
-                        memcpy(output + j * toSequenceLength, output + valid * toSequenceLength,
+                        UNI_MEMCPY(output + j * toSequenceLength, output + valid * toSequenceLength,
                             toSequenceLength * sizeof(F16));
                     }
                 }
             } else {
-                memcpy(output + i * fromSequenceLength * toSequenceLength, output,
+                UNI_MEMCPY(output + i * fromSequenceLength * toSequenceLength, output,
                     fromSequenceLength * toSequenceLength * sizeof(F16));
             }
         }

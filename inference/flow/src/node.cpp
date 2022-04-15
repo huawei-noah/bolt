@@ -221,7 +221,7 @@ EE Node::run()
                 void *src = ((CpuMemory *)inferenceResult[name]->get_memory())->get_ptr();
                 void *dst = ((CpuMemory *)postprocessInputs[name]->get_memory())->get_ptr();
                 if (src != dst) {
-                    memcpy(dst, src, tensorNumBytes(desc));
+                    UNI_MEMCPY(dst, src, tensorNumBytes(desc));
                 }
             }
         }

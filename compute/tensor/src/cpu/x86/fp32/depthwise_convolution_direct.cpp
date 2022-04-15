@@ -20,7 +20,7 @@
 #include "cpu/x86/fp32/convolution_functions.h"
 
 #define UNROLL_W 4
-#define UNROLL_OC_BLOCK_DIM 24
+#define UNROLL_OC_BLOCK_DIM 16
 
 typedef void (*kernelFunc)(F32 *in0,
     F32 *in1,
@@ -334,6 +334,117 @@ void Avx2DwKernel4x16(F32 *in0,
                          "%ymm15", "memory", "cc");
 }
 
+void Avx512DwKernel4x16(F32 *in0,
+    F32 *in1,
+    F32 *in2,
+    F32 *in3,
+    const F32 *curW,
+    F32 *curO,
+    const F32 *curB,
+    I32 fw,
+    I32 fh,
+    I32 oStep,
+    I32 iStep,
+    I32 hStep,
+    I32 flags,
+    I32 dw,
+    I32 wStep)
+{
+    __asm__ __volatile__("vmovups (%5), %%zmm0                       \n\t"
+                         "vmovups %%zmm0, %%zmm1                       \n\t"
+                         "vmovups %%zmm0, %%zmm2                       \n\t"
+                         "vmovups %%zmm0, %%zmm3                       \n\t"
+
+                         "cmp $0, %%ecx                                      \n\t"
+                         "je 3f                                             \n\t"
+                         "cmp $0, %6                                      \n\t"
+                         "je 3f                                             \n\t"
+
+                         ".align 16                                         \n\t"
+                         "0:                                                \n\t"
+
+                         "mov %6, %%eax                                     \n\t"
+                         ".align 16                                         \n\t"
+                         "1:                                                \n\t"
+
+                         "vmovaps (%4), %%zmm11                         \n\t"
+                         "vmovups (%0), %%zmm12                        \n\t"
+                         "vmovups (%1), %%zmm13                        \n\t"
+                         "vmovups (%2), %%zmm14                        \n\t"
+                         "vmovups (%3), %%zmm15                        \n\t"
+                         "vfmadd231ps %%zmm12, %%zmm11, %%zmm0              \n\t"
+                         "vfmadd231ps %%zmm13, %%zmm11, %%zmm1              \n\t"
+                         "prefetcht0 0x40(%4) \n\t"
+                         "vfmadd231ps %%zmm14, %%zmm11, %%zmm2              \n\t"
+                         "vfmadd231ps %%zmm15, %%zmm11, %%zmm3              \n\t"
+
+                         "add %12, %0                                      \n\t"
+                         "add %12, %1                                      \n\t"
+                         "add %12, %2                                      \n\t"
+                         "add %12, %3                                      \n\t"
+                         "add $0x40, %4                                    \n\t"
+                         "dec %%eax                                         \n\t"
+                         "jg 1b                                             \n\t"
+
+                         "add %10, %4                                    \n\t"
+                         "add %9, %0                                     \n\t"
+                         "add %9, %1                                     \n\t"
+                         "add %9, %2                                     \n\t"
+                         "add %9, %3                                     \n\t"
+                         "dec %%ecx                                         \n\t"
+                         "jg 0b                                             \n\t"
+
+                         // relu
+                         "mov %11, %%eax                                     \n\t"
+                         "and $0x6, %%eax                                      \n\t"
+                         "je 3f                                             \n\t"
+                         "vxorps %%zmm15, %%zmm15, %%zmm15                  \n\t"
+                         "vmaxps %%zmm15, %%zmm0, %%zmm0                    \n\t"
+                         "vmaxps %%zmm15, %%zmm1, %%zmm1                    \n\t"
+                         "vmaxps %%zmm15, %%zmm2, %%zmm2                    \n\t"
+                         "vmaxps %%zmm15, %%zmm3, %%zmm3                    \n\t"
+                         "vmaxps %%zmm15, %%zmm4, %%zmm4                    \n\t"
+                         "vmaxps %%zmm15, %%zmm5, %%zmm5                    \n\t"
+                         "vmaxps %%zmm15, %%zmm6, %%zmm6                    \n\t"
+                         "vmaxps %%zmm15, %%zmm7, %%zmm7                    \n\t"
+
+                         // relu6
+                         "and $0x4, %%eax                                      \n\t"
+                         "je 3f                                             \n\t"
+                         "mov $0x40C00000, %%eax                            \n\t"
+                         "vmovd %%eax, %%xmm12                              \n\t"
+                         "vpermps %%zmm12, %%zmm15, %%zmm12                 \n\t"
+                         "vminps %%zmm12, %%zmm0, %%zmm0                    \n\t"
+                         "vminps %%zmm12, %%zmm1, %%zmm1                    \n\t"
+                         "vminps %%zmm12, %%zmm2, %%zmm2                    \n\t"
+                         "vminps %%zmm12, %%zmm3, %%zmm3                    \n\t"
+                         "vminps %%zmm12, %%zmm4, %%zmm4                    \n\t"
+                         "vminps %%zmm12, %%zmm5, %%zmm5                    \n\t"
+                         "vminps %%zmm12, %%zmm6, %%zmm6                    \n\t"
+                         "vminps %%zmm12, %%zmm7, %%zmm7                    \n\t"
+
+                         ".align 16                                         \n\t"
+                         "3:                                                 \n\t"
+                         :
+                         : "r"(in0), "r"(in1), "r"(in2), "r"(in3), "r"(curW), "r"(curB), "r"(fw),
+                         "c"(fh), "r"((I64)iStep), "r"((I64)hStep), "r"((I64)wStep), "r"(flags),
+                         "r"((I64)dw)
+                         : "%eax", "%rax", "%zmm0", "%zmm1", "%zmm2", "%zmm3", "%zmm4", "%zmm5",
+                         "%zmm6", "%zmm7", "%zmm8", "%zmm9", "%zmm10", "%zmm11", "%zmm12", "%zmm13",
+                         "%zmm14", "%zmm15", "memory", "cc");
+
+    __asm__ __volatile__("vmovups %%zmm0, (%0)                              \n\t"
+                         "vmovups %%zmm1, 0x40(%0)                          \n\t"
+                         "vmovups %%zmm2, 0x80(%0)                          \n\t"
+                         "vmovups %%zmm3, 0xC0(%0)                          \n\t"
+
+                         ".align 16                                         \n\t"
+                         "1:                                                \n\t"
+                         :
+                         : "r"(curO), "r"((I64)oStep)
+                         : "%zmm0", "%zmm1", "%zmm2", "%zmm3", "memory", "cc");
+}
+
 void Avx2DwKernel4x8(F32 *in0,
     F32 *in1,
     F32 *in2,
@@ -593,6 +704,75 @@ void Avx2DwKernel1x16(F32 *in0,
                          "%ymm14", "%ymm15", "memory", "cc");
 }
 
+void Avx512DwKernel1x16(F32 *in0,
+    F32 *in1,
+    F32 *in2,
+    F32 *in3,
+    const F32 *curW,
+    F32 *curO,
+    const F32 *curB,
+    I32 fw,
+    I32 fh,
+    I32 oStep,
+    I32 iStep,
+    I32 hStep,
+    I32 flags,
+    I32 dw,
+    I32 wStep)
+{
+    __asm__ __volatile__("vmovups (%3), %%zmm0                       \n\t"
+
+                         "cmp $0, %%ecx                                      \n\t"
+                         "je 3f                                             \n\t"
+                         "cmp $0, %4                                      \n\t"
+                         "je 3f                                             \n\t"
+
+                         ".align 16                                         \n\t"
+                         "0:                                                \n\t"
+
+                         "mov %4, %%eax                                     \n\t"
+                         ".align 16                                         \n\t"
+                         "1:                                                \n\t"
+
+                         "vmovaps (%1), %%zmm1                         \n\t"
+                         "vmovups (%0), %%zmm2                        \n\t"
+                         "vfmadd231ps %%zmm2, %%zmm1, %%zmm0              \n\t"
+
+                         "add %11, %0                                      \n\t"
+                         "add $0x40, %1                                    \n\t"
+                         "dec %%eax                                         \n\t"
+                         "jg 1b                                             \n\t"
+
+                         "add %6, %1                                    \n\t"
+                         "add %9, %0                                     \n\t"
+                         "dec %%ecx                                         \n\t"
+                         "jg 0b                                             \n\t"
+
+                         // relu
+                         "mov %10, %%eax                                     \n\t"
+                         "and $0x6, %%eax                                      \n\t"
+                         "je 3f                                             \n\t"
+                         "vxorps %%zmm3, %%zmm3, %%zmm3                  \n\t"
+                         "vmaxps %%zmm3, %%zmm0, %%zmm0                    \n\t"
+
+                         // relu6
+                         "and $0x4, %%eax                                      \n\t"
+                         "je 3f                                             \n\t"
+                         "mov $0x40C00000, %%eax                            \n\t"
+                         "vmovd %%eax, %%xmm3                              \n\t"
+                         "vbroadcastss %%xmm3, %%zmm4                 \n\t"
+                         "vminps %%zmm4, %%zmm0, %%zmm0                    \n\t"
+
+                         ".align 16                                         \n\t"
+                         "3:                                                \n\t"
+                         "vmovups %%zmm0, (%2)                              \n\t"
+                         :
+                         : "r"(in0), "r"(curW), "r"(curO), "r"(curB), "r"(fw), "c"(fh),
+                         "r"((I64)wStep), "r"((I64)oStep), "r"((I64)iStep), "r"((I64)hStep),
+                         "r"(flags), "r"((I64)dw)
+                         : "%eax", "%rax", "%zmm0", "%zmm1", "%zmm2", "%zmm3", "memory", "cc");
+}
+
 void Avx2DwKernel1x8(F32 *in0,
     F32 *in1,
     F32 *in2,
@@ -834,6 +1014,103 @@ inline void Avx2DwKernel33s14x24(F32 *in0,
                          : "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm4", "%ymm5", "%ymm6", "%ymm7",
                          "%ymm8", "%ymm9", "%ymm10", "%ymm11", "%ymm12", "%ymm13", "%ymm14",
                          "%ymm15", "memory", "cc");
+}
+
+inline void Avx512DwKernel33s14x16(F32 *in0,
+    const F32 *curW,
+    F32 *curO,
+    const F32 *curB,
+    I32 oStep,
+    I32 iStep,
+    I32 hStep,
+    I32 flags,
+    I32 fh)
+{
+    __asm__ __volatile__(
+        "vmovups (%2), %%zmm0                       \n\t"
+        "vmovups %%zmm0, %%zmm1                       \n\t"
+        "vmovups %%zmm0, %%zmm2                       \n\t"
+        "vmovups %%zmm0, %%zmm3                       \n\t"
+
+        ".align 16                                         \n\t"
+        "0:                                               "
+
+        "vmovaps (%1), %%zmm15                         \n\t"
+        "vmovups (%0), %%zmm8                        \n\t"
+        "vmovups 0x40(%0), %%zmm9                        \n\t"
+        "vmovups 0x80(%0), %%zmm10                        \n\t"
+        "vmovups 0xC0(%0), %%zmm11                        \n\t"
+        "vfmadd231ps %%zmm8, %%zmm15, %%zmm0              \n\t"
+        "vfmadd231ps %%zmm9, %%zmm15, %%zmm1              \n\t"
+        "vfmadd231ps %%zmm10, %%zmm15, %%zmm2              \n\t"
+        "vfmadd231ps %%zmm11, %%zmm15, %%zmm3              \n\t"
+
+        "vmovaps 0x40(%1), %%zmm15                         \n\t"
+        "vmovups 0x100(%0), %%zmm8                        \n\t"
+        "vfmadd231ps %%zmm9, %%zmm15, %%zmm0              \n\t"
+        "vfmadd231ps %%zmm10, %%zmm15, %%zmm1              \n\t"
+        "vfmadd231ps %%zmm11, %%zmm15, %%zmm2              \n\t"
+        "vfmadd231ps %%zmm8, %%zmm15, %%zmm3              \n\t"
+
+        "vmovaps 0x80(%1), %%zmm15                         \n\t"
+        "vmovups 0x140(%0), %%zmm12                        \n\t"
+        "vfmadd231ps %%zmm10, %%zmm15, %%zmm0              \n\t"
+        "vfmadd231ps %%zmm11, %%zmm15, %%zmm1              \n\t"
+        "vfmadd231ps %%zmm8, %%zmm15, %%zmm2              \n\t"
+        "vfmadd231ps %%zmm12, %%zmm15, %%zmm3              \n\t"
+
+        "add %4, %0                                      \n\t"
+        "add $0xC0, %1                                      \n\t"
+
+        "dec %%ecx                                         \n\t"
+        "jg 0b                                             \n\t"
+
+        // relu
+        "mov %5, %%eax                                     \n\t"
+        "and $0x6, %%eax                                      \n\t"
+        "je 1f                                             \n\t"
+        "vxorps %%zmm15, %%zmm15, %%zmm15                  \n\t"
+        "vmaxps %%zmm15, %%zmm0, %%zmm0                    \n\t"
+        "vmaxps %%zmm15, %%zmm1, %%zmm1                    \n\t"
+        "vmaxps %%zmm15, %%zmm2, %%zmm2                    \n\t"
+        "vmaxps %%zmm15, %%zmm3, %%zmm3                    \n\t"
+        "vmaxps %%zmm15, %%zmm4, %%zmm4                    \n\t"
+        "vmaxps %%zmm15, %%zmm5, %%zmm5                    \n\t"
+        "vmaxps %%zmm15, %%zmm6, %%zmm6                    \n\t"
+        "vmaxps %%zmm15, %%zmm7, %%zmm7                    \n\t"
+
+        // relu6
+        "and $0x4, %%eax                                      \n\t"
+        "je 1f                                             \n\t"
+        "mov $0x40C00000, %%eax                            \n\t"
+        "vmovd %%eax, %%xmm12                              \n\t"
+        "vpermps %%zmm12, %%zmm15, %%zmm12                 \n\t"
+        "vminps %%zmm12, %%zmm0, %%zmm0                    \n\t"
+        "vminps %%zmm12, %%zmm1, %%zmm1                    \n\t"
+        "vminps %%zmm12, %%zmm2, %%zmm2                    \n\t"
+        "vminps %%zmm12, %%zmm3, %%zmm3                    \n\t"
+        "vminps %%zmm12, %%zmm4, %%zmm4                    \n\t"
+        "vminps %%zmm12, %%zmm5, %%zmm5                    \n\t"
+        "vminps %%zmm12, %%zmm6, %%zmm6                    \n\t"
+        "vminps %%zmm12, %%zmm7, %%zmm7                    \n\t"
+
+        ".align 16                                         \n\t"
+        "1:                                                \n\t"
+        :
+        : "r"(in0), "r"(curW), "r"(curB), "r"((I64)iStep), "r"((I64)hStep), "r"(flags), "c"(fh)
+        : "%eax", "%zmm0", "%zmm1", "%zmm2", "%zmm3", "%zmm4", "%zmm5", "%zmm6", "%zmm7",
+        "%zmm8", "%zmm9", "%zmm10", "%zmm11", "%zmm12", "%zmm13", "%zmm14", "%zmm15", "memory",
+        "cc");
+
+    __asm__ __volatile__("vmovups %%zmm0, (%0)                              \n\t"
+                         "vmovups %%zmm1, 0x40(%0)                          \n\t"
+                         "vmovups %%zmm2, 0x80(%0)                          \n\t"
+                         "vmovups %%zmm3, 0xC0(%0)                              \n\t"
+                         :
+                         : "r"(curO), "r"((I64)oStep)
+                         : "%zmm0", "%zmm1", "%zmm2", "%zmm3", "%zmm4", "%zmm5", "%zmm6", "%zmm7",
+                         "%zmm8", "%zmm9", "%zmm10", "%zmm11", "%zmm12", "%zmm13", "%zmm14",
+                         "%zmm15", "memory", "cc");
 }
 
 inline void Avx2DwKernel33s14x16(F32 *in0,
@@ -1242,25 +1519,28 @@ EE depthwise_convolution_direct(TensorDesc inputDesc,
     CHECK_STATUS(tensor4dGetI32(dwFilterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
     CHECK_STATUS(tensor4dGetI32(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
 
-    if ((fdf != DF_NCHWC24 && fdf != DF_NCHWC8) || (idf != DF_NCHWC8) || (ic % 8 != 0)) {
+    if ((fdf != DF_NCHWC24 && fdf != DF_NCHWC8) || (idf != DF_NCHWC8 && idf != DF_NCHWC16) || (ic % 8 != 0)) {
         CHECK_STATUS(NOT_MATCH);
     }
 
     // get kernels
-    kernelFunc kernel[2][3] = {{Avx2DwKernel1x8, Avx2DwKernel1x16, Avx2DwKernel1x24},
-        {Avx2DwKernel4x8, Avx2DwKernel4x16, Avx2DwKernel4x24}};
+    kernelFunc kernel[3][2] = {{Avx2DwKernel1x8, Avx2DwKernel4x8},
+                               {Avx2DwKernel1x16, Avx2DwKernel4x16},
+                               {Avx2DwKernel1x24, Avx2DwKernel4x24}};
     kernel33Func kernel33[2][3] = {{Avx2DwKernel33s18x8, Avx2DwKernel33s14x16, Avx2DwKernel33s14x24},
         {Avx2DwKernel33s28x8, nullptr, nullptr}};
+    kernelFunc kernel512[2] = {Avx512DwKernel1x16, Avx512DwKernel4x16};
+    kernel33Func kernel51233[1] = {Avx512DwKernel33s14x16};
     I32 unrollOcArray[3] = {8, 16, 24};
     I32 unrollHw33s1Array[3] = {8, 4, 4};
 
     // get computing params
     I32 strideH = convParamSpec.stride_h;
     I32 strideW = convParamSpec.stride_w;
-    I32 paddingT = convParamSpec.padding_top;
-    I32 paddingB = convParamSpec.padding_bottom;
-    I32 paddingL = convParamSpec.padding_left;
-    I32 paddingR = convParamSpec.padding_right;
+    I32 paddingT = convParamSpec.pad_top;
+    I32 paddingB = convParamSpec.pad_bottom;
+    I32 paddingL = convParamSpec.pad_left;
+    I32 paddingR = convParamSpec.pad_right;
     I32 dilateH = convParamSpec.dilatedRate_h;
     I32 dilateW = convParamSpec.dilatedRate_w;
     I32 fhDilated = (fh - 1) * dilateH + 1;
@@ -1270,14 +1550,15 @@ EE depthwise_convolution_direct(TensorDesc inputDesc,
     // infer block params
     I32 unrollOc = UNROLL_OC_BLOCK_DIM;
     I32 unrollHw = UNROLL_W;
+    I32 cLen = (idf == DF_NCHWC16)? 16: 8;
 
     // infer kernel params
-    I32 oStep = oh * ow * SIMDW * BYTES;
-    I32 iStep = ih * iw * SIMDW * BYTES;
-    I32 hStep = (iw - fw * dilateW + (dilateH - 1) * iw) * SIMDW * BYTES;
-    I32 hStep33 = iw * SIMDW * BYTES;
-    I32 sw = strideW * SIMDW * BYTES;
-    I32 dw = dilateW * SIMDW * BYTES;
+    I32 oStep = oh * ow * cLen * BYTES;
+    I32 iStep = ih * iw * cLen * BYTES;
+    I32 hStep = (iw - fw * dilateW + (dilateH - 1) * iw) * cLen * BYTES;
+    I32 hStep33 = iw * cLen * BYTES;
+    I32 sw = strideW * cLen * BYTES;
+    I32 dw = dilateW * cLen * BYTES;
 
     // fuse dw+pw
     F32 *useOutArray = (F32 *)tmp;
@@ -1300,6 +1581,13 @@ EE depthwise_convolution_direct(TensorDesc inputDesc,
             ocSize = UNI_MIN(unrollOc, ic - ocb);
             I32 ocIdx = (ocSize >> 3) - 1;
             ocSize = unrollOcArray[ocIdx];
+            kernelFunc *wkernel = kernel[ocIdx];
+            kernel33Func wkernel33 = kernel33[0][ocIdx];
+            if (idf == DF_NCHWC16) {
+                ocSize = 16;
+                wkernel = kernel512;
+                wkernel33 = kernel51233[0];
+            }
             if (paddingT == 0 && paddingB == 0 && paddingL == 0 && paddingR == 0) {
                 I32 wSize = 0;
                 if (use3x3) {
@@ -1309,15 +1597,15 @@ EE depthwise_convolution_direct(TensorDesc inputDesc,
                             wSize = UNI_MIN(ow - w, unrollHw);
                             I32 in_h_0 = h * strideH;
                             I32 in_w_0 = w * strideW;
-                            F32 *in_0 = curI + in_h_0 * iw * SIMDW + in_w_0 * SIMDW;
-                            F32 *calO = curO + (h * ow + w) * SIMDW;
+                            F32 *in_0 = curI + in_h_0 * iw * cLen + in_w_0 * cLen;
+                            F32 *calO = curO + (h * ow + w) * cLen;
 
                             if (wSize < unrollHw) {
-                                kernel[0][ocIdx](in_0, nullptr, nullptr, nullptr, curW, calO, curB,
+                                wkernel[0](in_0, nullptr, nullptr, nullptr, curW, calO, curB,
                                     fw, fh, oStep, iStep, hStep, flags, dw, 0);
                                 wSize = 1;
                             } else {
-                                kernel33[strideW - 1][ocIdx](
+                                wkernel33(
                                     in_0, curW, calO, curB, oStep, iStep, hStep33, flags, 3);
                             }
                         }
@@ -1336,12 +1624,12 @@ EE depthwise_convolution_direct(TensorDesc inputDesc,
                         I32 in_w_2 = (hw + 2) % ow * strideW;
                         I32 in_h_3 = (hw + 3) / ow * strideH;
                         I32 in_w_3 = (hw + 3) % ow * strideW;
-                        F32 *in_0 = curI + in_h_0 * iw * SIMDW + in_w_0 * SIMDW;
-                        F32 *in_1 = curI + in_h_1 * iw * SIMDW + in_w_1 * SIMDW;
-                        F32 *in_2 = curI + in_h_2 * iw * SIMDW + in_w_2 * SIMDW;
-                        F32 *in_3 = curI + in_h_3 * iw * SIMDW + in_w_3 * SIMDW;
+                        F32 *in_0 = curI + in_h_0 * iw * cLen + in_w_0 * cLen;
+                        F32 *in_1 = curI + in_h_1 * iw * cLen + in_w_1 * cLen;
+                        F32 *in_2 = curI + in_h_2 * iw * cLen + in_w_2 * cLen;
+                        F32 *in_3 = curI + in_h_3 * iw * cLen + in_w_3 * cLen;
 
-                        kernel[wSize >> 2][ocIdx](in_0, in_1, in_2, in_3, curW, curO + hw * SIMDW,
+                        wkernel[wSize >> 2](in_0, in_1, in_2, in_3, curW, curO + hw * cLen,
                             curB, fw, fh, oStep, iStep, hStep, flags, dw, 0);
                     }
                 }
@@ -1369,28 +1657,28 @@ EE depthwise_convolution_direct(TensorDesc inputDesc,
                         inW = (inW >= 0) ? inW : iwJump;
                         tfw = GetKernelnoDilated(tfw, dilateW);
                         const F32 *useW = calW + wwJump * ocSize;
-                        F32 *in_0 = curI + inH * iw * SIMDW + inW * SIMDW;
-                        F32 *calO = curO + (h * ow + realW) * SIMDW;
-                        hStep = (iw - tfw * dilateW + (dilateH - 1) * iw) * SIMDW * BYTES;
-                        kernel[0][ocIdx](in_0, nullptr, nullptr, nullptr, useW, calO, curB, tfw,
+                        F32 *in_0 = curI + inH * iw * cLen + inW * cLen;
+                        F32 *calO = curO + (h * ow + realW) * cLen;
+                        hStep = (iw - tfw * dilateW + (dilateH - 1) * iw) * cLen * BYTES;
+                        wkernel[0](in_0, nullptr, nullptr, nullptr, useW, calO, curB, tfw,
                             tfh, oStep, iStep, hStep, flags, dw, (fw - tfw) * ocSize * BYTES);
                     }
                     w = owPaddingL;
                     I32 wSize = 0;
-                    hStep = (iw - fw * dilateW + (dilateH - 1) * iw) * SIMDW * BYTES;
+                    hStep = (iw - fw * dilateW + (dilateH - 1) * iw) * cLen * BYTES;
                     if (use3x3) {
                         unrollHw = unrollHw33s1Array[ocIdx];
                         for (; w < ow - owPaddingR; w += wSize) {
                             wSize = UNI_MIN(ow - owPaddingR - w, unrollHw);
                             I32 in_w_0 = w * strideW - paddingL;
-                            F32 *in_0 = curI + inH * iw * SIMDW + in_w_0 * SIMDW;
-                            F32 *calO = curO + (h * ow + w) * SIMDW;
+                            F32 *in_0 = curI + inH * iw * cLen + in_w_0 * cLen;
+                            F32 *calO = curO + (h * ow + w) * cLen;
                             if (wSize < unrollHw) {
-                                kernel[0][ocIdx](in_0, nullptr, nullptr, nullptr, calW, calO, curB,
+                                wkernel[0](in_0, nullptr, nullptr, nullptr, calW, calO, curB,
                                     fw, tfh, oStep, iStep, hStep, flags, dw, 0);
                                 wSize = 1;
                             } else {
-                                kernel33[strideW - 1][ocIdx](
+                                wkernel33(
                                     in_0, calW, calO, curB, oStep, iStep, hStep33, flags, tfh);
                             }
                         }
@@ -1404,13 +1692,13 @@ EE depthwise_convolution_direct(TensorDesc inputDesc,
                             I32 in_w_1 = (w + 1) * strideW - paddingL;
                             I32 in_w_2 = (w + 2) * strideW - paddingL;
                             I32 in_w_3 = (w + 3) * strideW - paddingL;
-                            F32 *in_0 = curI + inH * iw * SIMDW + in_w_0 * SIMDW;
-                            F32 *in_1 = curI + inH * iw * SIMDW + in_w_1 * SIMDW;
-                            F32 *in_2 = curI + inH * iw * SIMDW + in_w_2 * SIMDW;
-                            F32 *in_3 = curI + inH * iw * SIMDW + in_w_3 * SIMDW;
-                            F32 *calO = curO + (h * ow + w) * SIMDW;
+                            F32 *in_0 = curI + inH * iw * cLen + in_w_0 * cLen;
+                            F32 *in_1 = curI + inH * iw * cLen + in_w_1 * cLen;
+                            F32 *in_2 = curI + inH * iw * cLen + in_w_2 * cLen;
+                            F32 *in_3 = curI + inH * iw * cLen + in_w_3 * cLen;
+                            F32 *calO = curO + (h * ow + w) * cLen;
 
-                            kernel[wSize >> 2][ocIdx](in_0, in_1, in_2, in_3, calW, calO, curB, fw,
+                            wkernel[wSize >> 2](in_0, in_1, in_2, in_3, calW, calO, curB, fw,
                                 tfh, oStep, iStep, hStep, flags, dw, 0);
                         }
                     }
@@ -1424,7 +1712,7 @@ EE depthwise_convolution_direct(TensorDesc inputDesc,
         tmpBytes -= oh * ic * oh * ow + 32;
         tmp = (void *)((F32 *)tmp + oh * ic * oh * ow + 32);
         ConvolutionParamSpec p = createConvolutionParamSpec(
-            1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, fn, Convolution_Pointwise);
+            1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, fn, CONVOLUTION_POINTWISE);
         convolution_1x1_direct(pwInputDesc, useOutArray, eltwiseInput, pwFilterDesc, pwFilterArray,
             p, pwBiasArray, tmpBytes, tmp, outputDesc, outArray, pointwiseActivationParamSpec);
     }

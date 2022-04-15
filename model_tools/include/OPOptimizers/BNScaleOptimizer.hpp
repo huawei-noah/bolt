@@ -60,8 +60,8 @@ class BNScaleOptimizer : public OPOptimizer {
                 if (spec->ws[scaleWeightIndex].vec == nullptr) {
                     spec->ws[scaleWeightIndex].bytes_of_vec = channelCur * sizeof(F32);
                     spec->ws[scaleWeightIndex].vec =
-                        (U8 *)mt_new_storage(spec->ws[scaleWeightIndex].bytes_of_vec);
-                    memset(
+                        (U8 *)mt_malloc(spec->ws[scaleWeightIndex].bytes_of_vec);
+                    UNI_MEMSET(
                         spec->ws[scaleWeightIndex].vec, 0, spec->ws[scaleWeightIndex].bytes_of_vec);
                 }
 
@@ -72,21 +72,10 @@ class BNScaleOptimizer : public OPOptimizer {
                     alphaPtr[m] /= stdValue[m];
                     betaPtr[m] = betaPtr[m] - alphaPtr[m] * gamaCur * meanPtr[m];
                 }
-                // free BN memory
-                if (spec->ws[bnWeightIndex].weight != nullptr) {
-                    spec->ws[bnWeightIndex].bytes_of_weight = 0;
-                    if (outOfFileMapRange(spec->ws[bnWeightIndex].weight, spec->mfd)) {
-                        delete spec->ws[bnWeightIndex].weight;
-                    }
-                    spec->ws[bnWeightIndex].weight = nullptr;
-                }
-                if (spec->ws[bnWeightIndex].vec != nullptr) {
-                    spec->ws[bnWeightIndex].bytes_of_vec = 0;
-                    if (outOfFileMapRange(spec->ws[bnWeightIndex].vec, spec->mfd)) {
-                        delete spec->ws[bnWeightIndex].vec;
-                    }
-                    spec->ws[bnWeightIndex].vec = nullptr;
-                }
+                spec->ws[bnWeightIndex].bytes_of_weight = 0;
+                mt_free(spec->ws[bnWeightIndex].weight, spec);
+                spec->ws[bnWeightIndex].bytes_of_vec = 0;
+                mt_free(spec->ws[bnWeightIndex].vec, spec);
                 setOperatorInvalid(spec, bnOpIndex, true);
                 hasOptimized = true;
                 i--;

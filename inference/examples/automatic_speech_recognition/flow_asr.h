@@ -267,7 +267,7 @@ void loadBinary(const std::string fileName, char *data, size_t size)
     ifs.seekg(0, std::ifstream::beg);
     ifs.read(data, UNI_MIN(length, size));
     if (length < size) {
-        memset(data + length, 0, size - length);
+        UNI_MEMSET(data + length, 0, size - length);
     }
     ifs.close();
 }
@@ -352,7 +352,7 @@ std::map<std::string, std::shared_ptr<Tensor>> getEncoderInputOutput(
         case DT_F32: {
             F32 *ptr = (F32 *)((CpuMemory *)(tensors["sounds"]->get_memory()))->get_ptr();
             for (int i = 0; i < frameLength; i++) {
-                memcpy(ptr + i * featureLength, feature[0][i + frameOffset].data(),
+                UNI_MEMCPY(ptr + i * featureLength, feature[0][i + frameOffset].data(),
                     featureLength * sizeof(float));
             }
             break;
@@ -497,7 +497,7 @@ std::map<std::string, std::shared_ptr<Tensor>> getEncoderInputOutput(
             if (iter.first != std::string("sounds")) {
                 TensorDesc desc = iter.second->get_desc();
                 U8 *ptr = (U8 *)((CpuMemory *)(iter.second->get_memory()))->get_ptr();
-                memset(ptr, 0, tensorNumBytes(desc));
+                UNI_MEMSET(ptr, 0, tensorNumBytes(desc));
             }
         }
     }
@@ -606,7 +606,7 @@ std::map<std::string, std::shared_ptr<Tensor>> getPinYin2HanZiInputOutput(int fr
     tensors["pinyin"]->resize(tensor2df(DT_U32, DF_NORMAL, 1, bufferLength));
     tensors["pinyin"]->alloc();
     if (frameId == 0) {
-        memset(buffer, 0, sizeof(unsigned int) * bufferLength);
+        UNI_MEMSET(buffer, 0, sizeof(unsigned int) * bufferLength);
     }
     int pinyin = *((unsigned int *)((CpuMemory *)(joint["output_argmax"]->get_memory()))->get_ptr()) -
         PINYIN_FEATURE_GAP;
@@ -620,8 +620,8 @@ std::map<std::string, std::shared_ptr<Tensor>> getPinYin2HanZiInputOutput(int fr
         buffer[bufferValidSize - 1] = pinyin;
     }
     unsigned int *ptr = (unsigned int *)((CpuMemory *)(tensors["pinyin"]->get_memory()))->get_ptr();
-    memcpy(ptr, buffer, sizeof(unsigned int) * bufferValidSize);
-    memset(ptr + bufferValidSize, 0, sizeof(unsigned int) * (bufferLength - bufferValidSize));
+    UNI_MEMCPY(ptr, buffer, sizeof(unsigned int) * bufferValidSize);
+    UNI_MEMSET(ptr + bufferValidSize, 0, sizeof(unsigned int) * (bufferLength - bufferValidSize));
 
     tensors["hanzi_squeeze/Squeeze"] = std::shared_ptr<Tensor>(new Tensor());
     std::shared_ptr<Tensor> tmp;

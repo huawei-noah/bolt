@@ -85,6 +85,8 @@ EE roialign_infer_forward_tmp_bytes(
         CHECK_STATUS(
             roialign_infer_forward_tmp_bytes_mali(inputDesc, gclmemInputDesc, outputDesc, bytes));
 #endif
+    } else {
+        *bytes = 0;
     }
     return SUCCESS;
 }
@@ -98,7 +100,6 @@ EE roialign(std::vector<Tensor> inputTensor,
     auto arch = archInfo->arch;
     std::vector<TensorDesc> inputDesc = get_desc_from_tensors(inputTensor);
     std::vector<void *> input = get_data_from_tensors<void *>(inputTensor, arch);
-    void *tmpbuf = get_ptr_from_tensor(tmpTensor, arch);
     TensorDesc outputDesc = outputTensor.get_desc();
     void *output = get_ptr_from_tensor(outputTensor, arch);
     EE ret = NOT_SUPPORTED;
@@ -108,6 +109,7 @@ EE roialign(std::vector<Tensor> inputTensor,
 #endif
     } else if (IS_GPU(arch)) {
 #ifdef _USE_GPU
+        void *tmpbuf = get_ptr_from_tensor(tmpTensor, arch);
         ret = roialign_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc, input, p,
             (GCLMem_t)tmpbuf, outputDesc, (GCLMem_t)output);
 #endif

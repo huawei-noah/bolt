@@ -14,6 +14,46 @@
 #include "cpu/tensor_computing_cpu.h"
 #include <algorithm>
 
+template <typename T, bool increase>
+inline static bool cmp(T *data, const int &a, const int &b)
+{
+    if (increase) {
+        return (data[a] < data[b]) || (data[a] == data[b] && a < b);
+    } else {
+        return (data[a] > data[b]) || (data[a] == data[b] && a < b);
+    }
+}
+
+template <typename T, bool increase>
+static void heap(int *buffer, int i, int k, T *data)
+{
+    while (true) {
+        int left = 2 * i + 1;
+        int right = left + 1;
+        if (right < k) {
+            bool replace = cmp<T, increase>(data, buffer[i], buffer[left]);
+            if (replace && cmp<T, increase>(data, buffer[right], buffer[left])) {
+                auto tmp = buffer[i];
+                buffer[i] = buffer[left];
+                buffer[left] = tmp;
+                i = left;
+            } else if (replace || cmp<T, increase>(data, buffer[i], buffer[right])) {
+                auto tmp = buffer[i];
+                buffer[i] = buffer[right];
+                buffer[right] = tmp;
+                i = right;
+            } else
+                break;
+        } else if ((left < k) && cmp<T, increase>(data, buffer[i], buffer[left])) {
+            auto tmp = buffer[i];
+            buffer[i] = buffer[left];
+            buffer[left] = tmp;
+            i = left;
+        } else
+            break;
+    }
+}
+
 template <typename T, bool increase, bool order>
 inline static void topk_kernel(
     const TensorDesc &inputDesc, T *input, const TopKParamSpec &p, int *tmp, T *output, int *index)
@@ -26,31 +66,67 @@ inline static void topk_kernel(
     for (U32 i = axis + 1; i < inputDesc.nDims; i++) {
         loopOuter *= inputDesc.dims[i];
     }
-    int num = UNI_MIN(loops, p.topk);
+    int num = loops;
+    if (p.k > 0 && p.k < num) {
+        num = p.k;
+    }
     int *tmpEnd = tmp + loops;
     for (int i = 0; i < loopOuter; i++) {
         int offset = i * loops * loopInner;
         for (int j = 0; j < loopInner; j++, offset++) {
+#if 0
             for (int k = 0; k < loops; k++) {
-                tmp[k] = k;
+                tmp[k] = offset + k * loopInner;
             }
             if (increase) {
-                std::sort(tmp, tmpEnd, [&input, &offset, &loopInner](int i1, int i2) {
-                    return input[offset + i1 * loopInner] < input[offset + i2 * loopInner];
-                });
+                std::stable_sort(
+                    tmp, tmpEnd, [&input](int i1, int i2) { return input[i1] < input[i2]; });
             } else {
-                std::sort(tmp, tmpEnd, [&input, &offset, &loopInner](int i1, int i2) {
-                    return input[offset + i1 * loopInner] > input[offset + i2 * loopInner];
-                });
+                std::stable_sort(
+                    tmp, tmpEnd, [&input](int i1, int i2) { return input[i1] > input[i2]; });
             }
             if (!order) {
                 std::sort(tmp, tmp + num);
             }
             for (int k = 0; k < num; k++) {
-                int id = (i * p.topk + k) * loopInner + j;
-                index[id] = tmp[k];
-                output[id] = input[offset + tmp[k] * loopInner];
+                int id = (i * num + k) * loopInner + j;
+                index[id] = (tmp[k] - offset) / loopInner;
+                output[id] = input[tmp[k]];
             }
+#else
+            int l = 0;
+            int cur_idx = offset;
+            for (; l < num; ++l) {
+                tmp[num - l - 1] = cur_idx;
+                heap<T, increase>(tmp, num - l - 1, num, input);
+                cur_idx += loopInner;
+            }
+
+            auto top = tmp[0];
+            for (; l < loops; ++l) {
+                if (cmp<T, increase>(input, cur_idx, top)) {
+                    tmp[0] = cur_idx;
+                    heap<T, increase>(tmp, 0, num, input);
+                    top = tmp[0];
+                }
+                cur_idx += loopInner;
+            }
+            if (order) {
+                for (l = 0; l < num; ++l) {
+                    int id = (i * num + (num - l - 1)) * loopInner + j;
+                    index[id] = (tmp[0] - offset) / loopInner;
+                    output[id] = input[tmp[0]];
+                    tmp[0] = tmp[num - l - 1];
+                    heap<T, increase>(tmp, 0, num - l - 1, input);
+                }
+            } else {
+                for (l = 0; l < num; ++l) {
+                    int id = (i * num + l) * loopInner + j;
+                    index[id] = (tmp[l] - offset) / loopInner;
+                    output[id] = input[tmp[l]];
+                }
+            }
+#endif
         }
     }
 }
@@ -88,16 +164,16 @@ EE topk_cpu(TensorDesc inputDesc,
     if (nullptr == input || nullptr == output || nullptr == index) {
         CHECK_STATUS(NULL_POINTER);
     }
-    EE ret;
+    EE ret = SUCCESS;
     switch (inputDesc.dt) {
+#ifdef _USE_FP32
         case DT_F32:
             topk_wrapper1<F32>(inputDesc, (F32 *)input, p, (I32 *)tmp, (F32 *)output, (I32 *)index);
-            ret = SUCCESS;
             break;
+#endif
 #ifdef _USE_FP16
         case DT_F16:
             topk_wrapper1<F16>(inputDesc, (F16 *)input, p, (I32 *)tmp, (F16 *)output, (I32 *)index);
-            ret = SUCCESS;
             break;
 #endif
         default:

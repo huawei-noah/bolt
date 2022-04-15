@@ -35,8 +35,8 @@ int preluTest(int argc, char **argv, DataType dt)
 
     Tensor inputTensor = Tensor::alloc_sized<CPUMem>(inputDesc);
     Tensor weightTensor = Tensor::alloc_sized<CPUMem>(weightDesc);
-    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inputDesc));
-    memcpy(get_ptr_from_tensor(weightTensor, CPU_GENERAL), weight, tensorNumBytes(weightDesc));
+    UNI_MEMCPY(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inputDesc));
+    UNI_MEMCPY(get_ptr_from_tensor(weightTensor, CPU_GENERAL), weight, tensorNumBytes(weightDesc));
 
     // set output
     Tensor outputTensor;

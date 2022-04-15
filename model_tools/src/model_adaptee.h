@@ -14,6 +14,11 @@
 #ifndef _H_MODELADAPTEE
 #define _H_MODELADAPTEE
 
+#include <string>
+#include <fstream>
+#include <map>
+#include <vector>
+
 #include "uni.h"
 #include "model_common.h"
 
@@ -21,19 +26,19 @@
     virtual ParameterSpec name()                                                           \
     {                                                                                      \
         UNI_WARNING_LOG("%s use default(0) operator parmeter as return.\n", __FUNCTION__); \
-        ParameterSpec curPs;                                                               \
-        memset(&curPs, 0, sizeof(ParameterSpec));                                          \
-        return curPs;                                                                      \
+        ParameterSpec ps;                                                                  \
+        UNI_MEMSET(&ps, 0, sizeof(ps));                                                    \
+        return ps;                                                                         \
     }
 
 class ModelAdaptee {
 public:
     virtual EE adapt(std::string dir, std::string mfn, ModelSpec *ms)
     {
-        EE ret = parse_file(dir, mfn);
-        ret = adapt_operators(ms);
-        ret = adapt_weights(ms);
-        return ret;
+        CHECK_STATUS(parse_file(dir, mfn));
+        CHECK_STATUS(adapt_operators(ms));
+        CHECK_STATUS(adapt_weights(ms));
+        return SUCCESS;
     }
 
     ModelAdaptee()
@@ -51,126 +56,78 @@ protected:
 
     virtual EE adapt_operator(OperatorType type, ParameterSpec *ps)
     {
-        if (type == OT_Conv) {
-            *ps = adapt_Conv();
-        } else if (type == OT_Deconvolution) {
-            *ps = adapt_Deconvolution();
-        } else if (type == OT_FC) {
-            *ps = adapt_Fc();
-        } else if (type == OT_RNN) {
-            *ps = adapt_RNN();
-        } else if (type == OT_MatMul) {
-            *ps = adapt_MatMul();
-        } else if (type == OT_Resize) {
-            *ps = adapt_Resize();
-        } else if (type == OT_Pooling) {
-            *ps = adapt_Pooling();
-        } else if (type == OT_Scale) {
-            *ps = adapt_Scale();
-        } else if (type == OT_PRelu) {
-            *ps = adapt_PRelu();
-        } else if (type == OT_BatchNorm) {
-            *ps = adapt_BatchNorm();
-        } else if (type == OT_InstanceNorm) {
-            *ps = adapt_InstanceNorm();
-        } else if (type == OT_LayerNorm) {
-            *ps = adapt_LayerNorm();
-        } else if (type == OT_Reduction) {
-            *ps = adapt_Reduction();
-        } else if (type == OT_ArgMax) {
-            *ps = adapt_ArgMax();
-        } else if (type == OT_Softmax || type == OT_LogSoftmax) {
-            *ps = adapt_Softmax();
-        } else if (type == OT_Clip) {
-            *ps = adapt_Clip();
-        } else if (type == OT_Power) {
-            *ps = adapt_Power();
-        } else if (type == OT_Relu) {
-            *ps = adapt_Relu();
-        } else if (type == OT_Gather) {
-            *ps = adapt_Gather();
-        } else if (type == OT_Embedding) {
-            *ps = adapt_Embedding();
-        } else if (type == OT_Pad) {
-            *ps = adapt_Pad();
-        } else if (type == OT_Eltwise) {
-            *ps = adapt_Eltwise();
-        } else if (type == OT_Concat) {
-            *ps = adapt_Concat();
-        } else if (type == OT_Slice) {
-            *ps = adapt_Slice();
-        } else if (type == OT_TfSlice) {
-            *ps = adapt_TfSlice();
-        } else if (type == OT_Cast) {
-            *ps = adapt_Cast();
-        } else if (type == OT_Transpose) {
-            *ps = adapt_Transpose();
-        } else if (type == OT_Reshape) {
-            *ps = adapt_Reshape();
-        } else if (type == OT_Squeeze) {
-            *ps = adapt_Squeeze();
-        } else if (type == OT_Unsqueeze) {
-            *ps = adapt_Unsqueeze();
-        } else if (type == OT_Space2Depth) {
-            *ps = adapt_Space2Depth();
-        } else if (type == OT_Depth2Space) {
-            *ps = adapt_Depth2Space();
-        } else if (type == OT_PreAllocatedMemory) {
-            *ps = adapt_PreAllocatedMemory();
-        } else if (type == OT_SharedWeight) {
-            *ps = adapt_SharedWeight();
-        } else if (type == OT_Copy) {
-            *ps = adapt_Copy();
-        } else if (type == OT_Check) {
-            *ps = adapt_Check();
-        } else if (type == OT_Repeat) {
-            *ps = adapt_Repeat();
-        } else if (type == OT_Attention) {
-            *ps = adapt_Attention();
-        } else if (type == OT_AttentionMask) {
-            *ps = adapt_AttentionMask();
-        } else if (type == OT_RelativePositionEmbedding) {
-            *ps = adapt_RelativePositionEmbedding();
-        } else if (type == OT_RelativeShift) {
-            *ps = adapt_RelativeShift();
-        } else if (type == OT_PriorBox) {
-            *ps = adapt_PriorBox();
-        } else if (type == OT_DetectionOutput) {
-            *ps = adapt_DetectionOutput();
-        } else if (type == OT_Yolov3DetectionOutput) {
-            *ps = adapt_Yolov3DetectionOutput();
-        } else if (type == OT_Tile) {
-            *ps = adapt_Tile();
-        } else if (type == OT_Splice) {
-            *ps = adapt_Splice();
-        } else if (type == OT_SoftPlus) {
-            *ps = adapt_SoftPlus();
-        } else if (type == OT_Exp) {
-            *ps = adapt_Exp();
-        } else if (type == OT_Tdnn) {
-            *ps = adapt_Tdnn();
-        } else if (type == OT_TopK) {
-            *ps = adapt_TopK();
-        } else if (type == OT_SpaceToBatchNd) {
-            *ps = adapt_SpaceToBatchNd();
-        } else if (type == OT_BatchToSpaceNd) {
-            *ps = adapt_BatchToSpaceNd();
-        } else if (type == OT_Where) {
-            *ps = adapt_Where();
-        } else if (type == OT_Expand) {
-            *ps = adapt_Expand();
-        } else if (type == OT_Scatter) {
-            *ps = adapt_Scatter();
-        } else if (type == OT_Equal) {
-            *ps = adapt_Equal();
-        } else if (type == OT_Select) {
-            *ps = adapt_Select();
-        } else if (type == OT_RoIAlign) {
-            *ps = adapt_RoIAlign();
-        } else if (type == OT_GenerateProposals) {
-            *ps = adapt_GenerateProposals();
+        typedef ParameterSpec (ModelAdaptee::*AdaptOperatorFunction)();
+        std::map<OperatorType, AdaptOperatorFunction> functions = {
+            {OT_Conv, &ModelAdaptee::adapt_Conv},
+            {OT_Deconvolution, &ModelAdaptee::adapt_Deconvolution},
+            {OT_FC, &ModelAdaptee::adapt_Fc},
+            {OT_RNN, &ModelAdaptee::adapt_RNN},
+            {OT_MatMul, &ModelAdaptee::adapt_MatMul},
+            {OT_Resize, &ModelAdaptee::adapt_Resize},
+            {OT_Pooling, &ModelAdaptee::adapt_Pooling},
+            {OT_Scale, &ModelAdaptee::adapt_Scale},
+            {OT_PRelu, &ModelAdaptee::adapt_PRelu},
+            {OT_BatchNorm, &ModelAdaptee::adapt_BatchNorm},
+            {OT_InstanceNorm, &ModelAdaptee::adapt_InstanceNorm},
+            {OT_LayerNorm, &ModelAdaptee::adapt_LayerNorm},
+            {OT_Reduction, &ModelAdaptee::adapt_Reduction},
+            {OT_ArgMax, &ModelAdaptee::adapt_ArgMax},
+            {OT_Softmax, &ModelAdaptee::adapt_Softmax},
+            {OT_LogSoftmax, &ModelAdaptee::adapt_Softmax},
+            {OT_Clip, &ModelAdaptee::adapt_Clip},
+            {OT_Power, &ModelAdaptee::adapt_Power},
+            {OT_Relu, &ModelAdaptee::adapt_Relu},
+            {OT_Gather, &ModelAdaptee::adapt_Gather},
+            {OT_Embedding, &ModelAdaptee::adapt_Embedding},
+            {OT_Pad, &ModelAdaptee::adapt_Pad},
+            {OT_Eltwise, &ModelAdaptee::adapt_Eltwise},
+            {OT_Concat, &ModelAdaptee::adapt_Concat},
+            {OT_Slice, &ModelAdaptee::adapt_Slice},
+            {OT_TfSlice, &ModelAdaptee::adapt_TfSlice},
+            {OT_Cast, &ModelAdaptee::adapt_Cast},
+            {OT_Transpose, &ModelAdaptee::adapt_Transpose},
+            {OT_Reshape, &ModelAdaptee::adapt_Reshape},
+            {OT_Squeeze, &ModelAdaptee::adapt_Squeeze},
+            {OT_Unsqueeze, &ModelAdaptee::adapt_Unsqueeze},
+            {OT_Space2Depth, &ModelAdaptee::adapt_Space2Depth},
+            {OT_Depth2Space, &ModelAdaptee::adapt_Depth2Space},
+            {OT_PreAllocatedMemory, &ModelAdaptee::adapt_PreAllocatedMemory},
+            {OT_SharedWeight, &ModelAdaptee::adapt_SharedWeight},
+            {OT_Copy, &ModelAdaptee::adapt_Copy},
+            {OT_Check, &ModelAdaptee::adapt_Check},
+            {OT_Repeat, &ModelAdaptee::adapt_Repeat},
+            {OT_Attention, &ModelAdaptee::adapt_Attention},
+            {OT_AttentionMask, &ModelAdaptee::adapt_AttentionMask},
+            {OT_RelativePositionEmbedding, &ModelAdaptee::adapt_RelativePositionEmbedding},
+            {OT_RelativeShift, &ModelAdaptee::adapt_RelativeShift},
+            {OT_PriorBox, &ModelAdaptee::adapt_PriorBox},
+            {OT_DetectionOutput, &ModelAdaptee::adapt_DetectionOutput},
+            {OT_Yolov3DetectionOutput, &ModelAdaptee::adapt_Yolov3DetectionOutput},
+            {OT_Tile, &ModelAdaptee::adapt_Tile},
+            {OT_Splice, &ModelAdaptee::adapt_Splice},
+            {OT_SoftPlus, &ModelAdaptee::adapt_SoftPlus},
+            {OT_Exp, &ModelAdaptee::adapt_Exp},
+            {OT_Tdnn, &ModelAdaptee::adapt_Tdnn},
+            {OT_TopK, &ModelAdaptee::adapt_TopK},
+            {OT_SpaceToBatchNd, &ModelAdaptee::adapt_SpaceToBatchNd},
+            {OT_BatchToSpaceNd, &ModelAdaptee::adapt_BatchToSpaceNd},
+            {OT_Where, &ModelAdaptee::adapt_Where},
+            {OT_Expand, &ModelAdaptee::adapt_Expand},
+            {OT_Scatter, &ModelAdaptee::adapt_Scatter},
+            {OT_Select, &ModelAdaptee::adapt_Select},
+            {OT_RoIAlign, &ModelAdaptee::adapt_RoIAlign},
+            {OT_GridSample, &ModelAdaptee::adapt_GridSample},
+            {OT_GenerateProposals, &ModelAdaptee::adapt_GenerateProposals},
+            {OT_OneHot, &ModelAdaptee::adapt_OneHot},
+            {OT_CumSum, &ModelAdaptee::adapt_CumSum},
+            {OT_NonMaxSuppression, &ModelAdaptee::adapt_NonMaxSuppression},
+            {OT_ConstantOfShape, &ModelAdaptee::adapt_ConstantOfShape},
+            {OT_Range, &ModelAdaptee::adapt_Range},
+        };
+        if (functions.find(type) == functions.end()) {
+            UNI_MEMSET(ps, 0, sizeof(*ps));
         } else {
-            memset(ps, 0, sizeof(ParameterSpec));
+            *ps = (this->*(functions[type]))();
         }
         return SUCCESS;
     }
@@ -192,10 +149,10 @@ protected:
 
     virtual ParameterSpec adapt_Softmax()
     {
-        ParameterSpec curPs;
-        memset(&curPs, 0, sizeof(ParameterSpec));
-        curPs.softmax_spec.axis = -1;
-        return curPs;
+        ParameterSpec ps;
+        UNI_MEMSET(&ps, 0, sizeof(ps));
+        ps.softmax_spec.axis = -1;
+        return ps;
     }
 
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Clip)
@@ -203,10 +160,10 @@ protected:
 
     virtual ParameterSpec adapt_Relu()
     {
-        ParameterSpec curPs;
-        memset(&curPs, 0, sizeof(ParameterSpec));
-        curPs.relu_spec.neg_slope = 0;
-        return curPs;
+        ParameterSpec ps;
+        UNI_MEMSET(&ps, 0, sizeof(ps));
+        ps.relu_spec.neg_slope = 0;
+        return ps;
     }
 
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Gather)
@@ -216,10 +173,10 @@ protected:
 
     virtual ParameterSpec adapt_Concat()
     {
-        ParameterSpec curPs;
-        memset(&curPs, 0, sizeof(ParameterSpec));
-        curPs.concat_spec.axis = 1;
-        return curPs;
+        ParameterSpec ps;
+        UNI_MEMSET(&ps, 0, sizeof(ps));
+        ps.concat_spec.axis = 1;
+        return ps;
     }
 
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Slice)
@@ -254,9 +211,14 @@ protected:
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Where)
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Expand)
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Scatter)
-    REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Equal)
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Select)
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_RoIAlign)
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_GenerateProposals)
+    REGISTER_EMPTY_ADAPT_OPERATOR(adapt_GridSample)
+    REGISTER_EMPTY_ADAPT_OPERATOR(adapt_OneHot)
+    REGISTER_EMPTY_ADAPT_OPERATOR(adapt_CumSum)
+    REGISTER_EMPTY_ADAPT_OPERATOR(adapt_NonMaxSuppression)
+    REGISTER_EMPTY_ADAPT_OPERATOR(adapt_ConstantOfShape)
+    REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Range)
 };
 #endif

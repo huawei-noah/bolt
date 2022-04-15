@@ -18,14 +18,14 @@ inline void topk_cpu_max(F16 *input, U32 len, U32 topk, F16 *output, I32 *output
 {
     for (U32 i = 0; i < topk; i++) {
         U32 index = 0;
-        F16 max_val = -65536;
+        F16 max_val = -UNI_F16_MAX;
         for (U32 j = 0; j < len; j++) {
             if (input[j] > max_val) {
                 max_val = input[j];
                 index = j;
             }
         }
-        input[index] = -65536;
+        input[index] = -UNI_F16_MAX;
         output[i] = max_val;
         outputId[i] = index;
     }
@@ -36,8 +36,8 @@ inline void sort_gpu_result(
 {
     std::vector<U32> skip_j;
     for (U32 i = 0; i < topk; i++) {
-        F16 max_val = -65536;
-        I32 index = 65536;
+        F16 max_val = -UNI_F16_MAX;
+        I32 index = UNI_F16_MAX;
         U32 sj = 0;
         for (U32 j = 0; j < topk; j++) {
             bool skip = false;
@@ -73,7 +73,7 @@ int topkTest(int argc, char **argv, DataType dt)
     U32 iw = 3000;
     TopKParamSpec p;
     p.axis = 0;
-    p.topk = 30;
+    p.k = 30;
     p.largest = 1;
     p.sorted = 0;
     if (argc == 8) {
@@ -82,7 +82,7 @@ int topkTest(int argc, char **argv, DataType dt)
         ih = atoi(argv[3]);
         iw = atoi(argv[4]);
         p.axis = atof(argv[5]);
-        p.topk = atof(argv[6]);
+        p.k = atof(argv[6]);
         p.largest = atof(argv[7]);
         p.sorted = atof(argv[8]);
     }
@@ -94,8 +94,8 @@ int topkTest(int argc, char **argv, DataType dt)
     U32 len = in * ic * ih * iw;
 
     TensorDesc input_desc_cpu = tensor1d(dt, len);
-    TensorDesc output_desc_cpu = tensor1d(dt, (U32)p.topk);
-    TensorDesc output_indices_desc_cpu = tensor1d(DT_I32, (U32)p.topk);
+    TensorDesc output_desc_cpu = tensor1d(dt, (U32)p.k);
+    TensorDesc output_indices_desc_cpu = tensor1d(DT_I32, (U32)p.k);
     TensorDesc input_desc_gpu = tensor1d(dt, len);
     TensorDesc output_desc_gpu, output_indices_desc_gpu;
 
@@ -166,16 +166,16 @@ int topkTest(int argc, char **argv, DataType dt)
     sprintf(params, "(%u %u %u %u) = (%u %u %u %u)", in, ic, ih, iw, on, oc, oh, ow);
     sprintf(buffer, "16bit%20s, %80s", "topk", params);
 
-    F16 *output_cpu = (F16 *)malloc(sizeof(F16) * p.topk);
-    I32 *output_id_cpu = (I32 *)malloc(sizeof(I32) * p.topk);
-    F16 *res_gpu_sort = (F16 *)malloc(sizeof(F16) * p.topk);
-    I32 *res_id_gpu_sort = (I32 *)malloc(sizeof(I32) * p.topk);
-    topk_cpu_max((F16 *)input_cpu, len, p.topk, output_cpu, output_id_cpu);
+    F16 *output_cpu = (F16 *)malloc(sizeof(F16) * p.k);
+    I32 *output_id_cpu = (I32 *)malloc(sizeof(I32) * p.k);
+    F16 *res_gpu_sort = (F16 *)malloc(sizeof(F16) * p.k);
+    I32 *res_id_gpu_sort = (I32 *)malloc(sizeof(I32) * p.k);
+    topk_cpu_max((F16 *)input_cpu, len, p.k, output_cpu, output_id_cpu);
     sort_gpu_result(
-        (F16 *)output_gpu, (I32 *)output_indices_gpu, p.topk, res_gpu_sort, res_id_gpu_sort);
+        (F16 *)output_gpu, (I32 *)output_indices_gpu, p.k, res_gpu_sort, res_id_gpu_sort);
 
-    ut_check_a(res_gpu_sort, output_cpu, p.topk, dt);
-    ut_check_a(res_id_gpu_sort, output_id_cpu, p.topk, dt);
+    ut_check_a(res_gpu_sort, output_cpu, p.k, dt);
+    ut_check_a(res_id_gpu_sort, output_id_cpu, p.k, dt);
 
     CHECK_STATUS(gcl_finish(handle));
     CHECK_STATUS(gcl_clean_kernelVec(handle));

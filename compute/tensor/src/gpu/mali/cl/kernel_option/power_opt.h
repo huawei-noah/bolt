@@ -20,8 +20,9 @@ inline EE set_power_opt_mali(bool useNchwFormat,
     }
     char ioMemName[128] = "";
     CHECK_STATUS(set_io_mem_name(inputMemType, outputMemType, ioMemName));
-    sprintf(kernelName, "power_%s%s%s", ioMemName, formatName.c_str(), dtName.c_str());
-    sprintf(kernelOpt->sourceName, "power");
+    std::string kernel = std::string("power_") + ioMemName + formatName + dtName;
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, "power");
     kernelOpt->kernelDataType = dt;
     char *opt = kernelOpt->option;
     if (useNchwFormat) {

@@ -23,7 +23,7 @@
 #endif
 
 EE matrix_matrix_multiply_tmp_bytes_x86(
-    U32 matrixA_M, U32 matrixA_K, U32 matrixB_K, U32 matrixB_N, DataType dt, U32 *bytes)
+    U32 matrixA_M, U32 matrixA_K, U32 matrixB_K, U32 matrixB_N, DataFormat df, DataType dt, U32 *bytes)
 {
     EE ret = SUCCESS;
     switch (dt) {
@@ -38,7 +38,7 @@ EE matrix_matrix_multiply_tmp_bytes_x86(
         case DT_U8_Q:
         case DT_I8: {
             matrix_matrix_multiply_tmp_bytes_int8(
-                matrixA_M, matrixA_K, matrixB_K, matrixB_N, dt, bytes);
+                matrixA_M, matrixA_K, matrixB_K, matrixB_N, df, dt, bytes);
             break;
         }
 #endif
@@ -51,7 +51,7 @@ EE matrix_matrix_multiply_tmp_bytes_x86(
 }
 
 static EE matrix_matrix_multiply_transform_rhsN(
-    TensorDesc desc, const void *src, TensorDesc *descTran, void *dst, void *offsetCBias)
+    TensorDesc desc, const void *src, TensorDesc *descTran, void *dst)
 {
     EE ret = SUCCESS;
     switch (desc.dt) {
@@ -64,7 +64,7 @@ static EE matrix_matrix_multiply_transform_rhsN(
 #ifdef _USE_INT8
         case DT_I8: {
             ret = matrix_matrix_multiply_transform_rhsN_int8(
-                desc, (INT8 *)src, (INT8 *)dst, (I32 *)offsetCBias);
+                desc, (INT8 *)src, (INT8 *)dst);
             break;
         }
 #endif
@@ -78,7 +78,7 @@ static EE matrix_matrix_multiply_transform_rhsN(
 }
 
 static EE matrix_matrix_multiply_transform_rhsT(
-    TensorDesc desc, const void *src, TensorDesc *descTran, void *dst, void *offsetCBias)
+    TensorDesc desc, const void *src, TensorDesc *descTran, void *dst)
 {
     EE ret = SUCCESS;
     switch (desc.dt) {
@@ -91,7 +91,7 @@ static EE matrix_matrix_multiply_transform_rhsT(
 #ifdef _USE_INT8
         case DT_I8: {
             ret = matrix_matrix_multiply_transform_rhsT_int8(
-                desc, (INT8 *)src, (INT8 *)dst, (I32 *)offsetCBias);
+                desc, (INT8 *)src, (INT8 *)dst);
             break;
         }
 #endif
@@ -106,7 +106,7 @@ static EE matrix_matrix_multiply_transform_rhsT(
 }
 
 EE matrix_matrix_multiply_transform_rhs_x86(
-    TensorDesc desc, const void *src, TensorDesc *descTran, void *dst, void *offsetCBias)
+    TensorDesc desc, const void *src, TensorDesc *descTran, void *dst)
 {
     if (desc.df == targetFormat4MatrixB(desc.dt)) {
         return SUCCESS;
@@ -114,11 +114,11 @@ EE matrix_matrix_multiply_transform_rhs_x86(
     EE ret = SUCCESS;
     switch (desc.df) {
         case DF_NORMAL: {
-            ret = matrix_matrix_multiply_transform_rhsN(desc, src, descTran, dst, offsetCBias);
+            ret = matrix_matrix_multiply_transform_rhsN(desc, src, descTran, dst);
             break;
         }
         case DF_TRANSPOSE: {
-            ret = matrix_matrix_multiply_transform_rhsT(desc, src, descTran, dst, offsetCBias);
+            ret = matrix_matrix_multiply_transform_rhsT(desc, src, descTran, dst);
             break;
         }
         default:

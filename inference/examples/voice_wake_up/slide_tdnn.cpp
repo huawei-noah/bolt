@@ -159,13 +159,13 @@ int main(int argc, char *argv[])
     Tensor buffer = Tensor::alloc_sized<CPUMem>(inputDesc);
     std::shared_ptr<U8> dst = ((CpuMemory *)buffer.get_memory())->get_shared_ptr();
     model_tensors_input[inputName] = dst;
-    memset(dst.get(), 0, frameNum * tileSize);
+    UNI_MEMSET(dst.get(), 0, frameNum * tileSize);
 
     // 3: run
     std::map<std::string, std::shared_ptr<Tensor>> outMap;
     double timeBegin = ut_time_ms();
     for (int i = 0; i < frameNum; i++) {
-        memcpy(dst.get() + (frameNum - i - 1) * tileSize, src.get(), (i + 1) * tileSize);
+        UNI_MEMCPY(dst.get() + (frameNum - i - 1) * tileSize, src.get(), (i + 1) * tileSize);
         pipeline->set_input_by_assign(model_tensors_input);
         pipeline->run();
         outMap = get_output(pipeline, affinityPolicyName);

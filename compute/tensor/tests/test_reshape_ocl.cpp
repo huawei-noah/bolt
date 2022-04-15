@@ -24,9 +24,9 @@ int reshapeTest(int argc, char **argv, DataType dt)
     for (U32 i = 0; i < inputDesc.nDims; i++) {
         inputDesc.dims[inputDesc.nDims - i - 1] = atoi(argv[i + 2]);
     }
-    p.shape_size = atoi(argv[inputDesc.nDims + 2]);
-    for (I32 i = 0; i < p.shape_size; i++) {
-        p.shape_dims[i] = atoi(argv[i + inputDesc.nDims + 3]);
+    p.num_shape = atoi(argv[inputDesc.nDims + 2]);
+    for (I32 i = 0; i < p.num_shape; i++) {
+        p.shape[i] = atoi(argv[i + inputDesc.nDims + 3]);
     }
 
     ArchInfo archInfo;
@@ -38,7 +38,8 @@ int reshapeTest(int argc, char **argv, DataType dt)
     Tensor inputTensorCpu;
     inputTensorCpu.resize(inputDesc);
     inputTensorCpu.alloc();
-    memcpy(get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), input_cpu, tensorNumBytes(inputDesc));
+    UNI_MEMCPY(
+        get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), input_cpu, tensorNumBytes(inputDesc));
 
     Tensor outputTensorCpu;
     Tensor tmpTensorCpu;
@@ -98,7 +99,7 @@ int reshapeTest(int argc, char **argv, DataType dt)
 
     char buffer[150];
     char params[120];
-    memset(params, 0, 120);
+    UNI_MEMSET(params, 0, 120);
     sprintf(params, "(");
     for (U32 i = 0; i < inputDesc.nDims; i++) {
         if (i != inputDesc.nDims - 1) {
@@ -107,14 +108,14 @@ int reshapeTest(int argc, char **argv, DataType dt)
             sprintf(params + i * 2 + 1, "%d) = (", inputDesc.dims[inputDesc.nDims - 1 - i]);
         }
     }
-    for (I32 i = 0; i < p.shape_size; i++) {
+    for (I32 i = 0; i < p.num_shape; i++) {
         I32 index = 0;
         for (; index < 120; index++) {
             if (params[index] == '\0') {
                 break;
             }
         }
-        if (i != p.shape_size - 1) {
+        if (i != p.num_shape - 1) {
             sprintf(params + index, "%d ", outputDesc.dims[outputDesc.nDims - 1 - i]);
         } else {
             sprintf(params + index, "%d)", outputDesc.dims[outputDesc.nDims - 1 - i]);

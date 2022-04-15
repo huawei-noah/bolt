@@ -342,7 +342,7 @@ class MultiHeadAttentionOptimizer : public OPOptimizer {
                         }
                     }
 
-                    MultiheadAttentionParamSpec multihead_spec;
+                    MultiHeadAttentionParamSpec multihead_spec;
                     multihead_spec.fc_desc[0] = spec->ops[leftIpIndex].ps.fc_spec;
                     multihead_spec.fc_desc[1] = spec->ops[midIpIndex].ps.fc_spec;
                     multihead_spec.fc_desc[2] = spec->ops[rightIpIndex].ps.fc_spec;
@@ -352,7 +352,7 @@ class MultiHeadAttentionOptimizer : public OPOptimizer {
                     multihead_spec.power_spec = spec->ops[globalPowerIndex].ps.power_spec;
                     multihead_spec.eltwiseWithLayerNormIn[0] = firstBoolTag;
                     multihead_spec.eltwiseWithLayerNormIn[1] = secBoolTag;
-                    multihead_spec.actiMode = globalActi;
+                    multihead_spec.activation_type = globalActi;
                     multihead_spec.reshapeDesc[0] = spec->ops[leftReshapeIndex].ps.reshape_spec;
                     multihead_spec.reshapeDesc[1] = spec->ops[midReshapeIndex].ps.reshape_spec;
                     multihead_spec.reshapeDesc[2] = spec->ops[rightReshapeIndex].ps.reshape_spec;
@@ -361,7 +361,7 @@ class MultiHeadAttentionOptimizer : public OPOptimizer {
                     multihead_spec.eltwiseDesc[1] = spec->ops[secEltIndex].ps.eltwise_spec;
 
                     spec->ops[layerNormOpIndex].type = OT_MultiHeadAttention;
-                    spec->ops[layerNormOpIndex].ps.multiheadAttention_spec = multihead_spec;
+                    spec->ops[layerNormOpIndex].ps.multihead_attention_spec = multihead_spec;
 
                     int lnWeightIndex = searchWeightIndex(spec, spec->ops[layerNormOpIndex].name);
                     int leftIpWeightIndex = searchWeightIndex(spec, spec->ops[leftIpIndex].name);
@@ -389,71 +389,68 @@ class MultiHeadAttentionOptimizer : public OPOptimizer {
                         spec->ws[backLayerNorm1WeightIndex].bytes_of_vec +
                         spec->ws[backIpWeightIndex2].bytes_of_vec +
                         spec->ws[backIpWeightIndex1].bytes_of_vec;
-                    U8 *multihead_weight = (U8 *)mt_new_storage(weightSize);
-                    U8 *multihead_vec = (U8 *)mt_new_storage(biasSize);
+                    U8 *multihead_weight = (U8 *)mt_malloc(weightSize);
+                    U8 *multihead_vec = (U8 *)mt_malloc(biasSize);
                     int weightOffset = 0;
-                    memcpy(&multihead_weight[weightOffset], spec->ws[lnWeightIndex].weight,
+                    UNI_MEMCPY(&multihead_weight[weightOffset], spec->ws[lnWeightIndex].weight,
                         spec->ws[lnWeightIndex].bytes_of_weight);
                     weightOffset += spec->ws[lnWeightIndex].bytes_of_weight;
-                    memcpy(&multihead_weight[weightOffset], spec->ws[leftIpWeightIndex].weight,
+                    UNI_MEMCPY(&multihead_weight[weightOffset], spec->ws[leftIpWeightIndex].weight,
                         spec->ws[leftIpWeightIndex].bytes_of_weight);
                     weightOffset += spec->ws[leftIpWeightIndex].bytes_of_weight;
-                    memcpy(&multihead_weight[weightOffset], spec->ws[midIpWeightIndex].weight,
+                    UNI_MEMCPY(&multihead_weight[weightOffset], spec->ws[midIpWeightIndex].weight,
                         spec->ws[midIpWeightIndex].bytes_of_weight);
                     weightOffset += spec->ws[midIpWeightIndex].bytes_of_weight;
-                    memcpy(&multihead_weight[weightOffset], spec->ws[rightIpWeightIndex].weight,
+                    UNI_MEMCPY(&multihead_weight[weightOffset], spec->ws[rightIpWeightIndex].weight,
                         spec->ws[rightIpWeightIndex].bytes_of_weight);
                     weightOffset += spec->ws[rightIpWeightIndex].bytes_of_weight;
-                    memcpy(&multihead_weight[weightOffset], spec->ws[backIpWeightIndex].weight,
+                    UNI_MEMCPY(&multihead_weight[weightOffset], spec->ws[backIpWeightIndex].weight,
                         spec->ws[backIpWeightIndex].bytes_of_weight);
                     weightOffset += spec->ws[backIpWeightIndex].bytes_of_weight;
-                    memcpy(&multihead_weight[weightOffset],
+                    UNI_MEMCPY(&multihead_weight[weightOffset],
                         spec->ws[backLayerNorm1WeightIndex].weight,
                         spec->ws[backLayerNorm1WeightIndex].bytes_of_weight);
                     weightOffset += spec->ws[backLayerNorm1WeightIndex].bytes_of_weight;
-                    memcpy(&multihead_weight[weightOffset], spec->ws[backIpWeightIndex2].weight,
+                    UNI_MEMCPY(&multihead_weight[weightOffset], spec->ws[backIpWeightIndex2].weight,
                         spec->ws[backIpWeightIndex2].bytes_of_weight);
                     weightOffset += spec->ws[backIpWeightIndex2].bytes_of_weight;
-                    memcpy(&multihead_weight[weightOffset], spec->ws[backIpWeightIndex1].weight,
+                    UNI_MEMCPY(&multihead_weight[weightOffset], spec->ws[backIpWeightIndex1].weight,
                         spec->ws[backIpWeightIndex1].bytes_of_weight);
 
                     int vecOffset = 0;
-                    memcpy(&multihead_vec[vecOffset], spec->ws[lnWeightIndex].vec,
+                    UNI_MEMCPY(&multihead_vec[vecOffset], spec->ws[lnWeightIndex].vec,
                         spec->ws[lnWeightIndex].bytes_of_vec);
                     vecOffset += spec->ws[lnWeightIndex].bytes_of_vec;
-                    memcpy(&multihead_vec[vecOffset], spec->ws[leftIpWeightIndex].vec,
+                    UNI_MEMCPY(&multihead_vec[vecOffset], spec->ws[leftIpWeightIndex].vec,
                         spec->ws[leftIpWeightIndex].bytes_of_vec);
                     vecOffset += spec->ws[leftIpWeightIndex].bytes_of_vec;
-                    memcpy(&multihead_vec[vecOffset], spec->ws[midIpWeightIndex].vec,
+                    UNI_MEMCPY(&multihead_vec[vecOffset], spec->ws[midIpWeightIndex].vec,
                         spec->ws[midIpWeightIndex].bytes_of_vec);
                     vecOffset += spec->ws[midIpWeightIndex].bytes_of_vec;
-                    memcpy(&multihead_vec[vecOffset], spec->ws[rightIpWeightIndex].vec,
+                    UNI_MEMCPY(&multihead_vec[vecOffset], spec->ws[rightIpWeightIndex].vec,
                         spec->ws[rightIpWeightIndex].bytes_of_vec);
                     vecOffset += spec->ws[rightIpWeightIndex].bytes_of_vec;
-                    memcpy(&multihead_vec[vecOffset], spec->ws[backIpWeightIndex].vec,
+                    UNI_MEMCPY(&multihead_vec[vecOffset], spec->ws[backIpWeightIndex].vec,
                         spec->ws[backIpWeightIndex].bytes_of_vec);
                     vecOffset += spec->ws[backIpWeightIndex].bytes_of_vec;
-                    memcpy(&multihead_vec[vecOffset], spec->ws[backLayerNorm1WeightIndex].vec,
+                    UNI_MEMCPY(&multihead_vec[vecOffset], spec->ws[backLayerNorm1WeightIndex].vec,
                         spec->ws[backLayerNorm1WeightIndex].bytes_of_vec);
                     vecOffset += spec->ws[backLayerNorm1WeightIndex].bytes_of_vec;
-                    memcpy(&multihead_vec[vecOffset], spec->ws[backIpWeightIndex2].vec,
+                    UNI_MEMCPY(&multihead_vec[vecOffset], spec->ws[backIpWeightIndex2].vec,
                         spec->ws[backIpWeightIndex2].bytes_of_vec);
                     vecOffset += spec->ws[backIpWeightIndex2].bytes_of_vec;
-                    memcpy(&multihead_vec[vecOffset], spec->ws[backIpWeightIndex1].vec,
+                    UNI_MEMCPY(&multihead_vec[vecOffset], spec->ws[backIpWeightIndex1].vec,
                         spec->ws[backIpWeightIndex1].bytes_of_vec);
                     spec->ws[lnWeightIndex].bytes_of_weight = weightSize;
                     spec->ws[lnWeightIndex].bytes_of_vec = biasSize;
 
-                    if (outOfFileMapRange(spec->ws[lnWeightIndex].weight, spec->mfd)) {
-                        delete spec->ws[lnWeightIndex].weight;
-                    }
-                    if (outOfFileMapRange(spec->ws[lnWeightIndex].vec, spec->mfd)) {
-                        delete spec->ws[lnWeightIndex].vec;
-                    }
+                    mt_free(spec->ws[lnWeightIndex].weight, spec);
+                    mt_free(spec->ws[lnWeightIndex].vec, spec);
+
                     spec->ws[lnWeightIndex].weight = multihead_weight;
                     spec->ws[lnWeightIndex].vec = multihead_vec;
 
-                    memcpy(spec->ops[layerNormOpIndex].output_tensors_name[0],
+                    UNI_MEMCPY(spec->ops[layerNormOpIndex].output_tensors_name[0],
                         spec->ops[secEltIndex].output_tensors_name[0], NAME_LEN);
 
                     for (int k = layerNormOpIndex + 1; k <= secEltIndex; k++) {

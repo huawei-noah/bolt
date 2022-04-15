@@ -45,7 +45,7 @@ int int8ConvolutionTest(int argc, char *argv[], DataType dt, DataType filterData
 
     TensorDesc inputDesc, filterDesc, outputDesc, biasDesc;
     ConvolutionParamSpec p = createConvolutionParamSpec(group, 1, fh, fw, 1, stride, stride, 0, 0,
-        padding, padding, padding, padding, 1, 1, 1, fn, Convolution_Depthwise_Pointwise);
+        padding, padding, padding, padding, 1, 1, 1, fn, CONVOLUTION_DEPTHWISE_POINTWISE);
 
     if (ic % 8 != 0) {
         printf("[WARN] can not quantize the first layer\n");
@@ -120,10 +120,8 @@ int int8ConvolutionTest(int argc, char *argv[], DataType dt, DataType filterData
                 CHECK_STATUS(convolution_transform_filter(
                     filterTensor, p, alg, tmpTensor, &tFilter, &UT_CPU_ARCHINFO));
 
-                TensorDesc ftmDesc = tFilter.get_desc();
-                ftmDesc.dt = DT_I8;
-                ftmTensor = Tensor::alloc_sized<CPUMem>(ftmDesc);
-
+                U32 ftmBytes = ftBytes / bytesOf(filterDataType);
+                ftmTensor = Tensor::alloc_sized<CPUMem>(tensor1d(DT_U8, ftmBytes));
                 scales = std::vector<F32>(38);
                 CHECK_STATUS(quantize(tFilter, &ftmTensor, scales.data() + 2, &UT_CPU_ARCHINFO));
                 break;
@@ -159,7 +157,7 @@ int int8ConvolutionTest(int argc, char *argv[], DataType dt, DataType filterData
         //         TensorDesc inputC16Desc = inputDesc;
         //         inputC16Desc.df = DF_NCHWC16;
         //         transformToNCHWC16(inputDesc, (void *)get_ptr_from_tensor(inputTensor, CPU_GENERAL), inputC16Desc, inputC16);
-        //         memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), inputC16, tensorNumBytes(inputDesc));
+        //         UNI_MEMCPY(get_ptr_from_tensor(inputTensor, CPU_GENERAL), inputC16, tensorNumBytes(inputDesc));
         //         inputTensor.resize(inputC16Desc);
         //         free(inputC16);
         // #endif

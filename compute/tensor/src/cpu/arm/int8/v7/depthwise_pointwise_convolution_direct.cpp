@@ -46,10 +46,10 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc,
     CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
     U32 strideH = convParamSpec.stride_h;
     U32 strideW = convParamSpec.stride_w;
-    U32 paddingT = convParamSpec.padding_top;
-    U32 paddingB = convParamSpec.padding_bottom;
-    U32 paddingL = convParamSpec.padding_left;
-    U32 paddingR = convParamSpec.padding_right;
+    U32 paddingT = convParamSpec.pad_top;
+    U32 paddingB = convParamSpec.pad_bottom;
+    U32 paddingL = convParamSpec.pad_left;
+    U32 paddingR = convParamSpec.pad_right;
     U32 dilateH = convParamSpec.dilatedRate_h;
     U32 dilateW = convParamSpec.dilatedRate_w;
 
@@ -77,20 +77,20 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc,
         INT8 *inArray_mov = inArray + n * ic * ihiw * 8;
         for (U32 c = 0; c < ic; c++) {
             if (paddingT > 0) {
-                memset(inArray_pad_mov, 0, paddingT * iw_pad * 8 * bytesOf(idt));
+                UNI_MEMSET(inArray_pad_mov, 0, paddingT * iw_pad * 8 * bytesOf(idt));
                 inArray_pad_mov += paddingT * iw_pad * 8;
             }
             for (U32 h = paddingT; h < ih_pad - paddingB; h++) {
-                memset(inArray_pad_mov, 0, paddingL * 8 * bytesOf(idt));
+                UNI_MEMSET(inArray_pad_mov, 0, paddingL * 8 * bytesOf(idt));
                 inArray_pad_mov += paddingL * 8;
-                memcpy(inArray_pad_mov, inArray_mov, iw * 8 * bytesOf(idt));
+                UNI_MEMCPY(inArray_pad_mov, inArray_mov, iw * 8 * bytesOf(idt));
                 inArray_pad_mov += iw * 8;
                 inArray_mov += iw * 8;
-                memset(inArray_pad_mov, 0, paddingR * 8 * bytesOf(idt));
+                UNI_MEMSET(inArray_pad_mov, 0, paddingR * 8 * bytesOf(idt));
                 inArray_pad_mov += paddingR * 8;
             }
             if (paddingB > 0) {
-                memset(inArray_pad_mov, 0, paddingB * iw_pad * 8 * bytesOf(idt));
+                UNI_MEMSET(inArray_pad_mov, 0, paddingB * iw_pad * 8 * bytesOf(idt));
                 inArray_pad_mov += paddingB * iw_pad * 8;
             }
 

@@ -164,9 +164,9 @@ int main(I32 argc, I8 *argv[])
     U32 srcLen = imageLen + half16Len + clcodeLen;
     I8 *source = new I8[srcLen];
 #ifdef CL_VERSION_1_2
-    memcpy(source, imagesource, imageLen);
+    UNI_MEMCPY(source, imagesource, imageLen);
 #endif
-    memcpy(source + imageLen, half16source, half16Len);
+    UNI_MEMCPY(source + imageLen, half16source, half16Len);
     FileStatus = LoadBinFile(FLAGS_inputFilename, source + imageLen + half16Len, clcodeLen);
     if (!FileStatus) {
         printf("load bin file failed\n");

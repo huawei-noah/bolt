@@ -29,8 +29,6 @@ inline EE activation_core_mali_fp16(GCLHandle_t handle,
     GCLMem_t output,
     ActivationMode activationMode)
 {
-    UNUSED(inputDesc);
-    UNUSED(outputDesc);
     U32 ow, oh, oc, on;
     U32 iw_str, ih_str, iw_off, ih_off;
     U32 ow_str, oh_str, ow_off, oh_off;

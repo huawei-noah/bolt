@@ -61,7 +61,5 @@ void CreateInference(int useModelFileStream,
     const char *algorithmMapPath,
     AFFINITY_TYPE affinity,
     ModelHandle *inferenceHandle,
-    ResultHandle *resultHandle,
-    int *inputNum,
-    char ***inputName);
+    ResultHandle *resultHandle);
 #endif

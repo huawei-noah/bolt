@@ -15,7 +15,6 @@
 #define _ATTENTION_H
 
 #include "operator.hpp"
-#include "tensor_computing.h"
 
 class Attention : public Operator {
 public:

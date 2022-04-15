@@ -16,6 +16,13 @@
 #include "cpu/x86/fp32/transform_functions_fp32.h"
 #include "cpu/x86/fp32/convolution_functions.h"
 
+EE convolution_winograd_transform_filter_fp32(TensorDesc filterDesc,
+    const F32 *filter,
+    ConvolutionParamSpec convParamSpec,
+    ConvolutionForwardAlgorithm algorithm,
+    TensorDesc *ftmDesc,
+    F32 *filterTransformed);
+
 // N is 32/24
 template <U32 N>
 inline EE transformNCHWToNCHWCxNxWrapper(
@@ -54,7 +61,7 @@ inline EE convolution_transform_filter_kernel_fp32(TensorDesc filterDesc,
     CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
     if (fdf == ftmDataFormat) {
         *ftmDesc = filterDesc;
-        memcpy(ftmArray, filterArray, fn * fc * fh * fw * bytesOf(fdt));
+        UNI_MEMCPY(ftmArray, filterArray, fn * fc * fh * fw * bytesOf(fdt));
         return SUCCESS;
     }
     if (fdf != DF_NCHW) {
@@ -89,6 +96,11 @@ EE convolution_transform_filter_fp32(TensorDesc filterDesc,
     TensorDesc *ftmDesc,
     F32 *filterTransformed)
 {
+    if (algorithm == CONVOLUTION_ALGORITHM_WINOGRAD) {
+        return convolution_winograd_transform_filter_fp32(
+            filterDesc, filter, convParamSpec, algorithm, ftmDesc, filterTransformed);
+    }
+
     DataFormat ftmDataFormat;
     DataType fdt;
     DataFormat fdf;
@@ -131,5 +143,114 @@ EE convolution_transform_filter_fp32(TensorDesc filterDesc,
         filterTransformed += newTileSize;
     }
     ftmDesc->dims[channelAxis] = filterDesc.dims[channelAxis];
+    return SUCCESS;
+}
+
+void transformWeight4x4_3x3(
+    const F32 *input, F32 *output, F32 *tmp, U32 blockIc, TensorDesc filterDesc)
+{
+    DataType fdt;
+    DataFormat fdf;
+    U32 fn, fc, fh, fw;
+    CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
+
+    __m256 v01666 = _mm256_set1_ps(0.1666666666666667f);
+    __m256 minusV01666 = _mm256_set1_ps(-0.1666666666666667f);
+    __m256 v00833 = _mm256_set1_ps(0.0833333333333333f);
+    __m256 minusV00833 = _mm256_set1_ps(-0.0833333333333333f);
+    __m256 v004166 = _mm256_set1_ps(0.0416666666666667f);
+    __m256 v025 = _mm256_set1_ps(0.25f);
+
+    // U32 fn32 = fn / 32;
+    U32 fnBlocks[3] = {8, 16, 32};
+    U32 lstep = fc * fh * fw;
+    __m256i vindex = _mm256_set_epi32(
+        lstep * 7, lstep * 6, lstep * 5, lstep * 4, lstep * 3, lstep * 2, lstep, 0);
+
+    U32 cx = 0;
+    for (U32 c = 0; c < fc; c += cx) {
+        cx = UNI_MIN(blockIc, fc - c);
+        U32 nSize = 0;
+        for (U32 n = 0; n < fn; n += nSize) {
+            nSize = UNI_MIN(32, fn - n);
+            nSize = fnBlocks[nSize >> 4];
+            F32 *curO = output + (c * fn + n * cx) * 36;
+            for (U32 cb = 0; cb < cx; ++cb) {
+                for (U32 ni = 0; ni < (nSize / 8); ++ni) {
+                    const F32 *curI = input + (n + ni * 8) * lstep + (c + cb) * fh * fw;
+                    for (U32 i = 0; i < 3; ++i) {
+                        __m256 xi0 = _mm256_i32gather_ps(curI + i, vindex, 4);
+                        __m256 xi1 = _mm256_i32gather_ps(curI + 3 + i, vindex, 4);
+                        __m256 xi2 = _mm256_i32gather_ps(curI + 3 * 2 + i, vindex, 4);
+
+                        __m256 t0 = _mm256_mul_ps(v01666, xi2);
+                        __m256 t1 = _mm256_sub_ps(_mm256_mul_ps(minusV01666, xi0), t0);
+                        __m256 t2 = _mm256_fmadd_ps(v004166, xi0, t0);
+
+                        __m256 o0 = _mm256_mul_ps(v025, xi0);
+                        __m256 o1 = _mm256_fmadd_ps(xi1, minusV01666, t1);
+                        __m256 o2 = _mm256_fmadd_ps(xi1, v01666, t1);
+                        __m256 o3 = _mm256_fmadd_ps(xi1, v00833, t2);
+                        __m256 o4 = _mm256_fmadd_ps(xi1, minusV00833, t2);
+
+                        _mm256_storeu_ps(tmp + (i)*8, o0);
+                        _mm256_storeu_ps(tmp + (3 + i) * 8, o1);
+                        _mm256_storeu_ps(tmp + (3 * 2 + i) * 8, o2);
+                        _mm256_storeu_ps(tmp + (3 * 3 + i) * 8, o3);
+                        _mm256_storeu_ps(tmp + (3 * 4 + i) * 8, o4);
+                        _mm256_storeu_ps(tmp + (3 * 5 + i) * 8, xi2);
+                    }
+                    for (U32 i = 0; i < 6; ++i) {
+                        __m256 xi0 = _mm256_loadu_ps(tmp + (3 * i) * 8);
+                        __m256 xi1 = _mm256_loadu_ps(tmp + (3 * i + 1) * 8);
+                        __m256 xi2 = _mm256_loadu_ps(tmp + (3 * i + 2) * 8);
+
+                        __m256 t0 = _mm256_mul_ps(v01666, xi2);
+                        __m256 t1 = _mm256_sub_ps(_mm256_mul_ps(minusV01666, xi0), t0);
+                        __m256 t2 = _mm256_fmadd_ps(v004166, xi0, t0);
+
+                        __m256 o0 = _mm256_mul_ps(v025, xi0);
+                        __m256 o1 = _mm256_fmadd_ps(xi1, minusV01666, t1);
+                        __m256 o2 = _mm256_fmadd_ps(xi1, v01666, t1);
+                        __m256 o3 = _mm256_fmadd_ps(xi1, v00833, t2);
+                        __m256 o4 = _mm256_fmadd_ps(xi1, minusV00833, t2);
+
+                        _mm256_storeu_ps(curO + (6 * i) * nSize * cx + cb * nSize + ni * 8, o0);
+                        _mm256_storeu_ps(curO + (6 * i + 1) * nSize * cx + cb * nSize + ni * 8, o1);
+                        _mm256_storeu_ps(curO + (6 * i + 2) * nSize * cx + cb * nSize + ni * 8, o2);
+                        _mm256_storeu_ps(curO + (6 * i + 3) * nSize * cx + cb * nSize + ni * 8, o3);
+                        _mm256_storeu_ps(curO + (6 * i + 4) * nSize * cx + cb * nSize + ni * 8, o4);
+                        _mm256_storeu_ps(curO + (6 * i + 5) * nSize * cx + cb * nSize + ni * 8, xi2);
+                    }
+                }
+            }
+        }
+    }
+}
+
+EE convolution_winograd_transform_filter_fp32(TensorDesc filterDesc,
+    const F32 *filter,
+    ConvolutionParamSpec convParamSpec,
+    ConvolutionForwardAlgorithm algorithm,
+    TensorDesc *ftmDesc,
+    F32 *filterTransformed)
+{
+    // F(4x4, 3x3)
+    if (nullptr == filter || nullptr == ftmDesc || nullptr == filterTransformed) {
+        CHECK_STATUS(NULL_POINTER);
+    }
+    DataType fdt;
+    DataFormat fdf;
+    U32 fn, fc, fh, fw;
+    CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
+    if (fdf != DF_NCHW) {
+        CHECK_STATUS(NOT_SUPPORTED);
+    }
+
+    U32 blockIc = UNI_MIN(32, fc);
+    F32 *tmp = filterTransformed + fn * fc * 36;
+    transformWeight4x4_3x3(filter, filterTransformed, tmp, blockIc, filterDesc);
+    *ftmDesc = tensor4df(fdt, DF_NCHWCxN32, fn, fc, fh, fw);
+
     return SUCCESS;
 }

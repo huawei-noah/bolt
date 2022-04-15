@@ -11,7 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string.h>
 #include "cpu/tensor_computing_cpu.h"
 #include "cpu/cpu_functions.h"
 
@@ -29,16 +28,6 @@ static EE reduction_kernel(TensorDesc inputDesc,
     if (nullptr == input || nullptr == output) {
         CHECK_STATUS(NULL_POINTER);
     }
-
-    ArraySumFunction sum_func = get_array_sum_function(arch);
-    ArrayMeanFunction mean_func = get_array_mean_function(arch);
-    ArrayVarFunction var_func = get_array_var_function(arch);
-    ArrayAddFunction add_func = get_array_add_function(arch);
-    ArrayMulAndAddFunction mul_and_add_func = get_array_mul_and_add_function(arch);
-    ArrayScaleFunction scale_func = get_array_scale_function(arch);
-    ArrayMinMaxValueFunction minmax_value_func = get_array_minmax_value_function(arch);
-    ArrayMaxFunction max_func = get_array_max_function(arch);
-
     if (axis < 0) {
         axis = inputDesc.nDims + axis;
     }
@@ -55,74 +44,94 @@ static EE reduction_kernel(TensorDesc inputDesc,
     U32 maskLen = tensorNumElements(maskDesc);
     maskLen = (maskLen > 0) ? maskLen : len;
     U32 axisDim = maskLen / len;
-    for (U32 i = 0; i < loopOuter; i++) {
-        if (loopInner == 1) {
-            if (mask != nullptr) {
-                return NOT_SUPPORTED;
-            }
-            const T *array = input + i * len;
-            F32 tmpValue = 0;
-            switch (reductionMode) {
-                case REDUCTION_SUM:
-                    output[i] = sum_func(inputDesc.dt, array, len);
-                    break;
-                case REDUCTION_MEAN:
-                    output[i] = mean_func(inputDesc.dt, array, len);
-                    break;
-                case REDUCTION_STD_DEVIATION: {
-                    tmpValue = mean_func(inputDesc.dt, array, len);
-                    tmpValue = var_func(inputDesc.dt, array, len, tmpValue);
-                    output[i] = sqrt(tmpValue);
-                    break;
+    EE ret = SUCCESS;
+#ifdef _USE_OPENMP
+#pragma omp parallel num_threads(OMP_NUM_THREADS)
+#endif
+    {
+        ArraySumFunction sum_func = get_array_sum_function(arch);
+        ArrayMeanFunction mean_func = get_array_mean_function(arch);
+        ArrayVarFunction var_func = get_array_var_function(arch);
+        ArrayAddFunction add_func = get_array_add_function(arch);
+        ArrayMulAndAddFunction mul_and_add_func = get_array_mul_and_add_function(arch);
+        ArrayScaleFunction scale_func = get_array_scale_function(arch);
+        ArrayMinMaxValueFunction minmax_value_func = get_array_minmax_value_function(arch);
+        ArrayMaxFunction max_func = get_array_max_function(arch);
+#ifdef _USE_OPENMP
+#pragma omp for
+#endif
+        for (U32 i = 0; i < loopOuter; i++) {
+            if (loopInner == 1) {
+                const T *array = input + i * len;
+                F32 tmpValue = 0;
+                switch (reductionMode) {
+                    case REDUCTION_SUM:
+                        output[i] = sum_func(inputDesc.dt, array, len);
+                        break;
+                    case REDUCTION_MEAN:
+                        output[i] = mean_func(inputDesc.dt, array, len);
+                        break;
+                    case REDUCTION_STD_DEVIATION: {
+                        tmpValue = mean_func(inputDesc.dt, array, len);
+                        tmpValue = var_func(inputDesc.dt, array, len, tmpValue);
+                        output[i] = sqrt(tmpValue);
+                        break;
+                    }
+                    case REDUCTION_SCALAR_PRODUCT:
+                        output[i] = var_func(inputDesc.dt, array, len, 0);
+                        break;
+                    case REDUCTION_MAX: {
+                        F32 maxValue = 0;
+                        CHECK_STATUS(minmax_value_func(inputDesc.dt, array, len, 2, &maxValue));
+                        output[i] = maxValue;
+                        break;
+                    }
+                    case REDUCTION_L2: {
+                        tmpValue = var_func(inputDesc.dt, array, len, 0) * len;
+                        output[i] = sqrt(tmpValue);
+                        break;
+                    }
+                    case REDUCTION_MIN: {
+                        F32 minValue = 0;
+                        CHECK_STATUS(minmax_value_func(inputDesc.dt, array, len, 1, &minValue));
+                        output[i] = minValue;
+                        break;
+                    }
+                    default:
+                        ret = NOT_SUPPORTED;
+                        break;
                 }
-                case REDUCTION_SCALAR_PRODUCT:
-                    output[i] = var_func(inputDesc.dt, array, len, 0);
-                    break;
-                case REDUCTION_MAX: {
-                    F32 maxValue = 0;
-                    CHECK_STATUS(minmax_value_func(inputDesc.dt, array, len, 2, &maxValue));
-                    output[i] = maxValue;
-                    break;
-                }
-                case REDUCTION_L2: {
-                    tmpValue = var_func(inputDesc.dt, array, len, 0) * len;
-                    output[i] = sqrt(tmpValue);
-                    break;
-                }
-                default:
-                    return NOT_SUPPORTED;
-            }
-        } else {
-            CHECK_REQUIREMENT(REDUCTION_STD_DEVIATION != reductionMode);
-            for (U32 j = 0; j < maskLen; j += len) {
-                U32 axisIndex = j / len;
-                U32 outputIndex = (i * axisDim + axisIndex) * loopInner;
-                auto ptr2 = output + outputIndex;
-                for (U32 k = 0; k < len; k++) {
-                    if (mask == nullptr || (mask != nullptr && mask[j + k] == 1)) {
-                        auto ptr1 = &input[(i * len + k) * loopInner];
-                        if ((k == 0) && (reductionMode != REDUCTION_SCALAR_PRODUCT)) {
-                            memcpy(ptr2, ptr1, loopInner * bytesOf(inputDesc.dt));
-                            continue;
-                        }
-                        if (reductionMode == REDUCTION_SUM || reductionMode == REDUCTION_MEAN) {
-                            add_func(inputDesc.dt, ptr2, ptr1, ptr2, loopInner);
-                        } else if (reductionMode == REDUCTION_SCALAR_PRODUCT) {
-                            mul_and_add_func(inputDesc.dt, ptr1, ptr1, ptr2, ptr2, loopInner);
-                        } else if (reductionMode == REDUCTION_MAX) {
-                            max_func(inputDesc.dt, ptr2, ptr1, ptr2, loopInner);
-                        } else {
-                            return NOT_SUPPORTED;
+            } else {
+                for (U32 j = 0; j < maskLen; j += len) {
+                    U32 axisIndex = j / len;
+                    U32 outputIndex = (i * axisDim + axisIndex) * loopInner;
+                    auto ptr2 = output + outputIndex;
+                    for (U32 k = 0; k < len; k++) {
+                        if (mask == nullptr || (mask != nullptr && mask[j + k] == 1)) {
+                            auto ptr1 = &input[(i * len + k) * loopInner];
+                            if ((k == 0) && (reductionMode != REDUCTION_SCALAR_PRODUCT)) {
+                                UNI_MEMCPY(ptr2, ptr1, loopInner * bytesOf(inputDesc.dt));
+                                continue;
+                            }
+                            if (reductionMode == REDUCTION_SUM || reductionMode == REDUCTION_MEAN) {
+                                add_func(inputDesc.dt, ptr2, ptr1, ptr2, loopInner);
+                            } else if (reductionMode == REDUCTION_SCALAR_PRODUCT) {
+                                mul_and_add_func(inputDesc.dt, ptr1, ptr1, ptr2, ptr2, loopInner);
+                            } else if (reductionMode == REDUCTION_MAX) {
+                                max_func(inputDesc.dt, ptr2, ptr1, ptr2, loopInner);
+                            } else {
+                                ret = NOT_SUPPORTED;
+                            }
                         }
                     }
-                }
-                if (reductionMode == REDUCTION_MEAN) {
-                    scale_func(inputDesc.dt, ptr2, ptr2, loopInner, 1.0 / len, 0);
+                    if (reductionMode == REDUCTION_MEAN) {
+                        scale_func(inputDesc.dt, ptr2, ptr2, loopInner, 1.0 / len, 0);
+                    }
                 }
             }
         }
     }
-    return SUCCESS;
+    return ret;
 }
 
 EE reduction_cpu(TensorDesc inputDesc,
@@ -143,7 +152,7 @@ EE reduction_cpu(TensorDesc inputDesc,
     int channel = tmpDesc.nDims - 1;
     if (inputDesc.df == DF_NCHWC8 || inputDesc.df == DF_NCHWC16) {
         U32 cx = (inputDesc.df == DF_NCHWC8) ? 8 : 16;
-        for (int i = 0; i < p.axes_num; i++) {
+        for (int i = 0; i < p.num_axes; i++) {
             // channel dimension
             if (p.axes[i] == 1 || p.axes[i] == -channel) {
                 start = -1;
@@ -159,8 +168,8 @@ EE reduction_cpu(TensorDesc inputDesc,
     }
     const void *tmp1 = input;
     void *tmp2 = nullptr;
-    for (int i = start; i < p.axes_num; i++) {
-        if (p.axes_num - start == 1) {
+    for (int i = start; i < p.num_axes; i++) {
+        if (p.num_axes - start == 1) {
             tmp2 = output;
         } else {
             tmp2 = (char *)tmp + (i - start) % 2 * (tmpBytes / 2);
@@ -176,17 +185,27 @@ EE reduction_cpu(TensorDesc inputDesc,
 #ifdef _USE_FP32
             case DT_F32: {
                 ret = reduction_kernel<F32>(tmpDesc, (const F32 *)tmp1, maskDesc,
-                    (const float *)mask, axis, p.reduction_mode, outputDesc, (F32 *)tmp2, arch);
+                    (const float *)mask, axis, p.mode, outputDesc, (F32 *)tmp2, arch);
                 break;
             }
 #endif
 #ifdef _USE_FP16
             case DT_F16: {
                 ret = reduction_kernel<F16>(tmpDesc, (const F16 *)tmp1, maskDesc,
-                    (const float *)mask, axis, p.reduction_mode, outputDesc, (F16 *)tmp2, arch);
+                    (const float *)mask, axis, p.mode, outputDesc, (F16 *)tmp2, arch);
                 break;
             }
 #endif
+            case DT_I32: {
+                ret = reduction_kernel<I32>(tmpDesc, (const I32 *)tmp1, maskDesc,
+                    (const float *)mask, axis, p.mode, outputDesc, (I32 *)tmp2, arch);
+                break;
+            }
+            case DT_U32: {
+                ret = reduction_kernel<U32>(tmpDesc, (const U32 *)tmp1, maskDesc,
+                    (const float *)mask, axis, p.mode, outputDesc, (U32 *)tmp2, arch);
+                break;
+            }
             default:
                 ret = NOT_SUPPORTED;
                 break;
@@ -200,7 +219,7 @@ EE reduction_cpu(TensorDesc inputDesc,
     }
 
     if (tmp2 != output) {
-        memcpy(output, tmp2, tensorNumBytes(outputDesc));
+        UNI_MEMCPY(output, tmp2, tensorNumBytes(outputDesc));
     }
 
     if (p.coeff != 1) {

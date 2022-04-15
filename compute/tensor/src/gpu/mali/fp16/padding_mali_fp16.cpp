@@ -27,11 +27,11 @@ inline EE padding_checkpara_mali_fp16(GCLHandle_t handle,
     if (inputDesc.dt != outputDesc.dt || inputDesc.dt != DT_F16) {
         return NOT_SUPPORTED;
     }
-    if (padParamSpec.pad_mode == Pad_Reflect &&
+    if (padParamSpec.pad_mode == PAD_REFLECT &&
         (padParamSpec.top >= inputDesc.dims[1] || padParamSpec.bottom >= inputDesc.dims[1])) {
         return NOT_SUPPORTED;
     }
-    if (padParamSpec.pad_mode == Pad_Symmetric &&
+    if (padParamSpec.pad_mode == PAD_SYMMETRIC &&
         (padParamSpec.left > inputDesc.dims[0] || padParamSpec.right > inputDesc.dims[0])) {
         return NOT_SUPPORTED;
     }

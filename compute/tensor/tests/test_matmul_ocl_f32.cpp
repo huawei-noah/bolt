@@ -32,13 +32,13 @@ inline U8 *matmulF32Cpu(TensorDesc matrixADesc,
     Tensor matrixATensorCpu;
     matrixATensorCpu.resize(matrixADesc);
     matrixATensorCpu.alloc();
-    memcpy(get_ptr_from_tensor(matrixATensorCpu, CPU_GENERAL), matrixA_cpu,
+    UNI_MEMCPY(get_ptr_from_tensor(matrixATensorCpu, CPU_GENERAL), matrixA_cpu,
         tensorNumBytes(matrixADesc));
 
     Tensor matrixBTensorCpu;
     matrixBTensorCpu.resize(matrixBDesc);
     matrixBTensorCpu.alloc();
-    memcpy(get_ptr_from_tensor(matrixBTensorCpu, CPU_GENERAL), matrixB_cpu,
+    UNI_MEMCPY(get_ptr_from_tensor(matrixBTensorCpu, CPU_GENERAL), matrixB_cpu,
         tensorNumBytes(matrixBDesc));
 
     CHECK_STATUS(matmul_infer_output_size(&matrixATensorCpu, transposeA, &matrixBTensorCpu,

@@ -11,86 +11,8 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "error.h"
 #include "cpu/tensor_computing_cpu.h"
-
-inline EE qsort_descent(std::vector<BoxRect> &boxes, std::vector<F32> &scores, int left, int right)
-{
-    if (boxes.empty() || scores.empty()) {
-        return NOT_SUPPORTED;
-    }
-
-    int i = left;
-    int j = right;
-    F32 temp = scores[(left + right) / 2];
-
-    while (i <= j) {
-        while (scores[i] > temp) {
-            i++;
-        }
-        while (scores[j] < temp) {
-            j--;
-        }
-        if (i <= j) {
-            std::swap(boxes[i], boxes[j]);
-            std::swap(scores[i], scores[j]);
-            i++;
-            j--;
-        }
-    }
-
-    if (left < j) {
-        qsort_descent(boxes, scores, left, j);
-    }
-    if (i < right) {
-        qsort_descent(boxes, scores, i, right);
-    }
-
-    return SUCCESS;
-}
-
-inline F32 intersectionarea(BoxRect a, BoxRect b)
-{
-    if (a.xmin > b.xmax || a.xmax < b.xmin || a.ymin > b.ymax || a.ymax < b.ymin) {
-        return 0.f;
-    }
-    F32 inter_width = std::min(a.xmax, b.xmax) - std::max(a.xmin, b.xmin);
-    F32 inter_height = std::min(a.ymax, b.ymax) - std::max(a.ymin, b.ymin);
-
-    return inter_width * inter_height;
-}
-
-inline EE nms_pickedboxes(std::vector<BoxRect> boxes, std::vector<I64> &picked, F32 nms_threshold)
-{
-    I64 n = boxes.size();
-
-    std::vector<F32> areas(n);
-    for (I64 i = 0; i < n; i++) {
-        BoxRect box = boxes[i];
-
-        F32 width = box.xmax - box.xmin;
-        F32 height = box.ymax - box.ymin;
-
-        areas[i] = width * height;
-    }
-    for (I64 i = 0; i < n; i++) {
-        BoxRect a = boxes[i];
-        int keep = 1;
-        for (int j = 0; j < (int)picked.size(); j++) {
-            BoxRect b = boxes[picked[j]];
-            F32 inter_area = intersectionarea(a, b);
-            F32 union_area = areas[i] + areas[picked[j]] - inter_area;
-
-            if (inter_area / union_area > nms_threshold) {
-                keep = 0;
-            }
-        }
-        if (keep) {
-            picked.push_back(i);
-        }
-    }
-    return SUCCESS;
-}
+#include "cpu/non_max_suppression.h"
 
 template <typename T>
 EE detectionoutput_kernel(std::vector<void *> input,
@@ -138,71 +60,54 @@ EE detectionoutput_kernel(std::vector<void *> input,
         boxes[i].assign(box.begin(), box.end());
     }
 
-    std::vector<std::vector<BoxRect>> allclass_boxrects;
-    std::vector<std::vector<F32>> allclass_boxscores;
-    allclass_boxrects.resize(numclass);
-    allclass_boxscores.resize(numclass);
-
+    std::vector<std::vector<BoxRect>> allclass_boxrects(numclass);
     for (U32 i = 1; i < numclass; i++) {
         std::vector<BoxRect> class_boxrects;
-        std::vector<F32> class_boxscores;
         for (U32 j = 0; j < num_total_priorbox; j++) {
             F32 score = confidence[j * numclass + i];
 
             if (score > confidence_threshold) {
                 std::vector<F32> inbox;
                 inbox.assign(boxes[j].begin(), boxes[j].end());
-                BoxRect b = {inbox[0], inbox[1], inbox[2], inbox[3], i};
+                BoxRect b = {inbox[0], inbox[1], inbox[2], inbox[3], i, score, j};
                 class_boxrects.push_back(b);
-                class_boxscores.push_back(score);
             }
         }
         // sort the boxes with scores
-        qsort_descent(
-            class_boxrects, class_boxscores, 0, static_cast<int>(class_boxscores.size() - 1));
+        std::stable_sort(class_boxrects.begin(), class_boxrects.end(),
+            [&](const BoxRect &a, const BoxRect &b) { return (a.score > b.score); });
 
-        if (nms_top_k < (U32)class_boxrects.size()) {
+        if (nms_top_k < class_boxrects.size()) {
             class_boxrects.resize(nms_top_k);
-            class_boxscores.resize(nms_top_k);
         }
         // apply nms
-        std::vector<I64> picked;
-        nms_pickedboxes(class_boxrects, picked, nms_threshold);
-
-        for (I64 j = 0; j < (I64)picked.size(); j++) {
+        std::vector<I32> picked = nms_pickedboxes(class_boxrects, nms_threshold);
+        for (U32 j = 0; j < picked.size(); j++) {
             I64 picked_box = picked[j];
             allclass_boxrects[i].push_back(class_boxrects[picked_box]);
-            allclass_boxscores[i].push_back(class_boxscores[picked_box]);
         }
     }
 
     std::vector<BoxRect> boxrects;
-    std::vector<F32> boxscores;
-
     for (U32 i = 1; i < numclass; i++) {
         boxrects.insert(boxrects.end(), allclass_boxrects[i].begin(), allclass_boxrects[i].end());
-        boxscores.insert(
-            boxscores.end(), allclass_boxscores[i].begin(), allclass_boxscores[i].end());
     }
 
-    qsort_descent(boxrects, boxscores, 0, static_cast<int>(boxscores.size() - 1));
-
+    std::stable_sort(boxrects.begin(), boxrects.end(),
+        [&](const BoxRect &a, const BoxRect &b) { return (a.score > b.score); });
     if (keep_top_k < (U32)boxrects.size()) {
         boxrects.resize(keep_top_k);
-        boxscores.resize(keep_top_k);
     }
 
-    U32 num_detected = static_cast<U32>(boxrects.size());
+    U32 num_detected = boxrects.size();
     // the first box contains the number of availble boxes in the first element.
     output[0] = num_detected;
     output[1] = output[2] = output[3] = output[4] = output[5] = 0;
 
     for (U32 i = 0; i < num_detected; i++) {
         BoxRect b = boxrects[i];
-        F32 score = boxscores[i];
-
         output[(i + 1) * 6] = b.label;
-        output[(i + 1) * 6 + 1] = score;
+        output[(i + 1) * 6 + 1] = b.score;
         output[(i + 1) * 6 + 2] = b.xmin;
         output[(i + 1) * 6 + 3] = b.ymin;
         output[(i + 1) * 6 + 4] = b.xmax;

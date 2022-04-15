@@ -45,18 +45,15 @@ class InnerProductOptimizer : public OPOptimizer {
                                 }
                                 spec->ws[firScaleWeightIndex].bytes_of_vec =
                                     spec->ws[secScaleWeightIndex].bytes_of_vec;
-                                U8 *ln_vec = (U8 *)mt_new_storage(
-                                    spec->ws[secScaleWeightIndex].bytes_of_vec);
-                                memcpy(ln_vec, spec->ws[secScaleWeightIndex].vec,
+                                U8 *ln_vec =
+                                    (U8 *)mt_malloc(spec->ws[secScaleWeightIndex].bytes_of_vec);
+                                UNI_MEMCPY(ln_vec, spec->ws[secScaleWeightIndex].vec,
                                     spec->ws[secScaleWeightIndex].bytes_of_vec);
                                 spec->ws[firScaleWeightIndex].vec = ln_vec;
 
                                 spec->ws[secScaleWeightIndex].bytes_of_vec = 0;
-                                if (outOfFileMapRange(spec->ws[secScaleWeightIndex].vec, spec->mfd)) {
-                                    delete spec->ws[secScaleWeightIndex].vec;
-                                }
-                                spec->ws[secScaleWeightIndex].vec = nullptr;
-                                memcpy(spec->ops[firScaleIndex].output_tensors_name[0],
+                                mt_free(spec->ws[secScaleWeightIndex].vec, spec);
+                                UNI_MEMCPY(spec->ops[firScaleIndex].output_tensors_name[0],
                                     spec->ops[secScaleIndex].output_tensors_name[0], NAME_LEN);
                                 setOperatorInvalid(spec, secScaleIndex);
                                 hasOptimized = true;

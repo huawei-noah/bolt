@@ -20,8 +20,8 @@
 
 EE resize_bilinear_x86(TensorDesc inputDesc,
     void *input,
-    TensorDesc outputDesc,
+    ResizeParamSpec p,
     void *tmp,
-    void *output,
-    ResizeParamSpec p);
+    TensorDesc outputDesc,
+    void *output);
 #endif

@@ -11,7 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <vector>
 #include "cpu/x86/tensor_computing_x86.h"
 #ifdef _USE_FP32
 #include "cpu/x86/fp32/tensor_computing_fp32.h"
@@ -25,7 +24,7 @@ EE eltwise_x86(DataType dataType,
     void *output,
     EltwiseMode eltwiseMode)
 {
-    EE ret = SUCCESS;
+    EE ret = NOT_SUPPORTED;
     switch (dataType) {
 #ifdef _USE_FP32
         case DT_F32: {
@@ -33,6 +32,7 @@ EE eltwise_x86(DataType dataType,
             break;
         }
 #endif
+        case DT_U32:
         case DT_I32: {
             ret = eltwise_i32(input, inputSize, num, len, output, eltwiseMode);
             break;
@@ -42,7 +42,6 @@ EE eltwise_x86(DataType dataType,
             break;
         }
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
     return ret;

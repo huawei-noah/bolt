@@ -147,7 +147,7 @@ inline EE eltwise_core_mali_fp16(GCLHandle_t handle,
     KernelOpt kernelOpt;
     char kernelName[128];
     bool useNchwFormat = (inputMem[arrayDimMax]->desc.memFormat == DF_NCHW) ? true : false;
-    EltwiseMode eltwiseMode = eltwiseDesc.elt_mode;
+    EltwiseMode eltwiseMode = eltwiseDesc.mode;
     ActivationMode activeMode = eltwiseDesc.activation_type;
     U32 gs[3] = {iw, ih, (ic + 3) / 4 * in * it};
     U32 ls[3] = {0, 0, 0};

@@ -51,12 +51,13 @@ inline EE set_reduction_opt_mali(bool useNchwFormat,
             return NOT_SUPPORTED;
     }
 
-    sprintf(kernelName, "reduction_%s%s%s%d", formatName.c_str(), outputC4Name.c_str(),
-        modeName.c_str(), axis);
+    std::string kernel =
+        std::string("reduction_") + formatName + outputC4Name + modeName + std::to_string(axis);
+    UNI_STRCPY(kernelName, kernel.c_str());
     if (useNchwFormat) {
-        sprintf(kernelOpt->sourceName, "reduction_nchw");
+        UNI_STRCPY(kernelOpt->sourceName, "reduction_nchw");
     } else {
-        sprintf(kernelOpt->sourceName, "reduction");
+        UNI_STRCPY(kernelOpt->sourceName, "reduction");
     }
     CHECK_STATUS(set_value_define_opt(axis, "AXIS", opt));
     return SUCCESS;

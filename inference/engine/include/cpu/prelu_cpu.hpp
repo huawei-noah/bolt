@@ -31,28 +31,35 @@ public:
     EE infer_weight_desc() override
     {
         auto curOpWs = this->get_weightspec();
-        U32 weightNum = 0;
-        if (curOpWs.weight != nullptr) {
-            weightNum = curOpWs.bytes_of_weight / UNI_MAX(1, bytesOf(curOpWs.mdt));
+        U32 weightNum = (curOpWs.weight == nullptr)
+            ? 0
+            : curOpWs.bytes_of_weight / UNI_MAX(1, bytesOf(curOpWs.mdt));
+        if (weightNum > 0) {
+            Tensor weightTensor;
+            weightTensor.resize(tensor1d(this->dt, weightNum));
+            this->weightTensors.push_back(weightTensor);
         }
-        if (weightNum == 0) {
-            CHECK_STATUS(NOT_SUPPORTED);
-        }
-        if (weightNum == 1) {
-            this->preluDesc.propagate_down = true;
-        } else {
-            this->preluDesc.propagate_down = false;
-        }
-        Tensor weightTensor;
-        weightTensor.resize(tensor1d(this->dt, weightNum));
-        this->weightTensors.push_back(weightTensor);
         return SUCCESS;
     }
 
     void run() override
     {
-        CHECK_STATUS(prelu(this->inputTensors[0], this->weightTensors[0], this->preluDesc,
-            this->outputTensors[0], &this->archInfo));
+        Tensor weight;
+        if (this->weightTensors.size() > 0) {
+            weight = this->weightTensors[0];
+        } else if (this->inputTensors.size() > 1) {
+            weight = this->inputTensors[1];
+        } else {
+            UNI_ERROR_LOG("operator:%s type:%s doesn't have weight.\n", this->name.c_str(),
+                OperatorTypeName()[this->get_type()]);
+        }
+        if (weight.length() == 1) {
+            this->p.propagate_down = true;
+        } else {
+            this->p.propagate_down = false;
+        }
+        CHECK_STATUS(
+            prelu(this->inputTensors[0], weight, this->p, this->outputTensors[0], &this->archInfo));
     }
 
     EE infer_output_tensors_size(

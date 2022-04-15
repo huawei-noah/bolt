@@ -13,7 +13,6 @@
 #ifndef _H_ULTRA_FACE
 #define _H_ULTRA_FACE
 
-#define clip(x, y) (x < 0 ? 0 : (x > y ? y : x))
 #include <algorithm>
 #include <iostream>
 #include <string>
@@ -61,6 +60,13 @@ std::vector<std::vector<float>> featuremap_size;
 std::vector<std::vector<float>> shrinkage_size;
 std::vector<int> w_h_list;
 std::vector<std::vector<float>> priors = {};
+
+inline float clip(float x, float y)
+{
+    float ret = (x < 0 ? 0 : (x > y ? y : x));
+    return ret;
+}
+
 inline void prior_boxes_generator(
     int input_width, int input_length, float score_threshold, float iou_threshold)
 {
@@ -176,7 +182,7 @@ inline void nms(std::vector<FaceInfo> &input, std::vector<FaceInfo> &output, int
                     total += exp(buf[i].score);
                 }
                 FaceInfo rects;
-                memset(&rects, 0, sizeof(rects));
+                UNI_MEMSET(&rects, 0, sizeof(rects));
                 for (unsigned int i = 0; i < buf.size(); i++) {
                     float rate = exp(buf[i].score) / total;
                     rects.x1 += buf[i].x1 * rate;

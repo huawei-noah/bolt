@@ -29,7 +29,8 @@ bool fileExist(const std::string &name)
 void *OnlineModelConversion(const char *storagePath,
     const char *modelName,
     const char *inferPrecision,
-    I32 removeProcessOpsNum)
+    I32 removeProcessOpsNum,
+    bool trainMode)
 {
     DataConvertType converterMode = F32_to_F32;
     if (inferPrecision == std::string("PTQ")) {
@@ -40,7 +41,7 @@ void *OnlineModelConversion(const char *storagePath,
         converterMode = F32_to_F32;
     } else {
         UNI_ERROR_LOG("Unknown converter data precision: %s.\n", inferPrecision);
-        exit(1);
+        return nullptr;
     }
 
     ModelSpec *originalMs = new ModelSpec();
@@ -74,16 +75,25 @@ void *OnlineModelConversion(const char *storagePath,
         UNI_INFO_LOG("Start to convert %s.json...\n", prefix.c_str());
         tensorflow_converter(storagePath, modelName, originalMs);
 #endif
+#ifdef _USE_MINDSPORE
+    } else if (fileExist(prefix + ".mindir")) {
+        UNI_INFO_LOG("Start to convert %s.mindir...\n", prefix.c_str());
+        mindspore_converter(storagePath, modelName, originalMs);
+#endif	
     } else {
-        UNI_ERROR_LOG("Can not find %s.prototxt/caffemodel, %s.onnx, %s.tflite or %s.json model "
+        UNI_ERROR_LOG("Can not find %s.prototxt/caffemodel, %s.onnx, %s.tflite or %s.json model or %s.mindir"
                       "file.\n",
-            prefix.c_str(), prefix.c_str(), prefix.c_str(), prefix.c_str());
-        exit(1);
+            prefix.c_str(), prefix.c_str(), prefix.c_str(), prefix.c_str(), prefix.c_str());
+        return nullptr;
     }
 
     UNI_DEBUG_LOG("Start to optimize graph...\n");
     ModelSpecOptimizer msOptimizer;
-    msOptimizer.suggest(inferPrecision == std::string("PTQ"));
+    if (trainMode) {
+        msOptimizer.suggest_for_training();
+    } else {
+        msOptimizer.suggest(inferPrecision == std::string("PTQ"));
+    }
     msOptimizer.optimize(originalMs);
 
     CHECK_STATUS(ms_datatype_converter(originalMs, targetMs, converterMode, "NOQUANT"));

@@ -19,7 +19,7 @@
 
 class ResizeOCL : public Resize {
 public:
-    ResizeOCL(DataType paramDT, ResizeParamSpec p) : Resize(paramDT, p)
+    ResizeOCL(DataType dt, ResizeParamSpec p) : Resize(dt, p)
     {
         INIT_GPU_INFO(nullptr)
     }
@@ -29,7 +29,7 @@ public:
     std::shared_ptr<Operator> clone() override
     {
         std::shared_ptr<ResizeOCL> mem =
-            std::shared_ptr<ResizeOCL>(new ResizeOCL(this->paramDT, this->p));
+            std::shared_ptr<ResizeOCL>(new ResizeOCL(this->dt, this->p));
         *mem = *this;
         return mem;
     }
@@ -39,31 +39,16 @@ public:
         OCLContext::getInstance().handle.get()->curOpName = this->get_name();
         Tensor inputTensor = this->inputTensors[0];
         Tensor outputTensor = this->outputTensors[0];
-        CHECK_STATUS(resize(inputTensor, this->temp, outputTensor, this->p, &this->archInfo));
+        CHECK_STATUS(resize(inputTensor, this->p, this->temp, outputTensor, &this->archInfo));
     }
 
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
         this->needSetKernelVec = true;
+        CHECK_STATUS(
+            resize_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo));
         TensorDesc desc = inTensors[0]->get_desc();
-        U32 bytes;
-        switch (paramDT) {
-            case DT_F32: {
-                CHECK_REQUIREMENT(1 == this->p.scales[0] && 1 == this->p.scales[1]);
-                CHECK_STATUS(resize_infer_output_size(inTensors[0], this->paramDT,
-                    this->p.scales + 2, outTensors[0], &bytes, &this->archInfo));
-                break;
-            }
-            case DT_U32: {
-                CHECK_STATUS(resize_infer_output_size(inTensors[0], this->paramDT, this->p.sizes,
-                    outTensors[0], &bytes, &this->archInfo));
-                break;
-            }
-            default: {
-                CHECK_STATUS(NOT_SUPPORTED);
-            }
-        }
         if (desc.df == DF_NCHWC4 && check_tensors_image(inTensors)) {
             CHECK_STATUS(set_tensors_image(outTensors, inTensors.size()));
         }
@@ -72,12 +57,10 @@ public:
 
     U32 infer_tmp_memory_size() override
     {
-        U32 size = 0;
-        TensorDesc inputDesc = inputTensors[0].get_desc();
-        if (inputDesc.df == DF_NCHW && inputTensors[0].get_mem_type() != OCLMem) {
-            size = tensorNumBytes(inputDesc);
-        }
-        return size;
+        U32 bytes = 0;
+        CHECK_STATUS(resize_infer_forward_tmp_bytes(
+            this->inputTensors[0], this->p, this->outputTensors[0], &bytes, &this->archInfo));
+        return bytes;
     }
 
     REGISTER_OCL_OPERATOR_RUN

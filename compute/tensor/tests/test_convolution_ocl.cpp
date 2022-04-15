@@ -96,7 +96,7 @@ int convolutionTest(int argc, char *argv[], DataType dt)
         dilationH = atoi(argv[14]);
         dilationW = atoi(argv[15]);
         if (argc == 17) {
-            use_nchw = atoi(argv[6]);
+            use_nchw = atoi(argv[16]);
         }
     }
 
@@ -136,7 +136,7 @@ int convolutionTest(int argc, char *argv[], DataType dt)
     activationDesc.mode = ACTIVATION_NULL;
     ConvolutionParamSpec convParamSpec = createConvolutionParamSpec(group, ft, fh, fw, strideT,
         strideH, strideW, paddingTF, paddingTB, paddingT, paddingB, paddingL, paddingR, 1,
-        dilationH, dilationW, fn, Convolution_Depthwise_Pointwise);
+        dilationH, dilationW, fn, CONVOLUTION_DEPTHWISE_POINTWISE);
 
     TensorDesc inputDesc, filterDesc, inputDesc_gpu;
     if (it > 1) {
@@ -220,7 +220,7 @@ int convolutionTest(int argc, char *argv[], DataType dt)
     U32 ocAlign = (oc + 3) / 4 * 4;
     if (ocAlign != oc) {
         U8 *bias_cpu_align = ut_input_v(ocAlign, dt, UT_INIT_ZERO);
-        memcpy(bias_cpu_align, bias_cpu, oc * bytesOf(dt));
+        UNI_MEMCPY(bias_cpu_align, bias_cpu, oc * bytesOf(dt));
         free(bias_cpu);
         bias_cpu = bias_cpu_align;
     }
@@ -245,7 +245,7 @@ int convolutionTest(int argc, char *argv[], DataType dt)
         tmp[0] = tmpTensorImgA;
     }
     alloc_img(tmpTensorImgB, maxBytes + 4);
-    Tensor filterTensorTran = filterTensor; 
+    Tensor filterTensorTran = filterTensor;
 
     if (alg == CONVOLUTION_ALGORITHM_WINOGRAD && archInfo.arch == QUALCOMM) {
         tmp[0] = tmpTensor;
@@ -260,8 +260,8 @@ int convolutionTest(int argc, char *argv[], DataType dt)
 
     CHECK_STATUS(ocl_set_input(handle, input, inputDesc_gpu, input_cpu, tmpbuf, true));
     std::vector<Tensor> inputTensors(1, inputTensor);
-    CHECK_STATUS(convolution(inputTensors, filterTensorTran, convParamSpec, alg, nullptr, biasTensor,
-        tmp, outputTensor, activationDesc, &archInfo));
+    CHECK_STATUS(convolution(inputTensors, filterTensorTran, convParamSpec, alg, nullptr,
+        biasTensor, tmp, outputTensor, activationDesc, &archInfo));
 
     /*warp up*/
     for (U32 i = 0; i < 2; i++) {
@@ -314,18 +314,19 @@ int convolutionTest(int argc, char *argv[], DataType dt)
     Tensor inputTensorCpu;
     inputTensorCpu.resize(inputDesc);
     inputTensorCpu.alloc();
-    memcpy(get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), input_cpu, tensorNumBytes(inputDesc));
+    UNI_MEMCPY(
+        get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), input_cpu, tensorNumBytes(inputDesc));
 
     Tensor filterTensorCpu;
     filterTensorCpu.resize(filterDesc);
     filterTensorCpu.alloc();
-    memcpy(
+    UNI_MEMCPY(
         get_ptr_from_tensor(filterTensorCpu, CPU_GENERAL), filter_cpu, tensorNumBytes(filterDesc));
 
     Tensor biasTensorCpu;
     biasTensorCpu.resize(biasDesc);
     biasTensorCpu.alloc();
-    memcpy(get_ptr_from_tensor(biasTensorCpu, CPU_GENERAL), bias_cpu, tensorNumBytes(biasDesc));
+    UNI_MEMCPY(get_ptr_from_tensor(biasTensorCpu, CPU_GENERAL), bias_cpu, tensorNumBytes(biasDesc));
 
     Tensor outputTensorCpu;
     outputDesc.df = DF_NCHW;

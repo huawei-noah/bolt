@@ -20,9 +20,8 @@ EE transpose_cpu(
     if (nullptr == input && tensorNumElements(inputDesc) == 0) {
         return SUCCESS;
     }
-
     if (nullptr == input || nullptr == output || nullptr == dim) {
-        CHECK_STATUS(NULL_POINTER);
+        return NULL_POINTER;
     }
     array_transpose(bytesOf(inputDesc.dt), inputDesc.dims, input, outputDesc.dims, output, dim,
         inputDesc.nDims, outputDesc.nDims);

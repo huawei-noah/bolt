@@ -20,19 +20,12 @@
 #include "error.h"
 
 #ifdef _USE_FP16
-
-inline U32 getBinFileSize(CI8 *dataPath, CI8 *dataName)
+inline U32 getBinFileSize(CI8 *directory, CI8 *name)
 {
-    std::string filePath = dataPath;
-    CI8 lastFlag = filePath[filePath.length() - 1];
-    if (strcmp(&lastFlag, "/") != 0) {
-        filePath += "/";
-    }
-    std::string fileName = dataName;
-    fileName = filePath + fileName;
-    FILE *file = fopen(fileName.c_str(), "rb");
+    std::string path = std::string(directory) + std::string("/") + std::string(name);
+    FILE *file = fopen(path.c_str(), "rb");
     if (file == NULL) {
-        UNI_WARNING_LOG("can not get %s file size.\n", fileName.c_str());
+        UNI_ERROR_LOG("can not get %s file size.\n", path.c_str());
         return 0;
     }
     fseek(file, 0, SEEK_END);
@@ -42,50 +35,34 @@ inline U32 getBinFileSize(CI8 *dataPath, CI8 *dataName)
     return size;
 }
 
-inline void writeF16ToF32Bin(F16 *data, U32 num, CI8 *dataPath, CI8 *dataName)
+inline void writeF16ToF32Bin(F16 *data, U32 num, CI8 *directory, CI8 *name)
 {
-    std::string filePath = dataPath;
-    CI8 lastFlag = filePath[filePath.length() - 1];
-    if (strcmp(&lastFlag, "/") != 0) {
-        filePath += "/";
-    }
-    std::string fileName = dataName;
-    fileName = filePath + fileName;
-    FILE *outfile = fopen(fileName.c_str(), "wb");
-    if (outfile == NULL) {
-        UNI_WARNING_LOG("can not write %s.\n", fileName.c_str());
+    std::string path = std::string(directory) + std::string("/") + std::string(name);
+    FILE *file = fopen(path.c_str(), "wb");
+    if (file == NULL) {
+        UNI_ERROR_LOG("can not write %s.\n", path.c_str());
         return;
     }
-    F32 *dataTran = new F32[num];
-    for (U32 i = 0; i < num; i++) {
-        dataTran[i] = (F32)data[i];
-    }
-    fwrite(dataTran, sizeof(float), num, outfile);
-    fclose(outfile);
-    delete[] dataTran;
+    float *buffer = (float *)UNI_MALLOC(sizeof(float) * num);
+    transformToFloat(DT_F16, data, buffer, num);
+    fwrite(buffer, sizeof(float), num, file);
+    fclose(file);
+    UNI_FREE(buffer);
 }
 
-inline void readF32BinToF16(F16 *data, U32 num, CI8 *dataPath, CI8 *dataName)
+inline void readF32BinToF16(F16 *data, U32 num, CI8 *directory, CI8 *name)
 {
-    std::string filePath = dataPath;
-    CI8 lastFlag = filePath[filePath.length() - 1];
-    if (strcmp(&lastFlag, "/") != 0) {
-        filePath += "/";
-    }
-    std::string fileName = dataName;
-    fileName = filePath + fileName;
-    FILE *infile = fopen(fileName.c_str(), "rb");
-    if (infile == NULL) {
-        UNI_WARNING_LOG("can not read %s.\n", fileName.c_str());
+    std::string path = std::string(directory) + std::string("/") + std::string(name);
+    FILE *file = fopen(path.c_str(), "rb");
+    if (file == NULL) {
+        UNI_ERROR_LOG("can not read %s.\n", path.c_str());
         return;
     }
-    F32 *dataTran = new F32[num];
-    fread(dataTran, sizeof(float), num, infile);
-    for (U32 i = 0; i < num; i++) {
-        data[i] = (F16)dataTran[i];
-    }
-    fclose(infile);
-    delete[] dataTran;
+    float *buffer = (float *)UNI_MALLOC(sizeof(float) * num);
+    fread(buffer, sizeof(float), num, file);
+    transformFromFloat(DT_F16, buffer, data, num);
+    fclose(file);
+    UNI_FREE(buffer);
 }
 #endif
 

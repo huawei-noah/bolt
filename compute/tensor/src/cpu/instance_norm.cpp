@@ -46,7 +46,7 @@ inline EE instance_norm_template(
     F32 eps = 1e-6;
     if (axisDim == (int)inputDesc.dims[axis]) {
         for (I32 i = 0; i < loopOuter; i += 8) {
-            F32 mean[8] = {0};
+            double mean[8] = {0};
             for (I32 j = 0; j < loopInner; ++j) {
                 for (U32 ii = 0; ii < 8; ++ii) {
                     mean[ii] += input[i * loopInner + j * 8 + ii];

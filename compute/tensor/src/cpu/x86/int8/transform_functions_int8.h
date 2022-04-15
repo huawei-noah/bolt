@@ -24,10 +24,10 @@ inline void PaddingNCHWC16(
     DataFormat idf;
     U32 in, ic, ih, iw;
     CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    U32 paddingT = convParamSpec.padding_top;
-    U32 paddingB = convParamSpec.padding_bottom;
-    U32 paddingL = convParamSpec.padding_left;
-    U32 paddingR = convParamSpec.padding_right;
+    U32 paddingT = convParamSpec.pad_top;
+    U32 paddingB = convParamSpec.pad_bottom;
+    U32 paddingL = convParamSpec.pad_left;
+    U32 paddingR = convParamSpec.pad_right;
 
     U32 padih = paddingT + paddingB + ih;
     U32 padiw = paddingL + paddingR + iw;
@@ -38,8 +38,8 @@ inline void PaddingNCHWC16(
     U32 icNum = ic / 16;
     for (U32 c = 0; c < icNum; ++c) {
         U32 coff = c * padih * padiw * simdW;
-        memset(tmp + coff, 128, padiw * paddingT * simdW);
-        memset(tmp + coff + (ih + paddingT) * padiw * simdW, 128, padiw * paddingB * simdW);
+        UNI_MEMSET(tmp + coff, 128, padiw * paddingT * simdW);
+        UNI_MEMSET(tmp + coff + (ih + paddingT) * padiw * simdW, 128, padiw * paddingB * simdW);
     }
     for (U32 hc = 0; hc < ih * icNum; ++hc) {
         U32 c = hc / ih;
@@ -47,10 +47,10 @@ inline void PaddingNCHWC16(
         U32 h = hc % ih;
         U32 hoff = (h + paddingT) * padiw;
 
-        memset(tmp + coff + hoff * simdW, 128, paddingL * simdW);
-        memcpy(tmp + coff + (hoff + paddingL) * simdW, data + c * ih * iw * simdW + h * iw * simdW,
-            iw * simdW);
-        memset(tmp + coff + (hoff + (paddingL + iw)) * simdW, 128, paddingR * simdW);
+        UNI_MEMSET(tmp + coff + hoff * simdW, 128, paddingL * simdW);
+        UNI_MEMCPY(tmp + coff + (hoff + paddingL) * simdW,
+            data + c * ih * iw * simdW + h * iw * simdW, iw * simdW);
+        UNI_MEMSET(tmp + coff + (hoff + (paddingL + iw)) * simdW, 128, paddingR * simdW);
     }
 
     icNum *= 16;
@@ -58,14 +58,14 @@ inline void PaddingNCHWC16(
     while (resC > 0) {
         U32 cx = (resC == 12) ? 8 : resC;  // resC: 4, 8, 12, 16
         U32 coff = icNum * padih * padiw;
-        memset(tmp + coff, 128, padiw * paddingT * cx);
-        memset(tmp + coff + (ih + paddingT) * padiw * cx, 128, padiw * paddingB * cx);
+        UNI_MEMSET(tmp + coff, 128, padiw * paddingT * cx);
+        UNI_MEMSET(tmp + coff + (ih + paddingT) * padiw * cx, 128, padiw * paddingB * cx);
         for (U32 h = 0; h < ih; ++h) {
             U32 hoff = (h + paddingT) * padiw;
-            memset(tmp + coff + hoff * cx, 128, paddingL * cx);
-            memcpy(
+            UNI_MEMSET(tmp + coff + hoff * cx, 128, paddingL * cx);
+            UNI_MEMCPY(
                 tmp + coff + (hoff + paddingL) * cx, data + icNum * ih * iw + h * iw * cx, iw * cx);
-            memset(tmp + coff + (hoff + (paddingL + iw)) * cx, 128, paddingR * cx);
+            UNI_MEMSET(tmp + coff + (hoff + (paddingL + iw)) * cx, 128, paddingR * cx);
         }
         resC -= cx;
     }
@@ -79,10 +79,10 @@ inline void PaddingNCHW2NCHWC16(
     DataFormat idf;
     U32 in, ic, ih, iw;
     CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    U32 paddingT = convParamSpec.padding_top;
-    U32 paddingB = convParamSpec.padding_bottom;
-    U32 paddingL = convParamSpec.padding_left;
-    U32 paddingR = convParamSpec.padding_right;
+    U32 paddingT = convParamSpec.pad_top;
+    U32 paddingB = convParamSpec.pad_bottom;
+    U32 paddingL = convParamSpec.pad_left;
+    U32 paddingR = convParamSpec.pad_right;
 
     U32 padih = paddingT + paddingB + ih;
     U32 padiw = paddingL + paddingR + iw;
@@ -92,8 +92,8 @@ inline void PaddingNCHW2NCHWC16(
     U32 icNum = ic / 16;
     for (U32 c = 0; c < icNum; ++c) {
         U32 coff = c * padih * padiw * simdW;
-        memset(tmp + coff, 128, padiw * paddingT * simdW);
-        memset(tmp + coff + (ih + paddingT) * padiw * simdW, 128, padiw * paddingB * simdW);
+        UNI_MEMSET(tmp + coff, 128, padiw * paddingT * simdW);
+        UNI_MEMSET(tmp + coff + (ih + paddingT) * padiw * simdW, 128, padiw * paddingB * simdW);
     }
     for (U32 hc = 0; hc < ih * icNum; ++hc) {
         U32 c = hc / ih;
@@ -101,7 +101,7 @@ inline void PaddingNCHW2NCHWC16(
         U32 h = hc % ih;
         U32 hoff = (h + paddingT) * padiw;
 
-        memset(tmp + coff + hoff * simdW, 128, paddingL * simdW);
+        UNI_MEMSET(tmp + coff + hoff * simdW, 128, paddingL * simdW);
         for (U32 w = 0; w < iw; ++w) {
             for (U32 s = 0; s < simdW; ++s) {
                 U32 iIdx = (c * simdW + s) * ih * iw + h * iw + w;
@@ -109,7 +109,7 @@ inline void PaddingNCHW2NCHWC16(
                 tmp[oIdx] = data[iIdx];
             }
         }
-        memset(tmp + coff + (hoff + (paddingL + iw)) * simdW, 128, paddingR * simdW);
+        UNI_MEMSET(tmp + coff + (hoff + (paddingL + iw)) * simdW, 128, paddingR * simdW);
     }
 
     icNum *= 16;
@@ -118,11 +118,11 @@ inline void PaddingNCHW2NCHWC16(
         U32 icx = ic - icNum;
         U32 cx = (resC == 12) ? 8 : resC;  // resC: 4, 8, 12, 16
         U32 coff = icNum * padih * padiw;
-        memset(tmp + coff, 128, padiw * paddingT * cx);
-        memset(tmp + coff + (ih + paddingT) * padiw * cx, 128, padiw * paddingB * cx);
+        UNI_MEMSET(tmp + coff, 128, padiw * paddingT * cx);
+        UNI_MEMSET(tmp + coff + (ih + paddingT) * padiw * cx, 128, padiw * paddingB * cx);
         for (U32 h = 0; h < ih; ++h) {
             U32 hoff = (h + paddingT) * padiw;
-            memset(tmp + coff + hoff * cx, 128, paddingL * cx);
+            UNI_MEMSET(tmp + coff + hoff * cx, 128, paddingL * cx);
             for (U32 w = 0; w < iw; ++w) {
                 U32 woff = (hoff + paddingL) * cx + w * cx;
                 for (U32 s = 0; s < icx; ++s) {
@@ -130,9 +130,9 @@ inline void PaddingNCHW2NCHWC16(
                     U32 oIdx = coff + woff + s;
                     tmp[oIdx] = data[iIdx];
                 }
-                memset(tmp + coff + woff + icx, 128, cx - icx);
+                UNI_MEMSET(tmp + coff + woff + icx, 128, cx - icx);
             }
-            memset(tmp + coff + (hoff + (paddingL + iw)) * cx, 128, paddingR * cx);
+            UNI_MEMSET(tmp + coff + (hoff + (paddingL + iw)) * cx, 128, paddingR * cx);
         }
         resC -= cx;
     }
@@ -146,10 +146,10 @@ inline void PaddingNCHWC8ToNCHWC16(
     DataFormat idf;
     U32 in, ic, ih, iw;
     CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    U32 paddingT = convParamSpec.padding_top;
-    U32 paddingB = convParamSpec.padding_bottom;
-    U32 paddingL = convParamSpec.padding_left;
-    U32 paddingR = convParamSpec.padding_right;
+    U32 paddingT = convParamSpec.pad_top;
+    U32 paddingB = convParamSpec.pad_bottom;
+    U32 paddingL = convParamSpec.pad_left;
+    U32 paddingR = convParamSpec.pad_right;
 
     U32 padih = paddingT + paddingB + ih;
     U32 padiw = paddingL + paddingR + iw;
@@ -161,8 +161,8 @@ inline void PaddingNCHWC8ToNCHWC16(
     if (paddingT != 0 || paddingB != 0) {
         for (U32 c = 0; c < icNum; ++c) {
             U32 coff = c * padih * padiw * simdW;
-            memset(tmp + coff, 128, padiw * paddingT * simdW);
-            memset(tmp + coff + (ih + paddingT) * padiw * simdW, 128, padiw * paddingB * simdW);
+            UNI_MEMSET(tmp + coff, 128, padiw * paddingT * simdW);
+            UNI_MEMSET(tmp + coff + (ih + paddingT) * padiw * simdW, 128, padiw * paddingB * simdW);
         }
     }
     for (U32 hc = 0; hc < ih * icNum; ++hc) {
@@ -171,32 +171,32 @@ inline void PaddingNCHWC8ToNCHWC16(
         U32 h = hc % ih;
         U32 hoff = (h + paddingT) * padiw;
 
-        memset(tmp + coff + hoff * simdW, 128, paddingL * simdW);
+        UNI_MEMSET(tmp + coff + hoff * simdW, 128, paddingL * simdW);
         for (U32 w = 0; w < iw; ++w) {
             for (U32 s = 0; s < simdW; s += 8) {
                 U32 iIdx = (c * simdW + s) * ih * iw + (h * iw + w) * 8;
                 U32 oIdx = coff + (hoff + paddingL) * simdW + w * simdW + s;
-                memcpy(tmp + oIdx, data + iIdx, 8);
+                UNI_MEMCPY(tmp + oIdx, data + iIdx, 8);
             }
         }
-        memset(tmp + coff + (hoff + (paddingL + iw)) * simdW, 128, paddingR * simdW);
+        UNI_MEMSET(tmp + coff + (hoff + (paddingL + iw)) * simdW, 128, paddingR * simdW);
     }
 
     icNum *= 16;
     if (ic > icNum) {
         U32 cx = 8;
         U32 coff = icNum * padih * padiw;
-        memset(tmp + coff, 128, padiw * paddingT * cx);
-        memset(tmp + coff + (ih + paddingT) * padiw * cx, 128, padiw * paddingB * cx);
+        UNI_MEMSET(tmp + coff, 128, padiw * paddingT * cx);
+        UNI_MEMSET(tmp + coff + (ih + paddingT) * padiw * cx, 128, padiw * paddingB * cx);
         for (U32 h = 0; h < ih; ++h) {
             U32 hoff = (h + paddingT) * padiw;
-            memset(tmp + coff + hoff * cx, 128, paddingL * cx);
+            UNI_MEMSET(tmp + coff + hoff * cx, 128, paddingL * cx);
             for (U32 w = 0; w < iw; ++w) {
                 U32 iIdx = icNum * ih * iw + (h * iw + w) * 8;
                 U32 oIdx = coff + (hoff + paddingL) * cx + w * cx;
-                memcpy(tmp + oIdx, data + iIdx, 8);
+                UNI_MEMCPY(tmp + oIdx, data + iIdx, 8);
             }
-            memset(tmp + coff + (hoff + (paddingL + iw)) * cx, 128, paddingR * cx);
+            UNI_MEMSET(tmp + coff + (hoff + (paddingL + iw)) * cx, 128, paddingR * cx);
         }
     }
 }

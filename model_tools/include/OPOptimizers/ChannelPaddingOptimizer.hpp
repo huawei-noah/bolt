@@ -28,7 +28,7 @@ class ChannelPaddingOptimizer : public OPOptimizer {
     {
         OperatorSpec channelResizeOperator = mt_create_operator(name, OT_ChannelResize, 1, 1);
         if (symmetric == nullptr || symmetric == NULL) {
-            memset(channelResizeOperator.ps.channel_resize_spec.symmetric, 0, NAME_LEN);
+            UNI_MEMSET(channelResizeOperator.ps.channel_resize_spec.symmetric, 0, NAME_LEN);
         } else {
             str_copy(channelResizeOperator.ps.channel_resize_spec.symmetric, symmetric,
                 strlen(symmetric));
@@ -79,7 +79,7 @@ class ChannelPaddingOptimizer : public OPOptimizer {
         std::string channelResizeNamePrefix = "ChannelResize_";
         for (int i = 0; i < spec->num_operator_specs; i++) {
             if (spec->ops[i].type == OT_Conv &&
-                spec->ops[i].ps.conv_spec.convolution_type == Convolution_Depthwise) {
+                spec->ops[i].ps.conv_spec.convolution_type == CONVOLUTION_DEPTHWISE) {
                 OperatorSpec currentOperator = spec->ops[i];
                 U32 numKernels = currentOperator.ps.conv_spec.num_outputs;
                 U32 paddingBase = channelAlign;
@@ -97,24 +97,19 @@ class ChannelPaddingOptimizer : public OPOptimizer {
                 U8 *weight = spec->ws[weightIndex].weight;
                 spec->ws[weightIndex].bytes_of_weight = weightSizeNew;
                 spec->ws[weightIndex].weight =
-                    (U8 *)mt_new_storage(spec->ws[weightIndex].bytes_of_weight);
-                memcpy(spec->ws[weightIndex].weight, weight, weightSize);
-                memset(spec->ws[weightIndex].weight + weightSize, 0, weightSizeNew - weightSize);
-                if (outOfFileMapRange(weight, spec->mfd)) {
-                    delete weight;
-                }
+                    (U8 *)mt_malloc(spec->ws[weightIndex].bytes_of_weight);
+                UNI_MEMCPY(spec->ws[weightIndex].weight, weight, weightSize);
+                UNI_MEMSET(spec->ws[weightIndex].weight + weightSize, 0, weightSizeNew - weightSize);
+                mt_free(weight, spec);
                 U8 *vec = spec->ws[weightIndex].vec;
                 if (vec != nullptr) {
                     U32 vecSize = spec->ws[weightIndex].bytes_of_vec;
                     U32 vecSizeNew = spec->ws[weightIndex].bytes_of_vec / numKernels * numKernelsNew;
                     spec->ws[weightIndex].bytes_of_vec = vecSizeNew;
-                    spec->ws[weightIndex].vec =
-                        (U8 *)mt_new_storage(spec->ws[weightIndex].bytes_of_vec);
-                    memcpy((U8 *)(spec->ws[weightIndex].vec), vec, vecSize);
-                    memset((U8 *)(spec->ws[weightIndex].vec + vecSize), 0, vecSizeNew - vecSize);
-                    if (outOfFileMapRange(vec, spec->mfd)) {
-                        delete vec;
-                    }
+                    spec->ws[weightIndex].vec = (U8 *)mt_malloc(spec->ws[weightIndex].bytes_of_vec);
+                    UNI_MEMCPY((U8 *)(spec->ws[weightIndex].vec), vec, vecSize);
+                    UNI_MEMSET((U8 *)(spec->ws[weightIndex].vec + vecSize), 0, vecSizeNew - vecSize);
+                    mt_free(vec, spec);
                 }
                 std::string channelResizeName1 = channelResizeNamePrefix + std::to_string(i);
                 std::string channelResizeName2 = channelResizeNamePrefix + std::to_string(i + 2);
@@ -128,10 +123,10 @@ class ChannelPaddingOptimizer : public OPOptimizer {
                 continue;
             }
             if ((spec->ops[i].type == OT_Conv &&
-                    (spec->ops[i].ps.conv_spec.convolution_type == Convolution_Pointwise ||
-                        spec->ops[i].ps.conv_spec.convolution_type == Convolution_Dilation)) ||
+                    (spec->ops[i].ps.conv_spec.convolution_type == CONVOLUTION_POINTWISE ||
+                        spec->ops[i].ps.conv_spec.convolution_type == CONVOLUTION_DILATION)) ||
                 (spec->ops[i].type == OT_Deconvolution &&
-                    spec->ops[i].ps.conv_spec.convolution_type == Convolution_Deconvolution)) {
+                    spec->ops[i].ps.conv_spec.convolution_type == CONVOLUTION_DECONVOLUTION)) {
                 OperatorSpec currentOperator = spec->ops[i];
                 U32 groups = currentOperator.ps.conv_spec.group;
                 U32 paddingBase = channelAlign * groups;
@@ -159,8 +154,8 @@ class ChannelPaddingOptimizer : public OPOptimizer {
                 U8 *weight = spec->ws[weightIndex].weight;
                 spec->ws[weightIndex].bytes_of_weight = weightSizeNew;
                 spec->ws[weightIndex].weight =
-                    (U8 *)mt_new_storage(spec->ws[weightIndex].bytes_of_weight);
-                memset(spec->ws[weightIndex].weight, 0, weightSizeNew);
+                    (U8 *)mt_malloc(spec->ws[weightIndex].bytes_of_weight);
+                UNI_MEMSET(spec->ws[weightIndex].weight, 0, weightSizeNew);
                 U32 ocGroupSize = numKernels / groups;
                 U32 ocGroupSizeNew = numKernelsNew / groups;
 
@@ -176,7 +171,7 @@ class ChannelPaddingOptimizer : public OPOptimizer {
                                 U32 indexNew = ((cg * icGroupSizeNew + ic) * numKernelsNew +
                                                    og * ocGroupSizeNew) *
                                     tileSize;
-                                memcpy((U8 *)(spec->ws[weightIndex].weight) + indexNew,
+                                UNI_MEMCPY((U8 *)(spec->ws[weightIndex].weight) + indexNew,
                                     weight + index, tileSize * ocGroupSize);
                             }
                         }
@@ -188,33 +183,28 @@ class ChannelPaddingOptimizer : public OPOptimizer {
                                 U32 index = ((og * ocGroupSize + oc) * inputChannels + c) * tileSize;
                                 U32 indexNew =
                                     ((og * ocGroupSizeNew + oc) * inputChannels + c) * tileSize;
-                                memcpy((U8 *)(spec->ws[weightIndex].weight) + indexNew,
+                                UNI_MEMCPY((U8 *)(spec->ws[weightIndex].weight) + indexNew,
                                     weight + index, tileSize);
                             }
                         }
                     }
                 }
-                if (outOfFileMapRange(weight, spec->mfd)) {
-                    delete weight;
-                }
+                mt_free(weight, spec);
                 U8 *vec = spec->ws[weightIndex].vec;
                 if (vec != nullptr && numKernels != numKernelsNew) {
                     U32 vecSize = spec->ws[weightIndex].bytes_of_vec;
                     U32 vecSizeNew = spec->ws[weightIndex].bytes_of_vec / numKernels * numKernelsNew;
                     spec->ws[weightIndex].bytes_of_vec = vecSizeNew;
-                    spec->ws[weightIndex].vec =
-                        (U8 *)mt_new_storage(spec->ws[weightIndex].bytes_of_vec);
+                    spec->ws[weightIndex].vec = (U8 *)mt_malloc(spec->ws[weightIndex].bytes_of_vec);
                     U32 tile = vecSize / groups;
                     U32 tileNew = vecSizeNew / groups;
                     for (U32 g = 0; g < groups; g++) {
-                        memcpy(
+                        UNI_MEMCPY(
                             (U8 *)(spec->ws[weightIndex].vec) + g * tileNew, vec + g * tile, tile);
-                        memset((U8 *)(spec->ws[weightIndex].vec) + g * tileNew + tile, 0,
+                        UNI_MEMSET((U8 *)(spec->ws[weightIndex].vec) + g * tileNew + tile, 0,
                             tileNew - tile);
                     }
-                    if (outOfFileMapRange(vec, spec->mfd)) {
-                        delete vec;
-                    }
+                    mt_free(vec, spec);
                 }
                 int channelResizeIndex1 = i;
                 int channelResizeIndex2 = i + 2;

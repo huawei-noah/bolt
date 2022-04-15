@@ -413,7 +413,7 @@ EE ocl_trans_mem(
                     CHECK_STATUS(NOT_MATCH);
                 }
                 CHECK_STATUS(set_padding_opt_mali(
-                    true, Pad_Constant, DT_F16, GCL_MEM_BUF, GCL_MEM_BUF, kernelName, &kernelOpt));
+                    true, PAD_CONSTANT, DT_F16, GCL_MEM_BUF, GCL_MEM_BUF, kernelName, &kernelOpt));
                 CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
                 CHECK_STATUS(gcl_set_kernelArgs(kernel, sw_str, sh_str, dw_str, dh_str, 0, 0,
                     sw_str, sh_str, dw_str, dh_str, pl, pr, pt, pb, gs[0], gs[1], srcMem, dstMem));
@@ -494,7 +494,7 @@ EE ocl_map_mem_write(
                 CHECK_STATUS(NOT_MATCH);
             }
             CHECK_STATUS(set_padding_opt_mali(
-                true, Pad_Constant, DT_F16, GCL_MEM_BUF, GCL_MEM_BUF, kernelName, &kernelOpt));
+                true, PAD_CONSTANT, DT_F16, GCL_MEM_BUF, GCL_MEM_BUF, kernelName, &kernelOpt));
             CHECK_STATUS(gcl_get_kernel_from_map(handle, kernelName, &kernel, &kernelOpt));
             CHECK_STATUS(gcl_set_kernelArgs(kernel, w, h, w_str, h_str, offset, 0, w, h, w_str,
                 h_str, pl, pr, pt, pb, gs[0], gs[1], gclMem->mem, gclMem->mem));

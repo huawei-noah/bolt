@@ -11,7 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string.h>
 #include <math.h>
 
 #include "cpu/general/tensor_computing_general.h"
@@ -69,14 +68,12 @@ static EE lstmcell(TensorDesc xDesc,
 
     U32 batch = in;
     U32 xDim = ix;
-    U32 hDim = rnnParamSpec.numOutput;
-    I32 column = (rnnParamSpec.numProjection > 0) ? rnnParamSpec.numProjection
-                                                  : rnnParamSpec.numOutput;
-    int num1 = rnnParamSpec.biDirection ? 2 : 1;
+    U32 hDim = rnnParamSpec.num_outputs;
+    I32 column = (rnnParamSpec.num_projection > 0) ? rnnParamSpec.num_projection
+                                                   : rnnParamSpec.num_outputs;
+    int num1 = rnnParamSpec.bi_direction ? 2 : 1;
     U32 steps = batchStrideH / hDim / num1;
-    F32 forgetBias = rnnParamSpec.forgetBias;
-    ActivationMode activationMode = rnnParamSpec.activationMode;
-    if (activationMode != ACTIVATION_TANH) {
+    if (rnnParamSpec.activation_type != ACTIVATION_TANH) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
 
@@ -100,8 +97,8 @@ static EE lstmcell(TensorDesc xDesc,
     for (U32 m = 0; m < batch; m++) {
         T *lastBatchH = lastHArray + m * lastHStride;
         if (xDim > 0) {
-            memcpy(xhArray, currentXArray + m * batchStrideX, xDim * sizeof(T));
-            memcpy(xhArray + xDim, lastBatchH, hDim * sizeof(T));
+            UNI_MEMCPY(xhArray, currentXArray + m * batchStrideX, xDim * sizeof(T));
+            UNI_MEMCPY(xhArray + xDim, lastBatchH, hDim * sizeof(T));
         } else {
             intermediateH = tmpArray;
             xhArray = lastBatchH;
@@ -109,7 +106,7 @@ static EE lstmcell(TensorDesc xDesc,
 
         // MVM
         const T *mBias = (const T *)bias[0] + m * steps * column * 4;
-        memcpy(intermediateH, mBias, column * 4 * sizeof(T));
+        UNI_MEMCPY(intermediateH, mBias, column * 4 * sizeof(T));
         mvm_nkn32_template<T>(fn / 32, fk, (const T *)filter[0], xhArray, intermediateH);
 
         T *out_i = intermediateH;
@@ -121,12 +118,12 @@ static EE lstmcell(TensorDesc xDesc,
         T *currentBatchH = currentHArray + m * currentHStride;
         T *currentOutput = outputArray + m * batchStrideH;
         T *tmpState, *tmpHH, *tmpH;
-        if (rnnParamSpec.zoneoutCell == 0) {
+        if (rnnParamSpec.zoneout_cell == 0) {
             tmpState = currentBatchState;
         } else {
             tmpState = out_i;
         }
-        if (rnnParamSpec.numProjection > 0) {
+        if (rnnParamSpec.num_projection > 0) {
             tmpHH = out_g;
             tmpH = currentOutput;
         } else {
@@ -138,7 +135,7 @@ static EE lstmcell(TensorDesc xDesc,
             F32 C_s = lastBatchState[h];
             F32 I_s = 1.0 / (1.0 + exp(-out_i[h]));
             F32 G_s = tanh(out_g[h]);
-            F32 F_s = 1.0 / (1.0 + exp(-(out_f[h] + forgetBias)));
+            F32 F_s = 1.0 / (1.0 + exp(-(out_f[h] + rnnParamSpec.forget_bias)));
             F32 O_s = 1.0 / (1.0 + exp(-out_o[h]));
             C_s = C_s * F_s + I_s * G_s;
             F32 value = O_s * tanh(C_s);
@@ -146,28 +143,28 @@ static EE lstmcell(TensorDesc xDesc,
             tmpHH[h] = value;
         }
 
-        if (rnnParamSpec.zoneoutCell != 0) {
-            array_scale_template<T>(tmpState, tmpState, column, 1 - rnnParamSpec.zoneoutCell, 0);
+        if (rnnParamSpec.zoneout_cell != 0) {
+            array_scale_template<T>(tmpState, tmpState, column, 1 - rnnParamSpec.zoneout_cell, 0);
             array_scale_template<T>(
-                lastBatchState, lastBatchState, column, rnnParamSpec.zoneoutCell, 0);
+                lastBatchState, lastBatchState, column, rnnParamSpec.zoneout_cell, 0);
             array_add_template<T>(tmpState, lastBatchState, currentBatchState, column);
         }
 
-        if (rnnParamSpec.numProjection > 0) {
-            memset(tmpH, 0, sizeof(T) * hDim);
+        if (rnnParamSpec.num_projection > 0) {
+            UNI_MEMSET(tmpH, 0, sizeof(T) * hDim);
             mvm_nkn32_template<T>(
-                hDim / 32, rnnParamSpec.numProjection, (const T *)filter[1], tmpHH, tmpH);
+                hDim / 32, rnnParamSpec.num_projection, (const T *)filter[1], tmpHH, tmpH);
         }
-        if (rnnParamSpec.zoneoutOutput != 0) {
-            if (rnnParamSpec.numProjection > 0) {
-                array_scale_template<T>(tmpH, out_f, hDim, 1 - rnnParamSpec.zoneoutOutput, 0);
+        if (rnnParamSpec.zoneout_output != 0) {
+            if (rnnParamSpec.num_projection > 0) {
+                array_scale_template<T>(tmpH, out_f, hDim, 1 - rnnParamSpec.zoneout_output, 0);
             } else {
-                array_scale_template<T>(tmpHH, out_f, hDim, 1 - rnnParamSpec.zoneoutOutput, 0);
+                array_scale_template<T>(tmpHH, out_f, hDim, 1 - rnnParamSpec.zoneout_output, 0);
             }
-            array_scale_template<T>(lastBatchH, lastBatchH, hDim, rnnParamSpec.zoneoutOutput, 0);
+            array_scale_template<T>(lastBatchH, lastBatchH, hDim, rnnParamSpec.zoneout_output, 0);
             array_add_template<T>(out_f, lastBatchH, currentBatchH, hDim);
         } else {
-            memcpy(currentBatchH, currentOutput, sizeof(T) * hDim);
+            UNI_MEMCPY(currentBatchH, currentOutput, sizeof(T) * hDim);
         }
     }
     return SUCCESS;
@@ -210,12 +207,11 @@ static EE grucell(TensorDesc xDesc,
 
     U32 batch = in;
     U32 xDim = ix;
-    U32 hDim = rnnParamSpec.numOutput;
+    U32 hDim = rnnParamSpec.num_outputs;
     I32 column = hDim;
-    int num1 = rnnParamSpec.biDirection ? 2 : 1;
+    int num1 = rnnParamSpec.bi_direction ? 2 : 1;
     U32 steps = batchStrideH / hDim / num1;
-    ActivationMode activationMode = rnnParamSpec.activationMode;
-    if (activationMode != ACTIVATION_TANH) {
+    if (rnnParamSpec.activation_type != ACTIVATION_TANH) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
 
@@ -237,15 +233,15 @@ static EE grucell(TensorDesc xDesc,
         T *currentBatchH = currentHArray + m * currentHStride;
         T *currentOutput = outputArray + m * batchStrideH;
         if (xDim > 0) {
-            memcpy(xhArray, currentXArray + m * batchStrideX, xDim * sizeof(T));
-            memcpy(xhArray + xDim, lastBatchH, hDim * sizeof(T));
+            UNI_MEMCPY(xhArray, currentXArray + m * batchStrideX, xDim * sizeof(T));
+            UNI_MEMCPY(xhArray + xDim, lastBatchH, hDim * sizeof(T));
         } else {
             intermediateH = tmpArray;
             xhArray = lastBatchH;
-            memcpy(currentOutput, lastBatchH, hDim * sizeof(T));
+            UNI_MEMCPY(currentOutput, lastBatchH, hDim * sizeof(T));
         }
         const T *mBias = (const T *)bias[0] + m * steps * column * 3;
-        memcpy(intermediateH, mBias, column * 2 * sizeof(T));
+        UNI_MEMCPY(intermediateH, mBias, column * 2 * sizeof(T));
         mvm_nkn32_template<T>(column * 2 / 32, fk, (const T *)filter[0], xhArray, intermediateH);
         T *out_z = intermediateH;
         T *out_r = out_z + column;
@@ -258,12 +254,12 @@ static EE grucell(TensorDesc xDesc,
         if (rnnParamSpec.mode == RNN_GRU_LBR) {
             T *h_x_b = (T *)mBias + column * 2;
             T *h_h_b = (T *)bias[1];
-            memcpy(out_h, h_h_b, column * sizeof(T));
+            UNI_MEMCPY(out_h, h_h_b, column * sizeof(T));
             mvm_nkn32_template<T>(column / 32, hDim,
                 (const T *)filter[0] + column * 2 * fk + column * xDim, xhArray + xDim, out_h);
             array_mul_template<T>(out_r, out_h, out_h, hDim);
             if (xDim > 0) {
-                memcpy(out_r, h_x_b, column * sizeof(T));
+                UNI_MEMCPY(out_r, h_x_b, column * sizeof(T));
                 mvm_nkn32_template<T>(
                     column / 32, xDim, (const T *)filter[0] + column * 2 * fk, xhArray, out_r);
                 h_x_b = out_r;
@@ -271,7 +267,7 @@ static EE grucell(TensorDesc xDesc,
             array_add_template<T>(h_x_b, out_h, out_h, hDim);
         } else {
             array_mul_template<T>(out_r, xhArray + xDim, xhArray + xDim, hDim);
-            memcpy(out_h, (const T *)mBias + column * 2, column * sizeof(T));
+            UNI_MEMCPY(out_h, (const T *)mBias + column * 2, column * sizeof(T));
             mvm_nkn32_template<T>(
                 column / 32, fk, (const T *)filter[0] + column * 2 * fk, xhArray, out_h);
         }
@@ -287,7 +283,7 @@ static EE grucell(TensorDesc xDesc,
         array_scale_template<T>(out_z, out_z, column, -1, 1);
         array_mul_template<T>(out_z, out_h, out_h, column);
         array_add_template<T>(out_r, out_h, currentOutput, column);
-        memcpy(currentBatchH, currentOutput, sizeof(T) * hDim);
+        UNI_MEMCPY(currentBatchH, currentOutput, sizeof(T) * hDim);
     }
     return SUCCESS;
 }

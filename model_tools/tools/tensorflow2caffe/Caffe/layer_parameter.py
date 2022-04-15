@@ -214,6 +214,7 @@ class LayerParameter():
     #      }
     #      optional DataType data_type = 1;
     #      optional BlobShape shape = 2;
+    #      optional float value = 3 [default = 0];
     #    }
     #
     # prototxt example
@@ -228,11 +229,13 @@ class LayerParameter():
     #           dim: 100
     #           dim: 200
     #         }
+    #         value: 0
     #       }
     #     }
-    def memory_param(self, shape, data_type):
+    def memory_param(self, shape, data_type, value=0):
         preallocated_memory_param = pb.PreAllocatedMemoryParameter()
         preallocated_memory_param.data_type = self.convert_data_type(data_type)
+        preallocated_memory_param.value = value;
         for i in shape:
             preallocated_memory_param.shape.dim.append(i)
         self.layerParameter.preallocated_memory_param.CopyFrom(preallocated_memory_param)
