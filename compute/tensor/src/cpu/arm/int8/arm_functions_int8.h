@@ -14,40 +14,43 @@
 #ifndef _H_ARM_FUNCTIONS_INT8
 #define _H_ARM_FUNCTIONS_INT8
 
+#include "cpu/cpu_functions_template.h"
 #include "arm_neon_expand.h"
-#include "parameter_spec.h"
 
 inline EE activation_int8(INT8 *input, U32 len, ActivationParamSpec activationDesc, INT8 *output)
 {
-    int8x16_t in, out;
     int8x16_t zero = vdupq_n_s8(0);
-    U32 len_main = len / 16;
-    U32 len_tail = len % 16;
-
+    U32 loops = len / 16 * 16;
+    EE ret = SUCCESS;
     switch (activationDesc.mode) {
         case ACTIVATION_NULL: {
+            if (output != input) {
+                UNI_MEMCPY(output, input, sizeof(INT8) * len);
+            }
+            loops = len;
             break;
         }
         case ACTIVATION_RELU: {
             if (activationDesc.value[0] != 0) {
-                return NOT_SUPPORTED;
-            }
-            for (U32 i = 0; i < len_main; i++) {
-                in = vld1q_s8(input);
-                out = vmaxq_s8(zero, in);
-                vst1q_s8(output, out);
-                input += 16;
-                output += 16;
-            }
-            for (U32 i = 0; i < len_tail; i++) {
-                output[i] = (input[i] < 0) ? 0 : input[i];
+                ret = NOT_SUPPORTED;
+            } else {
+                for (U32 i = 0; i < loops; i += 16) {
+                    int8x16_t in = vld1q_s8(input + i);
+                    int8x16_t out = vmaxq_s8(zero, in);
+                    vst1q_s8(output + i, out);
+                }
             }
             break;
         }
         default:
-            return NOT_SUPPORTED;
+            ret = NOT_SUPPORTED;
+            break;
     }
-
-    return SUCCESS;
+    if (ret == SUCCESS) {
+        for (U32 i = loops; i < len; i++) {
+            ret = activation_template<INT8>(activationDesc, input[i], output + i);
+        }
+    }
+    return ret;
 }
 #endif

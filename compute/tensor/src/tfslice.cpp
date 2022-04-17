@@ -22,10 +22,7 @@
 EE tfslice_infer_output_size(
     Tensor *inputTensor, TfSliceParamSpec p, Tensor *outputTensor, ArchInfo_t archInfo)
 {
-    if (inputTensor == nullptr) {
-        CHECK_STATUS(NULL_POINTER);
-    }
-    if (outputTensor == nullptr) {
+    if (inputTensor == nullptr || outputTensor == nullptr) {
         CHECK_STATUS(NULL_POINTER);
     }
     TensorDesc inputDesc = inputTensor->get_desc();
@@ -38,8 +35,15 @@ EE tfslice_infer_output_size(
         }
 #endif
     }
+    EE ret = SUCCESS;
+#ifdef _USE_CPU
+    if (tensorIsShape(inputDesc)) {
+        ret = tfslice_cpu(inputDesc, inputDesc.dims + inputDesc.nDims, p, outputDesc,
+            outputDesc.dims + outputDesc.nDims);
+    }
+#endif
     outputTensor->resize(outputDesc);
-    return SUCCESS;
+    return ret;
 }
 
 EE tfslice_infer_forward_tmp_bytes(

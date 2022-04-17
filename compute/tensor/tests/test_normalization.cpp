@@ -22,6 +22,8 @@ int normalizationTest(int argc, char **argv, DataType dt)
     U32 ic = atoi(argv[3]);
     U32 ih = atoi(argv[4]);
     U32 iw = atoi(argv[5]);
+    LayerNormParamSpec p;
+    p.axis = -1;
 
     DataFormat df = DF_MTK;
     Tensor inputTensor;
@@ -30,7 +32,7 @@ int normalizationTest(int argc, char **argv, DataType dt)
     inputTensor.alloc();
     U32 input_len = tensorNumElements(inputDesc);
     U8 *input = ut_input_v(input_len, dt, UT_INIT_RANDOM);
-    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inputDesc));
+    UNI_MEMCPY(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inputDesc));
 
     // set output
     Tensor outputTensor, outputTensorRef;
@@ -56,16 +58,16 @@ int normalizationTest(int argc, char **argv, DataType dt)
     betaTensor.resize(betaDesc);
     alphaTensor.alloc();
     betaTensor.alloc();
-    memcpy(get_ptr_from_tensor(alphaTensor, CPU_GENERAL), alpha_list, tensorNumBytes(alphaDesc));
-    memcpy(get_ptr_from_tensor(betaTensor, CPU_GENERAL), beta_list, tensorNumBytes(betaDesc));
+    UNI_MEMCPY(get_ptr_from_tensor(alphaTensor, CPU_GENERAL), alpha_list, tensorNumBytes(alphaDesc));
+    UNI_MEMCPY(get_ptr_from_tensor(betaTensor, CPU_GENERAL), beta_list, tensorNumBytes(betaDesc));
 
     if (UT_CHECK) {
         CHECK_STATUS(layer_normalization(
-            inputTensor, alphaTensor, betaTensor, tmpTensor, outputTensor, &UT_CPU_ARCHINFO));
+            inputTensor, p, alphaTensor, betaTensor, tmpTensor, outputTensor, &UT_CPU_ARCHINFO));
 
         // naive implement
-        CHECK_STATUS(layer_normalization(
-            inputTensor, alphaTensor, betaTensor, tmpTensor, outputTensorRef, &UT_SERIAL_ARCHINFO));
+        CHECK_STATUS(layer_normalization(inputTensor, p, alphaTensor, betaTensor, tmpTensor,
+            outputTensorRef, &UT_SERIAL_ARCHINFO));
 
         // check
         ut_check_v(get_ptr_from_tensor(outputTensor, CPU_GENERAL),
@@ -77,7 +79,7 @@ int normalizationTest(int argc, char **argv, DataType dt)
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
         CHECK_STATUS(layer_normalization(
-            inputTensor, alphaTensor, betaTensor, tmpTensor, outputTensor, &UT_CPU_ARCHINFO));
+            inputTensor, p, alphaTensor, betaTensor, tmpTensor, outputTensor, &UT_CPU_ARCHINFO));
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;

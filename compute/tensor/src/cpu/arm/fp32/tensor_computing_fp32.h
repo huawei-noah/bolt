@@ -55,22 +55,7 @@ EE convolution_gemm_V8(TensorDesc inputDesc,
     TensorDesc outputDesc,
     F32 *outArray,
     ActivationParamSpec activationDesc);
-#else
-EE convolution_gemm_V7(TensorDesc inputDesc,
-    F32 *inArray,
-    TensorDesc filterDesc,
-    const F32 *filterArray,
-    ConvolutionParamSpec convParamSpec,
-    TensorDesc biasDesc,
-    const F32 *biasArray,
-    U32 tmpBytes,
-    void *tmp,
-    TensorDesc outputDesc,
-    F32 *outArray,
-    ActivationParamSpec activationDesc);
-#endif
 
-#ifdef __aarch64__
 EE convolution_gemm_icnchw_V8(TensorDesc inputDesc,
     F32 *inArray,
     TensorDesc filterDesc,
@@ -84,6 +69,19 @@ EE convolution_gemm_icnchw_V8(TensorDesc inputDesc,
     F32 *outArray,
     ActivationParamSpec activationDesc);
 #else
+EE convolution_gemm_V7(TensorDesc inputDesc,
+    F32 *inArray,
+    TensorDesc filterDesc,
+    const F32 *filterArray,
+    ConvolutionParamSpec convParamSpec,
+    TensorDesc biasDesc,
+    const F32 *biasArray,
+    U32 tmpBytes,
+    void *tmp,
+    TensorDesc outputDesc,
+    F32 *outArray,
+    ActivationParamSpec activationDesc);
+
 EE convolution_gemm_icnchw_V7(TensorDesc inputDesc,
     F32 *inArray,
     TensorDesc filterDesc,
@@ -138,11 +136,15 @@ EE pooling_bp_c8_fp32(const F32 *input,
     int hend,
     int wstart,
     int wend,
+    int poolSize,
     F32 *output,
     U32 stride,
     PoolingParamSpec poolingParamSpec);
 
 EE softmax_fp32(
+    TensorDesc inputDesc, const F32 *input, int axis, TensorDesc outputDesc, F32 *output);
+
+EE logsoftmax_fp32(
     TensorDesc inputDesc, const F32 *input, int axis, TensorDesc outputDesc, F32 *output);
 
 EE concat_fp32(std::vector<TensorDesc> inputDesc,
@@ -243,8 +245,13 @@ EE power_fp32(TensorDesc inputDesc,
     TensorDesc outputDesc,
     F32 *output);
 
-EE layer_normalization_fp32(
-    TensorDesc inputDesc, F32 *input, F32 *alpha, F32 *beta, TensorDesc outputDesc, F32 *output);
+EE layer_normalization_fp32(TensorDesc inputDesc,
+    F32 *input,
+    LayerNormParamSpec p,
+    F32 *alpha,
+    F32 *beta,
+    TensorDesc outputDesc,
+    F32 *output);
 
 EE scale_fp32(F32 *input,
     I32 axis,

@@ -15,11 +15,10 @@
 #define _FACTORY_H
 
 #include "operator.hpp"
-#include "tensor_computing.h"
 
 #define NOT_SUPPORT       \
     Operator *cep = NULL; \
-    CHECK_STATUS(NOT_SUPPORTED);
+    UNI_ERROR_LOG("not support to create operator in %s.\n", __FUNCTION__);
 #define NOT_USE0()
 #define NOT_USE1(a1) \
     {                \
@@ -100,11 +99,12 @@ public:
 
     virtual std::shared_ptr<Operator> createMatMul(DataType dt, MatMulParamSpec p) = 0;
 
-    virtual std::shared_ptr<Operator> createLayerNorm(DataType dt, U32 weightNum) = 0;
+    virtual std::shared_ptr<Operator> createLayerNorm(
+        DataType dt, LayerNormParamSpec p, U32 weightNum) = 0;
 
     virtual std::shared_ptr<Operator> createReshape(DataType dt, ReshapeParamSpec p) = 0;
 
-    virtual std::shared_ptr<Operator> createResize(DataType paramDT, ResizeParamSpec p) = 0;
+    virtual std::shared_ptr<Operator> createResize(DataType dt, ResizeParamSpec p) = 0;
 
     virtual std::shared_ptr<Operator> createSlice(DataType dt, SliceParamSpec p) = 0;
 
@@ -131,7 +131,7 @@ public:
 
     virtual std::shared_ptr<Operator> createBilateralSliceApply(BilateralSliceApplyParamSpec p) = 0;
 
-    virtual std::shared_ptr<Operator> createPreAllocatedMemory(DataType dt, TensorDesc desc) = 0;
+    virtual std::shared_ptr<Operator> createPreAllocatedMemory(PreAllocatedMemoryParamSpec p) = 0;
 
     virtual std::shared_ptr<Operator> createSharedWeight(DataType dt,
         TensorDesc desc,
@@ -186,8 +186,6 @@ public:
 
     virtual std::shared_ptr<Operator> createCast(DataType dt, CastParamSpec p) = 0;
 
-    virtual std::shared_ptr<Operator> createEqual(DataType dt, EqualParamSpec p) = 0;
-
     virtual std::shared_ptr<Operator> createExpand(DataType dt, ExpandParamSpec p) = 0;
 
     virtual std::shared_ptr<Operator> createScatter(DataType dt, ScatterParamSpec p) = 0;
@@ -198,23 +196,31 @@ public:
 
     virtual std::shared_ptr<Operator> createInstanceNorm(DataType dt, InstanceNormParamSpec p) = 0;
 
-    virtual std::shared_ptr<Operator> createRoIAlign(RoIAlignParamSpec p) = 0;
+    virtual std::shared_ptr<Operator> createRoIAlign(DataType dt, RoIAlignParamSpec p) = 0;
 
     virtual std::shared_ptr<Operator> createGenerateProposals(
         DataType dt, GenerateProposalsParamSpec p) = 0;
 
     virtual std::shared_ptr<Operator> createGAT(DataType dt, GATParamSpec p) = 0;
 
-    DataType get_float_precision(DataType dt)
-    {
-        DataType ret = dt;
-        if (dt == DT_F16_8Q) {
-            ret = DT_F16;
-        } else if (dt == DT_F32_8Q) {
-            ret = DT_F32;
-        }
-        return ret;
-    }
+    virtual std::shared_ptr<Operator> createQuantizeLinear(
+        DataType dt, QuantizeLinearParamSpec p) = 0;
+
+    virtual std::shared_ptr<Operator> createGridSample(DataType dt, GridSampleParamSpec p) = 0;
+
+    virtual std::shared_ptr<Operator> createOneHot(DataType dt, OneHotParamSpec p) = 0;
+
+    virtual std::shared_ptr<Operator> createCumSum(DataType dt, CumSumParamSpec p) = 0;
+
+    virtual std::shared_ptr<Operator> createNonMaxSuppression(
+        DataType dt, NonMaxSuppressionParamSpec p) = 0;
+
+    virtual std::shared_ptr<Operator> createConstantOfShape(
+        DataType dt, ConstantOfShapeParamSpec p) = 0;
+
+    virtual std::shared_ptr<Operator> createNonZero(DataType dt) = 0;
+
+    virtual std::shared_ptr<Operator> createRange(DataType dt, RangeParamSpec p) = 0;
 
     std::shared_ptr<Operator> createOperators(OperatorSpec curOps,
         DataType dt,
@@ -239,14 +245,28 @@ public:
         if (dt == DT_F32_8Q || dt == DT_F16_8Q) {
 #ifndef _USE_INT8
             UNI_ERROR_LOG("this library not support to inference int8, please recompile with "
-                          "--int8=on. Only Armv7+ and x86 AVX512-VNNI cpu support.\n");
+                          "--int8=on. Only Armv7+ and x86 AVX512/AVX512-VNNI cpu support.\n");
 #endif
         }
         OperatorType opType = curOps.type;
-        DataType dtNoQ = get_float_precision(dt);
+        DataType dtNoQ = (dt == DT_F16_8Q) ? DT_F16 : ((dt == DT_F32_8Q) ? DT_F32 : dt);
         std::string opName = curOps.name;
         std::shared_ptr<Operator> op;
         auto curPs = curOps.ps;
+        std::map<OperatorType, ActivationMode> activationMap = {{OT_Relu6, ACTIVATION_RELU6},
+            {OT_HSwish, ACTIVATION_H_SWISH}, {OT_HSwishNoDiv, ACTIVATION_H_SWISH_NODIV},
+            {OT_Sigmoid, ACTIVATION_SIGMOID}, {OT_HSigmoid, ACTIVATION_H_SIGMOID},
+            {OT_Gelu, ACTIVATION_GELU}, {OT_TanH, ACTIVATION_TANH}, {OT_Mish, ACTIVATION_MISH},
+            {OT_Greater, ACTIVATION_GREATER}, {OT_Exp, ACTIVATION_EXP},
+            {OT_SoftPlus, ACTIVATION_SOFTPLUS}, {OT_Abs, ACTIVATION_ABS}, {OT_Sign, ACTIVATION_SIGN},
+            {OT_Not, ACTIVATION_NOT}, {OT_Log, ACTIVATION_LOG}, {OT_Neg, ACTIVATION_NEG},
+            {OT_Round, ACTIVATION_ROUND}, {OT_Floor, ACTIVATION_FLOOR}, {OT_Ceil, ACTIVATION_CEIL},
+            {OT_Swish, ACTIVATION_SWISH}, {OT_Reciprocal, ACTIVATION_RECIPROCAL}};
+        if (activationMap.find(opType) != activationMap.end()) {
+            ActivationParamSpec activationDesc;
+            activationDesc.mode = activationMap[opType];
+            return createActivation(activationDesc);
+        }
         switch (opType) {
             case OT_Conv: {
                 ActivationParamSpec dwActiveDesc;
@@ -288,60 +308,6 @@ public:
                 op = createActivation(activationDesc);
                 break;
             }
-            case OT_Relu6: {
-                ActivationParamSpec activationDesc;
-                activationDesc.mode = ACTIVATION_RELU6;
-                op = createActivation(activationDesc);
-                break;
-            }
-            case OT_HSwish: {
-                ActivationParamSpec activationDesc;
-                activationDesc.mode = ACTIVATION_H_SWISH;
-                op = createActivation(activationDesc);
-                break;
-            }
-            case OT_HSwishNoDiv: {
-                ActivationParamSpec activationDesc;
-                activationDesc.mode = ACTIVATION_H_SWISH_NODIV;
-                op = createActivation(activationDesc);
-                break;
-            }
-            case OT_Sigmoid: {
-                ActivationParamSpec activationDesc;
-                activationDesc.mode = ACTIVATION_SIGMOID;
-                op = createActivation(activationDesc);
-                break;
-            }
-            case OT_HSigmoid: {
-                ActivationParamSpec activationDesc;
-                activationDesc.mode = ACTIVATION_H_SIGMOID;
-                op = createActivation(activationDesc);
-                break;
-            }
-            case OT_Gelu: {
-                ActivationParamSpec activationDesc;
-                activationDesc.mode = ACTIVATION_GELU;
-                op = createActivation(activationDesc);
-                break;
-            }
-            case OT_TanH: {
-                ActivationParamSpec activationDesc;
-                activationDesc.mode = ACTIVATION_TANH;
-                op = createActivation(activationDesc);
-                break;
-            }
-            case OT_Mish: {
-                ActivationParamSpec activationDesc;
-                activationDesc.mode = ACTIVATION_MISH;
-                op = createActivation(activationDesc);
-                break;
-            }
-            case OT_Greater: {
-                ActivationParamSpec activationDesc;
-                activationDesc.mode = ACTIVATION_GREATER;
-                op = createActivation(activationDesc);
-                break;
-            }
             case OT_Concat: {
                 op = createConcat(curPs.concat_spec);
                 break;
@@ -367,7 +333,7 @@ public:
                 break;
             }
             case OT_LayerNorm: {
-                op = createLayerNorm(dt, 0);
+                op = createLayerNorm(dt, curPs.ln_spec, 0);
                 break;
             }
             case OT_Reshape: {
@@ -375,12 +341,7 @@ public:
                 break;
             }
             case OT_Resize: {
-                if (curPs.resize_spec.num_sizes > 0) {
-                    op = createResize(DT_U32, curPs.resize_spec);
-                } else {
-                    CHECK_REQUIREMENT(curPs.resize_spec.num_scales == 4);
-                    op = createResize(DT_F32, curPs.resize_spec);
-                }
+                op = createResize(dt, curPs.resize_spec);
                 break;
             }
             case OT_Slice: {
@@ -424,10 +385,7 @@ public:
                 break;
             }
             case OT_PreAllocatedMemory: {
-                PreAllocatedMemoryParamSpec curPreAllocatedMemoryParamSpec =
-                    curOps.ps.preallocated_memory_spec;
-                TensorDesc desc = curPreAllocatedMemoryParamSpec.desc;
-                op = createPreAllocatedMemory(dtNoQ, desc);
+                op = createPreAllocatedMemory(curOps.ps.preallocated_memory_spec);
                 break;
             }
             case OT_SharedWeight: {
@@ -527,18 +485,6 @@ public:
                 op = createWhere(dt);
                 break;
             }
-            case OT_SoftPlus: {
-                ActivationParamSpec activationDesc;
-                activationDesc.mode = ACTIVATION_SOFTPLUS;
-                op = createActivation(activationDesc);
-                break;
-            }
-            case OT_Exp: {
-                ActivationParamSpec activationDesc;
-                activationDesc.mode = ACTIVATION_EXP;
-                op = createActivation(activationDesc);
-                break;
-            }
             case OT_Tdnn: {
                 op = createTdnn(dt, curPs.tdnn_spec);
                 break;
@@ -551,24 +497,8 @@ public:
                 op = createTopK(dt, curPs.topk_spec);
                 break;
             }
-            case OT_Abs: {
-                ActivationParamSpec activationDesc;
-                activationDesc.mode = ACTIVATION_ABS;
-                op = createActivation(activationDesc);
-                break;
-            }
             case OT_Cast: {
                 op = createCast(dt, curPs.cast_spec);
-                break;
-            }
-            case OT_Equal: {
-                op = createEqual(dt, curPs.equal_spec);
-                break;
-            }
-            case OT_Sign: {
-                ActivationParamSpec activationDesc;
-                activationDesc.mode = ACTIVATION_SIGN;
-                op = createActivation(activationDesc);
                 break;
             }
             case OT_InstanceNorm: {
@@ -591,38 +521,52 @@ public:
                 op = createSelect(dt);
                 break;
             }
-            case OT_Not: {
-                ActivationParamSpec activationDesc;
-                activationDesc.mode = ACTIVATION_NOT;
-                op = createActivation(activationDesc);
-                break;
-            }
-            case OT_Log: {
-                ActivationParamSpec activationDesc;
-                activationDesc.mode = ACTIVATION_LOG;
-                op = createActivation(activationDesc);
-                break;
-            }
-            case OT_Neg: {
-                ActivationParamSpec activationDesc;
-                activationDesc.mode = ACTIVATION_NEG;
-                op = createActivation(activationDesc);
-                break;
-            }
             case OT_GAT: {
                 op = createGAT(dt, curPs.gat_spec);
                 break;
             }
             case OT_RoIAlign: {
-                op = createRoIAlign(curPs.roialign_spec);
+                op = createRoIAlign(dt, curPs.roialign_spec);
                 break;
             }
             case OT_GenerateProposals: {
                 op = createGenerateProposals(dt, curPs.generate_proposals_spec);
                 break;
             }
+            case OT_QuantizeLinear: {
+                op = createQuantizeLinear(dt, curPs.quant_spec);
+                break;
+            }
+            case OT_GridSample: {
+                op = createGridSample(dt, curPs.grid_sample_spec);
+                break;
+            }
+            case OT_OneHot: {
+                op = createOneHot(dt, curPs.onehot_spec);
+                break;
+            }
+            case OT_CumSum: {
+                op = createCumSum(dt, curPs.cumsum_spec);
+                break;
+            }
+            case OT_NonMaxSuppression: {
+                op = createNonMaxSuppression(dt, curPs.non_max_suppression_spec);
+                break;
+            }
+            case OT_ConstantOfShape: {
+                op = createConstantOfShape(dt, curPs.constant_of_shape_spec);
+                break;
+            }
+            case OT_NonZero: {
+                op = createNonZero(dt);
+                break;
+            }
+            case OT_Range: {
+                op = createRange(dt, curPs.range_spec);
+                break;
+            }
             default: {
-                UNI_ERROR_LOG("unsupported layer %s\n", OperatorTypeName()[opType]);
+                UNI_ERROR_LOG("can not create layer %s.\n", OperatorTypeName()[opType]);
                 break;
             }
         }

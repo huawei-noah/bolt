@@ -18,9 +18,10 @@
 
 class LayerNorm : public WeightOperator {
 public:
-    LayerNorm(DataType dt, U32 weightNum)
+    LayerNorm(DataType dt, LayerNormParamSpec p, U32 weightNum)
     {
         this->dt = dt;
+        this->p = p;
         this->weightNum = weightNum;
         this->hasBias = false;
     }
@@ -31,6 +32,7 @@ public:
     }
 
 protected:
+    LayerNormParamSpec p;
     U32 weightNum;
 };
 

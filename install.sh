@@ -8,6 +8,7 @@ target=""
 build_threads="8"
 converter="on"
 use_serial="on"
+use_neon="on"
 use_fp32="on"
 use_fp16="on"
 use_int8="on"
@@ -26,7 +27,7 @@ Build bolt library.
 
 Mandatory arguments to long options are mandatory for short options too.
   -h, --help                 display this help and exit.
-  --target=<???>             target device system and hardware setting, currently only support theses targets:
+  --target=<???>             target device system and hardware setting. xxx_blank will use shell environment variables CC, CXX, CFLAGS and CXXFLAGS, e.g. linux-aarch64_blank is for ARM64 server. currently only support theses targets:
 EOF
     print_targets
     cat <<EOF
@@ -35,10 +36,13 @@ EOF
   --debug                    set to use debug(default: OFF).
   --profile                  set to print performance profiling information(default: OFF).
   --shared                   set to use shared library(default: OFF).
+  --secure                   set to use Huawei secure C(default: OFF).
   --gpu                      set to use arm mali/qualcomm gpu(default: OFF).
   --openmp                   set to use OpenMP multi-threads parallel operator(default: OFF).
   --flow                     set to use flow to process pipeline data(default: OFF).
+  --train                    set to use train(default: OFF).
   --serial=<ON|OFF>          set to use serial calculation(default: ON).
+  --neon=<ON|OFF>            set to use arm neon calculation(default: ON when using for arm platform).
   --fp32=<ON|OFF>            set to use float32 calculation(default: ON).
   --fp16=<ON|OFF>            set to use float16 calculation on arm aarch64(default: ON on aarch64, OFF on others).
   --int8=<ON|OFF>            set to use int8 calculation on arm aarch64(default: ON on aarch64, OFF on others).
@@ -49,7 +53,7 @@ EOF
 }
 
 cmake_options=""
-TEMP=`getopt -o "ht:c:" -al target:,threads:,help,converter:,example,debug,profile,shared,gpu,openmp,flow,serial:,fp32:,fp16:,int8:,clean -- "$@"`
+TEMP=`getopt -o "ht:c:" -al target:,threads:,help,converter:,example,debug,profile,shared,gpu,openmp,flow,serial:,neon:,fp32:,fp16:,int8:,train,clean,secure -- "$@"`
 if [[ $? != 0 ]]; then
     echo "[ERROR] ${script_name} terminating..." >&2
     exit 1
@@ -99,6 +103,9 @@ while true ; do
         --serial)
             use_serial=$2
             shift 2 ;;
+        --neon)
+            use_neon=$2
+            shift 2 ;;
         --fp32)
             use_fp32=$2
             shift 2 ;;
@@ -108,6 +115,12 @@ while true ; do
         --int8)
             use_int8=$2
             shift 2 ;;
+        --train)
+            cmake_options="${cmake_options} -DUSE_TRAINING=ON -DRAUL_CONFIG_BLAS_VENDOR=Huawei"
+            shift ;;
+        --secure)
+            cmake_options="${cmake_options} -DUSE_SECURE_C=ON"
+            shift ;;
         --clean)
             clean="on"
             shift ;;
@@ -127,7 +140,7 @@ target=$(map_target ${target})
 check_target ${target}
 
 if [[ "${converter}" == "ON" || "${converter}" == "on" ]]; then
-    cmake_options="${cmake_options} -DUSE_CAFFE=ON -DUSE_ONNX=ON -DUSE_TFLITE=ON -DUSE_TENSORFLOW=ON"
+    cmake_options="${cmake_options} -DUSE_CAFFE=ON -DUSE_ONNX=ON -DUSE_TFLITE=ON -DUSE_TENSORFLOW=ON -DUSE_MINDSPORE=ON"
 fi
 
 source ${script_dir}/scripts/setup_compiler.sh || exit 1
@@ -167,7 +180,9 @@ else
     cmake_options="${cmake_options} -DUSE_FP32=OFF"
 fi
 if [[ ${target} =~ aarch64 ]]; then
-    cmake_options="${cmake_options} -DUSE_NEON=ON"
+    if [[ "${use_neon}" == "ON" || "${use_neon}" == "on" ]]; then
+        cmake_options="${cmake_options} -DUSE_NEON=ON"
+    fi
     if [[ ${cmake_options} =~ USE_GPU=ON ]]; then
         use_fp16="on"
     fi
@@ -183,6 +198,10 @@ if [[ ${target} =~ aarch64 ]]; then
             fi
         fi
         rm -rf test.log main
+    else
+        if [[ "${use_int8}" == "ON" || "${use_int8}" == "on" ]]; then
+            cmake_options="${cmake_options} -DUSE_INT8=ON"
+        fi
     fi
 elif [[ ${target} =~ avx ]]; then
     cmake_options="${cmake_options} -DUSE_X86=ON"
@@ -200,7 +219,9 @@ else
     fi
 fi
 if [[ "${target}" == "linux-arm_himix100" || ${target} =~ armv7 || "${target}" == "linux-arm_musleabi" ]]; then
-    cmake_options="${cmake_options} -DUSE_NEON=ON"
+    if [[ "${use_neon}" == "ON" || "${use_neon}" == "on" ]]; then
+        cmake_options="${cmake_options} -DUSE_NEON=ON"
+    fi
     if [[ "${use_int8}" == "ON" || "${use_int8}" == "on" ]]; then
         cmake_options="${cmake_options} -DUSE_INT8=ON"
     fi
@@ -238,6 +259,6 @@ if [[ ${cmake_options} =~ USE_FLOW=ON ]]; then
 fi
 ${BOLT_ROOT}/kit/setup.sh ${platform} ${kit_flow} || exit 1
 
-${MAKE} test ARGS="-V"
+${MAKE} test ARGS="-V" || exit 1
 
 cd ..

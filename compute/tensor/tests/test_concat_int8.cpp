@@ -75,7 +75,7 @@ int int8ConcatTest(int argc, char **argv, DataType dt)
         U8 *tmp = (U8 *)ut_input_v(in_len, dt, UT_INIT_ZERO);
         U8 *out_d = (U8 *)ut_input_v(in_len, dt, UT_INIT_ZERO);
         for (int i = 0, index = 0; i < num; i++) {
-            memcpy(tmp + index, get_ptr_from_tensor(inTensorsRef[i], CPU_GENERAL),
+            UNI_MEMCPY(tmp + index, get_ptr_from_tensor(inTensorsRef[i], CPU_GENERAL),
                 inTensorsRef[i].bytes());
             index += inTensorsRef[i].bytes();
         }

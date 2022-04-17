@@ -19,28 +19,31 @@
 #include "cpu/arm/fp16/tensor_computing_fp16.h"
 #endif
 
-EE layer_normalization_arm(
-    TensorDesc inputDesc, void *input, void *alpha, void *beta, TensorDesc outputDesc, void *output)
+EE layer_normalization_arm(TensorDesc inputDesc,
+    void *input,
+    LayerNormParamSpec p,
+    void *alpha,
+    void *beta,
+    TensorDesc outputDesc,
+    void *output)
 {
-    DataType idt = inputDesc.dt;
-    EE ret = SUCCESS;
-    switch (idt) {
+    EE ret = NOT_SUPPORTED;
+    switch (inputDesc.dt) {
 #ifdef _USE_FP32
         case DT_F32: {
             ret = layer_normalization_fp32(
-                inputDesc, (F32 *)input, (F32 *)alpha, (F32 *)beta, outputDesc, (F32 *)output);
+                inputDesc, (F32 *)input, p, (F32 *)alpha, (F32 *)beta, outputDesc, (F32 *)output);
             break;
         }
 #endif
 #ifdef _USE_FP16
         case DT_F16: {
             ret = layer_normalization_fp16(
-                inputDesc, (F16 *)input, (F16 *)alpha, (F16 *)beta, outputDesc, (F16 *)output);
+                inputDesc, (F16 *)input, p, (F16 *)alpha, (F16 *)beta, outputDesc, (F16 *)output);
             break;
         }
 #endif
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
     return ret;

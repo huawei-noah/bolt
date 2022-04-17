@@ -21,14 +21,19 @@ class Operators:
         print("[INFO] tensor name %s shape %s sum %f" % (name, shape_str, x.sum()))
         num = x.size
         x = np.reshape(x, [num])
-        threshold = 60
+        threshold = 40
         if (num < threshold):
             threshold = num
         print(x[:threshold])
 
     @staticmethod
-    def zeros(shape, name):
+    def memory(shape, value, name):
         x = np.zeros(shape)
+        if (value != 0):
+            x = x.reshape([-1])
+            for i in range(len(x)):
+                x[i] = value
+            x = x.reshape(shape)
         if (Operators.calculate):
             Operators.print_data(x, name)
         return x
@@ -244,6 +249,10 @@ class Operators:
         if (not Operators.calculate):
             return None;
         x = _x.copy()
+        x_shape = x.shape
+        for i in range(len(dim)):
+            if (dim[i] == 0):
+                dim[i] = x_shape[i]
         x = np.reshape(x, dim)
         Operators.print_data(x, name)
         return x
@@ -726,7 +735,7 @@ class Operators:
         name, state_name, printFlag=True):
         if (mode == "LSTM"):
             result, state = Operators.lstm(inputs, state, w, b, projection, projection_bias,
-                zoneout_cell, zoneout_output, None, None, False)
+                zoneout_cell, zoneout_output, name, state_name, printFlag)
         elif (mode == "GRU"):
             result, state = Operators.gru(inputs, state, w, b, name, state_name, printFlag)
         elif (mode == "GRU_LBR"):

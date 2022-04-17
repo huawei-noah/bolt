@@ -57,7 +57,7 @@ EE copy(std::vector<Tensor> inputTensor,
             UNI_ERROR_LOG("copy %u bytes from src tensor(%u) beyond size(%u).\n", copyLength,
                 srcIndex, inputTensor[0].bytes());
         }
-        memcpy((U8 *)input[1] + dstIndex, (U8 *)input[0] + srcIndex, copyLength);
+        UNI_MEMCPY((U8 *)input[1] + dstIndex, (U8 *)input[0] + srcIndex, copyLength);
         ret = SUCCESS;
 #endif
     }

@@ -107,6 +107,9 @@ inline EE array_minmax_value_arm(DataType dt, const void *data, I32 len, int mod
         case DT_I32:
             ret = array_minmax_value_i32((const I32 *)data, len, mode, result);
             break;
+        case DT_U32:
+            ret = array_minmax_value_template<U32>((const U32 *)data, len, mode, result);
+            break;
         default:
             ret = NOT_SUPPORTED;
             break;

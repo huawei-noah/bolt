@@ -10,6 +10,7 @@
 // WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+#if 0
 #include "tensor_computing.h"
 
 EE equal_infer_output_size(Tensor *inputTensor, Tensor *outputTensor, ArchInfo_t archInfo)
@@ -22,9 +23,8 @@ EE equal_infer_output_size(Tensor *inputTensor, Tensor *outputTensor, ArchInfo_t
 }
 
 // attention: comparision ptr will be fixed in mt
-template <typename T>
-static EE equal_kernel(
-    U32 inputLen, U32 comparisonLen, T *inputPtr, F32 *comparisionPtr, bool not_equal, U8 *outputPtr)
+template <typename T1, typename T2>
+static EE equal_kernel(T1 *a1, int len1, T2 *a2, int len2, bool not_equal, U8 *out)
 {
     U8 equal_flag, notequal_flag;
     if (not_equal) {
@@ -34,27 +34,27 @@ static EE equal_kernel(
         equal_flag = 1;
         notequal_flag = 0;
     }
-    if (inputLen == comparisonLen) {
-        for (U32 i = 0; i < inputLen; ++i) {
-            if (inputPtr[i] == (T)(comparisionPtr[i])) {
-                outputPtr[i] = equal_flag;
+    EE ret = SUCCESS;
+    if (len1 == len2) {
+        for (int i = 0; i < len1; ++i) {
+            if (a1[i] == (T1)(a2[i])) {
+                out[i] = equal_flag;
             } else {
-                outputPtr[i] = notequal_flag;
+                out[i] = notequal_flag;
             }
         }
-    } else if (comparisonLen == 1) {
-        F32 compF = comparisionPtr[0];
-        for (U32 i = 0; i < inputLen; ++i) {
-            if (inputPtr[i] == (T)compF) {
-                outputPtr[i] = equal_flag;
+    } else if (len2 == 1) {
+        for (int i = 0; i < len1; ++i) {
+            if (a1[i] == (T1)(a2[0])) {
+                out[i] = equal_flag;
             } else {
-                outputPtr[i] = notequal_flag;
+                out[i] = notequal_flag;
             }
         }
     } else {
-        return NOT_SUPPORTED;
+        ret = NOT_SUPPORTED;
     }
-    return SUCCESS;
+    return ret;
 }
 
 EE equal(Tensor inputTensor,
@@ -64,37 +64,43 @@ EE equal(Tensor inputTensor,
     ArchInfo_t archInfo)
 {
     auto arch = archInfo->arch;
-    void *input = get_ptr_from_tensor(inputTensor, arch);
-    void *comparision = get_ptr_from_tensor(compareTensor, arch);
-    void *output = get_ptr_from_tensor(outputTensor, arch);
     TensorDesc inputDesc = inputTensor.get_desc();
     U32 inputLen = tensorNumElements(inputDesc);
-    U32 comparisonLen = tensorNumElements(compareTensor.get_desc());
+    void *input = get_ptr_from_tensor(inputTensor, arch);
+    TensorDesc compareDesc = compareTensor.get_desc();
+    U32 compareLen = tensorNumElements(compareDesc);
+    void *compare = get_ptr_from_tensor(compareTensor, arch);
+    void *output = get_ptr_from_tensor(outputTensor, arch);
 
-    EE ret = SUCCESS;
+    EE ret = NOT_SUPPORTED;
     switch (inputDesc.dt) {
 #ifdef _USE_FP32
         case DT_F32: {
-            ret = equal_kernel<F32>(
-                inputLen, comparisonLen, (F32 *)input, (F32 *)comparision, p.invert, (U8 *)output);
+            ret = equal_kernel<F32, F32>(
+                (F32 *)input, inputLen, (F32 *)compare, compareLen, p.invert, (U8 *)output);
             break;
         }
 #endif
 #ifdef _USE_FP16
         case DT_F16: {
-            ret = equal_kernel<F16>(
-                inputLen, comparisonLen, (F16 *)input, (F32 *)comparision, p.invert, (U8 *)output);
+            if (compareDesc.dt == DT_F32) {
+                ret = equal_kernel<F16, F32>(
+                    (F16 *)input, inputLen, (F32 *)compare, compareLen, p.invert, (U8 *)output);
+            } else {
+                ret = equal_kernel<F16, F16>(
+                    (F16 *)input, inputLen, (F16 *)compare, compareLen, p.invert, (U8 *)output);
+            }
             break;
         }
 #endif
         case DT_I32: {
-            ret = equal_kernel<I32>(
-                inputLen, comparisonLen, (I32 *)input, (F32 *)comparision, p.invert, (U8 *)output);
+            ret = equal_kernel<I32, I32>(
+                (I32 *)input, inputLen, (I32 *)compare, compareLen, p.invert, (U8 *)output);
             break;
         }
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
     return ret;
 }
+#endif

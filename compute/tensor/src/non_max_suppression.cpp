@@ -35,15 +35,14 @@ inline EE non_max_suppression_infer_output_size_cpu(
     CHECK_REQUIREMENT(p.max_output_boxes_per_class != 0);
     // output size
     U32 oh, ow;
-    // oh = the first box for saving the number of available boxes(1) + the maximum number of dectected boxes(max_output_boxes_per_class * num_class)
+    // oh = the first box for saving the maximum number of dectected boxes(max_output_boxes_per_class * num_class)
     U32 max_output_boxes_per_class = p.max_output_boxes_per_class;
     U32 num_class = ic1;
     U32 num_detected_max = max_output_boxes_per_class * num_class;
-    oh = num_detected_max + 1;
+    oh = num_detected_max;
     // Each width is a 3 dimension vector, which stores [batch_index, class_index, box_index] -> 3
-    // The first box is [ number of available boxes, 0, 0 ]
     ow = 3;
-    *outputDesc = tensor2d(idt0, oh, ow);
+    *outputDesc = tensor2d(DT_I32, oh, ow);
     return SUCCESS;
 }
 
@@ -77,7 +76,10 @@ EE non_max_suppression(std::vector<Tensor> inputTensor,
     EE ret = NOT_SUPPORTED;
     if (IS_CPU(arch)) {
 #ifdef _USE_CPU
-        ret = non_max_suppression_cpu(inputDesc, input, p, outputDesc, output);
+        U32 length = 0;
+        ret = non_max_suppression_cpu(inputDesc, input, p, outputDesc, output, &length);
+        outputDesc.dims[1] = length;
+        outputTensor.resize(outputDesc);
 #endif
     }
     return ret;

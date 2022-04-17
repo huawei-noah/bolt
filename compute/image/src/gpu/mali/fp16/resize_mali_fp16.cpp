@@ -97,7 +97,7 @@ inline EE resize_nearest_core_mali_fp16(GCLHandle_t handle,
     GCLMemType outputMemType = output->desc.memType;
 
     F32 ratiow, ratioh;
-    if (p.trans_mode == ALIGN_CORNERS) {
+    if (p.trans_mode == COORDINATE_TRANS_ALIGN_CORNERS) {
         ratiow = (iw - 1.0) / (ow - 1.0);
         ratioh = (ih - 1.0) / (oh - 1.0);
     } else {

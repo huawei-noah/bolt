@@ -86,8 +86,10 @@ EE topk_infer_output_size(Tensor *inputTensor,
     outputDesc = inputDesc;
     outputIndicesDesc = inputDesc;
     int axis = inputDesc.nDims - 1 - (p.axis + inputDesc.nDims) % inputDesc.nDims;
-    outputDesc.dims[axis] = p.topk;
-    outputIndicesDesc.dims[axis] = p.topk;
+    if (p.k > 0) {
+        outputDesc.dims[axis] = p.k;
+        outputIndicesDesc.dims[axis] = p.k;
+    }
     outputIndicesDesc.dt = DT_I32;
     outputTensor->resize(outputDesc);
     outputIndicesTensor->resize(outputIndicesDesc);

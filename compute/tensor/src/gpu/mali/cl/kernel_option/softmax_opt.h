@@ -15,8 +15,9 @@ inline EE set_softmax_opt_mali(U32 axis,
     if (useNchwFormat) {
         formatName = "nchw_";
     }
-    sprintf(kernelName, "softmax_%s%s%d", ioMemName, formatName.c_str(), axis);
-    sprintf(kernelOpt->sourceName, "softmax");
+    std::string kernel = std::string("softmax_") + ioMemName + formatName + std::to_string(axis);
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, "softmax");
     kernelOpt->kernelDataType = dt;
     char *opt = kernelOpt->option;
     CHECK_STATUS(set_value_define_opt(axis, "AXIS", opt));
@@ -83,9 +84,10 @@ inline EE set_softmax_vec_reduce_opt_mali(bool useNchwFormat,
             }
         }
     }
-    sprintf(kernelName, "softmax_vec_reduce_%s%s%s%s", ioMemName, formatName.c_str(),
-        inputAxis.c_str(), outputAxis.c_str());
-    sprintf(kernelOpt->sourceName, "softmax_vec_reduce");
+    std::string kernel =
+        std::string("softmax_vec_reduce_") + ioMemName + formatName + inputAxis + outputAxis;
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, "softmax_vec_reduce");
     kernelOpt->kernelDataType = dt;
     if (useNchwFormat) {
         CHECK_STATUS(set_chars_define_opt("USE_NCHW", opt));

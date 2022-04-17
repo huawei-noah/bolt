@@ -47,7 +47,7 @@ int main(int argc, char **argv)
     INT8 *matTran = (INT8 *)ut_input_v(m * k4 + m * 4, DT_I8, UT_INIT_ZERO);
     INT8 *vec = (INT8 *)ut_input_v(vc, DT_I8, UT_INIT_RANDOM);
     INT8 *vec_ref = (INT8 *)ut_input_v(vc, DT_I8, UT_INIT_RANDOM);
-    memcpy(vec_ref, vec, vc);
+    UNI_MEMCPY(vec_ref, vec, vc);
     I32 *res = (I32 *)ut_input_v(rc, DT_I32, UT_INIT_ZERO);
     I32 *res_ref = (I32 *)ut_input_v(rc, DT_I32, UT_INIT_ZERO);
 
@@ -62,7 +62,7 @@ int main(int argc, char **argv)
     for (U32 i = 0; i < vc; ++i) {
         uA[i] = (UINT8)((I32)vec[i] + 128);
     }
-    memcpy(tmp, matTran, rc * bytesOf(DT_I32));
+    UNI_MEMCPY(tmp, matTran, rc * bytesOf(DT_I32));
 #endif
 
     // check

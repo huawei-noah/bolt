@@ -33,4 +33,6 @@ EE tflite_converter(std::string dir, std::string mfn, ModelSpec *ms);
 #ifdef _USE_TENSORFLOW
 EE tensorflow_converter(std::string dir, std::string mfn, ModelSpec *ms);
 #endif
+
+EE mindspore_converter(std::string dir, std::string mfn, ModelSpec *ms);
 #endif

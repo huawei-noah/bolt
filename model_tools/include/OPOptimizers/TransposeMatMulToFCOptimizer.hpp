@@ -40,8 +40,8 @@ class TransposeMatMulToFCOptimizer : public OPOptimizer {
 
                     int matmulIdx = nextOpIndexes[0].first;
                     int matmulSubIdx = nextOpIndexes[0].second;
-                    U32 paramSize = spec->ops[i].ps.transpose_spec.trans_size;
-                    U32 *transDims = spec->ops[i].ps.transpose_spec.trans_dims;
+                    U32 paramSize = spec->ops[i].ps.transpose_spec.num_axes;
+                    U32 *transDims = spec->ops[i].ps.transpose_spec.axes;
                     bool fuseTranspose = true;
                     if (paramSize < 2) {
                         continue;
@@ -97,7 +97,7 @@ class TransposeMatMulToFCOptimizer : public OPOptimizer {
                 // Update matmul to fc
                 spec->ops[matmulOpIndex].type = OT_FC;
                 spec->ops[matmulOpIndex].num_inputs = 1;
-                delete spec->ops[matmulOpIndex].input_tensors_name[1];
+                mt_free(spec->ops[matmulOpIndex].input_tensors_name[1]);
                 spec->ops[matmulOpIndex].ps.fc_spec.num_outputs =
                     spec->ws[transposeWeightIndex].bytes_of_vec;
                 spec->ops[matmulOpIndex].ps.fc_spec.num_slices = 1;

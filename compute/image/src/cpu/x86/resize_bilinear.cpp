@@ -46,18 +46,22 @@ typedef void (*compute_bilinear_func)(F32 *input0,
     U32 onStep,
     U32 on);
 
-inline F32 infer_src(I32 x, I32 iw, I32 ow, ResizeCoordinateTransMode trans_mode)
+inline F32 infer_src(I32 x, I32 iw, I32 ow, CoordinateTransMode trans_mode)
 {
+    F32 scale = 1.0 * iw / ow;
     F32 ret;
     switch (trans_mode) {
-        case HALF_PIXEL:
-            ret = (x + 0.5f) * 1.0f * iw / ow - 0.5;
+        case COORDINATE_TRANS_HALF_PIXEL:
+            ret = (x + 0.5f) * scale - 0.5;
             break;
-        case ALIGN_CORNERS:
+        case COORDINATE_TRANS_ALIGN_CORNERS:
             ret = x * 1.0f * (iw - 1) / (ow - 1);
             break;
-        case PYTORCH_HALF_PIXEL:
-            ret = (ow > 1) ? ((x + 0.5f) * 1.0f * iw / ow - 0.5) : 0;
+        case COORDINATE_TRANS_PYTORCH_HALF_PIXEL:
+            ret = (ow > 1) ? ((x + 0.5f) * scale - 0.5) : 0;
+            break;
+        case COORDINATE_TRANS_ASYMMETRIC:
+            ret = x * scale;
             break;
         default:
             ret = 0;
@@ -281,8 +285,59 @@ inline void compute_bilinear_nchw_fp32(F32 *input0,
     }
 }
 
+EE resize_bilinear_x86_fp32_nchw(
+    TensorDesc inputDesc, F32 *input, ResizeParamSpec p, F32 *tmp, TensorDesc outputDesc, F32 *output)
+{
+    DataType idt, odt;
+    DataFormat idf, odf;
+    U32 in, ic, ih, iw;
+    U32 on, oc, oh, ow;
+    CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+    CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
+    CHECK_REQUIREMENT(odf == DF_NCHW || idf == DF_NCHW);
+
+    for (U32 c = 0; c < oc; ++c) {
+        F32 *outp = output + c * oh * ow;
+        F32 *inp = input + c * ih * iw;
+
+        for (U32 h = 0; h < oh; ++h) {
+            F32 hC = infer_src(h, ih, oh, p.trans_mode);
+            hC = UNI_MIN(ih - 1, UNI_MAX(0, hC));
+            I32 hT = floor(hC);
+            I32 hB = ceil(hC);
+            F32 h1 = hB - hC;
+            F32 h2 = hC - hT;
+
+            for (U32 w = 0; w < ow; ++w) {
+                F32 wC = infer_src(w, iw, ow, p.trans_mode);
+                wC = UNI_MIN(iw - 1, UNI_MAX(0, wC));
+                I32 wL = floor(wC);
+                I32 wR = ceil(wC);
+                F32 w1 = wR - wC;
+                F32 w2 = wC - wL;
+
+                U32 output_idx = h * ow + w;
+                if (hB == hT && wL == wR) {
+                    outp[output_idx] = inp[hT * iw + wL];
+                } else if (hB == hT) {
+                    outp[output_idx] = w1 * inp[hT * iw + wL] + w2 * inp[hT * iw + wR];
+                } else if (wL == wR) {
+                    outp[output_idx] = h1 * inp[hT * iw + wL] + h2 * inp[hB * iw + wL];
+                } else {
+                    outp[output_idx] = h1 * w1 * inp[hT * iw + wL] +
+                        h1 * w2 * inp[hT * iw + wR] +
+                        h2 * w1 * inp[hB * iw + wL] +
+                        h2 * w2 * inp[hB * iw + wR];
+                }
+
+            }
+        }
+    }
+    return SUCCESS;
+}
+
 EE resize_bilinear_x86_fp32(
-    TensorDesc inputDesc, F32 *input, TensorDesc outputDesc, F32 *tmp, F32 *output, ResizeParamSpec p)
+    TensorDesc inputDesc, F32 *input, ResizeParamSpec p, F32 *tmp, TensorDesc outputDesc, F32 *output)
 {
     DataType idt, odt;
     DataFormat idf, odf;
@@ -291,6 +346,7 @@ EE resize_bilinear_x86_fp32(
     CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
     CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
     CHECK_REQUIREMENT(idf == DF_NCHWC8 || idf == DF_NCHW);
+
     EE ret = SUCCESS;
 
     U32 ocStep = oh * ow * 8;
@@ -316,22 +372,6 @@ EE resize_bilinear_x86_fp32(
             F32 hC = infer_src(h, ih, oh, p.trans_mode);
             F32 wC = infer_src(w, iw, ow, p.trans_mode);
             U32 output_idx = h * ow * 8 + w * 8;
-            if (h == 0 && w == 0) {
-                copy[func_idx](input, output, icStep, ocStep, ic, inStep, onStep, on);
-                continue;
-            } else if (h == oh - 1 && w == ow - 1) {
-                copy[func_idx](input + ((ih - 1) * iw + iw - 1) * itile_size, output + output_idx,
-                    icStep, ocStep, ic, inStep, onStep, on);
-                continue;
-            } else if (h == 0 && w == ow - 1) {
-                copy[func_idx](input + (iw - 1) * itile_size, output + output_idx, icStep, ocStep,
-                    ic, inStep, onStep, on);
-                continue;
-            } else if (h == oh - 1 && w == 0) {
-                copy[func_idx](input + (ih - 1) * iw * itile_size, output + output_idx, icStep,
-                    ocStep, ic, inStep, onStep, on);
-                continue;
-            }
 
             // process edge pixel, linear
             hC = UNI_MIN(ih - 1, UNI_MAX(0, hC));
@@ -390,17 +430,10 @@ EE resize_bilinear_x86_fp32(
                 }
             }
             I32 mainc = c;
-            for (; c < (I32)oc - 3; c += 4) {
-                for (I32 hw = 0; hw < ohow; ++hw) {
-                    outArray[n * oc * ohow + c * ohow + hw] =
-                        output[n * oc * ohow + mainc * ohow + hw * 4 + (c - mainc)];
-                }
-            }
-            mainc = c;
             for (; c < (I32)oc; ++c) {
                 for (I32 hw = 0; hw < ohow; ++hw) {
                     outArray[n * oc * ohow + c * ohow + hw] =
-                        output[n * oc * ohow + mainc * ohow + hw * ((I32)oc - mainc) + (c - mainc)];
+                        output[n * oc * ohow + mainc * ohow + hw * 8 + (c - mainc)];
                 }
             }
         }
@@ -411,10 +444,10 @@ EE resize_bilinear_x86_fp32(
 
 EE resize_bilinear_x86(TensorDesc inputDesc,
     void *input,
-    TensorDesc outputDesc,
+    ResizeParamSpec p,
     void *tmp,
-    void *output,
-    ResizeParamSpec p)
+    TensorDesc outputDesc,
+    void *output)
 {
     DataType idt, odt;
     DataFormat idf, odf;
@@ -425,8 +458,13 @@ EE resize_bilinear_x86(TensorDesc inputDesc,
     EE ret = NOT_SUPPORTED;
     switch (idt) {
         case DT_F32:
-            ret = resize_bilinear_x86_fp32(
-                inputDesc, (F32 *)input, outputDesc, (F32 *)tmp, (F32 *)output, p);
+            if (idf == DF_NCHW && odf == DF_NCHW) {
+                ret = resize_bilinear_x86_fp32_nchw(
+                    inputDesc, (F32 *)input, p, (F32 *)tmp, outputDesc, (F32 *)output);
+            } else {
+                ret = resize_bilinear_x86_fp32(
+                    inputDesc, (F32 *)input, p, (F32 *)tmp, outputDesc, (F32 *)output);
+            }
         default:
             break;
     }

@@ -65,7 +65,7 @@ inline EE eltwise_checkpara_mali(GCLHandle_t handle,
             CHECK_STATUS(NULL_POINTER);
         }
     }
-    EltwiseMode eltwiseMode = eltwiseDesc.elt_mode;
+    EltwiseMode eltwiseMode = eltwiseDesc.mode;
     U32 arrayDimMax = 0;
     bool sameDesc = eltwise_same_desc(inputDesc, &arrayDimMax);
     if (sameDesc) {

@@ -127,9 +127,9 @@ public:
             U8 *tmp = nullptr;
             if (size < this->desc.byteSize) {
                 if (this->get_mem_type() == OCLMemImg1D) {
-                    U8 *tmp = (U8 *)operator new(this->bytes());
-                    memset(tmp, 0, this->bytes());
-                    memcpy(tmp, host_ptr, size);
+                    tmp = (U8 *)UNI_OPERATOR_NEW(this->bytes());
+                    UNI_MEMSET(tmp, 0, this->bytes());
+                    UNI_MEMCPY(tmp, host_ptr, size);
                     host_ptr = tmp;
                 } else {
                     CHECK_STATUS(NOT_MATCH);
@@ -145,6 +145,9 @@ public:
                 } else {
                     CHECK_STATUS(NOT_SUPPORTED);
                 }
+            }
+            if (tmp != nullptr) {
+                UNI_OPERATOR_DELETE(tmp);
             }
         } else {
             if (!allocated) {

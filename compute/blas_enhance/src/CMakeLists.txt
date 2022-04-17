@@ -29,6 +29,8 @@ if (USE_NEON)
     if (USE_INT8)
         file(GLOB arm_int8_srcs ${CMAKE_CURRENT_SOURCE_DIR}/cpu/arm/int8/*.cpp)
         if (USE_FP16)
+            file(GLOB armv8_int8_srcs ${CMAKE_CURRENT_SOURCE_DIR}/cpu/arm/int8/v8.2/*.cpp)
+        elseif ("${CMAKE_SYSTEM_PROCESSOR}" STREQUAL "aarch64")
             file(GLOB armv8_int8_srcs ${CMAKE_CURRENT_SOURCE_DIR}/cpu/arm/int8/v8/*.cpp)
         else ()
             file(GLOB armv8_int8_srcs ${CMAKE_CURRENT_SOURCE_DIR}/cpu/arm/int8/v7/*.cpp)
@@ -47,6 +49,9 @@ include_directories(${CMAKE_CURRENT_SOURCE_DIR})
 # shared library 
 add_library(${PROJECT_NAME} SHARED ${srcs})
 target_link_libraries(${PROJECT_NAME} LINK_PUBLIC uni)
+if (USE_SECURE_C)
+    target_link_libraries(${PROJECT_NAME} LINK_PUBLIC ${SecureC_SHARED_LIBRARY})
+endif ()
 
 # static library 
 add_library(${PROJECT_NAME}_static STATIC ${srcs})

@@ -41,7 +41,7 @@ inline static void concat_v1(const std::vector<TensorDesc> &inputDesc,
             U32 blockSize = inputDesc[j].dims[axis] * tileSize;
             if (!jumpMemcpy[j]) {
                 U8 *srcPtr = ((U8 *)input[j]) + i * blockSize;
-                memcpy(dstPtr, srcPtr, blockSize);
+                UNI_MEMCPY(dstPtr, srcPtr, blockSize);
             }
             dstPtr += blockSize;
         }
@@ -61,21 +61,23 @@ inline static void concat_v2(const std::vector<TensorDesc> &inputDesc,
     U8 *dstPtr = (U8 *)output;
     for (U32 i = 0; i < loops; i++) {
         for (U32 j = 0; j < num; j++) {
-            U32 blockSize = inputDesc[j].dims[axis] * tileSize;
+            I32 blockSize = inputDesc[j].dims[axis] * tileSize;
             if (!jumpMemcpy[j]) {
                 U8 *srcPtr = ((U8 *)input[j]) + i * blockSize;
 #ifdef _USE_OPENMP
-                U32 bblockNum = OMP_NUM_THREADS;
-                U32 bblockSize = (blockSize + bblockNum - 1) / bblockNum;
+                I32 bblockNum = OMP_NUM_THREADS;
+                I32 bblockSize = (blockSize + bblockNum - 1) / bblockNum;
+                bblockSize = UNI_MIN(32, bblockSize);
+                bblockNum = (blockSize + bblockSize - 1) / bblockSize;
 
-#pragma omp parallel for num_threads(OMP_NUM_THREADS)
-                for (U32 k = 0; k < bblockNum; ++k) {
-                    U32 copyDst = k * bblockSize;
-                    memcpy(dstPtr + copyDst, srcPtr + copyDst,
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) if (bblockNum >= OMP_NUM_THREADS)
+                for (I32 k = 0; k < bblockNum; ++k) {
+                    I32 copyDst = k * bblockSize;
+                    UNI_MEMCPY(dstPtr + copyDst, srcPtr + copyDst,
                         UNI_MIN(bblockSize, blockSize - copyDst));
                 }
 #else
-                memcpy(dstPtr, srcPtr, blockSize);
+                UNI_MEMCPY(dstPtr, srcPtr, blockSize);
 #endif
             }
             dstPtr += blockSize;
@@ -138,7 +140,9 @@ static EE concat(std::vector<TensorDesc> inputDesc,
     U8 *tmpPtr = (U8 *)tmp;
     U32 outputOff = 0;
     for (U32 j = 0; j < num; j++) {
-        if ((4 != inputDesc[j].nDims) || (1 != inputDesc[j].dims[1]) || (1 != inputDesc[j].dims[0])) {
+        if (((4 == inputDesc[j].nDims) &&
+                ((1 != inputDesc[j].dims[1]) || (1 != inputDesc[j].dims[0]))) ||
+            ((3 == inputDesc[j].nDims) && (1 != inputDesc[j].dims[0]))) {
             if (isC8 && (DF_NCHWC8 != inputDesc[j].df)) {
                 TensorDesc tmpDesc = inputDesc[j];
                 tmpDesc.df = DF_NCHWC8;

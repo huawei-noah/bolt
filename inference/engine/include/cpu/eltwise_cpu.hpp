@@ -18,71 +18,26 @@
 
 class EltwiseCPU : public Eltwise {
 public:
-    EltwiseCPU(EltwiseParamSpec eltwiseDesc) : Eltwise(eltwiseDesc)
+    EltwiseCPU(EltwiseParamSpec p) : Eltwise(p)
     {}
 
     std::shared_ptr<Operator> clone() override
     {
-        std::shared_ptr<EltwiseCPU> mem =
-            std::shared_ptr<EltwiseCPU>(new EltwiseCPU(this->eltwiseDesc));
+        std::shared_ptr<EltwiseCPU> mem = std::shared_ptr<EltwiseCPU>(new EltwiseCPU(this->p));
         *mem = *this;
         return mem;
     }
 
-    bool use_scale(const std::vector<TensorDesc> &inputDesc)
-    {
-        bool ret;
-        if (this->eltwiseDesc.elt_mode == ELTWISE_PROD && inputDesc.size() == 2 &&
-            inputDesc[0].nDims > 1 && inputDesc[1].nDims > 1 &&
-            inputDesc[0].dims[inputDesc[0].nDims - 2] == inputDesc[1].dims[inputDesc[1].nDims - 2] &&
-            inputDesc[1].dims[inputDesc[1].nDims - 1] == 1 &&
-            (inputDesc[1].nDims == 2 || (inputDesc[1].nDims == 3 && inputDesc[1].dims[0] == 1) ||
-                (inputDesc[1].nDims == 4 && inputDesc[1].dims[0] == 1 && inputDesc[1].dims[1] == 1)) &&
-            tensorNumElements(inputDesc[0]) != tensorNumElements(inputDesc[1])) {
-            ret = true;
-        } else {
-            ret = false;
-        }
-        return ret;
-    }
-
     void run() override
     {
-        std::vector<TensorDesc> inputDesc;
-        for (auto p : this->inputTensors) {
-            inputDesc.push_back(p.get_desc());
-        }
-        if (this->use_scale(inputDesc)) {
-            Tensor inTensor = this->inputTensors[1];
-            U8 *alpha = (U8 *)((CpuMemory *)(inTensor.get_memory()))->get_ptr();
-            ScaleParamSpec scaleParam;
-            scaleParam.axis = 1;
-            CHECK_STATUS(scale(this->inputTensors[0], alpha, nullptr, scaleParam,
-                this->outputTensors[0], &this->archInfo));
-        } else {
-            CHECK_STATUS(eltwise(this->inputTensors, this->eltwiseDesc, this->temp,
-                this->outputTensors[0], &this->archInfo));
-        }
+        CHECK_STATUS(eltwise(
+            this->inputTensors, this->p, this->temp, this->outputTensors[0], &this->archInfo));
     }
 
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
-        std::vector<TensorDesc> inputDesc;
-        for (auto p : inTensors) {
-            inputDesc.push_back(p->get_desc());
-        }
-        if (this->use_scale(inputDesc)) {
-            ScaleParamSpec scaleParam;
-            scaleParam.axis = 1;
-            TensorDesc desc = inTensors[1]->get_desc();
-            U32 axisLen = desc.dims[desc.nDims - 2];
-            CHECK_STATUS(scale_infer_output_size(
-                inTensors[0], scaleParam, axisLen, outTensors[0], &this->archInfo));
-        } else {
-            CHECK_STATUS(eltwise_infer_output_size(inTensors, outTensors[0], &this->archInfo));
-        }
-        return SUCCESS;
+        return eltwise_infer_output_size(inTensors, outTensors[0], &this->archInfo);
     }
 };
 

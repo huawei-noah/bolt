@@ -28,7 +28,7 @@ int eltwiseTest(int argc, char **argv, DataType dt)
     U32 len = in * ic * ih * iw;
     EltwiseMode eltwiseMode = ELTWISE_MAX;
     EltwiseParamSpec eltwiseDesc;
-    eltwiseDesc.elt_mode = eltwiseMode;
+    eltwiseDesc.mode = eltwiseMode;
     eltwiseDesc.activation_type = ACTIVATION_NULL;
 
     std::vector<void *> input(num);
@@ -40,7 +40,7 @@ int eltwiseTest(int argc, char **argv, DataType dt)
         input[i] = (void *)ut_input_v(len, dt, UT_INIT_RANDOM);
         inTensors[i].resize(inDesc);
         inTensors[i].alloc();
-        memcpy(get_ptr_from_tensor(inTensors[i], CPU_GENERAL), input[i], tensorNumBytes(inDesc));
+        UNI_MEMCPY(get_ptr_from_tensor(inTensors[i], CPU_GENERAL), input[i], tensorNumBytes(inDesc));
         inTensorPtr[i] = &inTensors[i];
     }
 

@@ -18,6 +18,7 @@
 #include "data_loader.hpp"
 #include <algorithm>
 #include <string>
+#include <fstream>
 
 #ifdef _BUILD_TEST
 #include <jpeglib.h>
@@ -50,7 +51,7 @@ std::vector<Tensor> load_jpeg(
         info.out_color_space);
     CHECK_REQUIREMENT(2 == info.out_color_space);  // Support RGB for now
 
-    U8 *data = (U8 *)malloc(dataSize);
+    U8 *data = (U8 *)UNI_MALLOC(dataSize);
     JSAMPROW row_pointer[1];
     while (info.output_scanline < info.output_height) {
         row_pointer[0] = data + info.output_scanline * width * numChannels;
@@ -76,7 +77,7 @@ std::vector<Tensor> load_jpeg(
         b[i] = dataMov[2];
         dataMov += numChannels;
     }
-    free(data);
+    UNI_FREE(data);
 
     std::shared_ptr<Tensor> imageTensor =
         load_resize_image(rgbTensor, imageDesc[0], ImageFormat, scaleValue);
@@ -130,7 +131,8 @@ void get_files(std::string directoryName, std::vector<std::string> &files)
     }
     struct dirent *file;
     while ((file = readdir(directory)) != NULL) {
-        if (strcmp(file->d_name, ".") == 0 || strcmp(file->d_name, "..") == 0) {
+        if (std::string(file->d_name) == std::string(".") ||
+            std::string(file->d_name) == std::string("..")) {
             continue;
         }
         struct stat st;
@@ -146,7 +148,7 @@ void get_files(std::string directoryName, std::vector<std::string> &files)
     closedir(directory);
 }
 
-Tensor fscanfReadData(FILE *f, TensorDesc desc)
+Tensor readFileData(std::ifstream &file, TensorDesc desc)
 {
     Tensor tensor = Tensor::alloc_sized<CPUMem>(desc);
     U32 size = tensor.length();
@@ -156,41 +158,37 @@ Tensor fscanfReadData(FILE *f, TensorDesc desc)
         case DT_F32: {
             F32 *dataPtr = (F32 *)ptr;
             for (U32 i = 0; i < size; i++) {
-                fscanf(f, "%f", dataPtr + i);
+                file >> dataPtr[i];
             }
             break;
         }
-#ifdef __aarch64__
+#ifdef _USE_FP16
         case DT_F16: {
             F16 *dataPtr = (F16 *)ptr;
             F32 value;
             for (U32 i = 0; i < size; i++) {
-                fscanf(f, "%f", &value);
+                file >> value;
                 dataPtr[i] = (F16)value;
             }
             break;
         }
 #endif
         case DT_U32: {
-            F32 value = 0;
             U32 *dataPtr = (U32 *)ptr;
             for (U32 i = 0; i < size; i++) {
-                fscanf(f, "%f", &value);
-                dataPtr[i] = value;
+                file >> dataPtr[i];
             }
             break;
         }
         case DT_I32: {
-            F32 value = 0;
             I32 *dataPtr = (I32 *)ptr;
             for (U32 i = 0; i < size; i++) {
-                fscanf(f, "%f", &value);
-                dataPtr[i] = value;
+                file >> dataPtr[i];
             }
             break;
         }
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("not support to read %s type data.\n", DataTypeName()[dataType]);
             break;
     }
     return tensor;
@@ -211,31 +209,37 @@ std::vector<Tensor> load_fake_data(std::vector<TensorDesc> dataDesc)
 std::vector<Tensor> load_txt(std::string dataPath, std::vector<TensorDesc> dataDesc)
 {
     std::vector<Tensor> result;
-    FILE *f = fopen(dataPath.c_str(), "r");
-    CHECK_REQUIREMENT(f != nullptr);
-    for (U32 index = 0; index < dataDesc.size(); index++) {
-        result.push_back(fscanfReadData(f, dataDesc[index]));
+    std::ifstream file;
+    file.open(dataPath.c_str());
+    if (!file.is_open()) {
+        UNI_ERROR_LOG("can not read %s.\n", dataPath.c_str());
     }
-    fclose(f);
+    for (U32 index = 0; index < dataDesc.size(); index++) {
+        result.push_back(readFileData(file, dataDesc[index]));
+    }
+    file.close();
     return result;
 }
 
 std::vector<Tensor> load_seq(std::string dataPath, std::vector<TensorDesc> dataDesc)
 {
     std::vector<Tensor> result;
-    FILE *f = fopen(dataPath.c_str(), "r");
-    CHECK_REQUIREMENT(f != nullptr);
+    std::ifstream file;
+    file.open(dataPath.c_str());
+    if (!file.is_open()) {
+        UNI_ERROR_LOG("can not read %s.\n", dataPath.c_str());
+    }
     for (U32 index = 0; index < dataDesc.size(); index++) {
         U32 sequenceLen = 0;
-        fscanf(f, "%u", &sequenceLen);
+        file >> sequenceLen;
         TensorDesc sequenceDesc = dataDesc[index];
         sequenceDesc.dims[0] = sequenceLen;
         for (U32 j = 1; j < sequenceDesc.nDims; j++) {
             sequenceDesc.dims[j] = 1;
         }
-        result.push_back(fscanfReadData(f, sequenceDesc));
+        result.push_back(readFileData(file, sequenceDesc));
     }
-    fclose(f);
+    file.close();
     return result;
 }
 
@@ -253,21 +257,15 @@ std::vector<Tensor> load_bin(
             Tensor tensor = Tensor::alloc_sized<CPUMem>(sourceDesc);
             U32 len = tensor.length();
             auto ptr = ((CpuMemory *)(tensor.get_memory()))->get_ptr();
-            U32 readLength = fread(ptr, bytesOf(sourceDataType[index]), len, f);
-            CHECK_REQUIREMENT(len == readLength);
+            CHECK_REQUIREMENT(fread(ptr, bytesOf(sourceDataType[index]), len, f) == len);
             if (sourceDataType[index] != dataDesc[index].dt) {
                 Tensor transform_tensor = Tensor::alloc_sized<CPUMem>(dataDesc[index]);
-                if (0) {
-#ifdef __aarch64__
-                } else if (sourceDataType[index] == DT_F32 && dataDesc[index].dt == DT_F16) {
-                    F32 *ptr1 = (F32 *)ptr;
-                    F16 *ptr2 = (F16 *)((CpuMemory *)(transform_tensor.get_memory()))->get_ptr();
-                    for (U32 i = 0; i < len; i++) {
-                        ptr2[i] = (F16)ptr1[i];
-                    }
-#endif
+                if (sourceDataType[index] == DT_F32) {
+                    transformFromFloat(dataDesc[index].dt, (const float *)ptr,
+                        ((CpuMemory *)(transform_tensor.get_memory()))->get_ptr(), len);
                 } else {
-                    CHECK_STATUS(NOT_SUPPORTED);
+                    UNI_ERROR_LOG("not support to read+transform %s data.\n",
+                        DataTypeName()[sourceDataType[index]]);
                 }
                 result.push_back(transform_tensor);
             } else {
@@ -314,4 +312,22 @@ std::vector<std::string> load_data(std::string directoryPath,
         dataPaths.push_back(dataPath);
     }
     return dataPaths;
+}
+
+bool is_directory(std::string path)
+{
+    bool ret = false;
+    struct stat s;
+    if (stat(path.c_str(), &s) == 0) {
+        if (s.st_mode & S_IFDIR) {
+            ret = true;
+        } else if (s.st_mode & S_IFREG) {
+            ret = false;
+        } else {
+            UNI_ERROR_LOG("can not recognize %s.\n", path.c_str());
+        }
+    } else {
+        UNI_ERROR_LOG("%s is not exist.\n", path.c_str());
+    }
+    return ret;
 }

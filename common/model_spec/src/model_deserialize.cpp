@@ -128,16 +128,16 @@ EE operator_relationship(ModelSpec *spec)
     int opNum = spec->num_operator_specs;
     spec->num_op_tensor_entries = opNum;
     OperatorSpec *opsPtr2 = spec->ops;
-    OperatorRelationshipMapEntry *oprmePtr = (OperatorRelationshipMapEntry *)mt_new_storage(
-        sizeof(OperatorRelationshipMapEntry) * opNum);
+    OperatorRelationshipMapEntry *oprmePtr =
+        (OperatorRelationshipMapEntry *)mt_malloc(sizeof(OperatorRelationshipMapEntry) * opNum);
     spec->op_relationship_entries = oprmePtr;
     for (int j = 0; j < opNum; j++) {
         str_copy(oprmePtr[j].op, opsPtr2[j].name, NAME_LEN);
         int opInOpNum = opInTensorNew[opsPtr2[j].name].size();
         oprmePtr[j].num_inputs = opInOpNum;
-        oprmePtr[j].input_op_names = (I8 **)mt_new_storage(opInOpNum * sizeof(I8 *));
+        oprmePtr[j].input_op_names = (I8 **)mt_malloc(opInOpNum * sizeof(I8 *));
         for (int k = 0; k < opInOpNum; k++) {
-            oprmePtr[j].input_op_names[k] = (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
+            oprmePtr[j].input_op_names[k] = (I8 *)mt_malloc(NAME_LEN * sizeof(I8));
             std::string ten_name = opInTensorNew[opsPtr2[j].name][k];
             std::string tensor2op = tensorOpMapping[ten_name];
             str_copy(oprmePtr[j].input_op_names[k], tensor2op.c_str(), tensor2op.length());
@@ -145,9 +145,9 @@ EE operator_relationship(ModelSpec *spec)
 
         int opOutOpNum = tensorFlowsToOpSet[opOutTensorNew[opsPtr2[j].name]].size();
         oprmePtr[j].num_outputs = opOutOpNum;
-        oprmePtr[j].output_op_names = (I8 **)mt_new_storage(opOutOpNum * sizeof(I8 *));
+        oprmePtr[j].output_op_names = (I8 **)mt_malloc(opOutOpNum * sizeof(I8 *));
         for (int k = 0; k < opOutOpNum; k++) {
-            oprmePtr[j].output_op_names[k] = (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
+            oprmePtr[j].output_op_names[k] = (I8 *)mt_malloc(NAME_LEN * sizeof(I8));
             std::string tensor2op = tensorFlowsToOpSet[opOutTensorNew[opsPtr2[j].name]][k];
             str_copy(oprmePtr[j].output_op_names[k], tensor2op.c_str(), tensor2op.length());
         }
@@ -163,11 +163,11 @@ void dequantize_int8_weight(int num, F32 scale, INT8 *q, T *d)
     int base = -127;
     for (int i = 0; i < 255; i++) {
         F32 value = factor * base;
-#ifndef __aarch64__
+#ifndef _USE_FP16
         if (dt != DT_F16) {
 #endif
             table[i] = value;
-#ifndef __aarch64__
+#ifndef _USE_FP16
         } else {
             transformFromFloat(DT_F16, &value, table + i, 1);
         }
@@ -184,7 +184,7 @@ template <typename T>
 inline void deserialize_field(const char **buffer, U32 *position, T *element, int length = 1)
 {
     int size = length * sizeof(T);
-    memcpy(element, *buffer, size);
+    UNI_MEMCPY(element, *buffer, size);
     *buffer += size;
     *position += size;
 }
@@ -196,18 +196,20 @@ EE deserialize_header(const char *bytes, ModelSpec *spec, U32 *pos)
 
     deserialize_field<I32>(pointer, pos, &spec->version);
     if (spec->version != sg_boltVersion) {
-        UNI_ERROR_LOG("X2bolt version is [%d], but your model version is : [%d].\n Please update "
-                      "X2bolt to version[%d].\n",
-            sg_boltVersion, spec->version, spec->version);
-        CHECK_STATUS(NOT_MATCH);
+        UNI_WARNING_LOG("The read model module version(%d) of the library should match the model "
+                        "file of the same version, but your model version is %d. This may "
+                        "encounter error.\nPlease use another library or reconverter model.\n",
+            sg_boltVersion, spec->version);
+    }
+    if (spec->version < 20201120) {
+        UNI_ERROR_LOG("This library can not read model with version(%d),\n", spec->version);
         return NOT_MATCH;
     }
 
     deserialize_field<I32>(pointer, pos, &spec->magic_number);
     if (spec->magic_number != sg_magicNumber) {
-        UNI_ERROR_LOG(
-            "magic_number not_match: code %d bolt model %d\n", sg_magicNumber, spec->magic_number);
-        CHECK_STATUS(NOT_MATCH);
+        UNI_ERROR_LOG("magic number not match: library is %d, bolt model is %d\n", sg_magicNumber,
+            spec->magic_number);
         return NOT_MATCH;
     }
 
@@ -215,18 +217,18 @@ EE deserialize_header(const char *bytes, ModelSpec *spec, U32 *pos)
     deserialize_field<DataType>(pointer, pos, &spec->dt);
 
     deserialize_field<I32>(pointer, pos, &spec->num_inputs);
-    spec->input_names = (I8 **)mt_new_storage(spec->num_inputs * sizeof(I8 *));
-    spec->input_dims = (TensorDesc *)mt_new_storage(spec->num_inputs * sizeof(TensorDesc));
+    spec->input_names = (I8 **)mt_malloc(spec->num_inputs * sizeof(I8 *));
+    spec->input_dims = (TensorDesc *)mt_malloc(spec->num_inputs * sizeof(TensorDesc));
     for (int i = 0; i < spec->num_inputs; i++) {
-        spec->input_names[i] = (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
+        spec->input_names[i] = (I8 *)mt_malloc(NAME_LEN * sizeof(I8));
         deserialize_field<I8>(pointer, pos, spec->input_names[i], NAME_LEN);
     }
     deserialize_field<TensorDesc>(pointer, pos, spec->input_dims, spec->num_inputs);
 
     deserialize_field<I32>(pointer, pos, &spec->num_outputs);
-    spec->output_names = (I8 **)mt_new_storage(spec->num_outputs * NAME_LEN);
+    spec->output_names = (I8 **)mt_malloc(spec->num_outputs * NAME_LEN);
     for (int i = 0; i < spec->num_outputs; i++) {
-        spec->output_names[i] = (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
+        spec->output_names[i] = (I8 *)mt_malloc(NAME_LEN * sizeof(I8));
         deserialize_field<I8>(pointer, pos, spec->output_names[i], NAME_LEN);
     }
     return SUCCESS;
@@ -238,43 +240,57 @@ EE deserialize_operator(const char *bytes, ModelSpec *spec, U32 *pos)
     const char **pointer = &operator_pointer;
 
     deserialize_field<I32>(pointer, pos, &spec->num_operator_specs);
-    spec->ops = (OperatorSpec *)mt_new_storage(spec->num_operator_specs * sizeof(OperatorSpec));
+    spec->ops = (OperatorSpec *)mt_malloc(spec->num_operator_specs * sizeof(OperatorSpec));
     OperatorSpec *ptr = spec->ops;
     for (int i = 0; i < spec->num_operator_specs; i++) {
         deserialize_field<I8>(pointer, pos, ptr[i].name, NAME_LEN);
         deserialize_field<OperatorType>(pointer, pos, &ptr[i].type);
 
         deserialize_field<U32>(pointer, pos, &ptr[i].num_inputs);
-        ptr[i].input_tensors_name = (I8 **)mt_new_storage(ptr[i].num_inputs * sizeof(I8 *));
+        ptr[i].input_tensors_name = (I8 **)mt_malloc(ptr[i].num_inputs * sizeof(I8 *));
         for (U32 j = 0; j < ptr[i].num_inputs; j++) {
-            ptr[i].input_tensors_name[j] = (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
+            ptr[i].input_tensors_name[j] = (I8 *)mt_malloc(NAME_LEN * sizeof(I8));
             deserialize_field<I8>(pointer, pos, ptr[i].input_tensors_name[j], NAME_LEN);
         }
 
         deserialize_field<U32>(pointer, pos, &ptr[i].num_outputs);
-        ptr[i].output_tensors_name = (I8 **)mt_new_storage(ptr[i].num_outputs * sizeof(I8 *));
+        ptr[i].output_tensors_name = (I8 **)mt_malloc(ptr[i].num_outputs * sizeof(I8 *));
         for (U32 j = 0; j < ptr[i].num_outputs; j++) {
-            ptr[i].output_tensors_name[j] = (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
+            ptr[i].output_tensors_name[j] = (I8 *)mt_malloc(NAME_LEN * sizeof(I8));
             deserialize_field<I8>(pointer, pos, ptr[i].output_tensors_name[j], NAME_LEN);
         }
 
         U32 numTensors = ptr[i].num_inputs + ptr[i].num_outputs;
-        ptr[i].tensor_positions = (I32 *)mt_new_storage(numTensors * sizeof(I32));
+        ptr[i].tensor_positions = (I32 *)mt_malloc(numTensors * sizeof(I32));
         deserialize_field<I32>(pointer, pos, ptr[i].tensor_positions, numTensors);
 
         deserialize_field<U32>(pointer, pos, &ptr[i].num_quant_feature);
-        ptr[i].feature_scale =
-            (QuantSpec *)mt_new_storage(ptr[i].num_quant_feature * sizeof(QuantSpec));
+        ptr[i].feature_scale = (QuantSpec *)mt_malloc(ptr[i].num_quant_feature * sizeof(QuantSpec));
         for (U32 j = 0; j < ptr[i].num_quant_feature; j++) {
             deserialize_field<I32>(pointer, pos, &(ptr[i].feature_scale[j].num_scale));
             ptr[i].feature_scale[j].scale =
-                (F32 *)mt_new_storage(ptr[i].feature_scale[j].num_scale * sizeof(F32));
+                (F32 *)mt_malloc(ptr[i].feature_scale[j].num_scale * sizeof(F32));
             deserialize_field<F32>(
                 pointer, pos, ptr[i].feature_scale[j].scale, ptr[i].feature_scale[j].num_scale);
         }
 
-        deserialize_field<U8>(
-            pointer, pos, (U8 *)&(ptr[i].ps), get_operator_parameter_size(ptr[i].type));
+        deserialize_field<U8>(pointer, pos, (U8 *)&(ptr[i].ps),
+            get_operator_parameter_size(spec->version, ptr[i].type));
+        if (spec->version == 20201120) {
+            if (ptr[i].type == OT_Conv || ptr[i].type == OT_Deconvolution) {
+                ptr[i].ps.conv_spec.output_pad_t = 0;
+                ptr[i].ps.conv_spec.output_pad_h = 0;
+                ptr[i].ps.conv_spec.output_pad_w = 0;
+            }
+            if (ptr[i].type == OT_LayerNorm) {
+                ptr[i].ps.ln_spec.axis = -1;
+            }
+        }
+        if (spec->version == 20201120 || spec->version == 20211021) {
+            if (ptr[i].type == OT_Transpose) {
+                ptr[i].ps.transpose_spec.df = DF_NCHW;
+            }
+        }
     }
     return SUCCESS;
 }
@@ -285,7 +301,7 @@ EE deserialize_weight(const char *bytes, ModelSpec *spec, U32 *pos)
     const char **pointer = &weight_pointer;
 
     deserialize_field<I32>(pointer, pos, &spec->num_weight_specs);
-    spec->ws = (WeightSpec *)mt_new_storage(spec->num_weight_specs * sizeof(WeightSpec));
+    spec->ws = (WeightSpec *)mt_malloc(spec->num_weight_specs * sizeof(WeightSpec));
     WeightSpec *ptr = spec->ws;
     for (int i = 0; i < spec->num_weight_specs; i++) {
         U32 length = 0, count = 0;
@@ -296,17 +312,19 @@ EE deserialize_weight(const char *bytes, ModelSpec *spec, U32 *pos)
 
         bool quantFP16 = false;
         bool quantInt8 = false;
-        if (DT_F16 == ptr[i].mdt && DT_F32 == spec->dt) {
-            ptr[i].mdt = DT_F32;
-            quantFP16 = true;
-        } else if (DT_I8 == ptr[i].mdt && DT_I8 != spec->dt) {
-            if (spec->dt == DT_F16_8Q) {
-                ptr[i].mdt = DT_F16;
-            } else if (spec->dt == DT_F32_8Q) {
-                ptr[i].mdt = DT_F32;
-            } else {
-                ptr[i].mdt = spec->dt;
+        if (DT_F32 == spec->dt) {
+            if (ptr[i].mdt == DT_F16) {
+                quantFP16 = true;
             }
+            if (ptr[i].mdt == DT_I8) {
+                quantInt8 = true;
+            }
+            ptr[i].mdt = DT_F32;
+        } else if (DT_F16_8Q == ptr[i].mdt) {
+            ptr[i].mdt = DT_F16;
+            quantInt8 = true;
+        } else if (DT_F32_8Q == ptr[i].mdt) {
+            ptr[i].mdt = DT_F32;
             quantInt8 = true;
         }
 
@@ -338,12 +356,11 @@ EE deserialize_weight(const char *bytes, ModelSpec *spec, U32 *pos)
         }
 
         deserialize_field<U32>(pointer, pos, &ptr[i].num_quant_scale);
-        ptr[i].weight_scale =
-            (QuantSpec *)mt_new_storage(ptr[i].num_quant_scale * sizeof(QuantSpec));
+        ptr[i].weight_scale = (QuantSpec *)mt_malloc(ptr[i].num_quant_scale * sizeof(QuantSpec));
         for (U32 j = 0; j < ptr[i].num_quant_scale; j++) {
             deserialize_field<I32>(pointer, pos, &(ptr[i].weight_scale[j].num_scale));
             ptr[i].weight_scale[j].scale =
-                (F32 *)mt_new_storage(ptr[i].weight_scale[j].num_scale * sizeof(F32));
+                (F32 *)mt_malloc(ptr[i].weight_scale[j].num_scale * sizeof(F32));
             deserialize_field<F32>(
                 pointer, pos, ptr[i].weight_scale[j].scale, ptr[i].weight_scale[j].num_scale);
         }
@@ -351,21 +368,21 @@ EE deserialize_weight(const char *bytes, ModelSpec *spec, U32 *pos)
         CHECK_REQUIREMENT(length == count);
 
         if (quantFP16) {
-            ptr[i].weight = (U8 *)mt_new_storage(ptr[i].bytes_of_weight);
-            ptr[i].vec = (U8 *)mt_new_storage(ptr[i].bytes_of_vec);
+            ptr[i].weight = (U8 *)mt_malloc(ptr[i].bytes_of_weight);
+            ptr[i].vec = (U8 *)mt_malloc(ptr[i].bytes_of_vec);
             transformToFloat(DT_F16, serialWeight, (F32 *)ptr[i].weight, ptr[i].bytes_of_weight / 4);
             transformToFloat(DT_F16, serialBias, (F32 *)ptr[i].vec, ptr[i].bytes_of_vec / 4);
         } else {
             if (quantInt8) {
                 CHECK_REQUIREMENT(
                     1 == ptr[i].num_quant_scale && 1 == ptr[i].weight_scale[0].num_scale);
-                ptr[i].weight = (U8 *)mt_new_storage(ptr[i].bytes_of_weight);
+                ptr[i].weight = (U8 *)mt_malloc(ptr[i].bytes_of_weight);
                 F32 scale = ptr[i].weight_scale[0].scale[0];
                 if (DT_F32 == ptr[i].mdt) {
                     dequantize_int8_weight<DT_F32, F32>(ptr[i].bytes_of_weight / 4, scale,
                         (INT8 *)serialWeight, (F32 *)ptr[i].weight);
                 } else if (DT_F16 == ptr[i].mdt) {
-#ifdef __aarch64__
+#ifdef _USE_FP16
                     dequantize_int8_weight<DT_F16, F16>(ptr[i].bytes_of_weight / 2, scale,
                         (INT8 *)serialWeight, (F16 *)ptr[i].weight);
 #else
@@ -375,7 +392,7 @@ EE deserialize_weight(const char *bytes, ModelSpec *spec, U32 *pos)
                 } else {
                     UNI_ERROR_LOG(
                         "Can not support convert INT8 data to %s.\n", DataTypeName()[ptr[i].mdt]);
-                    exit(1);
+                    return NOT_SUPPORTED;
                 }
             } else {
                 ptr[i].weight = serialWeight;
@@ -389,28 +406,36 @@ EE deserialize_weight(const char *bytes, ModelSpec *spec, U32 *pos)
 EE deserialize_model(const char *bytes, ModelSpec *spec)
 {
     U32 pos = 0;
-    CHECK_STATUS(deserialize_header(bytes, spec, &pos));
-    CHECK_STATUS(deserialize_operator(bytes, spec, &pos));
-    CHECK_STATUS(deserialize_weight(bytes, spec, &pos));
-    CHECK_STATUS(operator_relationship(spec));
+    EE ret = deserialize_header(bytes, spec, &pos);
+    if (ret == SUCCESS) {
+        ret = deserialize_operator(bytes, spec, &pos);
+    }
+    if (ret == SUCCESS) {
+        ret = deserialize_weight(bytes, spec, &pos);
+    }
+    if (ret == SUCCESS) {
+        ret = operator_relationship(spec);
+    }
     if (spec->mfd->useFileStream) {
         spec->mfd->fileLength = pos;
     }
-    return SUCCESS;
+    return ret;
 }
 
 EE deserialize_model_from_file(const char *fn, ModelSpec *spec, bool useFileStream)
 {
     UNI_DEBUG_LOG("Read bolt model from %s...\n", (useFileStream ? "file stream" : fn));
+    EE ret = NOT_SUPPORTED;
     UNI_PROFILE(
         {
             char *bytes = nullptr;
             int fd = -1;
             size_t fileLength;
-            spec->mfd = (ModelFileDescriptor *)mt_new_storage(sizeof(ModelFileDescriptor));
+            spec->mfd = (ModelFileDescriptor *)mt_malloc(sizeof(ModelFileDescriptor));
             spec->mfd->useFileStream = useFileStream;
             if (useFileStream) {
                 bytes = (char *)fn;
+                ret = SUCCESS;
             } else {
 #ifdef _WIN32
                 FILE *file = fopen(fn, "rb");
@@ -423,7 +448,7 @@ EE deserialize_model_from_file(const char *fn, ModelSpec *spec, bool useFileStre
                 fileLength = ftell(file);
                 rewind(file);
 
-                bytes = (char *)malloc(sizeof(char) * fileLength);
+                bytes = (char *)UNI_MALLOC(sizeof(char) * fileLength);
                 if (bytes == NULL) {
                     UNI_ERROR_LOG("Memory allocated for model failed.\n");
                 }
@@ -459,9 +484,9 @@ EE deserialize_model_from_file(const char *fn, ModelSpec *spec, bool useFileStre
             }
             spec->mfd->bytes = bytes;
 
-            CHECK_STATUS(deserialize_model(bytes, spec));
+            ret = deserialize_model(bytes, spec);
         },
         std::string("deserialize_model_from_file"), std::string("prepare"));
     UNI_DEBUG_LOG("Read bolt model end.\n");
-    return SUCCESS;
+    return ret;
 }

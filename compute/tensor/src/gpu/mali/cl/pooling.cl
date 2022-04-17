@@ -72,6 +72,7 @@ __kernel void MANGLE_NAME(pooling_, IOM, PM)(const int iw_str,
     const int ph,
     const int kw,
     const int kh,
+    const int count_include_pad,
     READ_ONLY_KERNEL_MEM in,
     KERNEL_MEM out)
 {
@@ -116,7 +117,7 @@ __kernel void MANGLE_NAME(pooling_, IOM, PM)(const int iw_str,
         ADD_IN_OFF
     }
 #if defined(USE_POOLING_MEAN)
-    float psize = (eh - bh) * (ew - bw);
+    float psize = count_include_pad ? (kh * kw) : ((eh - bh) * (ew - bw));
     res = res / psize;
 #endif
     STORE_OUT;

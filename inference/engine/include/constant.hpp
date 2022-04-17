@@ -40,7 +40,7 @@ public:
     {
         Tensor outputTensor = this->outputTensors[0];
         auto outputPtr = ((CpuMemory *)outputTensor.get_memory())->get_ptr();
-        memcpy(outputPtr, data, tensorNumBytes(constDesc));
+        UNI_MEMCPY(outputPtr, data, tensorNumBytes(constDesc));
     }
 
     EE infer_output_tensors_size(std::vector<TensorDesc> *outDims) override

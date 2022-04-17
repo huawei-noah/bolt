@@ -144,10 +144,10 @@ public:
                 ret = true;
                 break;
             }
-            case OT_Power: {
-                ret = true;
-                break;
-            }
+            //case OT_Power: {
+            //    ret = true;
+            //    break;
+            //}
             default: {
                 break;
             }

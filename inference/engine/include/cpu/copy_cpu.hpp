@@ -43,11 +43,11 @@ public:
         U32 copyLength = (this->p.length >= 0) ? this->p.length : tensorNumElements(srcDesc) / batch;
         U32 srcBatchStride = (this->p.src_dims[0] >= 0) ? this->p.src_dims[0]
                                                         : tensorNumElements(srcDesc) / batch;
-        U32 srcStride = (this->p.src_dims[0] >= 0) ? this->p.src_dims[1]
+        U32 srcStride = (this->p.src_dims[1] >= 0) ? this->p.src_dims[1]
                                                    : tensorNumElements(srcDesc) / batch;
         U32 dstBatchStride = (this->p.dst_dims[0] >= 0) ? this->p.dst_dims[0]
                                                         : tensorNumElements(dstDesc) / batch;
-        U32 dstStride = (this->p.dst_dims[0] >= 0) ? this->p.dst_dims[1]
+        U32 dstStride = (this->p.dst_dims[1] >= 0) ? this->p.dst_dims[1]
                                                    : tensorNumElements(dstDesc) / batch;
         for (U32 i = 0; i < batch; i++) {
             U32 srcBlockIndex = 0;

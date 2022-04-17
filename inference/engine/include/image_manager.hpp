@@ -11,8 +11,8 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef _IMAGE_MANAGER_
-#define _IMAGE_MANAGER_
+#ifndef _IMAGE_MANAGER_H
+#define _IMAGE_MANAGER_H
 #include <vector>
 
 class ImageManager {
@@ -32,7 +32,7 @@ public:
         if (width == 0 && height == 0 && depth == 0) {
             return false;
         } else if (width == 0 || height == 0 || depth == 0) {
-            CHECK_STATUS(NOT_MATCH);
+            UNI_ERROR_LOG("gpu image tensor parameter is wrong.\n");
         }
         if (imageVecs.count(slot) == 0) {
             std::vector<std::vector<U32>> strs(1, str);

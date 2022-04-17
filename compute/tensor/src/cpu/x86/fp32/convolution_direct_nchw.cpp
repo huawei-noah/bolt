@@ -1671,10 +1671,10 @@ EE convolution_direct_nchw(TensorDesc inputDesc,
     I32 fhDilated = (fh - 1) * dilateH + 1;
     I32 fwDilated = (fw - 1) * dilateW + 1;
     //pad
-    I32 paddingT = convParamSpec.padding_top;
-    I32 paddingB = convParamSpec.padding_bottom;
-    I32 paddingL = convParamSpec.padding_left;
-    I32 paddingR = convParamSpec.padding_right;
+    I32 paddingT = convParamSpec.pad_top;
+    I32 paddingB = convParamSpec.pad_bottom;
+    I32 paddingL = convParamSpec.pad_left;
+    I32 paddingR = convParamSpec.pad_right;
     I32 ohPaddingT = 0;
     I32 ohPaddingB = 0;
     if ((paddingL == 0) && (paddingR == 0) && (paddingT != 0 || paddingB != 0)) {

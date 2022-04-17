@@ -14,6 +14,7 @@
 #include <getopt.h>
 #include "online_conversion.h"
 #include "model_print.h"
+#include "model_common.h"
 #include <iostream>
 #include <algorithm>
 
@@ -28,7 +29,7 @@ void print_X2bolt_usage()
                  "2. -m <modelFileName>: The name of your model file without file suffix.\n"
                  "Tips: If your model trained from caffe, please ensure the model file prefix of "
                  "prototxt and caffemodel are the same, otherwise error occurs.\n"
-                 "3. -i <inferencePrecision>: The inference precision. Currently, you can only "
+                 "3. -i [inferencePrecision]: The inference precision. Currently, you can only "
                  "choose one of {FP32, FP16, PTQ, BNN_FP16}. PTQ produces the input for "
                  "post_training_quantization tool. INT8_FP16 is for machine(ARMv8.2+) that "
                  "supports fp16 to compute non BNN(1-bit) operators.\n"
@@ -36,7 +37,12 @@ void print_X2bolt_usage()
                  "The default value is 0.\n"
                  "5. -v : X2bolt version information.\n"
                  "6. -V : Bolt Model detail information.\n"
-                 "7. -h : X2bolt help information.\n"
+                 "7. -t : training format for on-device finetuning.\n"
+                 "8. -h : X2bolt help information.\n"
+                 "9. -I : To modify input names of the model. Please use ',' as the connection "
+                 "symbol.\n"
+                 "10. -O : To modify output names of the model. Please use ',' as the connection "
+                 "symbol.\n"
                  "Example: ./X2bolt -d /local/models/ -m resnet50 -i FP16\n"
                  "If model conversion is successful, you can find the resnet50_f16.bolt file in "
                  "/local/models. Otherwise, you should check the usage Intro above.\n"
@@ -67,9 +73,12 @@ int main(int argc, char *argv[])
     std::string inferPrecision = "FP32";
     I32 removeProcessOpsNum = 0;
     bool printModel = false;
+    bool trainMode = false;
+    std::string modifiedInputs = "";
+    std::string modifiedOutputs = "";
 
     int option;
-    const char *optionstring = "d:m:i:r:V";
+    const char *optionstring = "d:m:i:r:VtI:O:";
     while ((option = getopt(argc, argv, optionstring)) != -1) {
         switch (option) {
             case 'd':
@@ -94,6 +103,15 @@ int main(int argc, char *argv[])
             case 'V':
                 printModel = true;
                 break;
+            case 't':
+                trainMode = true;
+                break;
+            case 'I':
+                modifiedInputs = optarg;
+                break;
+            case 'O':
+                modifiedOutputs = optarg;
+                break;
             default:
                 std::cerr << "Input option gets error. Please check the params meticulously.\n"
                           << std::endl;
@@ -107,12 +125,14 @@ int main(int argc, char *argv[])
     }
     transform(inferPrecision.begin(), inferPrecision.end(), inferPrecision.begin(), toupper);
 
-    void *onlineModel = OnlineModelConversion(
-        storagePath.c_str(), modelFileName.c_str(), inferPrecision.c_str(), removeProcessOpsNum);
+    void *onlineModel = OnlineModelConversion(storagePath.c_str(), modelFileName.c_str(),
+        inferPrecision.c_str(), removeProcessOpsNum, trainMode);
     ModelSpec *ms = (ModelSpec *)onlineModel;
 
     std::string modelStorePath = storagePath + "/" + modelFileName;
-    if (inferPrecision.compare(std::string("PTQ")) == 0) {
+    if (trainMode) {
+        modelStorePath += std::string("_train.bolt");
+    } else if (inferPrecision.compare(std::string("PTQ")) == 0) {
         modelStorePath += std::string("_ptq_input.bolt");
     } else if (inferPrecision.compare(std::string("FP16")) == 0 ||
         inferPrecision.compare(std::string("BNN_FP16")) == 0) {
@@ -123,6 +143,10 @@ int main(int argc, char *argv[])
         UNI_ERROR_LOG("Unknown converter data precision: %s.\n", inferPrecision.c_str());
         exit(1);
     }
+
+    // modified input names and output names
+    modify_ms_inputs_and_outputs(ms, modifiedInputs, modifiedOutputs);
+
     UNI_INFO_LOG("Write bolt model to %s.\n", modelStorePath.c_str());
     CHECK_STATUS(serialize_model_to_file(ms, modelStorePath.c_str()));
     OnlineModelReclaim(onlineModel);
@@ -135,5 +159,6 @@ int main(int argc, char *argv[])
         CHECK_STATUS(mt_destroy_model(&resultMs));
     }
     std::cout << "Model Conversion Succeeded!" << std::endl;
+    // UNI_MEM_STATISTICS();
     return 0;
 }

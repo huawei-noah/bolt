@@ -11,8 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "error.h"
-
 #include "cpu/arm/blas_arm.h"
 #ifdef _USE_FP16
 #include "cpu/arm/fp16/blas_fp16.h"
@@ -23,13 +21,10 @@
 
 EE axpby_arm(U32 len, DataType dt, F32 a, const void *x, F32 b, void *y, Arch arch)
 {
-    EE ret = SUCCESS;
+    EE ret = NOT_SUPPORTED;
     switch (dt) {
 #ifdef _USE_FP16
         case DT_F16:
-            if (ARM_A55 != arch && ARM_A76 != arch) {
-                return NOT_SUPPORTED;
-            }
             ret = axpby_fp16(len, a, (F16 *)x, b, (F16 *)y);
             break;
 #endif
@@ -39,7 +34,6 @@ EE axpby_arm(U32 len, DataType dt, F32 a, const void *x, F32 b, void *y, Arch ar
             break;
 #endif
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
     return ret;

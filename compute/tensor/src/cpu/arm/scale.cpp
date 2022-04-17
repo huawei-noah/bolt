@@ -12,6 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "cpu/arm/tensor_computing_arm.h"
+#include "cpu/arm/int32/tensor_computing_int32.h"
 #ifdef _USE_FP32
 #include "cpu/arm/fp32/tensor_computing_fp32.h"
 #endif
@@ -36,7 +37,7 @@ EE scale_arm(TensorDesc inputDesc,
     if (outputDesc.df == DF_NCHWC8) {
         axis = outputDesc.nDims;
     }
-    EE ret = SUCCESS;
+    EE ret = NOT_SUPPORTED;
     switch (outputDesc.dt) {
 #ifdef _USE_FP32
         case DT_F32: {
@@ -52,8 +53,12 @@ EE scale_arm(TensorDesc inputDesc,
             break;
         }
 #endif
+        case DT_I32: {
+            ret = scale_int32((I32 *)input, axis, outputDesc.nDims, (I32 *)alpha, (I32 *)beta, on,
+                oc, elements_per_channel, ic, (I32 *)output);
+            break;
+        }
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
 

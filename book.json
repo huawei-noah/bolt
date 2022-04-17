@@ -1,0 +1,22 @@
+{
+    "plugins": [
+        "github",
+        "back-to-top-button",
+        "page-toc-button",
+        "insert-logo"
+    ],
+
+    "pluginsConfig": {
+        "github": {
+            "url": "https://github.com/huawei-noah/bolt"
+        },
+        "page-toc-button": {
+            "maxTocDepth": 1,
+            "minTocSize": 2
+        },
+        "insert-logo":{
+            "url":"../docs/images/LOGO.PNG",
+            "style":"background:none;max-height:100px"
+        }
+    }
+}

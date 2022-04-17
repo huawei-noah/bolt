@@ -48,9 +48,10 @@ inline EE set_scale_opt_mali(bool useAlpha,
 
     char ioMemName[128] = "";
     CHECK_STATUS(set_io_mem_name(inputMemType, outputMemType, ioMemName));
-    sprintf(kernelName, "scale_%s%s%s%s%s%s", ioMemName, formatName.c_str(), broadName.c_str(),
-        axisName.c_str(), alphaName.c_str(), betaName.c_str());
-    sprintf(kernelOpt->sourceName, "scale");
+    std::string kernel = std::string("scale_") + ioMemName + formatName + broadName + axisName +
+        alphaName + betaName;
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, "scale");
     CHECK_STATUS(set_io_mem_define_opt(inputMemType, outputMemType, opt));
     return SUCCESS;
 }

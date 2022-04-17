@@ -67,6 +67,12 @@ EE pooling_c8_fp16(const I32 &tstart,
 EE softmax_fp16(
     TensorDesc inputDesc, const F16 *input, int axis, TensorDesc outputDesc, F16 *output);
 
+EE logsoftmax_fp16(
+    TensorDesc inputDesc, const F16 *input, int axis, TensorDesc outputDesc, F16 *output);
+
+EE logsoftmax_fp16(
+    TensorDesc inputDesc, const F16 *input, int axis, TensorDesc outputDesc, F16 *output);
+
 EE attention_fp16(U32 batch,
     U32 numHeads,
     I32 fromSequenceLength,
@@ -167,8 +173,13 @@ EE power_fp16(TensorDesc inputDesc,
     TensorDesc outputDesc,
     F16 *output);
 
-EE layer_normalization_fp16(
-    TensorDesc inputDesc, F16 *input, F16 *alpha, F16 *beta, TensorDesc outputDesc, F16 *output);
+EE layer_normalization_fp16(TensorDesc inputDesc,
+    F16 *input,
+    LayerNormParamSpec p,
+    F16 *alpha,
+    F16 *beta,
+    TensorDesc outputDesc,
+    F16 *output);
 
 EE scale_fp16(F16 *input,
     I32 axis,

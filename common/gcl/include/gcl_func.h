@@ -559,7 +559,8 @@ inline EE gcl_create_kernel_with_source_map(
             option = handle->common_source_opt + " " + option;
         }
         if (!kernel_source->get_source(sourceName, &source_ptr)) {
-            UNI_ERROR_LOG("the %s doesn't exist in sourceMap\n", sourceName);
+            UNI_ERROR_LOG(
+                "the %s doesn't exist in sourceMap to find kernel %s.\n", sourceName, kernelName);
             CHECK_STATUS(NULL_POINTER);
         }
 
@@ -878,6 +879,53 @@ inline EE gcl_run_kernel(
     return SUCCESS;
 }
 
+inline EE gcl_get_kernel_name(Kernel kernel, I8 *kernelName)
+{
+    char name[256];
+    U32 len;
+    CHECK_STATUS(get_kernel_name(kernel, name, &len));
+    if (len > 256) {
+        UNI_ERROR_LOG("KernelName length %d > 256, please reset name array length\n", len);
+        CHECK_STATUS(NOT_MATCH);
+    } else {
+        UNI_STRCPY(kernelName, name);
+    }
+    return SUCCESS;
+}
+
+inline void gcl_set_kernel_ls_to_cache(GCLHandle_t handle, CI8 *kernelName, U32 gs[3], U32 ls[3])
+{
+    std::string name = kernelName;
+    name += "_" + std::to_string(gs[0]);
+    name += "_" + std::to_string(gs[1]);
+    name += "_" + std::to_string(gs[2]);
+    std::vector<U32> lsVec = {ls[0], ls[1], ls[2]};
+    if (handle->kernelLSCache.find(name) == handle->kernelLSCache.end()) {
+        handle->kernelLSCache[name] = lsVec;
+    }
+}
+
+inline bool gcl_get_kernel_ls_from_cache(GCLHandle_t handle, CI8 *kernelName, U32 gs[3], U32 ls[3])
+{
+    std::string name = kernelName;
+    name += "_" + std::to_string(gs[0]);
+    name += "_" + std::to_string(gs[1]);
+    name += "_" + std::to_string(gs[2]);
+    if (handle->kernelLSCache.find(name) != handle->kernelLSCache.end()) {
+        for (U32 i = 0; i < 3; i++) {
+            ls[i] = handle->kernelLSCache[name][i];
+        }
+        UNI_DEBUG_LOG("get kernel %s ls from cache success, gs is {%d %d %d}, ls is {%d %d %d}\n",
+            kernelName, gs[0], gs[1], gs[2], ls[0], ls[1], ls[2]);
+        return true;
+    } else {
+        UNI_DEBUG_LOG("get kernel %s ls from cache fail, try to find best ls for kernel, gs is {%d "
+                      "%d %d}\n",
+            kernelName, gs[0], gs[1], gs[2]);
+        return false;
+    }
+}
+
 inline U32 get_next_ls_size(U32 ls_size)
 {
     return (ls_size << 1);
@@ -969,16 +1017,20 @@ inline EE gcl_run_kernelVec_select_ls(GCLHandle_t handle, std::vector<U32> kerne
     for (auto index : kernelIndex) {
         auto kernelInfo = (*handle->kernelVec)[index];
         bool needSelectLs = false;
+        U32 gs[3] = {0, 0, 0};
         for (U32 i = 0; i < kernelInfo.dim; i++) {
             if (kernelInfo.ls[i] == 0) {
                 needSelectLs = true;
-                break;
             }
+            gs[i] = kernelInfo.gs[i];
         }
         if (!needSelectLs) {
             continue;
         }
         CHECK_STATUS(gcl_run_kernel_select_ls(handle, &kernelInfo));
+        char kernelName[256];
+        gcl_get_kernel_name(kernelInfo.kernel, kernelName);
+        gcl_set_kernel_ls_to_cache(handle, kernelName, gs, kernelInfo.ls);
         (*handle->kernelVec)[index].gs[0] = kernelInfo.gs[0];
         (*handle->kernelVec)[index].gs[1] = kernelInfo.gs[1];
         (*handle->kernelVec)[index].gs[2] = kernelInfo.gs[2];
@@ -995,17 +1047,18 @@ inline EE gcl_infer_best_kernelVec_ls_with_map(
 {
     std::vector<U32> kernelIndex;
     U32 len = handle->kernelVec->size();
+    bool needSaveKernelThreadInfoToMap = false;
     for (U32 i = 0; i < len; i++) {
         auto kernelInfo = (*handle->kernelVec)[i];
-        U32 gs[3];
-        U32 ls[3];
+        U32 gs[3] = {0};
+        U32 ls[3] = {0};
         bool findKernelThreadInfo = false;
         findKernelThreadInfo = algoMap->getKernelThreadInfoFromMap(kernelInfo.name, gs, ls);
         U32 dim = (*handle->kernelVec)[i].dim;
         if (findKernelThreadInfo) {
             U32 cur_gs[3];
             for (U32 j = 0; j < dim; j++) {
-                cur_gs[j] = (*handle->kernelVec)[i].gs[j];
+                cur_gs[j] = kernelInfo.gs[j];
                 if (ls[j] != 0) {
                     cur_gs[j] = (cur_gs[j] + ls[j] - 1) / ls[j] * ls[j];
                 }
@@ -1014,16 +1067,29 @@ inline EE gcl_infer_best_kernelVec_ls_with_map(
             }
         } else {
             bool noNeedInferLS = true;
+            needSaveKernelThreadInfoToMap = true;
             for (U32 j = 0; j < dim; j++) {
-                gs[j] = (*handle->kernelVec)[i].gs[j];
-                ls[j] = (*handle->kernelVec)[i].ls[j];
+                gs[j] = kernelInfo.gs[j];
+                ls[j] = kernelInfo.ls[j];
                 if (ls[j] == 0) {
                     noNeedInferLS = false;
                 }
             }
+            if (!noNeedInferLS) {
+                char kernelName[256];
+                gcl_get_kernel_name(kernelInfo.kernel, kernelName);
+                if (gcl_get_kernel_ls_from_cache(handle, kernelName, gs, ls)) {
+                    for (U32 j = 0; j < dim; j++) {
+                        (*handle->kernelVec)[i].ls[j] = ls[j];
+                    }
+                    noNeedInferLS = true;
+                }
+            }
             if (noNeedInferLS) {
                 for (U32 j = 0; j < dim; j++) {
-                    (*handle->kernelVec)[i].gs[j] = (gs[j] + ls[j] - 1) / ls[j] * ls[j];
+                    if (ls[j] > 0) {
+                        (*handle->kernelVec)[i].gs[j] = (gs[j] + ls[j] - 1) / ls[j] * ls[j];
+                    }
                 }
             }
             if (!noNeedInferLS) {
@@ -1032,9 +1098,11 @@ inline EE gcl_infer_best_kernelVec_ls_with_map(
         }
     }
     CHECK_STATUS(gcl_run_kernelVec_select_ls(handle, kernelIndex));
-    for (U32 i = 0; i < len; i++) {
-        auto kernelInfo = (*handle->kernelVec)[i];
-        algoMap->setKernelThreadInfoToMap(kernelInfo.name, kernelInfo.gs, kernelInfo.ls);
+    if (needSaveKernelThreadInfoToMap) {
+        for (U32 i = 0; i < len; i++) {
+            auto kernelInfo = (*handle->kernelVec)[i];
+            algoMap->setKernelThreadInfoToMap(kernelInfo.name, kernelInfo.gs, kernelInfo.ls);
+        }
     }
     return SUCCESS;
 }
@@ -1387,7 +1455,7 @@ inline EE gcl_set_kernelArgs(Kernel kernel, Args... args)
 inline std::string gclMemDesc2Str(GCLMemDesc desc)
 {
     char buff[128];
-    snprintf(buff, sizeof(buff), "dt:%s memFormat:%s ", DataTypeName()[desc.dt],
+    UNI_SNPRINTF(buff, sizeof(buff), "dt:%s memFormat:%s ", DataTypeName()[desc.dt],
         DataFormatName()[desc.memFormat]);
     std::string descStr = buff;
     descStr += "stride(";
@@ -1414,6 +1482,28 @@ inline EE gcl_get_image_size(GCLMem_t gclMem, U32 *width, U32 *height, U32 *dept
     CHECK_STATUS(get_image_size(gclMem->mem, width, height, depth));
     return SUCCESS;
 }
+
+inline void gcl_set_runInfo_to_cache(
+    GCLHandle_t handle, std::vector<I32> flag, ForwardRunInfoMali runInfo)
+{
+    if (handle->runInfoCache.find(flag) == handle->runInfoCache.end()) {
+        handle->runInfoCache[flag] = runInfo;
+    }
+}
+
+inline bool gcl_get_runInfo_from_cache(
+    GCLHandle_t handle, std::vector<I32> flag, ForwardRunInfoMali_t runInfo)
+{
+    if (handle->runInfoCache.find(flag) != handle->runInfoCache.end()) {
+        *runInfo = handle->runInfoCache[flag];
+        UNI_DEBUG_LOG("get forward run info from cache success\n");
+        return true;
+    } else {
+        UNI_DEBUG_LOG("get forward run info from cache fail, try to find best forward run info\n");
+        return false;
+    }
+}
+
 #ifdef _DEBUG
 template <typename T>
 inline EE gcl_print_memory(GCLHandle_t handle, GCLMem_t gclMem, CI8 *gclMemName = NULL)

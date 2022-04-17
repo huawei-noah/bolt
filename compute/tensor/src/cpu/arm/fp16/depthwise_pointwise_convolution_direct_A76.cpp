@@ -43,10 +43,10 @@ EE depthwise_pointwise_convolution_direct_A76(TensorDesc inputDesc,
     CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
     U32 strideH = convParamSpec.stride_h;
     U32 strideW = convParamSpec.stride_w;
-    U32 paddingT = convParamSpec.padding_top;
-    U32 paddingB = convParamSpec.padding_bottom;
-    U32 paddingL = convParamSpec.padding_left;
-    U32 paddingR = convParamSpec.padding_right;
+    U32 paddingT = convParamSpec.pad_top;
+    U32 paddingB = convParamSpec.pad_bottom;
+    U32 paddingL = convParamSpec.pad_left;
+    U32 paddingR = convParamSpec.pad_right;
     U32 dilateH = convParamSpec.dilatedRate_h;
     U32 dilateW = convParamSpec.dilatedRate_w;
 
@@ -71,20 +71,20 @@ EE depthwise_pointwise_convolution_direct_A76(TensorDesc inputDesc,
         F16 *inArray_mov = inArray + n * ic * ihiw * 8;
         for (U32 c = 0; c < ic; c++) {
             if (paddingT > 0) {
-                memset(inArray_pad_mov, 0, paddingT * iw_pad * 8 * bytesOf(fdt));
+                UNI_MEMSET(inArray_pad_mov, 0, paddingT * iw_pad * 8 * bytesOf(fdt));
                 inArray_pad_mov += paddingT * iw_pad * 8;
             }
             for (U32 h = paddingT; h < ih_pad - paddingB; h++) {
-                memset(inArray_pad_mov, 0, paddingL * 8 * bytesOf(fdt));
+                UNI_MEMSET(inArray_pad_mov, 0, paddingL * 8 * bytesOf(fdt));
                 inArray_pad_mov += paddingL * 8;
-                memcpy(inArray_pad_mov, inArray_mov, iw * 8 * bytesOf(fdt));
+                UNI_MEMCPY(inArray_pad_mov, inArray_mov, iw * 8 * bytesOf(fdt));
                 inArray_pad_mov += iw * 8;
                 inArray_mov += iw * 8;
-                memset(inArray_pad_mov, 0, paddingR * 8 * bytesOf(fdt));
+                UNI_MEMSET(inArray_pad_mov, 0, paddingR * 8 * bytesOf(fdt));
                 inArray_pad_mov += paddingR * 8;
             }
             if (paddingB > 0) {
-                memset(inArray_pad_mov, 0, paddingB * iw_pad * 8 * bytesOf(fdt));
+                UNI_MEMSET(inArray_pad_mov, 0, paddingB * iw_pad * 8 * bytesOf(fdt));
                 inArray_pad_mov += paddingB * iw_pad * 8;
             }
 
@@ -137,30 +137,29 @@ EE depthwise_pointwise_convolution_direct_A76(TensorDesc inputDesc,
                         F16 *in_5 = in_idx + in_h_5 * iw_pad * 8 + in_w_5 * 8;
                         F16 *in_6 = in_idx + in_h_6 * iw_pad * 8 + in_w_6 * 8;
                         F16 *in_7 = in_idx + in_h_7 * iw_pad * 8 + in_w_7 * 8;
-                        __asm__ __volatile__("ldr q17, [%[f0]]\n"
-                                             "ldr q9, [%[in0]]\n"
-                                             "ldr q10, [%[in1]]\n"
-                                             "ldr q11, [%[in2]]\n"
-                                             "ldr q12, [%[in3]]\n"
-                                             "ldr q13, [%[in4]]\n"
-                                             "ldr q14, [%[in5]]\n"
-                                             "ldr q15, [%[in6]]\n"
-                                             "ldr q16, [%[in7]]\n"
-                                             "fmla v0.8h,  v9.8h, v17.8h\n"
-                                             "fmla v1.8h, v10.8h, v17.8h\n"
-                                             "fmla v2.8h, v11.8h, v17.8h\n"
-                                             "fmla v3.8h, v12.8h, v17.8h\n"
-                                             "fmla v4.8h, v13.8h, v17.8h\n"
-                                             "fmla v5.8h, v14.8h, v17.8h\n"
-                                             "fmla v6.8h, v15.8h, v17.8h\n"
-                                             "fmla v7.8h, v16.8h, v17.8h\n"
-                                             :
-                                             : [in0] "r"(in_0), [in1] "r"(in_1), [in2] "r"(in_2),
-                                             [in3] "r"(in_3), [in4] "r"(in_4), [in5] "r"(in_5),
-                                             [in6] "r"(in_6), [in7] "r"(in_7), [f0] "r"(f_0)
-                                             : "memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5",
-                                             "v6", "v7", "v9", "v10", "v11", "v12", "v13", "v14",
-                                             "v15", "v16", "v17");
+                        __asm__ __volatile__(
+                            "ldr q17, [%[f0]]\n"
+                            "ldr q9, [%[in0]]\n"
+                            "ldr q10, [%[in1]]\n"
+                            "ldr q11, [%[in2]]\n"
+                            "ldr q12, [%[in3]]\n"
+                            "ldr q13, [%[in4]]\n"
+                            "ldr q14, [%[in5]]\n"
+                            "ldr q15, [%[in6]]\n"
+                            "ldr q16, [%[in7]]\n"
+                            "fmla v0.8h,  v9.8h, v17.8h\n"
+                            "fmla v1.8h, v10.8h, v17.8h\n"
+                            "fmla v2.8h, v11.8h, v17.8h\n"
+                            "fmla v3.8h, v12.8h, v17.8h\n"
+                            "fmla v4.8h, v13.8h, v17.8h\n"
+                            "fmla v5.8h, v14.8h, v17.8h\n"
+                            "fmla v6.8h, v15.8h, v17.8h\n"
+                            "fmla v7.8h, v16.8h, v17.8h\n"
+                            :
+                            : [in0] "r"(in_0), [in1] "r"(in_1), [in2] "r"(in_2), [in3] "r"(in_3),
+                            [in4] "r"(in_4), [in5] "r"(in_5), [in6] "r"(in_6), [in7] "r"(in_7), [f0] "r"(f_0)
+                            : "memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v9",
+                            "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17");
                     }
                 }
 

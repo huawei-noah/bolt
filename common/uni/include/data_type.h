@@ -15,9 +15,9 @@
 #define _H_DATA_TYPE
 
 #include <bitset>
-#include <string.h>
 #include <math.h>
-#ifdef __aarch64__
+#include <limits.h>
+#ifdef _USE_FP16
 #include <arm_neon.h>
 typedef __fp16 F16;
 #endif
@@ -25,8 +25,9 @@ typedef __fp16 F16;
 #include <immintrin.h>
 #include <xmmintrin.h>
 #define FTZ _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
-typedef float F16;
 #endif
+#define _USE_ULTRA_OPTIMIZATION
+#include "secure_c_wrapper.h"
 
 typedef int8_t INT8;
 typedef uint8_t UINT8;
@@ -56,26 +57,41 @@ typedef enum {
     DT_BIN11 = 8,
     DT_F32_8Q = 9,
     DT_U8_Q = 10,
-    DT_NUM = 11
+    DT_I64 = 11,
+    DT_U64 = 12,
+    DT_F64 = 13,
+    DT_NUM = 14
 } DataType;
 
 inline const char *const *DataTypeName()
 {
     static const char *const names[] = {"DT_U8", "DT_I8", "DT_U32", "DT_I32", "DT_F16", "DT_F16_8Q",
-        "DT_F32", "DT_BIN01", "DT_BIN11", "DT_F32_8Q", "DT_U8_Q", "DT_NUM"};
+        "DT_F32", "DT_BIN01", "DT_BIN11", "DT_F32_8Q", "DT_U8_Q", "DT_I64", "DT_U64", "DT_F64",
+        "DT_NUM"};
     return names;
 }
 
 inline U32 bytesOf(DataType dt)
 {
     // Please divide number of elements by 8 first in the case of binary data types
-    U32 bytes[] = {1, 1, 4, 4, 2, 2, 4, 1, 1, 4, 1};
-    return dt < DT_NUM ? bytes[dt] : 0;
+    U32 bytes[] = {1, 1, 4, 4, 2, 2, 4, 1, 1, 4, 1, 8, 8, 8};
+    U32 ret;
+    if (dt < DT_NUM) {
+        ret = bytes[dt];
+    } else {
+        ret = 0;
+        printf("[ERROR] try to get unknown type:%s bytes.\n", DataTypeName()[dt]);
+        exit(1);
+    }
+    return ret;
 }
 
 #ifdef _USE_FP16
 inline void transformFromHalf(DataType dataType, const F16 *src, void *dst, int num)
 {
+    if (num <= 0) {
+        return;
+    }
     if (num % 8 != 0) {
         printf("[ERROR] can not support to transformFromHalf for array(length(%d) mod 8 != 0).\n",
             num);
@@ -110,6 +126,9 @@ inline void transformFromHalf(DataType dataType, const F16 *src, void *dst, int 
 
 inline void transformToHalf(DataType dataType, const void *src, F16 *dst, int num)
 {
+    if (num <= 0) {
+        return;
+    }
     if (num % 8 != 0) {
         printf(
             "[ERROR] can not support to transformToHalf for array(length(%d) mod 8 != 0).\n", num);
@@ -148,12 +167,81 @@ inline void transformToHalf(DataType dataType, const void *src, F16 *dst, int nu
 }
 #endif
 
+inline void transformToInt(DataType dataType, const void *src, int *dst, int num)
+{
+    if (num <= 0) {
+        return;
+    }
+    switch (dataType) {
+        case DT_I64: {
+            I64 value;
+            const U8 *ptr = (const U8 *)src;
+            for (int i = 0; i < num; i++) {
+                UNI_MEMCPY(&value, ptr, sizeof(I64));
+                ptr += sizeof(I64);
+                value = value > INT_MAX ? INT_MAX : value;
+                dst[i] = value < INT_MIN ? INT_MIN : value;
+            }
+            break;
+        }
+        case DT_U32:
+        case DT_I32: {
+            UNI_MEMCPY(dst, src, sizeof(int) * num);
+            break;
+        }
+        default: {
+            printf("[ERROR] can not transform %s to int.\n", DataTypeName()[dataType]);
+            exit(1);
+        }
+    }
+}
+
+inline unsigned short float32ToFloat16(float value)
+{
+    const U32 *word = (const U32 *)(&value);
+    unsigned short sign = (word[0] & 0x80000000) >> 31;
+    unsigned short exponent = (word[0] & 0x7F800000) >> 23;
+    unsigned int significand = word[0] & 0x7FFFFF;
+
+    unsigned short u;
+    if (exponent == 0) {
+        u = (sign << 15) | (0x00 << 10) | 0x00;
+    } else if (exponent == 0xFF) {
+        u = (sign << 15) | (0x1F << 10) | (significand ? 0x200 : 0x00);
+    } else {
+        short newexp = exponent + (-127 + 15);
+        if (newexp >= 31) {
+            u = (sign << 15) | (0x1F << 10) | 0x00;
+        } else if (newexp <= 0) {
+            if (newexp >= -10) {
+                unsigned short sig = (significand | 0x800000) >> (14 - newexp);
+                u = (sign << 15) | (0x00 << 10) | sig;
+            } else {
+                u = (sign << 15) | (0x00 << 10) | 0x00;
+            }
+        } else {
+            u = (sign << 15) | (newexp << 10) | (significand >> 13);
+        }
+    }
+    return u;
+}
+
 inline void transformFromFloat(
     DataType dataType, const float *src, void *dst, int num, float scale = 1)
 {
+    if (num <= 0) {
+        return;
+    }
     switch (dataType) {
         case DT_F32: {
-            memcpy(dst, src, sizeof(float) * num);
+            UNI_MEMCPY(dst, src, sizeof(float) * num);
+            break;
+        }
+        case DT_I64: {
+            I64 *ptr = (I64 *)dst;
+            for (int i = 0; i < num; i++) {
+                ptr[i] = src[i];
+            }
             break;
         }
         case DT_U32: {
@@ -172,41 +260,16 @@ inline void transformFromFloat(
         }
         case DT_F16_8Q:
         case DT_F16: {
-#ifdef __aarch64__
+#ifdef _USE_FP16
             F16 *ptr = (F16 *)dst;
 #else
-            const U32 *word = (const U32 *)src;
             unsigned short *q = (unsigned short *)dst;
 #endif
             for (int i = 0; i < num; i++) {
-#ifdef __aarch64__
+#ifdef _USE_FP16
                 ptr[i] = src[i];
 #else
-                unsigned short sign = (word[i] & 0x80000000) >> 31;
-                unsigned short exponent = (word[i] & 0x7F800000) >> 23;
-                unsigned int significand = word[i] & 0x7FFFFF;
-
-                unsigned short u;
-                if (exponent == 0) {
-                    u = (sign << 15) | (0x00 << 10) | 0x00;
-                } else if (exponent == 0xFF) {
-                    u = (sign << 15) | (0x1F << 10) | (significand ? 0x200 : 0x00);
-                } else {
-                    short newexp = exponent + (-127 + 15);
-                    if (newexp >= 31) {
-                        u = (sign << 15) | (0x1F << 10) | 0x00;
-                    } else if (newexp <= 0) {
-                        if (newexp >= -10) {
-                            unsigned short sig = (significand | 0x800000) >> (14 - newexp);
-                            u = (sign << 15) | (0x00 << 10) | sig;
-                        } else {
-                            u = (sign << 15) | (0x00 << 10) | 0x00;
-                        }
-                    } else {
-                        u = (sign << 15) | (newexp << 10) | (significand >> 13);
-                    }
-                }
-                q[i] = u;
+                q[i] = float32ToFloat16(src[i]);
 #endif
             }
             break;
@@ -235,10 +298,20 @@ inline void transformFromFloat(
 inline void transformToFloat(
     DataType dataType, const void *src, float *dst, int num, float scale = 1)
 {
+    if (num <= 0) {
+        return;
+    }
     switch (dataType) {
         case DT_F32_8Q:
         case DT_F32: {
-            memcpy(dst, src, sizeof(float) * num);
+            UNI_MEMCPY(dst, src, sizeof(float) * num);
+            break;
+        }
+        case DT_I64: {
+            const I64 *ptr = (const I64 *)src;
+            for (int i = 0; i < num; i++) {
+                dst[i] = ptr[i];
+            }
             break;
         }
         case DT_U32: {
@@ -257,14 +330,14 @@ inline void transformToFloat(
         }
         case DT_F16_8Q:
         case DT_F16: {
-#ifdef __aarch64__
+#ifdef _USE_FP16
             const F16 *ptr = (const F16 *)src;
 #else
             const unsigned short *q = (const unsigned short *)src;
             U32 *word = (U32 *)dst;
 #endif
             for (int i = 0; i < num; i++) {
-#ifdef __aarch64__
+#ifdef _USE_FP16
                 dst[i] = ptr[i];
 #else
                 unsigned short value = q[i];
@@ -350,13 +423,19 @@ inline void transformToFloat(
 
 inline void UNI_INIT(U32 num, DataType dt, F32 val, void *dst)
 {
+    if (num <= 0) {
+        return;
+    }
+    if (val == 0) {
+        UNI_MEMSET(dst, 0, bytesOf(dt) * num);
+        return;
+    }
     switch (dt) {
         case DT_F16: {
-            unsigned int short mem;
-            transformFromFloat(DT_F16, &val, &mem, 1);
-            U8 *arr = (U8 *)dst;
+            unsigned short mem = float32ToFloat16(val);
+            unsigned short *arr = (unsigned short *)dst;
             for (U32 i = 0; i < num; i++) {
-                memcpy(arr + i * bytesOf(DT_F16), &mem, bytesOf(DT_F16));
+                arr[i] = mem;
             }
             break;
         }

@@ -27,10 +27,10 @@ inline static void scatter_elements(const TensorDesc &dataDesc,
     int axis = (p.axis + dataDesc.nDims) % dataDesc.nDims;
     axis = dataDesc.nDims - 1 - axis;
 
-    memcpy(output, data, tensorNumBytes(dataDesc));
+    UNI_MEMCPY(output, data, tensorNumBytes(dataDesc));
 
-    for (U32 i = 0; i < tensorNumElements(dataDesc); i++) {
-        std::vector<U32> local = calculateLocalIndex(i, dataDesc.dims, dataDesc.nDims);
+    for (U32 i = 0; i < tensorNumElements(updateDesc); i++) {
+        std::vector<U32> local = calculateLocalIndex(i, updateDesc.dims, updateDesc.nDims);
         local[axis] = index[i];
         U32 k = calculateGlobalIndex(local.data(), dataDesc.dims, dataDesc.nDims);
         output[k] = update[i];
@@ -47,7 +47,7 @@ inline static void scatterND(const TensorDesc &dataDesc,
     const TensorDesc &outputDesc,
     T *output)
 {
-    memcpy(output, data, tensorNumBytes(dataDesc));
+    UNI_MEMCPY(output, data, tensorNumBytes(dataDesc));
 
     int lastDim = indexDesc.dims[0];
     for (U32 i = 0; i < indexDesc.nDims - 1; i++) {

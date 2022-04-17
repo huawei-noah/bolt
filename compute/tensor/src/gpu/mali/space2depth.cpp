@@ -52,7 +52,7 @@ inline EE space2depth_core_mali_fp16(GCLHandle_t handle,
     inbuf = input->mem;
     outbuf = output->mem;
     bool useNchw = (inputDesc.df == DF_NCHWC4) ? false : true;
-    U32 blockSize = space2DepthPara.blockSize;
+    U32 blockSize = space2DepthPara.block_size;
 
     U32 gs[3] = {iw, ih, (ic + 3) / 4};
     U32 ls[3] = {0, 0, 0};
@@ -87,7 +87,7 @@ EE space2depth_padding_input_mali(TensorDesc inputDesc,
     if (inputMem == nullptr || outputMem == nullptr || outputDesc == nullptr) {
         CHECK_STATUS(NULL_POINTER);
     }
-    U32 blockSize = space2DepthPara.blockSize;
+    U32 blockSize = space2DepthPara.block_size;
     DataType idt;
     DataFormat idf;
     U32 iw, ih, ic, in;

@@ -14,7 +14,6 @@
 #ifndef _H_CONVOLUTION_GEMM_ICNCHW
 #define _H_CONVOLUTION_GEMM_ICNCHW
 
-#include <string.h>
 #include "sys.h"
 #include "tensor_desc.h"
 #include "parameter_spec.h"

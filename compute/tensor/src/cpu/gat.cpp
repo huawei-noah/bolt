@@ -46,7 +46,7 @@ void preprocess(TensorDesc node_feature_desc,
     std::vector<TensorDesc> inputDescs = {outputDesc, outputDesc, outputDesc};
     std::vector<void *> inputs = {out0, out1, edge_feature};
     EltwiseParamSpec eltwiseDesc;
-    eltwiseDesc.elt_mode = ELTWISE_SUM;
+    eltwiseDesc.mode = ELTWISE_SUM;
     eltwiseDesc.activation_type = ACTIVATION_NULL;
     CHECK_STATUS(eltwise_cpu(inputDescs, inputs, eltwiseDesc, 0, nullptr, outputDesc, output, arch));
 
@@ -82,7 +82,7 @@ void neighborhood_aware_softmax_yun(TensorDesc inputDesc,
     }
 #endif
     T *out1 = (T *)tmp;
-    memset(out1, 0, sizeof(T) * num_nodes * num_heads);
+    UNI_MEMSET(out1, 0, sizeof(T) * num_nodes * num_heads);
     for (int i = 0; i < num_edges; i++) {
         int node = nodes1[i];
         for (int j = 0; j < num_heads; j++) {
@@ -92,13 +92,13 @@ void neighborhood_aware_softmax_yun(TensorDesc inputDesc,
 
     for (int i = 0; i < num_edges; i++) {
         int node = nodes1[i];
-        memcpy(output + i * num_heads, out1 + node * num_heads, num_heads * sizeof(T));
+        UNI_MEMCPY(output + i * num_heads, out1 + node * num_heads, num_heads * sizeof(T));
     }
 
     std::vector<TensorDesc> inputDescs = {inputDesc, inputDesc};
     std::vector<void *> inputs = {out0, output};
     EltwiseParamSpec eltwiseDesc;
-    eltwiseDesc.elt_mode = ELTWISE_DIV;
+    eltwiseDesc.mode = ELTWISE_DIV;
     eltwiseDesc.activation_type = ACTIVATION_NULL;
     CHECK_STATUS(eltwise_cpu(inputDescs, inputs, eltwiseDesc, 0, nullptr, inputDesc, output, arch));
 }
@@ -112,7 +112,7 @@ void scatter_atten_score(const int *nodes0,
     int num_edges,
     T *out)
 {
-    memset(out, 0, sizeof(T) * num_heads * num_nodes * num_nodes);
+    UNI_MEMSET(out, 0, sizeof(T) * num_heads * num_nodes * num_nodes);
     for (int j = 0, k = 0; j < num_edges; j++) {
         int node0 = nodes0[j];
         int node1 = nodes1[j];
@@ -142,7 +142,7 @@ EE gat_cpu(TensorDesc node_feature_desc,
     tmp = (U8 *)out1 + tensorNumBytes(edge_feature_desc);
     // tmpBytes = tensorNumBytes(edge_feature_desc) * 2
     preprocess(node_feature_desc, node_desc, node_features0, nodes0, node_features1, nodes1,
-        edge_feature, p.activation, tmp, edge_feature_desc, out0, arch);
+        edge_feature, p.activation_type, tmp, edge_feature_desc, out0, arch);
 
     int num_heads = p.num_heads;
     int num_nodes = node_feature_desc.dims[1];

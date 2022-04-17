@@ -12,7 +12,6 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "cpu/tensor_computing_cpu.h"
-#include <string.h>
 
 EE padding_infer_output_size_cpu(
     TensorDesc inputDesc, PadParamSpec padParamSpec, TensorDesc *outputDesc)
@@ -66,6 +65,14 @@ EE padding_cpu(TensorDesc inputDesc,
     U32 alignSize = 1;
     if (idf == DF_NCHWC8) {
         alignSize = 8;
+        if (padParamSpec.front % 8 != 0 || padParamSpec.back % 8 != 0) {
+            UNI_ERROR_LOG("try to pad in channel dimension, input layout is nchwc8, but "
+                          "padding(%d,%d) mod 8 != 0\n",
+                padParamSpec.front, padParamSpec.back);
+        } else {
+            padParamSpec.front /= 8;
+            padParamSpec.back /= 8;
+        }
     }
     ic /= alignSize;
     oc /= alignSize;
@@ -81,19 +88,13 @@ EE padding_cpu(TensorDesc inputDesc,
 #ifdef _USE_FP16
         case DT_F16: {
             F16 tmpV = padParamSpec.constant_value;
-            memcpy(&constant, &tmpV, bytesOf(odt));
+            UNI_MEMCPY(&constant, &tmpV, bytesOf(odt));
             break;
         }
 #endif
         default:
             return NOT_SUPPORTED;
             break;
-    }
-
-    if (padParamSpec.front + padParamSpec.back != 0) {
-        if (padParamSpec.pad_mode != Pad_Constant || idf == DF_NCHWC8) {
-            UNI_ERROR_LOG("NOT SUPPORT this C channel padding\n");
-        }
     }
 
     for (U32 n = 0; n < in; n++) {
@@ -104,45 +105,35 @@ EE padding_cpu(TensorDesc inputDesc,
                 U8 *outPtr = (U8 *)output +
                     (((n * oc + (padParamSpec.front + c)) * oh + (padParamSpec.top + h)) * ow) *
                         alignSize * bytesOf(odt);
-                if (padParamSpec.pad_mode == Pad_Constant) {
-                    if (constant == 0) {
-                        memset(outPtr, 0, padParamSpec.left * alignSize * bytesOf(odt));
-                    } else {
-                        for (U32 i = 0; i < padParamSpec.left * alignSize; ++i) {
-                            memcpy(outPtr + i * bytesOf(odt), &constant, bytesOf(odt));
-                        }
-                    }
+                if (padParamSpec.pad_mode == PAD_CONSTANT) {
+                    UNI_INIT(
+                        padParamSpec.left * alignSize, odt, padParamSpec.constant_value, outPtr);
                     outPtr += padParamSpec.left * alignSize * bytesOf(odt);
-                    memcpy(outPtr, inPtr, iw * alignSize * bytesOf(idt));
+                    UNI_MEMCPY(outPtr, inPtr, iw * alignSize * bytesOf(idt));
                     outPtr += iw * alignSize * bytesOf(odt);
-                    if (constant == 0) {
-                        memset(outPtr, 0, padParamSpec.right * alignSize * bytesOf(odt));
-                    } else {
-                        for (U32 i = 0; i < padParamSpec.right * alignSize; ++i) {
-                            memcpy(outPtr + i * bytesOf(odt), &constant, bytesOf(odt));
-                        }
-                    }
+                    UNI_INIT(
+                        padParamSpec.right * alignSize, odt, padParamSpec.constant_value, outPtr);
                 } else {
                     for (U32 w = 0; w < padParamSpec.left; w++) {
                         U32 index = 0;
-                        if (padParamSpec.pad_mode == Pad_Reflect) {
+                        if (padParamSpec.pad_mode == PAD_REFLECT) {
                             index = (padParamSpec.left - w) * alignSize * bytesOf(idt);
-                        } else if (padParamSpec.pad_mode == Pad_Symmetric) {
+                        } else if (padParamSpec.pad_mode == PAD_SYMMETRIC) {
                             index = (padParamSpec.left - w - 1) * alignSize * bytesOf(idt);
                         }
-                        memcpy(outPtr, inPtr + index, alignSize * bytesOf(idt));
+                        UNI_MEMCPY(outPtr, inPtr + index, alignSize * bytesOf(idt));
                         outPtr += alignSize * bytesOf(idt);
                     }
-                    memcpy(outPtr, inPtr, iw * alignSize * bytesOf(idt));
+                    UNI_MEMCPY(outPtr, inPtr, iw * alignSize * bytesOf(idt));
                     outPtr += iw * alignSize * bytesOf(odt);
                     for (U32 w = 0; w < padParamSpec.right; w++) {
                         U32 index = (iw - 1) * alignSize * bytesOf(idt);
-                        if (padParamSpec.pad_mode == Pad_Reflect) {
+                        if (padParamSpec.pad_mode == PAD_REFLECT) {
                             index = (iw - w - 2) * alignSize * bytesOf(idt);
-                        } else if (padParamSpec.pad_mode == Pad_Symmetric) {
+                        } else if (padParamSpec.pad_mode == PAD_SYMMETRIC) {
                             index = (iw - w - 1) * alignSize * bytesOf(idt);
                         }
-                        memcpy(outPtr, inPtr + index, alignSize * bytesOf(idt));
+                        UNI_MEMCPY(outPtr, inPtr + index, alignSize * bytesOf(idt));
                         outPtr += alignSize * bytesOf(idt);
                     }
                 }
@@ -150,26 +141,20 @@ EE padding_cpu(TensorDesc inputDesc,
             U8 *outPtr = (U8 *)output + (((n * oc + c) * oh) * ow) * alignSize * bytesOf(odt);
             for (U32 h = 0; h < padParamSpec.top; h++) {
                 U32 index = h * ow * alignSize * bytesOf(odt);
-                if (padParamSpec.pad_mode == Pad_Constant) {
-                    if (constant == 0) {
-                        memset(outPtr + index, 0, ow * alignSize * bytesOf(odt));
-                    } else {
-                        for (U32 i = 0; i < ow * alignSize; ++i) {
-                            memcpy(outPtr + index + i * bytesOf(odt), &constant, bytesOf(odt));
-                        }
-                    }
-                } else if (padParamSpec.pad_mode == Pad_Edge) {
-                    memcpy(outPtr + index,
+                if (padParamSpec.pad_mode == PAD_CONSTANT) {
+                    UNI_INIT(ow * alignSize, odt, padParamSpec.constant_value, outPtr + index);
+                } else if (padParamSpec.pad_mode == PAD_EDGE) {
+                    UNI_MEMCPY(outPtr + index,
                         outPtr + (padParamSpec.top * ow * alignSize * bytesOf(odt)),
                         ow * alignSize * bytesOf(odt));
-                } else if (padParamSpec.pad_mode == Pad_Reflect) {
-                    memcpy(outPtr + index,
+                } else if (padParamSpec.pad_mode == PAD_REFLECT) {
+                    UNI_MEMCPY(outPtr + index,
                         outPtr +
                             ((padParamSpec.top + padParamSpec.top - h) * ow * alignSize *
                                 bytesOf(odt)),
                         ow * alignSize * bytesOf(odt));
-                } else if (padParamSpec.pad_mode == Pad_Symmetric) {
-                    memcpy(outPtr + index,
+                } else if (padParamSpec.pad_mode == PAD_SYMMETRIC) {
+                    UNI_MEMCPY(outPtr + index,
                         outPtr +
                             ((padParamSpec.top + padParamSpec.top - h - 1) * ow * alignSize *
                                 bytesOf(odt)),
@@ -180,24 +165,18 @@ EE padding_cpu(TensorDesc inputDesc,
             }
             for (U32 h = 0; h < padParamSpec.bottom; h++) {
                 U32 index = (padParamSpec.top + ih + h) * ow * alignSize * bytesOf(odt);
-                if (padParamSpec.pad_mode == Pad_Constant) {
-                    if (constant == 0) {
-                        memset(outPtr + index, 0, ow * alignSize * bytesOf(odt));
-                    } else {
-                        for (U32 i = 0; i < ow * alignSize; ++i) {
-                            memcpy(outPtr + index + i * bytesOf(odt), &constant, bytesOf(odt));
-                        }
-                    }
-                } else if (padParamSpec.pad_mode == Pad_Edge) {
-                    memcpy(outPtr + index,
+                if (padParamSpec.pad_mode == PAD_CONSTANT) {
+                    UNI_INIT(ow * alignSize, odt, padParamSpec.constant_value, outPtr + index);
+                } else if (padParamSpec.pad_mode == PAD_EDGE) {
+                    UNI_MEMCPY(outPtr + index,
                         outPtr + ((padParamSpec.top + ih - 1) * ow * alignSize * bytesOf(odt)),
                         ow * alignSize * bytesOf(odt));
-                } else if (padParamSpec.pad_mode == Pad_Reflect) {
-                    memcpy(outPtr + index,
+                } else if (padParamSpec.pad_mode == PAD_REFLECT) {
+                    UNI_MEMCPY(outPtr + index,
                         outPtr + ((padParamSpec.top + ih - 2 - h) * ow * alignSize * bytesOf(odt)),
                         ow * alignSize * bytesOf(odt));
-                } else if (padParamSpec.pad_mode == Pad_Symmetric) {
-                    memcpy(outPtr + index,
+                } else if (padParamSpec.pad_mode == PAD_SYMMETRIC) {
+                    UNI_MEMCPY(outPtr + index,
                         outPtr + ((padParamSpec.top + ih - 1 - h) * ow * alignSize * bytesOf(odt)),
                         ow * alignSize * bytesOf(odt));
                 } else {
@@ -209,26 +188,20 @@ EE padding_cpu(TensorDesc inputDesc,
         U8 *outPtr = (U8 *)output + (((n * oc) * oh) * ow) * alignSize * bytesOf(odt);
         for (U32 c = 0; c < padParamSpec.front; c++) {
             U32 index = c * oh * ow * alignSize * bytesOf(odt);
-            if (padParamSpec.pad_mode == Pad_Constant) {
-                if (constant == 0) {
-                    memset(outPtr + index, 0, oh * ow * alignSize * bytesOf(odt));
-                } else {
-                    for (U32 i = 0; i < oh * ow * alignSize; ++i) {
-                        memcpy(outPtr + index + i * bytesOf(odt), &constant, bytesOf(odt));
-                    }
-                }
-            } else if (padParamSpec.pad_mode == Pad_Edge) {
-                memcpy(outPtr + index,
+            if (padParamSpec.pad_mode == PAD_CONSTANT) {
+                UNI_INIT(oh * ow * alignSize, odt, padParamSpec.constant_value, outPtr + index);
+            } else if (padParamSpec.pad_mode == PAD_EDGE) {
+                UNI_MEMCPY(outPtr + index,
                     outPtr + (padParamSpec.front * oh * ow * alignSize * bytesOf(odt)),
                     oh * ow * alignSize * bytesOf(odt));
-            } else if (padParamSpec.pad_mode == Pad_Reflect) {
-                memcpy(outPtr + index,
+            } else if (padParamSpec.pad_mode == PAD_REFLECT) {
+                UNI_MEMCPY(outPtr + index,
                     outPtr +
                         ((padParamSpec.front + padParamSpec.front - c) * oh * ow * alignSize *
                             bytesOf(odt)),
                     oh * ow * alignSize * bytesOf(odt));
-            } else if (padParamSpec.pad_mode == Pad_Symmetric) {
-                memcpy(outPtr + index,
+            } else if (padParamSpec.pad_mode == PAD_SYMMETRIC) {
+                UNI_MEMCPY(outPtr + index,
                     outPtr +
                         ((padParamSpec.front + padParamSpec.front - c - 1) * oh * ow * alignSize *
                             bytesOf(odt)),
@@ -240,24 +213,18 @@ EE padding_cpu(TensorDesc inputDesc,
 
         for (U32 c = 0; c < padParamSpec.back; c++) {
             U32 index = (padParamSpec.front + ic + c) * oh * ow * alignSize * bytesOf(odt);
-            if (padParamSpec.pad_mode == Pad_Constant) {
-                if (constant == 0) {
-                    memset(outPtr + index, 0, oh * ow * alignSize * bytesOf(odt));
-                } else {
-                    for (U32 i = 0; i < oh * ow * alignSize; ++i) {
-                        memcpy(outPtr + index + i * bytesOf(odt), &constant, bytesOf(odt));
-                    }
-                }
-            } else if (padParamSpec.pad_mode == Pad_Edge) {
-                memcpy(outPtr + index,
+            if (padParamSpec.pad_mode == PAD_CONSTANT) {
+                UNI_INIT(oh * ow * alignSize, odt, padParamSpec.constant_value, outPtr + index);
+            } else if (padParamSpec.pad_mode == PAD_EDGE) {
+                UNI_MEMCPY(outPtr + index,
                     outPtr + ((padParamSpec.front + ic - 1) * oh * ow * alignSize * bytesOf(odt)),
                     oh * ow * alignSize * bytesOf(odt));
-            } else if (padParamSpec.pad_mode == Pad_Reflect) {
-                memcpy(outPtr + index,
+            } else if (padParamSpec.pad_mode == PAD_REFLECT) {
+                UNI_MEMCPY(outPtr + index,
                     outPtr + ((padParamSpec.front + ic - 2 - c) * oh * ow * alignSize * bytesOf(odt)),
                     oh * ow * alignSize * bytesOf(odt));
-            } else if (padParamSpec.pad_mode == Pad_Symmetric) {
-                memcpy(outPtr + index,
+            } else if (padParamSpec.pad_mode == PAD_SYMMETRIC) {
+                UNI_MEMCPY(outPtr + index,
                     outPtr + ((padParamSpec.front + ic - 1 - c) * oh * ow * alignSize * bytesOf(odt)),
                     oh * ow * alignSize * bytesOf(odt));
             } else {

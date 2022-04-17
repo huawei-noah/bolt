@@ -17,7 +17,7 @@ template <U32 C, U32 N>
 inline void transformCNHW2NCHWCxNxKernel(
     U32 fc, U32 fn, U32 fh, U32 fw, U32 fnPadding, const F32 *input, F32 *output)
 {
-    F32 *dest;
+    F32 *dest = nullptr;
     const F32 *src;
     U32 cSize = 0, cSizePadding = 0;
     U32 lstep = fh * fw;
@@ -44,7 +44,7 @@ inline void transformCNHW2NCHWCxNxKernel(
                     _mm256_storeu_ps(dest + 24, _mm256_i32gather_ps(src + 24 * lstep, vindex, 4));
                 }
             }
-            memset(dest + N, 0, ((cSizePadding - cSize) * N * 4));
+            UNI_MEMSET(dest + N, 0, ((cSizePadding - cSize) * N * 4));
         }
     }
 }
@@ -85,7 +85,7 @@ inline EE transformCNHW2NCHWCxNx(
         tail -= 8;
     }
     if (tail > 0) {
-        F32 *dest;
+        F32 *dest = nullptr;
         const F32 *src;
         U32 cSize = 0, cSizePadding = 0;
         U32 hwMax = fh * fw - 1;
@@ -108,7 +108,7 @@ inline EE transformCNHW2NCHWCxNx(
                     dest = output + n * fh * fw * 8 + hw * cSizePadding * 8 + c8 * 8;
                     _mm256_storeu_ps(dest, _mm256_mask_i32gather_ps(src256, src, vindex, mask, 4));
                 }
-                memset(dest + 8, 0, ((cSizePadding - cSize) * 32));
+                UNI_MEMSET(dest + 8, 0, ((cSizePadding - cSize) * 32));
             }
         }
     }
@@ -169,7 +169,7 @@ inline EE deconvolution_transform_filter_kernel_fp32(TensorDesc filterDesc,
     CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
     if (fdf == ftmDataFormat) {
         *ftmDesc = filterDesc;
-        memcpy(ftmArray, filterArray, fn * fc * fh * fw * bytesOf(fdt));
+        UNI_MEMCPY(ftmArray, filterArray, fn * fc * fh * fw * bytesOf(fdt));
         return SUCCESS;
     }
     if (fdf != DF_NCHW) {
@@ -180,7 +180,7 @@ inline EE deconvolution_transform_filter_kernel_fp32(TensorDesc filterDesc,
         case DF_NCHWC24: {
             filterDesc = tensor4df(fdt, fdf, 1, fc, fh, fw);
             *ftmDesc = tensor4df(fdt, ftmDataFormat, 1, fc, fh, fw);
-            transformCNHW2NCHWCxNx<1, 24>(filterDesc, filterArray, *ftmDesc, ftmArray);
+            transformCNHW2NCHWCxNx<1, 16>(filterDesc, filterArray, *ftmDesc, ftmArray);
             *ftmDesc = tensor4df(fdt, ftmDataFormat, fn, fc, fh, fw);
             break;
         }

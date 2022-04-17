@@ -11,8 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string.h>
-
 #include "cpu/general/tensor_computing_general.h"
 
 EE transpose_general(
@@ -42,7 +40,7 @@ EE transpose_general(
             inputIndex = (inputIndex + inputLocalIndex[j]) * inputDesc.dims[j - 1];
         }
         inputIndex += inputLocalIndex[0];
-        memcpy(output_ptr + i * bytesOf(outputDesc.dt),
+        UNI_MEMCPY(output_ptr + i * bytesOf(outputDesc.dt),
             input_ptr + inputIndex * bytesOf(inputDesc.dt), bytesOf(inputDesc.dt));
     }
     return SUCCESS;

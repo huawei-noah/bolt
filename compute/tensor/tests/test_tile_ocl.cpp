@@ -22,12 +22,12 @@ int tileTest(int argc, char **argv, DataType dt)
     }
     U32 iDim[8];
     TileParamSpec tileParamSpec;
-    tileParamSpec.dimsSize = nDims;
+    tileParamSpec.num_repeats = nDims;
     for (U32 i = 2; i < nDims + 2; i++) {
         iDim[i - 2] = atoi(argv[i]);
     }
     for (U32 i = nDims + 2; i < 2 * nDims + 2; i++) {
-        tileParamSpec.repeatsInfo[i - nDims - 2] = atoi(argv[i]);
+        tileParamSpec.repeats[i - nDims - 2] = atoi(argv[i]);
     }
 
     ArchInfo archInfo;
@@ -58,7 +58,8 @@ int tileTest(int argc, char **argv, DataType dt)
     Tensor inputTensorCpu, outputTensorCpu, tmpTensorCpu;
     inputTensorCpu.resize(inputDesc);
     inputTensorCpu.alloc();
-    memcpy(get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), input_cpu, tensorNumBytes(inputDesc));
+    UNI_MEMCPY(
+        get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), input_cpu, tensorNumBytes(inputDesc));
 
     CHECK_STATUS(tile_infer_output_size(
         &inputTensorCpu, tileParamSpec, &outputTensorCpu, &UT_SERIAL_ARCHINFO));
@@ -122,7 +123,7 @@ int tileTest(int argc, char **argv, DataType dt)
 
     char buffer[150];
     char params[120];
-    memset(params, 0, 120);
+    UNI_MEMSET(params, 0, 120);
     sprintf(params, "(");
     for (U32 i = 0; i < inputDesc.nDims; i++) {
         if (i != inputDesc.nDims - 1) {

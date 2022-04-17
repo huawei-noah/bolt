@@ -5,13 +5,12 @@
 inline EE set_normalization_opt_mali(
     bool useNchwFormat, DataType dt, char *kernelName, KernelOpt *kernelOpt)
 {
-    std::string formatName = "";
+    std::string kernel = "normalization";
     if (useNchwFormat) {
-        formatName = "_nchw";
+        kernel += "_nchw";
     }
-
-    sprintf(kernelName, "normalization%s", formatName.c_str());
-    sprintf(kernelOpt->sourceName, "normalization");
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, "normalization");
     kernelOpt->kernelDataType = dt;
     char *opt = kernelOpt->option;
     if (useNchwFormat) {

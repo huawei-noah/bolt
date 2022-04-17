@@ -52,20 +52,20 @@ int paddingTest(int argc, char **argv, DataType dt)
     padParamSpec.constant_value = 0.0;
     switch (mode) {
         case 0: {
-            padParamSpec.pad_mode = Pad_Constant;
+            padParamSpec.pad_mode = PAD_CONSTANT;
             break;
         }
         case 1: {
-            padParamSpec.pad_mode = Pad_Edge;
+            padParamSpec.pad_mode = PAD_EDGE;
             break;
         }
         case 2: {
             // limitation: the h_fir and the h_sec should lower than 0
-            padParamSpec.pad_mode = Pad_Reflect;
+            padParamSpec.pad_mode = PAD_REFLECT;
             break;
         }
         case 3: {
-            padParamSpec.pad_mode = Pad_Symmetric;
+            padParamSpec.pad_mode = PAD_SYMMETRIC;
             break;
         }
         default: {
@@ -80,7 +80,7 @@ int paddingTest(int argc, char **argv, DataType dt)
     inputTensor.alloc();
     U32 input_len = tensorNumElements(inputDesc);
     U8 *input = ut_input_v(input_len, dt, UT_INIT_RANDOM);
-    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inputDesc));
+    UNI_MEMCPY(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inputDesc));
 
     // set output
     Tensor outputTensor, outputTensorRef;

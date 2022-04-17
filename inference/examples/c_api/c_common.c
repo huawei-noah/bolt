@@ -88,7 +88,7 @@ void MallocTensor(int num,
     const DATA_FORMAT *df,
     void ***data)
 {
-    *data = malloc(sizeof(void *) * num);
+    *data = (void **)malloc(sizeof(void *) * num);
     for (int i = 0; i < num; i++) {
         int length = n[i] * c[i] * h[i] * w[i];
         switch (dt[i]) {
@@ -128,9 +128,7 @@ void CreateInference(int useModelFileStream,
     const char *algorithmMapPath,
     AFFINITY_TYPE affinity,
     ModelHandle *inferenceHandle,
-    ResultHandle *resultHandle,
-    int *inputNum,
-    char ***inputName)
+    ResultHandle *resultHandle)
 {
     if (useModelFileStream) {
         *inferenceHandle = CreateModelWithFileStream(modelPath, affinity, algorithmMapPath);
@@ -153,12 +151,10 @@ void CreateInference(int useModelFileStream,
 
     *resultHandle = AllocAllResultHandle(*inferenceHandle);
 
-    *inputNum = in_num;
-    *inputName = in_name;
-    //for (int i = 0; i < in_num; i++) {
-    //    free(in_name[i]);
-    //}
-    //free(in_name);
+    for (int i = 0; i < in_num; i++) {
+        free(in_name[i]);
+    }
+    free(in_name);
     free(in_n);
     free(in_c);
     free(in_h);

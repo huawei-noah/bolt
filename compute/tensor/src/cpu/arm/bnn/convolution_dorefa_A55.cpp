@@ -44,10 +44,10 @@ EE convolution_dorefa_A55(TensorDesc inputDesc,
     CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
     U32 strideH = convParamSpec.stride_h;
     U32 strideW = convParamSpec.stride_w;
-    U32 paddingT = convParamSpec.padding_top;
-    U32 paddingB = convParamSpec.padding_bottom;
-    U32 paddingL = convParamSpec.padding_left;
-    U32 paddingR = convParamSpec.padding_right;
+    U32 paddingT = convParamSpec.pad_top;
+    U32 paddingB = convParamSpec.pad_bottom;
+    U32 paddingL = convParamSpec.pad_left;
+    U32 paddingR = convParamSpec.pad_right;
 
     if (fdf != DF_NCHWN16C8) {
         CHECK_STATUS(NOT_MATCH);

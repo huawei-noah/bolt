@@ -16,14 +16,15 @@
 #include "gpu/mali/cl/kernel_option/conv_wino_opt.h"
 #include "gpu/mali/cl/kernel_option/gemm_tn_opt.h"
 
-TensorDesc getInputPreProcessDesc(TensorDesc inputDesc, ConvolutionParamSpec convParamSpec, U32 wino_w, U32 wino_h)
+TensorDesc getInputPreProcessDesc(
+    TensorDesc inputDesc, ConvolutionParamSpec convParamSpec, U32 wino_w, U32 wino_h)
 {
     U32 fw = convParamSpec.kernel_w;
     U32 fh = convParamSpec.kernel_h;
-    U32 pl = convParamSpec.padding_left;
-    U32 pr = convParamSpec.padding_right;
-    U32 pt = convParamSpec.padding_top;
-    U32 pb = convParamSpec.padding_bottom;
+    U32 pl = convParamSpec.pad_left;
+    U32 pr = convParamSpec.pad_right;
+    U32 pt = convParamSpec.pad_top;
+    U32 pb = convParamSpec.pad_bottom;
     TensorDesc desc = inputDesc;
     desc.df = DF_NCHW;
     desc.dims[0] = wino_w * 4;
@@ -35,7 +36,7 @@ TensorDesc getInputPreProcessDesc(TensorDesc inputDesc, ConvolutionParamSpec con
     return desc;
 }
 
-TensorDesc getPicTranDesc(DataType dt, U32 wino_w, U32 wino_h, U32 wino_num, U32 ic, U32 item_n) 
+TensorDesc getPicTranDesc(DataType dt, U32 wino_w, U32 wino_h, U32 wino_num, U32 ic, U32 item_n)
 {
     TensorDesc desc;
     desc.df = DF_NCHW;
@@ -48,7 +49,7 @@ TensorDesc getPicTranDesc(DataType dt, U32 wino_w, U32 wino_h, U32 wino_num, U32
     return desc;
 }
 
-TensorDesc getGemmOutDesc(DataType dt, U32 M, U32 N, U32 wino_num) 
+TensorDesc getGemmOutDesc(DataType dt, U32 M, U32 N, U32 wino_num)
 {
     TensorDesc desc;
     desc.df = DF_NCHW;
@@ -61,17 +62,30 @@ TensorDesc getGemmOutDesc(DataType dt, U32 M, U32 N, U32 wino_num)
     return desc;
 }
 
-inline EE wino_preprocess_input(GCLHandle_t handle, DataType dt, DataFormat df,
-    U32 iw_str, U32 ih_str, U32 i_off, U32 ow_str, U32 oh_str, 
-    U32 iw, U32 ih, U32 ic, U32 pw, U32 ph, 
-    GCLMemType imt, GCLMemType omt, Mem in, Mem out)
+inline EE wino_preprocess_input(GCLHandle_t handle,
+    DataType dt,
+    DataFormat df,
+    U32 iw_str,
+    U32 ih_str,
+    U32 i_off,
+    U32 ow_str,
+    U32 oh_str,
+    U32 iw,
+    U32 ih,
+    U32 ic,
+    U32 pw,
+    U32 ph,
+    GCLMemType imt,
+    GCLMemType omt,
+    Mem in,
+    Mem out)
 {
     char kernelName[128];
     KernelOpt kernelOpt;
     Kernel kernel;
-    bool useNchwFormat = (df == DF_NCHW) ? true :false;
-    CHECK_STATUS(set_conv_wino_preprocess_input_opt(dt, useNchwFormat, imt, omt,
-        kernelName, &kernelOpt));
+    bool useNchwFormat = (df == DF_NCHW) ? true : false;
+    CHECK_STATUS(
+        set_conv_wino_preprocess_input_opt(dt, useNchwFormat, imt, omt, kernelName, &kernelOpt));
     U32 gs[3] = {(ow_str + 3) / 4, oh_str, (ic + 3) / 4};
     U32 ls[3] = {0};
     U32 dim = 3;
@@ -80,8 +94,8 @@ inline EE wino_preprocess_input(GCLHandle_t handle, DataType dt, DataFormat df,
         gs[2] = ic;
     }
     CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
-    CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, i_off, ow_str, oh_str,
-        iw, ih, ic, pw, ph, gs[0], gs[1], in, out));
+    CHECK_STATUS(gcl_set_kernelArgs(
+        kernel, iw_str, ih_str, i_off, ow_str, oh_str, iw, ih, ic, pw, ph, gs[0], gs[1], in, out));
     gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
 #ifdef _DEBUG
     CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
@@ -90,21 +104,31 @@ inline EE wino_preprocess_input(GCLHandle_t handle, DataType dt, DataFormat df,
     return SUCCESS;
 }
 
-inline EE wino_trans_pic_nchw(GCLHandle_t handle, DataType dt, U32 wino_w, U32 wino_h, U32 ic,
-    U32 iw_str, U32 ih_str, U32 i_off, U32 pw_str, U32 pwh_str,
-    GCLMemType imt, Mem in, Mem out)
+inline EE wino_trans_pic_nchw(GCLHandle_t handle,
+    DataType dt,
+    U32 wino_w,
+    U32 wino_h,
+    U32 ic,
+    U32 iw_str,
+    U32 ih_str,
+    U32 i_off,
+    U32 pw_str,
+    U32 pwh_str,
+    GCLMemType imt,
+    Mem in,
+    Mem out)
 {
     char kernelName[128];
     KernelOpt kernelOpt;
     Kernel kernel;
-    CHECK_STATUS(set_common_opt(dt, imt, GCL_MEM_BUF, "conv_wino_trans_picbuf_nchw",
-        kernelName, &kernelOpt));
+    CHECK_STATUS(
+        set_common_opt(dt, imt, GCL_MEM_BUF, "conv_wino_trans_picbuf_nchw", kernelName, &kernelOpt));
     U32 gs[3] = {wino_w, wino_h, ic};
     U32 ls[3] = {0};
     U32 dim = 3;
     CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
-    CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, i_off, pw_str, pwh_str,
-        gs[0], gs[1], in, out));
+    CHECK_STATUS(
+        gcl_set_kernelArgs(kernel, iw_str, ih_str, i_off, pw_str, pwh_str, gs[0], gs[1], in, out));
     gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
 #ifdef _DEBUG
     CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
@@ -129,15 +153,25 @@ inline EE wino_trans_pic_img(GCLHandle_t handle, TensorDesc picTranDesc, Mem pic
     return SUCCESS;
 }
 
-inline EE wino_gemm(GCLHandle_t handle, DataType dt,
-    U32 M, U32 N, U32 K, U32 item_m, U32 item_n, U32 wino_num,
-    GCLMemType ma, GCLMemType mb, Mem A, Mem B, Mem C)
+inline EE wino_gemm(GCLHandle_t handle,
+    DataType dt,
+    U32 M,
+    U32 N,
+    U32 K,
+    U32 item_m,
+    U32 item_n,
+    U32 wino_num,
+    GCLMemType ma,
+    GCLMemType mb,
+    Mem A,
+    Mem B,
+    Mem C)
 {
     char kernelName[128];
     KernelOpt kernelOpt;
     Kernel kernel;
-    CHECK_STATUS(set_gemm_tn_opt_mali(item_m, item_n, NO_BIAS, false, ACTIVATION_NULL, dt,
-        ma, mb, GCL_MEM_BUF, kernelName, &kernelOpt));
+    CHECK_STATUS(set_gemm_tn_opt_mali(item_m, item_n, NO_BIAS, false, ACTIVATION_NULL, dt, ma, mb,
+        GCL_MEM_BUF, kernelName, &kernelOpt));
     U32 gs[3] = {N / item_n, M / item_m, wino_num * wino_num};
     U32 ls[3] = {0};
     U32 dim = 3;
@@ -149,8 +183,8 @@ inline EE wino_gemm(GCLHandle_t handle, DataType dt,
     U32 ch = M;
     U32 cc = wino_num * wino_num;
     CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
-    CHECK_STATUS(gcl_set_kernelArgs(kernel, M, N, K, A_str, B_str, C_str, 0, 0, 0,
-        cw_str, cw, ch, cc, gs[0], gs[1], A, B, C, C));
+    CHECK_STATUS(gcl_set_kernelArgs(kernel, M, N, K, A_str, B_str, C_str, 0, 0, 0, cw_str, cw, ch,
+        cc, gs[0], gs[1], A, B, C, C));
     gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
 #ifdef _DEBUG
     CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
@@ -184,8 +218,8 @@ inline EE wino_trans_out(GCLHandle_t handle,
     if ((oh & 3) == 0 && (ow & 3) == 0) {
         useAlign = true;
     }
-    CHECK_STATUS(set_conv_wino_trans_outbuf_opt(useAlign, activationMode, DT_F16, GCL_MEM_BUF,
-        omt, kernelName, &kernelOpt));
+    CHECK_STATUS(set_conv_wino_trans_outbuf_opt(
+        useAlign, activationMode, DT_F16, GCL_MEM_BUF, omt, kernelName, &kernelOpt));
     U32 gs[3] = {wino_w, wino_h, (oc + 3) / 4};
     U32 ls[3] = {0, 0, 0};
     U32 dim = 3;
@@ -260,8 +294,8 @@ EE convolution_wino_transform_filter_mali_fp16(GCLHandle_t handle,
         U32 offset = ALIGN(fn_align * fwhc * bytesOf(fdt), BUFFER_ALIGN_BASE);
         CHECK_STATUS(gcl_create_sub_buffer(bytes, &offset, tmp, &fltTranMem));
     }
-    CHECK_STATUS(set_common_opt(DT_F16, GCL_MEM_BUF, GCL_MEM_BUF, "conv_wino_trans_fltbuf_3x3",
-        kernelName, &kernelOpt));
+    CHECK_STATUS(set_common_opt(
+        DT_F16, GCL_MEM_BUF, GCL_MEM_BUF, "conv_wino_trans_fltbuf_3x3", kernelName, &kernelOpt));
     CHECK_STATUS(gcl_get_kernel_from_map(handle, kernelName, &kernel, &kernelOpt));
     CHECK_STATUS(gcl_set_kernelArgs(kernel, fn_align, fc, fnc, tmp->mem, fltTranMem));
     gs[0] = fn_align;
@@ -304,7 +338,7 @@ EE convolution_wino_infer_forward_tmp_bytes_mali_fp16(TensorDesc inputDesc,
         if (useImg) {
             U32 width = (inputNchwDesc.dims[0] + 3) / 4;
             U32 height = inputNchwDesc.dims[1];
-            U32 depth =  inputNchwDesc.dims[2] * inputNchwDesc.dims[3];
+            U32 depth = inputNchwDesc.dims[2] * inputNchwDesc.dims[3];
             if (CHECK_MEET_IMAGE_LIMITS(width, height, depth)) {
                 bytes[1] = width;
                 bytes[2] = height;
@@ -316,7 +350,7 @@ EE convolution_wino_infer_forward_tmp_bytes_mali_fp16(TensorDesc inputDesc,
         if (!useImg) {
             bufSize += ALIGN(tensorNumBytes(inputNchwDesc), BUFFER_ALIGN_BASE);
         }
-    } else {//for input is NCHW and memType is image
+    } else {  //for input is NCHW and memType is image
         bufSize += ALIGN(tensorNumBytes(inputNchwDesc), BUFFER_ALIGN_BASE);
     }
 
@@ -383,17 +417,17 @@ EE convolution_wino_mali_fp16(GCLHandle_t handle,
     U32 ow, oh, oc, on;
     fw = convParamSpec.kernel_w;
     fh = convParamSpec.kernel_h;
-    pw = convParamSpec.padding_left;
-    ph = convParamSpec.padding_top;
+    pw = convParamSpec.pad_left;
+    ph = convParamSpec.pad_top;
     tensorSelectGet(inputDesc, &idt, NULL, NULL, &ic, &ih, &iw);
     tensorSelectGet(outputDesc, NULL, NULL, &on, &oc, &oh, &ow);
     fc = ic;
     fn = oc;
     Mem inMem = input->mem;
-    U32 iw_str ,ih_str;
+    U32 iw_str, ih_str;
     I32 iw_off, ih_off, i_off;
-    get_gclmem_dim(input->desc, &iw_str, &ih_str, NULL, (U32*)&iw_off, (U32*)&ih_off);
-    U32 ow_str ,oh_str, ow_off, oh_off;
+    get_gclmem_dim(input->desc, &iw_str, &ih_str, NULL, (U32 *)&iw_off, (U32 *)&ih_off);
+    U32 ow_str, oh_str, ow_off, oh_off;
     get_gclmem_dim(output->desc, &ow_str, &oh_str, NULL, &ow_off, &oh_off);
 
     GCLMemType imt = input->desc.memType;
@@ -408,7 +442,7 @@ EE convolution_wino_mali_fp16(GCLHandle_t handle,
         Mem inputPre;
         GCLMemType omt;
         bool useImg = (tmp[1]) ? true : false;
-        if (inputDesc.df == DF_NCHW) {//for padding input(must be image), have to set data to buffer
+        if (inputDesc.df == DF_NCHW) {  //for padding input(must be image), have to set data to buffer
             useImg = false;
         }
         if (useImg) {
@@ -422,9 +456,8 @@ EE convolution_wino_mali_fp16(GCLHandle_t handle,
         U32 tw_str = desc.dims[0];
         U32 th_str = desc.dims[1];
         i_off = ih_off * iw_str + iw_off;
-        CHECK_STATUS(wino_preprocess_input(handle, desc.dt, input->desc.df, 
-            iw_str, ih_str, i_off, tw_str, th_str, 
-            iw, ih, ic, pw, ph, imt, omt, inMem, inputPre));
+        CHECK_STATUS(wino_preprocess_input(handle, desc.dt, input->desc.df, iw_str, ih_str, i_off,
+            tw_str, th_str, iw, ih, ic, pw, ph, imt, omt, inMem, inputPre));
         inMem = inputPre;
         iw_str = tw_str;
         ih_str = th_str;
@@ -441,8 +474,8 @@ EE convolution_wino_mali_fp16(GCLHandle_t handle,
     CHECK_STATUS(gcl_create_sub_buffer(picTranSize, &offset, tmp[0], &picTran));
     U32 pw_str = picTranDesc.dims[0];
     U32 pwh_str = pw_str * picTranDesc.dims[1];
-    CHECK_STATUS(wino_trans_pic_nchw(handle, picTranDesc.dt, wino_w, wino_h, ic,
-        iw_str, ih_str, i_off, pw_str, pwh_str, imt, inMem, picTran));
+    CHECK_STATUS(wino_trans_pic_nchw(handle, picTranDesc.dt, wino_w, wino_h, ic, iw_str, ih_str,
+        i_off, pw_str, pwh_str, imt, inMem, picTran));
     if (tmp[2]) {
         CHECK_STATUS(wino_trans_pic_img(handle, picTranDesc, picTran, tmp[2]->mem));
         picTran = tmp[2]->mem;
@@ -459,12 +492,12 @@ EE convolution_wino_mali_fp16(GCLHandle_t handle,
     GCLMemType fltTranType = filter->desc.memType;
 
     CHECK_STATUS(gcl_create_sub_buffer(gemmOutSize, &offset, tmp[0], &gemmOut));
-    CHECK_STATUS(wino_gemm(handle, idt, M, N, K, item_m, item_n, wino_num, 
-        fltTranType, picTranType, fltTran, picTran, gemmOut));
+    CHECK_STATUS(wino_gemm(handle, idt, M, N, K, item_m, item_n, wino_num, fltTranType, picTranType,
+        fltTran, picTran, gemmOut));
     Mem biasbuf = bias->mem;
     Mem outbuf = output->mem;
 
-    CHECK_STATUS(wino_trans_out(handle, wino_w, wino_h, N, N * M, ow_str, oh_str, ow_off, oh_off, ow,
-        oh, oc, output->desc.memType, activationMode, biasbuf, gemmOut, outbuf));
+    CHECK_STATUS(wino_trans_out(handle, wino_w, wino_h, N, N * M, ow_str, oh_str, ow_off, oh_off,
+        ow, oh, oc, output->desc.memType, activationMode, biasbuf, gemmOut, outbuf));
     return SUCCESS;
 }

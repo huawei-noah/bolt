@@ -24,7 +24,7 @@ inline static void gather(const TensorDesc &dataDesc,
 {
     int axis = (p.axis + dataDesc.nDims) % dataDesc.nDims;
     axis = dataDesc.nDims - 1 - axis;
-    int outer_loop = 1, k = dataDesc.dims[axis], inner_loop = 1;
+    int outer_loop = 1, k = dataDesc.dims[axis], loop = tensorNumElements(indexDesc), inner_loop = 1;
     for (int i = 0; i < axis; i++) {
         inner_loop *= dataDesc.dims[i];
     }
@@ -32,11 +32,18 @@ inline static void gather(const TensorDesc &dataDesc,
         outer_loop *= dataDesc.dims[i];
     }
     int tile_size = inner_loop;
-    for (int i = 0, dst_index = 0; i < outer_loop; i++) {
-        for (U32 j = 0; j < tensorNumElements(indexDesc); j++, dst_index += tile_size) {
-            int src_index = (i * k + index[j]) * tile_size;
-            memcpy(output + dst_index, data + src_index, tile_size * sizeof(T));
-        }
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
+    for (int o = 0; o < outer_loop * loop; o++) {
+        int i = o / loop;
+        int j = o % loop;
+        U32 dst_index = o * tile_size;
+        //for (int i = 0, dst_index = 0; i < outer_loop; i++)
+        //for (U32 j = 0; j < loop; j++, dst_index += tile_size)
+        int stable_index = index[j] < 0 ? index[j] + k : index[j];
+        int src_index = (i * k + stable_index) * tile_size;
+        UNI_MEMCPY(output + dst_index, data + src_index, tile_size * sizeof(T));
     }
 }
 
@@ -51,12 +58,14 @@ inline static void gather_elements(const TensorDesc &dataDesc,
 {
     int axis = (p.axis + dataDesc.nDims) % dataDesc.nDims;
     axis = dataDesc.nDims - 1 - axis;
-
-    for (U32 i = 0; i < tensorNumElements(dataDesc); i++) {
-        std::vector<U32> local = calculateLocalIndex(i, dataDesc.dims, dataDesc.nDims);
-        local[axis] = index[i];
-        U32 k = calculateGlobalIndex(local.data(), dataDesc.dims, dataDesc.nDims);
-        output[i] = data[k];
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
+    for (U32 i = 0; i < tensorNumElements(indexDesc); i++) {
+        std::vector<U32> local = calculateLocalIndex(i, indexDesc.dims, indexDesc.nDims);
+        local[axis] = index[i] < 0 ? index[i] + dataDesc.dims[axis] : index[i];
+        U32 idx = calculateGlobalIndex(local.data(), dataDesc.dims, dataDesc.nDims);
+        output[i] = data[idx];
     }
 }
 
@@ -82,20 +91,32 @@ inline static void gatherND(const TensorDesc &dataDesc,
     newDataDesc.dims[axis + 1] = batch_dims_size;
     newDataDesc.nDims = axis + 1 + 1;
 
-    U32 gather_index[16] = {0};
     int tile_dims = newDataDesc.nDims - (k + 1);
-    gather_index[tile_dims + k] = p.batch_dims;
     U32 tile_size = 1;
     for (int i = 0; i < tile_dims; i++) {
         tile_size *= newDataDesc.dims[i];
     }
-    for (int batch_dim = 0, i = 0, dst_index = 0; batch_dim < batch_dims_size; batch_dim++) {
-        for (int outer_dim = 0; outer_dim < t; outer_dim++, i += k, dst_index += tile_size) {
+#ifdef _USE_OPENMP
+#pragma omp parallel num_threads(OMP_NUM_THREADS)
+#endif
+    {
+        U32 gather_index[16] = {0};
+        gather_index[tile_dims + k] = p.batch_dims;
+#ifdef _USE_OPENMP
+#pragma omp for
+#endif
+        for (int o = 0; o < batch_dims_size * t; o++) {
+            int batch_dim = o / t;
+            int outer_dim = o % t;
+            int i = o * k;
+            int dst_index = o * tile_size;
+            //for (int batch_dim = 0, i = 0, dst_index = 0; batch_dim < batch_dims_size; batch_dim++)
+            //    for (int outer_dim = 0; outer_dim < t; outer_dim++, i += k, dst_index += tile_size) {
             for (int j = 0; j < k; j++) {
                 gather_index[tile_dims + k - 1 - j] = index[i + j];
             }
             U32 src_index = calculateGlobalIndex(gather_index, newDataDesc.dims, newDataDesc.nDims);
-            memcpy(output + dst_index, data + src_index, tile_size * sizeof(T));
+            UNI_MEMCPY(output + dst_index, data + src_index, tile_size * sizeof(T));
         }
     }
 }
@@ -137,8 +158,13 @@ EE gather_cpu(TensorDesc dataDesc,
     EE ret = SUCCESS;
     switch (dataDesc.dt) {
         case DT_I32:
+        case DT_U32:
             gather_kernel<I32>(dataDesc, (const I32 *)data, indexDesc, (const int *)index, p,
                 outputDesc, (I32 *)output);
+            break;
+        case DT_U8:
+            gather_kernel<U8>(dataDesc, (const U8 *)data, indexDesc, (const int *)index, p,
+                outputDesc, (U8 *)output);
             break;
 #ifdef _USE_FP32
         case DT_F32:

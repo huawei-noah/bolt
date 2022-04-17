@@ -18,7 +18,6 @@
 #ifdef _USE_GPU
 #include "gcl.h"
 #endif
-#include "thread_affinity.h"
 
 inline std::map<std::string, TensorDesc> extractInputDims(const ModelSpec *ms)
 {
@@ -41,10 +40,9 @@ inline std::shared_ptr<CNN> createPipelinefromMs(
     // create ops
     cnn->initialize_ops(ms);
 
-    std::map<std::string, TensorDesc> inputDescMap = extractInputDims(ms);
-
     cnn->loadAlgorithmMap(algorithmMapPath);
 
+    std::map<std::string, TensorDesc> inputDescMap = extractInputDims(ms);
     // assign space for output, tmp, bias, and trans_weight
     cnn->ready(inputDescMap);
 
@@ -56,12 +54,13 @@ inline std::shared_ptr<CNN> createPipelinefromMs(
 inline std::shared_ptr<CNN> createPipeline(
     const char *affinityPolicyName, const char *modelPath, const char *algorithmMapPath = "")
 {
-    // deserialize model from file
+    std::shared_ptr<CNN> pipeline;
     ModelSpec ms;
-    CHECK_STATUS(deserialize_model_from_file(modelPath, &ms));
-    std::shared_ptr<CNN> pipeline = createPipelinefromMs(affinityPolicyName, &ms, algorithmMapPath);
-    CHECK_STATUS(mt_destroy_model(&ms));
+    EE ret = deserialize_model_from_file(modelPath, &ms);
+    if (ret == SUCCESS) {
+        pipeline = createPipelinefromMs(affinityPolicyName, &ms, algorithmMapPath);
+        CHECK_STATUS(mt_destroy_model(&ms));
+    }
     return pipeline;
 }
-
 #endif

@@ -87,8 +87,26 @@ EE quantize_bias_offsetC(const void *bias,
         switch (qType) {
 #ifdef _USE_INT8
             case DT_I32: {
-                ret = quantizeBiasOffsetCI32(
-                    (F32 *)bias, biasDesc, (INT8 *)filter, filterDesc, scale, (I32 *)offsetCBias);
+                ret = quantizeBiasOffsetCI32((const F32 *)bias, biasDesc, (INT8 *)filter,
+                    filterDesc, scale, (I32 *)offsetCBias);
+                break;
+            }
+#endif
+            default:
+                ret = NOT_SUPPORTED;
+                break;
+        }
+    } else if (biasDesc.dt == DT_I32) {
+        switch (qType) {
+#ifdef _USE_INT8
+            case DT_I32: {
+                if (filter == nullptr) {
+                    UNI_MEMCPY(offsetCBias, bias, tensorNumBytes(biasDesc));
+                } else {
+                    for (U32 i = 0; i < tensorNumElements(biasDesc); ++i) {
+                        ((I32 *)offsetCBias)[i] = ((I32 *)bias)[i] + ((I32 *)filter)[i];
+                    }
+                }
                 break;
             }
 #endif

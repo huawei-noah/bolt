@@ -11,15 +11,16 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define MANGLE_NAME_IMPL(base, OFM) base##OFM
-#define MANGLE_NAME(base, OFM) MANGLE_NAME_IMPL(base, OFM)
+#include "kernel_def.h"
+#define MANGLE_NAME_IMPL(base, IOM, OFM) base##IOM##OFM
+#define MANGLE_NAME(base, IOM, OFM) MANGLE_NAME_IMPL(base, IOM, OFM)
 
 #define OFM
 #if defined(OUT_NCHW)
-#define OFM _nchw
+#define OFM nchw
 #endif
 
-__kernel void MANGLE_NAME(depth2space_nchwc4_2x2, OFM)(const int blockSize,
+__kernel void MANGLE_NAME(depth2space_nchwc4_2x2_, IOM, OFM)(const int blockSize,
     const int iw_str,
     const int ihw_str,
     const int ic_str,
@@ -31,7 +32,7 @@ __kernel void MANGLE_NAME(depth2space_nchwc4_2x2, OFM)(const int blockSize,
     const int iw,
     const int ih,
     const int oc,
-    __global const T *in,
+    READ_ONLY_KERNEL_MEM input,
     __global T *out)
 {
     const int idx = get_global_id(0);
@@ -40,19 +41,18 @@ __kernel void MANGLE_NAME(depth2space_nchwc4_2x2, OFM)(const int blockSize,
         return;
     }
     const int idz = get_global_id(2);
-    const int in_off = idz * 4 * ihw_str + idy * iw_str + idx + i_off;
     T4 val[4] = {0};
     T4 val_0, val_1, val_2, val_3;
 
-    val[0] = vload4(in_off, in);
+    LOAD_MEM_V4_COMMON(val[0], idx, idy, idz * 4, iw_str, ih_str, i_off, input);
     if (idz * 4 + 1 < ic_str) {
-        val[1] = vload4(in_off + ihw_str, in);
+        LOAD_MEM_V4_COMMON(val[1], idx, idy, (idz * 4 + 1), iw_str, ih_str, i_off, input);
     }
     if (idz * 4 + 2 < ic_str) {
-        val[2] = vload4(in_off + ihw_str * 2, in);
+        LOAD_MEM_V4_COMMON(val[2], idx, idy, (idz * 4 + 2), iw_str, ih_str, i_off, input);
     }
     if (idz * 4 + 3 < ic_str) {
-        val[3] = vload4(in_off + ihw_str * 3, in);
+        LOAD_MEM_V4_COMMON(val[3], idx, idy, (idz * 4 + 3), iw_str, ih_str, i_off, input);
     }
 
     val_0.x = val[0].x;

@@ -17,8 +17,9 @@ inline EE set_activation_opt_mali(bool useNchwFormat,
     CHECK_STATUS(set_io_mem_name(inputMemType, outputMemType, ioMemName));
     char modeName[128] = "";
     CHECK_STATUS(set_activation_mode_name(activeMode, modeName));
-    sprintf(kernelName, "activation_%s%s%s", ioMemName, formatName.c_str(), modeName);
-    sprintf(kernelOpt->sourceName, "activation");
+    std::string kernel = std::string("activation_") + ioMemName + formatName + modeName;
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, "activation");
     kernelOpt->kernelDataType = dt;
     char *opt = kernelOpt->option;
     CHECK_STATUS(set_activation_define_opt(activeMode, opt));

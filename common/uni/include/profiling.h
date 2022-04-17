@@ -18,15 +18,21 @@
 
 double ut_time_ms();
 void ut_time_init();
+void ut_time_start();
+void ut_time_stop();
 void ut_time_process(
     const std::string &name, const std::string &category, double time_start_ms, double time_end_ms);
 void ut_time_statistics();
 
 #ifdef _PROFILE_STATISTICS
 #define UNI_TIME_INIT ut_time_init();
+#define UNI_TIME_START ut_time_start();
+#define UNI_TIME_STOP ut_time_stop();
 #define UNI_TIME_STATISTICS ut_time_statistics();
 #else
 #define UNI_TIME_INIT
+#define UNI_TIME_START
+#define UNI_TIME_STOP
 #define UNI_TIME_STATISTICS
 #endif
 

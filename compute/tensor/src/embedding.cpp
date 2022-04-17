@@ -44,7 +44,7 @@ EE embedding_infer_output_size(Tensor *inputTensor,
     }
     CHECK_REQUIREMENT(tensorIs2d(inputDesc));
     CHECK_STATUS(tensor2dGet(inputDesc, &dt, &df, &batch, &step));
-    outputDesc = tensor3df(outputDt, DF_MTK, batch, step, p.num_output);
+    outputDesc = tensor3df(outputDt, DF_MTK, batch, step, p.num_outputs);
     if (inputOneDim) {
         outputDesc.nDims = 2;
         outputDesc.df = DF_NORMAL;

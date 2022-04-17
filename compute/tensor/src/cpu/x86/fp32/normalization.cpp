@@ -14,10 +14,11 @@
 #include <math.h>
 #include "cpu/x86/fp32/tensor_computing_fp32.h"
 
-inline void array_norm_scale_fp32(
+static F32 eps = 1e-6;
+
+inline static void array_norm_scale_fp32(
     F32 *input, F32 *output, I32 len, F32 mean, F32 var, F32 *alpha, F32 *beta)
 {
-    F32 eps = 1e-6;
     F32 std_value = sqrt(var + eps);
     __m256 mean_v = _mm256_set1_ps(mean);
     __m256 std_v = _mm256_set1_ps(std_value);
@@ -38,17 +39,17 @@ inline void array_norm_scale_fp32(
     }
 }
 
-EE layer_normalization_fp32(
+static EE layer_normalization_nhwc(
     TensorDesc inputDesc, F32 *input, F32 *alpha, F32 *beta, TensorDesc outputDesc, F32 *output)
 {
     UNUSED(outputDesc);
-    if (nullptr == alpha || nullptr == beta || nullptr == input || nullptr == output) {
-        CHECK_STATUS(NULL_POINTER);
-    }
-
     U32 size = tensorNumElements(inputDesc);
     I32 size_inner = inputDesc.dims[0];
     I32 size_outer = size / size_inner;
+
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
+#endif
     for (I32 i = 0; i < size_outer; i++) {
         F32 *current_input = input + i * size_inner;
         F32 *current_output = output + i * size_inner;
@@ -57,6 +58,81 @@ EE layer_normalization_fp32(
 
         array_norm_scale_fp32(current_input, current_output, size_inner, mean, var, alpha, beta);
     }
-
     return SUCCESS;
+}
+
+static EE layer_normalization_nchwc8(
+    TensorDesc inputDesc, F32 *input, F32 *alpha, F32 *beta, TensorDesc outputDesc, F32 *output)
+{
+    UNUSED(outputDesc);
+    int n = inputDesc.dims[inputDesc.nDims - 1];
+    int c = inputDesc.dims[inputDesc.nDims - 2];
+    int hw = 1;
+    for (unsigned int i = 0; i < inputDesc.nDims - 2; i++) {
+        hw *= inputDesc.dims[i];
+    }
+    int c8 = c / 8;
+    int nums = n * hw;
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
+#endif
+    for (int x = 0; x < nums; ++x) {
+        int i = x / hw;
+        int j = x % hw;
+        __m256 sum_v = _mm256_set1_ps(0);
+        for (int k = 0; k < c8; k++) {
+            int id = ((i * c8 + k) * hw + j) * 8;
+            sum_v = _mm256_add_ps(sum_v, _mm256_loadu_ps(input + id));
+        }
+        F32 mean = _mm256_sum_ps(sum_v) / c;
+        __m256 mean_v = _mm256_set1_ps(mean);
+
+        sum_v = _mm256_set1_ps(0);
+        for (int k = 0; k < c8; k++) {
+            int id = ((i * c8 + k) * hw + j) * 8;
+            __m256 tmp_v = _mm256_sub_ps(_mm256_loadu_ps(input + id), mean_v);
+            sum_v = _mm256_fmadd_ps(tmp_v, tmp_v, sum_v);
+        }
+        F32 var = _mm256_sum_ps(sum_v) / c;
+        F32 std_value = sqrt(var + eps);
+
+        __m256 std_v = _mm256_set1_ps(std_value);
+        for (int k = 0, kk = 0; k < c8; k++, kk += 8) {
+            int id = ((i * c8 + k) * hw + j) * 8;
+            __m256 in = _mm256_loadu_ps(input + id);
+            __m256 alpha_v = _mm256_loadu_ps(alpha + kk);
+            __m256 beta_v = _mm256_loadu_ps(beta + kk);
+
+            __m256 tmp_v = _mm256_sub_ps(in, mean_v);
+            tmp_v = _mm256_div_ps(tmp_v, std_v);
+            tmp_v = _mm256_fmadd_ps(alpha_v, tmp_v, beta_v);
+            _mm256_storeu_ps(output + id, tmp_v);
+        }
+    }
+    return SUCCESS;
+}
+
+EE layer_normalization_fp32(TensorDesc inputDesc,
+    F32 *input,
+    LayerNormParamSpec p,
+    F32 *alpha,
+    F32 *beta,
+    TensorDesc outputDesc,
+    F32 *output)
+{
+    if (nullptr == alpha || nullptr == beta || nullptr == input || nullptr == output) {
+        CHECK_STATUS(NULL_POINTER);
+    }
+
+    EE ret = NOT_SUPPORTED;
+    if (inputDesc.df == DF_NCHWC8) {
+        if (p.axis == 1) {
+            ret = layer_normalization_nchwc8(inputDesc, input, alpha, beta, outputDesc, output);
+        }
+    } else {
+        if (p.axis == -1) {
+            ret = layer_normalization_nhwc(inputDesc, input, alpha, beta, outputDesc, output);
+        }
+    }
+    return ret;
 }

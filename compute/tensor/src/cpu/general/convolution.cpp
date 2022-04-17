@@ -49,9 +49,9 @@ inline EE convolution(TensorDesc inputDesc,
     U32 strideT = convParamSpec.stride_t;
     U32 strideH = convParamSpec.stride_h;
     U32 strideW = convParamSpec.stride_w;
-    U32 paddingB = convParamSpec.padding_before;
-    U32 paddingT = convParamSpec.padding_top;
-    U32 paddingL = convParamSpec.padding_left;
+    U32 paddingB = convParamSpec.pad_before;
+    U32 paddingT = convParamSpec.pad_top;
+    U32 paddingL = convParamSpec.pad_left;
     U32 dilateT = convParamSpec.dilatedRate_t;
     U32 dilateH = convParamSpec.dilatedRate_h;
     U32 dilateW = convParamSpec.dilatedRate_w;
@@ -202,9 +202,9 @@ EE convolution_general(TensorDesc inputDesc,
     UNUSED(biasDesc);
 
     if (eltwiseInput == nullptr) {
-        memset(output, 0, tensorNumBytes(outputDesc));
+        UNI_MEMSET(output, 0, tensorNumBytes(outputDesc));
     } else {
-        memcpy(output, eltwiseInput, tensorNumBytes(outputDesc));
+        UNI_MEMCPY(output, eltwiseInput, tensorNumBytes(outputDesc));
     }
 
     EE ret = NOT_SUPPORTED;

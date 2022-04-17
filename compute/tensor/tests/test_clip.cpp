@@ -27,7 +27,7 @@ int clipTest(int argc, char **argv, DataType dt)
     Tensor inputTensor;
     inputTensor.resize(inDesc);
     inputTensor.alloc();
-    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inDesc));
+    UNI_MEMCPY(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inDesc));
 
     Tensor outputTensor;
     Tensor outputTensorRef;

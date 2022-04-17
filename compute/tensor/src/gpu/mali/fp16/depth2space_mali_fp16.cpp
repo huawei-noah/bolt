@@ -56,16 +56,16 @@ inline EE depth2space_core_mali_fp16(GCLHandle_t handle,
     char kernelName[128];
     KernelOpt kernelOpt;
 
-    if (imf == DF_NCHWC4 && p.blockSize == 2) {
+    if (imf == DF_NCHWC4 && p.block_size == 2) {
         U32 gs[3] = {iw, ih, (ic_str + 3) / 4};
         U32 ls[3] = {0, 0, 0};
         U32 dim = 3;
         bool useOutputNchw = (omf == DF_NCHW) ? true : false;
         CHECK_STATUS(set_depth2space_nchwc4_2x2_opt(
-            useOutputNchw, DT_F16, GCL_MEM_BUF, GCL_MEM_BUF, kernelName, &kernelOpt));
+            useOutputNchw, DT_F16, input->desc.memType, GCL_MEM_BUF, kernelName, &kernelOpt));
         CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
-        CHECK_STATUS(gcl_set_kernelArgs(kernel, p.blockSize, iw_str, ihw_str, ic_str, i_off, ow_str,
-            oh_str, ohw_str, o_off, iw, ih, oc, inbuf, outbuf));
+        CHECK_STATUS(gcl_set_kernelArgs(kernel, p.block_size, iw_str, ihw_str, ic_str, i_off,
+            ow_str, oh_str, ohw_str, o_off, iw, ih, oc, inbuf, outbuf));
         gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
 #ifdef _DEBUG
         CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
@@ -85,13 +85,13 @@ inline EE depth2space_core_mali_fp16(GCLHandle_t handle,
             inbuf = tmp;
         }
         U32 gs[3] = {
-            iw, ih, (ic / (p.blockSize * p.blockSize) + 3) / 4 * (p.blockSize * p.blockSize)};
+            iw, ih, (ic / (p.block_size * p.block_size) + 3) / 4 * (p.block_size * p.block_size)};
         U32 ls[3] = {0, 0, 0};
         U32 dim = 3;
         CHECK_STATUS(set_common_opt(
             DT_F16, GCL_MEM_BUF, GCL_MEM_BUF, "depth2space_nchw", kernelName, &kernelOpt));
         CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
-        CHECK_STATUS(gcl_set_kernelArgs(kernel, p.blockSize, iw_str, ihw_str, ow_str, ohw_str,
+        CHECK_STATUS(gcl_set_kernelArgs(kernel, p.block_size, iw_str, ihw_str, ow_str, ohw_str,
             i_off, o_off, iw, ih, ic, inbuf, outbuf));
         gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
 #ifdef _DEBUG
@@ -110,7 +110,7 @@ EE depth2space_infer_tmpBuf_size_mali_fp16(
     U32 iw, ih, ic, in;
     tensorSelectGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw);
     *bytes = 0;
-    if (p.blockSize != 2) {
+    if (p.block_size != 2) {
         *bytes = in * ic * ih * iw * bytesOf(idt);
     }
     return SUCCESS;

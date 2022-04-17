@@ -47,19 +47,19 @@ int poolingTest(int argc, char **argv, DataType dt)
 
     PoolingParamSpec p;
     p.mode = POOLING_MEAN;
-    p.rm = CEIL;
+    p.round_mode = ROUND_CEIL;
     p.kernel_t = atoi(argv[6]);
     p.kernel_h = atoi(argv[7]);
     p.kernel_w = atoi(argv[8]);
     p.stride_t = atoi(argv[9]);
     p.stride_h = atoi(argv[10]);
     p.stride_w = atoi(argv[11]);
-    p.padding_before = atoi(argv[12]);
-    p.padding_after = atoi(argv[13]);
-    p.padding_top = atoi(argv[14]);
-    p.padding_bottom = atoi(argv[15]);
-    p.padding_left = atoi(argv[16]);
-    p.padding_right = atoi(argv[17]);
+    p.pad_before = atoi(argv[12]);
+    p.pad_after = atoi(argv[13]);
+    p.pad_top = atoi(argv[14]);
+    p.pad_bottom = atoi(argv[15]);
+    p.pad_left = atoi(argv[16]);
+    p.pad_right = atoi(argv[17]);
 
     ArchInfo archInfo;
     archInfo.arch = MALI;
@@ -84,7 +84,7 @@ int poolingTest(int argc, char **argv, DataType dt)
     Tensor inputTensorCpu;
     inputTensorCpu.resize(inputDescCpu);
     inputTensorCpu.alloc();
-    memcpy(get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), input_cpu_nchwc8,
+    UNI_MEMCPY(get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), input_cpu_nchwc8,
         tensorNumBytes(inputDescCpu));
 
     Tensor outputTensorCpu;

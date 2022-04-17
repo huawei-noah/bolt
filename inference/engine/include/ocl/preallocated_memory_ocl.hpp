@@ -18,7 +18,7 @@
 
 class PreAllocatedMemoryOCL : public PreAllocatedMemory {
 public:
-    PreAllocatedMemoryOCL(DataType dt, TensorDesc desc) : PreAllocatedMemory(dt, desc)
+    PreAllocatedMemoryOCL(PreAllocatedMemoryParamSpec p) : PreAllocatedMemory(p)
     {
         INIT_GPU_INFO(nullptr)
     }
@@ -28,7 +28,7 @@ public:
     std::shared_ptr<Operator> clone() override
     {
         std::shared_ptr<PreAllocatedMemoryOCL> mem =
-            std::shared_ptr<PreAllocatedMemoryOCL>(new PreAllocatedMemoryOCL(this->dt, this->desc));
+            std::shared_ptr<PreAllocatedMemoryOCL>(new PreAllocatedMemoryOCL(this->p));
         *mem = *this;
         return mem;
     }
@@ -36,19 +36,15 @@ public:
     inline void run_prepare()
     {
         OCLContext::getInstance().handle.get()->curOpName = this->get_name();
-        CHECK_STATUS(preallocated_memory(this->outputTensors[0], &this->archInfo));
+        CHECK_STATUS(preallocated_memory(this->p, this->outputTensors[0], &this->archInfo));
     }
 
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
         this->needSetKernelVec = true;
-        if (inTensors.size() > 0) {
-            CHECK_STATUS(NOT_MATCH);
-        }
-        outTensors[0]->resize(this->desc);
-        CHECK_STATUS(preallocated_memory_infer_output_size(outTensors[0], &this->archInfo));
-        return SUCCESS;
+        return preallocated_memory_infer_output_size(
+            inTensors, this->p, outTensors[0], &this->archInfo);
     }
 
     REGISTER_OCL_OPERATOR_RUN

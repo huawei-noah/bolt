@@ -202,6 +202,14 @@ EE matmul_infer_forward_algorithm_mali(GCLHandle_t handle,
     if (algorithm != CONVOLUTION_ALGORITHM_NULL) {
         return SUCCESS;
     }
+    GCLMemType amt = gclmemMatrixADesc.memType;
+    GCLMemType bmt = gclmemMatrixBDesc.memType;
+    GCLMemType cmt = gclmemMatrixCDesc.memType;
+    std::vector<I32> flag = build_matmul_forward_algorithm_flag(
+        matrixADesc, transposeA, matrixBDesc, transposeB, amt, bmt, cmt);
+    if (gcl_get_runInfo_from_cache(handle, flag, forwardRunInfo)) {
+        return SUCCESS;
+    }
     std::vector<ConvolutionForwardAlgorithm> matmulAlgorithms;
     std::vector<U32> vecH;
     std::vector<U32> vecC;
@@ -290,6 +298,7 @@ EE matmul_infer_forward_algorithm_mali(GCLHandle_t handle,
         CHECK_STATUS(NOT_SUPPORTED);
     }
     *forwardRunInfo = bestRunInfo;
+    gcl_set_runInfo_to_cache(handle, flag, bestRunInfo);
     CHECK_STATUS(gcl_finish(handle));
     gcl_destroy_gclmem(matrixA);
     gcl_destroy_gclmem(matrixB);

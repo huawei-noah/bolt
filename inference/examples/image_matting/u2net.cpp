@@ -121,7 +121,7 @@ std::shared_ptr<U8> preprocess(cv::Mat image,
         }
     }
     if (appending_channels != 0) {
-        memcpy(&(vec_transpose[iter_index]), &(vec_flow[0]), vec_flow.size() * sizeof(float));
+        UNI_MEMCPY(&(vec_transpose[iter_index]), &(vec_flow[0]), vec_flow.size() * sizeof(float));
     }
     return input_ptr;
 }

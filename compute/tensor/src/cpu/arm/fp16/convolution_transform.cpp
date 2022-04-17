@@ -25,7 +25,7 @@ static EE convolution_transform_filter_kernel_fp16(TensorDesc filterDesc,
     }
     if (filterDesc.df == ftmDataFormat) {
         *ftmDesc = filterDesc;
-        memcpy(ftmArray, filterArray, tensorNumBytes(filterDesc));
+        UNI_MEMCPY(ftmArray, filterArray, tensorNumBytes(filterDesc));
         return SUCCESS;
     }
     if (filterDesc.df != DF_NCHW) {

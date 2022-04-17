@@ -25,9 +25,15 @@ int OMP_NUM_THREADS = OMP_MAX_NUM_THREADS;
 #ifdef _THREAD_SAFE
 pthread_mutex_t uniThreadMutex = PTHREAD_MUTEX_INITIALIZER;
 #endif
-std::map<std::string, double> time_statistics;
+static std::map<std::string, double> time_statistics;
+static bool time_statistics_flag = true;
 #ifndef _EAGER_LOG
-std::vector<std::string> logs;
+static std::vector<std::string> logs;
+#endif
+
+#ifdef _USE_MEM_CHECK
+#include "memory_cpu.h"
+std::map<std::string, unsigned int> mem_statistics;
 #endif
 
 double ut_time_ms()
@@ -40,7 +46,20 @@ double ut_time_ms()
 
 void ut_time_init()
 {
-    UNI_THREAD_SAFE(time_statistics.clear());
+    UNI_THREAD_SAFE({
+        time_statistics.clear();
+        time_statistics_flag = true;
+    });
+}
+
+void ut_time_start()
+{
+    UNI_THREAD_SAFE({ time_statistics_flag = true; });
+}
+
+void ut_time_stop()
+{
+    UNI_THREAD_SAFE({ time_statistics_flag = false; });
 }
 
 inline std::string ut_profile_log(const std::string &name,
@@ -84,6 +103,9 @@ void ut_time_process(
 #endif
 #endif
 
+    if (!time_statistics_flag) {
+        return;
+    }
 #ifdef _PROFILE_STATISTICS
     double duration = time_end_ms - time_start_ms;
     UNI_THREAD_SAFE({
@@ -99,6 +121,9 @@ void ut_time_process(
 void ut_time_statistics()
 {
 #ifndef _EAGER_LOG
+    printf("\nFunction Time:\n{\"name\": function name, \"cat\": function category, \"ph\": "
+           "function type, \"pid\": process id, \"tid\": thread id, \"ts\": start time(ms), "
+           "\"dur\": duration time(vs, gpu will have 1 ms synchronization overhead)\n");
     for (unsigned int i = 0; i < logs.size(); i++) {
         UNI_PROFILE_LOG("%s\n", logs[i].c_str());
     }

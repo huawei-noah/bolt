@@ -131,9 +131,7 @@ public:
             auto biasMem = (OclMemory *)inTensors[1]->get_memory();
             biasMem->padding(0, 8, 0, 0);
         }
-        if (this->p.num_slices > 1) {
-            CHECK_STATUS(NOT_SUPPORTED);
-        }
+        CHECK_REQUIREMENT(this->p.num_slices == 1);
         return SUCCESS;
     }
 
@@ -174,11 +172,8 @@ public:
     {
         Tensor inputTensor = this->inputTensors[0];
         Tensor filterTensor = this->weightTensors[0];
-        if (this->p.num_slices == 1) {
-            CHECK_STATUS(alloc_wtm_memory());
-        } else {
-            CHECK_STATUS(NOT_SUPPORTED);
-        }
+        CHECK_REQUIREMENT(this->p.num_slices == 1);
+        CHECK_STATUS(alloc_wtm_memory());
         CHECK_STATUS(fully_connected_transform_filter(
             inputTensor, filterTensor, this->wtm.get(), &this->archInfo));
         this->weightTensors[0] = *this->get_wtm();

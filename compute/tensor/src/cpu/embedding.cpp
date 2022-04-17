@@ -25,8 +25,8 @@ EE embedding_cpu(TensorDesc inputDesc,
     U8 *outputPtr = (U8 *)output;
     U32 len = tensorNumElements(inputDesc);
     U32 elementBytes = bytesOf(weightDesc.dt);
-    U32 wordEmbeddingCPUBytes = elementBytes * p.num_output;
-    U32 transposeStride = elementBytes * p.input_dim;
+    U32 wordEmbeddingCPUBytes = elementBytes * p.num_outputs;
+    U32 transposeStride = elementBytes * p.num_inputs;
     EE ret = SUCCESS;
     for (U32 i = 0; i < len; i++) {
         U32 wordIndex = 0;
@@ -52,14 +52,14 @@ EE embedding_cpu(TensorDesc inputDesc,
         U8 *dest = outputPtr;
         if (p.transpose) {
             U8 *src = weightPtr + wordIndex * elementBytes;
-            for (U32 j = 0; j < p.num_output; j++) {
-                memcpy(dest, src, elementBytes);
+            for (U32 j = 0; j < p.num_outputs; j++) {
+                UNI_MEMCPY(dest, src, elementBytes);
                 src += transposeStride;
                 dest += elementBytes;
             }
         } else {
             U8 *src = weightPtr + wordIndex * wordEmbeddingCPUBytes;
-            memcpy(dest, src, wordEmbeddingCPUBytes);
+            UNI_MEMCPY(dest, src, wordEmbeddingCPUBytes);
         }
         outputPtr += wordEmbeddingCPUBytes;
     }

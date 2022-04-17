@@ -45,18 +45,10 @@ public:
         if (this->inputTensors.size() > 1) {
             Tensor inputTensor = this->inputTensors[1];
             TensorDesc inputDesc = inputTensor.get_desc();
-            GCLMem_t ptr = (GCLMem_t)(((OclMemory *)(inputTensor.get_memory()))->get_ptr());
             U32 length = tensorNumElements(inputDesc);
-            DataFormat df = ptr->desc.memFormat;
-            if (df != DF_NCHW) {
-                CHECK_STATUS(NOT_SUPPORTED);
-            }
-            U32 w_off, h_off;
-            w_off = ptr->desc.offset[0];
-            h_off = ptr->desc.offset[1];
-            if (w_off != 0 || h_off != 0) {
-                CHECK_STATUS(NOT_SUPPORTED);
-            }
+            GCLMem_t ptr = (GCLMem_t)(((OclMemory *)(inputTensor.get_memory()))->get_ptr());
+            CHECK_REQUIREMENT(ptr->desc.memFormat == DF_NCHW);
+            CHECK_REQUIREMENT(ptr->desc.offset[0] == 0 && ptr->desc.offset[1] == 0);
             I32 *val = hostVal.get();
             CHECK_STATUS(gcl_trans_memory(OCLContext::getInstance().handle.get(), ptr, val, &length,
                 DEVICE_BUF_TO_HOST, CL_TRUE));

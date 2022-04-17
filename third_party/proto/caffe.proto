@@ -675,6 +675,7 @@ message PreAllocatedMemoryParameter {
   }
   optional DataType data_type = 1;
   optional BlobShape shape = 2;
+  optional float value = 3 [default = 0];
 }
 
 message SharedWeightParameter {

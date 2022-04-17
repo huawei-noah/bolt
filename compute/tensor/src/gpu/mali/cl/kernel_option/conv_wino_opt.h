@@ -7,13 +7,14 @@ inline EE set_conv_wino_rotate_flt(
     kernelOpt->kernelDataType = dt;
     char *opt = kernelOpt->option;
     U32 fwh = fw * fh;
-    sprintf(kernelName, "conv_wino_rotate_fltbuf_%d", fwh);
-    sprintf(kernelOpt->sourceName, "conv_wino_rotate_fltbuf");
+    std::string kernel = std::string("conv_wino_rotate_fltbuf_") + std::to_string(fwh);
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, "conv_wino_rotate_fltbuf");
     CHECK_STATUS(set_value_define_opt(fwh, "FWH", opt));
     return SUCCESS;
 }
 
-inline EE set_conv_wino_preprocess_input_opt(DataType dt, 
+inline EE set_conv_wino_preprocess_input_opt(DataType dt,
     bool useNchwFormat,
     GCLMemType inputMemType,
     GCLMemType outputMemType,
@@ -24,12 +25,13 @@ inline EE set_conv_wino_preprocess_input_opt(DataType dt,
     char *opt = kernelOpt->option;
     kernelOpt->kernelDataType = dt;
     CHECK_STATUS(set_io_mem_name(inputMemType, outputMemType, ioMemName));
-    std::string formatName= "";
+    std::string formatName = "";
     if (useNchwFormat) {
         formatName = "nchw";
     }
-    sprintf(kernelName, "conv_wino_preprocess_input_%s%s", ioMemName, formatName.c_str());
-    sprintf(kernelOpt->sourceName, "conv_wino_preprocess_input");
+    std::string kernel = std::string("conv_wino_preprocess_input_") + ioMemName + formatName;
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, "conv_wino_preprocess_input");
     CHECK_STATUS(set_io_mem_define_opt(inputMemType, outputMemType, opt));
     if (useNchwFormat) {
         CHECK_STATUS(set_chars_define_opt("USE_NCHW", opt));
@@ -55,8 +57,9 @@ inline EE set_conv_wino_trans_outbuf_opt(bool useAlign,
     if (useAlign) {
         alignName = "align";
     }
-    sprintf(kernelName, "conv_wino_trans_outbuf_%s%s%s", ioMemName, modeName, alignName.c_str());
-    sprintf(kernelOpt->sourceName, "conv_wino_trans_outbuf");
+    std::string kernel = std::string("conv_wino_trans_outbuf_") + ioMemName + modeName + alignName;
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, "conv_wino_trans_outbuf");
     CHECK_STATUS(set_activation_define_opt(activeMode, opt));
     if (useAlign) {
         CHECK_STATUS(set_chars_define_opt("USE_ALIGN", opt));

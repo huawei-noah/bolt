@@ -15,6 +15,7 @@
 #include "cpu/arm/blas_arm.h"
 #include "cpu/arm/int8/blas_matrix_transpose.h"
 #include "arm_neon_expand.h"
+#include "uni.h"
 
 #define ALIGN 32
 
@@ -28,7 +29,7 @@ EE matrix_vector_multiply_transform_weight_int8(TensorDesc desc, INT8 *src, INT8
     switch (desc.df) {
         case DF_NORMAL: {
             CHECK_STATUS(tensor2dGet(desc, &dt, &df, &N, &K));
-#ifdef __aarch64__
+#ifdef _USE_FP16
             U32 K4 = pad_to_4_multiple(K);
 #else
             U32 K4 = K;
@@ -37,13 +38,13 @@ EE matrix_vector_multiply_transform_weight_int8(TensorDesc desc, INT8 *src, INT8
                 matrix1_trans_int8(ALIGN, K, K, src + i * K, dst + i * K4);
             }
             if (i < (int)N) {
-                memcpy(dst + i * K4, src + i * K, (N - i) * K * bytesOf(DT_I8));
+                UNI_MEMCPY(dst + i * K4, src + i * K, (N - i) * K * bytesOf(DT_I8));
             }
             break;
         }
         case DF_TRANSPOSE: {
             CHECK_STATUS(tensor2dGet(desc, &dt, &df, &K, &N));
-#ifdef __aarch64__
+#ifdef _USE_FP16
             U32 K4 = pad_to_4_multiple(K);
 #else
             U32 K4 = K;
@@ -69,7 +70,7 @@ EE matrix_vector_multiply_transform_weight_int8(TensorDesc desc, INT8 *src, INT8
     return ret;
 }
 
-#ifndef __aarch64__
+#ifndef _USE_FP16
 #if 1
 void mvm_row_pack(U32 Nbatch, U32 K, INT8 *matrix, INT8 *vector, I32 *result)
 {
@@ -197,7 +198,7 @@ void mvm_row_pack(U32 Nbatch, U32 K, INT8 *matrix, INT8 *vector, I32 *result)
 inline void mvm_row_unpack(U32 Nbatch, U32 K, INT8 *matrix, INT8 *vector, I32 *result)
 {
     U32 N = Nbatch * 8;
-#ifdef __aarch64__
+#ifdef _USE_FP16
     int8x16_t mat[8];
 #else
     int16x4_t mat[8][2];
@@ -213,7 +214,7 @@ inline void mvm_row_unpack(U32 Nbatch, U32 K, INT8 *matrix, INT8 *vector, I32 *r
         int32x4_t bias0 = vld1q_s32(result + n);
         int32x4_t bias1 = vld1q_s32(result + n + 4);
         int32x4_t res[8] = {0};
-#ifdef __aarch64__
+#ifdef _USE_FP16
         for (U32 k = 0; k < K_inner; k += 16) {
             int8x16_t v = vld1q_s8(vector + k);
             for (int i = 0; i < 8; i++) {
@@ -319,7 +320,7 @@ inline void mvm_col(U32 numRows, U32 numColumns, INT8 *matrix, INT8 *vector, I32
     U32 NInner = N - NTail;
 
     for (U32 n = 0; n < NInner; n += 64) {
-        memset(tmp, 0, sizeof(I32) * 64);
+        UNI_MEMSET(tmp, 0, sizeof(I32) * 64);
         for (U32 k = 0; k < K; k++) {
             for (U32 i = 0; i < 64; i++) {
                 tmp[i] += vector[k] * matrix[k * N + n + i];
@@ -331,7 +332,7 @@ inline void mvm_col(U32 numRows, U32 numColumns, INT8 *matrix, INT8 *vector, I32
         }
     }
 
-    memset(tmp, 0, sizeof(I32) * 64);
+    UNI_MEMSET(tmp, 0, sizeof(I32) * 64);
     for (U32 k = 0; k < K; k++) {
         for (U32 i = 0; i < NTail; i++) {
             tmp[i] += vector[k] * matrix[k * N + NInner + i];

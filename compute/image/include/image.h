@@ -23,13 +23,29 @@
 #include "ocl_desc_trans.h"
 #endif
 
-EE resize_infer_output_size(Tensor *inputTensor,
-    DataType paramDT,
-    void *params,
-    Tensor *outputTensor,
-    U32 *outputBytes,
-    ArchInfo_t archInfo);
+EE resize_infer_output_size(
+    Tensor *inputTensor, ResizeParamSpec p, Tensor *outputTensor, ArchInfo_t archInfo);
+
+EE resize_infer_forward_tmp_bytes(
+    Tensor inputTensor, ResizeParamSpec p, Tensor outputTensor, U32 *bytes, ArchInfo_t archInfo);
 
 EE resize(
-    Tensor inputTensor, Tensor tmpTensor, Tensor outputTensor, ResizeParamSpec p, ArchInfo_t archInfo);
+    Tensor inputTensor, ResizeParamSpec p, Tensor tmpTensor, Tensor outputTensor, ArchInfo_t archInfo);
+
+EE grid_sample_infer_output_size(
+    Tensor *inputTensor, Tensor *gridTensor, Tensor *outputTensor, ArchInfo_t archInfo);
+
+EE grid_sample_infer_forward_tmp_bytes(Tensor inputTensor,
+    Tensor gridTensor,
+    GridSampleParamSpec p,
+    Tensor outputTensor,
+    U32 *bytes,
+    ArchInfo_t archInfo);
+
+EE grid_sample(Tensor inputTensor,
+    Tensor gridTensor,
+    GridSampleParamSpec p,
+    Tensor tmpTensor,
+    Tensor outputTensor,
+    ArchInfo_t archInfo);
 #endif

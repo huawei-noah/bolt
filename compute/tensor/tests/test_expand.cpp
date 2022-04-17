@@ -28,11 +28,11 @@ int expandTest(int argc, char **argv, DataType dt)
     U32 oh = atoi(argv[7]);
     U32 ow = atoi(argv[8]);
     ExpandParamSpec p;
-    p.shape_size = 4;
-    p.shape_dims[0] = on;
-    p.shape_dims[1] = oc;
-    p.shape_dims[2] = oh;
-    p.shape_dims[3] = ow;
+    p.num_shape = 4;
+    p.shape[0] = on;
+    p.shape[1] = oc;
+    p.shape[2] = oh;
+    p.shape[3] = ow;
 
     DataFormat df = DF_NCHW;
     TensorDesc inDesc = tensor4df(dt, df, in, ic, ih, iw);
@@ -41,7 +41,7 @@ int expandTest(int argc, char **argv, DataType dt)
     Tensor inputTensor;
     inputTensor.resize(inDesc);
     inputTensor.alloc();
-    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inDesc));
+    UNI_MEMCPY(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inDesc));
 
     Tensor outputTensor;
     CHECK_STATUS(expand_infer_output_size(&inputTensor, p, &outputTensor, &UT_CPU_ARCHINFO));

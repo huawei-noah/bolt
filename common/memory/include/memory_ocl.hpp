@@ -23,7 +23,7 @@ class OclMemory : public Memory {
 public:
     OclMemory()
     {
-        memset(&(this->desc), 0, sizeof(GCLMemDesc));
+        UNI_MEMSET(&(this->desc), 0, sizeof(GCLMemDesc));
         this->desc.memFormat = DF_NCHW;
         this->desc.memType = GCL_MEM_BUF;
         this->desc.flags = CL_MEM_READ_WRITE;
@@ -202,14 +202,14 @@ public:
             if (!allocated) {
                 U8 *tmp = nullptr;
                 if (size < this->desc.byteSize) {
-                    U8 *tmp = (U8 *)operator new(this->desc.byteSize);
-                    memset(tmp, 0, this->desc.byteSize);
-                    memcpy(tmp, host_ptr, size);
+                    U8 *tmp = (U8 *)UNI_OPERATOR_NEW(this->desc.byteSize);
+                    UNI_MEMSET(tmp, 0, this->desc.byteSize);
+                    UNI_MEMCPY(tmp, host_ptr, size);
                     host_ptr = tmp;
                 }
                 this->alloc(host_ptr);
-                if (tmp) {
-                    delete tmp;
+                if (tmp != nullptr) {
+                    UNI_OPERATOR_DELETE(tmp);
                 }
             } else {
                 this->val->desc = this->desc;  //TODO DELETE AFTER SPLITE DESC FROM GCLMEM
@@ -345,7 +345,7 @@ public:
 
     std::string string(U32 num, F32 factor) override
     {
-        std::string line = "desc: " + gclMemDesc2Str(this->desc) + " data: ";
+        std::string line = "desc:" + gclMemDesc2Str(this->desc) + " data:";
 #ifdef _DEBUG
         DataType dt = (this->desc.dt == DT_U8) ? DT_F16 : this->desc.dt;
         if (dt == DT_U32) {
@@ -374,7 +374,7 @@ public:
             for (U32 i = 0; i < this->length(); i++) {
                 sum += this->element(i) / factor;
             }
-            line += " sum: " + std::to_string(sum);
+            line += " sum:" + std::to_string(sum);
         }
 #endif
         return line;

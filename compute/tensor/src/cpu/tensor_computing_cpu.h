@@ -25,6 +25,7 @@ EE rnn_transform_filter_cpu(const TensorDesc *filterDescs,
     RNNParamSpec rnnParamSpec,
     TensorDesc *ftmDesc,
     void **ftmArray,
+    float *scale,
     Arch arch);
 
 EE rnn_transform_filter_bytes_cpu(
@@ -50,6 +51,7 @@ EE rnncell_cpu(TensorDesc xDesc,
     const void **filter,
     const TensorDesc *biasDesc,
     const void **bias,
+    float *scale,
     void *state,
     RNNParamSpec rnnParamSpec,
     U32 batchStrideX,
@@ -66,6 +68,7 @@ EE rnn_cpu(TensorDesc inputDesc,
     const void **filter,
     const TensorDesc *biasDesc,
     const void **bias,
+    float *scale,
     RNNParamSpec rnnParamSpec,
     U32 tmpBytes,
     void *tmp,
@@ -140,7 +143,8 @@ EE non_max_suppression_cpu(std::vector<TensorDesc> inputDesc,
     std::vector<void *> input,
     NonMaxSuppressionParamSpec nonMaxSuppressionParamSpec,
     TensorDesc outputDesc,
-    void *output);
+    void *output,
+    U32 *length);
 
 EE concat_cpu(std::vector<TensorDesc> inputDesc,
     std::vector<void *> input,
@@ -164,8 +168,8 @@ EE power_cpu(TensorDesc inputDesc,
 EE slice_cpu(TensorDesc inputDesc,
     void *input,
     SliceParamSpec p,
-    std::vector<TensorDesc> outputDesc,
-    std::vector<void *> *output);
+    std::vector<TensorDesc>& outputDesc,
+    std::vector<void *>& output);
 
 EE priorbox_cpu(std::vector<TensorDesc> inputDesc,
     PriorBoxParamSpec priorBoxParamSpec,
@@ -350,4 +354,28 @@ EE gat_cpu(TensorDesc node_feature_desc,
     TensorDesc outputDesc,
     void *output,
     Arch arch);
+
+EE onehot_cpu(
+    TensorDesc inputDesc, void *input, OneHotParamSpec p, TensorDesc outputDesc, void *output);
+
+EE non_zero_cpu(TensorDesc inputDesc, void *input, TensorDesc outputDesc, void *output, U32 *length);
+
+EE check_cpu(TensorDesc inputADesc,
+    void *inputA,
+    TensorDesc inputBDesc,
+    void *inputB,
+    CheckParamSpec p,
+    TensorDesc outputDesc,
+    void *output);
+
+EE cast_cpu(TensorDesc inputDesc, void *input, TensorDesc outputDesc, void *output);
+
+EE space2depth_cpu(
+    TensorDesc inputDesc, void *input, Space2DepthParamSpec p, TensorDesc outputDesc, void *output);
+
+EE depth2space_cpu(
+    TensorDesc inputDesc, void *input, Depth2SpaceParamSpec p, TensorDesc outputDesc, void *output);
+
+EE scale_cpu(
+    TensorDesc inputDesc, void *input, void *alpha, void *beta, ScaleParamSpec p, TensorDesc outputDesc, void *output, Arch arch);
 #endif

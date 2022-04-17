@@ -14,11 +14,7 @@
 #ifndef _H_TENSORFLOWADAPTEE
 #define _H_TENSORFLOWADAPTEE
 #include <json/json.h>
-#include <fstream>
 #include <sstream>
-#include <string>
-#include <vector>
-#include <math.h>
 
 #include "model_adaptee.h"
 
@@ -28,9 +24,8 @@ public:
     {
         this->modelInputLayerNum = 0;
         this->entityOpCount = 0;
-        this->weightOpNum = 0;
+        this->weightNumber = 0;
         this->curInDegree = 0;
-        this->curNodeIndex = 0;
     }
 
     ~TensorflowAdaptee()
@@ -52,63 +47,47 @@ protected:
 
     OperatorType convert_tensorflow_type(std::string tfType)
     {
-        if (tfType.compare("Mul") == 0 || tfType.compare("Sub") == 0 ||
-            tfType.compare("Add") == 0 || tfType.compare("RealDiv") == 0) {
+        std::map<std::string, OperatorType> operatorMap = {
+            {"FusedBatchNorm", OT_BatchNorm},
+            {"Relu6", OT_Relu6},
+            {"DepthwiseConv2dNative", OT_Conv},
+            {"MaxPool", OT_Pooling},
+            {"ConcatV2", OT_Concat},
+            {"Relu", OT_Relu},
+            {"ResizeBilinear", OT_Resize},
+            {"ArgMax", OT_ArgMax},
+            {"ExpandDims", OT_Unsqueeze},
+            {"Pad", OT_Pad},
+            {"PadV2", OT_Pad},
+            {"Transpose", OT_Transpose},
+            {"BiasAdd", OT_FC},
+            {"Conv2DBackpropInput", OT_Conv},
+            {"Conv2D", OT_Conv},
+            {"Cast", OT_Cast},
+            {"Reshape", OT_Reshape},
+            {"Rsqrt", OT_Power},
+            {"Squeeze", OT_Squeeze},
+            {"Sigmoid", OT_Sigmoid},
+            {"Softmax", OT_Softmax},
+            {"AvgPool", OT_Pooling},
+            {"Mean", OT_Reduction},
+            {"Shape", OT_Shape},
+        };
+        if (operatorMap.find(tfType) != operatorMap.end()) {
+            return operatorMap[tfType];
+        }
+        if (tfType == "Mul" || tfType == "Sub" || tfType == "Add" || tfType == "RealDiv") {
             if (curInDegree == 1) {
                 return OT_Power;
             } else {
                 return OT_Eltwise;
             }
-        } else if (tfType.compare("FusedBatchNorm") == 0) {
-            return OT_BatchNorm;
-        } else if (tfType.compare("Relu6") == 0) {
-            return OT_Relu6;
-        } else if (tfType.compare("DepthwiseConv2dNative") == 0) {
-            return OT_Conv;
-        } else if (tfType.compare("MaxPool") == 0) {
-            return OT_Pooling;
-        } else if (tfType.compare("ConcatV2") == 0) {
-            return OT_Concat;
-        } else if (tfType.compare("Relu") == 0) {
-            return OT_Relu;
-        } else if (tfType.compare("ResizeBilinear") == 0) {
-            return OT_Resize;
-        } else if (tfType.compare("ArgMax") == 0) {
-            return OT_ArgMax;
-        } else if (tfType.compare("ExpandDims") == 0) {
-            return OT_Unsqueeze;
-        } else if (tfType.compare("Pad") == 0 || tfType.compare("PadV2") == 0) {
-            return OT_Pad;
-        } else if (tfType.compare("Transpose") == 0) {
-            return OT_Transpose;
-        } else if (tfType.compare("BiasAdd") == 0) {
-            return OT_FC;
-        } else if (tfType.compare("Conv2DBackpropInput") == 0 || tfType.compare("Conv2D") == 0) {
-            return OT_Conv;
-        } else if (tfType.compare("Cast") == 0) {
-            return OT_Cast;
-        } else if (tfType.compare("Reshape") == 0) {
-            return OT_Reshape;
-        } else if (tfType.compare("Rsqrt") == 0) {
-            return OT_Power;
-        } else if (tfType.compare("Squeeze") == 0) {
-            return OT_Squeeze;
-        } else if (tfType.compare("Sigmoid") == 0) {
-            return OT_Sigmoid;
-        } else if (tfType.compare("MatMul") == 0) {
+        } else if (tfType == "MatMul") {
             if (this->curInDegree == 1) {
                 return OT_FC;
             } else {
                 return OT_MatMul;
             }
-        } else if (tfType.compare("Softmax") == 0) {
-            return OT_Softmax;
-        } else if (tfType.compare("AvgPool") == 0) {
-            return OT_Pooling;
-        } else if (tfType.compare("Mean") == 0) {
-            return OT_Reduction;
-        } else if (tfType.compare("Shape") == 0) {
-            return OT_Shape;
         } else {
             UNI_ERROR_LOG("operator name:%s type:%s not supported.\n", this->layerName.c_str(),
                 tfType.c_str());
@@ -183,13 +162,13 @@ protected:
         ms->dt = DT_F32;
         str_copy(ms->model_name, modelName.c_str(), modelName.length());
         ms->num_inputs = this->modelInputLayerNum;
-        ms->input_names = (I8 **)mt_new_storage(ms->num_inputs * sizeof(I8 *));
-        ms->input_dims = (TensorDesc *)mt_new_storage(sizeof(TensorDesc) * ms->num_inputs);
+        ms->input_names = (I8 **)mt_malloc(ms->num_inputs * sizeof(I8 *));
+        ms->input_dims = (TensorDesc *)mt_malloc(sizeof(TensorDesc) * ms->num_inputs);
         int traverseInputLayerIndex = 0;
 
         ms->num_operator_specs = this->entityOpCount;
         OperatorSpec *opsPtr =
-            (OperatorSpec *)mt_new_storage(sizeof(OperatorSpec) * ms->num_operator_specs);
+            (OperatorSpec *)mt_malloc(sizeof(OperatorSpec) * ms->num_operator_specs);
         ms->ops = opsPtr;
         int traverseEntityOpIndex = 0;
 
@@ -204,7 +183,7 @@ protected:
                 this->opType = value["node"][i]["op"].asString();
                 if (opType.compare("Placeholder") == 0) {
                     ms->input_names[traverseInputLayerIndex] =
-                        (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
+                        (I8 *)mt_malloc(NAME_LEN * sizeof(I8));
                     str_copy(ms->input_names[traverseInputLayerIndex], layerName.c_str(),
                         layerName.length());
                     int placeholder_shape_size =
@@ -230,24 +209,19 @@ protected:
                     }
                     traverseInputLayerIndex++;
                 } else if (opType.compare("Const") == 0) {
-                    int tensorDimSize =
-                        value["node"][i]["attr"]["value"]["tensor"]["tensorShape"]["dim"].size();
+                    auto shape = value["node"][i]["attr"]["value"]["tensor"]["tensorShape"]["dim"];
+                    int tensorDimSize = shape.size();
                     std::vector<int> tensorDims;
                     int tensorDimsNum = 1;
                     for (int j = 0; j < tensorDimSize; j++) {
-                        tensorDims.push_back(std::stoi(
-                            value["node"][i]["attr"]["value"]["tensor"]["tensorShape"]["dim"][j]["s"
-                                                                                                 "i"
-                                                                                                 "z"
-                                                                                                 "e"]
-                                .asString()));
+                        tensorDims.push_back(std::stoi(shape[j]["size"].asString()));
                         tensorDimsNum *= tensorDims[j];
                     }
                 } else if (opType.compare("Identity") != 0) {
                     std::vector<std::string> inList;
                     std::vector<std::string> constList;
 
-                    this->nodeV = value["node"][i];
+                    this->node = value["node"][i];
                     ParameterSpec tmpPs;
 
                     str_copy(
@@ -285,25 +259,25 @@ protected:
                             opType != "ExpandDims" && opType != "ResizeBilinear" &&
                             opType != "Reshape" && opType != "Mean") {  // TODO: expand more cases
                             weightIds.push_back(i);
-                            this->weightOpNum = this->weightOpNum + 1;
+                            this->weightNumber = this->weightNumber + 1;
                         }
                     }
 
                     opsPtr[traverseEntityOpIndex].num_inputs = inList.size();
-                    opsPtr[traverseEntityOpIndex].input_tensors_name = (I8 **)mt_new_storage(
-                        opsPtr[traverseEntityOpIndex].num_inputs * sizeof(I8 *));
+                    opsPtr[traverseEntityOpIndex].input_tensors_name =
+                        (I8 **)mt_malloc(opsPtr[traverseEntityOpIndex].num_inputs * sizeof(I8 *));
                     for (int k = 0; k < (int)(opsPtr[traverseEntityOpIndex].num_inputs); k++) {
                         opsPtr[traverseEntityOpIndex].input_tensors_name[k] =
-                            (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
+                            (I8 *)mt_malloc(NAME_LEN * sizeof(I8));
                         str_copy(opsPtr[traverseEntityOpIndex].input_tensors_name[k],
                             inList[k].c_str(), inList[k].length());
                     }
                     opsPtr[traverseEntityOpIndex].num_outputs = 1;
-                    opsPtr[traverseEntityOpIndex].output_tensors_name = (I8 **)mt_new_storage(
-                        opsPtr[traverseEntityOpIndex].num_outputs * sizeof(I8 *));
+                    opsPtr[traverseEntityOpIndex].output_tensors_name =
+                        (I8 **)mt_malloc(opsPtr[traverseEntityOpIndex].num_outputs * sizeof(I8 *));
                     for (int k = 0; k < (int)(opsPtr[traverseEntityOpIndex].num_outputs); k++) {
                         opsPtr[traverseEntityOpIndex].output_tensors_name[k] =
-                            (I8 *)mt_new_storage(NAME_LEN * sizeof(I8));
+                            (I8 *)mt_malloc(NAME_LEN * sizeof(I8));
                         str_copy(opsPtr[traverseEntityOpIndex].output_tensors_name[k],
                             layerName.c_str(), layerName.length());
                     }
@@ -326,159 +300,137 @@ protected:
         return ret;
     }
 
+    std::vector<int> get_weight_ids(const Json::Value &node)
+    {
+        std::vector<int> ids;
+        std::string name = node["name"].asString();
+        std::vector<std::string> all = this->weightConstInput[name];
+        for (U32 i = 0; i < all.size(); i++) {
+            int id;
+            if (constId.find(all[i]) != constId.end()) {
+                id = constId[all[i]];
+            } else {
+                id = constId[idenConst[all[i]]];
+            }
+            ids.push_back(id);
+        }
+        return ids;
+    }
+
+    int get_length(const Json::Value &tensor)
+    {
+        auto data = tensor["attr"]["value"]["tensor"]["tensorContent"];
+        return data.size();
+    }
+
+    std::vector<float> get_floats(const Json::Value &tensor)
+    {
+        auto data = tensor["attr"]["value"]["tensor"]["tensorContent"];
+        int size = data.size();
+        std::vector<float> ret(size);
+        for (int i = 0; i < size; i++) {
+            ret[i] = std::stof(data[i].asString());
+        }
+        return ret;
+    }
+
+    std::vector<int> get_shape(const Json::Value &tensor)
+    {
+        auto shape = tensor["attr"]["value"]["tensor"]["tensorShape"]["dim"];
+        int size = shape.size();
+        std::vector<int> ret(size);
+        for (int i = 0; i < size; i++) {
+            ret[i] = std::stoi(shape[i].asString());
+        }
+        return ret;
+    }
+
+    std::vector<int> get_ints(const Json::Value &tensor)
+    {
+        auto data = tensor["attr"]["value"]["tensor"]["tensorContent"];
+        int size = data.size();
+        std::vector<int> ret(size);
+        for (int i = 0; i < size; i++) {
+            ret[i] = std::stoi(data[i].asString());
+        }
+        return ret;
+    }
+
+    std::vector<int> get_ints(const Json::Value &node, const char *attributeName)
+    {
+        auto attribute = node["attr"][attributeName]["list"]["i"];
+        int size = attribute.size();
+        std::vector<int> ret(size);
+        for (int i = 0; i < size; i++) {
+            ret[i] = std::stoi(attribute[i].asString());
+        }
+        return ret;
+    }
+
+    void copy_tensors(std::vector<Json::Value> tensors, U8 *ptr)
+    {
+        for (U32 i = 0; i < tensors.size(); i++) {
+            std::vector<float> data = get_floats(tensors[i]);
+            int bytes = sizeof(float) * data.size();
+            UNI_MEMCPY(ptr, data.data(), bytes);
+            ptr += bytes;
+        }
+    }
+
+    WeightSpec convert_weight(
+        std::string operatorName, std::vector<Json::Value> weight, std::vector<Json::Value> bias)
+    {
+        DataType wdt = DT_F32;
+        U32 bytes0 = 0, bytes1 = 0;
+        for (U32 i = 0; i < weight.size(); i++) {
+            bytes0 += get_length(weight[i]) * bytesOf(wdt);
+        }
+        for (U32 i = 0; i < bias.size(); i++) {
+            bytes1 += get_length(bias[i]) * bytesOf(wdt);
+        }
+        WeightSpec w = mt_create_weight(operatorName.c_str(), wdt, bytes0, bytes1, 0);
+        copy_tensors(weight, w.weight);
+        copy_tensors(bias, w.vec);
+        return w;
+    }
+
     EE adapt_weights(ModelSpec *ms) override
     {
-        ms->num_weight_specs = weightOpNum;
-        WeightSpec *wsPtr = (WeightSpec *)mt_new_storage(sizeof(WeightSpec) * ms->num_weight_specs);
-        for (int j = 0; j < ms->num_weight_specs; j++) {
-            wsPtr[j].num_quant_scale = 0;
-            wsPtr[j].weight_scale = nullptr;
-        }
-        ms->ws = wsPtr;
+        ms->num_weight_specs = weightNumber;
+        WeightSpec *ws = (WeightSpec *)mt_malloc(sizeof(WeightSpec) * ms->num_weight_specs);
+        ms->ws = ws;
         Json::Reader reader;
         Json::Value value;
-        if (reader.parse(newStrValue, value)) {
-            for (int j = 0; j < ms->num_weight_specs; j++) {
-                int curWeightIndex = weightIds[j];
-                std::string weightOpType = value["node"][curWeightIndex]["op"].asString();
-                std::string weightOpName = value["node"][curWeightIndex]["name"].asString();
-                str_copy(wsPtr[j].op_name, weightOpName.c_str(), weightOpName.length());
-                std::vector<std::string> constList = weightConstInput[weightOpName];
-                UNI_DEBUG_LOG("process operator name:%s weight.\n", weightOpName.c_str());
-                if (weightOpType.compare("Conv2D") == 0 ||
-                    weightOpType.compare("Conv2DBackpropInput") == 0 ||
-                    weightOpType.compare("MatMul") == 0 ||
-                    weightOpType.compare("DepthwiseConv2dNative") == 0) {  // To collect more op
-
-                    if (constList.size() == 1) {
-                        std::string curIdenStr = constList[0];
-                        std::string curConstStr = idenConst[curIdenStr];
-                        int curConstIndex = constId[curConstStr];
-                        if (constId.find(curIdenStr) != constId.end()) {
-                            curConstIndex = constId[curIdenStr];
-                        }
-                        int tensorContentSize =
-                            value["node"][curConstIndex]["attr"]["value"]["tensor"]["tensorContent"]
-                                .size();
-                        wsPtr[j].mdt = DT_F32;
-                        wsPtr[j].bytes_of_weight = tensorContentSize * sizeof(float);
-                        float *fp32Ptr = (float *)mt_new_storage(wsPtr[j].bytes_of_weight);
-                        for (int k = 0; k < tensorContentSize; k++) {
-                            fp32Ptr[k] = std::stof(
-                                value["node"][curConstIndex]["attr"]["value"]["tensor"]["tensorCont"
-                                                                                        "ent"][k]
-                                    .asString());
-                        }
-                        wsPtr[j].weight = (U8 *)fp32Ptr;
-                        wsPtr[j].bytes_of_vec = 0;
-                        wsPtr[j].vec = nullptr;
-                    } else {
-                        CHECK_STATUS(NOT_IMPLEMENTED);
-                    }
-                } else if (weightOpType.compare("BiasAdd") == 0) {
-                    if (constList.size() == 1) {
-                        std::string curIdenStr = constList[0];
-                        std::string curConstStr = idenConst[curIdenStr];
-                        int curConstIndex = constId[curConstStr];
-
-                        int tensorContentSize =
-                            value["node"][curConstIndex]["attr"]["value"]["tensor"]["tensorContent"]
-                                .size();
-                        wsPtr[j].mdt = DT_F32;
-                        wsPtr[j].bytes_of_weight = 0;
-                        wsPtr[j].weight = nullptr;
-                        wsPtr[j].bytes_of_vec = tensorContentSize * sizeof(float);
-                        float *fp32Ptr = (float *)mt_new_storage(wsPtr[j].bytes_of_vec);
-                        for (int k = 0; k < tensorContentSize; k++) {
-                            fp32Ptr[k] = std::stof(
-                                value["node"][curConstIndex]["attr"]["value"]["tensor"]["tensorCont"
-                                                                                        "ent"][k]
-                                    .asString());
-                        }
-                        wsPtr[j].vec = (U8 *)fp32Ptr;
-                    } else {
-                        CHECK_STATUS(NOT_IMPLEMENTED);
-                    }
-
-                } else if (weightOpType.compare("FusedBatchNorm") == 0) {
-                    if (constList.size() == 4) {
-                        std::string curScaleIdenStr = constList[0];
-                        std::string curScaleConstStr = idenConst[curScaleIdenStr];
-                        int curScaleConstIndex = constId[curScaleConstStr];
-                        if (constId.find(curScaleIdenStr) != constId.end()) {
-                            curScaleConstIndex = constId[curScaleIdenStr];
-                        }
-
-                        std::string curOffsetIdenStr = constList[1];
-                        std::string curOffsetConstStr = idenConst[curOffsetIdenStr];
-                        int curOffsetConstIndex = constId[curOffsetConstStr];
-                        if (constId.find(curOffsetIdenStr) != constId.end()) {
-                            curOffsetConstIndex = constId[curOffsetIdenStr];
-                        }
-
-                        std::string curMeanIdenStr = constList[2];
-                        std::string curMeanConstStr = idenConst[curMeanIdenStr];
-                        int curMeanConstIndex = constId[curMeanConstStr];
-                        if (constId.find(curMeanIdenStr) != constId.end()) {
-                            curMeanConstIndex = constId[curMeanIdenStr];
-                        }
-
-                        std::string curVarianceIdenStr = constList[3];
-                        std::string curVarianceConstStr = idenConst[curVarianceIdenStr];
-                        int curVarianceConstIndex = constId[curVarianceConstStr];
-                        if (constId.find(curVarianceIdenStr) != constId.end()) {
-                            curVarianceConstIndex = constId[curVarianceIdenStr];
-                        }
-
-                        int iterSize =
-                            value["node"][curScaleConstIndex]["attr"]["value"]["tensor"]["tensorCon"
-                                                                                         "tent"]
-                                .size();
-                        wsPtr[j].mdt = DT_F32;
-                        wsPtr[j].bytes_of_weight = iterSize * sizeof(float);
-                        float *fp32FirPtr = (float *)mt_new_storage(wsPtr[j].bytes_of_weight);
-                        wsPtr[j].weight = (U8 *)fp32FirPtr;
-                        wsPtr[j].bytes_of_vec = iterSize * sizeof(float);
-                        float *fp32SecPtr = (float *)mt_new_storage(wsPtr[j].bytes_of_vec);
-                        wsPtr[j].vec = (U8 *)fp32SecPtr;
-
-                        for (int k = 0; k < iterSize; k++) {
-                            float tmpScale = std::stof(
-                                value["node"][curScaleConstIndex]["attr"]["value"]["tensor"]["tenso"
-                                                                                             "rCont"
-                                                                                             "ent"][0]
-                                    .asString());
-                            float tmpOffset = std::stof(
-                                value["node"][curOffsetConstIndex]["attr"]["value"]["tensor"]["tens"
-                                                                                              "orCo"
-                                                                                              "nten"
-                                                                                              "t"][0]
-                                    .asString());
-                            float tmpMean = std::stof(
-                                value["node"][curMeanConstIndex]["attr"]["value"]["tensor"]["tensor"
-                                                                                            "Conten"
-                                                                                            "t"][0]
-                                    .asString());
-                            float tmpVariance = std::stof(
-                                value["node"][curVarianceConstIndex]["attr"]["value"]["tensor"]["te"
-                                                                                                "ns"
-                                                                                                "or"
-                                                                                                "Co"
-                                                                                                "nt"
-                                                                                                "en"
-                                                                                                "t"][0]
-                                    .asString());
-
-                            float tmpNewMean =
-                                tmpMean - tmpOffset * sqrt(tmpVariance / powf(tmpScale, 2));
-                            float tmpNewVariance = tmpVariance / (powf(tmpScale, 2));
-                            fp32FirPtr[k] = tmpNewMean;
-                            fp32SecPtr[k] = tmpNewVariance;
-                        }
-                    } else {
-                        CHECK_STATUS(NOT_IMPLEMENTED);
-                    }
+        if (!reader.parse(newStrValue, value)) {
+            return NOT_SUPPORTED;
+        }
+        for (int j = 0; j < ms->num_weight_specs; j++) {
+            this->node = value["node"][weightIds[j]];
+            std::string name = this->node["name"].asString();
+            UNI_DEBUG_LOG("process operator name:%s weight.\n", name.c_str());
+            std::vector<int> ids = get_weight_ids(this->node);
+            std::string type = this->node["op"].asString();
+            std::vector<std::string> constList;
+            if (type == "Conv2D" || type == "Conv2DBackpropInput" || type == "MatMul" ||
+                type == "DepthwiseConv2dNative") {
+                ws[j] = convert_weight(name, {value["node"][ids[0]]}, {});
+            } else if (type.compare("BiasAdd") == 0) {
+                ws[j] = convert_weight(name, {}, {value["node"][ids[0]]});
+            } else if (type.compare("FusedBatchNorm") == 0) {
+                U32 bytes = get_length(value["node"][ids[0]]) * sizeof(float);
+                ws[j] = mt_create_weight(name.c_str(), DT_F32, bytes, bytes, 0);
+                std::vector<float> scale = get_floats(value["node"][ids[0]]);
+                std::vector<float> bias = get_floats(value["node"][ids[1]]);
+                std::vector<float> mean = get_floats(value["node"][ids[2]]);
+                std::vector<float> var = get_floats(value["node"][ids[3]]);
+                for (U32 i = 0; i < scale.size(); i++) {
+                    float a = mean[i] - bias[i] * sqrt(var[i] / powf(scale[i], 2));
+                    float b = var[i] / (powf(scale[i], 2));
+                    mean[i] = a;
+                    var[i] = b;
                 }
+                UNI_MEMCPY(ws[j].weight, mean.data(), mean.size() * sizeof(float));
+                UNI_MEMCPY(ws[j].vec, var.data(), var.size() * sizeof(float));
             }
         }
         return SUCCESS;
@@ -486,480 +438,321 @@ protected:
 
     ParameterSpec adapt_Eltwise() override
     {
-        ParameterSpec curPs;
-        memset(&curPs, 0, sizeof(curPs));
-        EltwiseParamSpec eps;
-        memset(&eps, 0, sizeof(eps));
+        ParameterSpec ps;
+        EltwiseParamSpec p;
+        UNI_MEMSET(&p, 0, sizeof(p));
         if (opType == "Add") {
-            eps.elt_mode = ELTWISE_SUM;
-            eps.activation_type = ACTIVATION_NULL;
+            p.mode = ELTWISE_SUM;
         } else if (opType == "Sub") {
-            eps.elt_mode = ELTWISE_SUB;
-            eps.activation_type = ACTIVATION_NULL;
+            p.mode = ELTWISE_SUB;
         }
-        curPs.eltwise_spec = eps;
-        return curPs;
+        p.activation_type = ACTIVATION_NULL;
+        ps.eltwise_spec = p;
+        return ps;
     }
 
     ParameterSpec adapt_ArgMax() override
     {
-        ParameterSpec curPs;
-        memset(&curPs, 0, sizeof(curPs));
-        ArgMaxParamSpec aps;
-        memset(&aps, 0, sizeof(aps));
-        aps.axis = 1;  // TODO
-        curPs.argmax_spec = aps;
-        return curPs;
+        ParameterSpec ps;
+        ArgMaxParamSpec p;
+        UNI_MEMSET(&p, 0, sizeof(p));
+        p.axis = 1;
+        ps.argmax_spec = p;
+        return ps;
     }
 
     ParameterSpec adapt_Conv() override
     {
-        ParameterSpec curPs;
-        memset(&curPs, 0, sizeof(curPs));
-        ConvolutionParamSpec convPs;
-        memset(&convPs, 0, sizeof(convPs));
-        convPs.kernel_t = 1;
-        convPs.stride_t = 1;
-        convPs.padding_before = 0;
-        convPs.padding_after = 0;
-        convPs.dilatedRate_t = 1;
+        ParameterSpec ps;
+        ConvolutionParamSpec p;
+        UNI_MEMSET(&p, 0, sizeof(p));
+        p.kernel_t = 1;
+        p.stride_t = 1;
+        p.pad_before = 0;
+        p.pad_after = 0;
+        p.dilatedRate_t = 1;
 
-        std::string conv_op = nodeV["name"].asString();
-        int dilationsInfo[4] = {0, 0, 0, 0};
-        int stridesInfo[4] = {0, 0, 0, 0};
+        std::vector<int> dilations(4, 1);
         if (opType.compare("DepthwiseConv2dNative") == 0) {
-            for (int i = 0; i < (int)(nodeV["attr"]["dilations"]["list"]["i"].size()); i++) {
-                dilationsInfo[i] = 1;
-            }
-        } else {
-            dilationsInfo[0] = 1;
-            dilationsInfo[1] = 1;
+            dilations = get_ints(this->node, "dilations");
         }
-        for (int i = 0; i < (int)(nodeV["attr"]["strides"]["list"]["i"].size()); i++) {
-            stridesInfo[i] = std::stoi(
-                nodeV["attr"]["strides"]["list"]["i"][i].asString());  // TODO extract real data
-        }
-        convPs.dilatedRate_h = dilationsInfo[1];  // atten
-        convPs.dilatedRate_w = dilationsInfo[2];
-        convPs.stride_h = stridesInfo[1];
-        convPs.stride_w = stridesInfo[2];
+        std::vector<int> strides = get_ints(this->node, "strides");
+        ;
+        p.dilatedRate_h = dilations[1];
+        p.dilatedRate_w = dilations[2];
+        p.stride_h = strides[1];
+        p.stride_w = strides[2];
 
-        std::vector<std::string> curConvIdens = this->weightConstInput[conv_op];
-        int curConstId = -1;
-        if (constId.find(curConvIdens[0]) != constId.end()) {
-            curConstId = constId[curConvIdens[0]];
-        } else {
-            curConstId = constId[idenConst[curConvIdens[0]]];
-        }
-        std::string constOpName = this->ttValue["node"][curConstId]["name"].asString();
-        std::vector<int> convWeightKernels;
-        for (int k = 0; k <
-             (int)(this->ttValue["node"][curConstId]["attr"]["value"]["tensor"]["tensorShape"]["di"
-                                                                                               "m"]
-                       .size());
-             k++) {
-            convWeightKernels.push_back(
-                std::stoi(this->ttValue["node"][curConstId]["attr"]["value"]["tensor"]
-                                       ["tensorShape"]["dim"][k]["size"]
-                                           .asString()));
-        }
-
-        if (convWeightKernels.size() < 4) {
+        int id = get_weight_ids(this->node)[0];
+        std::vector<int> kernels = get_shape(this->ttValue["node"][id]);
+        if (kernels.size() < 4) {
             UNI_ERROR_LOG("can not process operator name:%s kernel.\n", this->layerName.c_str());
         }
         if (opType.compare("DepthwiseConv2dNative") == 0) {
-            convPs.num_outputs = convWeightKernels[2];
+            p.num_outputs = kernels[2];
         } else {
-            convPs.num_outputs = convWeightKernels[3];
+            p.num_outputs = kernels[3];
         }
-        convPs.kernel_h = convWeightKernels[0];
-        convPs.kernel_w = convWeightKernels[1];
+        p.kernel_h = kernels[0];
+        p.kernel_w = kernels[1];
 
-        std::string tfPaddingMode =
-            nodeV["attr"]["padding"]["s"].asString();  // choose one of VALID/SAME
+        // choose one of VALID/SAME
+        std::string tfPaddingMode = this->node["attr"]["padding"]["s"].asString();
         if (tfPaddingMode.at(0) == 'V') {
             tfPaddingMode = "VALID";
-            convPs.padding_top = 0;
-            convPs.padding_bottom = 0;
-            convPs.padding_left = 0;
-            convPs.padding_right = 0;
+            p.pad_top = 0;
+            p.pad_bottom = 0;
+            p.pad_left = 0;
+            p.pad_right = 0;
         } else {
             tfPaddingMode = "SAME";
-            convPs.padding_top = (U32)INT_MAX;
-            convPs.padding_bottom = (U32)INT_MAX;
-            convPs.padding_left = (U32)INT_MAX;
-            convPs.padding_right = (U32)INT_MAX;
+            p.pad_top = (U32)INT_MAX;
+            p.pad_bottom = (U32)INT_MAX;
+            p.pad_left = (U32)INT_MAX;
+            p.pad_right = (U32)INT_MAX;
         }
 
-        convPs.group = 1;
-        convPs.dw_activation_type = ACTIVATION_NULL;
-        convPs.pw_activation_type = ACTIVATION_NULL;
+        p.group = 1;
+        p.dw_activation_type = ACTIVATION_NULL;
+        p.pw_activation_type = ACTIVATION_NULL;
 
-        if (convPs.group != 1 && convPs.group == convPs.num_outputs) {
-            convPs.convolution_type = Convolution_Depthwise;
+        if (p.group != 1 && p.group == p.num_outputs) {
+            p.convolution_type = CONVOLUTION_DEPTHWISE;
         } else {
-            if (convPs.dilatedRate_h > 1 || convPs.dilatedRate_w > 1) {
-                convPs.convolution_type = Convolution_Dilation;
-            } else {
-                convPs.convolution_type = Convolution_Pointwise;
-            }
+            p.convolution_type = CONVOLUTION_POINTWISE;
         }
 
         if (opType.compare("DepthwiseConv2dNative") == 0) {
-            convPs.convolution_type = Convolution_Depthwise;
+            p.convolution_type = CONVOLUTION_DEPTHWISE;
         }
-        curPs.conv_spec = convPs;
-        return curPs;
+        ps.conv_spec = p;
+        return ps;
     }
 
     ParameterSpec adapt_BatchNorm() override
     {
-        ParameterSpec curPs;
-        memset(&curPs, 0, sizeof(curPs));
-        BatchNormParamSpec bps;
-        memset(&bps, 0, sizeof(bps));
-        bps.axis = 0;
-        bps.eps = nodeV["attr"]["epsilon"]["f"].asFloat();
-        bps.gama = 0;
-        bps.momentum = 0;
-        curPs.bn_spec = bps;
-        return curPs;
+        ParameterSpec ps;
+        BatchNormParamSpec p;
+        UNI_MEMSET(&p, 0, sizeof(p));
+        p.axis = 0;
+        p.eps = this->node["attr"]["epsilon"]["f"].asFloat();
+        p.gama = 0;
+        p.momentum = 0;
+        ps.bn_spec = p;
+        return ps;
     }
 
     ParameterSpec adapt_Fc() override
     {
-        ParameterSpec curPs;
-        memset(&curPs, 0, sizeof(curPs));
-        FullyConnectedParamSpec fps;
-        memset(&fps, 0, sizeof(fps));
-        // to locate the const weight op
-        std::string curOpName = nodeV["name"].asString();
-        std::vector<std::string> curConvIdens = this->weightConstInput[curOpName];
-        int curConstId = -1;
-        if (constId.find(curConvIdens[0]) != constId.end()) {
-            curConstId = constId[curConvIdens[0]];
-        } else {
-            curConstId = constId[idenConst[curConvIdens[0]]];
-        }
-        int dimLengthIndex =
-            this->ttValue["node"][curConstId]["attr"]["value"]["tensor"]["tensorShape"].size() - 1;
-        fps.num_outputs =
-            std::stoi(this->ttValue["node"][curConstId]["attr"]["value"]["tensor"]["tensorShape"]
-                                   ["dim"][dimLengthIndex]["size"]
-                                       .asString());  // fc_dimSize is static two-dimension
-        fps.num_slices = 1;
-        curPs.fc_spec = fps;
-        return curPs;
+        ParameterSpec ps;
+        FullyConnectedParamSpec p;
+        UNI_MEMSET(&p, 0, sizeof(p));
+        int id = get_weight_ids(this->node)[0];
+        std::vector<int> kernels = get_shape(this->ttValue["node"][id]);
+        p.num_outputs = kernels[kernels.size() - 1];
+        p.num_slices = 1;
+        ps.fc_spec = p;
+        return ps;
     }
 
     ParameterSpec adapt_Pooling() override
     {
-        ParameterSpec curPs;
-        memset(&curPs, 0, sizeof(curPs));
-        PoolingParamSpec pps;
-        memset(&pps, 0, sizeof(pps));
-        std::vector<int> kernelSize;  // ihwo
-        std::vector<int> stridesInfo;
-        for (int i = 0; i < (int)(nodeV["attr"]["ksize"]["list"]["i"].size()); i++) {
-            kernelSize.push_back(std::stoi(nodeV["attr"]["ksize"]["list"]["i"][i].asString()));
-        }
-        for (int i = 0; i < (int)(nodeV["attr"]["strides"]["list"]["i"].size()); i++) {
-            stridesInfo.push_back(std::stoi(nodeV["attr"]["strides"]["list"]["i"][i].asString()));
-        }
-        pps.kernel_t = 1;
-        pps.kernel_h = kernelSize[1];
-        pps.kernel_w = kernelSize[2];
-        pps.stride_t = 1;
-        pps.stride_h = 1;
-        pps.stride_w = 1;
-        pps.padding_before = 0;
-        pps.padding_after = 0;
-        pps.padding_top = 0;
-        pps.padding_bottom = 0;
-        pps.padding_left = 0;
-        pps.padding_right = 0;
-        pps.rm = CEIL;
+        ParameterSpec ps;
+        PoolingParamSpec p;
+        UNI_MEMSET(&p, 0, sizeof(p));
+        std::vector<int> kernels = get_ints(this->node, "ksize");
+        std::vector<int> strides = get_ints(this->node, "strides");
+        p.kernel_t = 1;
+        p.kernel_h = kernels[1];
+        p.kernel_w = kernels[2];
+        p.stride_t = 1;
+        p.stride_h = strides[1];
+        p.stride_w = strides[2];
+        p.pad_before = 0;
+        p.pad_after = 0;
+        p.pad_top = 0;
+        p.pad_bottom = 0;
+        p.pad_left = 0;
+        p.pad_right = 0;
+        p.round_mode = ROUND_CEIL;
         if (opType.compare("MaxPool") == 0) {
-            pps.mode = POOLING_MAX;
-        } else {  // refer to "AvgPool"
-            pps.mode = POOLING_MEAN;
+            p.mode = POOLING_MAX;
+        } else {
+            p.mode = POOLING_MEAN;
         }
-        curPs.pooling_spec = pps;
-        return curPs;
+        p.count_include_pad = false;
+        ps.pooling_spec = p;
+        return ps;
     }
 
     ParameterSpec adapt_Reduction() override
     {
-        // Mapping to <Mean>
-        ParameterSpec curPs;
-        memset(&curPs, 0, sizeof(curPs));
-        ReductionParamSpec reductionPs;
-        memset(&reductionPs, 0, sizeof(reductionPs));
+        ParameterSpec ps;
+        UNI_MEMSET(&ps, 0, sizeof(ps));
+        ReductionParamSpec p;
+        UNI_MEMSET(&p, 0, sizeof(p));
         if (opType.compare("Mean") == 0) {
-            reductionPs.reduction_mode = REDUCTION_MEAN;
+            p.mode = REDUCTION_MEAN;
         } else {
             UNI_ERROR_LOG("can not map operator name:%s type:%s to Reduction.\n",
                 this->layerName.c_str(), opType.c_str());
         }
-        std::string reductionOpName = nodeV["name"].asString();
-        std::vector<std::string> constInputs = weightConstInput[reductionOpName];
-        int constReductionOpIndex = -1;
-        if (constId.find(constInputs[0]) != constId.end()) {
-            constReductionOpIndex = constId[constInputs[0]];
-        } else {
-            constReductionOpIndex = constId[idenConst[constInputs[0]]];
+        int id = get_weight_ids(this->node)[0];
+        std::vector<int> dims = get_ints(this->ttValue["node"][id]);
+        p.num_axes = dims.size();
+        for (int i = 0; i < p.num_axes; i++) {
+            p.axes[i] = dims[i];
         }
-        reductionPs.axes_num =
-            this->ttValue["node"][constReductionOpIndex]["attr"]["value"]["tensor"]["tensorContent"]
-                .size();
-        for (int i = 0; i < reductionPs.axes_num; i++) {
-            reductionPs.axes[i] = std::stoi(
-                this->ttValue["node"][constReductionOpIndex]["attr"]["value"]["tensor"]["tensorCont"
-                                                                                        "ent"][i]
-                    .asString());
-        }
-        curPs.reduction_spec = reductionPs;
-        return curPs;
+        ps.reduction_spec = p;
+        return ps;
     }
 
     ParameterSpec adapt_Pad() override
     {
-        ParameterSpec curPs;
-        memset(&curPs, 0, sizeof(curPs));
-        PadParamSpec padPs;
-        memset(&padPs, 0, sizeof(padPs));
-
-        std::string curOpName = nodeV["name"].asString();
-        std::vector<std::string> curConvIdens = this->weightConstInput[curOpName];
-        int curConstId = -1;
-        if (constId.find(curConvIdens[0]) != constId.end()) {
-            curConstId = constId[curConvIdens[0]];
-        } else {
-            curConstId = constId[idenConst[curConvIdens[0]]];
-        }
-
-        std::vector<int> padInfos;
-        for (int i = 0; i < (int)(this->ttValue["node"][curConstId]["attr"]["value"]["tensor"]["ten"
-                                                                                               "sor"
-                                                                                               "Con"
-                                                                                               "ten"
-                                                                                               "t"]
-                                      .size());
-             i++) {
-            padInfos.push_back(
-                std::stoi(this->ttValue["node"][curConstId]["attr"]["value"]["tensor"]["tensorConte"
-                                                                                       "nt"][i]
-                              .asString()));
-        }
-        padPs.before = 0;
-        padPs.after = 0;
-        padPs.top = padInfos[2];
-        padPs.bottom = padInfos[3];
-        padPs.left = padInfos[4];
-        padPs.right = padInfos[5];
-        padPs.constant_value = 0;  // TODO: for PadV2
-        padPs.pad_mode = Pad_Constant;
-        curPs.pad_spec = padPs;
-        return curPs;
+        ParameterSpec ps;
+        UNI_MEMSET(&ps, 0, sizeof(ps));
+        PadParamSpec p;
+        UNI_MEMSET(&p, 0, sizeof(p));
+        int id = get_weight_ids(this->node)[0];
+        std::vector<int> pad = get_ints(this->ttValue["node"][id]);
+        p.before = 0;
+        p.after = 0;
+        p.top = pad[2];
+        p.bottom = pad[3];
+        p.left = pad[4];
+        p.right = pad[5];
+        p.constant_value = 0;
+        p.pad_mode = PAD_CONSTANT;
+        ps.pad_spec = p;
+        return ps;
     }
 
     ParameterSpec adapt_Concat() override
     {
-        ParameterSpec curPs;
-        memset(&curPs, 0, sizeof(curPs));
-        ConcatParamSpec concatPs;
-        memset(&concatPs, 0, sizeof(concatPs));
-        concatPs.axis = std::stoi(nodeV["attr"]["N"]["i"].asString());
-        curPs.concat_spec = concatPs;
-        return curPs;
+        ParameterSpec ps;
+        UNI_MEMSET(&ps, 0, sizeof(ps));
+        ConcatParamSpec p;
+        UNI_MEMSET(&p, 0, sizeof(p));
+        p.axis = std::stoi(this->node["attr"]["N"]["i"].asString());
+        ps.concat_spec = p;
+        return ps;
     }
 
     ParameterSpec adapt_Resize() override
     {
-        ParameterSpec curPs;
-        memset(&curPs, 0, sizeof(curPs));
-        ResizeParamSpec resizePs;
-        memset(&resizePs, 0, sizeof(resizePs));
+        ParameterSpec ps;
+        UNI_MEMSET(&ps, 0, sizeof(ps));
+        ResizeParamSpec p;
+        UNI_MEMSET(&p, 0, sizeof(p));
 
-        std::string curOpName = nodeV["name"].asString();
-        std::vector<std::string> curConvIdens = this->weightConstInput[curOpName];
-        int curConstId = -1;
-        if (constId.find(curConvIdens[0]) != constId.end()) {
-            curConstId = constId[curConvIdens[0]];
-        } else {
-            curConstId = constId[idenConst[curConvIdens[0]]];
+        int id = get_weight_ids(this->node)[0];
+        p.num_sizes = 2;
+        std::vector<int> sizes = get_ints(this->ttValue["node"][id]);
+        for (U32 i = 0; i < p.num_sizes; i++) {
+            p.sizes[i] = sizes[i];
         }
-        resizePs.num_sizes = 2;
-        resizePs.num_scales = 0;
-        for (int k = 0; k < (int)(this->ttValue["node"][curConstId]["attr"]["value"]["tensor"]["ten"
-                                                                                               "sor"
-                                                                                               "Con"
-                                                                                               "ten"
-                                                                                               "t"]
-                                      .size());
-             k++) {
-            resizePs.sizes[k] =
-                std::stoi(this->ttValue["node"][curConstId]["attr"]["value"]["tensor"]["tensorConte"
-                                                                                       "nt"][k]
-                              .asString());
-        }
-
-        curPs.resize_spec = resizePs;
-        return curPs;
+        p.num_scales = 0;
+        ps.resize_spec = p;
+        return ps;
     }
 
     ParameterSpec adapt_Power() override
     {
-        ParameterSpec curPs;
-        memset(&curPs, 0, sizeof(curPs));
-        PowerParamSpec powerPs;
-        memset(&curPs, 0, sizeof(powerPs));
-        float curScale = 1.0;
-        float curShift = 0.0;
-
+        ParameterSpec ps;
+        UNI_MEMSET(&ps, 0, sizeof(ps));
+        PowerParamSpec p;
+        UNI_MEMSET(&p, 0, sizeof(p));
+        p.scale = 1.0;
+        p.shift = 0.0;
+        p.power = 1.0;
         if (opType.compare("Rsqrt") == 0) {
-            powerPs.power = 0.5;
-            curPs.power_spec = powerPs;
-            return curPs;
-        }
-
-        std::string curOpName = nodeV["name"].asString();
-        std::vector<std::string> curConvIdens = this->weightConstInput[curOpName];
-        int curConstId = -1;
-        if (constId.find(curConvIdens[0]) != constId.end()) {
-            curConstId = constId[curConvIdens[0]];
+            p.power = 0.5;
         } else {
-            curConstId = constId[idenConst[curConvIdens[0]]];
+            int id = get_weight_ids(this->node)[0];
+            std::vector<float> data = get_floats(this->ttValue["node"][id]);
+            if (opType.compare("Mul") == 0) {
+                p.scale = data[0];
+            } else if (opType.compare("Sub") == 0) {
+                p.shift = -1 * data[0];
+            } else if (opType.compare("RealDiv") == 0) {
+                p.scale = 1 / data[0];
+            }
         }
-
-        if (opType.compare("Mul") == 0) {
-            curScale = std::stof(this->ttValue["node"][curConstId]["attr"]["value"]["tensor"]["tens"
-                                                                                              "orCo"
-                                                                                              "nten"
-                                                                                              "t"][0]
-                                     .asString());
-        } else if (opType.compare("Sub") == 0) {
-            curShift = -1 *
-                std::stof(this->ttValue["node"][curConstId]["attr"]["value"]["tensor"]["tensorConte"
-                                                                                       "nt"][0]
-                              .asString());
-        } else if (opType.compare("RealDiv") == 0) {
-            curScale = 1.0 /
-                std::stof(this->ttValue["node"][curConstId]["attr"]["value"]["tensor"]["tensorConte"
-                                                                                       "nt"][0]
-                              .asString());
-        }
-        powerPs.scale = curScale;
-        powerPs.shift = curShift;
-        powerPs.power = 1;
-        curPs.power_spec = powerPs;
-        return curPs;
+        ps.power_spec = p;
+        return ps;
     }
 
     ParameterSpec adapt_Transpose() override
     {
-        ParameterSpec curPs;
-        memset(&curPs, 0, sizeof(curPs));
-        TransposeParamSpec transPs;
-        memset(&transPs, 0, sizeof(transPs));
-        // extract the perm info from the const input
-        std::string curOpName = nodeV["name"].asString();
-        std::vector<std::string> curConvIdens = this->weightConstInput[curOpName];
-        int curConstId = -1;
-        if (constId.find(curConvIdens[0]) != constId.end()) {
-            curConstId = constId[curConvIdens[0]];
-        } else {
-            curConstId = constId[idenConst[curConvIdens[0]]];
+        ParameterSpec ps;
+        UNI_MEMSET(&ps, 0, sizeof(ps));
+        TransposeParamSpec p;
+        UNI_MEMSET(&p, 0, sizeof(p));
+        int id = get_weight_ids(this->node)[0];
+        std::vector<int> dims = get_ints(this->ttValue["node"][id]);
+        p.num_axes = dims.size();
+        for (U32 i = 0; i < p.num_axes; i++) {
+            p.axes[i] = dims[i];
         }
-
-        transPs.trans_size =
-            this->ttValue["node"][curConstId]["attr"]["value"]["tensor"]["tensorContent"].size();
-        for (int i = 0; i < (int)(transPs.trans_size); i++) {
-            transPs.trans_dims[i] =
-                std::stoi(this->ttValue["node"][curConstId]["attr"]["value"]["tensor"]["tensorConte"
-                                                                                       "nt"][i]
-                              .asString());
-            ;
-        }
-        curPs.transpose_spec = transPs;
-        return curPs;
+        ps.transpose_spec = p;
+        return ps;
     }
 
     ParameterSpec adapt_Reshape() override
     {
-        ParameterSpec curPs;
-        memset(&curPs, 0, sizeof(curPs));
-        ReshapeParamSpec reshapePs;
-        memset(&reshapePs, 0, sizeof(reshapePs));
-
-        std::string curOpName = nodeV["name"].asString();
-        std::vector<std::string> curConvIdens = this->weightConstInput[curOpName];
-        if (curConvIdens.size() == 0) {
-            return curPs;
+        ParameterSpec ps;
+        ReshapeParamSpec p;
+        UNI_MEMSET(&p, 0, sizeof(p));
+        int id = get_weight_ids(this->node)[0];
+        std::vector<int> shape = get_ints(this->ttValue["node"][id]);
+        p.num_shape = shape.size();
+        for (int i = 0; i < p.num_shape; i++) {
+            p.shape[i] = shape[i];
         }
-        int curConstId = -1;
-        if (constId.find(curConvIdens[0]) != constId.end()) {
-            curConstId = constId[curConvIdens[0]];
-        } else {
-            curConstId = constId[idenConst[curConvIdens[0]]];
-        }
-        reshapePs.shape_size =
-            this->ttValue["node"][curConstId]["attr"]["value"]["tensor"]["tensorContent"].size();
-        for (int k = 0; k < reshapePs.shape_size; k++) {
-            reshapePs.shape_dims[k] =
-                std::stoi(this->ttValue["node"][curConstId]["attr"]["value"]["tensor"]["tensorConte"
-                                                                                       "nt"][k]
-                              .asString());
-        }
-        reshapePs.axis = 8;
-        reshapePs.num_axes = -1;
-        curPs.reshape_spec = reshapePs;
-        return curPs;
+        p.axis = 8;
+        p.num_axes = -1;
+        ps.reshape_spec = p;
+        return ps;
     }
 
     ParameterSpec adapt_Squeeze() override
     {
-        ParameterSpec curPs;
-        memset(&curPs, 0, sizeof(curPs));
-        SqueezeParamSpec squeezePs;
-        memset(&squeezePs, 0, sizeof(squeezePs));
-        std::vector<int> squeezeDimsInfo;
-        squeezePs.axes_num = nodeV["attr"]["squeeze_dims"]["list"]["i"].size();
-        for (int i = 0; i < (int)(nodeV["attr"]["squeeze_dims"]["list"]["i"].size()); i++) {
-            squeezePs.axes[i] = std::stoi(nodeV["attr"]["squeeze_dims"]["list"]["i"][i].asString());
+        ParameterSpec ps;
+        UNI_MEMSET(&ps, 0, sizeof(ps));
+        SqueezeParamSpec p;
+        UNI_MEMSET(&p, 0, sizeof(p));
+        std::vector<int> dims = get_ints(this->node, "squeeze_dims");
+        p.num_axes = dims.size();
+        for (int i = 0; i < p.num_axes; i++) {
+            p.axes[i] = dims[i];
         }
-        curPs.squeeze_spec = squeezePs;
-        return curPs;
+        ps.squeeze_spec = p;
+        return ps;
     }
 
     ParameterSpec adapt_Unsqueeze() override
     {
-        ParameterSpec curPs;
-        memset(&curPs, 0, sizeof(curPs));
-        UnsqueezeParamSpec unsqueezePs;
-        memset(&unsqueezePs, 0, sizeof(unsqueezePs));
-        std::string unsqueeze_op = nodeV["name"].asString();
-        int expandDimIndex = constId[idenConst[weightConstInput[unsqueeze_op][0]]];
-        unsqueezePs.axes_num =
-            this->ttValue["node"][expandDimIndex]["attr"]["value"]["tensor"]["tensorContent"].size();
-        for (int k = 0; k < unsqueezePs.axes_num; k++) {
-            unsqueezePs.axes[k] = std::stoi(
-                this->ttValue["node"][expandDimIndex]["attr"]["value"]["tensor"]["tensorContent"][k]
-                    .asString());
+        ParameterSpec ps;
+        UnsqueezeParamSpec p;
+        UNI_MEMSET(&p, 0, sizeof(p));
+        int id = get_weight_ids(this->node)[0];
+        std::vector<int> dims = get_ints(this->ttValue["node"][id]);
+        p.num_axes = dims.size();
+        for (int i = 0; i < p.num_axes; i++) {
+            p.axes[i] = dims[i];
         }
-        curPs.unsqueeze_spec = unsqueezePs;
-        return curPs;
+        ps.unsqueeze_spec = p;
+        return ps;
     }
 
     ParameterSpec adapt_Cast() override
     {
-        ParameterSpec curPs;
-        memset(&curPs, 0, sizeof(curPs));
-        CastParamSpec castPs;
-        memset(&castPs, 0, sizeof(castPs));
-        castPs.targetDt = DT_F32;
-        curPs.cast_spec = castPs;
-        return curPs;
+        ParameterSpec ps;
+        CastParamSpec p;
+        UNI_MEMSET(&p, 0, sizeof(p));
+        p.dt = DT_F32;
+        ps.cast_spec = p;
+        return ps;
     }
 
 private:
@@ -968,8 +761,7 @@ private:
 
     std::string modelName;
     std::string newStrValue;
-    Json::Value nodeV;
-    int curNodeIndex;
+    Json::Value node;
     std::string opType;
     std::string layerName;
 
@@ -980,7 +772,7 @@ private:
     std::map<std::string, std::vector<std::string>> weightConstInput;
     std::vector<int> weightIds;
 
-    int weightOpNum;
+    int weightNumber;
     int curInDegree;
 };
 #endif

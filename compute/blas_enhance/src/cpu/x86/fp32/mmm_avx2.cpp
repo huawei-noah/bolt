@@ -17,17 +17,576 @@
 #define UNROLL_K 4
 #define UNROLL_N 24
 #define UNROLL_M 4
-#define BOLCK_M_DIM 768
-#define BOLCK_K_DIM 768
+#define BOLCK_M_DIM 1024
+#define BOLCK_K_DIM 1024
 #define align_addr(addr, unit) (((uintptr_t)addr + unit - 1) / unit * unit)
 
-typedef void (*kernel_func)(
-    U32 um, U32 un, U32 bk, F32 *matrixA, F32 *matrixB, F32 *matrixC, U32 ldc);
+typedef void (*kernel_func)(U32 um,
+    U32 un,
+    U32 bk,
+    F32 *matrixA,
+    F32 *matrixB,
+    F32 *matrixC,
+    U32 ldc,
+    I32 *mask,
+    F32 *A1,
+    F32 *A2,
+    F32 *A3);
+
+// clang-format off
+#define clear1Regs(rtype) \
+    "vxorps "#rtype"0, "#rtype"0, "#rtype"0                     \n\t"
+
+#define clear2Regs(rtype) \
+    clear1Regs(rtype) \
+    "vxorps "#rtype"1, "#rtype"1, "#rtype"1                     \n\t"
+
+#define clear3Regs(rtype) \
+    clear2Regs(rtype) \
+    "vxorps "#rtype"2, "#rtype"2, "#rtype"2                     \n\t"
+
+#define clear4Regs(rtype) \
+    clear3Regs(rtype) \
+    "vxorps "#rtype"3, "#rtype"3, "#rtype"3                     \n\t"
+
+#define clear6Regs(rtype) \
+    clear4Regs(rtype) \
+    "vxorps "#rtype"4, "#rtype"4, "#rtype"4                     \n\t" \
+    "vxorps "#rtype"5, "#rtype"5, "#rtype"5                     \n\t"
+
+#define clear8Regs(rtype) \
+    clear6Regs(rtype) \
+    "vxorps "#rtype"6, "#rtype"6, "#rtype"6                     \n\t" \
+    "vxorps "#rtype"7, "#rtype"7, "#rtype"7                     \n\t"
+
+#define clear9Regs(rtype) \
+    clear8Regs(rtype) \
+    "vxorps "#rtype"8, "#rtype"8, "#rtype"8                     \n\t"
+
+#define clear12Regs(rtype) \
+    clear9Regs(rtype) \
+    "vxorps "#rtype"9, "#rtype"9, "#rtype"9                     \n\t" \
+    "vxorps "#rtype"10, "#rtype"10, "#rtype"10                  \n\t" \
+    "vxorps "#rtype"11, "#rtype"11, "#rtype"11                  \n\t"
+
+#define asm_1x24_kernel(i0, f0, f1, f2) \
+    "vbroadcastss "#i0"(%[A0]), %%ymm15                   \n\t" \
+    "vmovaps "#f0"(%[B]), %%ymm12                        \n\t" \
+    "vmovaps "#f1"(%[B]), %%ymm13                    \n\t" \
+    "vmovaps "#f2"(%[B]), %%ymm14                    \n\t" \
+    "vfmadd231ps %%ymm15, %%ymm12, %%ymm0         \n\t" \
+    "vfmadd231ps %%ymm15, %%ymm13, %%ymm1         \n\t" \
+    "vfmadd231ps %%ymm15, %%ymm14, %%ymm2         \n\t"
+
+#define asm_2x24_kernel(i0, f0, f1, f2) \
+    asm_1x24_kernel(i0, f0, f1, f2) \
+    "vbroadcastss "#i0"(%[A1]), %%ymm15                   \n\t" \
+    "vfmadd231ps %%ymm15, %%ymm12, %%ymm3         \n\t" \
+    "vfmadd231ps %%ymm15, %%ymm13, %%ymm4         \n\t" \
+    "vfmadd231ps %%ymm15, %%ymm14, %%ymm5         \n\t"
+
+#define asm_3x24_kernel(i0, f0, f1, f2) \
+    asm_2x24_kernel(i0, f0, f1, f2) \
+    "vbroadcastss "#i0"(%[A2]), %%ymm15                   \n\t" \
+    "vfmadd231ps %%ymm15, %%ymm12, %%ymm6         \n\t" \
+    "vfmadd231ps %%ymm15, %%ymm13, %%ymm7         \n\t" \
+    "vfmadd231ps %%ymm15, %%ymm14, %%ymm8         \n\t"
+
+#define asm_4x24_kernel(i0, f0, f1, f2) \
+    asm_3x24_kernel(i0, f0, f1, f2) \
+    "vbroadcastss "#i0"(%[A3]), %%ymm15                   \n\t" \
+    "vfmadd231ps %%ymm15, %%ymm12, %%ymm9         \n\t" \
+    "vfmadd231ps %%ymm15, %%ymm13, %%ymm10         \n\t" \
+    "vfmadd231ps %%ymm15, %%ymm14, %%ymm11         \n\t"
+
+#define store_1x24_0(N) \
+    "vaddps (%[C]), %%ymm0, %%ymm0                       \n\t" \
+    "vaddps 0x20(%[C]), %%ymm1, %%ymm1                   \n\t" \
+    "vaddps 0x40(%[C]), %%ymm2, %%ymm2                   \n\t" \
+    "vmovups %%ymm0,  (%[C])                             \n\t" \
+    "vmovups %%ymm1,  0x20(%[C])                         \n\t" \
+    "vmovups %%ymm2,  0x40(%[C])                         \n\t"
+
+#define store_2x24_0(N) \
+    store_1x24_0(N) \
+    "add "#N", %[C]                                     \n\t" \
+    "vaddps (%[C]), %%ymm3, %%ymm3                       \n\t" \
+    "vaddps 0x20(%[C]), %%ymm4, %%ymm4                   \n\t" \
+    "vaddps 0x40(%[C]), %%ymm5, %%ymm5                   \n\t" \
+    "vmovups %%ymm3,  (%[C])                             \n\t" \
+    "vmovups %%ymm4,  0x20(%[C])                         \n\t" \
+    "vmovups %%ymm5,  0x40(%[C])                         \n\t"
+
+#define store_3x24_0(N) \
+    store_2x24_0(N) \
+    "add "#N", %[C]                                     \n\t" \
+    "vaddps (%[C]), %%ymm6, %%ymm6                       \n\t" \
+    "vaddps 0x20(%[C]), %%ymm7, %%ymm7                   \n\t" \
+    "vaddps 0x40(%[C]), %%ymm8, %%ymm8                   \n\t" \
+    "vmovups %%ymm6,  (%[C])                             \n\t" \
+    "vmovups %%ymm7,  0x20(%[C])                         \n\t" \
+    "vmovups %%ymm8,  0x40(%[C])                         \n\t"
+
+#define store_4x24_0(N) \
+    store_3x24_0(N) \
+    "add "#N", %[C]                                     \n\t" \
+    "vaddps (%[C]), %%ymm9, %%ymm9                       \n\t" \
+    "vaddps 0x20(%[C]), %%ymm10, %%ymm10                 \n\t" \
+    "vaddps 0x40(%[C]), %%ymm11, %%ymm11                 \n\t" \
+    "vmovups %%ymm9,  (%[C])                             \n\t" \
+    "vmovups %%ymm10, 0x20(%[C])                         \n\t" \
+    "vmovups %%ymm11, 0x40(%[C])                         \n\t"
+
+#define store_1x24_1(N) \
+    "vmovups (%[mask]), %%ymm15                             \n\t" \
+    "vmaskmovps 0x40(%[C]), %%ymm15, %%ymm14                       \n\t" \
+    "vaddps (%[C]), %%ymm0, %%ymm0                       \n\t" \
+    "vaddps 0x20(%[C]), %%ymm1, %%ymm1                   \n\t" \
+    "vaddps %%ymm14, %%ymm2, %%ymm2                   \n\t" \
+    "vmovups %%ymm0,  (%[C])                             \n\t" \
+    "vmovups %%ymm1,  0x20(%[C])                         \n\t" \
+    "vmaskmovps %%ymm2, %%ymm15,  0x40(%[C])                         \n\t"
+
+#define store_2x24_1(N) \
+    store_1x24_1(N) \
+    "add "#N", %[C]                                     \n\t" \
+    "vmaskmovps 0x40(%[C]), %%ymm15, %%ymm14                       \n\t" \
+    "vaddps (%[C]), %%ymm3, %%ymm3                       \n\t" \
+    "vaddps 0x20(%[C]), %%ymm4, %%ymm4                   \n\t" \
+    "vaddps %%ymm14, %%ymm5, %%ymm5                   \n\t" \
+    "vmovups %%ymm3,  (%[C])                             \n\t" \
+    "vmovups %%ymm4,  0x20(%[C])                         \n\t" \
+    "vmaskmovps %%ymm5, %%ymm15,  0x40(%[C])                         \n\t"
+
+#define store_3x24_1(N) \
+    store_2x24_1(N) \
+    "add "#N", %[C]                                     \n\t" \
+    "vmaskmovps 0x40(%[C]), %%ymm15, %%ymm14                       \n\t" \
+    "vaddps (%[C]), %%ymm6, %%ymm6                       \n\t" \
+    "vaddps 0x20(%[C]), %%ymm7, %%ymm7                   \n\t" \
+    "vaddps %%ymm14, %%ymm8, %%ymm8                   \n\t" \
+    "vmovups %%ymm6,  (%[C])                             \n\t" \
+    "vmovups %%ymm7,  0x20(%[C])                         \n\t" \
+    "vmaskmovps %%ymm8, %%ymm15,  0x40(%[C])                         \n\t"
+
+#define store_4x24_1(N) \
+    store_3x24_1(N) \
+    "add "#N", %[C]                                     \n\t" \
+    "vmaskmovps 0x40(%[C]), %%ymm15, %%ymm14                       \n\t" \
+    "vaddps (%[C]), %%ymm9, %%ymm9                       \n\t" \
+    "vaddps 0x20(%[C]), %%ymm10, %%ymm10                 \n\t" \
+    "vaddps %%ymm14, %%ymm11, %%ymm11                 \n\t" \
+    "vmovups %%ymm9,  (%[C])                             \n\t" \
+    "vmovups %%ymm10, 0x20(%[C])                         \n\t" \
+    "vmaskmovps %%ymm11, %%ymm15, 0x40(%[C])                         \n\t"
+
+
+#define asm_1x16_kernel(i0, f0, f1) \
+    "vbroadcastss "#i0"(%[A0]), %%ymm10                   \n\t" \
+    "vmovaps "#f0"(%[B]), %%ymm8                        \n\t" \
+    "vmovaps "#f1"(%[B]), %%ymm9                    \n\t" \
+    "vfmadd231ps %%ymm10, %%ymm8, %%ymm0         \n\t" \
+    "vfmadd231ps %%ymm10, %%ymm9, %%ymm1         \n\t" \
+
+#define asm_2x16_kernel(i0, f0, f1) \
+    asm_1x16_kernel(i0, f0, f1) \
+    "vbroadcastss "#i0"(%[A1]), %%ymm10                   \n\t" \
+    "vfmadd231ps %%ymm10, %%ymm8, %%ymm2         \n\t" \
+    "vfmadd231ps %%ymm10, %%ymm9, %%ymm3         \n\t" \
+
+#define asm_3x16_kernel(i0, f0, f1) \
+    asm_2x16_kernel(i0, f0, f1) \
+    "vbroadcastss "#i0"(%[A2]), %%ymm10                   \n\t" \
+    "vfmadd231ps %%ymm10, %%ymm8, %%ymm4         \n\t" \
+    "vfmadd231ps %%ymm10, %%ymm9, %%ymm5         \n\t" \
+
+#define asm_4x16_kernel(i0, f0, f1) \
+    asm_3x16_kernel(i0, f0, f1) \
+    "vbroadcastss "#i0"(%[A3]), %%ymm10                   \n\t" \
+    "vfmadd231ps %%ymm10, %%ymm8, %%ymm6         \n\t" \
+    "vfmadd231ps %%ymm10, %%ymm9, %%ymm7         \n\t" \
+
+#define store_1x16_0(N) \
+    "vaddps (%[C]), %%ymm0, %%ymm0                       \n\t" \
+    "vaddps 0x20(%[C]), %%ymm1, %%ymm1                   \n\t" \
+    "vmovups %%ymm0,  (%[C])                             \n\t" \
+    "vmovups %%ymm1,  0x20(%[C])                         \n\t" \
+
+#define store_2x16_0(N) \
+    store_1x16_0(N) \
+    "add "#N", %[C]                                     \n\t" \
+    "vaddps (%[C]), %%ymm2, %%ymm2                       \n\t" \
+    "vaddps 0x20(%[C]), %%ymm3, %%ymm3                   \n\t" \
+    "vmovups %%ymm2,  (%[C])                             \n\t" \
+    "vmovups %%ymm3,  0x20(%[C])                         \n\t" \
+
+#define store_3x16_0(N) \
+    store_2x16_0(N) \
+    "add "#N", %[C]                                     \n\t" \
+    "vaddps (%[C]), %%ymm4, %%ymm4                       \n\t" \
+    "vaddps 0x20(%[C]), %%ymm5, %%ymm5                   \n\t" \
+    "vmovups %%ymm4,  (%[C])                             \n\t" \
+    "vmovups %%ymm5,  0x20(%[C])                         \n\t" \
+
+#define store_4x16_0(N) \
+    store_3x16_0(N) \
+    "add "#N", %[C]                                     \n\t" \
+    "vaddps (%[C]), %%ymm6, %%ymm6                       \n\t" \
+    "vaddps 0x20(%[C]), %%ymm7, %%ymm7                   \n\t" \
+    "vmovups %%ymm6,  (%[C])                             \n\t" \
+    "vmovups %%ymm7,  0x20(%[C])                         \n\t" \
+
+#define store_1x16_1(N) \
+    "vmovups (%[mask]), %%ymm10                             \n\t" \
+    "vmaskmovps 0x20(%[C]), %%ymm10, %%ymm9                       \n\t" \
+    "vaddps (%[C]), %%ymm0, %%ymm0                       \n\t" \
+    "vaddps %%ymm9, %%ymm1, %%ymm1                   \n\t" \
+    "vmovups %%ymm0,  (%[C])                             \n\t" \
+    "vmaskmovps %%ymm1, %%ymm10,  0x20(%[C])                         \n\t" \
+
+#define store_2x16_1(N) \
+    store_1x16_1(N) \
+    "add "#N", %[C]                                     \n\t" \
+    "vmaskmovps 0x20(%[C]), %%ymm10, %%ymm9                       \n\t" \
+    "vaddps (%[C]), %%ymm2, %%ymm2                       \n\t" \
+    "vaddps %%ymm9, %%ymm3, %%ymm3                   \n\t" \
+    "vmovups %%ymm2,  (%[C])                             \n\t" \
+    "vmaskmovps %%ymm3, %%ymm10,  0x20(%[C])                         \n\t" \
+
+#define store_3x16_1(N) \
+    store_2x16_1(N) \
+    "add "#N", %[C]                                     \n\t" \
+    "vmaskmovps 0x20(%[C]), %%ymm10, %%ymm9                       \n\t" \
+    "vaddps (%[C]), %%ymm4, %%ymm4                       \n\t" \
+    "vaddps %%ymm9, %%ymm5, %%ymm5                   \n\t" \
+    "vmovups %%ymm4,  (%[C])                             \n\t" \
+    "vmaskmovps %%ymm5, %%ymm10,  0x20(%[C])                         \n\t" \
+
+#define store_4x16_1(N) \
+    store_3x16_1(N) \
+    "add "#N", %[C]                                     \n\t" \
+    "vmaskmovps 0x20(%[C]), %%ymm10, %%ymm9                       \n\t" \
+    "vaddps (%[C]), %%ymm6, %%ymm6                       \n\t" \
+    "vaddps %%ymm9, %%ymm7, %%ymm7                   \n\t" \
+    "vmovups %%ymm6,  (%[C])                             \n\t" \
+    "vmaskmovps %%ymm7, %%ymm10,  0x20(%[C])                         \n\t" \
+
+
+#define asm_1x8_kernel(i0, f0, rtype) \
+    "vmovaps "#f0"(%[B]), "#rtype"4                              \n\t" \
+    "vbroadcastss "#i0"(%[A0]), "#rtype"5                      \n\t" \
+    "vfmadd231ps "#rtype"5, "#rtype"4, "#rtype"0                \n\t"
+
+#define asm_2x8_kernel(i0, f0, rtype) \
+    asm_1x8_kernel(i0, f0, rtype) \
+    "vbroadcastss "#i0"(%[A1]), "#rtype"5                   \n\t" \
+    "vfmadd231ps "#rtype"5, "#rtype"4, "#rtype"1                \n\t"
+
+#define asm_3x8_kernel(i0, f0, rtype) \
+    asm_2x8_kernel(i0, f0, rtype) \
+    "vbroadcastss "#i0"(%[A2]), "#rtype"5                   \n\t" \
+    "vfmadd231ps "#rtype"5, "#rtype"4, "#rtype"2                \n\t"
+
+#define asm_4x8_kernel(i0, f0, rtype) \
+    asm_3x8_kernel(i0, f0, rtype) \
+    "vbroadcastss "#i0"(%[A3]), "#rtype"5                      \n\t" \
+    "vfmadd231ps "#rtype"5, "#rtype"4, "#rtype"3                \n\t"
+
+#define store_1x8_0(N, rtype) \
+    "vaddps (%[C]), "#rtype"0, "#rtype"0                       \n\t" \
+    "vmovups "#rtype"0,  (%[C])                             \n\t"
+
+#define store_2x8_0(N, rtype) \
+    store_1x8_0(N, rtype) \
+    "add "#N", %[C]                                     \n\t" \
+    "vaddps (%[C]), "#rtype"1, "#rtype"1                       \n\t" \
+    "vmovups "#rtype"1,  (%[C])                             \n\t"
+
+#define store_3x8_0(N, rtype) \
+    store_2x8_0(N, rtype) \
+    "add "#N", %[C]                                     \n\t" \
+    "vaddps (%[C]), "#rtype"2, "#rtype"2                       \n\t" \
+    "vmovups "#rtype"2,  (%[C])                             \n\t"
+
+#define store_4x8_0(N, rtype) \
+    store_3x8_0(N, rtype) \
+    "add "#N", %[C]                                     \n\t" \
+    "vaddps (%[C]), "#rtype"3, "#rtype"3                       \n\t" \
+    "vmovups "#rtype"3,  (%[C])                             \n\t"
+
+#define store_1x8_1(N, rtype) \
+    "vmovups (%[mask]), "#rtype"5                             \n\t" \
+    "vmaskmovps (%[C]), "#rtype"5, "#rtype"4                       \n\t" \
+    "vaddps "#rtype"4, "#rtype"0, "#rtype"0                       \n\t" \
+    "vmaskmovps "#rtype"0, "#rtype"5, (%[C])                             \n\t"
+
+#define store_2x8_1(N, rtype) \
+    store_1x8_1(N, rtype) \
+    "add "#N", %[C]                                     \n\t" \
+    "vmaskmovps (%[C]), "#rtype"5, "#rtype"4                       \n\t" \
+    "vaddps "#rtype"4, "#rtype"1, "#rtype"1                       \n\t" \
+    "vmaskmovps "#rtype"1, "#rtype"5, (%[C])                             \n\t"
+
+#define store_3x8_1(N, rtype) \
+    store_2x8_1(N, rtype) \
+    "add "#N", %[C]                                     \n\t" \
+    "vmaskmovps (%[C]), "#rtype"5, "#rtype"4                       \n\t" \
+    "vaddps "#rtype"4, "#rtype"2, "#rtype"2                       \n\t" \
+    "vmaskmovps "#rtype"2, "#rtype"5, (%[C])                             \n\t"
+
+#define store_4x8_1(N, rtype) \
+    store_3x8_1(N, rtype) \
+    "add "#N", %[C]                                     \n\t" \
+    "vmaskmovps (%[C]), "#rtype"5, "#rtype"4                       \n\t" \
+    "vaddps "#rtype"4, "#rtype"3, "#rtype"3                       \n\t" \
+    "vmaskmovps "#rtype"3, "#rtype"5, (%[C])                             \n\t"
+
+#define kernel_24_4_loop(m) \
+    "prefetcht0 0x140(%[B])                              \n\t" \
+    "prefetcht0 0x180(%[B])                              \n\t" \
+    asm_##m##x24_kernel(0x0, 0x0, 0x20, 0x40) \
+    "prefetcht0 0x1C0(%[B])                              \n\t" \
+    asm_##m##x24_kernel(0x4, 0x60, 0x80, 0xA0) \
+    "prefetcht0 0x200(%[B])                              \n\t" \
+    "prefetcht0 0x240(%[B])                              \n\t" \
+    asm_##m##x24_kernel(0x8, 0xC0, 0xE0, 0x100) \
+    "prefetcht0 0x280(%[B])                              \n\t" \
+    asm_##m##x24_kernel(0xC, 0x120, 0x140, 0x160) \
+    "add $0x180, %[B]                             \n\t"
+
+#define kernel_16_4_loop(m) \
+    "prefetcht0 0x140(%1)                              \n\t" \
+    asm_##m##x16_kernel(0x0, 0x0, 0x20) \
+    "prefetcht0 0x180(%1)                              \n\t" \
+    asm_##m##x16_kernel(0x4, 0x40, 0x60) \
+    "prefetcht0 0x1C0(%1)                              \n\t" \
+    asm_##m##x16_kernel(0x8, 0x80, 0xA0) \
+    "prefetcht0 0x200(%1)                              \n\t" \
+    asm_##m##x16_kernel(0xC, 0xC0, 0xE0) \
+    "add $0x100, %[B]                             \n\t"
+
+#define kernel_8_4_loop(m) \
+    asm_##m##x8_kernel(0x0, 0x0, %%ymm) \
+    asm_##m##x8_kernel(0x4, 0x20, %%ymm) \
+    asm_##m##x8_kernel(0x8, 0x40, %%ymm) \
+    asm_##m##x8_kernel(0xC, 0x60, %%ymm) \
+    "add $0x80, %[B]                             \n\t"
+
+#define kernel_4_4_loop(m) \
+    asm_##m##x8_kernel(0x0, 0x0, %%xmm) \
+    asm_##m##x8_kernel(0x4, 0x10, %%xmm) \
+    asm_##m##x8_kernel(0x8, 0x20, %%xmm) \
+    asm_##m##x8_kernel(0xC, 0x30, %%xmm) \
+    "add $0x40, %[B]                             \n\t"
+
+#define m_24_kernel(m, x, edge) \
+    __asm__ __volatile__(clear##x##Regs(%%ymm)                               \
+                         "mov %[bk], %%ecx                             \n\t" \
+                         "shr $2, %%ecx                                \n\t" \
+                         "je 1f                                        \n\t" \
+                         ".align 16                                    \n\t" \
+                         "0:                                           \n\t" \
+                         kernel_24_4_loop(m)                                 \
+                         "add $0x10, %[A0]                             \n\t" \
+                         "add $0x10, %[A1]                             \n\t" \
+                         "add $0x10, %[A2]                             \n\t" \
+                         "add $0x10, %[A3]                             \n\t" \
+                         "dec %%ecx                                    \n\t" \
+                         "jg 0b                                        \n\t" \
+                         ".align 16                                    \n\t" \
+                         "1:                                           \n\t" \
+                         "mov %[bk], %%ecx                             \n\t" \
+                         "and $3, %%ecx                                \n\t" \
+                         "je 3f                                        \n\t" \
+                         ".align 16                                    \n\t" \
+                         "2:                                           \n\t" \
+                         asm_##m##x24_kernel(0x0, 0x0, 0x20, 0x40)           \
+                         "add $0x60, %[B]                              \n\t" \
+                         "add $0x4, %[A0]                              \n\t" \
+                         "add $0x4, %[A1]                              \n\t" \
+                         "add $0x4, %[A2]                              \n\t" \
+                         "add $0x4, %[A3]                              \n\t" \
+                         "dec %%ecx                                    \n\t" \
+                         "jg 2b                                        \n\t" \
+                         "3:                                           \n\t" \
+                         "shl $2, %%rax                                \n\t" \
+                         store_##m##x24_##edge(%%rax)                               \
+                         : [B] "+r" (matrixB),                               \
+                           [A0] "+r" (matrixA),                              \
+                           [A1] "+r" (A1),                                   \
+                           [A2] "+r" (A2),                                   \
+                           [A3] "+r" (A3),                                   \
+                           [C] "+r" (matrixC)                                \
+                         : "a"((I64)N),                                      \
+                           [bk] "r" (bk),                                     \
+                           [mask] "r" (mask)                                     \
+                         : "%ecx",                                           \
+                           "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm4",      \
+                           "%ymm5", "%ymm6", "%ymm7", "%ymm8", "%ymm9",      \
+                           "%ymm10", "%ymm11", "%ymm12", "%ymm13",           \
+                           "%ymm14", "%ymm15", "memory");
+
+#define m_16_kernel(m, x, edge) \
+    __asm__ __volatile__(clear##x##Regs(%%ymm)                               \
+                         "mov %[bk], %%ecx                             \n\t" \
+                         "shr $2, %%ecx                                \n\t" \
+                         "je 1f                                        \n\t" \
+                         ".align 16                                    \n\t" \
+                         "0:                                           \n\t" \
+                         kernel_16_4_loop(m)                                 \
+                         "add $0x10, %[A0]                             \n\t" \
+                         "add $0x10, %[A1]                             \n\t" \
+                         "add $0x10, %[A2]                             \n\t" \
+                         "add $0x10, %[A3]                             \n\t" \
+                         "dec %%ecx                                    \n\t" \
+                         "jg 0b                                        \n\t" \
+                         ".align 16                                    \n\t" \
+                         "1:                                           \n\t" \
+                         "mov %[bk], %%ecx                             \n\t" \
+                         "and $3, %%ecx                                \n\t" \
+                         "je 3f                                        \n\t" \
+                         ".align 16                                    \n\t" \
+                         "2:                                           \n\t" \
+                         asm_##m##x16_kernel(0x0, 0x0, 0x20)                 \
+                         "add $0x40, %[B]                              \n\t" \
+                         "add $0x4, %[A0]                              \n\t" \
+                         "add $0x4, %[A1]                              \n\t" \
+                         "add $0x4, %[A2]                              \n\t" \
+                         "add $0x4, %[A3]                              \n\t" \
+                         "dec %%ecx                                    \n\t" \
+                         "jg 2b                                        \n\t" \
+                         "3:                                           \n\t" \
+                         "shl $2, %%rax                                \n\t" \
+                         store_##m##x16_##edge(%%rax)                               \
+                         : [B] "+r" (matrixB),                               \
+                           [A0] "+r" (matrixA),                              \
+                           [A1] "+r" (A1),                                   \
+                           [A2] "+r" (A2),                                   \
+                           [A3] "+r" (A3),                                   \
+                           [C] "+r" (matrixC)                                \
+                         : "a"((I64)N),                                      \
+                           [bk] "r" (bk),                                     \
+                           [mask] "r" (mask)                                     \
+                         : "%ecx",                                           \
+                           "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm4",      \
+                           "%ymm5", "%ymm6", "%ymm7", "%ymm8", "%ymm9",      \
+                           "%ymm10", "memory");
+
+#define asm_4_kernel(m) \
+    asm_##m##x8_kernel(0x0, 0x0, %%xmm)                 \
+    "add $0x10, %[B]                              \n\t"
+
+#define asm_8_kernel(m) \
+    asm_##m##x8_kernel(0x0, 0x0, %%ymm)                 \
+    "add $0x20, %[B]                              \n\t"
+
+#define m_8_kernel_wrap(m, n, x, rtype, edge) \
+    __asm__ __volatile__(clear##x##Regs(rtype)                               \
+                         "mov %[bk], %%ecx                             \n\t" \
+                         "shr $2, %%ecx                                \n\t" \
+                         "je 1f                                        \n\t" \
+                         ".align 16                                    \n\t" \
+                         "0:                                           \n\t" \
+                         kernel_##n##_4_loop(m)                                 \
+                         "add $0x10, %[A0]                             \n\t" \
+                         "add $0x10, %[A1]                             \n\t" \
+                         "add $0x10, %[A2]                             \n\t" \
+                         "add $0x10, %[A3]                             \n\t" \
+                         "dec %%ecx                                    \n\t" \
+                         "jg 0b                                        \n\t" \
+                         ".align 16                                    \n\t" \
+                         "1:                                           \n\t" \
+                         "mov %[bk], %%ecx                             \n\t" \
+                         "and $3, %%ecx                                \n\t" \
+                         "je 3f                                        \n\t" \
+                         ".align 16                                    \n\t" \
+                         "2:                                           \n\t" \
+                         asm_##n##_kernel(m)                                     \
+                         "add $0x4, %[A0]                              \n\t" \
+                         "add $0x4, %[A1]                              \n\t" \
+                         "add $0x4, %[A2]                              \n\t" \
+                         "add $0x4, %[A3]                              \n\t" \
+                         "dec %%ecx                                    \n\t" \
+                         "jg 2b                                        \n\t" \
+                         "3:                                           \n\t" \
+                         "shl $2, %%rax                                \n\t" \
+                         store_##m##x8_##edge(%%rax, rtype)                         \
+                         : [B] "+r" (matrixB),                               \
+                           [A0] "+r" (matrixA),                              \
+                           [A1] "+r" (A1),                                   \
+                           [A2] "+r" (A2),                                   \
+                           [A3] "+r" (A3),                                   \
+                           [C] "+r" (matrixC)                                \
+                         : "a"((I64)N),                                      \
+                           [bk] "r" (bk),                                     \
+                           [mask] "r" (mask)                                     \
+                         : "%ecx",                                           \
+                           "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm4",      \
+                           "%ymm5", "memory");
+
+#define m_8_kernel(m, x, edge) \
+    m_8_kernel_wrap(m, 8, x, %%ymm, edge)
+
+#define m_4_kernel(m, x, edge) \
+    m_8_kernel_wrap(m, 4, x, %%xmm, edge)
+
+#define mmm_mxn_asm(m, n, regNum) \
+    void mmm_avx2_##m##x##n##_asm( \
+        U32 um, U32 un, U32 bk, F32 *matrixA, F32 *matrixB, \
+        F32 *matrixC, U32 N, I32 *mask, F32 *A1, F32 *A2, F32 *A3) \
+{ \
+    if (mask == nullptr) { \
+        m_##n##_kernel(m, regNum, 0) \
+    } else { \
+        m_##n##_kernel(m, regNum, 1) \
+    } \
+}
+
+mmm_mxn_asm(4, 24, 12)
+mmm_mxn_asm(3, 24, 9)
+mmm_mxn_asm(2, 24, 6)
+mmm_mxn_asm(1, 24, 3)
+mmm_mxn_asm(4, 16, 8)
+mmm_mxn_asm(3, 16, 6)
+mmm_mxn_asm(2, 16, 4)
+mmm_mxn_asm(1, 16, 2)
+mmm_mxn_asm(4, 8, 4)
+mmm_mxn_asm(3, 8, 3)
+mmm_mxn_asm(2, 8, 2)
+mmm_mxn_asm(1, 8, 1)
+mmm_mxn_asm(4, 4, 4)
+mmm_mxn_asm(3, 4, 3)
+mmm_mxn_asm(2, 4, 2)
+mmm_mxn_asm(1, 4, 1)
+
+// clang-format on
+
+void mmm_avx2_n_mtail(U32 um,
+    U32 un,
+    U32 bk,
+    F32 *matrixA,
+    F32 *matrixB,
+    F32 *matrixC,
+    U32 N,
+    I32 *mask,
+    F32 *A1,
+    F32 *A2,
+    F32 *A3)
+{
+    F32 *ar[4] = {matrixA, A1, A2, A3};
+    for (U32 i = 0; i < um; ++i) {
+        for (U32 j = 0; j < un; ++j) {
+            for (U32 k = 0; k < bk; ++k) {
+                matrixC[i * N + j] += ar[i][k] * matrixB[k * un + j];
+            }
+        }
+    }
+}
 
 void matrix_matrix_multiply_tmp_bytes_fp32(
     U32 row1, U32 col1, U32 row2, U32 col2, DataType dt, U32 *bytes)
 {
-    *bytes = row1 * col1 + row2 * col2;
+    *bytes = row1 * col1 + (col2 + 7) / 8 * 8 * row2;
     *bytes *= sizeof(dt);
     *bytes += 32;
 }
@@ -39,15 +598,18 @@ EE matrix_matrix_multiply_transform_rhsN_fp32(TensorDesc desc, F32 *src, F32 *ds
     U32 N, K, blockSizeK, unrollSizeN;
     CHECK_STATUS(tensor2dGet(desc, &dt, &df, &K, &N));
     F32 unrollSize[4] = {4, 8, 16, 24};
+    U32 resN = N % UNROLL_N;
+    U32 edgeBlockNSizeIdx = (resN > 4) ? ((resN + 7) / 8) : 0;
+    U32 edgeBlockNSize = unrollSize[edgeBlockNSizeIdx];
 
     // buffer addr algined to 32
     F32 *packB = (F32 *)align_addr(dst, 32);
     for (U32 bk = 0; bk < K; bk += blockSizeK) {
         blockSizeK = UNI_MIN(BOLCK_K_DIM, K - bk);
         for (U32 un = 0; un < N; un += unrollSizeN) {
-            unrollSizeN = UNI_MIN(UNROLL_N, N - un);
-            unrollSizeN = UNI_MIN(unrollSize[unrollSizeN / 8], unrollSizeN);
-            matrix2_trans(unrollSizeN, blockSizeK, N, src + un, packB);
+            unrollSizeN = UNI_MAX(UNI_MIN(UNROLL_N, N - un), edgeBlockNSize);
+            matrix2_trans_w(
+                unrollSizeN, UNI_MIN(N - un, unrollSizeN), blockSizeK, N, src + un, packB);
             packB += unrollSizeN * blockSizeK;
         }
         src += blockSizeK * N;
@@ -62,1301 +624,23 @@ EE matrix_matrix_multiply_transform_rhsT_fp32(TensorDesc desc, F32 *src, F32 *ds
     U32 N, K, blockSizeK, unrollSizeN;
     CHECK_STATUS(tensor2dGet(desc, &dt, &df, &N, &K));
     F32 unrollSize[4] = {4, 8, 16, 24};
+    U32 resN = N % UNROLL_N;
+    U32 edgeBlockNSizeIdx = (resN > 4) ? ((resN + 7) / 8) : 0;
+    U32 edgeBlockNSize = unrollSize[edgeBlockNSizeIdx];
 
     // buffer addr aligned to 32
     F32 *packB = (F32 *)align_addr(dst, 32);
     for (U32 bk = 0; bk < K; bk += blockSizeK) {
         blockSizeK = UNI_MIN(BOLCK_K_DIM, K - bk);
         for (U32 un = 0; un < N; un += unrollSizeN) {
-            unrollSizeN = UNI_MIN(UNROLL_N, N - un);
-            unrollSizeN = UNI_MIN(unrollSize[unrollSizeN >> 3], unrollSizeN);
-            matrix1_trans(unrollSizeN, blockSizeK, K, src + un * K, packB);
+            unrollSizeN = UNI_MAX(UNI_MIN(UNROLL_N, N - un), edgeBlockNSize);
+            matrix1_trans_w(
+                unrollSizeN, UNI_MIN(N - un, unrollSizeN), blockSizeK, K, src + un * K, packB);
             packB += unrollSizeN * blockSizeK;
         }
         src += blockSizeK;
     }
     return SUCCESS;
-}
-
-void mmm_avx2_4x24_asm(U32 um, U32 un, U32 bk, F32 *matrixA, F32 *matrixB, F32 *matrixC, U32 N)
-{
-    __asm__ __volatile__("vxorps %%ymm0, %%ymm0, %%ymm0                     \n\t"
-                         "vxorps %%ymm1, %%ymm1, %%ymm1                     \n\t"
-                         "vxorps %%ymm2, %%ymm2, %%ymm2                     \n\t"
-                         "vxorps %%ymm3, %%ymm3, %%ymm3                     \n\t"
-                         "vxorps %%ymm4, %%ymm4, %%ymm4                     \n\t"
-                         "vxorps %%ymm5, %%ymm5, %%ymm5                     \n\t"
-                         "vxorps %%ymm6, %%ymm6, %%ymm6                     \n\t"
-                         "vxorps %%ymm7, %%ymm7, %%ymm7                     \n\t"
-                         "vxorps %%ymm8, %%ymm8, %%ymm8                     \n\t"
-                         "vxorps %%ymm9, %%ymm9, %%ymm9                     \n\t"
-                         "vxorps %%ymm10, %%ymm10, %%ymm10                  \n\t"
-                         "vxorps %%ymm11, %%ymm11, %%ymm11                  \n\t"
-
-                         "mov %0, %%ecx                                     \n\t"
-                         "shr $2, %%ecx                                     \n\t"
-                         "je .k_loop_4x24_end                                \n\t"
-                         ".align 16                                         \n\t"
-                         ".k_loop_4x24:                                      \n\t"
-
-                         "prefetcht0 0x140(%1)                              \n\t"
-                         "prefetcht0 0x180(%1)                              \n\t"
-                         "prefetcht0 0x140(%2)                              \n\t"
-
-                         "vmovaps (%1), %%ymm12                             \n\t"
-                         "vmovaps 0x20(%1), %%ymm13                         \n\t"
-                         "vmovaps 0x40(%1), %%ymm14                         \n\t"
-                         "vbroadcastss 0x0(%2), %%ymm15                     \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm12, %%ymm0              \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm13, %%ymm1              \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm14, %%ymm2              \n\t"
-                         "vbroadcastss 0x4(%2), %%ymm15                     \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm12, %%ymm3              \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm13, %%ymm4              \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm14, %%ymm5              \n\t"
-                         "vbroadcastss 0x8(%2), %%ymm15                     \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm12, %%ymm6              \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm13, %%ymm7              \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm14, %%ymm8              \n\t"
-                         "vbroadcastss 0xC(%2), %%ymm15                     \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm12, %%ymm9              \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm13, %%ymm10             \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm14, %%ymm11             \n\t"
-
-                         "prefetcht0 0x1C0(%1)                              \n\t"
-
-                         "vmovaps 0x60(%1), %%ymm12                         \n\t"
-                         "vmovaps 0x80(%1), %%ymm13                         \n\t"
-                         "vmovaps 0xA0(%1), %%ymm14                         \n\t"
-                         "vbroadcastss 0x10(%2), %%ymm15                    \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm12, %%ymm0              \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm13, %%ymm1              \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm14, %%ymm2              \n\t"
-                         "vbroadcastss 0x14(%2), %%ymm15                    \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm12, %%ymm3              \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm13, %%ymm4              \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm14, %%ymm5              \n\t"
-                         "vbroadcastss 0x18(%2), %%ymm15                    \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm12, %%ymm6              \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm13, %%ymm7              \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm14, %%ymm8              \n\t"
-                         "vbroadcastss 0x1C(%2), %%ymm15                    \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm12, %%ymm9              \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm13, %%ymm10             \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm14, %%ymm11             \n\t"
-
-                         "prefetcht0 0x200(%1)                              \n\t"
-                         "prefetcht0 0x240(%1)                              \n\t"
-
-                         "vmovaps 0xC0(%1), %%ymm12                         \n\t"
-                         "vmovaps 0xE0(%1), %%ymm13                         \n\t"
-                         "vmovaps 0x100(%1), %%ymm14                        \n\t"
-                         "vbroadcastss 0x20(%2), %%ymm15                    \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm12, %%ymm0              \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm13, %%ymm1              \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm14, %%ymm2              \n\t"
-                         "vbroadcastss 0x24(%2), %%ymm15                    \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm12, %%ymm3              \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm13, %%ymm4              \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm14, %%ymm5              \n\t"
-                         "vbroadcastss 0x28(%2), %%ymm15                    \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm12, %%ymm6              \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm13, %%ymm7              \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm14, %%ymm8              \n\t"
-                         "vbroadcastss 0x2C(%2), %%ymm15                    \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm12, %%ymm9              \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm13, %%ymm10             \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm14, %%ymm11             \n\t"
-
-                         "prefetcht0 0x280(%1)                              \n\t"
-
-                         "vmovaps 0x120(%1), %%ymm12                        \n\t"
-                         "vmovaps 0x140(%1), %%ymm13                        \n\t"
-                         "vmovaps 0x160(%1), %%ymm14                        \n\t"
-                         "vbroadcastss 0x30(%2), %%ymm15                    \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm12, %%ymm0              \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm13, %%ymm1              \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm14, %%ymm2              \n\t"
-                         "vbroadcastss 0x34(%2), %%ymm15                    \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm12, %%ymm3              \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm13, %%ymm4              \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm14, %%ymm5              \n\t"
-                         "vbroadcastss 0x38(%2), %%ymm15                    \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm12, %%ymm6              \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm13, %%ymm7              \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm14, %%ymm8              \n\t"
-                         "vbroadcastss 0x3C(%2), %%ymm15                    \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm12, %%ymm9              \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm13, %%ymm10             \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm14, %%ymm11             \n\t"
-
-                         "add $0x180, %1                                    \n\t"
-                         "add $0x40, %2                                     \n\t"
-
-                         "sub $1, %%ecx                                     \n\t"
-                         "jg .k_loop_4x24                                    \n\t"
-                         ".align 16                                         \n\t"
-                         ".k_loop_4x24_end:                                  \n\t"
-
-                         "mov %0, %%ecx                                     \n\t"
-                         "and $3, %%ecx                                     \n\t"
-                         "je .k_loop_4x24_remain_end                         \n\t"
-                         ".k_loop_4x24_remain:                               \n\t"
-                         "vmovaps (%1), %%ymm12                             \n\t"
-                         "vmovaps 0x20(%1), %%ymm13                         \n\t"
-                         "vmovaps 0x40(%1), %%ymm14                         \n\t"
-                         "vbroadcastss 0x0(%2), %%ymm15                     \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm12, %%ymm0              \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm13, %%ymm1              \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm14, %%ymm2              \n\t"
-                         "vbroadcastss 0x4(%2), %%ymm15                     \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm12, %%ymm3              \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm13, %%ymm4              \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm14, %%ymm5              \n\t"
-                         "vbroadcastss 0x8(%2), %%ymm15                     \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm12, %%ymm6              \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm13, %%ymm7              \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm14, %%ymm8              \n\t"
-                         "vbroadcastss 0xC(%2), %%ymm15                     \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm12, %%ymm9              \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm13, %%ymm10             \n\t"
-                         "vfmadd231ps %%ymm15, %%ymm14, %%ymm11             \n\t"
-                         "add $0x60, %1                                     \n\t"
-                         "add $0x10, %2                                     \n\t"
-                         "sub $1, %%ecx                                     \n\t"
-                         "jg .k_loop_4x24_remain                             \n\t"
-
-                         ".k_loop_4x24_remain_end:                           \n\t"
-                         "mov %4, %%eax                                     \n\t"
-                         "shl $2, %%eax                                     \n\t"
-                         "mov %%eax, %%eax                                  \n\t"
-                         "prefetcht0 0x40(%3)                               \n\t"
-                         "prefetcht0 (%3, %%rax)                            \n\t"
-                         "prefetcht0 0x40(%3, %%rax)                        \n\t"
-                         "vaddps (%3), %%ymm0, %%ymm0                       \n\t"
-                         "vaddps 0x20(%3), %%ymm1, %%ymm1                   \n\t"
-                         "vaddps 0x40(%3), %%ymm2, %%ymm2                   \n\t"
-                         "vmovups %%ymm0,  (%3)                             \n\t"
-                         "vmovups %%ymm1,  0x20(%3)                         \n\t"
-                         "vmovups %%ymm2,  0x40(%3)                         \n\t"
-                         "add %%rax, %3                                     \n\t"
-                         "prefetcht0 (%3, %%rax)                            \n\t"
-                         "prefetcht0 0x40(%3, %%rax)                        \n\t"
-                         "vaddps (%3), %%ymm3, %%ymm3                       \n\t"
-                         "vaddps 0x20(%3), %%ymm4, %%ymm4                   \n\t"
-                         "vaddps 0x40(%3), %%ymm5, %%ymm5                   \n\t"
-                         "vmovups %%ymm3,  (%3)                             \n\t"
-                         "vmovups %%ymm4,  0x20(%3)                         \n\t"
-                         "vmovups %%ymm5,  0x40(%3)                         \n\t"
-                         "add %%rax, %3                                     \n\t"
-                         "prefetcht0 (%3, %%rax)                            \n\t"
-                         "prefetcht0 0x40(%3, %%rax)                        \n\t"
-                         "vaddps (%3), %%ymm6, %%ymm6                       \n\t"
-                         "vaddps 0x20(%3), %%ymm7, %%ymm7                   \n\t"
-                         "vaddps 0x40(%3), %%ymm8, %%ymm8                   \n\t"
-                         "vmovups %%ymm6,  (%3)                             \n\t"
-                         "vmovups %%ymm7,  0x20(%3)                         \n\t"
-                         "vmovups %%ymm8,  0x40(%3)                         \n\t"
-                         "add %%rax, %3                                     \n\t"
-                         "prefetcht0 0x40(%3)                               \n\t"
-                         "vaddps (%3), %%ymm9, %%ymm9                       \n\t"
-                         "vaddps 0x20(%3), %%ymm10, %%ymm10                 \n\t"
-                         "vaddps 0x40(%3), %%ymm11, %%ymm11                 \n\t"
-                         "vmovups %%ymm9,  (%3)                             \n\t"
-                         "vmovups %%ymm10, 0x20(%3)                         \n\t"
-                         "vmovups %%ymm11, 0x40(%3)                         \n\t"
-                         :
-                         : "r"(bk), "r"(matrixB), "r"(matrixA), "r"(matrixC), "r"(N)
-                         : "%eax", "%rax", "%ecx", "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm4",
-                         "%ymm5", "%ymm6", "%ymm7", "%ymm8", "%ymm9", "%ymm10", "%ymm11", "%ymm12",
-                         "%ymm13", "%ymm14", "%ymm15", "memory");
-}
-
-void mmm_avx2_4x16_asm(U32 um, U32 un, U32 bk, F32 *matrixA, F32 *matrixB, F32 *matrixC, U32 N)
-{
-    __asm__ __volatile__("vxorps %%ymm0, %%ymm0, %%ymm0                     \n\t"
-                         "vxorps %%ymm1, %%ymm1, %%ymm1                     \n\t"
-                         "vxorps %%ymm2, %%ymm2, %%ymm2                     \n\t"
-                         "vxorps %%ymm3, %%ymm3, %%ymm3                     \n\t"
-                         "vxorps %%ymm4, %%ymm4, %%ymm4                     \n\t"
-                         "vxorps %%ymm5, %%ymm5, %%ymm5                     \n\t"
-                         "vxorps %%ymm6, %%ymm6, %%ymm6                     \n\t"
-                         "vxorps %%ymm7, %%ymm7, %%ymm7                     \n\t"
-
-                         "mov %0, %%ecx                                     \n\t"
-                         "shr $2, %%ecx                                     \n\t"
-                         "je .k_loop_4x16_end                                \n\t"
-                         ".align 16                                         \n\t"
-                         ".k_loop_4x16:                                      \n\t"
-
-                         "prefetcht0 0x140(%1)                              \n\t"
-                         "prefetcht0 0x140(%2)                              \n\t"
-
-                         "vmovaps (%1), %%ymm8                              \n\t"
-                         "vmovaps 0x20(%1), %%ymm9                          \n\t"
-                         "vbroadcastss 0x0(%2), %%ymm10                     \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm8, %%ymm0               \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm9, %%ymm1               \n\t"
-                         "vbroadcastss 0x4(%2), %%ymm10                     \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm8, %%ymm2               \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm9, %%ymm3               \n\t"
-                         "vbroadcastss 0x8(%2), %%ymm10                     \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm8, %%ymm4               \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm9, %%ymm5               \n\t"
-                         "vbroadcastss 0xC(%2), %%ymm10                     \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm8, %%ymm6               \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm9, %%ymm7               \n\t"
-
-                         "prefetcht0 0x180(%1)                              \n\t"
-
-                         "vmovaps 0x40(%1), %%ymm8                          \n\t"
-                         "vmovaps 0x60(%1), %%ymm9                          \n\t"
-                         "vbroadcastss 0x10(%2), %%ymm10                    \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm8, %%ymm0               \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm9, %%ymm1               \n\t"
-                         "vbroadcastss 0x14(%2), %%ymm10                    \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm8, %%ymm2               \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm9, %%ymm3               \n\t"
-                         "vbroadcastss 0x18(%2), %%ymm10                    \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm8, %%ymm4               \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm9, %%ymm5               \n\t"
-                         "vbroadcastss 0x1C(%2), %%ymm10                    \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm8, %%ymm6               \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm9, %%ymm7               \n\t"
-
-                         "prefetcht0 0x1C0(%1)                              \n\t"
-
-                         "vmovaps 0x80(%1), %%ymm8                          \n\t"
-                         "vmovaps 0xA0(%1), %%ymm9                          \n\t"
-                         "vbroadcastss 0x20(%2), %%ymm10                    \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm8, %%ymm0               \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm9, %%ymm1               \n\t"
-                         "vbroadcastss 0x24(%2), %%ymm10                    \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm8, %%ymm2               \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm9, %%ymm3               \n\t"
-                         "vbroadcastss 0x28(%2), %%ymm10                    \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm8, %%ymm4               \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm9, %%ymm5               \n\t"
-                         "vbroadcastss 0x2C(%2), %%ymm10                    \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm8, %%ymm6               \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm9, %%ymm7               \n\t"
-
-                         "prefetcht0 0x200(%1)                              \n\t"
-
-                         "vmovaps 0xC0(%1), %%ymm8                          \n\t"
-                         "vmovaps 0xE0(%1), %%ymm9                          \n\t"
-                         "vbroadcastss 0x30(%2), %%ymm10                    \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm8, %%ymm0               \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm9, %%ymm1               \n\t"
-                         "vbroadcastss 0x34(%2), %%ymm10                    \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm8, %%ymm2               \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm9, %%ymm3               \n\t"
-                         "vbroadcastss 0x38(%2), %%ymm10                    \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm8, %%ymm4               \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm9, %%ymm5               \n\t"
-                         "vbroadcastss 0x3C(%2), %%ymm10                    \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm8, %%ymm6               \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm9, %%ymm7               \n\t"
-
-                         "add $0x100, %1                                    \n\t"
-                         "add $0x40, %2                                     \n\t"
-
-                         "sub $1, %%ecx                                     \n\t"
-                         "jg .k_loop_4x16                                    \n\t"
-                         ".align 16                                         \n\t"
-                         ".k_loop_4x16_end:                                  \n\t"
-
-                         "mov %0, %%ecx                                     \n\t"
-                         "and $3, %%ecx                                     \n\t"
-                         "je .k_loop_4x16_remain_end                         \n\t"
-                         ".k_loop_4x16_remain:                               \n\t"
-                         "vmovaps (%1), %%ymm8                              \n\t"
-                         "vmovaps 0x20(%1), %%ymm9                          \n\t"
-                         "vbroadcastss 0x0(%2), %%ymm10                     \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm8, %%ymm0               \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm9, %%ymm1               \n\t"
-                         "vbroadcastss 0x4(%2), %%ymm10                     \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm8, %%ymm2               \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm9, %%ymm3               \n\t"
-                         "vbroadcastss 0x8(%2), %%ymm10                     \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm8, %%ymm4               \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm9, %%ymm5               \n\t"
-                         "vbroadcastss 0xC(%2), %%ymm10                     \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm8, %%ymm6               \n\t"
-                         "vfmadd231ps %%ymm10, %%ymm9, %%ymm7               \n\t"
-                         "add $0x40, %1                                     \n\t"
-                         "add $0x10, %2                                     \n\t"
-                         "sub $1, %%ecx                                     \n\t"
-                         "jg .k_loop_4x16_remain                             \n\t"
-
-                         ".k_loop_4x16_remain_end:                           \n\t"
-                         "mov %4, %%eax                                     \n\t"
-                         "shl $2, %%eax                                     \n\t"
-                         "mov %%eax, %%eax                                  \n\t"
-                         "prefetcht0 (%3, %%rax)                            \n\t"
-                         "vaddps (%3), %%ymm0, %%ymm0                       \n\t"
-                         "vaddps 0x20(%3), %%ymm1, %%ymm1                   \n\t"
-                         "vmovups %%ymm0,  (%3)                             \n\t"
-                         "vmovups %%ymm1,  0x20(%3)                         \n\t"
-                         "add %%rax, %3                                     \n\t"
-                         "prefetcht0 (%3, %%rax)                            \n\t"
-                         "vaddps (%3), %%ymm2, %%ymm2                       \n\t"
-                         "vaddps 0x20(%3), %%ymm3, %%ymm3                   \n\t"
-                         "vmovups %%ymm2,  (%3)                             \n\t"
-                         "vmovups %%ymm3,  0x20(%3)                         \n\t"
-                         "add %%rax, %3                                     \n\t"
-                         "prefetcht0 (%3, %%rax)                            \n\t"
-                         "vaddps (%3), %%ymm4, %%ymm4                       \n\t"
-                         "vaddps 0x20(%3), %%ymm5, %%ymm5                   \n\t"
-                         "vmovups %%ymm4,  (%3)                             \n\t"
-                         "vmovups %%ymm5,  0x20(%3)                         \n\t"
-                         "add %%rax, %3                                     \n\t"
-                         "vaddps (%3), %%ymm6, %%ymm6                       \n\t"
-                         "vaddps 0x20(%3), %%ymm7, %%ymm7                   \n\t"
-                         "vmovups %%ymm6,  (%3)                             \n\t"
-                         "vmovups %%ymm7, 0x20(%3)                          \n\t"
-                         :
-                         : "r"(bk), "r"(matrixB), "r"(matrixA), "r"(matrixC), "r"(N)
-                         : "%eax", "%rax", "%ecx", "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm4",
-                         "%ymm5", "%ymm6", "%ymm7", "%ymm8", "%ymm9", "%ymm10", "memory");
-}
-
-void mmm_avx2_4x8_asm(U32 um, U32 un, U32 bk, F32 *matrixA, F32 *matrixB, F32 *matrixC, U32 N)
-{
-    __asm__ __volatile__(
-        "vxorps %%ymm0, %%ymm0, %%ymm0                     \n\t"
-        "vxorps %%ymm1, %%ymm1, %%ymm1                     \n\t"
-        "vxorps %%ymm2, %%ymm2, %%ymm2                     \n\t"
-        "vxorps %%ymm3, %%ymm3, %%ymm3                     \n\t"
-
-        "mov %0, %%ecx                                     \n\t"
-        "shr $2, %%ecx                                     \n\t"
-        "je .k_loop_4x8_end                                 \n\t"
-        ".align 16                                         \n\t"
-        ".k_loop_4x8:                                       \n\t"
-
-        "prefetcht0 0x140(%1)                              \n\t"
-        "prefetcht0 0x140(%2)                              \n\t"
-
-        "vmovaps (%1), %%ymm4                              \n\t"
-        "vbroadcastss 0x0(%2), %%ymm5                      \n\t"
-        "vfmadd231ps %%ymm5, %%ymm4, %%ymm0                \n\t"
-        "vbroadcastss 0x4(%2), %%ymm5                      \n\t"
-        "vfmadd231ps %%ymm5, %%ymm4, %%ymm1                \n\t"
-        "vbroadcastss 0x8(%2), %%ymm5                      \n\t"
-        "vfmadd231ps %%ymm5, %%ymm4, %%ymm2                \n\t"
-        "vbroadcastss 0xC(%2), %%ymm5                      \n\t"
-        "vfmadd231ps %%ymm5, %%ymm4, %%ymm3                \n\t"
-
-        "vmovaps 0x20(%1), %%ymm4                          \n\t"
-        "vbroadcastss 0x10(%2), %%ymm5                     \n\t"
-        "vfmadd231ps %%ymm5, %%ymm4, %%ymm0                \n\t"
-        "vbroadcastss 0x14(%2), %%ymm5                     \n\t"
-        "vfmadd231ps %%ymm5, %%ymm4, %%ymm1                \n\t"
-        "vbroadcastss 0x18(%2), %%ymm5                     \n\t"
-        "vfmadd231ps %%ymm5, %%ymm4, %%ymm2                \n\t"
-        "vbroadcastss 0x1C(%2), %%ymm5                     \n\t"
-        "vfmadd231ps %%ymm5, %%ymm4, %%ymm3                \n\t"
-
-        "prefetcht0 0x180(%1)                              \n\t"
-
-        "vmovaps 0x40(%1), %%ymm4                          \n\t"
-        "vbroadcastss 0x20(%2), %%ymm5                     \n\t"
-        "vfmadd231ps %%ymm5, %%ymm4, %%ymm0                \n\t"
-        "vbroadcastss 0x24(%2), %%ymm5                     \n\t"
-        "vfmadd231ps %%ymm5, %%ymm4, %%ymm1                \n\t"
-        "vbroadcastss 0x28(%2), %%ymm5                     \n\t"
-        "vfmadd231ps %%ymm5, %%ymm4, %%ymm2                \n\t"
-        "vbroadcastss 0x2C(%2), %%ymm5                     \n\t"
-        "vfmadd231ps %%ymm5, %%ymm4, %%ymm3                \n\t"
-
-        "vmovaps 0x60(%1), %%ymm4                          \n\t"
-        "vbroadcastss 0x30(%2), %%ymm5                     \n\t"
-        "vfmadd231ps %%ymm5, %%ymm4, %%ymm0                \n\t"
-        "vbroadcastss 0x34(%2), %%ymm5                     \n\t"
-        "vfmadd231ps %%ymm5, %%ymm4, %%ymm1                \n\t"
-        "vbroadcastss 0x38(%2), %%ymm5                     \n\t"
-        "vfmadd231ps %%ymm5, %%ymm4, %%ymm2                \n\t"
-        "vbroadcastss 0x3C(%2), %%ymm5                     \n\t"
-        "vfmadd231ps %%ymm5, %%ymm4, %%ymm3                \n\t"
-
-        "add $0x80, %1                                     \n\t"
-        "add $0x40, %2                                     \n\t"
-
-        "sub $1, %%ecx                                     \n\t"
-        "jg .k_loop_4x8                                     \n\t"
-        ".align 16                                         \n\t"
-        ".k_loop_4x8_end:                                   \n\t"
-
-        "mov %0, %%ecx                                     \n\t"
-        "and $3, %%ecx                                     \n\t"
-        "je .k_loop_4x8_remain_end                          \n\t"
-        ".k_loop_4x8_remain:                                \n\t"
-        "vmovaps (%1), %%ymm4                              \n\t"
-        "vbroadcastss 0x0(%2), %%ymm5                      \n\t"
-        "vfmadd231ps %%ymm5, %%ymm4, %%ymm0                \n\t"
-        "vbroadcastss 0x4(%2), %%ymm5                      \n\t"
-        "vfmadd231ps %%ymm5, %%ymm4, %%ymm1                \n\t"
-        "vbroadcastss 0x8(%2), %%ymm5                      \n\t"
-        "vfmadd231ps %%ymm5, %%ymm4, %%ymm2                \n\t"
-        "vbroadcastss 0xC(%2), %%ymm5                      \n\t"
-        "vfmadd231ps %%ymm5, %%ymm4, %%ymm3                \n\t"
-        "add $0x20, %1                                     \n\t"
-        "add $0x10, %2                                     \n\t"
-        "sub $1, %%ecx                                     \n\t"
-        "jg .k_loop_4x8_remain                              \n\t"
-
-        ".k_loop_4x8_remain_end:                            \n\t"
-        "mov %4, %%eax                                     \n\t"
-        "shl $2, %%eax                                     \n\t"
-        "mov %%eax, %%eax                                  \n\t"
-        "prefetcht0 (%3, %%rax)                            \n\t"
-        "vaddps (%3), %%ymm0, %%ymm0                       \n\t"
-        "vmovups %%ymm0,  (%3)                             \n\t"
-        "add %%rax, %3                                     \n\t"
-        "prefetcht0 (%3, %%rax)                            \n\t"
-        "vaddps (%3), %%ymm1, %%ymm1                       \n\t"
-        "vmovups %%ymm1,  (%3)                             \n\t"
-        "add %%rax, %3                                     \n\t"
-        "prefetcht0 (%3, %%rax)                            \n\t"
-        "vaddps (%3), %%ymm2, %%ymm2                       \n\t"
-        "vmovups %%ymm2,  (%3)                             \n\t"
-        "add %%rax, %3                                     \n\t"
-        "vaddps (%3), %%ymm3, %%ymm3                       \n\t"
-        "vmovups %%ymm3,  (%3)                             \n\t"
-        :
-        : "r"(bk), "r"(matrixB), "r"(matrixA), "r"(matrixC), "r"(N)
-        : "%eax", "%rax", "%ecx", "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm4", "%ymm5", "memory");
-}
-
-void mmm_avx2_4x4_asm(U32 um, U32 un, U32 bk, F32 *matrixA, F32 *matrixB, F32 *matrixC, U32 N)
-{
-    __asm__ __volatile__(
-        "vxorps %%xmm0, %%xmm0, %%xmm0                     \n\t"
-        "vxorps %%xmm1, %%xmm1, %%xmm1                     \n\t"
-        "vxorps %%xmm2, %%xmm2, %%xmm2                     \n\t"
-        "vxorps %%xmm3, %%xmm3, %%xmm3                     \n\t"
-
-        "mov %0, %%ecx                                     \n\t"
-        "shr $2, %%ecx                                     \n\t"
-        "je .k_loop_4x4_end                                 \n\t"
-        ".align 16                                         \n\t"
-        ".k_loop_4x4:                                       \n\t"
-
-        "prefetcht0 0x140(%1)                              \n\t"
-        "prefetcht0 0x140(%2)                              \n\t"
-
-        "vmovaps (%1), %%xmm4                              \n\t"
-        "vbroadcastss 0x0(%2), %%xmm5                      \n\t"
-        "vfmadd231ps %%xmm5, %%xmm4, %%xmm0                \n\t"
-        "vbroadcastss 0x4(%2), %%xmm5                      \n\t"
-        "vfmadd231ps %%xmm5, %%xmm4, %%xmm1                \n\t"
-        "vbroadcastss 0x8(%2), %%xmm5                      \n\t"
-        "vfmadd231ps %%xmm5, %%xmm4, %%xmm2                \n\t"
-        "vbroadcastss 0xC(%2), %%xmm5                      \n\t"
-        "vfmadd231ps %%xmm5, %%xmm4, %%xmm3                \n\t"
-
-        "vmovaps 0x10(%1), %%xmm4                          \n\t"
-        "vbroadcastss 0x10(%2), %%xmm5                     \n\t"
-        "vfmadd231ps %%xmm5, %%xmm4, %%xmm0                \n\t"
-        "vbroadcastss 0x14(%2), %%xmm5                     \n\t"
-        "vfmadd231ps %%xmm5, %%xmm4, %%xmm1                \n\t"
-        "vbroadcastss 0x18(%2), %%xmm5                     \n\t"
-        "vfmadd231ps %%xmm5, %%xmm4, %%xmm2                \n\t"
-        "vbroadcastss 0x1C(%2), %%xmm5                     \n\t"
-        "vfmadd231ps %%xmm5, %%xmm4, %%xmm3                \n\t"
-
-        "vmovaps 0x20(%1), %%xmm4                          \n\t"
-        "vbroadcastss 0x20(%2), %%xmm5                     \n\t"
-        "vfmadd231ps %%xmm5, %%xmm4, %%xmm0                \n\t"
-        "vbroadcastss 0x24(%2), %%xmm5                     \n\t"
-        "vfmadd231ps %%xmm5, %%xmm4, %%xmm1                \n\t"
-        "vbroadcastss 0x28(%2), %%xmm5                     \n\t"
-        "vfmadd231ps %%xmm5, %%xmm4, %%xmm2                \n\t"
-        "vbroadcastss 0x2C(%2), %%xmm5                     \n\t"
-        "vfmadd231ps %%xmm5, %%xmm4, %%xmm3                \n\t"
-
-        "vmovaps 0x30(%1), %%xmm4                          \n\t"
-        "vbroadcastss 0x30(%2), %%xmm5                     \n\t"
-        "vfmadd231ps %%xmm5, %%xmm4, %%xmm0                \n\t"
-        "vbroadcastss 0x34(%2), %%xmm5                     \n\t"
-        "vfmadd231ps %%xmm5, %%xmm4, %%xmm1                \n\t"
-        "vbroadcastss 0x38(%2), %%xmm5                     \n\t"
-        "vfmadd231ps %%xmm5, %%xmm4, %%xmm2                \n\t"
-        "vbroadcastss 0x3C(%2), %%xmm5                     \n\t"
-        "vfmadd231ps %%xmm5, %%xmm4, %%xmm3                \n\t"
-
-        "add $0x40, %1                                     \n\t"
-        "add $0x40, %2                                     \n\t"
-
-        "sub $1, %%ecx                                     \n\t"
-        "jg .k_loop_4x4                                     \n\t"
-        ".align 16                                         \n\t"
-        ".k_loop_4x4_end:                                   \n\t"
-
-        "mov %0, %%ecx                                     \n\t"
-        "and $3, %%ecx                                     \n\t"
-        "je .k_loop_4x4_remain_end                          \n\t"
-
-        ".k_loop_4x4_remain:                                \n\t"
-        "vmovaps (%1), %%xmm4                              \n\t"
-        "vbroadcastss 0x0(%2), %%xmm5                      \n\t"
-        "vfmadd231ps %%xmm5, %%xmm4, %%xmm0                \n\t"
-        "vbroadcastss 0x4(%2), %%xmm5                      \n\t"
-        "vfmadd231ps %%xmm5, %%xmm4, %%xmm1                \n\t"
-        "vbroadcastss 0x8(%2), %%xmm5                      \n\t"
-        "vfmadd231ps %%xmm5, %%xmm4, %%xmm2                \n\t"
-        "vbroadcastss 0xC(%2), %%xmm5                      \n\t"
-        "vfmadd231ps %%xmm5, %%xmm4, %%xmm3                \n\t"
-        "add $0x10, %1                                     \n\t"
-        "add $0x10, %2                                     \n\t"
-        "sub $1, %%ecx                                     \n\t"
-        "jg .k_loop_4x4_remain                              \n\t"
-
-        ".k_loop_4x4_remain_end:                            \n\t"
-        "mov %4, %%eax                                     \n\t"
-        "shl $2, %%eax                                     \n\t"
-        "mov %%eax, %%eax                                  \n\t"
-        "prefetcht0 (%3, %%rax)                            \n\t"
-        "vaddps (%3), %%xmm0, %%xmm0                       \n\t"
-        "vmovups %%xmm0,  (%3)                             \n\t"
-        "add %%rax, %3                                     \n\t"
-        "prefetcht0 (%3, %%rax)                            \n\t"
-        "vaddps (%3), %%xmm1, %%xmm1                       \n\t"
-        "vmovups %%xmm1,  (%3)                             \n\t"
-        "add %%rax, %3                                     \n\t"
-        "prefetcht0 (%3, %%rax)                            \n\t"
-        "vaddps (%3), %%xmm2, %%xmm2                       \n\t"
-        "vmovups %%xmm2,  (%3)                             \n\t"
-        "add %%rax, %3                                     \n\t"
-        "vaddps (%3), %%xmm3, %%xmm3                       \n\t"
-        "vmovups %%xmm3,  (%3)                             \n\t"
-        :
-        : "r"(bk), "r"(matrixB), "r"(matrixA), "r"(matrixC), "r"(N)
-        : "%eax", "%rax", "%ecx", "%xmm0", "%xmm1", "%xmm2", "%xmm3", "%xmm4", "%xmm5", "memory");
-}
-
-void mmm_avx2_2x24_asm(U32 um, U32 un, U32 bk, F32 *matrixA, F32 *matrixB, F32 *matrixC, U32 N)
-{
-    __asm__ __volatile__("mov %4, %%eax                                     \n\t"
-                         "shl $2, %%eax                                     \n\t"
-                         "mov %%eax, %%eax                                  \n\t"
-
-                         "vxorps %%ymm0, %%ymm0, %%ymm0                     \n\t"
-                         "vxorps %%ymm1, %%ymm1, %%ymm1                     \n\t"
-                         "vxorps %%ymm2, %%ymm2, %%ymm2                     \n\t"
-                         "vxorps %%ymm3, %%ymm3, %%ymm3                     \n\t"
-                         "vxorps %%ymm4, %%ymm4, %%ymm4                     \n\t"
-                         "vxorps %%ymm5, %%ymm5, %%ymm5                     \n\t"
-
-                         "mov %0, %%ecx                                     \n\t"
-                         "shr $2, %%ecx                                     \n\t"
-                         "je .k_loop_2x24_end                                \n\t"
-
-                         ".align 16                                         \n\t"
-                         ".k_loop_2x24:                                      \n\t"
-
-                         "prefetcht0 0x140(%1)                              \n\t"
-                         "prefetcht0 0x180(%1)                              \n\t"
-
-                         "vmovaps (%1), %%ymm6                              \n\t"
-                         "vmovaps 0x20(%1), %%ymm7                          \n\t"
-                         "vmovaps 0x40(%1), %%ymm8                          \n\t"
-                         "vbroadcastss 0x0(%2), %%ymm9                      \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm6, %%ymm0                \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm7, %%ymm1                \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm8, %%ymm2                \n\t"
-                         "vbroadcastss 0x4(%2), %%ymm9                      \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm6, %%ymm3                \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm7, %%ymm4                \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm8, %%ymm5                \n\t"
-
-                         "prefetcht0 0x1C0(%1)                              \n\t"
-
-                         "vmovaps 0x60(%1), %%ymm6                          \n\t"
-                         "vmovaps 0x80(%1), %%ymm7                          \n\t"
-                         "vmovaps 0xA0(%1), %%ymm8                          \n\t"
-                         "vbroadcastss 0x8(%2), %%ymm9                      \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm6, %%ymm0                \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm7, %%ymm1                \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm8, %%ymm2                \n\t"
-                         "vbroadcastss 0xC(%2), %%ymm9                      \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm6, %%ymm3                \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm7, %%ymm4                \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm8, %%ymm5                \n\t"
-
-                         "prefetcht0 0x200(%1)                              \n\t"
-                         "prefetcht0 0x240(%1)                              \n\t"
-
-                         "vmovaps 0xC0(%1), %%ymm6                          \n\t"
-                         "vmovaps 0xE0(%1), %%ymm7                          \n\t"
-                         "vmovaps 0x100(%1), %%ymm8                         \n\t"
-                         "vbroadcastss 0x10(%2), %%ymm9                     \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm6, %%ymm0                \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm7, %%ymm1                \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm8, %%ymm2                \n\t"
-                         "vbroadcastss 0x14(%2), %%ymm9                     \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm6, %%ymm3                \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm7, %%ymm4                \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm8, %%ymm5                \n\t"
-
-                         "prefetcht0 0x280(%1)                              \n\t"
-
-                         "vmovaps 0x120(%1), %%ymm6                         \n\t"
-                         "vmovaps 0x140(%1), %%ymm7                         \n\t"
-                         "vmovaps 0x160(%1), %%ymm8                         \n\t"
-                         "vbroadcastss 0x18(%2), %%ymm9                     \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm6, %%ymm0                \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm7, %%ymm1                \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm8, %%ymm2                \n\t"
-                         "vbroadcastss 0x1C(%2), %%ymm9                     \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm6, %%ymm3                \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm7, %%ymm4                \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm8, %%ymm5                \n\t"
-
-                         "add $0x180, %1                                    \n\t"
-                         "add $0x20, %2                                     \n\t"
-
-                         "sub $1, %%ecx                                     \n\t"
-                         "jg .k_loop_2x24                                    \n\t"
-                         ".align 16                                         \n\t"
-                         ".k_loop_2x24_end:                                  \n\t"
-
-                         "mov %0, %%ecx                                     \n\t"
-                         "and $3, %%ecx                                     \n\t"
-                         "je .k_loop_2x24_remain_end                         \n\t"
-
-                         ".align 16                                         \n\t"
-                         ".k_loop_2x24_remain:                               \n\t"
-                         "vmovaps (%1), %%ymm6                              \n\t"
-                         "vmovaps 0x20(%1), %%ymm7                          \n\t"
-                         "vmovaps 0x40(%1), %%ymm8                          \n\t"
-                         "vbroadcastss 0x0(%2), %%ymm9                      \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm6, %%ymm0                \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm7, %%ymm1                \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm8, %%ymm2                \n\t"
-                         "vbroadcastss 0x4(%2), %%ymm9                      \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm6, %%ymm3                \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm7, %%ymm4                \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm8, %%ymm5                \n\t"
-                         "add $0x60, %1                                     \n\t"
-                         "add $0x8, %2                                      \n\t"
-                         "sub $1, %%ecx                                     \n\t"
-                         "jg .k_loop_2x24_remain                             \n\t"
-
-                         ".align 16                                         \n\t"
-                         ".k_loop_2x24_remain_end:                           \n\t"
-                         "prefetcht0 (%3, %%rax)                            \n\t"
-                         "prefetcht0 0x40(%3, %%rax)                        \n\t"
-                         "vaddps (%3), %%ymm0, %%ymm0                       \n\t"
-                         "vaddps 0x20(%3), %%ymm1, %%ymm1                   \n\t"
-                         "vaddps 0x40(%3), %%ymm2, %%ymm2                   \n\t"
-                         "vmovups %%ymm0,  (%3)                             \n\t"
-                         "vmovups %%ymm1,  0x20(%3)                         \n\t"
-                         "vmovups %%ymm2,  0x40(%3)                         \n\t"
-                         "add %%rax, %3                                     \n\t"
-                         "vaddps (%3), %%ymm3, %%ymm3                       \n\t"
-                         "vaddps 0x20(%3), %%ymm4, %%ymm4                   \n\t"
-                         "vaddps 0x40(%3), %%ymm5, %%ymm5                   \n\t"
-                         "vmovups %%ymm3,  (%3)                             \n\t"
-                         "vmovups %%ymm4,  0x20(%3)                         \n\t"
-                         "vmovups %%ymm5,  0x40(%3)                         \n\t"
-                         :
-                         : "r"(bk), "r"(matrixB), "r"(matrixA), "r"(matrixC), "r"(N)
-                         : "%eax", "%rax", "%ecx", "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm4",
-                         "%ymm5", "%ymm6", "%ymm7", "%ymm8", "%ymm9", "memory");
-}
-
-void mmm_avx2_2x16_asm(U32 um, U32 un, U32 bk, F32 *matrixA, F32 *matrixB, F32 *matrixC, U32 N)
-{
-    __asm__ __volatile__("mov %4, %%eax                                     \n\t"
-                         "shl $2, %%eax                                     \n\t"
-                         "mov %%eax, %%eax                                  \n\t"
-
-                         "vxorps %%ymm0, %%ymm0, %%ymm0                     \n\t"
-                         "vxorps %%ymm1, %%ymm1, %%ymm1                     \n\t"
-                         "vxorps %%ymm3, %%ymm3, %%ymm3                     \n\t"
-                         "vxorps %%ymm4, %%ymm4, %%ymm4                     \n\t"
-
-                         "mov %0, %%ecx                                     \n\t"
-                         "shr $2, %%ecx                                     \n\t"
-                         "je .k_loop_2x16_end                                \n\t"
-
-                         ".align 16                                         \n\t"
-                         ".k_loop_2x16:                                      \n\t"
-
-                         "prefetcht0 0x140(%1)                              \n\t"
-
-                         "vmovaps (%1), %%ymm6                              \n\t"
-                         "vmovaps 0x20(%1), %%ymm7                          \n\t"
-                         "vbroadcastss 0x0(%2), %%ymm9                      \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm6, %%ymm0                \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm7, %%ymm1                \n\t"
-                         "vbroadcastss 0x4(%2), %%ymm9                      \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm6, %%ymm3                \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm7, %%ymm4                \n\t"
-
-                         "prefetcht0 0x180(%1)                              \n\t"
-
-                         "vmovaps 0x40(%1), %%ymm6                          \n\t"
-                         "vmovaps 0x60(%1), %%ymm7                          \n\t"
-                         "vbroadcastss 0x8(%2), %%ymm9                      \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm6, %%ymm0                \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm7, %%ymm1                \n\t"
-                         "vbroadcastss 0xC(%2), %%ymm9                      \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm6, %%ymm3                \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm7, %%ymm4                \n\t"
-
-                         "prefetcht0 0x1C0(%1)                              \n\t"
-
-                         "vmovaps 0x80(%1), %%ymm6                          \n\t"
-                         "vmovaps 0xA0(%1), %%ymm7                          \n\t"
-                         "vbroadcastss 0x10(%2), %%ymm9                     \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm6, %%ymm0                \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm7, %%ymm1                \n\t"
-                         "vbroadcastss 0x14(%2), %%ymm9                     \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm6, %%ymm3                \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm7, %%ymm4                \n\t"
-
-                         "prefetcht0 0x200(%1)                              \n\t"
-
-                         "vmovaps 0xC0(%1), %%ymm6                         \n\t"
-                         "vmovaps 0xE0(%1), %%ymm7                         \n\t"
-                         "vbroadcastss 0x18(%2), %%ymm9                     \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm6, %%ymm0                \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm7, %%ymm1                \n\t"
-                         "vbroadcastss 0x1C(%2), %%ymm9                     \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm6, %%ymm3                \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm7, %%ymm4                \n\t"
-
-                         "add $0x100, %1                                    \n\t"
-                         "add $0x20, %2                                     \n\t"
-
-                         "sub $1, %%ecx                                     \n\t"
-                         "jg .k_loop_2x16                                    \n\t"
-                         ".align 16                                         \n\t"
-                         ".k_loop_2x16_end:                                  \n\t"
-
-                         "mov %0, %%ecx                                     \n\t"
-                         "and $3, %%ecx                                     \n\t"
-                         "je .k_loop_2x16_remain_end                         \n\t"
-
-                         ".align 16                                         \n\t"
-                         ".k_loop_2x16_remain:                               \n\t"
-                         "vmovaps (%1), %%ymm6                              \n\t"
-                         "vmovaps 0x20(%1), %%ymm7                          \n\t"
-                         "vbroadcastss 0x0(%2), %%ymm9                      \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm6, %%ymm0                \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm7, %%ymm1                \n\t"
-                         "vbroadcastss 0x4(%2), %%ymm9                      \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm6, %%ymm3                \n\t"
-                         "vfmadd231ps %%ymm9, %%ymm7, %%ymm4                \n\t"
-                         "add $0x40, %1                                     \n\t"
-                         "add $0x8, %2                                      \n\t"
-                         "sub $1, %%ecx                                     \n\t"
-                         "jg .k_loop_2x16_remain                             \n\t"
-
-                         ".align 16                                         \n\t"
-                         ".k_loop_2x16_remain_end:                           \n\t"
-                         "prefetcht0 (%3, %%rax)                            \n\t"
-                         "vaddps (%3), %%ymm0, %%ymm0                       \n\t"
-                         "vaddps 0x20(%3), %%ymm1, %%ymm1                   \n\t"
-                         "vmovups %%ymm0,  (%3)                             \n\t"
-                         "vmovups %%ymm1,  0x20(%3)                         \n\t"
-                         "add %%rax, %3                                     \n\t"
-                         "prefetcht0 (%3, %%rax)                            \n\t"
-                         "vaddps (%3), %%ymm3, %%ymm3                       \n\t"
-                         "vaddps 0x20(%3), %%ymm4, %%ymm4                   \n\t"
-                         "vmovups %%ymm3,  (%3)                             \n\t"
-                         "vmovups %%ymm4,  0x20(%3)                         \n\t"
-                         :
-                         : "r"(bk), "r"(matrixB), "r"(matrixA), "r"(matrixC), "r"(N)
-                         : "%eax", "%rax", "%ecx", "%ymm0", "%ymm1", "%ymm3", "%ymm4", "%ymm6",
-                         "%ymm7", "%ymm9", "memory");
-}
-
-void mmm_avx2_2x8_asm(U32 um, U32 un, U32 bk, F32 *matrixA, F32 *matrixB, F32 *matrixC, U32 N)
-{
-    __asm__ __volatile__("mov %4, %%eax                                     \n\t"
-                         "shl $2, %%eax                                     \n\t"
-                         "mov %%eax, %%eax                                  \n\t"
-
-                         "vxorps %%ymm0, %%ymm0, %%ymm0                     \n\t"
-                         "vxorps %%ymm1, %%ymm1, %%ymm1                     \n\t"
-
-                         "mov %0, %%ecx                                     \n\t"
-                         "shr $2, %%ecx                                     \n\t"
-                         "je .k_loop_2x8_end                                 \n\t"
-
-                         ".align 16                                         \n\t"
-                         ".k_loop_2x8:                                       \n\t"
-
-                         "prefetcht0 0x140(%1)                              \n\t"
-                         "vmovaps (%1), %%ymm2                              \n\t"
-                         "vbroadcastss 0x0(%2), %%ymm3                      \n\t"
-                         "vfmadd231ps %%ymm3, %%ymm2, %%ymm0                \n\t"
-                         "vbroadcastss 0x4(%2), %%ymm3                      \n\t"
-                         "vfmadd231ps %%ymm3, %%ymm2, %%ymm1                \n\t"
-
-                         "vmovaps 0x20(%1), %%ymm2                          \n\t"
-                         "vbroadcastss 0x8(%2), %%ymm3                      \n\t"
-                         "vfmadd231ps %%ymm3, %%ymm2, %%ymm0                \n\t"
-                         "vbroadcastss 0xC(%2), %%ymm3                      \n\t"
-                         "vfmadd231ps %%ymm3, %%ymm2, %%ymm1                \n\t"
-
-                         "prefetcht0 0x180(%1)                              \n\t"
-                         "vmovaps 0x40(%1), %%ymm2                          \n\t"
-                         "vbroadcastss 0x10(%2), %%ymm3                     \n\t"
-                         "vfmadd231ps %%ymm3, %%ymm2, %%ymm0                \n\t"
-                         "vbroadcastss 0x14(%2), %%ymm3                     \n\t"
-                         "vfmadd231ps %%ymm3, %%ymm2, %%ymm1                \n\t"
-
-                         "vmovaps 0x60(%1), %%ymm2                          \n\t"
-                         "vbroadcastss 0x18(%2), %%ymm3                     \n\t"
-                         "vfmadd231ps %%ymm3, %%ymm2, %%ymm0                \n\t"
-                         "vbroadcastss 0x1C(%2), %%ymm3                     \n\t"
-                         "vfmadd231ps %%ymm3, %%ymm2, %%ymm1                \n\t"
-
-                         "add $0x80, %1                                     \n\t"
-                         "add $0x20, %2                                     \n\t"
-
-                         "sub $1, %%ecx                                     \n\t"
-                         "jg .k_loop_2x8                                     \n\t"
-                         ".align 16                                         \n\t"
-                         ".k_loop_2x8_end:                                   \n\t"
-
-                         "mov %0, %%ecx                                     \n\t"
-                         "and $3, %%ecx                                     \n\t"
-                         "je .k_loop_2x8_remain_end                          \n\t"
-
-                         ".align 16                                         \n\t"
-                         ".k_loop_2x8_remain:                                \n\t"
-                         "vmovaps (%1), %%ymm2                              \n\t"
-                         "vbroadcastss 0x0(%2), %%ymm3                      \n\t"
-                         "vfmadd231ps %%ymm3, %%ymm2, %%ymm0                \n\t"
-                         "vbroadcastss 0x4(%2), %%ymm3                      \n\t"
-                         "vfmadd231ps %%ymm3, %%ymm2, %%ymm1                \n\t"
-                         "add $0x20, %1                                     \n\t"
-                         "add $0x8, %2                                      \n\t"
-                         "sub $1, %%ecx                                     \n\t"
-                         "jg .k_loop_2x8_remain                              \n\t"
-
-                         ".align 16                                         \n\t"
-                         ".k_loop_2x8_remain_end:                            \n\t"
-
-                         "vaddps (%3), %%ymm0, %%ymm0                       \n\t"
-                         "vmovups %%ymm0,  (%3)                             \n\t"
-                         "add %%rax, %3                                     \n\t"
-                         "vaddps (%3), %%ymm1, %%ymm1                       \n\t"
-                         "vmovups %%ymm1,  (%3)                             \n\t"
-                         :
-                         : "r"(bk), "r"(matrixB), "r"(matrixA), "r"(matrixC), "r"(N)
-                         : "%eax", "%rax", "%ecx", "%ymm0", "%ymm1", "%ymm2", "%ymm3", "memory");
-}
-
-void mmm_avx2_2x4_asm(U32 um, U32 un, U32 bk, F32 *matrixA, F32 *matrixB, F32 *matrixC, U32 N)
-{
-    __asm__ __volatile__("mov %4, %%eax                                     \n\t"
-                         "shl $2, %%eax                                     \n\t"
-                         "mov %%eax, %%eax                                  \n\t"
-
-                         "vxorps %%xmm0, %%xmm0, %%xmm0                     \n\t"
-                         "vxorps %%xmm1, %%xmm1, %%xmm1                     \n\t"
-
-                         "mov %0, %%ecx                                     \n\t"
-                         "shr $2, %%ecx                                     \n\t"
-                         "je .k_loop_2x4_end                                 \n\t"
-
-                         ".align 16                                         \n\t"
-                         ".k_loop_2x4:                                       \n\t"
-
-                         "prefetcht0 0x140(%1)                              \n\t"
-                         "vmovaps (%1), %%xmm2                              \n\t"
-                         "vbroadcastss 0x0(%2), %%xmm3                      \n\t"
-                         "vfmadd231ps %%xmm3, %%xmm2, %%xmm0                \n\t"
-                         "vbroadcastss 0x4(%2), %%xmm3                      \n\t"
-                         "vfmadd231ps %%xmm3, %%xmm2, %%xmm1                \n\t"
-
-                         "vmovaps 0x10(%1), %%xmm2                          \n\t"
-                         "vbroadcastss 0x8(%2), %%xmm3                      \n\t"
-                         "vfmadd231ps %%xmm3, %%xmm2, %%xmm0                \n\t"
-                         "vbroadcastss 0xC(%2), %%xmm3                      \n\t"
-                         "vfmadd231ps %%xmm3, %%xmm2, %%xmm1                \n\t"
-
-                         "vmovaps 0x20(%1), %%xmm2                          \n\t"
-                         "vbroadcastss 0x10(%2), %%xmm3                     \n\t"
-                         "vfmadd231ps %%xmm3, %%xmm2, %%xmm0                \n\t"
-                         "vbroadcastss 0x14(%2), %%xmm3                     \n\t"
-                         "vfmadd231ps %%xmm3, %%xmm2, %%xmm1                \n\t"
-
-                         "vmovaps 0x30(%1), %%xmm2                          \n\t"
-                         "vbroadcastss 0x18(%2), %%xmm3                     \n\t"
-                         "vfmadd231ps %%xmm3, %%xmm2, %%xmm0                \n\t"
-                         "vbroadcastss 0x1C(%2), %%xmm3                     \n\t"
-                         "vfmadd231ps %%xmm3, %%xmm2, %%xmm1                \n\t"
-
-                         "add $0x40, %1                                     \n\t"
-                         "add $0x20, %2                                     \n\t"
-
-                         "sub $1, %%ecx                                     \n\t"
-                         "jg .k_loop_2x4                                     \n\t"
-                         ".align 16                                         \n\t"
-                         ".k_loop_2x4_end:                                   \n\t"
-
-                         "mov %0, %%ecx                                     \n\t"
-                         "and $3, %%ecx                                     \n\t"
-                         "je .k_loop_2x4_remain_end                          \n\t"
-
-                         ".align 16                                         \n\t"
-                         ".k_loop_2x4_remain:                                \n\t"
-                         "vmovaps (%1), %%xmm2                              \n\t"
-                         "vbroadcastss 0x0(%2), %%xmm3                      \n\t"
-                         "vfmadd231ps %%xmm3, %%xmm2, %%xmm0                \n\t"
-                         "vbroadcastss 0x4(%2), %%xmm3                      \n\t"
-                         "vfmadd231ps %%xmm3, %%xmm2, %%xmm1                \n\t"
-                         "add $0x10, %1                                     \n\t"
-                         "add $0x8, %2                                      \n\t"
-                         "sub $1, %%ecx                                     \n\t"
-                         "jg .k_loop_2x4_remain                              \n\t"
-
-                         ".align 16                                         \n\t"
-                         ".k_loop_2x4_remain_end:                            \n\t"
-
-                         "vaddps (%3), %%xmm0, %%xmm0                       \n\t"
-                         "vmovups %%xmm0, (%3)                              \n\t"
-                         "add %%rax, %3                                     \n\t"
-                         "vaddps (%3), %%xmm1, %%xmm1                       \n\t"
-                         "vmovups %%xmm1, (%3)                              \n\t"
-                         :
-                         : "r"(bk), "r"(matrixB), "r"(matrixA), "r"(matrixC), "r"(N)
-                         : "%eax", "%rax", "%ecx", "%xmm0", "%xmm1", "%xmm2", "%xmm3", "memory");
-}
-
-void mmm_avx2_1x24_asm(U32 um, U32 un, U32 bk, F32 *matrixA, F32 *matrixB, F32 *matrixC, U32 N)
-{
-    __asm__ __volatile__("mov %4, %%eax                                     \n\t"
-                         "shl $2, %%eax                                     \n\t"
-                         "mov %%eax, %%eax                                  \n\t"
-
-                         "vxorps %%ymm0, %%ymm0, %%ymm0                     \n\t"
-                         "vxorps %%ymm1, %%ymm1, %%ymm1                     \n\t"
-                         "vxorps %%ymm2, %%ymm2, %%ymm2                     \n\t"
-
-                         "mov %0, %%ecx                                     \n\t"
-                         "shr $2, %%ecx                                     \n\t"
-                         "je .k_loop_1x24_end                                \n\t"
-
-                         ".align 16                                         \n\t"
-                         ".k_loop_1x24:                                      \n\t"
-
-                         "prefetcht0 0x140(%1)                              \n\t"
-                         "prefetcht0 0x180(%1)                              \n\t"
-
-                         "vmovaps (%1), %%ymm3                              \n\t"
-                         "vmovaps 0x20(%1), %%ymm4                          \n\t"
-                         "vmovaps 0x40(%1), %%ymm5                          \n\t"
-                         "vbroadcastss 0x0(%2), %%ymm6                      \n\t"
-                         "vfmadd231ps %%ymm6, %%ymm3, %%ymm0                \n\t"
-                         "vfmadd231ps %%ymm6, %%ymm4, %%ymm1                \n\t"
-                         "vfmadd231ps %%ymm6, %%ymm5, %%ymm2                \n\t"
-
-                         "prefetcht0 0x1C0(%1)                              \n\t"
-
-                         "vmovaps 0x60(%1), %%ymm3                          \n\t"
-                         "vmovaps 0x80(%1), %%ymm4                          \n\t"
-                         "vmovaps 0xA0(%1), %%ymm5                          \n\t"
-                         "vbroadcastss 0x4(%2), %%ymm6                      \n\t"
-                         "vfmadd231ps %%ymm6, %%ymm3, %%ymm0                \n\t"
-                         "vfmadd231ps %%ymm6, %%ymm4, %%ymm1                \n\t"
-                         "vfmadd231ps %%ymm6, %%ymm5, %%ymm2                \n\t"
-
-                         "prefetcht0 0x200(%1)                              \n\t"
-                         "prefetcht0 0x240(%1)                              \n\t"
-
-                         "vmovaps 0xC0(%1), %%ymm3                          \n\t"
-                         "vmovaps 0xE0(%1), %%ymm4                          \n\t"
-                         "vmovaps 0x100(%1), %%ymm5                         \n\t"
-                         "vbroadcastss 0x8(%2), %%ymm6                      \n\t"
-                         "vfmadd231ps %%ymm6, %%ymm3, %%ymm0                \n\t"
-                         "vfmadd231ps %%ymm6, %%ymm4, %%ymm1                \n\t"
-                         "vfmadd231ps %%ymm6, %%ymm5, %%ymm2                \n\t"
-
-                         "prefetcht0 0x280(%1)                              \n\t"
-
-                         "vmovaps 0x120(%1), %%ymm3                         \n\t"
-                         "vmovaps 0x140(%1), %%ymm4                         \n\t"
-                         "vmovaps 0x160(%1), %%ymm5                         \n\t"
-                         "vbroadcastss 0xC(%2), %%ymm6                      \n\t"
-                         "vfmadd231ps %%ymm6, %%ymm3, %%ymm0                \n\t"
-                         "vfmadd231ps %%ymm6, %%ymm4, %%ymm1                \n\t"
-                         "vfmadd231ps %%ymm6, %%ymm5, %%ymm2                \n\t"
-
-                         "add $0x180, %1                                    \n\t"
-                         "add $0x10, %2                                     \n\t"
-
-                         "sub $1, %%ecx                                     \n\t"
-                         "jg .k_loop_1x24                                    \n\t"
-                         ".align 16                                         \n\t"
-                         ".k_loop_1x24_end:                                  \n\t"
-
-                         "mov %0, %%ecx                                     \n\t"
-                         "and $3, %%ecx                                     \n\t"
-                         "je .k_loop_1x24_remain_end                         \n\t"
-
-                         ".align 16                                         \n\t"
-                         ".k_loop_1x24_remain:                               \n\t"
-                         "vmovaps (%1), %%ymm3                              \n\t"
-                         "vmovaps 0x20(%1), %%ymm4                          \n\t"
-                         "vmovaps 0x40(%1), %%ymm5                          \n\t"
-                         "vbroadcastss (%2), %%ymm6                         \n\t"
-                         "vfmadd231ps %%ymm6, %%ymm3, %%ymm0                \n\t"
-                         "vfmadd231ps %%ymm6, %%ymm4, %%ymm1                \n\t"
-                         "vfmadd231ps %%ymm6, %%ymm5, %%ymm2                \n\t"
-                         "add $0x60, %1                                     \n\t"
-                         "add $0x4, %2                                      \n\t"
-                         "sub $1, %%ecx                                     \n\t"
-                         "jg .k_loop_1x24_remain                             \n\t"
-
-                         ".align 16                                         \n\t"
-                         ".k_loop_1x24_remain_end:                           \n\t"
-                         "prefetcht0 (%3, %%rax)                            \n\t"
-                         "prefetcht0 0x40(%3, %%rax)                        \n\t"
-                         "vaddps (%3), %%ymm0, %%ymm0                       \n\t"
-                         "vaddps 0x20(%3), %%ymm1, %%ymm1                   \n\t"
-                         "vaddps 0x40(%3), %%ymm2, %%ymm2                   \n\t"
-                         "vmovups %%ymm0,  (%3)                             \n\t"
-                         "vmovups %%ymm1,  0x20(%3)                         \n\t"
-                         "vmovups %%ymm2,  0x40(%3)                         \n\t"
-                         :
-                         : "r"(bk), "r"(matrixB), "r"(matrixA), "r"(matrixC), "r"(N)
-                         : "%eax", "%rax", "%ecx", "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm4",
-                         "%ymm5", "%ymm6", "memory");
-}
-
-void mmm_avx2_1x16_asm(U32 um, U32 un, U32 bk, F32 *matrixA, F32 *matrixB, F32 *matrixC, U32 N)
-{
-    __asm__ __volatile__(
-        "mov %4, %%eax                                     \n\t"
-        "shl $2, %%eax                                     \n\t"
-        "mov %%eax, %%eax                                  \n\t"
-
-        "vxorps %%ymm0, %%ymm0, %%ymm0                     \n\t"
-        "vxorps %%ymm1, %%ymm1, %%ymm1                     \n\t"
-
-        "mov %0, %%ecx                                     \n\t"
-        "shr $2, %%ecx                                     \n\t"
-        "je .k_loop_1x16_end                                \n\t"
-
-        ".align 16                                         \n\t"
-        ".k_loop_1x16:                                      \n\t"
-
-        "prefetcht0 0x140(%1)                              \n\t"
-
-        "vmovaps (%1), %%ymm2                              \n\t"
-        "vmovaps 0x20(%1), %%ymm3                          \n\t"
-        "vbroadcastss (%2), %%ymm5                         \n\t"
-        "vfmadd231ps %%ymm5, %%ymm2, %%ymm0                \n\t"
-        "vfmadd231ps %%ymm5, %%ymm3, %%ymm1                \n\t"
-
-        "prefetcht0 0x180(%1)                              \n\t"
-
-        "vmovaps 0x40(%1), %%ymm2                          \n\t"
-        "vmovaps 0x60(%1), %%ymm3                          \n\t"
-        "vbroadcastss 0x4(%2), %%ymm5                      \n\t"
-        "vfmadd231ps %%ymm5, %%ymm2, %%ymm0                \n\t"
-        "vfmadd231ps %%ymm5, %%ymm3, %%ymm1                \n\t"
-
-        "prefetcht0 0x1C0(%1)                              \n\t"
-
-        "vmovaps 0x80(%1), %%ymm2                          \n\t"
-        "vmovaps 0xA0(%1), %%ymm3                          \n\t"
-        "vbroadcastss 0x8(%2), %%ymm5                      \n\t"
-        "vfmadd231ps %%ymm5, %%ymm2, %%ymm0                \n\t"
-        "vfmadd231ps %%ymm5, %%ymm3, %%ymm1                \n\t"
-
-        "prefetcht0 0x200(%1)                              \n\t"
-
-        "vmovaps 0xC0(%1), %%ymm2                          \n\t"
-        "vmovaps 0xE0(%1), %%ymm3                          \n\t"
-        "vbroadcastss 0xC(%2), %%ymm5                      \n\t"
-        "vfmadd231ps %%ymm5, %%ymm2, %%ymm0                \n\t"
-        "vfmadd231ps %%ymm5, %%ymm3, %%ymm1                \n\t"
-
-        "add $0x100, %1                                    \n\t"
-        "add $0x10, %2                                     \n\t"
-
-        "sub $1, %%ecx                                     \n\t"
-        "jg .k_loop_1x16                                    \n\t"
-        ".align 16                                         \n\t"
-        ".k_loop_1x16_end:                                  \n\t"
-
-        "mov %0, %%ecx                                     \n\t"
-        "and $3, %%ecx                                     \n\t"
-        "je .k_loop_1x16_remain_end                         \n\t"
-
-        ".align 16                                         \n\t"
-        ".k_loop_1x16_remain:                               \n\t"
-        "vmovaps (%1), %%ymm2                              \n\t"
-        "vmovaps 0x20(%1), %%ymm3                          \n\t"
-        "vbroadcastss 0x0(%2), %%ymm5                      \n\t"
-        "vfmadd231ps %%ymm5, %%ymm2, %%ymm0                \n\t"
-        "vfmadd231ps %%ymm5, %%ymm3, %%ymm1                \n\t"
-        "add $0x40, %1                                     \n\t"
-        "add $0x4, %2                                      \n\t"
-        "sub $1, %%ecx                                     \n\t"
-        "jg .k_loop_1x16_remain                             \n\t"
-
-        ".align 16                                         \n\t"
-        ".k_loop_1x16_remain_end:                           \n\t"
-        "prefetcht0 (%3, %%rax)                            \n\t"
-        "vaddps (%3), %%ymm0, %%ymm0                       \n\t"
-        "vaddps 0x20(%3), %%ymm1, %%ymm1                   \n\t"
-        "vmovups %%ymm0,  (%3)                             \n\t"
-        "vmovups %%ymm1,  0x20(%3)                         \n\t"
-        :
-        : "r"(bk), "r"(matrixB), "r"(matrixA), "r"(matrixC), "r"(N)
-        : "%eax", "%rax", "%ecx", "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm5", "memory");
-}
-
-void mmm_avx2_1x8_asm(U32 um, U32 un, U32 bk, F32 *matrixA, F32 *matrixB, F32 *matrixC, U32 N)
-{
-    __asm__ __volatile__("mov %4, %%eax                                     \n\t"
-                         "shl $2, %%eax                                     \n\t"
-                         "mov %%eax, %%eax                                  \n\t"
-
-                         "vxorps %%ymm0, %%ymm0, %%ymm0                     \n\t"
-
-                         "mov %0, %%ecx                                     \n\t"
-                         "shr $2, %%ecx                                     \n\t"
-                         "je .k_loop_1x8_end                                 \n\t"
-
-                         ".align 16                                         \n\t"
-                         ".k_loop_1x8:                                       \n\t"
-
-                         "prefetcht0 0x140(%1)                              \n\t"
-                         "vmovaps (%1), %%ymm1                              \n\t"
-                         "vbroadcastss (%2), %%ymm2                         \n\t"
-                         "vfmadd231ps %%ymm2, %%ymm1, %%ymm0                \n\t"
-
-                         "vmovaps 0x20(%1), %%ymm1                          \n\t"
-                         "vbroadcastss 0x4(%2), %%ymm2                      \n\t"
-                         "vfmadd231ps %%ymm2, %%ymm1, %%ymm0                \n\t"
-
-                         "prefetcht0 0x180(%1)                              \n\t"
-                         "vmovaps 0x40(%1), %%ymm1                          \n\t"
-                         "vbroadcastss 0x8(%2), %%ymm2                      \n\t"
-                         "vfmadd231ps %%ymm2, %%ymm1, %%ymm0                \n\t"
-
-                         "vmovaps 0x60(%1), %%ymm1                          \n\t"
-                         "vbroadcastss 0xC(%2), %%ymm2                      \n\t"
-                         "vfmadd231ps %%ymm2, %%ymm1, %%ymm0                \n\t"
-
-                         "add $0x80, %1                                     \n\t"
-                         "add $0x10, %2                                     \n\t"
-
-                         "sub $1, %%ecx                                     \n\t"
-                         "jg .k_loop_1x8                                     \n\t"
-                         ".align 16                                         \n\t"
-                         ".k_loop_1x8_end:                                   \n\t"
-
-                         "mov %0, %%ecx                                     \n\t"
-                         "and $3, %%ecx                                     \n\t"
-                         "je .k_loop_1x8_remain_end                          \n\t"
-
-                         ".align 16                                         \n\t"
-                         ".k_loop_1x8_remain:                                \n\t"
-                         "vmovaps (%1), %%ymm1                              \n\t"
-                         "vbroadcastss (%2), %%ymm2                         \n\t"
-                         "vfmadd231ps %%ymm2, %%ymm1, %%ymm0                \n\t"
-                         "add $0x20, %1                                     \n\t"
-                         "add $0x4, %2                                      \n\t"
-                         "sub $1, %%ecx                                     \n\t"
-                         "jg .k_loop_1x8_remain                              \n\t"
-
-                         ".align 16                                         \n\t"
-                         ".k_loop_1x8_remain_end:                            \n\t"
-
-                         "vaddps (%3), %%ymm0, %%ymm0                       \n\t"
-                         "vmovups %%ymm0,  (%3)                             \n\t"
-                         :
-                         : "r"(bk), "r"(matrixB), "r"(matrixA), "r"(matrixC), "r"(N)
-                         : "%eax", "%rax", "%ecx", "%ymm0", "%ymm1", "%ymm2", "memory");
-}
-
-void mmm_avx2_1x4_asm(U32 um, U32 un, U32 bk, F32 *matrixA, F32 *matrixB, F32 *matrixC, U32 N)
-{
-    __asm__ __volatile__("mov %4, %%eax                                     \n\t"
-                         "shl $2, %%eax                                     \n\t"
-                         "mov %%eax, %%eax                                  \n\t"
-
-                         "vxorps %%xmm0, %%xmm0, %%xmm0                     \n\t"
-
-                         "mov %0, %%ecx                                     \n\t"
-                         "shr $2, %%ecx                                     \n\t"
-                         "je .k_loop_1x4_end                                 \n\t"
-                         ".align 16                                         \n\t"
-                         ".k_loop_1x4:                                       \n\t"
-
-                         "prefetcht0 0x40(%1)                               \n\t"
-
-                         "vmovaps (%1), %%xmm1                              \n\t"
-                         "vbroadcastss 0x0(%2), %%xmm2                      \n\t"
-                         "vfmadd231ps %%xmm2, %%xmm1, %%xmm0                \n\t"
-
-                         "vmovaps 0x10(%1), %%xmm1                          \n\t"
-                         "vbroadcastss 0x4(%2), %%xmm2                      \n\t"
-                         "vfmadd231ps %%xmm2, %%xmm1, %%xmm0                \n\t"
-
-                         "vmovaps 0x20(%1), %%xmm1                          \n\t"
-                         "vbroadcastss 0x8(%2), %%xmm2                      \n\t"
-                         "vfmadd231ps %%xmm2, %%xmm1, %%xmm0                \n\t"
-
-                         "vmovaps 0x30(%1), %%xmm1                          \n\t"
-                         "vbroadcastss 0xC(%2), %%xmm2                      \n\t"
-                         "vfmadd231ps %%xmm2, %%xmm1, %%xmm0                \n\t"
-
-                         "add $0x40, %1                                     \n\t"
-                         "add $0x10, %2                                     \n\t"
-
-                         "sub $1, %%ecx                                     \n\t"
-                         "jg .k_loop_1x4                                     \n\t"
-                         ".align 16                                         \n\t"
-                         ".k_loop_1x4_end:                                   \n\t"
-
-                         "mov %0, %%ecx                                     \n\t"
-                         "and $3, %%ecx                                     \n\t"
-                         "je .k_loop_1x4_remain_end                          \n\t"
-
-                         ".align 16                                         \n\t"
-                         ".k_loop_1x4_remain:                                \n\t"
-                         "vmovaps (%1), %%xmm1                              \n\t"
-                         "vbroadcastss 0x0(%2), %%xmm2                      \n\t"
-                         "vfmadd231ps %%xmm2, %%xmm1, %%xmm0                \n\t"
-                         "add $0x10, %1                                     \n\t"
-                         "add $0x4, %2                                      \n\t"
-                         "sub $1, %%ecx                                     \n\t"
-                         "jg .k_loop_1x4_remain                              \n\t"
-
-                         ".align 16                                         \n\t"
-                         ".k_loop_1x4_remain_end:                            \n\t"
-
-                         "vaddps (%3), %%xmm0, %%xmm0                       \n\t"
-                         "vmovups %%xmm0,  (%3)                             \n\t"
-                         "add %%rax, %3                                     \n\t"
-                         :
-                         : "r"(bk), "r"(matrixB), "r"(matrixA), "r"(matrixC), "r"(N)
-                         : "%eax", "%rax", "%ecx", "%xmm0", "%xmm1", "%xmm2", "memory");
-}
-
-void mmm_avx2_n_mtail(U32 um, U32 un, U32 bk, F32 *matrixA, F32 *matrixB, F32 *matrixC, U32 N)
-{
-    for (U32 i = 0; i < um; ++i) {
-        for (U32 j = 0; j < un; ++j) {
-            for (U32 k = 0; k < bk; ++k) {
-                matrixC[i * N + j] += matrixA[k * um + i] * matrixB[k * un + j];
-            }
-        }
-    }
 }
 
 EE mmm_avx2_fp32(
@@ -1365,80 +649,73 @@ EE mmm_avx2_fp32(
     // buffer addr algined to 32
     F32 *packA = (F32 *)align_addr(tmp, 32);
     F32 *packB = (F32 *)align_addr(matrix2, 32);
-    kernel_func kernel[3][5] = {
+    kernel_func kernel[4][5] = {
         {mmm_avx2_n_mtail, mmm_avx2_1x4_asm, mmm_avx2_1x8_asm, mmm_avx2_1x16_asm, mmm_avx2_1x24_asm},
         {mmm_avx2_n_mtail, mmm_avx2_2x4_asm, mmm_avx2_2x8_asm, mmm_avx2_2x16_asm, mmm_avx2_2x24_asm},
+        {mmm_avx2_n_mtail, mmm_avx2_3x4_asm, mmm_avx2_3x8_asm, mmm_avx2_3x16_asm, mmm_avx2_3x24_asm},
         {mmm_avx2_n_mtail, mmm_avx2_4x4_asm, mmm_avx2_4x8_asm, mmm_avx2_4x16_asm, mmm_avx2_4x24_asm}};
     F32 unrollNSize[4] = {4, 8, 16, 24};
-    F32 unrollMSize[3] = {1, 2, 4};
-    I32 resN = N % 24;
-    I32 blockNNum = N / 24;
-    I32 edgeblockNSizeArray[5] = {0};
-    for (U32 i = 0; resN > 0; ++i) {
-        U32 value = UNI_MIN(unrollNSize[resN >> 3], resN);
-        edgeblockNSizeArray[i] += value;
-        edgeblockNSizeArray[i + 1] = edgeblockNSizeArray[i];
-        resN -= value;
-        blockNNum += 1;
+    F32 unrollMSize[4] = {1, 2, 3, 4};
+    I32 resN = N % UNROLL_N;
+    I32 blockNNum = N / UNROLL_N + (resN > 0);
+    I32 edgeBlockNSizeIdx = (resN > 4) ? ((resN + 7) / 8) : 0;
+    I32 edgeBlockNSize = (resN > 0) ? unrollNSize[edgeBlockNSizeIdx] : 0;
+    I32 mask[8] = {-1, -1, -1, -1, -1, -1, -1, -1};
+    if (resN != edgeBlockNSize) {
+        UNI_MEMSET(mask + resN % 8, 0, (edgeBlockNSize - resN) * 4);
     }
+    I32 *maskPtr = (N % 4 != 0) ? mask : nullptr;
+    I32 alginedN = (blockNNum - 1) * UNROLL_N + edgeBlockNSize;
+    if (edgeBlockNSize == 0) {
+        alginedN += UNROLL_N;
+    }
+    I32 blockNum = (M + 3) / 4 * blockNNum;
+    I32 mainBlockNum = (BOLCK_M_DIM + 3) / 4 * blockNNum;
 
 #ifdef _USE_OPENMP
-#pragma omp parallel num_threads(OMP_NUM_THREADS)
+    int in_parallel = omp_in_parallel();
+#pragma omp parallel num_threads(OMP_NUM_THREADS) if (in_parallel == 0)
     {
 #endif
-        I32 blockSizeM = 0, blockSizeK = 0;
+        I32 blockSizeK = 0;
         for (int k = 0; k < K; k += blockSizeK) {
             blockSizeK = UNI_MIN(BOLCK_K_DIM, K - k);
-            for (int j = 0; j < M; j += blockSizeM) {
-                blockSizeM = UNI_MIN(BOLCK_M_DIM, M - j);
-                I32 blockMNum = blockSizeM / 4 + (blockSizeM % 4 + 1) / 2;
+            if (matrix1Df == DF_TRANSPOSE) {
+                matrix1_trans(blockSizeK, M, M, matrix1 + k * M, packA);
+            }
+
 #ifdef _USE_OPENMP
 #pragma omp for
 #endif
-                for (I32 mIdx = 0; mIdx < blockMNum; ++mIdx) {
-                    I32 m = mIdx * 4 - ((mIdx * 4) > blockSizeM) * 2;
-                    I32 unrollSizeM = UNI_MIN(UNROLL_M, blockSizeM - m);
-                    unrollSizeM = unrollMSize[unrollSizeM >> 1];
+            for (int mnIdx = 0; mnIdx < blockNum; ++mnIdx) {
+                I32 j = mnIdx / mainBlockNum * BOLCK_M_DIM;
+                I32 blockSizeM = UNI_MIN(BOLCK_M_DIM, M - j);
+                I32 blockMNum = (blockSizeM + 3) / 4;
 
-                    I32 blockSizeN = UNI_MIN(UNROLL_N, N);
-                    blockSizeN = UNI_MIN(unrollNSize[blockSizeN >> 3], blockSizeN);
+                I32 n = (mnIdx % mainBlockNum) / blockMNum * UNROLL_N;
+                I32 blockSizeN = UNI_MAX(UNI_MIN(UNROLL_N, N - n), edgeBlockNSize);
+                F32 *curB = packB + k * alginedN + n * blockSizeK;
+                maskPtr = ((blockSizeN + n) > N) ? mask : nullptr;
 
-                    F32 *curB = packB + k * N;
-                    F32 *curA = packA + m * blockSizeK;
-                    if (matrix1Df == DF_TRANSPOSE) {
-                        matrix2_trans(unrollSizeM, blockSizeK, M, matrix1 + (j + m) + k * M, curA);
-                    } else if (matrix1Df == DF_NORMAL) {
-                        matrix1_trans(unrollSizeM, blockSizeK, K, matrix1 + k + (j + m) * K, curA);
-                    } else if (matrix1Df == DF_NKN8) {
-                        matrix2_trans_c8(
-                            unrollSizeM, blockSizeK, M, matrix1 + (j + m) * 8 + k * M, curA);
-                    }
-                    kernel[unrollSizeM >> 1][(blockSizeN >> 3) + (blockSizeN > 3)](
-                        unrollSizeM, blockSizeN, blockSizeK, curA, curB, result + (m + j) * N, N);
+                I32 m = ((mnIdx % mainBlockNum) % blockMNum) * UNROLL_M;
+                I32 unrollSizeM = UNI_MIN(UNROLL_M, blockSizeM - m);
+
+                F32 *curA, *A1, *A2, *A3;
+                if (matrix1Df == DF_TRANSPOSE) {
+                    curA = packA + m * blockSizeK;
+                    A1 = curA + blockSizeK;
+                    A2 = curA + 2 * blockSizeK;
+                    A3 = curA + 3 * blockSizeK;
+                } else {
+                    curA = matrix1 + k + (j + m) * K;
+                    A1 = curA + K;
+                    A2 = curA + 2 * K;
+                    A3 = curA + 3 * K;
                 }
-#ifdef _USE_OPENMP
-#pragma omp for
-#endif
-                for (int mnIdx = blockMNum; mnIdx < blockNNum * blockMNum; ++mnIdx) {
-                    I32 nIdx = mnIdx / blockMNum;
-                    I32 n = nIdx * UNROLL_N;
-                    if (n >= N) {
-                        U32 idx = (n - N) / UNROLL_N;
-                        CHECK_REQUIREMENT(idx <= 4);
-                        n = N / UNROLL_N * UNROLL_N + edgeblockNSizeArray[idx];
-                    }
-                    I32 blockSizeN = UNI_MIN(UNROLL_N, N - n);
-                    blockSizeN = UNI_MIN(unrollNSize[blockSizeN >> 3], blockSizeN);
-                    F32 *curB = packB + k * N + n * blockSizeK;
 
-                    I32 mIdx = mnIdx % blockMNum;
-                    I32 m = mIdx * 4 - ((mIdx * 4) > blockSizeM) * 2;
-                    I32 unrollSizeM = UNI_MIN(UNROLL_M, blockSizeM - m);
-                    unrollSizeM = unrollMSize[unrollSizeM >> 1];
-                    kernel[unrollSizeM >> 1][(blockSizeN >> 3) + (blockSizeN > 3)](unrollSizeM,
-                        blockSizeN, blockSizeK, packA + m * blockSizeK, curB,
-                        result + (m + j) * N + n, N);
-                }
+                kernel[unrollSizeM - 1][(blockSizeN >> 3) + (blockSizeN > 3)](unrollSizeM,
+                    blockSizeN, blockSizeK, curA, curB, result + (m + j) * N + n, N, maskPtr,
+                    A1, A2, A3);
             }
         }
 #ifdef _USE_OPENMP

@@ -17,7 +17,8 @@
 void *OnlineModelConversion(const char *storagePath,
     const char *modelName,
     const char *inferPrecision,
-    int removeProcessOpsNum);
+    int removeProcessOpsNum = 0,
+    bool trainMode = false);
 
 void OnlineModelReclaim(void *ms);
 #endif

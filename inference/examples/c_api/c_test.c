@@ -13,13 +13,13 @@
 
 #include <sys/time.h>
 #include <unistd.h>
-#include <string.h>
 #include <stdio.h>
+#include <string.h>
 #include "../../examples/c_api/c_test.h"
 
 char *modelPath = (char *)"";
 AFFINITY_TYPE affinity = CPU_HIGH_PERFORMANCE;
-char *algorithmMapPath = (char *)"./";
+char *algorithmMapPath = NULL;
 int loopTime = 1;
 int useFileStream = 0;
 char *algorithmMapName = (char *)"";

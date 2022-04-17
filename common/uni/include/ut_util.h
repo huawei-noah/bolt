@@ -14,7 +14,7 @@
 #ifndef _H_UT_UTIL
 #define _H_UT_UTIL
 
-#include <string.h>
+#include <math.h>
 
 #include "sys.h"
 #include "uni.h"
@@ -181,6 +181,10 @@ inline void ut_check_v(
                 a = ((INT8 *)A)[i];
                 b = ((INT8 *)B)[i];
                 break;
+            case DT_U8:
+                a = ((U8 *)A)[i];
+                b = ((U8 *)B)[i];
+                break;
             case DT_BIN11:
                 a = ((BIN8 *)A)[i];
                 b = ((BIN8 *)B)[i];
@@ -217,6 +221,9 @@ inline void ut_check_v(void *A, F32 val, U32 len, DataType dt, const char *file,
             case DT_U32:
                 a = ((U32 *)A)[i];
                 break;
+            case DT_U8:
+                a = ((U8 *)A)[i];
+                break;
             case DT_BIN11:
                 a = ((BIN8 *)A)[i];
                 break;
@@ -245,10 +252,10 @@ inline void ut_check_a(void *A, void *B, U32 len, DataType dt)
     switch (dt) {
         case DT_F32:
         case DT_F16:
-            memcpy(threshold, threshold_float, sizeof(F32) * num);
+            UNI_MEMCPY(threshold, threshold_float, sizeof(F32) * num);
             break;
         case DT_U8:
-            memcpy(threshold, threshold_int8, sizeof(F32) * num);
+            UNI_MEMCPY(threshold, threshold_int8, sizeof(F32) * num);
             break;
         default:
             UNI_ERROR_LOG("unsupported data type.\n");
@@ -274,11 +281,11 @@ inline void ut_check_a(void *A, void *B, U32 len, DataType dt)
                 break;
         }
 
-        if (UNI_ISNAN((float)a) || UNI_ISINF((float)a)) {
+        if (isnan((float)a) || isinf((float)a)) {
             UNI_ERROR_LOG("nan or inf value in ut_check_a of input A\n");
             return;
         }
-        if (UNI_ISNAN((float)b) || UNI_ISINF((float)b)) {
+        if (isnan((float)b) || isinf((float)b)) {
             UNI_ERROR_LOG("nan or inf value in ut_check_a of input B\n");
             return;
         }

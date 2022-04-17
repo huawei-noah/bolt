@@ -14,11 +14,8 @@
 #ifndef _H_ARM_FUNCTIONS_FP16
 #define _H_ARM_FUNCTIONS_FP16
 
-#include <math.h>
+#include "cpu/cpu_functions_template.h"
 #include "arm_neon_expand.h"
-#include "uni.h"
-#include "data_type.h"
-#include "parameter_spec.h"
 
 // array sum
 inline F32 array_sum_f16(const F16 *data, I32 len)
@@ -237,7 +234,7 @@ inline void array_power_f16(F16 *input, F16 *output, I32 len, F32 power)
 #endif
     } else if (power == 1) {
         if (input != output) {
-            memcpy(output, input, len * sizeof(F16));
+            UNI_MEMCPY(output, input, len * sizeof(F16));
         }
         i = len;
     } else if (power == 2) {
@@ -263,137 +260,110 @@ inline void array_power_f16(F16 *input, F16 *output, I32 len, F32 power)
 
 inline EE activation_fp16(F16 *input, U32 len, ActivationParamSpec activationDesc, F16 *output)
 {
-    float16x8_t in, out;
     float16x8_t zero = vdupq_n_f16(float16_t(0.));
     float16x8_t one = vdupq_n_f16(float16_t(1.));
     float16x8_t three = vdupq_n_f16(float16_t(3.));
     float16x8_t six = vdupq_n_f16(float16_t(6.));
-    U32 len_main = len / 8;
-    U32 len_tail = len % 8;
-
-    F16 value;
+    U32 loops = len / 8 * 8;
     EE ret = SUCCESS;
     switch (activationDesc.mode) {
         case ACTIVATION_NULL: {
+            if (output != input) {
+                UNI_MEMCPY(output, input, sizeof(F16) * len);
+            }
+            loops = len;
             break;
         }
         case ACTIVATION_RELU: {
             if (activationDesc.value[0] == 0) {
-                for (U32 i = 0; i < len_main; i++) {
-                    in = vld1q_f16(input);
-                    out = vmaxq_f16(zero, in);
-                    vst1q_f16(output, out);
-                    input += 8;
-                    output += 8;
-                }
-                for (U32 i = 0; i < len_tail; i++) {
-                    output[i] = (input[i] < 0) ? 0 : input[i];
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
+                for (U32 i = 0; i < loops; i += 8) {
+                    float16x8_t in = vld1q_f16(input + i);
+                    float16x8_t out = vmaxq_f16(zero, in);
+                    vst1q_f16(output + i, out);
                 }
             } else {
                 float16x8_t scale = vdupq_n_f16(activationDesc.value[0]);
-                for (U32 i = 0; i < len_main; i++) {
-                    in = vld1q_f16(input);
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
+                for (U32 i = 0; i < loops; i += 8) {
+                    float16x8_t in = vld1q_f16(input + i);
                     float16x8_t tmp = vmulq_f16(scale, in);
-                    out = vmaxq_f16(tmp, in);
-                    vst1q_f16(output, out);
-                    input += 8;
-                    output += 8;
-                }
-                for (U32 i = 0; i < len_tail; i++) {
-                    float tmp = activationDesc.value[0] * input[i];
-                    output[i] = (input[i] < tmp) ? tmp : input[i];
+                    float16x8_t out = vmaxq_f16(tmp, in);
+                    vst1q_f16(output + i, out);
                 }
             }
             break;
         }
         case ACTIVATION_RELU6: {
-            for (U32 i = 0; i < len_main; i++) {
-                in = vld1q_f16(input);
-                out = vmaxq_f16(zero, in);
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
+            for (U32 i = 0; i < loops; i += 8) {
+                float16x8_t in = vld1q_f16(input + i);
+                float16x8_t out = vmaxq_f16(zero, in);
                 out = vminq_f16(six, out);
-                vst1q_f16(output, out);
-                input += 8;
-                output += 8;
-            }
-            for (U32 i = 0; i < len_tail; i++) {
-                value = (input[i] < 0) ? 0 : input[i];
-                if (value > 6) {
-                    value = 6;
-                }
-                output[i] = value;
+                vst1q_f16(output + i, out);
             }
             break;
         }
         case ACTIVATION_H_SIGMOID: {
-            for (U32 i = 0; i < len_main; i++) {
-                in = vld1q_f16(input);
-                out = vaddq_f16(in, three);
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
+
+            for (U32 i = 0; i < loops; i += 8) {
+                float16x8_t in = vld1q_f16(input + i);
+                float16x8_t out = vaddq_f16(in, three);
                 out = vmaxq_f16(out, zero);
                 out = vminq_f16(out, six);
                 out = vdivq_f16(out, six);
-                vst1q_f16(output, out);
-                input += 8;
-                output += 8;
-            }
-            for (U32 i = 0; i < len_tail; i++) {
-                value = input[i] + 3;
-                value = (value < 0) ? 0 : value;
-                value = (value > 6) ? 6 : value;
-                value = value / 6;
-                output[i] = value;
+                vst1q_f16(output + i, out);
             }
             break;
         }
         case ACTIVATION_H_SWISH: {
-            for (U32 i = 0; i < len_main; i++) {
-                in = vld1q_f16(input);
-                out = vaddq_f16(in, three);
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
+            for (U32 i = 0; i < loops; i += 8) {
+                float16x8_t in = vld1q_f16(input + i);
+                float16x8_t out = vaddq_f16(in, three);
                 out = vmaxq_f16(out, zero);
                 out = vminq_f16(out, six);
                 out = vdivq_f16(out, six);
                 out = vmulq_f16(out, in);
-                vst1q_f16(output, out);
-                input += 8;
-                output += 8;
-            }
-            for (U32 i = 0; i < len_tail; i++) {
-                value = input[i] + 3;
-                value = (value < 0) ? 0 : value;
-                value = (value > 6) ? 6 : value;
-                value = input[i] * value;
-                value = value / 6;
-                output[i] = value;
+                vst1q_f16(output + i, out);
             }
             break;
         }
         case ACTIVATION_H_SWISH_NODIV: {
-            for (U32 i = 0; i < len_main; i++) {
-                in = vld1q_f16(input);
-                out = vaddq_f16(in, three);
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
+            for (U32 i = 0; i < loops; i += 8) {
+                float16x8_t in = vld1q_f16(input + i);
+                float16x8_t out = vaddq_f16(in, three);
                 out = vmaxq_f16(out, zero);
                 out = vminq_f16(out, six);
                 out = vmulq_f16(out, in);
-                vst1q_f16(output, out);
-                input += 8;
-                output += 8;
-            }
-            for (U32 i = 0; i < len_tail; i++) {
-                value = input[i] + 3;
-                value = (value < 0) ? 0 : value;
-                value = (value > 6) ? 6 : value;
-                value = input[i] * value;
-                output[i] = value;
+                vst1q_f16(output + i, out);
             }
             break;
         }
         case ACTIVATION_GELU: {
-            F16 two_div_PI_sqrt = sqrt(2 / 3.14159265358979323846);
-            float16x8_t vec0 = vdupq_n_f16(two_div_PI_sqrt);
+            float16x8_t vec0 = vdupq_n_f16(sqrt(2 / 3.14159265358979323846));
             float16x8_t vec1 = vdupq_n_f16(float16_t(0.044715));
             float16x8_t vec2 = vdupq_n_f16(float16_t(0.5));
-            for (U32 i = 0; i < len_main; i++) {
-                in = vld1q_f16(input);
-                out = vmulq_f16(in, in);
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
+            for (U32 i = 0; i < loops; i += 8) {
+                float16x8_t in = vld1q_f16(input + i);
+                float16x8_t out = vmulq_f16(in, in);
                 out = vmulq_f16(out, in);
                 out = vfmaq_f16(in, vec1, out);
                 out = vmulq_f16(vec0, out);
@@ -401,135 +371,121 @@ inline EE activation_fp16(F16 *input, U32 len, ActivationParamSpec activationDes
                 out = vaddq_f16(one, out);
                 out = vmulq_f16(vec2, out);
                 out = vmulq_f16(in, out);
-                vst1q_f16(output, out);
-                input += 8;
-                output += 8;
-            }
-            for (U32 i = 0; i < len_tail; i++) {
-                value = input[i];
-                value = two_div_PI_sqrt * (value + 0.044715 * powf(value, 3));
-                value = 1.0 - 2.0 / (exp(2.0 * value) + 1.0);
-                value = 0.5 * (1.0 + value);
-                value = input[i] * value;
-                output[i] = value;
+                vst1q_f16(output + i, out);
             }
             break;
         }
         case ACTIVATION_TANH: {
-            for (U32 i = 0; i < len_main; i++) {
-                in = vld1q_f16(input);
-                out = vtanhq_f16(in);
-                vst1q_f16(output, out);
-                input += 8;
-                output += 8;
-            }
-            for (U32 i = 0; i < len_tail; i++) {
-                value = 1.0 - 2.0 / (exp(2.0 * input[i]) + 1.0);
-                output[i] = value;
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
+            for (U32 i = 0; i < loops; i += 8) {
+                float16x8_t in = vld1q_f16(input + i);
+                float16x8_t out = vtanhq_f16(in);
+                vst1q_f16(output + i, out);
             }
             break;
         }
         case ACTIVATION_SIGMOID: {
-            for (U32 i = 0; i < len_main; i++) {
-                in = vld1q_f16(input);
-                out = vsigmoidq_f16(in);
-                vst1q_f16(output, out);
-                input += 8;
-                output += 8;
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
+            for (U32 i = 0; i < loops; i += 8) {
+                float16x8_t in = vld1q_f16(input + i);
+                float16x8_t out = vsigmoidq_f16(in);
+                vst1q_f16(output + i, out);
             }
-            for (U32 i = 0; i < len_tail; i++) {
-                value = 1.0 / (1.0 + exp(-1.0 * input[i]));
-                output[i] = value;
+            break;
+        }
+        case ACTIVATION_SWISH: {
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
+            for (U32 i = 0; i < loops; i += 8) {
+                float16x8_t in = vld1q_f16(input + i);
+                float16x8_t out = vmulq_f16(in, vsigmoidq_f16(in));
+                vst1q_f16(output + i, out);
             }
             break;
         }
         case ACTIVATION_MISH: {
-            for (U32 i = 0; i < len_main; i++) {
-                in = vld1q_f16(input);
-                out = vmulq_f16(
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
+            for (U32 i = 0; i < loops; i += 8) {
+                float16x8_t in = vld1q_f16(input + i);
+                float16x8_t out = vmulq_f16(
                     in, vtanhq_f16(vlogq_f16(vaddq_f16(vexpq_f16_03_percent_error(in), one))));
-                vst1q_f16(output, out);
-                input += 8;
-                output += 8;
-            }
-            for (U32 i = 0; i < len_tail; i++) {
-                value = input[i] * tanh(log(exp(input[i]) + 1.0));
-                output[i] = value;
-            }
-            break;
-        }
-        case ACTIVATION_GREATER: {
-            for (U32 i = 0; i < len; i++) {
-                output[i] = input[i] > 1 ? 1 : 0;
+                vst1q_f16(output + i, out);
             }
             break;
         }
         case ACTIVATION_SOFTPLUS: {
-            for (U32 i = 0; i < len_main; i++) {
-                in = vld1q_f16(input);
-                out = vlogq_f16(vaddq_f16(vexpq_f16_03_percent_error(in), one));
-                vst1q_f16(output, out);
-                input += 8;
-                output += 8;
-            }
-            for (U32 i = 0; i < len_tail; i++) {
-                output[i] = log(1 + exp(input[i]));
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
+            for (U32 i = 0; i < loops; i += 8) {
+                float16x8_t in = vld1q_f16(input + i);
+                float16x8_t out = vlogq_f16(vaddq_f16(vexpq_f16_03_percent_error(in), one));
+                vst1q_f16(output + i, out);
             }
             break;
         }
         case ACTIVATION_EXP: {
-            for (U32 i = 0; i < len_main; i++) {
-                in = vld1q_f16(input);
-                out = vexpq_f16_03_percent_error(in);
-                vst1q_f16(output, out);
-                input += 8;
-                output += 8;
-            }
-            for (U32 i = 0; i < len_tail; i++) {
-                output[i] = exp(input[i]);
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
+            for (U32 i = 0; i < loops; i += 8) {
+                float16x8_t in = vld1q_f16(input + i);
+                float16x8_t out = vexpq_f16_03_percent_error(in);
+                vst1q_f16(output + i, out);
             }
             break;
         }
         case ACTIVATION_ABS: {
-            for (U32 i = 0; i < len_main; i++) {
-                in = vld1q_f16(input);
-                out = vabsq_f16(in);
-                vst1q_f16(output, out);
-                input += 8;
-                output += 8;
-            }
-            for (U32 i = 0; i < len_tail; i++) {
-                output[i] = UNI_ABS(input[i]);
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
+            for (U32 i = 0; i < loops; i += 8) {
+                float16x8_t in = vld1q_f16(input + i);
+                float16x8_t out = vabsq_f16(in);
+                vst1q_f16(output + i, out);
             }
             break;
         }
-        case ACTIVATION_SIGN: {
-            for (U32 i = 0; i < len; i++) {
-                output[i] = UNI_SIGN(input[i]);
+        case ACTIVATION_RECIPROCAL: {
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
+            for (U32 i = 0; i < loops; i += 8) {
+                float16x8_t in = vld1q_f16(input + i);
+                float16x8_t out = vdivq_f16(one, in);
+                vst1q_f16(output + i, out);
             }
             break;
         }
-        case ACTIVATION_LOG: {
-            for (U32 i = 0; i < len; i++) {
-                output[i] = log(input[i]);
-            }
-            break;
-        }
-        case ACTIVATION_NOT: {
-            for (U32 i = 0; i < len; i++) {
-                output[i] = (input[i] > 0) ? 0 : 1;
-            }
-            break;
-        }
-        case ACTIVATION_NEG: {
-            for (U32 i = 0; i < len; i++) {
-                output[i] = -input[i];
-            }
+        case ACTIVATION_SIGN:
+        case ACTIVATION_LOG:
+        case ACTIVATION_NOT:
+        case ACTIVATION_GREATER:
+        case ACTIVATION_NEG:
+        case ACTIVATION_ROUND:
+        case ACTIVATION_CEIL:
+        case ACTIVATION_FLOOR: {
+            loops = 0;
             break;
         }
         default:
             ret = NOT_SUPPORTED;
             break;
+    }
+    if (ret == SUCCESS) {
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
+        for (U32 i = loops; i < len; i++) {
+            ret = activation_template<F16>(activationDesc, input[i], output + i);
+        }
     }
     return ret;
 }

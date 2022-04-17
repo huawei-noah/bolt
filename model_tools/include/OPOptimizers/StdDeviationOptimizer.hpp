@@ -23,9 +23,8 @@ class StdDeviationOptimizer : public OPOptimizer {
         for (int i = 0; i < spec->num_operator_specs - 2; i++) {
             if (OT_SqDiff == spec->ops[i].type) {
                 if (OT_Reduction == spec->ops[i + 1].type && OT_Power == spec->ops[i + 2].type) {
-                    CHECK_REQUIREMENT(
-                        REDUCTION_MEAN == spec->ops[i + 1].ps.reduction_spec.reduction_mode);
-                    spec->ops[i + 1].ps.reduction_spec.reduction_mode = REDUCTION_STD_DEVIATION;
+                    CHECK_REQUIREMENT(REDUCTION_MEAN == spec->ops[i + 1].ps.reduction_spec.mode);
+                    spec->ops[i + 1].ps.reduction_spec.mode = REDUCTION_STD_DEVIATION;
 
                     str_copy(spec->ops[i + 1].input_tensors_name[0],
                         spec->ops[i].input_tensors_name[0], NAME_LEN);

@@ -41,7 +41,7 @@ EE matrix_vector_multiply_transform_weight_int8(
             I32 *sumB = nullptr;
             if (!hasBias) {
                 sumB = (I32 *)packB;
-                memset(sumB, 0, N * sizeof(I32));
+                UNI_MEMSET(sumB, 0, N * sizeof(I32));
                 packB += N * bytesOf(DT_I32);
             } else {
                 sumB = offsetCBias;
@@ -49,13 +49,13 @@ EE matrix_vector_multiply_transform_weight_int8(
             U32 blockKSize = 0;
             for (U32 bk = 0; bk < K; bk += blockKSize) {
                 blockKSize = UNI_MIN(K - bk, BOLCK_K_DIM);
-                U32 alignedBlockSizeK = align_size(blockKSize, 4);
+                U32 alignedBlockSizeK = UNI_ALIGN(blockKSize, 4);
                 for (U32 un = 0; un < N; un += unrollSizeN) {
                     unrollSizeN = UNI_MIN(UNROLL_N, N - un);
                     unrollSizeN = unrollSize[unrollSizeN >> 4];
                     if (N - un < unrollSizeN) {
                         unrollSizeN = N - un;
-                        memset(packB, 0, unrollSizeN * alignedBlockSizeK);
+                        UNI_MEMSET(packB, 0, unrollSizeN * alignedBlockSizeK);
                         for (U32 k = 0; k < alignedBlockSizeK; k += 4) {
                             for (U32 i = 0; i < unrollSizeN; ++i) {
                                 for (U32 ii = 0; ii < 4 && k + ii < blockKSize; ++ii) {
@@ -65,7 +65,8 @@ EE matrix_vector_multiply_transform_weight_int8(
                             }
                         }
                     } else {
-                        matrix1_trans_l(unrollSizeN, blockKSize, K, 4, src + un * K + bk, packB);
+                        matrix1_trans_l(
+                            unrollSizeN, unrollSizeN, blockKSize, K, 4, src + un * K + bk, packB);
                     }
                     packB += unrollSizeN * alignedBlockSizeK;
                 }
@@ -84,7 +85,7 @@ EE matrix_vector_multiply_transform_weight_int8(
             I32 *sumB = nullptr;
             if (!hasBias) {
                 sumB = (I32 *)packB;
-                memset(sumB, 0, N * sizeof(I32));
+                UNI_MEMSET(sumB, 0, N * sizeof(I32));
                 packB += N * bytesOf(DT_I32);
             } else {
                 sumB = offsetCBias;
@@ -92,13 +93,13 @@ EE matrix_vector_multiply_transform_weight_int8(
             U32 blockKSize = 0;
             for (U32 bk = 0; bk < K; bk += blockKSize) {
                 blockKSize = UNI_MIN(K - bk, BOLCK_K_DIM);
-                U32 alignedBlockSizeK = align_size(blockKSize, 4);
+                U32 alignedBlockSizeK = UNI_ALIGN(blockKSize, 4);
                 for (U32 un = 0; un < N; un += unrollSizeN) {
                     unrollSizeN = UNI_MIN(UNROLL_N, N - un);
                     unrollSizeN = unrollSize[unrollSizeN >> 4];
                     if (N - un < unrollSizeN) {
                         unrollSizeN = N - un;
-                        memset(packB, 0, unrollSizeN * alignedBlockSizeK);
+                        UNI_MEMSET(packB, 0, unrollSizeN * alignedBlockSizeK);
                         for (U32 k = 0; k < blockKSize; k += 4) {
                             for (U32 i = 0; i < unrollSizeN; ++i) {
                                 for (U32 ii = 0; ii < 4 && k + ii < blockKSize; ++ii) {
@@ -108,7 +109,8 @@ EE matrix_vector_multiply_transform_weight_int8(
                             }
                         }
                     } else {
-                        matrix2_trans_l(unrollSizeN, blockKSize, N, 4, src + un + bk * N, packB);
+                        matrix2_trans_l(
+                            unrollSizeN, unrollSizeN, blockKSize, N, 4, src + un + bk * N, packB);
                     }
                     packB += unrollSizeN * alignedBlockSizeK;
                 }
@@ -680,6 +682,8 @@ void mvm_row_avx512_tail(U32 bn,
         I32 tmp = 0;
         if ((flags & 0x1) == 0) {
             tmp += offsetC[n];
+        } else {
+            tmp = ((I32 *)result)[n];
         }
         for (U32 k = 0; k < bk; k += 4) {
             for (U32 k4 = 0; k4 < 4; ++k4) {
@@ -717,12 +721,12 @@ EE mvm_avx512_int8(U32 numRows,
     I32 *i32Result = (I32 *)result;
     UINT8 *u8Result = result;
     if (scale != nullptr) {
-        if (scale[0] <
-            0) {  // when use offline scale, the output datatype is U8_Q, you need more tmp buffer
+        // when use offline scale, the output datatype is U8_Q, you need more tmp buffer
+        if (scale[0] < 0) {
             flags |= 1 << 1;
             factor = scale[1];
             i32Result = offsetCBias + numRows;
-            memset(i32Result, 0, numRows * bytesOf(DT_I32));
+            UNI_MEMSET(i32Result, 0, numRows * bytesOf(DT_I32));
         } else {
             factor = 1 / (*scale);
         }
@@ -731,7 +735,7 @@ EE mvm_avx512_int8(U32 numRows,
     packB += numRows * bytesOf(DT_I32);
     for (U32 k = 0; k < numColumns; k += blockSizeK) {
         blockSizeK = UNI_MIN(BOLCK_K_DIM, numColumns - k);
-        U32 alignedBlockSizeK = align_size(blockSizeK, 4);
+        U32 alignedBlockSizeK = UNI_ALIGN(blockSizeK, 4);
         flags |= (k > 0);
         F32 *useFactor = nullptr;
         if (k == numColumns - blockSizeK) {

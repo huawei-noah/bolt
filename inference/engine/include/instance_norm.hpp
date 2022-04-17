@@ -22,7 +22,6 @@ public:
     {
         this->dt = dt;
         this->p = p;
-        this->numChannels = 0;
     }
 
     OperatorType get_type() override
@@ -32,7 +31,6 @@ public:
 
 protected:
     InstanceNormParamSpec p;
-    U32 numChannels;
 };
 
 #endif  // _INSTANCE_NORM_H

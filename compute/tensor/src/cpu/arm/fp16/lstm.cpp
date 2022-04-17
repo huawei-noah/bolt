@@ -11,7 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string.h>
 #include "cpu/arm/fp16/tensor_computing_fp16.h"
 #include "cpu/arm/fp16/mvm_nkn32.h"
 
@@ -54,10 +53,10 @@ EE lstmcell_fp16(TensorDesc xDesc,
 
     U32 batch = in;
     I32 xDim = ix;
-    I32 hDim = rnnParamSpec.numOutput;
-    I32 column = (rnnParamSpec.numProjection > 0) ? rnnParamSpec.numProjection
-                                                  : rnnParamSpec.numOutput;
-    int num1 = rnnParamSpec.biDirection ? 2 : 1;
+    I32 hDim = rnnParamSpec.num_outputs;
+    I32 column = (rnnParamSpec.num_projection > 0) ? rnnParamSpec.num_projection
+                                                   : rnnParamSpec.num_outputs;
+    int num1 = rnnParamSpec.bi_direction ? 2 : 1;
     U32 steps = batchStrideH / hDim / num1;
     if (!(idt == DT_F16 && fdt == DT_F16 && odt == DT_F16)) {
         CHECK_STATUS(NOT_MATCH);
@@ -65,9 +64,8 @@ EE lstmcell_fp16(TensorDesc xDesc,
     if (!(4 * column == (I32)fn * 32 && (ix + oh) == fk && in == on)) {
         CHECK_STATUS(NOT_MATCH);
     }
-    F32 forgetBias = rnnParamSpec.forgetBias;
-    ActivationMode activationMode = rnnParamSpec.activationMode;
-    if (activationMode != ACTIVATION_TANH) {
+    F32 forgetBias = rnnParamSpec.forget_bias;
+    if (rnnParamSpec.activation_type != ACTIVATION_TANH) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
 
@@ -88,15 +86,15 @@ EE lstmcell_fp16(TensorDesc xDesc,
     for (U32 m = 0; m < batch; m++) {
         F16 *lastBatchH = lastHArray + m * lastHStride;
         if (xDim > 0) {
-            memcpy(xhArray, currentXArray + m * batchStrideX, xDim * sizeof(F16));
-            memcpy(xhArray + xDim, lastBatchH, hDim * sizeof(F16));
+            UNI_MEMCPY(xhArray, currentXArray + m * batchStrideX, xDim * sizeof(F16));
+            UNI_MEMCPY(xhArray + xDim, lastBatchH, hDim * sizeof(F16));
         } else {
             intermediateH = tmpArray;
             xhArray = lastBatchH;
         }
 
         const F16 *mBias = (const F16 *)bias[0] + m * steps * column * 4;
-        memcpy(intermediateH, mBias, column * 4 * sizeof(F16));
+        UNI_MEMCPY(intermediateH, mBias, column * 4 * sizeof(F16));
         mvm_nkn32(fn, fk, (const F16 *)filter[0], xhArray, intermediateH);
 
         F16 *out_i = intermediateH;
@@ -110,12 +108,12 @@ EE lstmcell_fp16(TensorDesc xDesc,
         F16 *currentOutput = outputArray + m * batchStrideH;
 
         F16 *tmpState, *tmpHH, *tmpH;
-        if (rnnParamSpec.zoneoutCell == 0) {
+        if (rnnParamSpec.zoneout_cell == 0) {
             tmpState = currentBatchState;
         } else {
             tmpState = out_i;
         }
-        if (rnnParamSpec.numProjection > 0) {
+        if (rnnParamSpec.num_projection > 0) {
             tmpHH = out_g;
             tmpH = currentOutput;
         } else {
@@ -150,26 +148,26 @@ EE lstmcell_fp16(TensorDesc xDesc,
             tmpState[h] = C_s;
             tmpHH[h] = value;
         }
-        if (rnnParamSpec.zoneoutCell != 0) {
-            array_scale_f16(tmpState, tmpState, column, 1 - rnnParamSpec.zoneoutCell, 0);
-            array_scale_f16(lastBatchState, lastBatchState, column, rnnParamSpec.zoneoutCell, 0);
+        if (rnnParamSpec.zoneout_cell != 0) {
+            array_scale_f16(tmpState, tmpState, column, 1 - rnnParamSpec.zoneout_cell, 0);
+            array_scale_f16(lastBatchState, lastBatchState, column, rnnParamSpec.zoneout_cell, 0);
             array_add_f16(tmpState, lastBatchState, currentBatchState, column);
         }
 
-        if (rnnParamSpec.numProjection > 0) {
-            memset(tmpH, 0, sizeof(F16) * hDim);
-            mvm_nkn32(hDim / 32, rnnParamSpec.numProjection, (const F16 *)filter[1], tmpHH, tmpH);
+        if (rnnParamSpec.num_projection > 0) {
+            UNI_MEMSET(tmpH, 0, sizeof(F16) * hDim);
+            mvm_nkn32(hDim / 32, rnnParamSpec.num_projection, (const F16 *)filter[1], tmpHH, tmpH);
         }
-        if (rnnParamSpec.zoneoutOutput != 0) {
-            if (rnnParamSpec.numProjection > 0) {
-                array_scale_f16(tmpH, out_f, hDim, 1 - rnnParamSpec.zoneoutOutput, 0);
+        if (rnnParamSpec.zoneout_output != 0) {
+            if (rnnParamSpec.num_projection > 0) {
+                array_scale_f16(tmpH, out_f, hDim, 1 - rnnParamSpec.zoneout_output, 0);
             } else {
-                array_scale_f16(tmpHH, out_f, hDim, 1 - rnnParamSpec.zoneoutOutput, 0);
+                array_scale_f16(tmpHH, out_f, hDim, 1 - rnnParamSpec.zoneout_output, 0);
             }
-            array_scale_f16(lastBatchH, lastBatchH, hDim, rnnParamSpec.zoneoutOutput, 0);
+            array_scale_f16(lastBatchH, lastBatchH, hDim, rnnParamSpec.zoneout_output, 0);
             array_add_f16(out_f, lastBatchH, currentBatchH, hDim);
         } else {
-            memcpy(currentBatchH, currentOutput, sizeof(F16) * hDim);
+            UNI_MEMCPY(currentBatchH, currentOutput, sizeof(F16) * hDim);
         }
     }
     return SUCCESS;

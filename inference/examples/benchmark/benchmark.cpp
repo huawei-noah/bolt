@@ -43,11 +43,14 @@ void print_benchmark_usage()
            "5. -l [loopTime]: The running loopTimes. The default value is %d.\n"
            "6. -w [warmUp]: WarmUp times. The default value is %d.\n"
            "7. -t [threadsNum]: Parallel threads num. The default value is %d.\n"
-           "Example: ./benchmark -m /local/models/resnet50_f16.bolt\n",
+           "Example:\n"
+           "    ./benchmark -m /local/models/resnet50_f16.bolt\n"
+           "    ./benchmark -m /local/models/resnet50_f16.bolt -i ./input.txt\n"
+           "    ./benchmark -m /local/models/resnet50_f16.bolt -i ./data/\n",
         loopTime, warmUp, threadsNum);
 }
 
-void parse_options(int argc, char *argv[])
+int parse_options(int argc, char *argv[])
 {
     std::cout << "\nPlease enter this command './benchmark --help' to get more usage "
                  "information.\n";
@@ -55,7 +58,7 @@ void parse_options(int argc, char *argv[])
     for (std::string arg : lineArgs) {
         if (arg == "--help" || arg == "-help" || arg == "--h" || arg == "-h") {
             print_benchmark_usage();
-            exit(-1);
+            return 0;
         }
     }
 
@@ -94,27 +97,35 @@ void parse_options(int argc, char *argv[])
             default:
                 std::cout << "Input option gets error, please check the params meticulously.\n";
                 print_benchmark_usage();
-                exit(-1);
+                return 0;
         }
     }
+    return 1;
 }
 
 std::map<std::string, std::shared_ptr<U8>> create_tensors_from_path(
-    std::string dataPath, std::shared_ptr<CNN> pipeline)
+    std::string inputData, std::shared_ptr<CNN> pipeline)
 {
     std::map<std::string, TensorDesc> inputDescMap = pipeline->get_input_desc();
-    std::vector<DataType> sourceDataTypes;
-    std::vector<TensorDesc> inputDescs;
-    for (auto iter : inputDescMap) {
-        TensorDesc curDesc = iter.second;
-        sourceDataTypes.push_back(curDesc.dt);
-        inputDescs.push_back(curDesc);
-    }
     std::vector<Tensor> input;
-    if (string_end_with(inputData, ".txt")) {
-        input = load_txt(inputData, inputDescs);
+    if (inputData != "" && is_directory(inputData)) {
+        for (auto iter : inputDescMap) {
+            std::string path = inputData + "/" + iter.first + ".txt";
+            input.push_back(load_txt(path, {iter.second})[0]);
+        }
     } else {
-        input = load_bin(inputData, sourceDataTypes, inputDescs);
+        std::vector<DataType> sourceDataTypes;
+        std::vector<TensorDesc> inputDescs;
+        for (auto iter : inputDescMap) {
+            TensorDesc curDesc = iter.second;
+            sourceDataTypes.push_back(curDesc.dt);
+            inputDescs.push_back(curDesc);
+        }
+        if (string_end_with(inputData, ".txt")) {
+            input = load_txt(inputData, inputDescs);
+        } else {
+            input = load_bin(inputData, sourceDataTypes, inputDescs);
+        }
     }
     std::map<std::string, std::shared_ptr<U8>> model_tensors_input;
     int index = 0;
@@ -145,7 +156,7 @@ std::map<std::string, std::shared_ptr<Tensor>> get_output(
         for (auto iter : outMap) {
             Tensor result = *(iter.second);
             auto mem = (OclMemory *)result.get_memory();
-            mem->get_mapped_ptr();
+            UNI_PROFILE(mem->get_mapped_ptr(), "copy " + iter.first, std::string("output::copy"));
         }
 #else
         UNI_WARNING_LOG("this binary not support GPU, please recompile project with GPU "
@@ -155,15 +166,26 @@ std::map<std::string, std::shared_ptr<Tensor>> get_output(
     return outMap;
 }
 
-int main(int argc, char *argv[])
+int benchmark(int argc, char *argv[])
 {
     UNI_TIME_INIT
-    parse_options(argc, argv);
+    int ret = parse_options(argc, argv);
+    if (!ret) {
+        return 0;
+    }
 
     set_cpu_num_threads(threadsNum);
 
     // 1: set up the pipeline
+    double timeBegin = ut_time_ms();
     auto pipeline = createPipeline(affinityPolicyName, modelPath, algorithmMapPath);
+#ifdef _USE_GPU
+    if (std::string(affinityPolicyName) == std::string("GPU")) {
+        gcl_finish(OCLContext::getInstance().handle.get());
+    }
+#endif
+    double timeEnd = ut_time_ms();
+    double prepareTime = timeEnd - timeBegin;
 
     // 2: create input data and feed the pipeline with it
     auto model_tensors_input = create_tensors_from_path(inputData, pipeline);
@@ -171,16 +193,21 @@ int main(int argc, char *argv[])
     std::map<std::string, std::shared_ptr<Tensor>> outMap;
 
     // 3: warm up and run
+    UNI_TIME_STOP
+    timeBegin = ut_time_ms();
     for (int i = 0; i < warmUp; i++) {
         pipeline->set_input_by_assign(model_tensors_input);
         pipeline->run();
         outMap = get_output(pipeline, affinityPolicyName);
     }
 #ifdef _USE_GPU
-    if (strcmp(affinityPolicyName, "GPU") == 0) {
+    if (std::string(affinityPolicyName) == std::string("GPU")) {
         gcl_finish(OCLContext::getInstance().handle.get());
     }
 #endif
+    timeEnd = ut_time_ms();
+    double warmUpTime = timeEnd - timeBegin;
+    UNI_TIME_START
 
     double minTime = DBL_MAX;
     double maxTime = 0;
@@ -201,10 +228,19 @@ int main(int argc, char *argv[])
     print_result(outMap);
 
     UNI_TIME_STATISTICS
-    UNI_CI_LOG("total_time:%fms(loops=%d)\n", 1.0 * totalTime, loopTime);
-    UNI_CI_LOG("avg_time:%fms/data\n", 1.0 * totalTime / UNI_MAX(1, loopTime));
-    UNI_CI_LOG("min_time:%fms/data\n", 1.0 * minTime);
-    UNI_CI_LOG("max_time:%fms/data\n", 1.0 * maxTime);
+    UNI_CI_LOG("model prepare_time:%fms\n", 1.0 * prepareTime);
+    UNI_CI_LOG("model warm_up_time:%fms\n", 1.0 * warmUpTime);
+    UNI_CI_LOG("run total_time:%fms(loops=%d)\n", 1.0 * totalTime, loopTime);
+    UNI_CI_LOG("run avg_time:%fms/data\n", 1.0 * totalTime / UNI_MAX(1, loopTime));
+    UNI_CI_LOG("run min_time:%fms/data\n", 1.0 * minTime);
+    UNI_CI_LOG("run max_time:%fms/data\n", 1.0 * maxTime);
     pipeline->saveAlgorithmMapToFile(algorithmMapPath);
     return 0;
+}
+
+int main(int argc, char *argv[])
+{
+    int ret = benchmark(argc, argv);
+    UNI_MEM_STATISTICS();
+    return ret;
 }

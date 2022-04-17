@@ -66,7 +66,7 @@ inline void matrix2_trans(U32 size, U32 blockK, U32 M, F32 *src, F32 *dst)
         if (i % 16 == 0) {
             __builtin_prefetch(src + 16);
         }
-        memcpy(dst, src, size * sizeof(F32));
+        UNI_MEMCPY(dst, src, size * sizeof(F32));
         dst += size;
         src += M;
     }

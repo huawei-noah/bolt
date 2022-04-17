@@ -46,14 +46,15 @@ inline EE set_mem_trans_opt_mali(MemTransFormType type,
         default:
             CHECK_STATUS(NOT_MATCH);
     }
-    sprintf(kernelName, "mem_trans_%s%s%s%s", use3dFormat.c_str(), ioMemName, inputFormat.c_str(),
-        outputFormat.c_str());
-    kernelOpt->kernelDataType = dt;
+    std::string kernel =
+        std::string("mem_trans_") + use3dFormat + ioMemName + inputFormat + outputFormat;
+    UNI_STRCPY(kernelName, kernel.c_str());
     if (use3dMode) {
-        sprintf(kernelOpt->sourceName, "mem_trans_3d");
+        UNI_STRCPY(kernelOpt->sourceName, "mem_trans_3d");
     } else {
-        sprintf(kernelOpt->sourceName, "mem_trans");
+        UNI_STRCPY(kernelOpt->sourceName, "mem_trans");
     }
+    kernelOpt->kernelDataType = dt;
     CHECK_STATUS(set_io_mem_define_opt(inputMemType, outputMemType, opt));
     return SUCCESS;
 }
@@ -83,8 +84,9 @@ inline EE set_mem_trans_c_opt_mali(MemTransCType type,
     } else {
         CHECK_STATUS(NOT_MATCH);
     }
-    sprintf(kernelName, "mem_trans_c_%s%s", ioMemName, transFormat.c_str());
-    sprintf(kernelOpt->sourceName, "mem_trans_c");
+    std::string kernel = std::string("mem_trans_c_") + ioMemName + transFormat;
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, "mem_trans_c");
     kernelOpt->kernelDataType = dt;
     CHECK_STATUS(set_io_mem_define_opt(inputMemType, outputMemType, opt));
     return SUCCESS;

@@ -24,9 +24,10 @@ inline EE set_eltwise_opt_mali(U32 inputNum,
     char iomName[128] = "";
     CHECK_STATUS(
         set_io_mems_name_and_define_opts(inputMemType, &outputMemType, inputNum, 1, iomName, opt));
-    sprintf(
-        kernelName, "eltwise_%s%s%s%s%d", iomName, actName, eltName, formatName.c_str(), inputNum);
-    sprintf(kernelOpt->sourceName, "eltwise");
+    std::string kernel = std::string("eltwise_") + iomName + actName + eltName + formatName +
+        std::to_string(inputNum);
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, "eltwise");
     kernelOpt->kernelDataType = dt;
     CHECK_STATUS(set_value_define_opt(inputNum, "N", opt));
     CHECK_STATUS(set_activation_define_opt(activeMode, opt));
@@ -74,9 +75,10 @@ inline EE set_eltwise_broadcast_opt_mali(bool useNchwFormat,
     char iomName[128] = "";
     CHECK_STATUS(set_io_mems_name_and_define_opts(inputMemType, &outputMemType, 2, 1, iomName, opt));
 
-    sprintf(kernelName, "eltwise_broadcast_%s%s%s%s%s%s", iomName, actName, eltName,
-        swapInputName.c_str(), formatName.c_str(), axisName.c_str());
-    sprintf(kernelOpt->sourceName, "eltwise_broadcast");
+    std::string kernel = std::string("eltwise_broadcast_") + iomName + actName + eltName +
+        swapInputName + formatName + axisName;
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, "eltwise_broadcast");
     CHECK_STATUS(set_activation_define_opt(activeMode, opt));
     CHECK_STATUS(set_eltwise_define_opt(eltwiseMode, opt));
     if (useNchwFormat) {

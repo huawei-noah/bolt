@@ -46,7 +46,7 @@ public:
         // check status
         if (this->inputTensors.size() > 1) {
             Tensor inputTensor = this->inputTensors[1];
-            I32 *ptr = (I32 *)((CpuMemory *)(inputTensor.get_memory()))->get_ptr();
+            U8 *ptr = (U8 *)((CpuMemory *)(inputTensor.get_memory()))->get_ptr();
             U32 length = inputTensor.length();
             for (U32 i = 0; i < length; i++) {
                 if (ptr[i]) {

@@ -21,13 +21,14 @@ engine_test(benchmark benchmark/benchmark.cpp)
 install(TARGETS benchmark
         RUNTIME DESTINATION examples)
 if (BUILD_TEST)
-    engine_test(c_image_classifification "c_api/c_image_classifification.c;c_api/c_common.c;c_api/c_test.c")
+    engine_test(c_image_classification "c_api/c_image_classification.c;c_api/c_common.c;c_api/c_test.c")
     engine_test(c_input_method "c_api/c_input_method.c;c_api/c_common.c;c_api/c_test.c")
     engine_test(bert bert/bert.cpp)
     engine_test(tinybert bert/tinybert.cpp)
     engine_test(classification image_classification/classification.cpp)
     engine_test(nmt machine_translation/nmt.cpp)
     engine_test(nmt_tsc machine_translation/nmt_tsc.cpp)
+    engine_test(tsc_ssru machine_translation/tsc_ssru.cpp)
     engine_test(asr_rnnt automatic_speech_recognition/asr_rnnt.cpp)
     engine_test(asr_convolution_transformer automatic_speech_recognition/asr_convolution_transformer.cpp)
     engine_test(tts text_to_speech/tts.cpp)
@@ -47,11 +48,12 @@ if (BUILD_TEST)
                     tinybert
                     tinybert_onnx
                     nmt
+                    tsc_ssru
                     asr_rnnt
                     asr_convolution_transformer
                     tts
                     vad
-                    c_image_classifification
+                    c_image_classification
                     c_input_method
             RUNTIME DESTINATION examples)
 

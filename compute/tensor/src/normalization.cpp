@@ -29,6 +29,7 @@
 #endif
 
 EE layer_normalization(Tensor inputTensor,
+    LayerNormParamSpec p,
     Tensor alphaTensor,
     Tensor betaTensor,
     Tensor tmpTensor,
@@ -54,22 +55,28 @@ EE layer_normalization(Tensor inputTensor,
     EE ret = NOT_SUPPORTED;
     if (IS_GENERAL(arch)) {
 #ifdef _USE_GENERAL
-        ret = layer_normalization_general(inputDesc, input, alpha, beta, outputDesc, output);
+        ret = layer_normalization_general(inputDesc, input, p, alpha, beta, outputDesc, output);
 #endif
 #ifdef _USE_X86
     } else if (IS_X86(arch)) {
-        ret = layer_normalization_x86(inputDesc, input, alpha, beta, outputDesc, output);
+        ret = layer_normalization_x86(inputDesc, input, p, alpha, beta, outputDesc, output);
 #endif
 #ifdef _USE_NEON
     } else if (IS_ARM(arch)) {
-        ret = layer_normalization_arm(inputDesc, input, alpha, beta, outputDesc, output);
+        ret = layer_normalization_arm(inputDesc, input, p, alpha, beta, outputDesc, output);
 #endif
 #ifdef _USE_GPU
     } else if (IS_GPU(arch)) {
         void *tmpbuf = get_ptr_from_tensor(tmpTensor, arch);
-        ret = layer_normalization_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc,
-            (GCLMem_t)input, (GCLMem_t)alpha, (GCLMem_t)beta, (GCLMem_t)tmpbuf, outputDesc,
-            (GCLMem_t)output);
+        if (p.axis == -1) {
+            ret = layer_normalization_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc,
+                (GCLMem_t)input, (GCLMem_t)alpha, (GCLMem_t)beta, (GCLMem_t)tmpbuf, outputDesc,
+                (GCLMem_t)output);
+        } else {
+            UNI_WARNING_LOG("please close optimizeTransposeLN in "
+                            "model_tools/include/OPOptimizers/LayerNormOptimizer.hpp and "
+                            "reconverter model.\n");
+        }
 #endif
     }
 
@@ -97,10 +104,7 @@ EE normalization_infer_output_size(Tensor *inputTensor, Tensor *outputTensor, Ar
     if (outputTensor == nullptr) {
         CHECK_STATUS(NULL_POINTER);
     }
-    TensorDesc inputDesc = inputTensor->get_desc();
-    TensorDesc outputDesc = outputTensor->get_desc();
-    outputDesc = inputDesc;
-    outputTensor->resize(outputDesc);
+    outputTensor->resize(inputTensor->get_desc());
     return SUCCESS;
 }
 
@@ -109,13 +113,15 @@ EE normalization_infer_forward_tmp_bytes(Tensor inputTensor, U32 *bytes, ArchInf
     if (bytes == nullptr) {
         CHECK_STATUS(NULL_POINTER);
     }
+    EE ret = NOT_SUPPORTED;
     if (IS_GPU(archInfo->arch)) {
 #ifdef _USE_GPU
         GCLMemDesc gclmemInputDesc = ocl_get_desc(inputTensor);
-        CHECK_STATUS(normalization_infer_forward_tmp_bytes_mali(gclmemInputDesc, bytes));
+        ret = normalization_infer_forward_tmp_bytes_mali(gclmemInputDesc, bytes);
 #endif
     } else {
         *bytes = 0;
+        ret = SUCCESS;
     }
-    return SUCCESS;
+    return ret;
 }

@@ -24,10 +24,10 @@ int reshapeTest(int argc, char **argv, DataType dt)
     U32 ih = atoi(argv[3]);
     U32 iw = atoi(argv[4]);
     ReshapeParamSpec p;
-    p.shape_size = atoi(argv[5]);
-    CHECK_REQUIREMENT(argc == 6 + p.shape_size);
-    for (I32 i = 0; i < p.shape_size; i++) {
-        p.shape_dims[i] = atoi(argv[6 + i]);
+    p.num_shape = atoi(argv[5]);
+    CHECK_REQUIREMENT(argc == 6 + p.num_shape);
+    for (I32 i = 0; i < p.num_shape; i++) {
+        p.shape[i] = atoi(argv[6 + i]);
     }
 
     DataFormat df = DF_NCHW;
@@ -37,7 +37,7 @@ int reshapeTest(int argc, char **argv, DataType dt)
     Tensor inputTensor;
     inputTensor.resize(inDesc);
     inputTensor.alloc();
-    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inDesc));
+    UNI_MEMCPY(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inDesc));
 
     Tensor outputTensor;
     CHECK_STATUS(reshape_infer_output_size(&inputTensor, p, &outputTensor, &UT_CPU_ARCHINFO));
@@ -61,16 +61,16 @@ int reshapeTest(int argc, char **argv, DataType dt)
     // log performance data
     char buffer[150];
     char params[120];
-    memset(params, 0, 120);
+    UNI_MEMSET(params, 0, 120);
     sprintf(params, "(%u %u %u %u)=(", in, ic, ih, iw);
-    for (I32 i = 0; i < p.shape_size; i++) {
+    for (I32 i = 0; i < p.num_shape; i++) {
         I32 index = 0;
         for (; index < 120; index++) {
             if (params[index] == '\0') {
                 break;
             }
         }
-        if (i != p.shape_size - 1) {
+        if (i != p.num_shape - 1) {
             sprintf(params + index, "%d ", outDesc.dims[outDesc.nDims - 1 - i]);
         } else {
             sprintf(params + index, "%d)", outDesc.dims[outDesc.nDims - 1 - i]);

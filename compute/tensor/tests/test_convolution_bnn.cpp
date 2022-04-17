@@ -14,7 +14,7 @@
 #include "tensor_computing.h"
 #include "ut_util.h"
 
-int bnnConvolutionTest(int argc, char *argv[], DataType dt)
+int bnnConvolutionTest(int argc, char *argv[], DataType idt, DataType fdt)
 {
     CHECK_REQUIREMENT(argc == 16);
     // in data
@@ -39,21 +39,20 @@ int bnnConvolutionTest(int argc, char *argv[], DataType dt)
 
     CHECK_REQUIREMENT(in == 1 && on == 1);
 
-    DataType fdt = DT_BIN11;  // Use dt to distinguish DoReFa and XNOR
     ActivationParamSpec activationDesc;
     activationDesc.mode = ACTIVATION_NULL;
 
-    TensorDesc inputDesc = tensor4df(dt, DF_NCHWC8, in, ic, ih, iw);
+    TensorDesc inputDesc = tensor4df(idt, DF_NCHWC8, in, ic, ih, iw);
     TensorDesc filterDesc = tensor4df(fdt, DF_NCHW, oc, ic, fh, fw);
-    TensorDesc biasDesc = tensor1d(dt, oc * 2);  // including scale and bias
+    TensorDesc biasDesc = tensor1d(idt, oc * 2);  // including scale and bias
     ConvolutionParamSpec p = createConvolutionParamSpec(group, 1, fh, fw, 1, stride, stride, 0, 0,
-        padding, padding, padding, padding, 1, 1, 1, oc, Convolution_Depthwise_Pointwise);
+        padding, padding, padding, padding, 1, 1, 1, oc, CONVOLUTION_DEPTHWISE_POINTWISE);
 
     // setup input, filter, bias
-    U8 *input = ut_input_v(in * ic * ih * iw, dt, UT_INIT_RANDOM);
+    U8 *input = ut_input_v(in * ic * ih * iw, idt, UT_INIT_RANDOM);
     if (fdt == DT_BIN01) {
         for (U32 i = 0; i < in * ic * ih * iw; i++) {
-            switch (dt) {
+            switch (idt) {
 #ifdef _USE_FP16
                 case DT_F16:
                     ((F16 *)input)[i] += 0.5;
@@ -71,7 +70,7 @@ int bnnConvolutionTest(int argc, char *argv[], DataType dt)
     }
 
     BIN8 *filter = (BIN8 *)ut_input_v(fn * fc * fh * fw / 8, fdt, UT_INIT_POS);
-    U8 *bias = ut_input_v(oc * 2, dt, UT_INIT_RANDOM);
+    U8 *bias = ut_input_v(oc * 2, idt, UT_INIT_RANDOM);
     Tensor inputTensor;
     Tensor inputTensorRef;
     Tensor filterTensor;
@@ -91,15 +90,18 @@ int bnnConvolutionTest(int argc, char *argv[], DataType dt)
     filterTensor.alloc();
     filterTensorRef.alloc();
     biasTensor.alloc();
-    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, bytesOf(dt) * in * ic * ih * iw);
-    memcpy(get_ptr_from_tensor(inputTensorRef, CPU_GENERAL), input, bytesOf(dt) * in * ic * ih * iw);
-    memcpy(get_ptr_from_tensor(filterTensor, CPU_GENERAL), filter, tensorNumBytes(filterDesc));
-    memcpy(get_ptr_from_tensor(filterTensorRef, CPU_GENERAL), filter, tensorNumBytes(filterDesc));
-    memcpy(get_ptr_from_tensor(biasTensor, CPU_GENERAL), bias, tensorNumBytes(biasDesc));
+    UNI_MEMCPY(
+        get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, bytesOf(idt) * in * ic * ih * iw);
+    UNI_MEMCPY(
+        get_ptr_from_tensor(inputTensorRef, CPU_GENERAL), input, bytesOf(idt) * in * ic * ih * iw);
+    UNI_MEMCPY(get_ptr_from_tensor(filterTensor, CPU_GENERAL), filter, tensorNumBytes(filterDesc));
+    UNI_MEMCPY(
+        get_ptr_from_tensor(filterTensorRef, CPU_GENERAL), filter, tensorNumBytes(filterDesc));
+    UNI_MEMCPY(get_ptr_from_tensor(biasTensor, CPU_GENERAL), bias, tensorNumBytes(biasDesc));
 
     // setup output, bias
     CHECK_STATUS(convolution_infer_output_size(
-        &inputTensor, filterTensor, p, &outputTensor, dt, &UT_CPU_ARCHINFO));
+        &inputTensor, filterTensor, p, &outputTensor, idt, &UT_CPU_ARCHINFO));
 
     outputTensor.alloc();
     outputTensorRef.resize(outputTensor.get_desc());
@@ -141,7 +143,7 @@ int bnnConvolutionTest(int argc, char *argv[], DataType dt)
             tmpTensors, outputTensorRef, activationDesc, &UT_SERIAL_ARCHINFO));
         // check
         ut_check_v(get_ptr_from_tensor(outputTensor, CPU_GENERAL),
-            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), outputTensor.length(), dt, 1,
+            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), outputTensor.length(), idt, 1,
             __FILE__, __LINE__);
     }
 
@@ -172,7 +174,8 @@ int bnnConvolutionTest(int argc, char *argv[], DataType dt)
 int main(int argc, char **argv)
 {
 #ifdef _USE_FP16
-    bnnConvolutionTest(argc, argv, DT_F16);
+    bnnConvolutionTest(argc, argv, DT_F16, DT_BIN01);
+    bnnConvolutionTest(argc, argv, DT_F16, DT_BIN11);
 #endif
     return 0;
 }

@@ -32,23 +32,24 @@ int fullyConnectedTest(int argc, char **argv, DataType dt, DataType filterDataTy
     inputTensor.resize(inputDesc);
     inputTensor.alloc();
     U8 *input = ut_input_v(m * k, dt, UT_INIT_RANDOM);
-    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inputDesc));
+    UNI_MEMCPY(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inputDesc));
 
     filterTensor.resize(filterDesc);
     filterTensor.alloc();
     U8 *filter = ut_input_v(k * n, dt, UT_INIT_RANDOM);
-    memcpy(get_ptr_from_tensor(filterTensor, CPU_GENERAL), filter, tensorNumBytes(filterDesc));
+    UNI_MEMCPY(get_ptr_from_tensor(filterTensor, CPU_GENERAL), filter, tensorNumBytes(filterDesc));
     if (m == 1) {
         filterDescRef.df = DF_NORMAL;
     }
     filterTensorRef.resize(filterDescRef);
     filterTensorRef.alloc();
-    memcpy(get_ptr_from_tensor(filterTensorRef, CPU_GENERAL), filter, tensorNumBytes(filterDescRef));
+    UNI_MEMCPY(
+        get_ptr_from_tensor(filterTensorRef, CPU_GENERAL), filter, tensorNumBytes(filterDescRef));
 
     biasTensor.resize(biasDesc);
     biasTensor.alloc();
     U8 *bias = ut_input_v(n, dt, UT_INIT_RANDOM);
-    memcpy(get_ptr_from_tensor(biasTensor, CPU_GENERAL), bias, tensorNumBytes(biasDesc));
+    UNI_MEMCPY(get_ptr_from_tensor(biasTensor, CPU_GENERAL), bias, tensorNumBytes(biasDesc));
 
     // set output
     Tensor outputTensor, outputTensorRef;

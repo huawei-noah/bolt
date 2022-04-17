@@ -29,12 +29,12 @@ inline void calDepthwisePaddingVal(TensorDesc inputDesc,
     U32 dh = convParamSpec.dilatedRate_h;
     U32 fhd = (fh - 1) * dh + 1;
     U32 ih = inputDesc.dims[1];
-    U32 plv = convParamSpec.padding_left;
-    U32 prv = convParamSpec.padding_right;
-    U32 ptv = convParamSpec.padding_top;
+    U32 plv = convParamSpec.pad_left;
+    U32 prv = convParamSpec.pad_right;
+    U32 ptv = convParamSpec.pad_top;
     U32 pbv = edge_align * sh + (fhd / 2) * 2 - ptv - ih;
-    if (pbv < convParamSpec.padding_bottom) {
-        pbv = convParamSpec.padding_bottom;
+    if (pbv < convParamSpec.pad_bottom) {
+        pbv = convParamSpec.pad_bottom;
     }
     *pl = plv;
     *pr = prv;

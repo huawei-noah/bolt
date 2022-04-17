@@ -1000,7 +1000,7 @@ EE mvm_avx512_int8_row_i8u8(U32 numRows,
             flags |= 1 << 1;
             factor = scale[1];
             i32Result = (I32 *)((UINT8 *)tmp + numRows * numColumns);
-            memset(i32Result, 0, numRows * bytesOf(DT_I32));
+            UNI_MEMSET(i32Result, 0, numRows * bytesOf(DT_I32));
         } else {
             factor = 1 / (*scale);
         }

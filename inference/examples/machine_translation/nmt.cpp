@@ -45,7 +45,7 @@ int main(int argc, char *argv[])
     if (parse_res.algoPath.second) {
         algorithmMapPath = parse_res.algoPath.first;
     }
-    bool useGPU = (strcmp(affinityPolicyName, "GPU") == 0) ? true : false;
+    bool useGPU = std::string(affinityPolicyName) == std::string("GPU");
 
     auto pipeline = createPipeline(affinityPolicyName, modelPath, algorithmMapPath);
 

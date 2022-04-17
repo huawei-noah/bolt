@@ -63,9 +63,9 @@ inline void array_power_template(T *input, T *output, I32 len, F32 power)
 }
 
 template <typename T>
-EE activation_template(ActivationParamSpec activationDesc, F32 input, T *output)
+inline EE activation_template(const ActivationParamSpec &activationDesc, const F32 &input, T *output)
 {
-    F32 value, result = 0;
+    F32 result = 0;
     EE ret = SUCCESS;
     switch (activationDesc.mode) {
         case ACTIVATION_NULL: {
@@ -73,86 +73,52 @@ EE activation_template(ActivationParamSpec activationDesc, F32 input, T *output)
             break;
         }
         case ACTIVATION_RELU: {
-            value = input;
-            F32 tmp = activationDesc.value[0] * value;
-            if (value < tmp) {
-                value = tmp;
-            }
-            result = value;
+            result = UNI_MAX(activationDesc.value[0] * input, input);
             break;
         }
         case ACTIVATION_RELU6: {
-            value = input;
-            if (value < 0) {
-                value = 0;
-            }
-            if (value > 6) {
-                value = 6;
-            }
-            result = value;
+            result = UNI_MIN(UNI_MAX(input, 0), 6);
             break;
         }
         case ACTIVATION_H_SIGMOID: {
-            value = input + 3;
-            if (value < 0) {
-                value = 0;
-            }
-            if (value > 6) {
-                value = 6;
-            }
-            result = value / 6;
+            result = UNI_MIN(UNI_MAX(input + 3, 0), 6) / 6;
             break;
         }
         case ACTIVATION_H_SWISH: {
-            value = input + 3;
-            if (value < 0) {
-                value = 0;
-            }
-            if (value > 6) {
-                value = 6;
-            }
-            result = input * (value / 6);
+            result = UNI_MIN(UNI_MAX(input + 3, 0), 6) * input / 6;
             break;
         }
         case ACTIVATION_H_SWISH_NODIV: {
-            value = input + 3;
-            if (value < 0) {
-                value = 0;
-            }
-            if (value > 6) {
-                value = 6;
-            }
-            result = input * value;
+            result = UNI_MIN(UNI_MAX(input + 3, 0), 6) * input;
             break;
         }
         case ACTIVATION_GELU: {
-            value = input;
-            value = erf(value / sqrt(2));
+            F32 value = erf(input / sqrt(2));
             value = 0.5 * (1.0 + value);
-            value = input * value;
-            result = value;
+            result = input * value;
             break;
         }
         case ACTIVATION_TANH: {
-            value = 1.0 - 2.0 / (exp(2.0 * input) + 1.0);
-            result = value;
+            result = 1.0 - 2.0 / (exp(2.0 * input) + 1.0);
             break;
         }
         case ACTIVATION_SIGMOID: {
-            value = 1.0 / (1.0 + exp(-1.0 * input));
-            result = value;
+            result = 1.0 / (1.0 + exp(-1.0 * input));
+            break;
+        }
+        case ACTIVATION_SWISH: {
+            result = input / (1.0 + exp(-1.0 * input));
             break;
         }
         case ACTIVATION_MISH: {
-            value = input;
+            F32 value = input;
             F32 mish_threshold = 20;
             if (value < -mish_threshold) {
                 value = exp(value);
             } else if (!(value > mish_threshold || value < -mish_threshold)) {
                 value = log(exp(value) + 1.0);
             }
-            value = input * tanh(value);
-            result = value;
+            result = input * tanh(value);
             break;
         }
         case ACTIVATION_SOFTPLUS: {
@@ -181,6 +147,22 @@ EE activation_template(ActivationParamSpec activationDesc, F32 input, T *output)
         }
         case ACTIVATION_NEG: {
             result = -input;
+            break;
+        }
+        case ACTIVATION_ROUND: {
+            result = round(input);
+            break;
+        }
+        case ACTIVATION_CEIL: {
+            result = ceil(input);
+            break;
+        }
+        case ACTIVATION_FLOOR: {
+            result = floor(input);
+            break;
+        }
+        case ACTIVATION_RECIPROCAL: {
+            result = 1 / input;
             break;
         }
         default:

@@ -12,13 +12,14 @@ inline EE set_depth2space_nchwc4_2x2_opt(bool useOutputNchw,
     char *opt = kernelOpt->option;
     std::string outputFormatName = "";
     if (useOutputNchw) {
-        outputFormatName = "_nchw";
+        outputFormatName = "nchw";
     }
     char ioMemName[128] = "";
     CHECK_STATUS(set_io_mem_name(inputMemType, outputMemType, ioMemName));
     kernelOpt->kernelDataType = DT_F16;
-    sprintf(kernelName, "depth2space_nchwc4_2x2%s", outputFormatName.c_str());
-    sprintf(kernelOpt->sourceName, "depth2space_nchwc4_2x2");
+    std::string kernel = std::string("depth2space_nchwc4_2x2_") + ioMemName + outputFormatName;
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, "depth2space_nchwc4_2x2");
     if (useOutputNchw) {
         CHECK_STATUS(set_chars_define_opt("OUT_NCHW", opt));
     }

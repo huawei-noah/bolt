@@ -22,21 +22,24 @@
 
 typedef enum { POOLING_MAX, POOLING_MEAN } PoolingMode;
 
-typedef enum { CEIL, FLOOR, TF_SAME, TF_VALID, ROUND_PREFER_FLOOR, ROUND_PREFER_CEIL } RoundMode;
+typedef enum {
+    ROUND_CEIL,
+    ROUND_FLOOR,
+    ROUND_TF_SAME,
+    ROUND_TF_VALID,
+    ROUND_PREFER_FLOOR,
+    ROUND_PREFER_CEIL
+} RoundMode;
 
-typedef enum { LINEAR, NEAREST, CUBIC } ResizeMode;
+typedef enum { RESIZE_LINEAR, RESIZE_NEAREST, RESIZE_CUBIC } ResizeMode;
 
 typedef enum {
-    ROIALIGN_HALF_PIXEL,
-    ROIALIGN_OUTPUT_HALF_PIXEL
-} ROIAlignCoordinateTransformationMode;
-
-typedef enum {
-    ALIGN_CORNERS,
-    HALF_PIXEL,
-    PYTORCH_HALF_PIXEL,
-    ASYMMETRIC
-} ResizeCoordinateTransMode;
+    COORDINATE_TRANS_ALIGN_CORNERS,
+    COORDINATE_TRANS_HALF_PIXEL,
+    COORDINATE_TRANS_PYTORCH_HALF_PIXEL,
+    COORDINATE_TRANS_ASYMMETRIC,
+    COORDINATE_TRANS_OUTPUT_HALF_PIXEL
+} CoordinateTransMode;
 
 typedef enum {
     ELTWISE_SUM,
@@ -47,7 +50,6 @@ typedef enum {
     ELTWISE_DIV,
     ELTWISE_SQRT,
     ELTWISE_ERF,
-
     ELTWISE_AND,
     ELTWISE_OR,
     ELTWISE_XOR
@@ -71,23 +73,35 @@ typedef enum {
     ACTIVATION_H_SWISH_NODIV,
     ACTIVATION_LOG,
     ACTIVATION_NOT,
-    ACTIVATION_NEG
+    ACTIVATION_NEG,
+    ACTIVATION_ROUND,
+    ACTIVATION_FLOOR,
+    ACTIVATION_CEIL,
+    ACTIVATION_SWISH,
+    ACTIVATION_RECIPROCAL
 } ActivationMode;
 
-typedef enum { BSliceApply_NULL, BSliceApply_CONV } BilateralSliceApplyMode;
+typedef enum { BSLICE_APPLY_NULL, BSLICE_APPLY_CONV } BilateralSliceApplyMode;
 
 typedef enum {
-    Convolution_Pointwise,
-    Convolution_Dilation,
-    Convolution_Depthwise,
-    Convolution_Depthwise_Pointwise,
-    Convolution_Deconvolution,
-    Convolution_Depthwise_Deconvolution
+    CONVOLUTION_POINTWISE,
+    CONVOLUTION_DILATION,
+    CONVOLUTION_DEPTHWISE,
+    CONVOLUTION_DEPTHWISE_POINTWISE,
+    CONVOLUTION_DECONVOLUTION,
+    CONVOLUTION_DEPTHWISE_DECONVOLUTION
 } ConvolutionMode;
 
-typedef enum { Pad_Constant, Pad_Reflect, Pad_Edge, Pad_Symmetric } PadMode;
+typedef enum { PAD_CONSTANT, PAD_REFLECT, PAD_EDGE, PAD_SYMMETRIC } PadMode;
 
-typedef enum { CHECK_EQUAL, CHECK_GREATEQUAL, CHECK_GREAT } CheckMode;
+typedef enum {
+    CHECK_EQUAL,
+    CHECK_GREATER_EQUAL,
+    CHECK_GREATER,
+    CHECK_LESS,
+    CHECK_LESS_EQUAL,
+    CHECK_NOT_EQUAL
+} CheckMode;
 
 typedef enum {
     REDUCTION_SUM,
@@ -112,16 +126,6 @@ typedef enum {
     BGR_SC_RAW = 5
 } ImageFormat;
 
-#pragma pack(8)
-typedef struct ActivationParamSpec {
-    ActivationMode mode;
-    float value[4] = {0, 0, 0, 0};
-} ActivationParamSpec;
-
-typedef struct {
-    bool propagate_down;
-} PReLUParamSpec;
-
 typedef enum {
     CONVOLUTION_NO_TMP_MEM,
     CONVOLUTION_FASTEST,
@@ -137,29 +141,10 @@ typedef enum {
     CONVOLUTION_ALGORITHM_GEMM_ICNCHW,
     CONVOLUTION_ALGORITHM_WINOGRAD,
     CONVOLUTION_ALGORITHM_BNN,
-    CONVOLUTION_ALGORITHM_DIRECT_SPE_CK,
+    CONVOLUTION_ALGORITHM_INVGEMM,
     CONVOLUTION_ALGORITHM_GROUP_DECONV,
     CONVOLUTION_ALGORITHM_NULL
 } ConvolutionForwardAlgorithm;
-
-typedef struct {
-    float xmin;
-    float ymin;
-    float xmax;
-    float ymax;
-    unsigned int label;
-} BoxRect;
-
-typedef struct {
-    unsigned int label;
-    I64 box_index;
-} BoxInfo;
-
-typedef struct {
-    unsigned int max_output_boxes_per_class;
-    float iou_threshold;
-    float score_threshold;
-} NonMaxSuppressionParamSpec;
 
 typedef enum {
     DEPTHWISE_CONVOLUTION_ALGORITHM_DIRECT,
@@ -170,28 +155,47 @@ typedef enum {
     DEPTHWISE_CONVOLUTION_ALGORITHM_NULL
 } DepthwiseConvolutionForwardAlgorithm;
 
+#pragma pack(8)
+typedef struct ActivationParamSpec {
+    ActivationMode mode;
+    float value[4] = {0, 0, 0, 0};
+} ActivationParamSpec;
+
 typedef struct {
+    bool propagate_down;
+} PReLUParamSpec;
+
+typedef struct {
+    int center_point_box;
+    unsigned int max_output_boxes_per_class;
+    float iou_threshold;
+    float score_threshold;
+} NonMaxSuppressionParamSpec;
+
+typedef struct {
+    // save h, w
     unsigned int sizes[2];
+    // save n, c, h, w
     float scales[4];
     unsigned int num_sizes;
     unsigned int num_scales;
     ResizeMode mode;
-    ResizeCoordinateTransMode trans_mode;
+    CoordinateTransMode trans_mode;
     RoundMode round_mode;
 } ResizeParamSpec;
 
 typedef struct {
     int axes[8];
-    int axes_num;
+    int num_axes;
 } SqueezeParamSpec;
 
 typedef struct {
     int axes[8];
-    int axes_num;
+    int num_axes;
 } UnsqueezeParamSpec;
 
 typedef struct {
-    DataType targetDt;
+    DataType dt;
 } CastParamSpec;
 
 typedef struct {
@@ -204,8 +208,8 @@ typedef struct {
 } ReLUParamSpec;
 
 typedef struct {
-    float coeff_values[8];
-    int coeff_size;
+    float coeff[8];
+    int num_coeff;
 } EltwiseSumSpec;
 
 typedef struct {
@@ -219,8 +223,8 @@ typedef union {
 } ActivationSpec;
 
 typedef struct {
-    EltwiseMode elt_mode;
-    EltwiseSumSpec elt_sum_spec;
+    EltwiseMode mode;
+    EltwiseSumSpec sum_spec;
     ActivationMode activation_type;
     ActivationSpec activation_spec;
 } EltwiseParamSpec;
@@ -233,12 +237,12 @@ typedef struct {
     unsigned int stride_t;
     unsigned int stride_h;
     unsigned int stride_w;
-    unsigned int padding_before;
-    unsigned int padding_after;
-    unsigned int padding_top;
-    unsigned int padding_bottom;
-    unsigned int padding_left;
-    unsigned int padding_right;
+    unsigned int pad_before;
+    unsigned int pad_after;
+    unsigned int pad_top;
+    unsigned int pad_bottom;
+    unsigned int pad_left;
+    unsigned int pad_right;
     unsigned int group;
     unsigned int dilatedRate_t;
     unsigned int dilatedRate_h;
@@ -248,7 +252,10 @@ typedef struct {
     ActivationMode dw_activation_type;
     ActivationMode pw_activation_type;
     ActivationSpec activation_spec;
-    RoundMode rm;
+    RoundMode round_mode;
+    unsigned int output_pad_t;
+    unsigned int output_pad_h;
+    unsigned int output_pad_w;
 } ConvolutionParamSpec;
 
 typedef struct {
@@ -258,14 +265,15 @@ typedef struct {
     unsigned int stride_t;
     unsigned int stride_h;
     unsigned int stride_w;
-    unsigned int padding_before;
-    unsigned int padding_after;
-    unsigned int padding_top;
-    unsigned int padding_bottom;
-    unsigned int padding_left;
-    unsigned int padding_right;
-    RoundMode rm;
+    unsigned int pad_before;
+    unsigned int pad_after;
+    unsigned int pad_top;
+    unsigned int pad_bottom;
+    unsigned int pad_left;
+    unsigned int pad_right;
+    RoundMode round_mode;
     PoolingMode mode;
+    bool count_include_pad;
 } PoolingParamSpec;
 
 // FC's weight is reordered to NxK, K is removed dimension.
@@ -307,8 +315,8 @@ typedef struct {
 } PadParamSpec;
 
 typedef struct {
-    unsigned int input_dim;
-    unsigned int num_output;
+    unsigned int num_inputs;
+    unsigned int num_outputs;
     bool bias_term;
     bool transpose;
     int axis;
@@ -321,21 +329,22 @@ typedef struct {
 } PowerParamSpec;
 
 typedef struct {
-    int shape_dims[8];
-    int shape_size;
+    int shape[8];
+    int num_shape;
     int axis;
     int num_axes;
 } ReshapeParamSpec;
 
 typedef struct {
     int slice_points[8];
-    unsigned int slice_size;
+    unsigned int num_slice;
     int axis;
 } SliceParamSpec;
 
-typedef struct {
-    unsigned int trans_dims[8];
-    unsigned int trans_size;
+typedef struct TransposeParamSpec {
+    unsigned int axes[8];
+    unsigned int num_axes;
+    DataFormat df = DF_NCHW;
 } TransposeParamSpec;
 
 typedef struct {
@@ -346,29 +355,29 @@ typedef struct {
 
 typedef struct {
     RNNMode mode;
-    unsigned int numOutput;
+    unsigned int num_outputs;
     // steps >= 0 for multi-steps RNN
     // steps = -1 for RNNCell
     int steps;
-    int numProjection;
-    float zoneoutCell;
-    float zoneoutOutput;
+    int num_projection;
+    float zoneout_cell;
+    float zoneout_output;
 
-    bool biDirection;
-    float forgetBias;
-    ActivationMode activationMode;
+    bool bi_direction;
+    float forget_bias;
+    ActivationMode activation_type;
 } RNNParamSpec;
 
 typedef struct {
-    unsigned int coefficient_len;
+    unsigned int coefficient;
     BilateralSliceApplyMode mode;
     bool has_offset;
 } BilateralSliceApplyParamSpec;
 
 typedef struct {
     int axes[8];
-    int axes_num;
-    ReductionMode reduction_mode;
+    int num_axes;
+    ReductionMode mode;
     float coeff;
     bool keep_dim;
 } ReductionParamSpec;
@@ -384,7 +393,7 @@ typedef struct {
 } CopyParamSpec;
 
 typedef struct {
-    CheckMode check_mode;
+    CheckMode mode;
 } CheckParamSpec;
 
 typedef struct {
@@ -392,8 +401,9 @@ typedef struct {
     int axis;
 } RepeatParamSpec;
 
-typedef struct {
+typedef struct PreAllocatedMemoryParamSpec {
     TensorDesc desc;
+    float value = 0;
 } PreAllocatedMemoryParamSpec;
 
 typedef struct {
@@ -434,7 +444,7 @@ typedef struct {
     char ellipsis_mask[8];
     char new_axis_mask[8];
     char shrink_axis_mask[8];
-    unsigned int dim_size;
+    unsigned int num_dims;
 } TfSliceParamSpec;
 
 typedef struct {
@@ -478,17 +488,17 @@ typedef struct {
 } ChannelResizeParamSpec;
 
 typedef struct {
-    int blockSize;
+    int block_size;
 } Space2DepthParamSpec;
 
 typedef struct {
-    int blockSize;
-    I8 reMode[8];
+    int block_size;
+    I8 mode[8];
 } Depth2SpaceParamSpec;
 
 typedef struct {
-    int repeatsInfo[8];
-    int dimsSize;
+    int repeats[8];
+    int num_repeats;
     int axis;
 } TileParamSpec;
 
@@ -511,26 +521,21 @@ typedef struct {
     FullyConnectedParamSpec fc_desc[6];
     PowerParamSpec power_spec;
     bool eltwiseWithLayerNormIn[2];
-    ActivationMode actiMode;
+    ActivationMode activation_type;
     ReshapeParamSpec reshapeDesc[4];
     EltwiseParamSpec eltwiseDesc[2];
-} MultiheadAttentionParamSpec;
+} MultiHeadAttentionParamSpec;
 
 typedef struct {
     int axis;
     int largest;
     int sorted;
-    int topk;
+    int k;
 } TopKParamSpec;
 
 typedef struct {
-    TensorDesc conditionDesc;
-    TensorDesc yDesc;
-} WhereParamSpec;
-
-typedef struct {
-    int shape_dims[8];
-    int shape_size;
+    int shape[8];
+    int num_shape;
 } ExpandParamSpec;
 
 typedef struct ScatterParamSpec {
@@ -558,17 +563,13 @@ typedef struct GatherParamSpec {
     int batch_dims = 0;
 } GatherParamSpec;
 
-typedef struct EqualParamSpec {
-    bool invert = false;
-} EqualParamSpec;
-
 typedef struct {
     unsigned int num_heads;
-    ActivationParamSpec activation;
+    ActivationParamSpec activation_type;
 } GATParamSpec;
 
 typedef struct RoIAlignParamSpec {
-    ROIAlignCoordinateTransformationMode coordinateTransformationMode;
+    CoordinateTransMode trans_mode;
     PoolingMode mode;
     unsigned int output_h;
     unsigned int output_w;
@@ -588,6 +589,57 @@ typedef struct GenerateProposalsParamSpec {
     int pre_nms_topN;
     float spatial_scale;
 } GenerateProposalsParamSpec;
+
+typedef struct QuantizeLinearParamSpec {
+    // get the scales from input tensor
+    int axis;
+    DataType dt;
+} QuantizeLinearParamSpec;
+
+typedef struct {
+    int axis;
+    float eps;
+} LayerNormParamSpec;
+
+typedef struct RandomUniformParamSpec {
+    DataType dt;
+    float low;
+    float high;
+    float seed;
+    int shape[8];
+    int num_shape;
+} RandomUniformParamSpec;
+
+typedef struct CumSumParamSpec {
+    bool exclusive;
+    bool reverse;
+    bool axis;
+} CumSumParamSpec;
+
+typedef struct GridSampleParamSpec {
+    ResizeMode mode;
+    PadMode pad_mode;
+    float constant_value = 0;
+    bool align_corners;
+} GridSampleParamSpec;
+
+typedef struct OneHotParamSpec {
+    int axis;
+    int depth;
+    float values[2];
+} OneHotParamSpec;
+
+typedef struct ConstantOfShapeParamSpec {
+    DataType dt;
+    float value = 0;
+} ConstantOfShapeParamSpec;
+
+typedef struct RangeParamSpec {
+    DataType dt;
+    float start;
+    float limit;
+    float delta;
+} RangeParamSpec;
 
 typedef union ParameterSpec {
     ParameterSpec()
@@ -634,18 +686,25 @@ typedef union ParameterSpec {
     PriorBoxParamSpec prior_box_spec;
     DetectionOutputParamSpec detection_output_spec;
     Yolov3DetectionOutputParamSpec yolov3_detection_output_spec;
-    MultiheadAttentionParamSpec multiheadAttention_spec;
+    MultiHeadAttentionParamSpec multihead_attention_spec;
     TileParamSpec tile_spec;
     SpliceParamSpec splice_spec;
     TdnnParamSpec tdnn_spec;
     TopKParamSpec topk_spec;
-    WhereParamSpec where_spec;
     ExpandParamSpec expand_spec;
     ScatterParamSpec scatter_spec;
-    EqualParamSpec equal_spec;
     RoIAlignParamSpec roialign_spec;
     GenerateProposalsParamSpec generate_proposals_spec;
     GATParamSpec gat_spec;
+    QuantizeLinearParamSpec quant_spec;
+    LayerNormParamSpec ln_spec;
+    RandomUniformParamSpec random_uniform_spec;
+    CumSumParamSpec cumsum_spec;
+    GridSampleParamSpec grid_sample_spec;
+    OneHotParamSpec onehot_spec;
+    NonMaxSuppressionParamSpec non_max_suppression_spec;
+    ConstantOfShapeParamSpec constant_of_shape_spec;
+    RangeParamSpec range_spec;
 } ParameterSpec;
 
 typedef struct {
@@ -654,7 +713,7 @@ typedef struct {
 } QuantSpec;
 #pragma pack()
 
-inline int get_operator_parameter_size(OperatorType operatorType)
+inline int get_operator_parameter_size(int version, OperatorType operatorType)
 {
     std::map<OperatorType, int> operatorParameterSizeMap = {{OT_Conv, sizeof(ConvolutionParamSpec)},
         {OT_Deconvolution, sizeof(ConvolutionParamSpec)}, {OT_FC, sizeof(FullyConnectedParamSpec)},
@@ -683,19 +742,40 @@ inline int get_operator_parameter_size(OperatorType operatorType)
         {OT_RelativeShift, sizeof(RelativeShiftParamSpec)}, {OT_PriorBox, sizeof(PriorBoxParamSpec)},
         {OT_DetectionOutput, sizeof(DetectionOutputParamSpec)},
         {OT_Yolov3DetectionOutput, sizeof(Yolov3DetectionOutputParamSpec)},
-        {OT_MultiHeadAttention, sizeof(MultiheadAttentionParamSpec)},
+        {OT_MultiHeadAttention, sizeof(MultiHeadAttentionParamSpec)},
         {OT_Tile, sizeof(TileParamSpec)}, {OT_Splice, sizeof(SpliceParamSpec)},
         {OT_Tdnn, sizeof(TdnnParamSpec)}, {OT_TopK, sizeof(TopKParamSpec)},
-        {OT_Where, sizeof(WhereParamSpec)}, {OT_Expand, sizeof(ExpandParamSpec)},
-        {OT_InstanceNorm, sizeof(InstanceNormParamSpec)}, {OT_Scatter, sizeof(ScatterParamSpec)},
-        {OT_LogSoftmax, sizeof(SoftmaxParamSpec)}, {OT_Equal, sizeof(EqualParamSpec)},
+        {OT_Expand, sizeof(ExpandParamSpec)}, {OT_InstanceNorm, sizeof(InstanceNormParamSpec)},
+        {OT_Scatter, sizeof(ScatterParamSpec)}, {OT_LogSoftmax, sizeof(SoftmaxParamSpec)},
         {OT_GenerateProposals, sizeof(GenerateProposalsParamSpec)},
-        {OT_RoIAlign, sizeof(RoIAlignParamSpec)}, {OT_GAT, sizeof(GATParamSpec)}};
+        {OT_RoIAlign, sizeof(RoIAlignParamSpec)}, {OT_GAT, sizeof(GATParamSpec)},
+        {OT_QuantizeLinear, sizeof(QuantizeLinearParamSpec)},
+        {OT_LayerNorm, sizeof(LayerNormParamSpec)},
+        {OT_QuantizeLinear, sizeof(QuantizeLinearParamSpec)}, {OT_CumSum, sizeof(CumSumParamSpec)},
+        {OT_RandomUniform, sizeof(RandomUniformParamSpec)},
+        {OT_GridSample, sizeof(GridSampleParamSpec)}, {OT_OneHot, sizeof(OneHotParamSpec)},
+        {OT_NonMaxSuppression, sizeof(NonMaxSuppressionParamSpec)},
+        {OT_Range, sizeof(RangeParamSpec)}, {OT_ConstantOfShape, sizeof(ConstantOfShapeParamSpec)}};
     int size;
     if (operatorParameterSizeMap.find(operatorType) == operatorParameterSizeMap.end()) {
         size = 0;
     } else {
         size = operatorParameterSizeMap[operatorType];
+    }
+    if (version == 20201120) {
+        if (operatorType == OT_Conv || operatorType == OT_Deconvolution) {
+            size -= 3 * sizeof(unsigned int);
+        }
+        if (operatorType == OT_LayerNorm) {
+            size = 0;
+        }
+    } else {
+        size = (size + 3) / 4 * 4;
+    }
+    if (version == 20201120 || version == 20211021) {
+        if (operatorType == OT_Transpose) {
+            size -= sizeof(DataFormat);
+        }
     }
     return size;
 }
@@ -707,12 +787,12 @@ inline ConvolutionParamSpec createConvolutionParamSpec(unsigned int group,
     unsigned int stride_t,
     unsigned int stride_h,
     unsigned int stride_w,
-    unsigned int padding_before,
-    unsigned int padding_after,
-    unsigned int padding_top,
-    unsigned int padding_bottom,
-    unsigned int padding_left,
-    unsigned int padding_right,
+    unsigned int pad_before,
+    unsigned int pad_after,
+    unsigned int pad_top,
+    unsigned int pad_bottom,
+    unsigned int pad_left,
+    unsigned int pad_right,
     unsigned int dilateRate_t,
     unsigned int dilateRate_h,
     unsigned int dilateRate_w,
@@ -727,17 +807,20 @@ inline ConvolutionParamSpec createConvolutionParamSpec(unsigned int group,
     p.stride_t = stride_t;
     p.stride_h = stride_h;
     p.stride_w = stride_w;
-    p.padding_before = padding_before;
-    p.padding_after = padding_after;
-    p.padding_top = padding_top;
-    p.padding_bottom = padding_bottom;
-    p.padding_left = padding_left;
-    p.padding_right = padding_right;
+    p.pad_before = pad_before;
+    p.pad_after = pad_after;
+    p.pad_top = pad_top;
+    p.pad_bottom = pad_bottom;
+    p.pad_left = pad_left;
+    p.pad_right = pad_right;
     p.dilatedRate_t = dilateRate_t;
     p.dilatedRate_h = dilateRate_h;
     p.dilatedRate_w = dilateRate_w;
     p.num_outputs = num_outputs;
     p.convolution_type = convMode;
+    p.output_pad_t = 0;
+    p.output_pad_h = 0;
+    p.output_pad_w = 0;
     return p;
 }
 
@@ -762,13 +845,13 @@ inline PoolingParamSpec createPoolingParamSpec(PoolingMode pm,
     unsigned int stride_t,
     unsigned int stride_h,
     unsigned int stride_w,
-    unsigned int padding_before,
-    unsigned int padding_after,
-    unsigned int padding_top,
-    unsigned int padding_bottom,
-    unsigned int padding_left,
-    unsigned int padding_right,
-    RoundMode rm)
+    unsigned int pad_before,
+    unsigned int pad_after,
+    unsigned int pad_top,
+    unsigned int pad_bottom,
+    unsigned int pad_left,
+    unsigned int pad_right,
+    RoundMode round_mode)
 {
     PoolingParamSpec p;
     p.mode = pm;
@@ -778,26 +861,25 @@ inline PoolingParamSpec createPoolingParamSpec(PoolingMode pm,
     p.stride_t = stride_t;
     p.stride_h = stride_h;
     p.stride_w = stride_w;
-    p.padding_before = padding_before;
-    p.padding_after = padding_after;
-    p.padding_top = padding_top;
-    p.padding_bottom = padding_bottom;
-    p.padding_left = padding_left;
-    p.padding_right = padding_right;
-    p.rm = rm;
+    p.pad_before = pad_before;
+    p.pad_after = pad_after;
+    p.pad_top = pad_top;
+    p.pad_bottom = pad_bottom;
+    p.pad_left = pad_left;
+    p.pad_right = pad_right;
+    p.round_mode = round_mode;
     return p;
 }
 
-inline ReshapeParamSpec createReshapeParamSpec(
-    int *shape_dims, int shape_size, int axis, int num_axes)
+inline ReshapeParamSpec createReshapeParamSpec(int *shape, int num_shape, int axis, int num_axes)
 {
     ReshapeParamSpec p;
-    p.shape_size = shape_size;
+    p.num_shape = num_shape;
     p.axis = axis;
     p.num_axes = num_axes;
-    if (shape_dims != nullptr && shape_size != 0) {
-        for (int i = 0; i < shape_size; i++) {
-            p.shape_dims[i] = shape_dims[i];
+    if (shape != nullptr && num_shape != 0) {
+        for (int i = 0; i < num_shape; i++) {
+            p.shape[i] = shape[i];
         }
     }
     return p;
@@ -811,12 +893,12 @@ inline ClipParamSpec createClipParamSpec(float min, float max)
     return p;
 }
 
-inline SqueezeParamSpec createSqueezeParamSpec(int *axes, int axes_num)
+inline SqueezeParamSpec createSqueezeParamSpec(int *axes, int num_axes)
 {
     SqueezeParamSpec p;
-    p.axes_num = axes_num;
-    if (axes != nullptr && axes_num != 0) {
-        for (int i = 0; i < axes_num; i++) {
+    p.num_axes = num_axes;
+    if (axes != nullptr && num_axes != 0) {
+        for (int i = 0; i < num_axes; i++) {
             p.axes[i] = axes[i];
         }
     }

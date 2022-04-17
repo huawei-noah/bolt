@@ -29,6 +29,18 @@ public:
         return mem;
     }
 
+    ReshapeParamSpec get_param(TensorDesc desc)
+    {
+        ReshapeParamSpec ps = this->p;
+        if (ps.num_shape == 0) {
+            ps.num_shape = desc.dims[0];
+            for (int i = 0; i < ps.num_shape; i++) {
+                ps.shape[i] = desc.dims[desc.nDims + i];
+            }
+        }
+        return ps;
+    }
+
     void run() override
     {
         Tensor inputTensor = this->inputTensors[0];
@@ -37,9 +49,9 @@ public:
         Tensor tmpOutputTensor = outputTensor;
         auto inputDesc = inputTensor.get_desc();
         auto outputDesc = outputTensor.get_desc();
+        auto tmpOutputDesc = outputDesc;
         // if axis is 8, the mode of a model for reshape is tflite.
         if (this->p.axis == 8 && outputDesc.nDims == 4) {
-            auto tmpOutputDesc = outputTensor.get_desc();
             tmpOutputDesc.df = DF_NHWC;
             tmpOutputTensor = this->temp;
             tmpOutputTensor.resize(tmpOutputDesc);
@@ -61,7 +73,6 @@ public:
         // NHWC -> NCHW
         if (this->p.axis == 8 && outputDesc.nDims == 4) {
             auto outputDesc = outputTensor.get_desc();
-            auto tmpOutputDesc = tmpOutputTensor.get_desc();
             void *tmpOutputPtr = ((CpuMemory *)(tmpOutputTensor.get_memory()))->get_ptr();
             transformToNCHW(tmpOutputDesc, tmpOutputPtr, outputDesc,
                 ((CpuMemory *)(outputTensor.get_memory()))->get_ptr());
@@ -72,9 +83,11 @@ public:
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
-        CHECK_STATUS(
-            reshape_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo));
-        return SUCCESS;
+        ReshapeParamSpec ps = this->p;
+        if (ps.num_shape == 0 && inTensors.size() > 1) {
+            ps = get_param(inTensors[1]->get_desc());
+        }
+        return reshape_infer_output_size(inTensors[0], ps, outTensors[0], &this->archInfo);
     }
 
     U32 infer_tmp_memory_size() override
@@ -82,6 +95,9 @@ public:
         U32 bytes = 0;
         CHECK_STATUS(reshape_infer_forward_tmp_bytes(
             this->inputTensors[0], this->outputTensors[0], &bytes, &this->archInfo));
+        if (this->p.axis == 8) {
+            bytes += UNI_MAX(this->inputTensors[0].bytes(), this->outputTensors[0].bytes());
+        }
         return bytes;
     }
 };

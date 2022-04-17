@@ -9,7 +9,7 @@ inline EE set_chars_define_opt(const char *optName, char *&opt)
     std::string sopt = "-D";
     sopt += optName;
     sopt += " ";
-    strcpy(opt, sopt.c_str());
+    UNI_STRCPY(opt, sopt.c_str());
     opt += sopt.length();
     return SUCCESS;
 }
@@ -22,7 +22,7 @@ inline EE set_value_define_opt(U32 val, const char *valName, char *&opt)
     sopt += "=";
     sopt += sval;
     sopt += " ";
-    strcpy(opt, sopt.c_str());
+    UNI_STRCPY(opt, sopt.c_str());
     opt += sopt.length();
     return SUCCESS;
 }
@@ -64,11 +64,17 @@ inline EE set_activation_define_opt(ActivationMode activeMode, char *&opt)
         case ACTIVATION_NEG:
             sopt = "-DUSE_NEG -D AM=neg_ ";
             break;
+        case ACTIVATION_EXP:
+            sopt = "-DUSE_EXP -D AM=exp_ ";
+            break;
+        case ACTIVATION_SWISH:
+            sopt = "-DUSE_SWISH -D AM=swish_ ";
+            break;
         default:
             CHECK_STATUS(NOT_SUPPORTED);
             break;
     }
-    strcpy(opt, sopt.c_str());
+    UNI_STRCPY(opt, sopt.c_str());
     opt += sopt.length();
     return SUCCESS;
 }
@@ -109,11 +115,17 @@ inline EE set_activation_mode_name(ActivationMode activeMode, char *name)
         case ACTIVATION_NEG:
             sname = "neg_";
             break;
+        case ACTIVATION_EXP:
+            sname = "exp_";
+            break;
+        case ACTIVATION_SWISH:
+            sname = "swish_";
+            break;
         default:
             CHECK_STATUS(NOT_SUPPORTED);
             break;
     }
-    strcpy(name, sname.c_str());
+    UNI_STRCPY(name, sname.c_str());
     return SUCCESS;
 }
 
@@ -143,7 +155,7 @@ inline EE set_eltwise_define_opt(EltwiseMode eltwiseMode, char *&opt)
             CHECK_STATUS(NOT_SUPPORTED);
             break;
     }
-    strcpy(opt, sopt.c_str());
+    UNI_STRCPY(opt, sopt.c_str());
     opt += sopt.length();
     return SUCCESS;
 }
@@ -174,7 +186,7 @@ inline EE set_eltwise_mode_name(EltwiseMode eltwiseMode, char *name)
             CHECK_STATUS(NOT_SUPPORTED);
             break;
     }
-    strcpy(name, sname.c_str());
+    UNI_STRCPY(name, sname.c_str());
     return SUCCESS;
 }
 
@@ -198,7 +210,7 @@ inline EE set_io_mem_define_opt(GCLMemType inputType, GCLMemType outputType, cha
     } else {
         def += "-D IOM= ";
     }
-    strcpy(opt, def.c_str());
+    UNI_STRCPY(opt, def.c_str());
     opt += def.length();
     return SUCCESS;
 }
@@ -215,7 +227,7 @@ inline EE set_io_mem_name(GCLMemType inputType, GCLMemType outputType, char *nam
     } else if (useInputImg && useOutputImg) {
         sname = "iom_";
     }
-    strcpy(name, sname.c_str());
+    UNI_STRCPY(name, sname.c_str());
     return SUCCESS;
 }
 
@@ -273,7 +285,7 @@ inline EE set_io_mems_name_and_define_opts(GCLMemType *inputMemType,
     }
     CHECK_STATUS(set_chars_define_opt(iomDef.c_str(), opt));
 
-    strcpy(name, iom.c_str());
+    UNI_STRCPY(name, iom.c_str());
     return SUCCESS;
 }
 
@@ -291,7 +303,7 @@ inline EE set_data_type_name(DataType dt, char *name)
     } else {
         return NOT_SUPPORTED;
     }
-    strcpy(name, sname.c_str());
+    UNI_STRCPY(name, sname.c_str());
     return SUCCESS;
 }
 
@@ -309,7 +321,7 @@ inline EE set_data_type_define_opt(DataType dt, char *&opt)
     } else {
         return NOT_SUPPORTED;
     }
-    strcpy(opt, sopt.c_str());
+    UNI_STRCPY(opt, sopt.c_str());
     opt += sopt.length();
     return SUCCESS;
 }
@@ -323,8 +335,9 @@ inline EE set_common_opt(DataType dt,
 {
     char ioMemName[128] = "";
     CHECK_STATUS(set_io_mem_name(inputMemType, outputMemType, ioMemName));
-    sprintf(kernelName, "%s_%s", sourceName, ioMemName);
-    strcpy(kernelOpt->sourceName, sourceName);
+    std::string kernel = sourceName + std::string("_") + ioMemName;
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, sourceName);
     kernelOpt->kernelDataType = dt;
     char *opt = kernelOpt->option;
     CHECK_STATUS(set_io_mem_define_opt(inputMemType, outputMemType, opt));
@@ -339,7 +352,7 @@ inline bool check_qualcomm_device(char *devName = nullptr)
         if (useQualcommDev) {
             dev = "_qc";
         }
-        strcpy(devName, dev.c_str());
+        UNI_STRCPY(devName, dev.c_str());
     }
     return useQualcommDev;
 }
@@ -347,7 +360,7 @@ inline bool check_qualcomm_device(char *devName = nullptr)
 inline EE add_qcom_acc_16_bit_opt(char *&opt)
 {
     std::string qcom_acc = "-qcom-accelerate-16-bit ";
-    strcpy(opt, qcom_acc.c_str());
+    UNI_STRCPY(opt, qcom_acc.c_str());
     opt += qcom_acc.length();
     return SUCCESS;
 }

@@ -40,10 +40,10 @@ EE convolution_winograd_V8(TensorDesc inputDesc,
     CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
     CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
     CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
-    U32 paddingT = convParamSpec.padding_top;
-    U32 paddingB = convParamSpec.padding_bottom;
-    U32 paddingL = convParamSpec.padding_left;
-    U32 paddingR = convParamSpec.padding_right;
+    U32 paddingT = convParamSpec.pad_top;
+    U32 paddingB = convParamSpec.pad_bottom;
+    U32 paddingL = convParamSpec.pad_left;
+    U32 paddingR = convParamSpec.pad_right;
 
     if (fdf != DF_HWNCN8) {
         CHECK_STATUS(NOT_MATCH);
@@ -78,8 +78,8 @@ EE convolution_winograd_V8(TensorDesc inputDesc,
     EE ret = SUCCESS;
     // copy input into a input with padding
     for (U32 n = 0; n < in; n++) {
-        convParamSpec.padding_bottom = pad_bottom;
-        convParamSpec.padding_right = pad_right;
+        convParamSpec.pad_bottom = pad_bottom;
+        convParamSpec.pad_right = pad_right;
         F32 *inArray_pad = convolution_input_padding_per_channel<F32, 8>(
             n, ic, 1, ih, iw, convParamSpec, inArray, (F32 *)tmp);
 
@@ -796,7 +796,7 @@ EE convolution_winograd_V8(TensorDesc inputDesc,
                 trans_I_4x4_3x3(Iw_ptr1, I1);
                 for (U32 i = 0; i < 36; i++) {
                     F32 *itm = itmArray_mov + i * ic * 8;
-                    memcpy(itm, Iw[i], 8 * bytesOf(idt));
+                    UNI_MEMCPY(itm, Iw[i], 8 * bytesOf(idt));
                 }
             }
             for (I32 o = 0; o < I32(oc); o++) {

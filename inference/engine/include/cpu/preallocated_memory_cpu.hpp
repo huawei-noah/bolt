@@ -18,30 +18,27 @@
 
 class PreAllocatedMemoryCPU : public PreAllocatedMemory {
 public:
-    PreAllocatedMemoryCPU(DataType dt, TensorDesc desc) : PreAllocatedMemory(dt, desc)
+    PreAllocatedMemoryCPU(PreAllocatedMemoryParamSpec p) : PreAllocatedMemory(p)
     {}
 
     std::shared_ptr<Operator> clone() override
     {
         std::shared_ptr<PreAllocatedMemoryCPU> mem =
-            std::shared_ptr<PreAllocatedMemoryCPU>(new PreAllocatedMemoryCPU(this->dt, this->desc));
+            std::shared_ptr<PreAllocatedMemoryCPU>(new PreAllocatedMemoryCPU(this->p));
         *mem = *this;
         return mem;
     }
 
     void run() override
     {
-        CHECK_STATUS(preallocated_memory(this->outputTensors[0], &this->archInfo));
+        CHECK_STATUS(preallocated_memory(this->p, this->outputTensors[0], &this->archInfo));
     }
 
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
-        if (inTensors.size() > 0) {
-            CHECK_STATUS(NOT_MATCH);
-        }
-        outTensors[0]->resize(this->desc);
-        return SUCCESS;
+        return preallocated_memory_infer_output_size(
+            inTensors, this->p, outTensors[0], &this->archInfo);
     }
 };
 

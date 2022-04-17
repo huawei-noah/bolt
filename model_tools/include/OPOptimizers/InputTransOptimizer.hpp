@@ -39,11 +39,10 @@ class InputTransOptimizer : public OPOptimizer {
                 continue;
             }
             auto transPs = spec->ops[i].ps.transpose_spec;
-            if (spec->ops[i].type == OT_Transpose && transPs.trans_size == 4 &&
-                transPs.trans_dims[0] == 0 && transPs.trans_dims[1] == 3 &&
-                transPs.trans_dims[2] == 1 && transPs.trans_dims[3] == 2) {
+            int id = modelInput[name];
+            if (spec->ops[i].type == OT_Transpose && transPs.num_axes == 4 && transPs.axes[0] == 0 &&
+                transPs.axes[1] == 3 && transPs.axes[2] == 1 && transPs.axes[3] == 2) {
                 setOperatorInvalid(spec, i, true);
-                int id = modelInput[name];
                 int c = spec->input_dims[id].dims[0];
                 int w = spec->input_dims[id].dims[1];
                 int h = spec->input_dims[id].dims[2];
@@ -52,6 +51,17 @@ class InputTransOptimizer : public OPOptimizer {
                 spec->input_dims[id].dims[1] = h;
                 spec->input_dims[id].dims[2] = c;
                 spec->input_dims[id].dims[3] = n;
+                hasOptimized = true;
+            }
+            if (spec->ops[i].type == OT_Transpose && transPs.num_axes == 3 &&
+                transPs.axes[0] == 0 && transPs.axes[1] == 2 && transPs.axes[2] == 1) {
+                setOperatorInvalid(spec, i, true);
+                int c = spec->input_dims[id].dims[0];
+                int h = spec->input_dims[id].dims[1];
+                int n = spec->input_dims[id].dims[2];
+                spec->input_dims[id].dims[0] = h;
+                spec->input_dims[id].dims[1] = c;
+                spec->input_dims[id].dims[2] = n;
                 hasOptimized = true;
             }
             if (spec->ops[i].type == OT_Embedding || spec->ops[i].type == OT_Gather) {

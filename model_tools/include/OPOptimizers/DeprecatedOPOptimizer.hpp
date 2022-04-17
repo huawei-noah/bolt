@@ -49,18 +49,18 @@ class DeprecatedOPOptimizer : public OPOptimizer {
                     spec->ops[i].ps.pooling_spec.stride_t == 1 &&
                     spec->ops[i].ps.pooling_spec.stride_h == 1 &&
                     spec->ops[i].ps.pooling_spec.stride_w == 1 &&
-                    spec->ops[i].ps.pooling_spec.padding_before == 0 &&
-                    spec->ops[i].ps.pooling_spec.padding_after == 0 &&
-                    spec->ops[i].ps.pooling_spec.padding_top == 0 &&
-                    spec->ops[i].ps.pooling_spec.padding_bottom == 0 &&
-                    spec->ops[i].ps.pooling_spec.padding_left == 0 &&
-                    spec->ops[i].ps.pooling_spec.padding_right == 0) {
+                    spec->ops[i].ps.pooling_spec.pad_before == 0 &&
+                    spec->ops[i].ps.pooling_spec.pad_after == 0 &&
+                    spec->ops[i].ps.pooling_spec.pad_top == 0 &&
+                    spec->ops[i].ps.pooling_spec.pad_bottom == 0 &&
+                    spec->ops[i].ps.pooling_spec.pad_left == 0 &&
+                    spec->ops[i].ps.pooling_spec.pad_right == 0) {
                     setOperatorInvalid(spec, i, true);
                     hasOptimized = true;
                     continue;
                 }
             }
-            if (spec->ops[i].type == OT_Split || spec->ops[i].type == OT_Dropout) {
+            if (spec->ops[i].type == OT_Dropout) {
                 setOperatorInvalid(spec, i, true);
                 hasOptimized = true;
                 continue;
@@ -82,7 +82,8 @@ class DeprecatedOPOptimizer : public OPOptimizer {
                 for (U32 j = 0; j < spec->ops[i].num_inputs; j++) {
                     key += spec->ops[i].input_tensors_name[j] + std::string(",");
                 }
-                key += copyBuffer<1024>(&(spec->ops[i].ps), sizeof(ParameterSpec));
+                key += copyBuffer<1024>(&(spec->ops[i].ps),
+                    get_operator_parameter_size(sg_boltVersion, spec->ops[i].type));
                 if (weightMap.find(spec->ops[i].name) != weightMap.end()) {
                     int weightId = weightMap[spec->ops[i].name];
                     if (spec->ws[weightId].bytes_of_weight > 0) {
@@ -97,8 +98,7 @@ class DeprecatedOPOptimizer : public OPOptimizer {
 
                 if (operatorMap.find(key) == operatorMap.end()) {
                     operatorMap[key] = i;
-                } else {
-                    CHECK_REQUIREMENT(spec->ops[i].num_outputs == 1);
+                } else if (spec->ops[i].num_outputs == 1) {
                     char *lastOut = spec->ops[operatorMap[key]].output_tensors_name[0];
                     std::string curOut = spec->ops[i].output_tensors_name[0];
                     auto nextOpIndexes = searchOperatorIndexByInput(
@@ -115,8 +115,38 @@ class DeprecatedOPOptimizer : public OPOptimizer {
                             str_copy(spec->output_names[j], lastOut, NAME_LEN);
                         }
                     }
-                    continue;
                 }
+            }
+        }
+        for (int i = 0; i < spec->num_inputs; i++) {
+            std::string name = spec->input_names[i];
+            std::vector<std::pair<int, int>> nextOpIndexes =
+                searchOperatorIndexByInput(spec, name, 0, spec->num_operator_specs);
+            if (nextOpIndexes.size() == 0) {
+                UNI_INFO_LOG("remove model input:%s.\n", name.c_str());
+                for (int j = i + 1; j < spec->num_inputs; j++) {
+                    spec->input_dims[j - 1] = spec->input_dims[j];
+                    str_copy(spec->input_names[j - 1], spec->input_names[j], NAME_LEN);
+                }
+                mt_free(spec->input_names[spec->num_inputs - 1]);
+                spec->num_inputs--;
+
+                int out_idx = -1;
+                for (int j = 0; j < spec->num_outputs; j++) {
+                    if (spec->output_names[j] == name) {
+                        out_idx = j;
+                        break;
+                    }
+                }
+                if (out_idx >= 0) {
+                    UNI_INFO_LOG("remove model output:%s.\n", name.c_str());
+                    for (int j = out_idx + 1; j < spec->num_outputs; j++) {
+                        str_copy(spec->output_names[j - 1], spec->output_names[j], NAME_LEN);
+                    }
+                    mt_free(spec->output_names[spec->num_outputs - 1]);
+                    spec->num_outputs--;
+                }
+                hasOptimized = true;
             }
         }
         return hasOptimized;

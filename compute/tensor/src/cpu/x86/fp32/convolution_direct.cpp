@@ -1950,10 +1950,10 @@ EE convolution_direct(TensorDesc inputDesc,
     // get computing params
     I32 strideH = convParamSpec.stride_h;
     I32 strideW = convParamSpec.stride_w;
-    I32 paddingT = convParamSpec.padding_top;
-    I32 paddingB = convParamSpec.padding_bottom;
-    I32 paddingL = convParamSpec.padding_left;
-    I32 paddingR = convParamSpec.padding_right;
+    I32 paddingT = convParamSpec.pad_top;
+    I32 paddingB = convParamSpec.pad_bottom;
+    I32 paddingL = convParamSpec.pad_left;
+    I32 paddingR = convParamSpec.pad_right;
     I32 dilateH = convParamSpec.dilatedRate_h;
     I32 dilateW = convParamSpec.dilatedRate_w;
     I32 ih_pad = ih + paddingT + paddingB;
@@ -1975,7 +1975,7 @@ EE convolution_direct(TensorDesc inputDesc,
     I32 hwocBlockNums = hwBlockNums * ocBlockNums;
     I32 blockIcDim = InferConvDirectBolckIcDim(BLOCK_IC_DIM, unrollOc, blockHwDim, fh, fw);
 
-#if defined(_WIN32) && defined(_USE_OPENMP)
+#ifdef _USE_OPENMP
     OpenMPController ompCtr;
     ompCtr.checkAndSetOpenMP(ohow, BLOCK_HW_DIM, ocBlockNums);
 #endif
@@ -1992,12 +1992,12 @@ EE convolution_direct(TensorDesc inputDesc,
         if (idf == DF_NCHWC8 && paddingT == 0 && paddingB == 0 && paddingL == 0 && paddingR == 0) {
             tmpInput = bInArray;
         } else {
-            // TODO: optimize the memcpy
+            // TODO: optimize the UNI_MEMCPY
             PaddingNCHWC8(bInArray, tmpInput, inputDesc, convParamSpec);
         }
 
 #ifdef _USE_OPENMP
-#pragma omp parallel num_threads(OMP_NUM_THREADS)
+#pragma omp parallel num_threads(OMP_NUM_THREADS) if (ompCtr.useOmp)
         {
 #endif
             I32 flags = 0;
@@ -2049,10 +2049,6 @@ EE convolution_direct(TensorDesc inputDesc,
         }
 #endif
     }
-
-#if defined(_WIN32) && defined(_USE_OPENMP)
-    ompCtr.resetOpenMP();
-#endif
 
     return SUCCESS;
 }

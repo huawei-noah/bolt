@@ -50,7 +50,7 @@ EE deconvolution_infer_forward_algorithm_cpu(TensorDesc inputDesc,
     }
 
 #ifdef _USE_X86
-    if (IS_X86(arch) && idf == DF_NCHWC8 && (fc * 2 < ic || fc < 128)) {
+    if (IS_X86(arch) && idf == DF_NCHWC8) {
         *algorithm = CONVOLUTION_ALGORITHM_POINTWISE;
         return SUCCESS;
     }
@@ -144,23 +144,21 @@ EE deconvolution_infer_forward_tmp_bytes_cpu(TensorDesc inputDesc,
     if (algorithm == CONVOLUTION_ALGORITHM_IM2COL_GEMM) {
         TensorDesc matrixADesc = tensor2df(idt, DF_NKN8, ic, in * ih * iw);
         TensorDesc matrixBDesc = tensor2df(idt, DF_NORMAL, ic, oc * fh * fw);
-        CHECK_STATUS(matrix_matrix_multiply_tmp_bytes(matrixADesc, matrixBDesc, bytes, X86_AVX2));
+        CHECK_STATUS(matrix_matrix_multiply_tmp_bytes(matrixADesc, matrixBDesc, bytes, arch));
         *bytes += in * ih * iw * oc * fh * fw * bytesOf(idt);
-#ifdef _USE_NEON
-        if (IS_ARM(arch) && idf == DF_NCHWC8) {
+        if (!IS_X86(arch) || idf != DF_NCHWC8 || in > 1) {
             *bytes += in * ih * iw * ic * bytesOf(idt);
         }
         *bytes += 32;
-#endif
         return SUCCESS;
     }
 
     U32 strideH = convParamSpec.stride_h;
     U32 strideW = convParamSpec.stride_w;
-    U32 paddingT = convParamSpec.padding_top;
-    U32 paddingB = convParamSpec.padding_bottom;
-    U32 paddingL = convParamSpec.padding_left;
-    U32 paddingR = convParamSpec.padding_right;
+    U32 paddingT = convParamSpec.pad_top;
+    U32 paddingB = convParamSpec.pad_bottom;
+    U32 paddingL = convParamSpec.pad_left;
+    U32 paddingR = convParamSpec.pad_right;
 
     U32 tPadding = fh - 1 - paddingT;
     U32 bPadding = fh - 1 - paddingB;
@@ -197,37 +195,37 @@ EE deconvolution_gemm(TensorDesc inputDesc,
     U32 fh = convParamSpec.kernel_h;
     U32 fw = convParamSpec.kernel_w;
 
-    TensorDesc matrixADesc = tensor2df(idt, DF_TRANSPOSE, ic, in * ih * iw);
-    if (idf == DF_NCHWC8) {
-        if (IS_X86(arch)) {
-            matrixADesc = tensor2df(idt, DF_NKN8, ic, in * ih * iw);
-        } else {
-            TensorDesc tmpDesc = tensor4df(odt, DF_NCHW, in, ic, ih, iw);
-            U8 *tmpInput = (U8 *)tmp;
-            transformToNCHW(inputDesc, input, tmpDesc, tmpInput);
-            input = tmpInput;
-            tmp = (void *)(tmpInput + in * ic * iw * ih * bytesOf(idt));
-        }
+    TensorDesc matrixADesc = tensor2df(idt, DF_NORMAL, in * ih * iw, ic);
+    if (IS_X86(arch) && idf == DF_NCHWC8 && in == 1) {
+        matrixADesc = tensor2df(idt, DF_NKN8, ic, in * ih * iw);
+    } else {
+        TensorDesc tmpDesc = tensor4df(odt, DF_NHWC, in, ic, ih, iw);
+        U8 *tmpInput = (U8 *)tmp;
+        transformFormat(inputDesc, input, tmpDesc, tmpInput);
+        input = tmpInput;
+        tmp = (void *)(tmpInput + in * ic * iw * ih * bytesOf(idt));
     }
     TensorDesc matrixCDesc = tensor2df(odt, DF_NORMAL, in * ih * iw, fw * fh * oc);
     U8 *tmpOutput = (U8 *)tmp;
-    tmpOutput += in * ih * iw * ic * bytesOf(idt);
+    tmp = (void *)(tmpOutput + in * ih * iw * fw * fh * oc * bytesOf(idt));
 
-    memset(tmpOutput, 0, in * ih * iw * fw * fh * oc * bytesOf(idt));
+    UNI_MEMSET(tmpOutput, 0, in * ih * iw * fw * fh * oc * bytesOf(idt));
     CHECK_STATUS(matrix_matrix_multiply(matrixADesc, input, filterDesc, filter, tmpBytes, tmp,
         matrixCDesc, tmpOutput, nullptr, arch));
 
     U8 *tmpOutputPtr = (U8 *)output;
     U32 biasTileSize = bytesOf(biasDesc.dt) * 8;
-    U8 *biasPtr = (U8 *)bias;
-    for (U32 c = 0; c < oc / 8; c++, biasPtr += biasTileSize) {
-        for (U32 n = 0; n < oh * ow; n++) {
-            memcpy(tmpOutputPtr, biasPtr, biasTileSize);
-            tmpOutputPtr += biasTileSize;
+    for (U32 n = 0; n < on; ++n) {
+        U8 *biasPtr = (U8 *)bias;
+        for (U32 c = 0; c < oc / 8; c++, biasPtr += biasTileSize) {
+            for (U32 hw = 0; hw < oh * ow; hw++) {
+                UNI_MEMCPY(tmpOutputPtr, biasPtr, biasTileSize);
+                tmpOutputPtr += biasTileSize;
+            }
         }
     }
 
-    EE ret = NOT_SUPPORTED;
+    EE ret = SUCCESS;
     if (IS_ARM(arch)) {
 #ifdef _USE_NEON
         ret =
@@ -299,18 +297,18 @@ EE deconvolution_cpu(TensorDesc inputDesc,
 
     U32 strideH = convParamSpec.stride_h;
     U32 strideW = convParamSpec.stride_w;
-    U32 paddingT = convParamSpec.padding_top;
-    U32 paddingB = convParamSpec.padding_bottom;
-    U32 paddingL = convParamSpec.padding_left;
-    U32 paddingR = convParamSpec.padding_right;
+    U32 paddingT = convParamSpec.pad_top;
+    U32 paddingB = convParamSpec.pad_bottom;
+    U32 paddingL = convParamSpec.pad_left;
+    U32 paddingR = convParamSpec.pad_right;
 
     ConvolutionParamSpec transposedCD = convParamSpec;
     transposedCD.stride_h = 1;
     transposedCD.stride_w = 1;
-    transposedCD.padding_top = 0;
-    transposedCD.padding_bottom = 0;
-    transposedCD.padding_left = 0;
-    transposedCD.padding_right = 0;
+    transposedCD.pad_top = 0;
+    transposedCD.pad_bottom = 0;
+    transposedCD.pad_left = 0;
+    transposedCD.pad_right = 0;
     transposedCD.dilatedRate_h = 1;
     transposedCD.dilatedRate_w = 1;
 
@@ -323,69 +321,73 @@ EE deconvolution_cpu(TensorDesc inputDesc,
     U32 stuffW = strideW - 1;
     U32 ihPadded = ih + (ih - 1) * stuffH + tPadding + bPadding;
     U32 iwPadded = iw + (iw - 1) * stuffW + lPadding + rPadding;
-    TensorDesc inPaddedDesc = tensor4df(idt, idf, in, ic, ihPadded, iwPadded);
+    TensorDesc inPaddedDesc = tensor4df(idt, idf, 1, ic, ihPadded, iwPadded);
+    TensorDesc singleOutputDesc = tensor4df(idt, idf, 1, oc, oh, ow);
 
-    U8 *inPad = (U8 *)tmp;
-    U8 *inPadMov = inPad;
-    U8 *inputMov = (U8 *)input;
     U32 memUnit = 8 * bytesOf(idt);
-
-    ic /= 8;
-
-    for (U32 c = 0; c < ic; c++) {
-        for (U32 h = 0; h < tPadding; h++) {
-            memset(inPadMov, 0, iwPadded * memUnit);
-            inPadMov += iwPadded * memUnit;
-        }
-        for (U32 h = 0; h < ih - 1; h++) {
-            memset(inPadMov, 0, lPadding * memUnit);
-            inPadMov += lPadding * memUnit;
-            for (U32 w = 0; w < iw - 1; w++) {
-                memcpy(inPadMov, inputMov, memUnit);
-                inPadMov += memUnit;
-                inputMov += memUnit;
-                memset(inPadMov, 0, stuffW * memUnit);
-                inPadMov += stuffW * memUnit;
-            }
-            memcpy(inPadMov, inputMov, memUnit);
-            inPadMov += memUnit;
-            inputMov += memUnit;
-            memset(inPadMov, 0, rPadding * memUnit);
-            inPadMov += rPadding * memUnit;
-
-            // stuffH
-            memset(inPadMov, 0, iwPadded * stuffH * memUnit);
-            inPadMov += iwPadded * stuffH * memUnit;
-        }
-        memset(inPadMov, 0, lPadding * memUnit);
-        inPadMov += lPadding * memUnit;
-        for (U32 w = 0; w < iw - 1; w++) {
-            memcpy(inPadMov, inputMov, memUnit);
-            inPadMov += memUnit;
-            inputMov += memUnit;
-            memset(inPadMov, 0, stuffW * memUnit);
-            inPadMov += stuffW * memUnit;
-        }
-        memcpy(inPadMov, inputMov, memUnit);
-        inPadMov += memUnit;
-        inputMov += memUnit;
-        memset(inPadMov, 0, rPadding * memUnit);
-        inPadMov += rPadding * memUnit;
-
-        for (U32 h = ihPadded - bPadding; h < ihPadded; h++) {
-            memset(inPadMov, 0, iwPadded * memUnit);
-            inPadMov += iwPadded * memUnit;
-        }
-    }
-
+    U32 ic8 = ic / 8;
     EE ret = NOT_SUPPORTED;
     TensorDesc blankTensorDesc;
     ActivationParamSpec blankActivationParamSpec;
-    ret = depthwise_pointwise_convolution_cpu(inPaddedDesc, inPad, filterDesc, filter,
-        blankTensorDesc, nullptr, transposedCD, DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_DIRECT,
-        biasDesc, bias, blankTensorDesc, nullptr, tmpBytes - tensorNumBytes(inPaddedDesc),
-        inPad + tensorNumBytes(inPaddedDesc), outputDesc, output, activationDesc,
-        blankActivationParamSpec, arch);
+
+    for (U32 n = 0; n < in; ++n) {
+        U8 *inputMov = (U8 *)input + n * ih * iw * ic * bytesOf(idt);
+        U8 *outputMov = (U8 *)output + n * oh * ow * oc * bytesOf(odt);
+        U8 *inPad = (U8 *)tmp;
+        U8 *inPadMov = inPad;
+
+        for (U32 c = 0; c < ic8; c++) {
+            for (U32 h = 0; h < tPadding; h++) {
+                UNI_MEMSET(inPadMov, 0, iwPadded * memUnit);
+                inPadMov += iwPadded * memUnit;
+            }
+            for (U32 h = 0; h < ih - 1; h++) {
+                UNI_MEMSET(inPadMov, 0, lPadding * memUnit);
+                inPadMov += lPadding * memUnit;
+                for (U32 w = 0; w < iw - 1; w++) {
+                    UNI_MEMCPY(inPadMov, inputMov, memUnit);
+                    inPadMov += memUnit;
+                    inputMov += memUnit;
+                    UNI_MEMSET(inPadMov, 0, stuffW * memUnit);
+                    inPadMov += stuffW * memUnit;
+                }
+                UNI_MEMCPY(inPadMov, inputMov, memUnit);
+                inPadMov += memUnit;
+                inputMov += memUnit;
+                UNI_MEMSET(inPadMov, 0, rPadding * memUnit);
+                inPadMov += rPadding * memUnit;
+
+                // stuffH
+                UNI_MEMSET(inPadMov, 0, iwPadded * stuffH * memUnit);
+                inPadMov += iwPadded * stuffH * memUnit;
+            }
+            UNI_MEMSET(inPadMov, 0, lPadding * memUnit);
+            inPadMov += lPadding * memUnit;
+            for (U32 w = 0; w < iw - 1; w++) {
+                UNI_MEMCPY(inPadMov, inputMov, memUnit);
+                inPadMov += memUnit;
+                inputMov += memUnit;
+                UNI_MEMSET(inPadMov, 0, stuffW * memUnit);
+                inPadMov += stuffW * memUnit;
+            }
+            UNI_MEMCPY(inPadMov, inputMov, memUnit);
+            inPadMov += memUnit;
+            inputMov += memUnit;
+            UNI_MEMSET(inPadMov, 0, rPadding * memUnit);
+            inPadMov += rPadding * memUnit;
+
+            for (U32 h = ihPadded - bPadding; h < ihPadded; h++) {
+                UNI_MEMSET(inPadMov, 0, iwPadded * memUnit);
+                inPadMov += iwPadded * memUnit;
+            }
+        }
+
+        ret = depthwise_pointwise_convolution_cpu(inPaddedDesc, inPad, filterDesc, filter,
+            blankTensorDesc, nullptr, transposedCD,
+            DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_DIRECT, biasDesc, bias, blankTensorDesc,
+            nullptr, tmpBytes - tensorNumBytes(inPaddedDesc), inPad + tensorNumBytes(inPaddedDesc),
+            singleOutputDesc, outputMov, activationDesc, blankActivationParamSpec, arch);
+    }
 
     return ret;
 }

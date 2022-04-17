@@ -13,147 +13,101 @@
 
 #ifndef CHEETAH_X86_FUNCTIONS_FP32_H
 #define CHEETAH_X86_FUNCTIONS_FP32_H
-#include <math.h>
+
+#include "cpu/cpu_functions_template.h"
 #include "x86_avx2_expand.h"
-#include "parameter_spec.h"
-#include "uni.h"
 #include "thread_affinity.h"
 
 inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDesc, F32 *output)
 {
-    __m256 in, out;
     __m256 zero = _mm256_set1_ps(0.);
     __m256 one = _mm256_set1_ps(1.);
     __m256 three = _mm256_set1_ps(3.);
     __m256 six = _mm256_set1_ps(6.);
     __m256 signm = _mm256_set1_ps(-0.0);
-    U32 len_main = len / 8;
-    U32 len_tail = len % 8;
-
-    F32 value;
+    U32 loops = len / 8 * 8;
     EE ret = SUCCESS;
-
     switch (activationDesc.mode) {
         case ACTIVATION_NULL: {
+            if (output != input) {
+                UNI_MEMCPY(output, input, sizeof(float) * len);
+            }
+            loops = len;
             break;
         }
         case ACTIVATION_RELU: {
-            U32 main_len = len - len_tail;
             if (activationDesc.value[0] == 0) {
 #ifdef _USE_OPENMP
 #pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
 #endif
-                for (U32 i = 0; i < len_main; i++) {
-                    _mm256_storeu_ps(
-                        output + i * 8, _mm256_max_ps(zero, _mm256_loadu_ps(input + i * 8)));
-                }
-                for (U32 i = 0; i < len_tail; i++) {
-                    output[main_len + i] = (input[main_len + i] < 0) ? 0 : input[main_len + i];
+                for (U32 i = 0; i < loops; i += 8) {
+                    _mm256_storeu_ps(output + i, _mm256_max_ps(zero, _mm256_loadu_ps(input + i)));
                 }
             } else {
                 __m256 scale = _mm256_set1_ps(activationDesc.value[0]);
 #ifdef _USE_OPENMP
 #pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
 #endif
-                for (U32 i = 0; i < len_main; i++) {
-                    __m256 tmp = _mm256_loadu_ps(input + i * 8);
-                    _mm256_storeu_ps(output + i * 8, _mm256_max_ps(_mm256_mul_ps(scale, tmp), tmp));
-                }
-                for (U32 i = 0; i < len_tail; i++) {
-                    float tmp = activationDesc.value[0] * input[main_len + i];
-                    output[main_len + i] = (input[main_len + i] < tmp) ? tmp : input[main_len + i];
+                for (U32 i = 0; i < loops; i += 8) {
+                    __m256 tmp = _mm256_loadu_ps(input + i);
+                    _mm256_storeu_ps(output + i, _mm256_max_ps(_mm256_mul_ps(scale, tmp), tmp));
                 }
             }
             break;
         }
         case ACTIVATION_RELU6: {
-            for (U32 i = 0; i < len_main; i++) {
-                in = _mm256_loadu_ps(input);
-                out = _mm256_max_ps(zero, in);
+            for (U32 i = 0; i < loops; i += 8) {
+                __m256 in = _mm256_loadu_ps(input + i);
+                __m256 out = _mm256_max_ps(zero, in);
                 out = _mm256_min_ps(six, out);
-                _mm256_storeu_ps(output, out);
-                input += 8;
-                output += 8;
-            }
-            for (U32 i = 0; i < len_tail; i++) {
-                value = (input[i] < 0) ? 0 : input[i];
-                if (value > 6) {
-                    value = 6;
-                }
-                output[i] = value;
+                _mm256_storeu_ps(output + i, out);
             }
             break;
         }
         case ACTIVATION_H_SIGMOID: {
-            for (U32 i = 0; i < len_main; i++) {
-                in = _mm256_loadu_ps(input);
-                out = _mm256_add_ps(in, three);
+            for (U32 i = 0; i < loops; i += 8) {
+                __m256 in = _mm256_loadu_ps(input + i);
+                __m256 out = _mm256_add_ps(in, three);
                 out = _mm256_max_ps(out, zero);
                 out = _mm256_min_ps(out, six);
                 out = _mm256_div_ps(out, six);
-                _mm256_storeu_ps(output, out);
-                input += 8;
-                output += 8;
-            }
-            for (U32 i = 0; i < len_tail; i++) {
-                value = input[i] + 3;
-                value = (value < 0) ? 0 : value;
-                value = (value > 6) ? 6 : value;
-                value = value / 6;
-                output[i] = value;
+                _mm256_storeu_ps(output + i, out);
             }
             break;
         }
         case ACTIVATION_H_SWISH: {
-            for (U32 i = 0; i < len_main; i++) {
-                in = _mm256_loadu_ps(input);
-                out = _mm256_add_ps(in, three);
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
+#endif
+            for (U32 i = 0; i < loops; i += 8) {
+                __m256 in = _mm256_loadu_ps(input + i);
+                __m256 out = _mm256_add_ps(in, three);
                 out = _mm256_max_ps(out, zero);
                 out = _mm256_min_ps(out, six);
                 out = _mm256_div_ps(out, six);
                 out = _mm256_mul_ps(out, in);
-                _mm256_storeu_ps(output, out);
-                input += 8;
-                output += 8;
-            }
-            for (U32 i = 0; i < len_tail; i++) {
-                value = input[i] + 3;
-                value = (value < 0) ? 0 : value;
-                value = (value > 6) ? 6 : value;
-                value = input[i] * value;
-                value = value / 6;
-                output[i] = value;
+                _mm256_storeu_ps(output + i, out);
             }
             break;
         }
         case ACTIVATION_H_SWISH_NODIV: {
-            for (U32 i = 0; i < len_main; i++) {
-                in = _mm256_loadu_ps(input);
-                out = _mm256_add_ps(in, three);
+            for (U32 i = 0; i < loops; i += 8) {
+                __m256 in = _mm256_loadu_ps(input + i);
+                __m256 out = _mm256_add_ps(in, three);
                 out = _mm256_max_ps(out, zero);
                 out = _mm256_min_ps(out, six);
                 out = _mm256_mul_ps(out, in);
-                _mm256_storeu_ps(output, out);
-                input += 8;
-                output += 8;
-            }
-            for (U32 i = 0; i < len_tail; i++) {
-                value = input[i] + 3;
-                value = (value < 0) ? 0 : value;
-                value = (value > 6) ? 6 : value;
-                value = input[i] * value;
-                output[i] = value;
+                _mm256_storeu_ps(output + i, out);
             }
             break;
         }
         case ACTIVATION_GELU: {
-            F32 two_div_PI_sqrt = sqrt(2 / 3.14159265358979323846);
-            __m256 vec0 = _mm256_set1_ps(two_div_PI_sqrt);
+            __m256 vec0 = _mm256_set1_ps(sqrt(2 / 3.14159265358979323846));
             __m256 vec1 = _mm256_set1_ps(0.044715);
             __m256 vec2 = _mm256_set1_ps(0.5);
-            for (U32 i = 0; i < len_main; i++) {
-                in = _mm256_loadu_ps(input);
-                out = _mm256_mul_ps(in, in);
+            for (U32 i = 0; i < loops; i += 8) {
+                __m256 in = _mm256_loadu_ps(input + i);
+                __m256 out = _mm256_mul_ps(in, in);
                 out = _mm256_mul_ps(out, in);
                 out = _mm256_fmadd_ps(vec1, out, in);
                 out = _mm256_mul_ps(vec0, out);
@@ -161,135 +115,125 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
                 out = _mm256_add_ps(one, out);
                 out = _mm256_mul_ps(vec2, out);
                 out = _mm256_mul_ps(in, out);
-                _mm256_storeu_ps(output, out);
-                input += 8;
-                output += 8;
-            }
-            for (U32 i = 0; i < len_tail; i++) {
-                value = input[i];
-                value = two_div_PI_sqrt * (value + 0.044715 * powf(value, 3));
-                value = 1.0 - 2.0 / (exp(2.0 * value) + 1.0);
-                value = 0.5 * (1.0 + value);
-                value = input[i] * value;
-                output[i] = value;
+                _mm256_storeu_ps(output + i, out);
             }
             break;
         }
         case ACTIVATION_TANH: {
-            for (U32 i = 0; i < len_main; i++) {
-                in = _mm256_loadu_ps(input);
-                out = _mm256_tanh_ps(in);
-                _mm256_storeu_ps(output, out);
-                input += 8;
-                output += 8;
-            }
-            for (U32 i = 0; i < len_tail; i++) {
-                value = 1.0 - 2.0 / (exp(2.0 * input[i]) + 1.0);
-                output[i] = value;
+            for (U32 i = 0; i < loops; i += 8) {
+                __m256 in = _mm256_loadu_ps(input + i);
+                __m256 out = _mm256_tanh_ps(in);
+                _mm256_storeu_ps(output + i, out);
             }
             break;
         }
         case ACTIVATION_SIGMOID: {
-            for (U32 i = 0; i < len_main; i++) {
-                in = _mm256_loadu_ps(input);
-                out = _mm256_sigmod_ps(in);
-                _mm256_storeu_ps(output, out);
-                input += 8;
-                output += 8;
+            for (U32 i = 0; i < loops; i += 8) {
+                __m256 in = _mm256_loadu_ps(input + i);
+                __m256 out = _mm256_sigmod_ps(in);
+                _mm256_storeu_ps(output + i, out);
             }
-            for (U32 i = 0; i < len_tail; i++) {
-                value = 1.0 / (1.0 + exp(-1.0 * input[i]));
-                output[i] = value;
+            break;
+        }
+        case ACTIVATION_SWISH: {
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
+#endif
+            for (U32 i = 0; i < loops; i += 8) {
+                __m256 in = _mm256_loadu_ps(input + i);
+                __m256 out = _mm256_mul_ps(in, _mm256_sigmod_ps(in));
+                _mm256_storeu_ps(output + i, out);
             }
             break;
         }
         case ACTIVATION_MISH: {
-            for (U32 i = 0; i < len_main; i++) {
-                in = _mm256_loadu_ps(input);
-                out = _mm256_mul_ps(
+            for (U32 i = 0; i < loops; i += 8) {
+                __m256 in = _mm256_loadu_ps(input + i);
+                __m256 out = _mm256_mul_ps(
                     in, _mm256_tanh_ps(_mm256_log_ps(_mm256_add_ps(_mm256_exp_ps(in), one))));
-                _mm256_storeu_ps(output, out);
-                input += 8;
-                output += 8;
-            }
-            for (U32 i = 0; i < len_tail; i++) {
-                value = input[i] * tanh(log(exp(input[i]) + 1.0));
-                output[i] = value;
+                _mm256_storeu_ps(output + i, out);
             }
             break;
         }
         case ACTIVATION_SOFTPLUS: {
-            for (U32 i = 0; i < len_main; i++) {
-                in = _mm256_loadu_ps(input);
-                out = _mm256_log_ps(_mm256_add_ps(_mm256_exp_ps(in), one));
-                _mm256_storeu_ps(output, out);
-                input += 8;
-                output += 8;
-            }
-            for (U32 i = 0; i < len_tail; i++) {
-                output[i] = log(1 + exp(input[i]));
+            for (U32 i = 0; i < loops; i += 8) {
+                __m256 in = _mm256_loadu_ps(input + i);
+                __m256 out = _mm256_log_ps(_mm256_add_ps(_mm256_exp_ps(in), one));
+                _mm256_storeu_ps(output + i, out);
             }
             break;
         }
         case ACTIVATION_EXP: {
-            for (U32 i = 0; i < len_main; i++) {
-                in = _mm256_loadu_ps(input);
-                out = _mm256_exp_ps(in);
-                _mm256_storeu_ps(output, out);
-                input += 8;
-                output += 8;
-            }
-            for (U32 i = 0; i < len_tail; i++) {
-                output[i] = exp(input[i]);
+            for (U32 i = 0; i < loops; i += 8) {
+                __m256 in = _mm256_loadu_ps(input + i);
+                __m256 out = _mm256_exp_ps(in);
+                _mm256_storeu_ps(output + i, out);
             }
             break;
         }
         case ACTIVATION_ABS: {
-            for (U32 i = 0; i < len_main; i++) {
-                in = _mm256_loadu_ps(input);
-                out = _mm256_andnot_ps(signm, in);
-                _mm256_storeu_ps(output, out);
-                input += 8;
-                output += 8;
-            }
-            for (U32 i = 0; i < len_tail; i++) {
-                output[i] = UNI_ABS(input[i]);
-            }
-            break;
-        }
-        case ACTIVATION_SIGN: {
-            for (U32 i = 0; i < len; i++) {
-                output[i] = UNI_SIGN(input[i]);
+            for (U32 i = 0; i < loops; i += 8) {
+                __m256 in = _mm256_loadu_ps(input + i);
+                __m256 out = _mm256_andnot_ps(signm, in);
+                _mm256_storeu_ps(output + i, out);
             }
             break;
         }
         case ACTIVATION_LOG: {
-            for (U32 i = 0; i < len; i++) {
-                output[i] = log(input[i]);
+            for (U32 i = 0; i < loops; i += 8) {
+                __m256 in = _mm256_loadu_ps(input + i);
+                __m256 out = _mm256_log_ps(in);
+                _mm256_storeu_ps(output + i, out);
             }
             break;
         }
-        case ACTIVATION_NOT: {
-            for (U32 i = 0; i < len; i++) {
-                output[i] = (input[i] > 0) ? 0 : 1;
+        case ACTIVATION_ROUND: {
+            for (U32 i = 0; i < loops; i += 8) {
+                __m256 in = _mm256_loadu_ps(input + i);
+                __m256 out = _mm256_round_ps(in, _MM_FROUND_TO_NEAREST_INT);
+                _mm256_storeu_ps(output + i, out);
             }
             break;
         }
-        case ACTIVATION_GREATER: {
-            for (U32 i = 0; i < len; i++) {
-                output[i] = input[i] > 1 ? 1 : 0;
+        case ACTIVATION_CEIL: {
+            for (U32 i = 0; i < loops; i += 8) {
+                __m256 in = _mm256_loadu_ps(input + i);
+                __m256 out = _mm256_ceil_ps(in);
+                _mm256_storeu_ps(output + i, out);
             }
             break;
         }
+        case ACTIVATION_FLOOR: {
+            for (U32 i = 0; i < loops; i += 8) {
+                __m256 in = _mm256_loadu_ps(input + i);
+                __m256 out = _mm256_floor_ps(in);
+                _mm256_storeu_ps(output + i, out);
+            }
+            break;
+        }
+        case ACTIVATION_RECIPROCAL: {
+            for (U32 i = 0; i < loops; i += 8) {
+                __m256 in = _mm256_loadu_ps(input + i);
+                __m256 out = _mm256_div_ps(one, in);
+                _mm256_storeu_ps(output + i, out);
+            }
+            break;
+        }
+        case ACTIVATION_SIGN:
+        case ACTIVATION_NOT:
+        case ACTIVATION_GREATER:
         case ACTIVATION_NEG: {
-            for (U32 i = 0; i < len; i++) {
-                output[i] = -input[i];
-            }
+            loops = 0;
             break;
         }
         default:
             ret = NOT_SUPPORTED;
             break;
+    }
+    if (ret == SUCCESS) {
+        for (U32 i = loops; i < len; i++) {
+            ret = activation_template<F32>(activationDesc, input[i], output + i);
+        }
     }
     return ret;
 }
@@ -334,7 +278,7 @@ inline void array_power_f32(F32 *input, F32 *output, I32 len, F32 power)
         }
     } else if (power == 1) {
         if (input != output) {
-            memcpy(output, input, len * sizeof(F32));
+            UNI_MEMCPY(output, input, len * sizeof(F32));
         }
         i = len;
     } else if (power == 2) {
@@ -478,8 +422,7 @@ inline F32 array_var_f32(const F32 *data, I32 len, F32 mean)
         sum_s += _mm256_sum_ps(sum_v);
     }
     for (; i < len; i++) {
-        F32 in = data[i];
-        F32 tmp = in - mean;
+        F32 tmp = data[i] - mean;
         sum_s += tmp * tmp;
     }
     return sum_s / len;
@@ -500,6 +443,26 @@ inline F32 array_sum_f32(const F32 *data, I32 len)
         sum_v = _mm256_add_ps(sum_v, in);
     }
     sum_s += _mm256_sum_ps(sum_v);
+    for (; i < len; i++) {
+        sum_s += data[i];
+    }
+    return sum_s;
+}
+
+inline I32 array_sum_i32(const I32 *data, I32 len)
+{
+    if (len <= 0) {
+        return 0;
+    }
+
+    I32 i = 0;
+    I32 sum_s = 0;
+    __m256i sum_v = _mm256_set1_epi32(0);
+    for (i = 0; i < len - 7; i += 8) {
+        __m256i in = _mm256_loadu_si256((const __m256i *)(data + i));
+        sum_v = _mm256_add_epi32(sum_v, in);
+    }
+    sum_s += _mm256_sum_epi32(sum_v);
     for (; i < len; i++) {
         sum_s += data[i];
     }

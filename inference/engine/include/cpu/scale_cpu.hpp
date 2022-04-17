@@ -24,7 +24,7 @@ public:
     std::shared_ptr<Operator> clone() override
     {
         std::shared_ptr<ScaleCPU> mem =
-            std::shared_ptr<ScaleCPU>(new ScaleCPU(this->dt, this->p, this->numChannels));
+            std::shared_ptr<ScaleCPU>(new ScaleCPU(this->dt, this->p, 0));
         *mem = *this;
         return mem;
     }

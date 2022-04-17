@@ -44,12 +44,12 @@ inline EE rnncell_core_mali_fp16(GCLHandle_t handle,
     ForwardRunInfoMali_t forwardRunInfo)
 {
     U32 item_c = forwardRunInfo->best_c[0];
-    U32 hDim = rnncellDesc.numOutput;
-    U32 col = (rnncellDesc.numProjection > 0) ? rnncellDesc.numProjection : hDim;
-    bool project = (rnncellDesc.numProjection > 0) ? true : false;
-    float fbias = rnncellDesc.forgetBias;
-    float zonecell = rnncellDesc.zoneoutCell;
-    float zoneout = rnncellDesc.zoneoutOutput;
+    U32 hDim = rnncellDesc.num_outputs;
+    U32 col = (rnncellDesc.num_projection > 0) ? rnncellDesc.num_projection : hDim;
+    bool project = (rnncellDesc.num_projection > 0) ? true : false;
+    float fbias = rnncellDesc.forget_bias;
+    float zonecell = rnncellDesc.zoneout_cell;
+    float zoneout = rnncellDesc.zoneout_output;
     U32 xw_str, xh_str, xh_off, xw_off;
     U32 hw_str, hh_str, hh_off, hw_off;
     CHECK_STATUS(gclmem_get_desc_padding(currentX->desc, &xw_str, &xh_str, NULL, &xw_off, &xh_off));
@@ -123,7 +123,7 @@ inline EE rnncell_core_mali_fp16(GCLHandle_t handle,
 
     if (project) {
         item_c = forwardRunInfo->best_c[1];
-        filterRow = rnncellDesc.numOutput;
+        filterRow = rnncellDesc.num_outputs;
         fltbuf = filter[1].mem;
         tmpOff = offset;
         //biasMem = bias[1].mem;
@@ -150,13 +150,13 @@ inline void transform_filter_desc(TensorDesc filterDesc,
     U32 item_c = forwardRunInfo->best_c[0];
     U32 item_k = forwardRunInfo->best_k[0];
     ftmDesc[0] = gemv_transform_filter_desc(filterDesc, item_h, item_c, item_k);
-    bool useProject = (rnnParamSpec.numProjection > 0) ? true : false;
+    bool useProject = (rnnParamSpec.num_projection > 0) ? true : false;
     if (useProject) {
         item_h = forwardRunInfo->best_h[1];
         item_c = forwardRunInfo->best_c[1];
         item_k = forwardRunInfo->best_k[1];
-        TensorDesc filterDescPro =
-            tensor2df(filterDesc.dt, DF_NORMAL, rnnParamSpec.numOutput, rnnParamSpec.numProjection);
+        TensorDesc filterDescPro = tensor2df(
+            filterDesc.dt, DF_NORMAL, rnnParamSpec.num_outputs, rnnParamSpec.num_projection);
         ftmDesc[1] = gemv_transform_filter_desc(filterDescPro, item_h, item_c, item_k);
     }
 }
@@ -178,15 +178,15 @@ EE rnncell_transform_filter_mali_fp16(GCLHandle_t handle,
     GCLMem_t fltmem,
     ForwardRunInfoMali_t forwardRunInfo)
 {
-    U32 filterNum = (rnnParamSpec.numProjection > 0) ? 2 : 1;
+    U32 filterNum = (rnnParamSpec.num_projection > 0) ? 2 : 1;
     for (U32 i = 0; i < filterNum; i++) {
         ForwardRunInfoMali runInfo = *forwardRunInfo;
         if (i == 1) {
             runInfo.best_h[i - 1] = runInfo.best_h[i];
             runInfo.best_c[i - 1] = runInfo.best_c[i];
             runInfo.best_k[i - 1] = runInfo.best_k[i];
-            filterDesc.dims[0] = rnnParamSpec.numProjection;
-            filterDesc.dims[1] = rnnParamSpec.numOutput;
+            filterDesc.dims[0] = rnnParamSpec.num_projection;
+            filterDesc.dims[1] = rnnParamSpec.num_outputs;
         }
         CHECK_STATUS(gemv_transform_filter_mali_fp16(
             handle, filterDesc, &filter[i], &fltmemDesc[i], &fltmem[i], &runInfo));
@@ -204,12 +204,12 @@ EE rnncell_infer_forward_tmp_bytes_mali_fp16(TensorDesc inputDesc,
     U32 item_c = forwardRunInfo->best_c[0];
     DataType dt = inputDesc.dt;
     U32 xDim = inputDesc.dims[0];
-    U32 hDim = rnncellDesc.numOutput;
+    U32 hDim = rnncellDesc.num_outputs;
     U32 c_align = (item_c > 16) ? (item_c >> 4) : item_c;
     U32 xhNum = ALIGN(xDim + hDim, c_align);
     U32 xhSize = ALIGN(xhNum * bytesOf(dt), BUFFER_ALIGN_BASE);
 
-    U32 col = (rnncellDesc.numProjection > 0) ? rnncellDesc.numProjection : hDim;
+    U32 col = (rnncellDesc.num_projection > 0) ? rnncellDesc.num_projection : hDim;
     U32 filterRow = col * 4;
     U32 interNum = filterRow + 4;
     U32 interSize = ALIGN(interNum * bytesOf(dt), BUFFER_ALIGN_BASE);
@@ -217,12 +217,12 @@ EE rnncell_infer_forward_tmp_bytes_mali_fp16(TensorDesc inputDesc,
     U32 tmpOutSize = 0;
     U32 filterRowPro = 0;
     U32 item_cp = item_c;
-    if (rnncellDesc.numProjection > 0) {
+    if (rnncellDesc.num_projection > 0) {
         item_cp = forwardRunInfo->best_c[1];
         U32 cp_align = (item_cp > 16) ? (item_cp >> 4) : item_cp;
         U32 tmpOutNum = ALIGN(col, cp_align);
         tmpOutSize = ALIGN(tmpOutNum * bytesOf(dt), BUFFER_ALIGN_BASE);
-        filterRowPro = rnncellDesc.numOutput;
+        filterRowPro = rnncellDesc.num_outputs;
     }
 
     U32 reduceSize = 0;

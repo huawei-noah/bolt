@@ -102,6 +102,7 @@ EE depthwise_pointwise_convolution_x86(TensorDesc inputDesc,
     const void *pwFilter,
     ConvolutionParamSpec convParamSpec,
     DepthwiseConvolutionForwardAlgorithm algorithm,
+    void *scale,
     TensorDesc dwBiasDesc,
     const void *dwBias,
     TensorDesc pwBiasDesc,
@@ -124,6 +125,7 @@ EE depthwise_convolution_transform_filter_x86(TensorDesc filterDesc,
     void *filterTransformed);
 
 EE depthwise_convolution_infer_forward_tmp_bytes_x86(TensorDesc inputDesc,
+    TensorDesc dwFilterDesc,
     TensorDesc outputDesc,
     ConvolutionParamSpec convParamSpec,
     DepthwiseConvolutionForwardAlgorithm algorithm,
@@ -135,6 +137,7 @@ EE depthwise_convolution_x86(TensorDesc inputDesc,
     const void *filter,
     ConvolutionParamSpec convParamSpec,
     DepthwiseConvolutionForwardAlgorithm algorithm,
+    void *scale,
     TensorDesc biasDesc,
     const void *bias,
     U32 tmpBytes,
@@ -152,8 +155,13 @@ EE eltwise_x86(DataType dataType,
     void *output,
     EltwiseMode eltwiseMode);
 
-EE layer_normalization_x86(
-    TensorDesc inputDesc, void *input, void *alpha, void *beta, TensorDesc outputDesc, void *output);
+EE layer_normalization_x86(TensorDesc inputDesc,
+    void *input,
+    LayerNormParamSpec p,
+    void *alpha,
+    void *beta,
+    TensorDesc outputDesc,
+    void *output);
 
 EE rnncell_x86(TensorDesc xDesc,
     const void *currentX,
@@ -161,6 +169,7 @@ EE rnncell_x86(TensorDesc xDesc,
     const void **filter,
     const TensorDesc *biasDesc,
     const void **bias,
+    float *scale,
     void *state,
     U32 tmpBytes,
     void *tmp,
@@ -182,7 +191,7 @@ EE scale_x86(TensorDesc inputDesc,
 EE pooling_x86(TensorDesc inputDesc,
     const void *input,
     PoolingParamSpec poolingParamSpec,
-    const void *scale,
+    void *scale,
     TensorDesc outputDesc,
     void *output);
 
@@ -195,6 +204,9 @@ EE pooling_bp_x86(TensorDesc inputDesc,
 EE reshape_x86(TensorDesc inputDesc, void *input, TensorDesc outputDesc, void *output);
 
 EE softmax_x86(
+    TensorDesc inputDesc, const void *input, SoftmaxParamSpec p, TensorDesc outputDesc, void *output);
+
+EE logsoftmax_x86(
     TensorDesc inputDesc, const void *input, SoftmaxParamSpec p, TensorDesc outputDesc, void *output);
 
 EE deconvolution_transform_filter_x86(TensorDesc filterDesc,

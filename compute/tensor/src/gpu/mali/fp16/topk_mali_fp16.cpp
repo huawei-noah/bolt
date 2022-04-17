@@ -43,15 +43,16 @@ inline EE topk_core_mali_fp16(GCLHandle_t handle,
     axis = inputDesc.nDims - 1 - axis;
     U32 len = inputDesc.dims[axis];
     I32 sorted = p.sorted;
-    I32 top_k = p.topk;
+    I32 top_k = p.k;
     I32 largest = p.largest;
-    char modeName[128];
+    std::string modeName;
     if (largest) {
-        strcpy(modeName, "max");
+        modeName = "max";
     } else {
-        strcpy(modeName, "min");
+        modeName = "min";
     }
     if (sorted) {
+        UNI_ERROR_LOG("GPU have not support topK sorted");
         CHECK_STATUS(NOT_SUPPORTED);
     }
     Mem outputId = outputIndices->mem;
@@ -89,17 +90,16 @@ inline EE topk_core_mali_fp16(GCLHandle_t handle,
         CHECK_STATUS(gcl_create_sub_buffer(size, &sub_off, tmpbuf, &sub_id[3]));
 
         Kernel kernel;
-        char kernelName[1024];
-        sprintf(kernelName, "topk_sort_%s", modeName);
-        CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel));
+        std::string kernelName = "topk_sort_" + modeName;
+        CHECK_STATUS(gcl_create_kernel(handle, kernelName.c_str(), &kernel));
         U32 gs[3] = {0, 0, 0};
         U32 ls[3] = {0, 0, 0};
         U32 dim = 1;
         gs[0] = (len + 15) / 16;
         CHECK_STATUS(gcl_set_kernelArgs(kernel, len, gs[0], input->mem, sub[0], sub_id[0]));
-        CHECK_STATUS(gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName));
+        CHECK_STATUS(gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName.c_str()));
 #ifdef _DEBUG
-        CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
+        CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName.c_str()));
 #endif
 
         U32 top_k_loop = (top_k + 15) / 16;
@@ -108,7 +108,7 @@ inline EE topk_core_mali_fp16(GCLHandle_t handle,
             U32 mem_out_index = 1;
             U32 out_off = 0;
             U32 out_val_num = 16;
-            sprintf(kernelName, "topk_merge_%s", modeName);
+            kernelName = "topk_merge_" + modeName;
             Mem merge_in, merge_out, merge_in_id, merge_out_id;
             gs[0] = (len + 15) / 16;
             ls[0] = 0;
@@ -124,12 +124,12 @@ inline EE topk_core_mali_fp16(GCLHandle_t handle,
                     out_off = i * 16;
                     out_val_num = ((i * 16 + 16) <= (U32)top_k) ? 16 : (top_k % 16);
                 }
-                CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel));
+                CHECK_STATUS(gcl_create_kernel(handle, kernelName.c_str(), &kernel));
                 CHECK_STATUS(gcl_set_kernelArgs(kernel, total_group_num, out_val_num, out_off,
                     gs[0], merge_in, merge_in_id, merge_out, merge_out_id));
-                CHECK_STATUS(gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName));
+                CHECK_STATUS(gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName.c_str()));
 #ifdef _DEBUG
-                CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
+                CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName.c_str()));
 #endif
                 if (gs[0] > 1) {
                     mem_in_index++;
@@ -144,7 +144,7 @@ inline EE topk_core_mali_fp16(GCLHandle_t handle,
             }
 
             if (i < top_k_loop - 1 || need_out_id) {
-                sprintf(kernelName, "topk_update_%s", modeName);
+                kernelName = "topk_update_" + modeName;
                 gs[0] = 16;
                 ls[0] = 16;
                 int out_id_off = out_off;
@@ -152,12 +152,12 @@ inline EE topk_core_mali_fp16(GCLHandle_t handle,
                 if (!need_out_id) {
                     outputId = sub_id[0];
                 }
-                CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel));
+                CHECK_STATUS(gcl_create_kernel(handle, kernelName.c_str(), &kernel));
                 CHECK_STATUS(gcl_set_kernelArgs(kernel, need_out_id, out_id_off, out_id_num, gs[0],
                     merge_out_id, sub[0], sub_id[0], outputId));
-                CHECK_STATUS(gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName));
+                CHECK_STATUS(gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName.c_str()));
 #ifdef _DEBUG
-                CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
+                CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName.c_str()));
 #endif
             }
         }

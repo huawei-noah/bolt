@@ -103,6 +103,14 @@ EE depthwise_convolution_infer_forward_algorithm_mali(GCLHandle_t handle,
     if (policy == CONVOLUTION_FASTEST) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
+    GCLMemType imt = inputMemDesc.memType;
+    GCLMemType omt = outputMemDesc.memType;
+    std::vector<TensorDesc> filterDescVec(1, filterDesc);
+    std::vector<I32> flag = build_conv_forward_algorithm_flag(
+        inputDesc, filterDescVec, OT_Conv, imt, omt, convParamSpec);
+    if (gcl_get_runInfo_from_cache(handle, flag, forwardRunInfo)) {
+        return SUCCESS;
+    }
     U32 dw = convParamSpec.dilatedRate_w;
     U32 dh = convParamSpec.dilatedRate_h;
     std::vector<DepthwiseConvolutionForwardAlgorithm> depthwiseConvAlgorithms;
@@ -217,6 +225,7 @@ EE depthwise_convolution_infer_forward_algorithm_mali(GCLHandle_t handle,
             CHECK_STATUS(NOT_SUPPORTED);
         }
         *forwardRunInfo = bestRunInfo;
+        gcl_set_runInfo_to_cache(handle, flag, bestRunInfo);
         CHECK_STATUS(gcl_finish(handle));
         gcl_destroy_gclmem(input);
         gcl_destroy_gclmem(filter);

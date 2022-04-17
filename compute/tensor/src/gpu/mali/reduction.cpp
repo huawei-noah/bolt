@@ -37,7 +37,7 @@ inline EE reduction_checkpara_mali(GCLHandle_t handle,
     if (tensorNumElements(maskDesc) != 0) {
         CHECK_STATUS(NOT_SUPPORTED);  //unsupport currently
     }
-    if (p.axes_num > 1) {
+    if (p.num_axes > 1) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
     int axis = p.axes[0];
@@ -64,7 +64,7 @@ EE reduction_padding_input_mali(TensorDesc inputDesc,
 
     int axisTran[6];
     TensorDesc tmpDesc = inputDesc;
-    for (int i = 0; i < p.axes_num; i++) {
+    for (int i = 0; i < p.num_axes; i++) {
         int axis = p.axes[i];
         if (axis < 0) {
             axis = tmpDesc.nDims + axis;

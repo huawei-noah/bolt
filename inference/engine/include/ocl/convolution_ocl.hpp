@@ -47,7 +47,7 @@ public:
         U32 filterNum = 1;
         DataType dtNoQ = (this->dt == DT_F16_8Q) ? DT_F16 : this->dt;
         switch (this->p.convolution_type) {
-            case Convolution_Pointwise: {
+            case CONVOLUTION_POINTWISE: {
                 if (this->p.num_outputs_origin == 1) {
                     if (tensorIs5d(wDesc[0])) {
                         wDesc[0].dims[4] = this->p.num_outputs;
@@ -61,13 +61,13 @@ public:
                     CONVOLUTION_ALGORITHM_NULL;
                 break;
             }
-            case Convolution_Depthwise: {
+            case CONVOLUTION_DEPTHWISE: {
                 vDesc[0] = tensor1d(dtNoQ, this->p.num_outputs);
                 ((MaliPara_t)(this->archInfo.archPara))->forwardRunInfo->algorithm =
                     DEPTHWISE_CONVOLUTION_ALGORITHM_NULL;
                 break;
             }
-            case Convolution_Depthwise_Pointwise: {
+            case CONVOLUTION_DEPTHWISE_POINTWISE: {
                 wDesc[1] = this->filterDescExt;
                 vDesc[0] = tensor1d(dtNoQ, this->numChannels);
                 vDesc[1] = tensor1d(dtNoQ, this->p.num_outputs);
@@ -76,13 +76,8 @@ public:
                     DEPTHWISE_CONVOLUTION_ALGORITHM_NULL;
                 break;
             }
-            case Convolution_Dilation: {
-                CHECK_STATUS(NOT_SUPPORTED);
-                return NOT_SUPPORTED;
-                break;
-            }
             default:
-                CHECK_STATUS(NOT_SUPPORTED);
+                UNI_ERROR_LOG("not support to read new type convolution's weight.\n");
                 return NOT_SUPPORTED;
         }
 
@@ -106,7 +101,7 @@ public:
         Tensor biasTensor = this->biasTensors[0];
         Tensor outputTensor = this->outputTensors[0];
         switch (this->p.convolution_type) {
-            case Convolution_Pointwise: {
+            case CONVOLUTION_POINTWISE: {
                 Tensor tmpTensor = Tensor(OCLMem);
                 std::vector<Tensor> tmpTensors(3, tmpTensor);
                 tmpTensors[0] = this->temp;
@@ -121,15 +116,15 @@ public:
                     &this->archInfo));
                 break;
             }
-            case Convolution_Depthwise: {
+            case CONVOLUTION_DEPTHWISE: {
                 Tensor tmpTensor = this->temp;
                 get_tmp_image(0, bytes + 1, &tmpTensor);
-                CHECK_STATUS(
-                    depthwise_convolution(inputTensor, filterTensor, p, this->dwAlg, biasTensor,
-                        tmpTensor, outputTensor, this->dwActivationParamSpec, &this->archInfo));
+                CHECK_STATUS(depthwise_convolution(inputTensor, filterTensor, p, this->dwAlg,
+                    nullptr, biasTensor, tmpTensor, outputTensor, this->dwActivationParamSpec,
+                    &this->archInfo));
                 break;
             }
-            case Convolution_Depthwise_Pointwise: {
+            case CONVOLUTION_DEPTHWISE_POINTWISE: {
                 auto dwFilterTensor = filterTensor;
                 auto pwFilterTensor = this->weightTensors[1];
                 auto dwBiasTensor = biasTensor;
@@ -140,17 +135,13 @@ public:
                 get_tmp_image(0, bytes + 1, &tmpTensors[1]);
                 get_tmp_image(1, bytes + 4, &tmpTensors[2]);
                 CHECK_STATUS(depthwise_pointwise_convolution(this->inputTensors, dwFilterTensor,
-                    pwFilterTensor, p, this->dwAlg, dwBiasTensor, pwBiasTensor, tmpTensors,
+                    pwFilterTensor, p, this->dwAlg, nullptr, dwBiasTensor, pwBiasTensor, tmpTensors,
                     outputTensor, this->dwActivationParamSpec, this->pwActivationParamSpec,
                     &this->archInfo));
                 break;
             }
-            case Convolution_Dilation: {
-                CHECK_STATUS(NOT_SUPPORTED);
-                break;
-            }
             default: {
-                UNI_ERROR_LOG("unsupported convolution type %d\n", this->p.convolution_type);
+                UNI_ERROR_LOG("not support to run new type convolution.\n");
             }
         }
     }
@@ -165,9 +156,10 @@ public:
         ConvolutionPolicy policy = CONVOLUTION_TUNNING;
         DataType targetType = DT_F16;
         I32 algo[7];
-        std::string name = this->name + std::to_string(get_type()) + std::to_string(this->p.convolution_type); 
+        std::string name =
+            this->name + std::to_string(get_type()) + std::to_string(this->p.convolution_type);
         switch (this->p.convolution_type) {
-            case Convolution_Pointwise: {
+            case CONVOLUTION_POINTWISE: {
                 if (this->dt == DT_F16_8Q) {
                     targetType = DT_I8;
                 }
@@ -190,7 +182,7 @@ public:
                 }
                 break;
             }
-            case Convolution_Depthwise: {
+            case CONVOLUTION_DEPTHWISE: {
                 if (algorithmMap->getAlgorithmInfoFromMap(name, algo, 4)) {
                     this->runInfo.algorithm = (ConvolutionForwardAlgorithm)algo[0];
                     this->runInfo.best_h[0] = algo[1];
@@ -210,7 +202,7 @@ public:
                 }
                 break;
             }
-            case Convolution_Depthwise_Pointwise: {
+            case CONVOLUTION_DEPTHWISE_POINTWISE: {
                 if (algorithmMap->getAlgorithmInfoFromMap(name, algo, 7)) {
                     this->runInfo.algorithm = (ConvolutionForwardAlgorithm)algo[0];
                     this->runInfo.best_h[0] = algo[1];
@@ -239,12 +231,9 @@ public:
                 }
                 break;
             }
-            case Convolution_Dilation: {
-                CHECK_STATUS(NOT_SUPPORTED);
-                break;
-            }
             default:
-                CHECK_STATUS(NOT_SUPPORTED);
+                UNI_ERROR_LOG("not support to infer new type convolution's algorithm.\n");
+                return NOT_SUPPORTED;
         }
         return SUCCESS;
     }
@@ -293,11 +282,11 @@ public:
         }
         DataType targetType = DT_F16;  // Default DT_F16
 
-        if (this->p.convolution_type == Convolution_Dilation) {
-            this->p.convolution_type = Convolution_Pointwise;
+        if (this->p.convolution_type == CONVOLUTION_DILATION) {
+            this->p.convolution_type = CONVOLUTION_POINTWISE;
         }
         switch (this->p.convolution_type) {
-            case Convolution_Pointwise: {
+            case CONVOLUTION_POINTWISE: {
                 if (tensorIs5d(inDim)) {
                     this->filterDesc = tensor5df(this->dt, DF_NCHW, numFiltersOcl,
                         this->numChannels, this->p.kernel_t, this->p.kernel_h, this->p.kernel_w);
@@ -310,7 +299,7 @@ public:
                     inputTensor, filterTensor, p, outTensors[0], targetType, &this->archInfo));
                 break;
             }
-            case Convolution_Depthwise: {
+            case CONVOLUTION_DEPTHWISE: {
                 this->filterDesc = tensor4df(
                     this->dt, DF_NCHW, 1, this->numChannels, this->p.kernel_h, this->p.kernel_w);
                 filterTensor.resize(this->filterDesc);
@@ -318,7 +307,7 @@ public:
                     inputTensor, filterTensor, p, outTensors[0], targetType, &this->archInfo));
                 break;
             }
-            case Convolution_Depthwise_Pointwise: {
+            case CONVOLUTION_DEPTHWISE_POINTWISE: {
                 this->filterDesc = tensor4df(
                     this->dt, DF_NCHW, 1, this->numChannels, this->p.kernel_h, this->p.kernel_w);
                 this->filterDescExt =
@@ -330,12 +319,9 @@ public:
                     filterTensor, filterTensorExt, p, outTensors[0], targetType, &this->archInfo));
                 break;
             }
-            case Convolution_Dilation: {
-                return NOT_SUPPORTED;
-                break;
-            }
             default:
-                CHECK_STATUS(NOT_SUPPORTED);
+                UNI_ERROR_LOG("not support to infer new type convolution's output.\n");
+                return NOT_SUPPORTED;
         }
         if (use_output_tensor_image(numFiltersOcl, inputTensor)) {
             CHECK_STATUS(set_tensors_image(outTensors, inTensors.size()));
@@ -352,28 +338,24 @@ public:
             bytes[i] = 0;
         }
         switch (this->p.convolution_type) {
-            case Convolution_Pointwise: {
+            case CONVOLUTION_POINTWISE: {
                 CHECK_STATUS(convolution_infer_forward_tmp_bytes(inputTensor, filterTensor,
                     outputTensor, p, this->pwAlg, bytes, &this->archInfo));
                 break;
             }
-            case Convolution_Depthwise: {
+            case CONVOLUTION_DEPTHWISE: {
                 CHECK_STATUS(depthwise_convolution_infer_forward_tmp_bytes(inputTensor,
                     filterTensor, outputTensor, p, this->dwAlg, bytes, &this->archInfo));
                 break;
             }
-            case Convolution_Depthwise_Pointwise: {
+            case CONVOLUTION_DEPTHWISE_POINTWISE: {
                 CHECK_STATUS(depthwise_pointwise_convolution_infer_forward_tmp_bytes(inputTensor,
                     filterTensor, this->weightTensors[1], outputTensor, p, this->dwAlg, bytes,
                     &this->archInfo));
                 break;
             }
-            case Convolution_Dilation: {
-                CHECK_STATUS(NOT_SUPPORTED);
-                break;
-            }
             default:
-                CHECK_STATUS(NOT_SUPPORTED);
+                UNI_ERROR_LOG("not support to infer new type convolution's tmp memory.\n");
         }
         add_tmp_image(0, bytes + 1);
         add_tmp_image(1, bytes + 4);
@@ -387,22 +369,21 @@ public:
         U32 biasNum = 0;
         TensorDesc desc[2];
         switch (this->p.convolution_type) {
-            case Convolution_Pointwise: {
+            case CONVOLUTION_POINTWISE: {
                 CHECK_STATUS(convolution_transform_filter_bytes(
                     filterTensor, this->p, this->pwAlg, desc, &this->archInfo));
-                if (this->runInfo.best_k[0] <= 1 && 
-                    this->pwAlg == CONVOLUTION_ALGORITHM_DIRECT) {
+                if (this->runInfo.best_k[0] <= 1 && this->pwAlg == CONVOLUTION_ALGORITHM_DIRECT) {
                     needTransBiasImgToBuf = true;
                     biasNum = 0;
                 }
                 break;
             }
-            case Convolution_Depthwise: {
+            case CONVOLUTION_DEPTHWISE: {
                 CHECK_STATUS(depthwise_convolution_transform_filter_bytes(
                     filterTensor, this->p, this->dwAlg, desc, &this->archInfo));
                 break;
             }
-            case Convolution_Depthwise_Pointwise: {
+            case CONVOLUTION_DEPTHWISE_POINTWISE: {
                 CHECK_STATUS(depthwise_pointwise_convolution_transform_filter_bytes(filterTensor,
                     this->weightTensors[1], this->p, this->dwAlg, &desc[0], &desc[1],
                     &this->archInfo));
@@ -415,12 +396,10 @@ public:
                 }
                 break;
             }
-            case Convolution_Dilation: {
-                CHECK_STATUS(NOT_SUPPORTED);
-                break;
-            }
             default:
-                CHECK_STATUS(NOT_SUPPORTED);
+                UNI_ERROR_LOG("not support to infer new type convolution's tramsform filter tmp "
+                              "memory.\n");
+                return NOT_SUPPORTED;
         }
         this->wtm = std::shared_ptr<Tensor>(new Tensor(OCLMem));
         this->wtm->resize(desc[0]);
@@ -448,38 +427,36 @@ public:
     EE transform_filter() override
     {
         auto filterTensor = this->weightTensors[0];
-        if (DT_F16_8Q == this->dt && Convolution_Pointwise == this->p.convolution_type &&
+        if (DT_F16_8Q == this->dt && CONVOLUTION_POINTWISE == this->p.convolution_type &&
             CONVOLUTION_ALGORITHM_WINOGRAD == this->pwAlg) {  // int8 winograd
             return NOT_SUPPORTED;
         } else if (DT_F16_8Q == this->dt &&
-            Convolution_Pointwise == this->p.convolution_type) {  // int8 tilegemm
+            CONVOLUTION_POINTWISE == this->p.convolution_type) {  // int8 tilegemm
             return NOT_SUPPORTED;
         } else {  // All other cases
             CHECK_STATUS(alloc_wtm_memory());
             switch (this->p.convolution_type) {
-                case Convolution_Pointwise: {
+                case CONVOLUTION_POINTWISE: {
                     CHECK_STATUS(convolution_transform_filter(filterTensor, this->p, this->pwAlg,
                         this->temp, this->wtm.get(), &this->archInfo));
                     break;
                 }
-                case Convolution_Depthwise: {
+                case CONVOLUTION_DEPTHWISE: {
                     CHECK_STATUS(depthwise_convolution_transform_filter(
                         filterTensor, this->p, this->dwAlg, this->wtm.get(), &this->archInfo));
                     break;
                 }
-                case Convolution_Depthwise_Pointwise: {
+                case CONVOLUTION_DEPTHWISE_POINTWISE: {
                     CHECK_STATUS(depthwise_pointwise_convolution_transform_filter(filterTensor,
                         this->weightTensors[1], this->p, this->dwAlg, this->wtm.get(),
                         &this->wtm_dp, &this->archInfo));
                     this->weightTensors[1] = wtm_dp;
                     break;
                 }
-                case Convolution_Dilation: {
-                    CHECK_STATUS(NOT_SUPPORTED);
-                    break;
+                default: {
+                    UNI_ERROR_LOG("not support to transform new type convolution's filter.\n");
+                    return NOT_SUPPORTED;
                 }
-                default:
-                    CHECK_STATUS(NOT_SUPPORTED);
             }
         }
         this->weightTensors[0] = *this->get_wtm();

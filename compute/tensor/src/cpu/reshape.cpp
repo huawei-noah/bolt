@@ -11,7 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <string.h>
 #include "cpu/tensor_computing_cpu.h"
 
 EE reshape_infer_output_size_cpu(TensorDesc inputDesc, ReshapeParamSpec p, TensorDesc *outputDesc)
@@ -19,8 +18,8 @@ EE reshape_infer_output_size_cpu(TensorDesc inputDesc, ReshapeParamSpec p, Tenso
     if (nullptr == outputDesc) {
         return NULL_POINTER;
     }
-    I32 *shape = p.shape_dims;
-    I32 shape_size = p.shape_size;
+    I32 *shape = p.shape;
+    I32 shape_size = p.num_shape;
     int inputElementNum = tensorNumElements(inputDesc);
     int outputElementNum = 1;
     for (int i = 0; i < shape_size; i++) {
@@ -107,7 +106,7 @@ EE reshape_cpu(TensorDesc inputDesc, void *input, TensorDesc outputDesc, void *o
 
     if ((DF_NCHWC8 != inputDesc.df && DF_NCHWC16 != inputDesc.df) || sameDim) {
         if (output != input) {
-            memcpy(output, input, tensorNumBytes(outputDesc));
+            UNI_MEMCPY(output, input, tensorNumBytes(outputDesc));
         }
     } else {
         CHECK_REQUIREMENT(input != output);
@@ -132,7 +131,7 @@ EE reshape_cpu(TensorDesc inputDesc, void *input, TensorDesc outputDesc, void *o
             for (U32 c = 0; c < ic; c++) {
                 for (U32 hw = 0; hw < ih * iw; hw++) {
                     for (U32 c8 = 0; c8 < cx; c8++) {
-                        memcpy(outPtr +
+                        UNI_MEMCPY(outPtr +
                                 elementBytes * (n * ic * cx * ih * iw + (c * cx + c8) * ih * iw + hw),
                             inPtr +
                                 elementBytes *

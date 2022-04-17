@@ -113,9 +113,11 @@ inline EE set_gemm_tn_opt_mali(U32 item_m,
         matCMemName = "cm_";
         CHECK_STATUS(set_chars_define_opt("USE_OUTPUT_IMG", opt));
     }
-    sprintf(kernelName, "gemm_tn%s_%s%s%s%s%s%s%d%d", devName, matAMemName.c_str(), matBMemName.c_str(),
-        matCMemName.c_str(), modeName, formatName.c_str(), biasName.c_str(), item_m, item_n);
-    sprintf(kernelOpt->sourceName, "gemm_tn%s", devName);
+    std::string source = std::string("gemm_tn") + devName;
+    std::string kernel = source + std::string("_") + matAMemName + matBMemName + matCMemName +
+        modeName + formatName + biasName + std::to_string(item_m) + std::to_string(item_n);
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, source.c_str());
     kernelOpt->kernelDataType = dt;
     U32 UN = item_n - 1;
     CHECK_STATUS(set_value_define_opt(item_m, "LM", opt));

@@ -91,6 +91,9 @@ inline void array_power_x86(DataType dt, void *input, void *output, I32 len, F32
             array_power_f32((F32 *)input, (F32 *)output, len, power);
             break;
 #endif
+        case DT_I64:
+            array_power_template<I64>((I64 *)input, (I64 *)output, len, power);
+            break;
         case DT_I32:
             array_power_template<I32>((I32 *)input, (I32 *)output, len, power);
             break;
@@ -112,6 +115,10 @@ inline F32 array_sum_x86(DataType dt, const void *data, I32 len)
             result = array_sum_f32((const F32 *)data, len);
             break;
 #endif
+        case DT_U32:
+        case DT_I32:
+            result = array_sum_i32((const I32 *)data, len);
+            break;
         default:
             CHECK_STATUS(NOT_SUPPORTED);
             break;
@@ -128,6 +135,9 @@ inline void array_scale_x86(
             array_scale_f32((const F32 *)input, (F32 *)output, len, alpha, beta);
             break;
 #endif
+        case DT_I64:
+            array_scale_template<I64>((const I64 *)input, (I64 *)output, len, alpha, beta);
+            break;
         case DT_I32:
             array_scale_template<I32>((const I32 *)input, (I32 *)output, len, alpha, beta);
             break;
@@ -188,6 +198,9 @@ inline EE array_minmax_value_x86(DataType dt, const void *data, I32 len, int mod
             ret = array_minmax_value_f32((const F32 *)data, len, mode, result);
             break;
 #endif
+        case DT_U32:
+            ret = array_minmax_value_general(dt, data, len, mode, result);
+            break;
         case DT_I32:
             ret = array_minmax_value_i32((const I32 *)data, len, mode, result);
             break;

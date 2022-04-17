@@ -27,12 +27,12 @@ EE pooling_padding_input_mali(TensorDesc inputDesc,
     if (inputMem == nullptr || outputMem == nullptr || outputDesc == nullptr) {
         CHECK_STATUS(NULL_POINTER);
     }
-    U32 pl = poolingParamSpec.padding_left;
-    U32 pr = poolingParamSpec.padding_right;
-    U32 pt = poolingParamSpec.padding_top;
-    U32 pb = poolingParamSpec.padding_bottom;
-    U32 pf = poolingParamSpec.padding_before;
-    U32 pa = poolingParamSpec.padding_after;
+    U32 pl = poolingParamSpec.pad_left;
+    U32 pr = poolingParamSpec.pad_right;
+    U32 pt = poolingParamSpec.pad_top;
+    U32 pb = poolingParamSpec.pad_bottom;
+    U32 pf = poolingParamSpec.pad_before;
+    U32 pa = poolingParamSpec.pad_after;
     inputMem->padding(pl, pr, pt, pb, pf, pa);
     return SUCCESS;
 }

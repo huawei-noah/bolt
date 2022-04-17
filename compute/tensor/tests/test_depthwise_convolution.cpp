@@ -52,7 +52,7 @@ int depthwiseConvolutionTest(int argc, char *argv[], bool isFusedWithPw, DataTyp
         pwBiasDesc = tensor1d(dt, oc);
     }
     ConvolutionParamSpec p = createConvolutionParamSpec(group, 1, fh, fw, 1, stride, stride, 0, 0,
-        padding, padding, padding, padding, 1, 1, 1, fn, Convolution_Depthwise);
+        padding, padding, padding, padding, 1, 1, 1, fn, CONVOLUTION_DEPTHWISE);
 
     // setup input, filter, bias
     U8 *dwFilter = nullptr;
@@ -82,13 +82,15 @@ int depthwiseConvolutionTest(int argc, char *argv[], bool isFusedWithPw, DataTyp
     dwFilterTensor.alloc();
     dwFilterTensorRef.alloc();
     dwBiasTensor.alloc();
-    memcpy(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, bytesOf(dt) * in * ic * ih * iw);
-    memcpy(get_ptr_from_tensor(inputTensorRef, CPU_GENERAL), input, bytesOf(dt) * in * ic * ih * iw);
-    memcpy(
+    UNI_MEMCPY(
+        get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, bytesOf(dt) * in * ic * ih * iw);
+    UNI_MEMCPY(
+        get_ptr_from_tensor(inputTensorRef, CPU_GENERAL), input, bytesOf(dt) * in * ic * ih * iw);
+    UNI_MEMCPY(
         get_ptr_from_tensor(dwFilterTensor, CPU_GENERAL), dwFilter, bytesOf(dt) * 1 * ic * fh * fw);
-    memcpy(get_ptr_from_tensor(dwFilterTensorRef, CPU_GENERAL), dwFilter,
+    UNI_MEMCPY(get_ptr_from_tensor(dwFilterTensorRef, CPU_GENERAL), dwFilter,
         bytesOf(dt) * 1 * ic * fh * fw);
-    memcpy(get_ptr_from_tensor(dwBiasTensor, CPU_GENERAL), dwBias, bytesOf(dt) * ic);
+    UNI_MEMCPY(get_ptr_from_tensor(dwBiasTensor, CPU_GENERAL), dwBias, bytesOf(dt) * ic);
     Tensor pwFilterTensor;
     Tensor pwFilterTensorRef;
     Tensor pwBiasTensor;
@@ -101,11 +103,11 @@ int depthwiseConvolutionTest(int argc, char *argv[], bool isFusedWithPw, DataTyp
         pwFilterTensor.alloc();
         pwFilterTensorRef.alloc();
         pwBiasTensor.alloc();
-        memcpy(get_ptr_from_tensor(pwFilterTensor, CPU_GENERAL), pwFilter,
+        UNI_MEMCPY(get_ptr_from_tensor(pwFilterTensor, CPU_GENERAL), pwFilter,
             bytesOf(dt) * oc * ic * 1 * 1);
-        memcpy(get_ptr_from_tensor(pwFilterTensorRef, CPU_GENERAL), pwFilter,
+        UNI_MEMCPY(get_ptr_from_tensor(pwFilterTensorRef, CPU_GENERAL), pwFilter,
             bytesOf(dt) * oc * ic * 1 * 1);
-        memcpy(get_ptr_from_tensor(pwBiasTensor, CPU_GENERAL), pwBias, bytesOf(dt) * oc);
+        UNI_MEMCPY(get_ptr_from_tensor(pwBiasTensor, CPU_GENERAL), pwBias, bytesOf(dt) * oc);
     }
 
     // setup output, bias
@@ -183,21 +185,21 @@ int depthwiseConvolutionTest(int argc, char *argv[], bool isFusedWithPw, DataTyp
     if (UT_CHECK) {
         if (isFusedWithPw) {
             CHECK_STATUS(depthwise_pointwise_convolution(inputTensors, dwFtmTensor, pwFtmTensor, p,
-                alg, dwBiasTensor, pwBiasTensor, tmpTensors, outputTensor, dwActivationParamSpec,
-                pwActivationParamSpec, &UT_CPU_ARCHINFO));
+                alg, nullptr, dwBiasTensor, pwBiasTensor, tmpTensors, outputTensor,
+                dwActivationParamSpec, pwActivationParamSpec, &UT_CPU_ARCHINFO));
 
             // naive implement
             CHECK_STATUS(depthwise_pointwise_convolution(inputTensorsRef, dwFilterTensorRef,
-                pwFilterTensorRef, p, alg, dwBiasTensor, pwBiasTensor, tmpTensors, outputTensorRef,
-                dwActivationParamSpec, pwActivationParamSpec, &UT_SERIAL_ARCHINFO));
+                pwFilterTensorRef, p, alg, nullptr, dwBiasTensor, pwBiasTensor, tmpTensors,
+                outputTensorRef, dwActivationParamSpec, pwActivationParamSpec, &UT_SERIAL_ARCHINFO));
         } else {
-            CHECK_STATUS(depthwise_convolution(inputTensor, dwFtmTensor, p, alg, dwBiasTensor,
-                tmpTensor, outputTensor, dwActivationParamSpec, &UT_CPU_ARCHINFO));
+            CHECK_STATUS(depthwise_convolution(inputTensor, dwFtmTensor, p, alg, nullptr,
+                dwBiasTensor, tmpTensor, outputTensor, dwActivationParamSpec, &UT_CPU_ARCHINFO));
 
             // naive implement
-            CHECK_STATUS(
-                depthwise_convolution(inputTensorRef, dwFilterTensorRef, p, alg, dwBiasTensor,
-                    tmpTensor, outputTensorRef, dwActivationParamSpec, &UT_SERIAL_ARCHINFO));
+            CHECK_STATUS(depthwise_convolution(inputTensorRef, dwFilterTensorRef, p, alg, nullptr,
+                dwBiasTensor, tmpTensor, outputTensorRef, dwActivationParamSpec,
+                &UT_SERIAL_ARCHINFO));
         }
 
         // check
@@ -211,11 +213,11 @@ int depthwiseConvolutionTest(int argc, char *argv[], bool isFusedWithPw, DataTyp
     for (int iter = 0; iter < UT_LOOPS; iter++) {
         if (isFusedWithPw) {
             CHECK_STATUS(depthwise_pointwise_convolution(inputTensors, dwFtmTensor, pwFtmTensor, p,
-                alg, dwBiasTensor, pwBiasTensor, tmpTensors, outputTensor, dwActivationParamSpec,
-                pwActivationParamSpec, &UT_CPU_ARCHINFO));
+                alg, nullptr, dwBiasTensor, pwBiasTensor, tmpTensors, outputTensor,
+                dwActivationParamSpec, pwActivationParamSpec, &UT_CPU_ARCHINFO));
         } else {
-            CHECK_STATUS(depthwise_convolution(inputTensor, dwFtmTensor, p, alg, dwBiasTensor,
-                tmpTensor, outputTensor, dwActivationParamSpec, &UT_CPU_ARCHINFO));
+            CHECK_STATUS(depthwise_convolution(inputTensor, dwFtmTensor, p, alg, nullptr,
+                dwBiasTensor, tmpTensor, outputTensor, dwActivationParamSpec, &UT_CPU_ARCHINFO));
         }
     }
     double time_end = ut_time_ms();

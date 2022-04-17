@@ -18,9 +18,9 @@
 
 class Activation : public Operator {
 public:
-    Activation(ActivationParamSpec activationDesc)
+    Activation(ActivationParamSpec p)
     {
-        this->activationDesc = activationDesc;
+        this->p = p;
         std::map<ActivationMode, OperatorType> activationMap = {{ACTIVATION_RELU, OT_Relu},
             {ACTIVATION_RELU6, OT_Relu6}, {ACTIVATION_H_SWISH, OT_HSwish},
             {ACTIVATION_H_SWISH_NODIV, OT_HSwishNoDiv}, {ACTIVATION_SIGMOID, OT_Sigmoid},
@@ -28,13 +28,14 @@ public:
             {ACTIVATION_TANH, OT_TanH}, {ACTIVATION_MISH, OT_Mish}, {ACTIVATION_GREATER, OT_Greater},
             {ACTIVATION_EXP, OT_Exp}, {ACTIVATION_SOFTPLUS, OT_SoftPlus}, {ACTIVATION_ABS, OT_Abs},
             {ACTIVATION_SIGN, OT_Sign}, {ACTIVATION_NOT, OT_Not}, {ACTIVATION_LOG, OT_Log},
-            {ACTIVATION_NEG, OT_Neg}};
-        if (activationMap.find(activationDesc.mode) == activationMap.end()) {
-            UNI_ERROR_LOG("can not map ActivationMode to OperatorType.\n");
+            {ACTIVATION_NEG, OT_Neg}, {ACTIVATION_ROUND, OT_Round}, {ACTIVATION_FLOOR, OT_Floor},
+            {ACTIVATION_CEIL, OT_Ceil}, {ACTIVATION_SWISH, OT_Swish},
+            {ACTIVATION_RECIPROCAL, OT_Reciprocal}};
+        if (activationMap.find(p.mode) == activationMap.end()) {
+            UNI_ERROR_LOG("can not map ActivationMode(%d) to OperatorType.\n", p.mode);
         } else {
-            this->opt = activationMap[activationDesc.mode];
+            this->opt = activationMap[p.mode];
         }
-        this->lenOfTemp = 0;
     }
 
     OperatorType get_type() override
@@ -48,7 +49,7 @@ public:
     }
 
 protected:
-    ActivationParamSpec activationDesc;
+    ActivationParamSpec p;
     OperatorType opt;
 };
 

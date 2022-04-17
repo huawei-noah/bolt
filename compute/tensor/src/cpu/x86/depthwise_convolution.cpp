@@ -39,6 +39,7 @@ EE depthwise_convolution_transform_filter_x86(TensorDesc filterDesc,
 }
 
 EE depthwise_convolution_infer_forward_tmp_bytes_x86(TensorDesc inputDesc,
+    TensorDesc dwFilterDesc,
     TensorDesc outputDesc,
     ConvolutionParamSpec convParamSpec,
     DepthwiseConvolutionForwardAlgorithm algorithm,
@@ -47,16 +48,18 @@ EE depthwise_convolution_infer_forward_tmp_bytes_x86(TensorDesc inputDesc,
     if (nullptr == bytes) {
         CHECK_STATUS(NULL_POINTER);
     }
-    DataType idt, odt;
-    DataFormat idf, odf;
+    DataType idt, odt, fdt;
+    DataFormat idf, odf, fdf;
     U32 in, ic, ih, iw;
+    U32 fn, fc, fh, fw;
     U32 on, oc, oh, ow;
     CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
     CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
-    U32 paddingT = convParamSpec.padding_top;
-    U32 paddingB = convParamSpec.padding_bottom;
-    U32 paddingL = convParamSpec.padding_left;
-    U32 paddingR = convParamSpec.padding_right;
+    CHECK_STATUS(tensor4dGet(outputDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
+    U32 paddingT = convParamSpec.pad_top;
+    U32 paddingB = convParamSpec.pad_bottom;
+    U32 paddingL = convParamSpec.pad_left;
+    U32 paddingR = convParamSpec.pad_right;
 
     U32 ih_pad = ih + paddingT + paddingB;
     U32 iw_pad = iw + paddingL + paddingR;
@@ -66,13 +69,16 @@ EE depthwise_convolution_infer_forward_tmp_bytes_x86(TensorDesc inputDesc,
             *bytes = ic * ih_pad * iw_pad;
             break;
         case DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_DIRECT:
-            *bytes = ic * ih_pad * iw_pad + ic * oh * ow;
+            *bytes = ic * ih_pad * (iw_pad + 4) + ic * oh * ow + ic * 4;
             break;
         default: {
             ret = NOT_MATCH;
             *bytes = 0;
             break;
         }
+    }
+    if (idt == DT_I8 || idt == DT_U8_Q) {
+        *bytes += fh * fw * 16 * 16;
     }
     *bytes *= bytesOf(idt);
     if (idf != DF_NCHWC8) {
@@ -88,6 +94,7 @@ EE depthwise_convolution_x86(TensorDesc inputDesc,
     const void *filter,
     ConvolutionParamSpec convParamSpec,
     DepthwiseConvolutionForwardAlgorithm algorithm,
+    void *scale,
     TensorDesc biasDesc,
     const void *bias,
     U32 tmpBytes,
@@ -100,7 +107,7 @@ EE depthwise_convolution_x86(TensorDesc inputDesc,
     TensorDesc blankTensorDesc;
     ActivationParamSpec blankActivationParamSpec;
     return depthwise_pointwise_convolution_x86(inputDesc, input, nullptr, filterDesc, filter,
-        blankTensorDesc, nullptr, convParamSpec, algorithm, blankTensorDesc, bias, biasDesc,
+        blankTensorDesc, nullptr, convParamSpec, algorithm, nullptr, blankTensorDesc, bias, biasDesc,
         nullptr, tmpBytes, tmp, outputDesc, output, depthwiseActivationParamSpec,
         blankActivationParamSpec, arch);
 }

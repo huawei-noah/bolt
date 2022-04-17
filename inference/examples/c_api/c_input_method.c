@@ -13,6 +13,7 @@
 
 #include <stdio.h>
 #include <string.h>
+#include "secure_c_wrapper.h"
 #include "../../examples/c_api/c_test.h"
 
 int main(int argc, char *argv[])
@@ -20,15 +21,13 @@ int main(int argc, char *argv[])
     ParseOptions(argc, argv);
     ModelHandle inferenceHandle;
     ResultHandle resultHandle;
-    int inNum;
-    char **inName;
     if (useFileStream) {
         char *modelFileStream = BuildFileStream(modelPath);
         CreateInference(useFileStream, modelFileStream, algorithmMapPath, affinity,
-            &inferenceHandle, &resultHandle, &inNum, &inName);
+            &inferenceHandle, &resultHandle);
     } else {
-        CreateInference(useFileStream, modelPath, algorithmMapPath, affinity, &inferenceHandle,
-            &resultHandle, &inNum, &inName);
+        CreateInference(
+            useFileStream, modelPath, algorithmMapPath, affinity, &inferenceHandle, &resultHandle);
     }
 
     int inputNum, *inputN, *inputC, *inputH, *inputW;
@@ -38,7 +37,7 @@ int main(int argc, char *argv[])
     void **inputData;
     CreateInputTensorDesc(inferenceHandle, &inputNum, &inputName, &inputN, &inputC, &inputH,
         &inputW, &inputDT, &inputDF);
-    inputData = malloc(sizeof(void *) * inputNum);
+    inputData = (void **)malloc(sizeof(void *) * inputNum);
 
     int outputNum, *outputN, *outputC, *outputH, *outputW;
     DATA_TYPE *outputDT;
@@ -47,7 +46,7 @@ int main(int argc, char *argv[])
     void **outputData, **lastOutputData;
     CreateOutputTensorDesc(resultHandle, &outputNum, &outputName, &outputN, &outputC, &outputH,
         &outputW, &outputDT, &outputDF);
-    outputData = malloc(sizeof(void *) * outputNum);
+    outputData = (void **)malloc(sizeof(void *) * outputNum);
     MallocTensor(outputNum, outputName, outputN, outputC, outputH, outputW, outputDT, outputDF,
         &lastOutputData);
     InitTensor(outputNum, outputName, outputN, outputC, outputH, outputW, outputDT, outputDF,
@@ -94,9 +93,9 @@ int main(int argc, char *argv[])
         }
         PrintTensor(inputNum, inputName, inputN, inputC, inputH, inputW, inputDT, inputDF,
             inputData, "    input ", 8);
-        ResizeModelInput(inferenceHandle, inNum, (const char **)inName, inputN, inputC, inputH,
-            inputW, inputDT, inputDF);
-        RunModel(inferenceHandle, resultHandle, inNum, (const char **)inName, inputData);
+        ResizeModelInput(inferenceHandle, inputNum, (const char **)inputName, inputN, inputC,
+            inputH, inputW, inputDT, inputDF);
+        RunModel(inferenceHandle, resultHandle, inputNum, (const char **)inputName, inputData);
         GetOutputDataFromResultHandle(resultHandle, outputNum, outputData);
         PrintTensor(outputNum, outputName, outputN, outputC, outputH, outputW, outputDT, outputDF,
             outputData, "    output ", 8);
@@ -107,10 +106,6 @@ int main(int argc, char *argv[])
     FreeTensor(outputNum, outputName, outputN, outputC, outputH, outputW, outputDT, outputDF,
         lastOutputData);
     free(outputData);
-    for (int i = 0; i < inNum; i++) {
-        free(inName[i]);
-    }
-    free(inName);
     FreeResultHandle(resultHandle);
     DestroyModel(inferenceHandle);
     return 0;

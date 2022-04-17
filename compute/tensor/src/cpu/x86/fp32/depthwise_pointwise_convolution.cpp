@@ -51,7 +51,7 @@ EE depthwise_pointwise_convolution_fp32(TensorDesc inputDesc,
     if (!(idt == DT_F32 && fdt == DT_F32 && odt == DT_F32)) {
         CHECK_STATUS(NOT_MATCH);
     }
-    if (!(idf == DF_NCHWC8 && odf == DF_NCHWC8)) {
+    if (!(idf == DF_NCHWC8 || idf == DF_NCHWC16)) {
         CHECK_STATUS(NOT_MATCH);
     }
     if (ic != fc) {

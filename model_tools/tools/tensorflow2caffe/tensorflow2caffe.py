@@ -443,6 +443,10 @@ class Tensorflow2Caffe:
         x = self.add_expand_dims(x, 3, x+"_nch_nchw")
         return x
 
+    def transpose_nhc_nch(self, x):
+        x = self.add_transpose(x, x+"_nhc_nch", [0, 2, 1])
+        return x
+
     def calculate_convolution_padding(self, input_shape, kernel_size, strides, mode):
         i_h = input_shape[2]
         i_w = input_shape[3]
@@ -1062,12 +1066,26 @@ class Tensorflow2Caffe:
         self.caffe_model.add_layer(layer)
         return repeat_name
 
-    def add_memory(self, memory_name, memory_shapes, data_type):
+    def add_memory(self, memory_name, memory_shapes, data_type, value=0, input=None):
+        bottom = []
+        y_shape = None
+        if memory_shapes is not None:
+            y_shape = memory_shapes.copy()
+        if (input is not None):
+            bottom.append(input)
+            x_shape = self.get_tensor_shape(input)
+            if y_shape is None:
+                y_shape = x_shape
+            else:
+                for i in range(len(y_shape)):
+                    if y_shape[i] == 0:
+                        y_shape[i] = x_shape[i]
         layer = caffe_net.LayerParameter(name=memory_name+"_mem", type='PreAllocatedMemory',
+            bottom=bottom,
             top=[memory_name])
-        layer.memory_param(memory_shapes, data_type)
+        layer.memory_param(memory_shapes, data_type, value)
         self.caffe_model.add_layer(layer)
-        self.data_dict[memory_name] = Operators.zeros(memory_shapes, memory_name)
+        self.data_dict[memory_name] = Operators.memory(y_shape, value, memory_name)
         return memory_name
 
     def add_pad(self, input_name, output_name, padding_shapes, padding_values=None):

@@ -68,12 +68,19 @@ inline void convolution_produce_algos_paras(TensorDesc inputDesc,
     }
     algoNumIndex->push_back(vecH->size());
 
-    if (fw == 3 && fh == 3 && sw == 1 && sh == 1 && dw == 1 && dh == 1 
+    if (fw == 3 && fh == 3 && ft == 1 && sw == 1 && sh == 1 && dw == 1 && dh == 1 
         && idf != DF_NCHW && odf != DF_NCHW && ic > 32 && fn >= 128 && ih > 64 && iw > 64)
     {
         convolutionAlgorithms->push_back(CONVOLUTION_ALGORITHM_WINOGRAD);
         GCLMemType mt = (check_qualcomm_device()) ? GCL_MEM_IMG_3D : GCL_MEM_BUF;
         get_gemm_tn_cal_scheme(vecH, vecC, vecK, mt, mt, GCL_MEM_BUF);
+        algoNumIndex->push_back(vecH->size());
+    }
+
+    if (sw == 1 && sh == 1 && dw == 1 && dh == 1 && fw * fh > 1 && ft == 1
+        && idf != DF_NCHW && odf != DF_NCHW && ic > iw * 4 && ic > ih * 4) {
+        convolutionAlgorithms->push_back(CONVOLUTION_ALGORITHM_INVGEMM);
+        CHECK_STATUS(get_conv_direct_cal_scheme(vecH, vecC, vecK, 1, 1, fn));
         algoNumIndex->push_back(vecH->size());
     }
 }
@@ -214,6 +221,14 @@ EE convolution_infer_forward_algorithm_mali(GCLHandle_t handle,
     if (policy == CONVOLUTION_FASTEST) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
+    GCLMemType imt = inputMemDesc.memType;
+    GCLMemType omt = outputMemDesc.memType;
+    std::vector<TensorDesc> filterDescVec(1, filterDesc);
+    std::vector<I32> flag = build_conv_forward_algorithm_flag(
+        inputDesc, filterDescVec, OT_Conv, imt, omt, convParamSpec);
+    if (gcl_get_runInfo_from_cache(handle, flag, forwardRunInfo)) {
+        return SUCCESS;
+    }
     DataType dt;
     U32 ic, ih, iw, fn, fh, fw, ft;
     tensorSelectGet(inputDesc, NULL, NULL, NULL, &ic, &ih, &iw);
@@ -230,8 +245,6 @@ EE convolution_infer_forward_algorithm_mali(GCLHandle_t handle,
     std::vector<U32> vecK;
     DataFormat idf = inputDesc.df;
     DataFormat odf = outputDesc.df;
-    GCLMemType imt = inputMemDesc.memType;
-    GCLMemType omt = outputMemDesc.memType;
     convolution_produce_algos_paras(inputDesc, filterDesc, convParamSpec, idf, odf, imt, omt,
         &convolutionAlgorithms, &algoNumIndex, &vecH, &vecC, &vecK);
     if (vecH.size() == 1) {
@@ -328,13 +341,19 @@ EE convolution_infer_forward_algorithm_mali(GCLHandle_t handle,
         gcl_create_memory(handle, filter);
         gcl_create_memory(handle, bias);
         gcl_create_memory(handle, biasbuf);
-        std::vector<GCLMem_t> tmpDir(3, NULL);
+        std::vector<GCLMem_t> tmpDir(1, NULL);
+        std::vector<GCLMem_t> tmpInv(1, NULL);
         std::vector<GCLMem_t> tmpWino(3, NULL);
-        std::vector<GCLMem_t> tmp;
-        tmpbuf->desc.byteSize = maxBytes[0] + 1;
+        std::vector<GCLMem_t> tmp(3, NULL);
+        if (maxBytes[0]) {
+            tmpbuf->desc.byteSize = maxBytes[0];
+        } else {
+            tmpbuf->desc.byteSize = 128;
+        }
         gcl_create_memory(handle, tmpbuf);
         tmpDir[0] = tmpbuf;
         tmpWino[0] = tmpbuf;
+        tmpInv[0] = tmpbuf;
         if (check_qualcomm_device() && 
             maxBytes[1] > 0 && maxBytes[2] > 0 && maxBytes[3] > 0) {
             tmpImgA->desc.memType = GCL_MEM_IMG_3D;
@@ -355,16 +374,19 @@ EE convolution_infer_forward_algorithm_mali(GCLHandle_t handle,
             tmpWino[2] = tmpImgB;
         }
 
-        double minTimeWinograd = DBL_MAX;
         double minTime = DBL_MAX;
+        double minTimeWinograd = DBL_MAX;
         double winogradPicTranTime = DBL_MAX;
         double winogradOutTranTime = DBL_MAX;
+        double minTimeInvGemm = DBL_MAX;
+        double invGemmCol2ImgTime = DBL_MAX;
         U32 runKernelBe = 0;
         U32 runKernelEnd = 0;
         ForwardRunInfoMali bestRunInfo;
         ForwardRunInfoMali bestRunInfoWinograd;
+        ForwardRunInfoMali bestRunInfoInvGemm;
         GCLMem_t fltMem = filter;
-        tmp = tmpDir;
+        tmp[0] = tmpDir[0];
         for (U32 i = 0; i < algosNum; i++) {
             GCLMem_t biasMem = (runInfos[i].best_k[0] == 0) ? biasbuf : bias;
             if (check_qualcomm_device()) {
@@ -376,14 +398,22 @@ EE convolution_infer_forward_algorithm_mali(GCLHandle_t handle,
                         break;
                     }
                 }
-                if (runInfos[i].algorithm == (I32)CONVOLUTION_ALGORITHM_WINOGRAD) {
+                if (runInfos[i].algorithm == (I32)CONVOLUTION_ALGORITHM_DIRECT) {
+                    fltMem = filter;
+                    tmp[0] = tmpDir[0];
+                } else if (runInfos[i].algorithm == (I32)CONVOLUTION_ALGORITHM_INVGEMM) {
+                    fltMem = filter;
+                    tmp[0] = tmpInv[0];
+                } else if (runInfos[i].algorithm == (I32)CONVOLUTION_ALGORITHM_WINOGRAD) {
                     if (useWinoFltImg) {
                         gcl_create_memory(handle, filterImg);
                         useWinoFltImg = false;
-                        fltMem = filterImg;
                     }
-                    tmp = tmpWino;
-                } 
+                    fltMem = filterImg;
+                    for (U32 i = 0; i < 3; i++) {
+                        tmp[i] = tmpWino[i];
+                    }
+                }
             }
             if (convolution_mali(handle, inputDesc, input, filterDesc, fltMem, convParamSpec,
                     &runInfos[i], scaleDesc, NULL, biasDesc, biasMem, maxBytes[0], tmp, outputDesc,
@@ -391,11 +421,11 @@ EE convolution_infer_forward_algorithm_mali(GCLHandle_t handle,
                 if (runInfos[i].algorithm == (I32)CONVOLUTION_ALGORITHM_DIRECT) {
                     runKernelEnd = handle->kernelVec->size();
                     gcl_run_kernelVec_timing(handle, runKernelEnd - 1, runKernelEnd);
-                    runKernelBe = runKernelEnd;
                     if (minTime > handle->t_execute) {
                         minTime = handle->t_execute;
                         bestRunInfo = runInfos[i];
                     }
+                    runKernelBe = runKernelEnd;
                 }
 
                 if (runInfos[i].algorithm == (I32)CONVOLUTION_ALGORITHM_WINOGRAD) {
@@ -416,6 +446,19 @@ EE convolution_infer_forward_algorithm_mali(GCLHandle_t handle,
                     }
                     runKernelBe = runKernelEnd;
                 }
+                if (runInfos[i].algorithm == (I32)CONVOLUTION_ALGORITHM_INVGEMM) {
+                    runKernelEnd = handle->kernelVec->size();
+                    if (invGemmCol2ImgTime == DBL_MAX) {
+                        gcl_run_kernelVec_timing(handle, runKernelEnd - 1, runKernelEnd);
+                        invGemmCol2ImgTime = handle->t_execute;
+                    }
+                    gcl_run_kernelVec_timing(handle, runKernelEnd - 2, runKernelEnd - 1);
+                    if (minTimeInvGemm > handle->t_execute) {
+                        minTimeInvGemm = handle->t_execute;
+                        bestRunInfoInvGemm = runInfos[i];
+                    }
+                    runKernelBe = runKernelEnd;
+                }
             }
         }
 
@@ -426,10 +469,18 @@ EE convolution_infer_forward_algorithm_mali(GCLHandle_t handle,
             minTime = minTimeWinograd;
             bestRunInfo = bestRunInfoWinograd;
         }
+        if (minTimeInvGemm != DBL_MAX) {
+            minTimeInvGemm = minTimeInvGemm + invGemmCol2ImgTime;
+        }
+        if (minTimeInvGemm < minTime) {
+            minTime = minTimeInvGemm;
+            bestRunInfo = bestRunInfoInvGemm;
+        }
         if (minTime == DBL_MAX) {
             CHECK_STATUS(NOT_SUPPORTED);
         }
         *forwardRunInfo = bestRunInfo;
+        gcl_set_runInfo_to_cache(handle, flag, bestRunInfo);
         CHECK_STATUS(gcl_finish(handle));
         gcl_destroy_gclmem(input);
         gcl_destroy_gclmem(filter);

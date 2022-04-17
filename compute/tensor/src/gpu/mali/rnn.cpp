@@ -92,6 +92,10 @@ EE rnn_infer_forward_algorithm_mali(GCLHandle_t handle,
     if (algorithm != CONVOLUTION_ALGORITHM_NULL) {
         return SUCCESS;
     }
+    std::vector<I32> flag = build_rnn_forward_algorithm_flag(inputDesc, filterDescs, rnnPara);
+    if (gcl_get_runInfo_from_cache(handle, flag, forwardRunInfo)) {
+        return SUCCESS;
+    }
     std::vector<ConvolutionForwardAlgorithm> rnnAlgorithms;
     std::vector<U32> algoNumIndexGemm;
     std::vector<U32> vecHGemm;
@@ -105,7 +109,7 @@ EE rnn_infer_forward_algorithm_mali(GCLHandle_t handle,
     std::vector<U32> vecHGemvPro;
     std::vector<U32> vecCGemvPro;
     std::vector<U32> vecKGemvPro;
-    bool useProjection = (rnnPara.numProjection > 0) ? true : false;
+    bool useProjection = (rnnPara.num_projection > 0) ? true : false;
     U32 filterCol = filterDescs[0].dims[0];
     U32 filterRow = filterDescs[0].dims[1];
     U32 filterColPro = (useProjection) ? filterDescs[1].dims[0] : filterCol;
@@ -267,7 +271,7 @@ EE rnn_infer_forward_algorithm_mali(GCLHandle_t handle,
     outputDescs.push_back(outputDesc);
     std::vector<GCLMem> filters;
     std::vector<GCLMem> biases;
-    U32 biDirNum = (rnnPara.biDirection) ? 2 : 1;
+    U32 biDirNum = (rnnPara.bi_direction) ? 2 : 1;
     for (U32 i = 0; i < biDirNum; i++) {
         filters.push_back(*filterX);
         filters.push_back(*filterH);
@@ -329,6 +333,7 @@ EE rnn_infer_forward_algorithm_mali(GCLHandle_t handle,
         CHECK_STATUS(NOT_SUPPORTED);
     }
     *forwardRunInfo = bestRunInfo;
+    gcl_set_runInfo_to_cache(handle, flag, bestRunInfo);
     CHECK_STATUS(gcl_finish(handle));
     gcl_destroy_gclmem(input);
     gcl_destroy_gclmem(filterX);

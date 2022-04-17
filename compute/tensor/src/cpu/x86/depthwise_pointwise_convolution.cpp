@@ -15,6 +15,9 @@
 #ifdef _USE_FP32
 #include "cpu/x86/fp32/tensor_computing_fp32.h"
 #endif
+#ifdef _USE_INT8
+#include "cpu/x86/int8/tensor_computing_int8.h"
+#endif
 #include "tensor_transpose.h"
 
 EE depthwise_pointwise_convolution_transform_filter_x86(TensorDesc dwFilterDesc,
@@ -37,6 +40,14 @@ EE depthwise_pointwise_convolution_transform_filter_x86(TensorDesc dwFilterDesc,
             break;
         }
 #endif
+#ifdef _USE_INT8
+        case DT_I8: {
+            ret = depthwise_pointwise_convolution_transform_filter_int8(dwFilterDesc,
+                (INT8 *)dwFilter, pwFilterDesc, (INT8 *)pwFilter, algorithm, dwFtmDesc,
+                (INT8 *)dwFilterTransformed, pwFtmDesc, (INT8 *)pwFilterTransformed);
+            break;
+        }
+#endif
         default:
             ret = NOT_SUPPORTED;
             break;
@@ -53,6 +64,7 @@ EE depthwise_pointwise_convolution_x86(TensorDesc inputDesc,
     const void *pwFilter,
     ConvolutionParamSpec convParamSpec,
     DepthwiseConvolutionForwardAlgorithm algorithm,
+    void *scale,
     TensorDesc dwBiasDesc,
     const void *dwBias,
     TensorDesc pwBiasDesc,
@@ -67,22 +79,38 @@ EE depthwise_pointwise_convolution_x86(TensorDesc inputDesc,
 {
     TensorDesc newInputDesc = inputDesc;
     void *newInput = input;
-    if (inputDesc.df != DF_NCHWC8) {
-        newInputDesc.df = DF_NCHWC8;
+    DataFormat dstF = inputDesc.df;
+    if (inputDesc.dt == DT_U8_Q || inputDesc.df == DF_NCHWC16) {
+        dstF = DF_NCHWC16;
+    } else {
+        dstF = DF_NCHWC8;
+    }
+    if (inputDesc.df != dstF) {
+        newInputDesc.df = dstF;
         newInput = tmp;
         tmp = (U8 *)tmp + tensorNumBytes(inputDesc);
         tmpBytes -= tensorNumBytes(inputDesc);
-        transformNCHWToNCHWC8(inputDesc, input, newInputDesc, newInput);
+        transformFormat(inputDesc, input, newInputDesc, newInput);
     }
     EE ret = SUCCESS;
     switch (dwFilterDesc.dt) {
 #ifdef _USE_FP32
         case DT_F32: {
-            ret = depthwise_pointwise_convolution_fp32(newInputDesc, (F32 *)newInput,
-                (F32 *)eltwiseInput, dwFilterDesc, (const F32 *)dwFilter, pwFilterDesc,
-                (const F32 *)pwFilter, convParamSpec, algorithm, dwBiasDesc, (const F32 *)dwBias,
-                pwBiasDesc, (const F32 *)pwBias, tmpBytes, tmp, outputDesc, (F32 *)output,
-                depthwiseActivationParamSpec, pointwiseActivationParamSpec, arch);
+            ret = depthwise_pointwise_convolution_fp32(newInputDesc, (F32 *)newInput, (F32 *)eltwiseInput, dwFilterDesc,
+                (const F32 *)dwFilter, pwFilterDesc, (const F32 *)pwFilter, convParamSpec,
+                algorithm, dwBiasDesc, (const F32 *)dwBias, pwBiasDesc, (const F32 *)pwBias,
+                tmpBytes, tmp, outputDesc, (F32 *)output, depthwiseActivationParamSpec,
+                pointwiseActivationParamSpec, arch);
+            break;
+        }
+#endif
+#ifdef _USE_INT8
+        case DT_I8: {
+            ret = depthwise_pointwise_convolution_int8(newInputDesc, (UINT8 *)newInput, (F32 *)eltwiseInput, dwFilterDesc,
+                (const INT8 *)dwFilter, pwFilterDesc, (const INT8 *)pwFilter, convParamSpec,
+                dwBiasDesc, (const F32 *)dwBias, pwBiasDesc, (const F32 *)pwBias,
+                tmpBytes, tmp, outputDesc, (void *)output, (F32 *)scale, depthwiseActivationParamSpec,
+                pointwiseActivationParamSpec);
             break;
         }
 #endif

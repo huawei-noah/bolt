@@ -7,16 +7,54 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 and this project adheres to [Semantic Versioning](<https://semver.org/spec/v2.0.0.html>).
 
+### [1.3.0] - 2022-2-28
+
+#### Added
+
+- Support on-device training for MLP, CNN(lenet, resnet50, mobilnetv1), transformer/bert(text to speech)
+- Support change model input and output names in X2bolt
+- Support more graph optimizations : Transpose+Convolution, Swish, Quantization, Power+Scale
+- Support dynamic output related operators : Shape, ConstantOfShape, GenerateProposals, NonZero, NonMaxSuppression, Reshape, etc
+- Support more operators : GridSample, CumSum, OneHot, Round, Floor, Ceil
+- Support more networks on CPU : yolov2, yolov3, yolov4, yolov5, faster-rcnn, mask-rcnn, retinanet, dfsmn, frill, conformer, unet, etc
+- Support Armv8 int8 to accelerate NLP network
+- Improve inference performance on avx2 CPU
+- Support netron to visualize bolt model
+- Support not to bind CPU core
+- Add C API MemoryCheck to check bolt memory leak
+
+#### Changed
+
+- X2bolt add -I and -O options to change model input and output names.
+- X2bolt add -t option to convert model for on-device training.
+- C API CreateModel and AllocAllResultHandle return value is set to NULL when unsuccessful.
+- install.sh add --neon option to close arm neon acceleration on old platform.
+- some operator parameter defination
+
+#### Fixed
+
+- Fix GPU depth2space and deconv bug
+- Fix GPU preprocess tool on armv8 platform bug
+- Fix x86 Sigmoid precision
+- Fix C API CloneResultHandle bug
+- Fix mobilnetv1 int8 inference
+- Fix Java API build bug on Windows
+- Fix ONNX converter deconv, pooling parameter bug
+
+#### Removed
+
+- Equal operator is replaced with Check.
+
 
 ### [1.2.1] - 2021-9-11
 
 #### Added
 
 - Support more graph optimizations : Convolution+Convolution, LayerNorm
-- Support more operators: ROIAlign, GenerateProposals, Reciprocal, Not, Log, ReductionL2, InstanceNorm, Expand, Gather, Scatter
+- Support more operators : ROIAlign, GenerateProposals, Reciprocal, Not, Log, ReductionL2, InstanceNorm, Expand, Gather, Scatter
 - Support more operators(PReLU) process NCHW input data.
 - Support ONNX share weight between Linear, MatMul, Gemm and Gather
-- Support more networks on CPU: vision transformer(ViT, TNT), recommendation networks
+- Support more networks on CPU : vision transformer(ViT, TNT), recommendation networks
 - Support more networks on GPU : ASR, Faster_RCNN
 - Support Armv7 int8 to accelerate NLP network(50%+ speed-up)
 - Support X86 AVX512 int8 to accelerate NLP network(3x+ speed-up)

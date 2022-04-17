@@ -61,8 +61,10 @@ EE attention_infer_output_size(Tensor *inputTensor, AttentionParamSpec p, Tensor
     DataFormat df;
     U32 batch, sequenceLength;
     CHECK_STATUS(tensor2dGet(inputDesc, &dt, &df, &batch, &sequenceLength));
+    U32 oh = UNI_MIN(p.from_sequence_length, sequenceLength);
+    U32 ow = UNI_MIN(p.to_sequence_length, sequenceLength);
     outputDesc =
-        tensor4df(dt, DF_NCHW, batch, p.num_heads, p.from_sequence_length, p.to_sequence_length);
+        tensor4df(dt, DF_NCHW, batch, p.num_heads, oh, ow);
     outputTensor->resize(outputDesc);
     return SUCCESS;
 }

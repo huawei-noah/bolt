@@ -21,14 +21,15 @@ EE clip_fp16(F16 *input, F16 *output, I32 len, F32 minValue, F32 maxValue)
 
     float16x8_t min_v = vdupq_n_f16(minValue);
     float16x8_t max_v = vdupq_n_f16(maxValue);
-
-    I32 i = 0;
-    for (i = 0; i < len - 7; i += 8) {
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
+    for (int i = 0; i < len - 7; i += 8) {
         float16x8_t in = vld1q_f16(input + i);
         float16x8_t tmp_v = vminq_f16(max_v, vmaxq_f16(min_v, in));
         vst1q_f16(output + i, tmp_v);
     }
-    for (; i < len; i++) {
+    for (int i = len / 8 * 8; i < len; i++) {
         F16 value = input[i];
         value = (value > minValue) ? value : minValue;
         value = (value < maxValue) ? value : maxValue;

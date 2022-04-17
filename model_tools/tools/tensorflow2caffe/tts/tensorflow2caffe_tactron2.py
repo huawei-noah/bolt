@@ -24,6 +24,9 @@ class Tensorflow2CaffeTactron2(Tensorflow2Caffe):
             self.num_mels = 80 #Number of mel-spectrogram channels and local conditioning dimensionality
             self.outputs_per_step = 1 #number of frames to generate at each decoding step (increase to speed up computation and allows for higher batch size, decreases G&L audio quality)
             self.tacotron_zoneout_rate = 0.1 #zoneout rate for all LSTM cells in the network
+            self.stop_at_any = True
+            self.batch_norm_position = 'before'
+            self.tacotron_speaker_embedding = 128
 
 	        #Mel and Linear spectrograms normalization/scaling and clipping
             self.signal_normalization = True #Whether to normalize mel spectrograms to some predefined range (following below parameters)
@@ -50,6 +53,7 @@ class Tensorflow2CaffeTactron2(Tensorflow2Caffe):
             self.attention_kernel = 31 #kernel size of attention convolution
             self.cumulative_weights = True #Whether to cumulate (sum) all previous attention weights or simply feed previous weights (Recommended: True)
 
+            self.decoder_layers = 1 #number of decoder lstm layers
             self.decoder_lstm_units = 512 #number of decoder lstm units on each layer
 
             #Attention synthesis constraints
@@ -78,6 +82,7 @@ class Tensorflow2CaffeTactron2(Tensorflow2Caffe):
 
         inputs = self.transpose_nhc_nchw(inputs)
         x = inputs
+        assert(hparams.batch_norm_position in ['before', 'after'])
         for i in range(enc_conv_num_layers):
             self.scopes[scope_id+1] = 'conv_layer_{}_'.format(i + 1) + scope
             padding = self.calculate_convolution_padding(self.get_tensor_shape(x), kernel_size, strides, 'same')
@@ -85,13 +90,17 @@ class Tensorflow2CaffeTactron2(Tensorflow2Caffe):
                                 channels, kernel_size, strides, padding,
                                 data_format="NCHW",
                                 dilation=1, groups=1, layer_names=['conv1d', "kernel", "bias"])
-            x = self.extract_batch_norm(x, output_name_prefix+"_bn_"+str(i+1), scope_id+2,
-                layer_names=["batch_normalization", "moving_mean", "moving_variance"])
+            if (hparams.batch_norm_position == 'before'):
+                x = self.extract_batch_norm(x, output_name_prefix+"_bn_"+str(i+1), scope_id+2,
+                    layer_names=["batch_normalization", "moving_mean", "moving_variance"])
             if activation == "relu":
                 x = self.add_relu(x, output_name_prefix+"_"+scope+"_"+activation+"_"+str(i+1))
             else:
                 print("[ERROR] unsupported activation layer %s in EncoderConvolutions" % (activation))
                 exit(1)
+            if (hparams.batch_norm_position == 'after'):
+                x = self.extract_batch_norm(x, output_name_prefix+"_bn_"+str(i+1), scope_id+2,
+                    layer_names=["batch_normalization", "moving_mean", "moving_variance"])
         x = self.transpose_nchc8_nhc(x)
         return x
 
@@ -160,6 +169,7 @@ class Tensorflow2CaffeTactron2(Tensorflow2Caffe):
 
         inputs = self.transpose_nhc_nchw(inputs)
         x = inputs
+        assert(hparams.batch_norm_position in ['before', 'after'])
         for i in range(postnet_num_layers - 1):
             self.scopes[scope_id+1] = 'conv_layer_{}_'.format(i + 1) + scope
             padding = self.calculate_convolution_padding(self.get_tensor_shape(x), kernel_size, strides, 'same')
@@ -167,13 +177,17 @@ class Tensorflow2CaffeTactron2(Tensorflow2Caffe):
                                 channels, kernel_size, strides, padding,
                                 data_format="NCHW",
                                 dilation=1, groups=1, layer_names=['conv1d', "kernel", "bias"])
-            x = self.extract_batch_norm(x, output_name_prefix+"_bn_"+str(i+1), scope_id+2,
-                layer_names=["batch_normalization", "moving_mean", "moving_variance"])
+            if (hparams.batch_norm_position == 'before'):
+                x = self.extract_batch_norm(x, output_name_prefix+"_bn_"+str(i+1), scope_id+2,
+                    layer_names=["batch_normalization", "moving_mean", "moving_variance"])
             if activation == "tanh":
                 x = self.add_tanh(x, output_name_prefix+"_"+scope+"_"+activation+"_"+str(i+1))
             else:
                 print("[ERROR] unsupported activation layer %s in EncoderConvolutions" % (activation))
                 exit(1)
+            if (hparams.batch_norm_position == 'after'):
+                x = self.extract_batch_norm(x, output_name_prefix+"_bn_"+str(i+1), scope_id+2,
+                    layer_names=["batch_normalization", "moving_mean", "moving_variance"])
 
         layer_id = 5
         self.scopes[scope_id+1] = 'conv_layer_{}_'.format(layer_id) + scope
@@ -317,7 +331,7 @@ class Tensorflow2CaffeTactron2(Tensorflow2Caffe):
         else:
             self.add_memory(decoder_input_name, decoder_input_shape, data_type="FLOAT32")
             self.add_memory(decoder_attention_name, decoder_attention_shape, data_type="FLOAT32")
-        decoder_query_lstm_states = self.prepare_decoder_states(1, hp.decoder_lstm_units*2, "decoder_query")
+        decoder_query_lstm_states = self.prepare_decoder_states(hp.decoder_layers, hp.decoder_lstm_units*2, "decoder_query")
         self.set_input(inputs)
         self.save_input()
         negative_one = "negative_one"
@@ -353,7 +367,7 @@ class Tensorflow2CaffeTactron2(Tensorflow2Caffe):
 
             LSTM_input = self.add_concat([prenet, decoder_attention_name], "decoder_concat1", axis=-1)
 
-            LSTM_output = self.DecoderRNN(LSTM_input, decoder_query_lstm_states, layers=1,
+            LSTM_output = self.DecoderRNN(LSTM_input, decoder_query_lstm_states, layers=hp.decoder_layers,
                         size=hp.decoder_lstm_units, zoneout=hp.tacotron_zoneout_rate,
                         scope_id=3, scope='decoder_query_LSTM', output_name_prefix="decoder_query_lstm")
             context_vector, alignments, new_cumulated_alignments = self._compute_attention(

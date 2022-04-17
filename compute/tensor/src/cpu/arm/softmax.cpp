@@ -22,9 +22,8 @@
 EE softmax_arm(
     TensorDesc inputDesc, const void *input, SoftmaxParamSpec p, TensorDesc outputDesc, void *output)
 {
-    DataType idt = inputDesc.dt;
-    EE ret = SUCCESS;
-    switch (idt) {
+    EE ret = NOT_SUPPORTED;
+    switch (inputDesc.dt) {
 #ifdef _USE_FP32
         case DT_F32: {
             ret = softmax_fp32(inputDesc, (const F32 *)input, p.axis, outputDesc, (F32 *)output);
@@ -38,9 +37,30 @@ EE softmax_arm(
         }
 #endif
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
+    return ret;
+}
 
+EE logsoftmax_arm(
+    TensorDesc inputDesc, const void *input, SoftmaxParamSpec p, TensorDesc outputDesc, void *output)
+{
+    EE ret = NOT_SUPPORTED;
+    switch (inputDesc.dt) {
+#ifdef _USE_FP32
+        case DT_F32: {
+            ret = logsoftmax_fp32(inputDesc, (const F32 *)input, p.axis, outputDesc, (F32 *)output);
+            break;
+        }
+#endif
+#ifdef _USE_FP16
+        case DT_F16: {
+            ret = logsoftmax_fp16(inputDesc, (const F16 *)input, p.axis, outputDesc, (F16 *)output);
+            break;
+        }
+#endif
+        default:
+            break;
+    }
     return ret;
 }

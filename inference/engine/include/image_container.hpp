@@ -11,8 +11,8 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef _IMAGE_CONTAINER_
-#define _IMAGE_CONTAINER_
+#ifndef _IMAGE_CONTAINER_H
+#define _IMAGE_CONTAINER_H
 
 #include "tensor_desc.h"
 #include "image_manager.hpp"
@@ -49,7 +49,7 @@ public:
     {
         I32 vecId = ImageManager::getImageVecsId(slot, width, height, depth);
         if (vecId < 0 || vecId >= (I32)images[slot].size()) {
-            CHECK_STATUS(NOT_MATCH);
+            UNI_ERROR_LOG("gpu image buffer reuse wrong.\n");
         }
         return *(images[slot][vecId].get());
     }

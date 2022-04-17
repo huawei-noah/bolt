@@ -29,17 +29,36 @@ public:
         return mem;
     }
 
+    ExpandParamSpec get_param(TensorDesc desc)
+    {
+        ExpandParamSpec ps = this->p;
+        if (ps.num_shape == 0) {
+            ps.num_shape = desc.dims[0];
+            for (int i = 0; i < ps.num_shape; i++) {
+                ps.shape[i] = desc.dims[desc.nDims + i];
+            }
+        }
+        return ps;
+    }
+
     void run() override
     {
-        CHECK_STATUS(expand(
-            this->inputTensors[0], this->p, this->temp, this->outputTensors[0], &this->archInfo));
+        ExpandParamSpec ps = p;
+        if (ps.num_shape == 0 && inputTensors.size() > 1) {
+            ps = get_param(inputTensors[1].get_desc());
+        }
+        CHECK_STATUS(
+            expand(this->inputTensors[0], ps, this->temp, this->outputTensors[0], &this->archInfo));
     }
 
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
-        CHECK_STATUS(
-            expand_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo));
+        ExpandParamSpec ps = p;
+        if (ps.num_shape == 0 && inTensors.size() > 1) {
+            ps = get_param(inTensors[1]->get_desc());
+        }
+        CHECK_STATUS(expand_infer_output_size(inTensors[0], ps, outTensors[0], &this->archInfo));
         return SUCCESS;
     }
 };

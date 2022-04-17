@@ -54,10 +54,10 @@ class GeluOptimizer : public OPOptimizer {
                         UNI_ABS(spec->ops[AddIndex].ps.power_spec.shift - 1) < eps &&
                         UNI_ABS(spec->ops[AddIndex].ps.power_spec.power - 1) < eps) {
                         if (spec->ops[secMulIndex].type == OT_Eltwise &&
-                            spec->ops[secMulIndex].ps.eltwise_spec.elt_mode == ELTWISE_PROD) {
+                            spec->ops[secMulIndex].ps.eltwise_spec.mode == ELTWISE_PROD) {
                             spec->ops[secMulIndex].num_inputs = 1;
-                            delete spec->ops[secMulIndex].input_tensors_name[1];
-                            memcpy(spec->ops[secMulIndex].input_tensors_name[0],
+                            mt_free(spec->ops[secMulIndex].input_tensors_name[1]);
+                            UNI_MEMCPY(spec->ops[secMulIndex].input_tensors_name[0],
                                 spec->ops[divIndex].input_tensors_name[0], NAME_LEN);
                             spec->ops[secMulIndex].type = OT_Gelu;
                             setOperatorInvalid(spec, firMulIndex, true);

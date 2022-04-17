@@ -15,7 +15,8 @@
 #include "uni.h"
 
 template <typename IT, typename OT>
-EE resize_bilinear(TensorDesc inputDesc, IT *inArray, TensorDesc outputDesc, OT *outArray)
+EE resize_bilinear(
+    TensorDesc inputDesc, IT *inArray, ResizeParamSpec p, TensorDesc outputDesc, OT *outArray)
 {
     DataType idt, odt;
     DataFormat idf, odf;
@@ -32,8 +33,14 @@ EE resize_bilinear(TensorDesc inputDesc, IT *inArray, TensorDesc outputDesc, OT 
         oc_align = 8;
     }
 
-    F32 strideH = ((F32)ih) / oh;
-    F32 strideW = ((F32)iw) / ow;
+    F32 strideH, strideW;
+    if (p.trans_mode == COORDINATE_TRANS_ALIGN_CORNERS) {
+        strideH = ((F32)ih - 1) / (oh - 1);
+        strideW = ((F32)iw - 1) / (ow - 1);
+    } else {
+        strideH = ((F32)ih) / oh;
+        strideW = ((F32)iw) / ow;
+    }
     ic /= ic_align;
     oc /= oc_align;
     U32 srcTL, srcTR, srcBL, srcBR;
@@ -75,6 +82,7 @@ EE resize_bilinear(TensorDesc inputDesc, IT *inArray, TensorDesc outputDesc, OT 
                             srcBL = ((n * ic + cc) * ih + hBB) * iw + wL;
                             srcBR = ((n * ic + cc) * ih + hBB) * iw + wRR;
                         }
+
                         outArray[dst] = inArray[srcTL] * factorTL + inArray[srcTR] * factorTR +
                             inArray[srcBL] * factorBL + inArray[srcBR] * factorBR;
                     }
@@ -85,33 +93,34 @@ EE resize_bilinear(TensorDesc inputDesc, IT *inArray, TensorDesc outputDesc, OT 
     return SUCCESS;
 }
 
-EE resize_bilinear_general(TensorDesc inputDesc, void *input, TensorDesc outputDesc, void *output)
+EE resize_bilinear_general(
+    TensorDesc inputDesc, void *input, ResizeParamSpec p, TensorDesc outputDesc, void *output)
 {
     EE ret = NOT_SUPPORTED;
     switch (inputDesc.dt) {
 #ifdef _USE_FP16
         case DT_F16: {
-            ret = resize_bilinear<F16, F16>(inputDesc, (F16 *)input, outputDesc, (F16 *)output);
+            ret = resize_bilinear<F16, F16>(inputDesc, (F16 *)input, p, outputDesc, (F16 *)output);
             break;
         }
 #endif
 #ifdef _USE_FP32
         case DT_F32: {
-            ret = resize_bilinear<F32, F32>(inputDesc, (F32 *)input, outputDesc, (F32 *)output);
+            ret = resize_bilinear<F32, F32>(inputDesc, (F32 *)input, p, outputDesc, (F32 *)output);
             break;
         }
 #endif
         case DT_U8: {
+            if (0) {
 #ifdef _USE_FP16
-            if (DT_F16 == outputDesc.dt) {
-                ret = resize_bilinear<U8, F16>(inputDesc, (U8 *)input, outputDesc, (F16 *)output);
-            }
+            } else if (DT_F16 == outputDesc.dt) {
+                ret = resize_bilinear<U8, F16>(inputDesc, (U8 *)input, p, outputDesc, (F16 *)output);
 #endif
 #ifdef _USE_FP32
-            if (DT_F32 == outputDesc.dt) {
-                ret = resize_bilinear<U8, F32>(inputDesc, (U8 *)input, outputDesc, (F32 *)output);
-            }
+            } else if (DT_F32 == outputDesc.dt) {
+                ret = resize_bilinear<U8, F32>(inputDesc, (U8 *)input, p, outputDesc, (F32 *)output);
 #endif
+            }
             break;
         }
         default:

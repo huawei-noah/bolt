@@ -56,7 +56,7 @@ EE reshape_infer_forward_tmp_bytes(
             inputDesc, outputDesc, gclmemInputDesc, gclmemOutputDesc, bytes);
 #endif
     } else {
-        *bytes = UNI_MAX(inputTensor.bytes(), outputTensor.bytes());
+        *bytes = 0;
         ret = SUCCESS;
     }
     return ret;

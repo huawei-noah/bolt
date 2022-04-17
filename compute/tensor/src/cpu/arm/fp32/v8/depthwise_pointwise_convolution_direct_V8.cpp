@@ -43,10 +43,10 @@ EE depthwise_pointwise_convolution_direct_V8(TensorDesc inputDesc,
     CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
     U32 strideH = convParamSpec.stride_h;
     U32 strideW = convParamSpec.stride_w;
-    U32 paddingT = convParamSpec.padding_top;
-    U32 paddingB = convParamSpec.padding_bottom;
-    U32 paddingL = convParamSpec.padding_left;
-    U32 paddingR = convParamSpec.padding_right;
+    U32 paddingT = convParamSpec.pad_top;
+    U32 paddingB = convParamSpec.pad_bottom;
+    U32 paddingL = convParamSpec.pad_left;
+    U32 paddingR = convParamSpec.pad_right;
     U32 dilateH = convParamSpec.dilatedRate_h;
     U32 dilateW = convParamSpec.dilatedRate_w;
 
@@ -70,20 +70,20 @@ EE depthwise_pointwise_convolution_direct_V8(TensorDesc inputDesc,
         F32 *inArray_mov = inArray + n * ic * ihiw * 8;
         for (U32 c = 0; c < ic; c++) {
             if (paddingT > 0) {
-                memset(inArray_pad_mov, 0, paddingT * iw_pad * 8 * bytesOf(fdt));
+                UNI_MEMSET(inArray_pad_mov, 0, paddingT * iw_pad * 8 * bytesOf(fdt));
                 inArray_pad_mov += paddingT * iw_pad * 8;
             }
             for (U32 h = paddingT; h < ih_pad - paddingB; h++) {
-                memset(inArray_pad_mov, 0, paddingL * 8 * bytesOf(fdt));
+                UNI_MEMSET(inArray_pad_mov, 0, paddingL * 8 * bytesOf(fdt));
                 inArray_pad_mov += paddingL * 8;
-                memcpy(inArray_pad_mov, inArray_mov, iw * 8 * bytesOf(fdt));
+                UNI_MEMCPY(inArray_pad_mov, inArray_mov, iw * 8 * bytesOf(fdt));
                 inArray_pad_mov += iw * 8;
                 inArray_mov += iw * 8;
-                memset(inArray_pad_mov, 0, paddingR * 8 * bytesOf(fdt));
+                UNI_MEMSET(inArray_pad_mov, 0, paddingR * 8 * bytesOf(fdt));
                 inArray_pad_mov += paddingR * 8;
             }
             if (paddingB > 0) {
-                memset(inArray_pad_mov, 0, paddingB * iw_pad * 8 * bytesOf(fdt));
+                UNI_MEMSET(inArray_pad_mov, 0, paddingB * iw_pad * 8 * bytesOf(fdt));
                 inArray_pad_mov += paddingB * iw_pad * 8;
             }
 
@@ -143,41 +143,40 @@ EE depthwise_pointwise_convolution_direct_V8(TensorDesc inputDesc,
                         F32 *in_5 = in_idx + in_h_5 * iw_pad * 8 + in_w_5 * 8;
                         F32 *in_6 = in_idx + in_h_6 * iw_pad * 8 + in_w_6 * 8;
                         F32 *in_7 = in_idx + in_h_7 * iw_pad * 8 + in_w_7 * 8;
-                        __asm__ __volatile__("ldp q16, q17, [%[f0]]\n"
-                                             "ldp q30, q31, [%[in0]]\n"
-                                             "ldp q18, q19, [%[in1]]\n"
-                                             "ldp q20, q21, [%[in2]]\n"
-                                             "ldp q22, q23, [%[in3]]\n"
-                                             "ldp q24, q25, [%[in4]]\n"
-                                             "ldp q26, q27, [%[in5]]\n"
-                                             "ldp q28, q29, [%[in6]]\n"
+                        __asm__ __volatile__(
+                            "ldp q16, q17, [%[f0]]\n"
+                            "ldp q30, q31, [%[in0]]\n"
+                            "ldp q18, q19, [%[in1]]\n"
+                            "ldp q20, q21, [%[in2]]\n"
+                            "ldp q22, q23, [%[in3]]\n"
+                            "ldp q24, q25, [%[in4]]\n"
+                            "ldp q26, q27, [%[in5]]\n"
+                            "ldp q28, q29, [%[in6]]\n"
 
-                                             "fmla v0.4s, v30.4s, v16.4s\n"
-                                             "fmla v1.4s, v31.4s, v17.4s\n"
-                                             "fmla v2.4s, v18.4s, v16.4s\n"
-                                             "ldp q30, q31, [%[in7]]\n"
-                                             "fmla v3.4s, v19.4s, v17.4s\n"
-                                             "fmla v4.4s, v20.4s, v16.4s\n"
-                                             "fmla v5.4s, v21.4s, v17.4s\n"
-                                             "fmla v6.4s, v22.4s, v16.4s\n"
-                                             "fmla v7.4s, v23.4s, v17.4s\n"
-                                             "fmla v8.4s, v24.4s, v16.4s\n"
-                                             "fmla v9.4s, v25.4s, v17.4s\n"
-                                             "fmla v10.4s, v26.4s, v16.4s\n"
-                                             "fmla v11.4s, v27.4s, v17.4s\n"
-                                             "fmla v12.4s, v28.4s, v16.4s\n"
-                                             "fmla v13.4s, v29.4s, v17.4s\n"
-                                             "fmla v14.4s, v30.4s, v16.4s\n"
-                                             "fmla v15.4s, v31.4s, v17.4s\n"
-                                             :
-                                             : [in0] "r"(in_0), [in1] "r"(in_1), [in2] "r"(in_2),
-                                             [in3] "r"(in_3), [in4] "r"(in_4), [in5] "r"(in_5),
-                                             [in6] "r"(in_6), [in7] "r"(in_7), [f0] "r"(f_0)
-                                             : "memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5",
-                                             "v6", "v7", "v8", "v9", "v10", "v11", "v12", "v13",
-                                             "v14", "v15", "v16", "v17", "v18", "v19", "v20", "v21",
-                                             "v22", "v23", "v24", "v25", "v26", "v27", "v28", "v29",
-                                             "v30", "v31");
+                            "fmla v0.4s, v30.4s, v16.4s\n"
+                            "fmla v1.4s, v31.4s, v17.4s\n"
+                            "fmla v2.4s, v18.4s, v16.4s\n"
+                            "ldp q30, q31, [%[in7]]\n"
+                            "fmla v3.4s, v19.4s, v17.4s\n"
+                            "fmla v4.4s, v20.4s, v16.4s\n"
+                            "fmla v5.4s, v21.4s, v17.4s\n"
+                            "fmla v6.4s, v22.4s, v16.4s\n"
+                            "fmla v7.4s, v23.4s, v17.4s\n"
+                            "fmla v8.4s, v24.4s, v16.4s\n"
+                            "fmla v9.4s, v25.4s, v17.4s\n"
+                            "fmla v10.4s, v26.4s, v16.4s\n"
+                            "fmla v11.4s, v27.4s, v17.4s\n"
+                            "fmla v12.4s, v28.4s, v16.4s\n"
+                            "fmla v13.4s, v29.4s, v17.4s\n"
+                            "fmla v14.4s, v30.4s, v16.4s\n"
+                            "fmla v15.4s, v31.4s, v17.4s\n"
+                            :
+                            : [in0] "r"(in_0), [in1] "r"(in_1), [in2] "r"(in_2), [in3] "r"(in_3),
+                            [in4] "r"(in_4), [in5] "r"(in_5), [in6] "r"(in_6), [in7] "r"(in_7), [f0] "r"(f_0)
+                            : "memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7", "v8",
+                            "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17", "v18",
+                            "v19", "v20", "v21", "v22", "v23", "v24", "v25", "v26", "v27", "v28",
+                            "v29", "v30", "v31");
                     }
                 }
 

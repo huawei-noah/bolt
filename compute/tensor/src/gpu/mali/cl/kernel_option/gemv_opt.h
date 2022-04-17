@@ -15,8 +15,9 @@ inline EE set_gemv_trans_mat_opt(U32 workMatChannelsPerThread,
         CHECK_STATUS(set_chars_define_opt("USE_TRANS_CK", opt));
         transName = "kc_";
     }
-    sprintf(kernelName, "gemv_trans_mat_%s%d", transName.c_str(), C);
-    sprintf(kernelOpt->sourceName, "gemv_trans_mat");
+    std::string kernel = std::string("gemv_trans_mat_") + transName + std::to_string(C);
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, "gemv_trans_mat");
     kernelOpt->kernelDataType = dt;
     CHECK_STATUS(set_value_define_opt(C, "C", opt));
     return SUCCESS;
@@ -64,9 +65,11 @@ inline EE set_gemv_opt(U32 workMatChannelsPerThread,
         reduceName = "_reduce";
     }
 
-    sprintf(kernelName, "gemv%s_%s%s%s%d", reduceName.c_str(), modeName, outFormatName.c_str(),
-        biasName.c_str(), OC);
-    sprintf(kernelOpt->sourceName, "gemv%s", reduceName.c_str());
+    std::string source = "gemv" + reduceName;
+    std::string kernel =
+        source + std::string("_") + modeName + outFormatName + biasName + std::to_string(OC);
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, source.c_str());
     kernelOpt->kernelDataType = dt;
     CHECK_STATUS(set_value_define_opt(OC, "OC", opt));
     CHECK_STATUS(set_activation_define_opt(activeMode, opt));

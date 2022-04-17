@@ -4,13 +4,13 @@
 inline EE set_slice_opt_mali(
     bool useNchwFormat, U32 axis, U32 slice_num, DataType dt, char *kernelName, KernelOpt *kernelOpt)
 {
-    std::string formatName = "";
+    std::string name = "slice_";
     if (useNchwFormat) {
-        formatName = "nchw_";
+        name += "nchw_";
     }
-
-    sprintf(kernelName, "slice_%s%d%d", formatName.c_str(), axis, slice_num);
-    sprintf(kernelOpt->sourceName, "slice");
+    name += std::to_string(axis) + std::to_string(slice_num);
+    UNI_STRCPY(kernelName, name.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, "slice");
     kernelOpt->kernelDataType = dt;
     char *opt = kernelOpt->option;
     CHECK_STATUS(set_value_define_opt(axis, "AXIS_NUM", opt));

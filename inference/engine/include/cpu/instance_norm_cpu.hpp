@@ -38,33 +38,29 @@ public:
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
-        auto inputDesc = inTensors[0]->get_desc();
-        this->set_channels_from_weight();
-        TensorDesc outputDesc = inputDesc;
-        outTensors[0]->resize(outputDesc);
+        outTensors[0]->resize(inTensors[0]->get_desc());
         return SUCCESS;
     }
 
-    void set_channels_from_weight()
+    int get_channels_num()
     {
+        int ret = 0;
         auto curOpWs = this->get_weightspec();
         if (0 != curOpWs.bytes_of_weight) {
-            this->numChannels = curOpWs.bytes_of_weight / UNI_MAX(1, bytesOf(curOpWs.mdt));
+            ret = curOpWs.bytes_of_weight / UNI_MAX(1, bytesOf(curOpWs.mdt));
         } else if (0 != curOpWs.bytes_of_vec) {
-            this->numChannels = curOpWs.bytes_of_vec / UNI_MAX(1, bytesOf(curOpWs.mdt));
-        } else {
-            this->numChannels = 0;
+            ret = curOpWs.bytes_of_vec / UNI_MAX(1, bytesOf(curOpWs.mdt));
         }
+        return ret;
     }
 
     EE infer_weight_desc() override
     {
-        // weight is scale, bias is bias
-        this->set_channels_from_weight();
+        int num = this->get_channels_num();
         this->weightTensors = std::vector<Tensor>(1);
-        this->weightTensors[0].resize(tensor1d(this->dt, this->numChannels));
+        this->weightTensors[0].resize(tensor1d(this->dt, num));
         this->biasTensors = std::vector<Tensor>(1);
-        this->biasTensors[0].resize(tensor1d(this->dt, this->numChannels));
+        this->biasTensors[0].resize(tensor1d(this->dt, num));
         return SUCCESS;
     }
 

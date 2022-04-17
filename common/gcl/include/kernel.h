@@ -49,6 +49,22 @@ inline EE get_kernel_info(Kernel kernel, cl_kernel_info info, void **value, size
     map_cl_error_2_ee(ret);
 }
 
+inline EE get_kernel_name(Kernel kernel, char* name, U32 *len)
+{
+    if (NULL == name || NULL == len) {
+        return NULL_POINTER;
+    }
+
+    size_t lenVal;
+    cl_int ret = clGetKernelInfo(kernel, CL_KERNEL_FUNCTION_NAME, 0, NULL, &lenVal);
+    if (ret != CL_SUCCESS) {
+        map_cl_error_2_ee(ret);
+    }
+    *len = lenVal;
+    ret = clGetKernelInfo(kernel, CL_KERNEL_FUNCTION_NAME, lenVal, name, NULL);
+    map_cl_error_2_ee(ret);
+}
+
 inline EE get_program_info_from_kernel(Kernel kernel, Program *program)
 {
     cl_int ret = clGetKernelInfo(kernel, CL_KERNEL_PROGRAM, sizeof(Program), program, NULL);

@@ -82,7 +82,7 @@ class MemoryReuseOptimizer : public OPOptimizer {
                 U32 numInputs = spec->ops[i].num_inputs;
                 U32 numOutputs = spec->ops[i].num_outputs;
                 spec->ops[i].tensor_positions =
-                    (I32 *)mt_new_storage((numInputs + numOutputs) * bytesOf(DT_I32));
+                    (I32 *)mt_malloc((numInputs + numOutputs) * bytesOf(DT_I32));
 
                 std::vector<std::tuple<std::string, int, U32>> layerTensors;
 

@@ -27,8 +27,9 @@ inline EE set_roialign_opt_mali(bool useNchwFormat,
     } else {
         CHECK_STATUS(NOT_SUPPORTED);
     }
-    sprintf(kernelName, "roialign_%s%s%s", ioMemName, formatName.c_str(), modeName.c_str());
-    sprintf(kernelOpt->sourceName, "roialign");
+    std::string kernel = std::string("roialign_") + ioMemName + formatName + modeName;
+    UNI_STRCPY(kernelName, kernel.c_str());
+    UNI_STRCPY(kernelOpt->sourceName, "roialign");
     if (useNchwFormat) {
         CHECK_STATUS(set_chars_define_opt("USE_NCHW", opt));
     }

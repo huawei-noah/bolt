@@ -81,9 +81,9 @@ public:
         }
         TensorDesc weightDesc;
         if (this->p.transpose) {
-            weightDesc = tensor2df(this->dt, DF_TRANSPOSE, this->p.num_output, this->p.input_dim);
+            weightDesc = tensor2df(this->dt, DF_TRANSPOSE, this->p.num_outputs, this->p.num_inputs);
         } else {
-            weightDesc = tensor2df(this->dt, DF_NORMAL, this->p.input_dim, this->p.num_output);
+            weightDesc = tensor2df(this->dt, DF_NORMAL, this->p.num_inputs, this->p.num_outputs);
         }
         U32 weightBytes = tensorNumBytes(weightDesc);
 
@@ -93,15 +93,15 @@ public:
         bool set_ptr = false;
         modelWeightTensor->alloc();
         if (modelPtr != nullptr) {
-            memcpy(
+            UNI_MEMCPY(
                 ((CpuMemory *)(modelWeightTensor->get_memory()))->get_ptr(), modelPtr, weightBytes);
             *modelPtrShared = std::shared_ptr<U8>(*modelPtrShared, modelPtr + weightBytes);
             set_ptr = true;
         } else {
             auto curOpWs = this->get_weightspec();
             if (curOpWs.weight != nullptr) {
-                memcpy(((CpuMemory *)(modelWeightTensor->get_memory()))->get_ptr(), curOpWs.weight,
-                    weightBytes);
+                UNI_MEMCPY(((CpuMemory *)(modelWeightTensor->get_memory()))->get_ptr(),
+                    curOpWs.weight, weightBytes);
                 set_ptr = true;
             }
         }

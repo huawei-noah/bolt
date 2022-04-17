@@ -24,7 +24,7 @@ class RsqrtOptimizer : public OPOptimizer {
             if (spec->ops[i].type == OT_Power && spec->ops[i + 1].type == OT_Reciprocal) {
                 if (spec->ops[i].ps.power_spec.power == 0.5) {
                     spec->ops[i].ps.power_spec.power = -0.5;
-                    memcpy(spec->ops[i].output_tensors_name[0],
+                    UNI_MEMCPY(spec->ops[i].output_tensors_name[0],
                         spec->ops[i + 1].output_tensors_name[0], NAME_LEN);
                     setOperatorInvalid(spec, i + 1);
                     hasOptimized = true;

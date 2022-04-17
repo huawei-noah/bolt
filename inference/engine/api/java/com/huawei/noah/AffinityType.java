@@ -22,6 +22,7 @@ package com.huawei.noah;
 
 /** affinity policy */
 public enum AffinityType {
+    CPU,                   ///< don't bind process to specific core
     CPU_HIGH_PERFORMANCE,  ///< performance is high priority(use CPU big core)
     CPU_LOW_POWER,         ///< power is high priority(use CPU small core)
     GPU                    ///< use ARM MALI GPU

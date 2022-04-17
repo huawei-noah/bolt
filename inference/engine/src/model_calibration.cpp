@@ -287,7 +287,7 @@ void calibrate_model_with_dataset(std::string dataPath,
                 tensorSize.push_back(
                     tensorNumElements(resizedTensors[tensorPosition[i].second].get_desc()));
                 dBytes = tensorSize.back() * elementBytes;
-                memcpy(d,
+                UNI_MEMCPY(d,
                     ((CpuMemory *)(resizedTensors[tensorPosition[i].second].get_memory()))->get_ptr(),
                     dBytes);
 
@@ -347,13 +347,13 @@ void calibrate_model_with_dataset(std::string dataPath,
 
         resultMs->ops[opIdx].num_quant_feature = scales.size();
         resultMs->ops[opIdx].feature_scale =
-            (QuantSpec *)mt_new_storage(scales.size() * sizeof(QuantSpec));
+            (QuantSpec *)mt_malloc(scales.size() * sizeof(QuantSpec));
 
         for (U32 i = 0; i < scales.size(); i++) {
             resultMs->ops[opIdx].feature_scale[i].num_scale = scales[i].size();
             U32 scaleBytes = scales[i].size() * sizeof(F32);
-            resultMs->ops[opIdx].feature_scale[i].scale = (F32 *)mt_new_storage(scaleBytes);
-            memcpy(resultMs->ops[opIdx].feature_scale[i].scale, scales[i].data(), scaleBytes);
+            resultMs->ops[opIdx].feature_scale[i].scale = (F32 *)mt_malloc(scaleBytes);
+            UNI_MEMCPY(resultMs->ops[opIdx].feature_scale[i].scale, scales[i].data(), scaleBytes);
         }
 
         calibratedOpIdx.push_back(opIdx);

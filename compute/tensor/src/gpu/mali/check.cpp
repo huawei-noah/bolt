@@ -41,7 +41,7 @@ inline EE check_checkpara_mali(GCLHandle_t handle,
     if (outputDesc.dt != DT_I32) {
         CHECK_STATUS(NOT_MATCH);
     }
-    if (p.check_mode != CHECK_EQUAL) {
+    if (p.mode != CHECK_EQUAL) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
     return SUCCESS;

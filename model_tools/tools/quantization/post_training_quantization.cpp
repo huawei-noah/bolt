@@ -14,7 +14,6 @@
 #include <iostream>
 #include <getopt.h>
 #include "model_spec.h"
-#include "model_quantization.h"
 #include "model_calibration.hpp"
 #include "model_data_type_converter.h"
 #include "model_optimizer.hpp"
@@ -75,7 +74,6 @@ int main(int argc, char *argv[])
     ImageFormat imageFormat = RGB;
     F32 mulScale = 1.0;
     bool verbose = false;
-    bool hasScale = false;
 
     int option;
     const char *optionstring = "p:i:b:q:c:s:o:d:f:m:V";
@@ -104,7 +102,6 @@ int main(int argc, char *argv[])
             case 's':
                 std::cout << "option is -s [scaleFileDirectory], value is: " << optarg << std::endl;
                 scaleFile = optarg;
-                hasScale = true;
                 break;
 #if _USE_INT8
             case 'o':
@@ -203,12 +200,8 @@ int main(int argc, char *argv[])
     }
 
     ModelSpecOptimizer msOptimizer;
-    msOptimizer.suggest_for_ptq(inferPrecision, fuseBN, clipVal, hasScale);
+    msOptimizer.suggest_for_ptq(inferPrecision, fuseBN, scaleFile, clipVal);
     msOptimizer.optimize(&ms);
-
-    if (hasScale) {
-        add_scale_from_file(&ms, scaleFile);
-    }
 
     ModelSpec *targetMs = new ModelSpec();
     CHECK_STATUS(mt_create_model(targetMs));

@@ -16,7 +16,7 @@
 
 #include "parameter_spec.h"
 
-static const int sg_boltVersion = 20201120;
+static const int sg_boltVersion = 20220126;
 static const int sg_magicNumber = 1141119;
 
 #pragma pack(8)
@@ -87,14 +87,10 @@ typedef struct {
 } ModelSpec;
 #pragma pack()
 
-#define outOfFileMapRange(addr, mfd)                                  \
-    ((mfd == nullptr) || (uintptr_t(addr) < uintptr_t(mfd->bytes)) || \
-        (uintptr_t(addr) >= uintptr_t(mfd->bytes + mfd->fileLength)))
-
-EE mt_create_model(ModelSpec *md);
+EE mt_create_model(ModelSpec *spec);
 EE serialize_model_to_file(const ModelSpec *spec, const char *fn);
 EE deserialize_model_from_file(const char *fn, ModelSpec *spec, bool useFileStream = false);
-EE mt_destroy_model(ModelSpec *md);
+EE mt_destroy_model(ModelSpec *spec);
 
 #include "model_print.h"
 #endif

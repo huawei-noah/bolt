@@ -33,9 +33,10 @@ typedef void *ResultHandle;
 
 /** CPU affinity policy */
 typedef enum {
-    CPU_HIGH_PERFORMANCE = 0,  ///< performance is high priority(use big core)
-    CPU_LOW_POWER = 1,         ///< power is high priority(use small core)
-    GPU = 2                    ///< use GPU
+    CPU = 0,                   ///< don't bind process to specific core
+    CPU_HIGH_PERFORMANCE = 1,  ///< performance is high priority(use big core)
+    CPU_LOW_POWER = 2,         ///< power is high priority(use small core)
+    GPU = 3                    ///< use GPU
 } AFFINITY_TYPE;
 
 /** heterogeneous device type */
@@ -60,28 +61,20 @@ typedef enum {
 } DATA_TYPE;
 
 /** Get DATA_TYPE String */
-inline const char *const *GetDataTypeString()
-{
-    static const char *const names[] = {"FP_32", "FP_16", "INT_32", "UINT_32"};
-    return names;
-}
+const char *const *GetDataTypeString();
 
 /** multi-dimension data format */
 typedef enum {
     NCHW = 0,    ///< batch->channel->high->width data order
     NHWC = 1,    ///< batch->high->width->channel data order
-    NCHWC8 = 2,  ///< batch->channel/8->high->width->channel four element data order
+    NCHWC8 = 2,  ///< batch->channel/8->high->width->channel eight element data order
     MTK = 3,     ///< batch->time->unit data order
     NORMAL = 4,  ///< batch->unit data order
     NCHWC4 = 5   ///< batch->channel/4->width->high->channel four element data order
 } DATA_FORMAT;
 
 /** Get DATA_FORMAT String */
-inline const char *const *GetDataFormatString()
-{
-    static const char *const names[] = {"NCHW", "NHWC", "NCHWC8", "MTK", "NORMAL"};
-    return names;
-}
+const char *const *GetDataFormatString();
 
 /**
  * @brief create model from file
@@ -174,6 +167,12 @@ void PrepareModel(ModelHandle ih,
  * @param  ih            inference pipeline handle
  *
  * @return result data memory handle
+ * @note destroy result when unused
+ * @code
+ *     ResultHandle result = AllocAllResultHandle(...);
+ *     ...
+ *     FreeResultHandle(result);
+ * @endcode
  */
 ResultHandle AllocAllResultHandle(ModelHandle ih);
 
@@ -213,6 +212,11 @@ int GetNumOutputsFromResultHandle(ResultHandle ir);
  * @note
  * name/n/c/h/w/dt/df array space must be allocated before calling, the array length must be equal to num_inputs.
  * each element of name must be allocated, the array length must be equal to 128.
+ * GetOutputDataInfoFromResultHandle must behind RunModel because RunModel will change ResultHandle.
+ * @code
+ *     RunModel(...);
+ *     GetOutputDataInfoFromResultHandle(...);
+ * @endcode
  */
 void GetOutputDataInfoFromResultHandle(ResultHandle ir,
     int num_outputs,
@@ -231,6 +235,11 @@ void GetOutputDataInfoFromResultHandle(ResultHandle ir,
  * @param  data          the array of all output data's content
  *
  * @return
+ * @note GetOutputDataFromResultHandle must behind RunModel because RunModel will change ResultHandle.
+ * @code
+ *     RunModel(...);
+ *     GetOutputDataFromResultHandle(...);
+ * @endcode
  */
 void GetOutputDataFromResultHandle(ResultHandle ir, int num_outputs, void **data);
 
@@ -337,6 +346,11 @@ void ResizeModelInput(ModelHandle ih,
  * @param  name          the array of tesor name that needed
  *
  * @return result data memory handle
+ * @code
+ *     ResultHandle result = AllocSpecificResultHandle(...);
+ *     ...
+ *     FreeResultHandle(result);
+ * @endcode
  */
 ResultHandle AllocSpecificResultHandle(ModelHandle ih, int num_outputs, const char **name);
 
@@ -399,6 +413,15 @@ void SetRuntimeDeviceDynamic(ModelHandle ih);
  * @return
  */
 void SetNumThreads(int threads);
+
+/**
+ * @brief check memory leak
+ *
+ * @note
+ * This can only be used at the end of program after Model and Result free.
+ * @return
+ */
+void MemoryCheck();
 #ifdef __cplusplus
 }
 #endif

@@ -16,10 +16,33 @@
 
 #include <string>
 #include "model_spec.h"
+#include "memory_cpu.h"
 
 EE str_copy(I8 *dst, const I8 *src, I32 src_len, I32 dst_len = NAME_LEN);
 
-void *mt_new_storage(size_t size);
+inline void *mt_malloc(U32 size)
+{
+    return UNI_OPERATOR_NEW(size);
+}
+
+template <typename T>
+inline void mt_free(T *&p)
+{
+    UNI_OPERATOR_DELETE(p);
+    p = nullptr;
+}
+
+// only WeightSpec's weight and vec varialbles free by using this.
+// because this will use mmap memory.
+template <typename T>
+inline void mt_free(T *&p, ModelSpec *spec)
+{
+    if (spec == nullptr || spec->mfd == nullptr || (uintptr_t(p) < uintptr_t(spec->mfd->bytes)) ||
+        (uintptr_t(p) >= uintptr_t(spec->mfd->bytes + spec->mfd->fileLength))) {
+        UNI_OPERATOR_DELETE(p);
+    }
+    p = nullptr;
+}
 
 OperatorSpec mt_create_operator(
     const char *name, OperatorType type, U32 num_inputs, U32 num_outputs);
@@ -34,4 +57,7 @@ bool isDeprecatedOp(OperatorType opType);
 bool isDeprecatedOpWeight(const ModelSpec *spec, int index);
 
 std::string concat_dir_file(std::string dir, std::string file);
+
+void modify_ms_inputs_and_outputs(
+    ModelSpec *ms, std::string modifiedInputs, std::string modifiedOutputs);
 #endif

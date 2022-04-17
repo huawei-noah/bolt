@@ -33,20 +33,18 @@ public:
     EE infer_weight_desc() override
     {
         auto curOpWs = this->get_weightspec();
-        DataType filterDt = curOpWs.mdt;  // weight data type may not be the same as input and output
+        DataType fdt = curOpWs.mdt;
         if (curOpWs.weight == nullptr) {
-            filterDt = this->dt;
+            fdt = this->dt;
         }
-        DataType dtNoQ = (this->dt == DT_F16_8Q) ? DT_F16 : this->dt;
-        CHECK_REQUIREMENT(filterDt != DT_BIN01 && filterDt != DT_BIN11);
-        DataFormat filterDf = DF_NCHW;
-        TensorDesc filterTensorDesc = tensor4df(filterDt, filterDf, this->numInputs,
-            this->p.num_outputs, this->p.kernel_h, this->p.kernel_w);
-        // bias length
-        U32 vectorLen = this->numInputs * this->p.group;
+        if (fdt == DT_BIN01 || fdt == DT_BIN11) {
+            return NOT_MATCH;
+        }
+        TensorDesc filterTensorDesc = tensor4df(
+            fdt, DF_NCHW, this->numInputs, this->p.num_outputs, this->p.kernel_h, this->p.kernel_w);
         // bias data type should be the same as input and output
-        TensorDesc vectorTensorDesc = tensor1d(dtNoQ, vectorLen);
-
+        DataType dtNoQ = (dt == DT_F16_8Q) ? DT_F16 : ((dt == DT_F32_8Q) ? DT_F32 : dt);
+        TensorDesc vectorTensorDesc = tensor1d(dtNoQ, this->numInputs * this->p.group);
         this->weightTensors = std::vector<Tensor>(1);
         this->weightTensors[0].resize(filterTensorDesc);
         this->biasTensors = std::vector<Tensor>(1);
@@ -62,13 +60,8 @@ public:
         Tensor outputTensor = this->outputTensors[0];
         TensorDesc oriOutputDesc = outputTensor.get_desc();
         outputTensor.resize(transformDescTo4d(oriOutputDesc));
-
         Tensor filterTensor = this->weightTensors[0];
         Tensor biasTensor = this->biasTensors[0];
-        auto filterDesc = filterTensor.get_desc();
-        if (filterDesc.dt == DT_BIN01 || filterDesc.dt == DT_BIN11) {
-            CHECK_STATUS(NOT_SUPPORTED);
-        }
         CHECK_STATUS(deconvolution(inputTensor, filterTensor, p, this->alg, nullptr, biasTensor,
             this->temp, outputTensor, this->activationDesc, &this->archInfo));
         inputTensor.resize(oriInputDesc);
@@ -120,7 +113,7 @@ public:
         filterTensor.resize(filterDim);
 
         DataType targetType = this->dt;
-        if (DT_F16_8Q == this->dt) {
+        if (DT_F16_8Q == this->dt || DT_F32_8Q == this->dt) {
             targetType = DT_I8;
         }
 
@@ -167,10 +160,10 @@ public:
         Tensor filterTensor = this->weightTensors[0];
         auto wtmBytes = this->infer_wtm_memory_size();
         Tensor wtm = Tensor::alloc_sized<CPUMem>(tensor1d(DT_U8, wtmBytes));
-        CHECK_STATUS(deconvolution_transform_filter(
-            filterTensor, this->p, this->alg, this->temp, &wtm, &this->archInfo));
+        EE ret = deconvolution_transform_filter(
+            filterTensor, this->p, this->alg, this->temp, &wtm, &this->archInfo);
         this->weightTensors[0] = wtm;
-        return SUCCESS;
+        return ret;
     }
 };
 

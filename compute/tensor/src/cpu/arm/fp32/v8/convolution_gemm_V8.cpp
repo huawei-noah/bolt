@@ -42,7 +42,7 @@ EE convolution_gemm_V8(TensorDesc inputDesc,
         CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
         it = ft = ot = 1;
         p.dilatedRate_t = p.stride_t = 1;
-        p.padding_before = p.padding_after = 0;
+        p.pad_before = p.pad_after = 0;
     } else if (tensorIs5d(inputDesc)) {
         CHECK_STATUS(tensor5dGet(inputDesc, &idt, &idf, &in, &ic, &it, &ih, &iw));
         CHECK_STATUS(tensor5dGet(filterDesc, &fdt, &fdf, &fn, &fc, &ft, &fh, &fw));
@@ -56,9 +56,9 @@ EE convolution_gemm_V8(TensorDesc inputDesc,
     }
 
     oc /= 8;
-    U32 it_pad = it + p.padding_before + p.padding_after;
-    U32 ih_pad = ih + p.padding_top + p.padding_bottom;
-    U32 iw_pad = iw + p.padding_left + p.padding_right;
+    U32 it_pad = it + p.pad_before + p.pad_after;
+    U32 ih_pad = ih + p.pad_top + p.pad_bottom;
+    U32 iw_pad = iw + p.pad_left + p.pad_right;
     I64 K = ic * ft * fh * fw;
     I32 ohow = ot * oh * ow;
     F32 *in_pack = ((F32 *)tmp) + ic * it_pad * ih_pad * iw_pad;
@@ -216,9 +216,8 @@ EE convolution_gemm_V8(TensorDesc inputDesc,
                                 :
                                 : [pack] "r"(in_pack_c8hw12), [in_0] "r"(in_0), [in_1] "r"(in_1),
                                 [in_2] "r"(in_2), [in_3] "r"(in_3), [in_4] "r"(in_4),
-                                [in_5] "r"(in_5), [in_6] "r"(in_6), [in_7] "r"(in_7),
-                                [in_8] "r"(in_8), [in_9] "r"(in_9), [in_10] "r"(in_10),
-                                [in_11] "r"(in_11)
+                                [in_5] "r"(in_5), [in_6] "r"(in_6), [in_7] "r"(in_7), [in_8] "r"(in_8),
+                                [in_9] "r"(in_9), [in_10] "r"(in_10), [in_11] "r"(in_11)
                                 : "memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7",
                                 "v8", "v9", "v10", "v11", "v12", "v13", "v14", "v15", "v16", "v17",
                                 "v18", "v19", "v20", "v21", "v22", "v23", "v24", "v25", "v26",
@@ -756,8 +755,7 @@ EE convolution_gemm_V8(TensorDesc inputDesc,
                                 "st4 {v0.4s, v1.4s, v2.4s, v3.4s}, [%[pack]], #64\n"
                                 "st4 {v4.4s, v5.4s, v6.4s, v7.4s}, [%[pack]]\n"
                                 : [pack] "+r"(in_pack_c8hw4)
-                                : [in_0] "r"(in_0), [in_1] "r"(in_1), [in_2] "r"(in_2),
-                                [in_3] "r"(in_3)
+                                : [in_0] "r"(in_0), [in_1] "r"(in_1), [in_2] "r"(in_2), [in_3] "r"(in_3)
                                 : "memory", "cc", "v0", "v1", "v2", "v3", "v4", "v5", "v6", "v7");
                         }
                     }

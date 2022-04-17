@@ -55,11 +55,8 @@ EE gather_infer_output_size(Tensor *dataTensor,
     ArchInfo_t archInfo)
 {
     auto arch = archInfo->arch;
-    if (dataTensor == nullptr) {
-        CHECK_STATUS(NULL_POINTER);
-    }
-    if (outputTensor == nullptr) {
-        CHECK_STATUS(NULL_POINTER);
+    if (dataTensor == nullptr || outputTensor == nullptr) {
+        return NULL_POINTER;
     }
     TensorDesc dataDesc = dataTensor->get_desc();
     TensorDesc indexDesc = indexTensor->get_desc();
@@ -76,13 +73,20 @@ EE gather_infer_output_size(Tensor *dataTensor,
         }
         outputDesc.nDims = e + indexDesc.nDims;
     } else {
-        outputDesc = dataDesc;
+        outputDesc = indexDesc;
+        outputDesc.dt = dataDesc.dt;
         if (!p.element_level) {
+            outputDesc = dataDesc;
             if (tensorNumElements(indexDesc) == 1 && p.index_scalar) {
                 for (int i = axis; i < (int)outputDesc.nDims - 1; i++) {
                     outputDesc.dims[i] = outputDesc.dims[i + 1];
                 }
-                outputDesc.nDims--;
+                if (outputDesc.nDims > 1) {
+                    outputDesc.nDims--;
+                } else {
+                    outputDesc.dims[0] = 1;
+                    outputDesc.df = DF_SCALAR;
+                }
             } else {
                 for (int i = (int)outputDesc.nDims - 1; i > axis; i--) {
                     outputDesc.dims[i + indexDesc.nDims - 1] = outputDesc.dims[i];
@@ -105,8 +109,16 @@ EE gather_infer_output_size(Tensor *dataTensor,
         }
 #endif
     }
+    EE ret = SUCCESS;
+#ifdef _USE_CPU
+    if (tensorIsShape(dataDesc)) {
+        ret = gather_cpu(dataDesc, dataDesc.dims + dataDesc.nDims, indexDesc,
+            indexDesc.dims + indexDesc.nDims, p, nullptr, outputDesc,
+            outputDesc.dims + outputDesc.nDims);
+    }
+#endif
     outputTensor->resize(outputDesc);
-    return SUCCESS;
+    return ret;
 }
 
 EE gather_infer_forward_tmp_bytes(Tensor dataTensor,
@@ -117,13 +129,14 @@ EE gather_infer_forward_tmp_bytes(Tensor dataTensor,
     ArchInfo_t archInfo)
 {
     auto arch = archInfo->arch;
-
+    EE ret = NOT_SUPPORTED;
     if (IS_CPU(arch)) {
         if (dataTensor.get_desc().df == DF_NCHWC8) {
             *bytes = dataTensor.bytes();
         } else {
             *bytes = 0;
         }
+        ret = SUCCESS;
 #ifdef _USE_GPU
     } else if (IS_GPU(arch)) {
         TensorDesc dataDesc = dataTensor.get_desc();
@@ -131,9 +144,9 @@ EE gather_infer_forward_tmp_bytes(Tensor dataTensor,
         TensorDesc outputDesc = outputTensor.get_desc();
         GCLMemDesc gclmemDataDesc = ocl_get_desc(dataTensor);
         GCLMemDesc gclmemOutputDesc = ocl_get_desc(outputTensor);
-        CHECK_STATUS(gather_infer_forward_tmp_bytes_mali(
-            dataDesc, gclmemDataDesc, indexDesc, p, outputDesc, gclmemOutputDesc, bytes));
+        ret = gather_infer_forward_tmp_bytes_mali(
+            dataDesc, gclmemDataDesc, indexDesc, p, outputDesc, gclmemOutputDesc, bytes);
 #endif
     }
-    return SUCCESS;
+    return ret;
 }

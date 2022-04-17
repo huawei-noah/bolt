@@ -25,37 +25,6 @@
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
 
-EE softmax(
-    Tensor inputTensor, SoftmaxParamSpec p, Tensor tmpTensor, Tensor outputTensor, ArchInfo_t archInfo)
-{
-    auto arch = archInfo->arch;
-    TensorDesc inputDesc = inputTensor.get_desc();
-    void *input = get_ptr_from_tensor(inputTensor, arch);
-    TensorDesc outputDesc = outputTensor.get_desc();
-    void *output = get_ptr_from_tensor(outputTensor, arch);
-    EE ret = NOT_SUPPORTED;
-    if (IS_GENERAL(arch)) {
-#ifdef _USE_GENERAL
-        ret = softmax_general(inputDesc, input, p, outputDesc, output);
-#endif
-#ifdef _USE_X86
-    } else if (IS_X86(arch)) {
-        ret = softmax_x86(inputDesc, input, p, outputDesc, output);
-#endif
-#ifdef _USE_NEON
-    } else if (IS_ARM(arch)) {
-        ret = softmax_arm(inputDesc, input, p, outputDesc, output);
-#endif
-#ifdef _USE_GPU
-    } else if (IS_GPU(arch)) {
-        void *tmp = get_ptr_from_tensor(tmpTensor, arch);
-        ret = softmax_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc, (GCLMem_t)input,
-            p, (GCLMem_t)tmp, outputDesc, (GCLMem_t)output);
-#endif
-    }
-    return ret;
-}
-
 EE softmax_infer_output_size(
     Tensor *inputTensor, SoftmaxParamSpec p, Tensor *outputTensor, ArchInfo_t archInfo)
 {
@@ -99,6 +68,62 @@ EE softmax_infer_forward_tmp_bytes(
     } else {
         *bytes = 0;
         ret = SUCCESS;
+    }
+    return ret;
+}
+
+EE softmax(
+    Tensor inputTensor, SoftmaxParamSpec p, Tensor tmpTensor, Tensor outputTensor, ArchInfo_t archInfo)
+{
+    auto arch = archInfo->arch;
+    TensorDesc inputDesc = inputTensor.get_desc();
+    void *input = get_ptr_from_tensor(inputTensor, arch);
+    TensorDesc outputDesc = outputTensor.get_desc();
+    void *output = get_ptr_from_tensor(outputTensor, arch);
+    EE ret = NOT_SUPPORTED;
+    if (IS_GENERAL(arch)) {
+#ifdef _USE_GENERAL
+        ret = softmax_general(inputDesc, input, p, outputDesc, output);
+#endif
+#ifdef _USE_X86
+    } else if (IS_X86(arch)) {
+        ret = softmax_x86(inputDesc, input, p, outputDesc, output);
+#endif
+#ifdef _USE_NEON
+    } else if (IS_ARM(arch)) {
+        ret = softmax_arm(inputDesc, input, p, outputDesc, output);
+#endif
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
+        void *tmp = get_ptr_from_tensor(tmpTensor, arch);
+        ret = softmax_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc, (GCLMem_t)input,
+            p, (GCLMem_t)tmp, outputDesc, (GCLMem_t)output);
+#endif
+    }
+    return ret;
+}
+
+EE logsoftmax(
+    Tensor inputTensor, SoftmaxParamSpec p, Tensor tmpTensor, Tensor outputTensor, ArchInfo_t archInfo)
+{
+    auto arch = archInfo->arch;
+    TensorDesc inputDesc = inputTensor.get_desc();
+    void *input = get_ptr_from_tensor(inputTensor, arch);
+    TensorDesc outputDesc = outputTensor.get_desc();
+    void *output = get_ptr_from_tensor(outputTensor, arch);
+    EE ret = NOT_SUPPORTED;
+    if (IS_GENERAL(arch)) {
+#ifdef _USE_GENERAL
+        ret = logsoftmax_general(inputDesc, input, p, outputDesc, output);
+#endif
+#ifdef _USE_X86
+    } else if (IS_X86(arch)) {
+        ret = logsoftmax_x86(inputDesc, input, p, outputDesc, output);
+#endif
+#ifdef _USE_NEON
+    } else if (IS_ARM(arch)) {
+        ret = logsoftmax_arm(inputDesc, input, p, outputDesc, output);
+#endif
     }
     return ret;
 }

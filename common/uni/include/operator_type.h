@@ -92,14 +92,14 @@ typedef enum {
     OT_SoftPlus = 69,
 
     OT_Exp = 70,
-    OT_Split = 71,
+    OT_OneHot = 71,
     OT_Tdnn = 72,
     OT_Dropout = 73,
     OT_TopK = 74,
     OT_SpaceToBatchNd = 75,
     OT_BatchToSpaceNd = 76,
     OT_Abs = 77,
-    OT_Equal = 78,
+    OT_NonZero = 78,
     OT_Sign = 79,
 
     OT_HSwishNoDiv = 80,
@@ -113,7 +113,18 @@ typedef enum {
     OT_GenerateProposals = 88,
     OT_RoIAlign = 89,
 
-    OT_GAT = 90
+    OT_GAT = 90,
+    OT_QuantizeLinear = 91,
+    OT_Round = 92,
+    OT_Floor = 93,
+    OT_Ceil = 94,
+    OT_RandomUniform = 95,
+    OT_CumSum = 96,
+    OT_GridSample = 97,
+    OT_NonMaxSuppression = 98,
+    OT_Range = 99,
+
+    OT_Swish = 100
 } OperatorType;
 
 inline const char *const *OperatorTypeName()
@@ -140,13 +151,16 @@ inline const char *const *OperatorTypeName()
         "OT_DetectionOutput", "OT_Yolov3DetectionOutput", "OT_MultiHeadAttention", "OT_SqDiff",
         "OT_Tile", "OT_Splice", "OT_Neg", "OT_Greater", "OT_Where", "OT_SoftPlus", "OT_Exp",
 
-        "OT_Split", "OT_Tdnn", "OT_Dropout", "OT_TopK", "OT_SpaceToBatchNd", "OT_BatchToSpaceNd",
-        "OT_Abs", "OT_Equal", "OT_Sign", "OT_HSwishNoDiv",
+        "OT_OneHot", "OT_Tdnn", "OT_Dropout", "OT_TopK", "OT_SpaceToBatchNd", "OT_BatchToSpaceNd",
+        "OT_Abs", "OT_NonZero", "OT_Sign", "OT_HSwishNoDiv",
 
         "OT_InstanceNorm", "OT_Expand", "OT_Scatter", "OT_Select", "OT_Not", "OT_Reciprocal",
         "OT_Log", "OT_GenerateProposals", "OT_RoIAlign",
 
-        "OT_GAT"};
+        "OT_GAT", "OT_QuantizeLinear", "OT_Round", "OT_Floor", "OT_Ceil", "OT_RandomUniform",
+        "OT_CumSum", "OT_GridSample", "OT_NonMaxSuppression", "OT_Range",
+
+        "OT_Swish"};
     return names;
 }
 #endif
