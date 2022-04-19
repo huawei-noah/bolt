@@ -1,0 +1,16 @@
+name: training_linux-x86-avx2
+
+on: [push, pull_request]
+
+jobs:
+  linux:
+    name: training_linux-x86-avx2
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: checkout code
+        uses: actions/checkout@v2
+      - name: compile training_x86-avx2 on linux 
+        run: |
+          chmod +x install.sh
+          ./install.sh --target=linux-x86_64_avx2 -t 32 --train
