@@ -53,6 +53,8 @@ If you want to use multi-threads parallel, you can add **--openmp** option.
 | MacOS(x86_64)          | fp32,int8          | ./install.sh --target=macos-x86_64                   | / | / | [![Build Status](https://img.shields.io/github/workflow/status/huawei-noah/bolt/macos-x86)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Amacos-x86) |
 | MacOS(x86_64_avx2)     | fp32               | ./install.sh --target=macos-x86_64_avx2              | / | / | [![Build Status](https://img.shields.io/github/workflow/status/huawei-noah/bolt/macos-x86-avx2)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Amacos-x86-avx2) |
 | MacOS(x86_64_avx512)   | fp32,int8          | ./install.sh --target=macos-x86_64_avx512            | / | / | [![Build Status](https://img.shields.io/github/workflow/status/huawei-noah/bolt/macos-x86-avx2)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Amacos-x86-avx2) |
+| Train-Linux(x86_avx2) | fp32 | ./install.sh --target=linux-x86_64_avx2 --train | [![Build Status](https://img.shields.io/github/workflow/status/huawei-noah/bolt/training_linux-x86-avx2)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Atraining_linux-x86-avx2) | / | / |
+| Train-Android_armv8 | fp32 | ./install.sh --target=android-aarch64 --train | [![Build Status](https://img.shields.io/github/workflow/status/huawei-noah/bolt/training_linux-android-armv8)](https://github.com/huawei-noah/bolt/actions?query=workflow%3Atraining_linux-android-armv8) | / | / |
 
 # Quick Start
 ---
