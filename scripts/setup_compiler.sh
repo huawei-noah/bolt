@@ -28,11 +28,11 @@ setAndroidNDK() {
      fi
      if [[ "${INNER_ANDROID_NDK_ROOT}" != "" ]]; then
         if [[ ${host} =~ macos ]]; then
-            export PATH=$PATH:${INNER_ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/darwin-x86_64/bin
+            export PATH=${INNER_ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/darwin-x86_64/bin:$PATH
         elif [[ ${host} =~ windows ]]; then
-            export PATH=$PATH:${INNER_ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/windows-x86_64/bin
+            export PATH=${INNER_ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/windows-x86_64/bin:$PATH
         else
-            export PATH=$PATH:${INNER_ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin
+            export PATH=${INNER_ANDROID_NDK_ROOT}/toolchains/llvm/prebuilt/linux-x86_64/bin:$PATH
         fi
      fi
 }
