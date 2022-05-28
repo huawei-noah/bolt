@@ -169,7 +169,7 @@ inline EE list_platform_info(Platform p)
  * @brief get devices in platform, and allocate space for storing devices
  * @warning please free space of devices allocated in this function
  *
- * @param p		input, specify platform, device will be retrived from this platform
+ * @param p		input, specify platform, device will be retrieved from this platform
  * @param type		input, specify device type
  * @param num_devices	output, return device number with type in platform p
  * @param devices	output, return devices
