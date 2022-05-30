@@ -927,7 +927,7 @@ TEST(TestLSTMCell, SingleParamsLoadedNoBiasForgetForwardUnit)
     /// 3. If we need two tensors ih and hh, we have to split the weights tensor into 2 parts the weights tensor (axis=0).
     ///    They must be dumped in transposed mode.
     ///    weights_ih, weights_hh = np.split(weights, [input_size], axis=0)
-    /// 4. If we need one tensor,  we have to dump concatenate weights in in transposed mode.
+    /// 4. If we need one tensor,  we have to dump concatenate weights in transposed mode.
 
     // Test parameters
     const auto eps_rel = 1e-5_dt;
@@ -1007,7 +1007,7 @@ TEST(TestLSTMCell, SingleParamsLoadedWithBiasForgetForwardUnit)
     /// 3. If we need two tensors ih and hh, we have to split the weights tensor into 2 parts the weights tensor (axis=0).
     ///    They must be dumped in transposed mode.
     ///    weights_ih, weights_hh = np.split(weights, [input_size], axis=0)
-    /// 4. If we need one tensor,  we have to dump concatenate weights in in transposed mode.
+    /// 4. If we need one tensor,  we have to dump concatenate weights in transposed mode.
 
     // Test parameters
     const auto eps_rel = 1e-5_dt;
