@@ -607,7 +607,7 @@ void PrepareModel5D(ModelHandle ih,
 
     std::map<std::string, TensorDesc> modelInputDims =
         getInputDataFormatFromUser(ih, num_inputs, name, n, c, t, h, w, dt, df);
-    //cnn->loadAlgorithmMap((const char *)ihInfo->algoPath, ihInfo->useFileStream);
+    cnn->loadAlgorithmMap((const char *)ihInfo->algoPath, ihInfo->useFileStream);
     cnn->ready(modelInputDims);
     cnn->mark_input_output();
 
@@ -940,10 +940,10 @@ void DestroyModel(ModelHandle ih)
         CNN *cnn = (CNN *)ihInfo->cnn;
         assert_not_nullptr(__FUNCTION__, "ModelHandle.cnn", cnn);
         if (cnn != nullptr) {
-            //if (ihInfo->algoPath != nullptr && !ihInfo->useFileStream) {
-            //    const char *algoPath = (const char *)ihInfo->algoPath;
-            //    UNI_THREAD_SAFE(cnn->saveAlgorithmMapToFile(algoPath));
-            //}
+            if (ihInfo->algoPath != nullptr && !ihInfo->useFileStream) {
+                const char *algoPath = (const char *)ihInfo->algoPath;
+                UNI_THREAD_SAFE(cnn->saveAlgorithmMapToFile(algoPath));
+            }
             delete cnn;
             ihInfo->cnn = nullptr;
         }
