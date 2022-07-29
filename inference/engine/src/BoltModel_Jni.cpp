@@ -267,7 +267,7 @@ extern "C" JNIEXPORT jlong JNICALL BOLT_JNI_PREFIX(BoltModel_createModel)(
     const char *affinityPtr = env->GetStringUTFChars(affinity, JNI_FALSE);
     std::string affinity_str = (std::string)affinityPtr;
     AFFINITY_TYPE affinity_cur = str2AFFINITY_TYPE(affinity_str);
-    long modelAddr = (long long)CreateModel(modelPathPtr, affinity_cur, NULL);
+    long long modelAddr = (long long)CreateModel(modelPathPtr, affinity_cur, NULL);
     ModelHandleInfo *ihInfo = (ModelHandleInfo *)modelAddr;
     if (nullptr == ihInfo) {
         UNI_ERROR_LOG("Bolt instance not created\n");
@@ -285,7 +285,7 @@ extern "C" JNIEXPORT jlong JNICALL BOLT_JNI_PREFIX(BoltModel_cloneModel)(
     UNI_DEBUG_LOG("JNI %s...\n", __FUNCTION__);
     ModelHandle handle = (ModelHandle)modelAddr;
     ModelHandle cloneHandle = CloneModel(handle);
-    long ret = (long long)cloneHandle;
+    long long ret = (long long)cloneHandle;
     UNI_DEBUG_LOG("JNI %s end.\n", __FUNCTION__);
     return ret;
 }
@@ -433,7 +433,7 @@ extern "C" JNIEXPORT void JNICALL BOLT_JNI_PREFIX(BoltModel_setRuntimeDeviceDyna
     UNI_DEBUG_LOG("JNI %s end.\n", __FUNCTION__);
 }
 
-extern "C" JNIEXPORT void JNICALL BOLT_JNI_PREFIX(BoltModel_setNumThreads)(JNIEnv *env, jint threads)
+extern "C" JNIEXPORT void JNICALL BOLT_JNI_PREFIX(BoltModel_setNumThreads)(JNIEnv *env, jobject, jint threads)
 {
     UNI_DEBUG_LOG("JNI %s...\n", __FUNCTION__);
     SetNumThreads(threads);

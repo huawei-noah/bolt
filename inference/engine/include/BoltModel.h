@@ -110,7 +110,7 @@ JNIEXPORT void JNICALL BOLT_JNI_PREFIX(BoltModel_setRuntimeDeviceDynamicJNI)(
  * Method:    setNumThreads
  * Signature: (I)V
  */
-JNIEXPORT void JNICALL BOLT_JNI_PREFIX(BoltModel_setNumThreads)(JNIEnv *, jint);
+JNIEXPORT void JNICALL BOLT_JNI_PREFIX(BoltModel_setNumThreads)(JNIEnv *, jobject, jint);
 
 /*
  * Class:     BoltModel
