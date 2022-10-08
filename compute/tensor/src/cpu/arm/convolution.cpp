@@ -67,10 +67,6 @@ EE convolution_infer_forward_algorithm_arm(TensorDesc inputDesc,
         } else {
             return NOT_SUPPORTED;
         }
-        if (p.dilatedRate_t > 1 || p.dilatedRate_h > 1 || p.dilatedRate_w > 1) {
-            *algorithm = CONVOLUTION_ALGORITHM_GEMM;
-            return SUCCESS;
-        }
 
         if ((idf != DF_NCHWC8 || ic / p.group % 8 != 0) && DT_I8 != idt) {
             *algorithm = CONVOLUTION_ALGORITHM_GEMM_ICNCHW;
