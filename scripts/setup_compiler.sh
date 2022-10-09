@@ -20,11 +20,11 @@ exeIsValid(){
 }
 
 setAndroidNDK() {
-     if [[ "${ANDROID_NDK_ROOT}" != "" ]]; then
-         INNER_ANDROID_NDK_ROOT=${ANDROID_NDK_ROOT}
-     fi
      if [[ "${ANDROID_NDK_HOME}" != "" ]]; then
          INNER_ANDROID_NDK_ROOT=${ANDROID_NDK_HOME}
+     fi
+     if [[ "${ANDROID_NDK_ROOT}" != "" ]]; then
+         INNER_ANDROID_NDK_ROOT=${ANDROID_NDK_ROOT}
      fi
      if [[ "${INNER_ANDROID_NDK_ROOT}" != "" ]]; then
         if [[ ${host} =~ macos ]]; then
