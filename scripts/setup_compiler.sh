@@ -120,8 +120,8 @@ if [[ "${target}" == "android-aarch64" ]]; then
     androidNDKIsValid ${AR}
 fi
 if [[ "${target}" == "android-armv7" ]]; then
-    CC="clang --target=armv7a-linux-androideabi16"
-    CXX="clang++ --target=armv7a-linux-androideabi16"
+    CC="clang --target=armv7a-linux-androideabi21"
+    CXX="clang++ --target=armv7a-linux-androideabi21"
     STRIP=arm-linux-androideabi-strip
     AR=arm-linux-androideabi-ar
     RANLIB=arm-linux-androideabi-ranlib
@@ -132,7 +132,7 @@ if [[ "${target}" == "android-armv7" ]]; then
         RANLIB=llvm-ranlib
     fi
     CONFIGURE_OPTIONS="--host=arm-linux "
-    CCFLAGS="${CCFLAGS} --target=armv7a-linux-androideabi16"
+    CCFLAGS="${CCFLAGS} --target=armv7a-linux-androideabi21"
     androidNDKIsValid ${AR}
 fi
 if [[ "${target}" == "android-x86_64" ]]; then
