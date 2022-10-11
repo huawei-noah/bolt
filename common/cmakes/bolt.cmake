@@ -51,7 +51,7 @@ function (set_policy)
 endfunction(set_policy)
 
 macro (set_c_cxx_flags)
-    set(COMMON_FLAGS "-O3 -fPIC -fPIE")
+    set(COMMON_FLAGS "-O3 -fPIE -fPIC")
     # warning flag can be remove in release version
     set(COMMON_FLAGS "${COMMON_FLAGS} -W -Wextra")
     set(COMMON_FLAGS "${COMMON_FLAGS} -fstack-protector-all -fstack-protector-strong")
