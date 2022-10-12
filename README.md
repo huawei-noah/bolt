@@ -180,7 +180,7 @@ Everything you want to know about bolt is recorded in the detailed documentation
 - 中文语音识别: [Android Demo](https://zhuanlan.zhihu.com/p/414978782), [iOS Demo](https://zhuanlan.zhihu.com/p/414981121)
 - 人脸检测: [Android Demo](https://zhuanlan.zhihu.com/p/414975102), [iOS Demo](https://zhuanlan.zhihu.com/p/414971375)
 - 阅读理解: [Android Demo](https://zhuanlan.zhihu.com/p/498906834)
-- 
+
 # Acknowledgement
 ---
 Bolt refers to the following projects: [caffe](https://github.com/BVLC/caffe), [onnx](https://github.com/onnx/onnx), [tensorflow](https://github.com/tensorflow/tensorflow), [ncnn](https://github.com/Tencent/ncnn), [mnn](https://github.com/alibaba/MNN), [dabnn](https://github.com/JDAI-CV/dabnn).
