@@ -526,7 +526,7 @@ THE SOFTWARE.
 
 Copyright Notice and License Texts
 
-Software: half (<https://telkomuniversity.dl.sourceforge.net/project/half/half/2.2.0/half-2.2.0.zip>)
+Software: half (<https://sourceforge.net/projects/half/files/half/2.2.0/half-2.2.0.zip>)
 
 Copyright (c) 2012-2021 Christian Rau  All rights reserved.
 
