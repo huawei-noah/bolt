@@ -22,4 +22,5 @@ jobs:
           g++ -v
           cd $BOLT_PATH
           chmod +x install.sh
+          export SYSTEM_VERSION_COMPAT=1
           ./install.sh --target=macos-x86_64_avx2 -t 32
