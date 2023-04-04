@@ -45,94 +45,90 @@ inline EE convolution(TensorDesc inputDesc,
     } else {
         return NOT_SUPPORTED;
     }
-    U32 group = convParamSpec.group;
-    U32 strideT = convParamSpec.stride_t;
-    U32 strideH = convParamSpec.stride_h;
-    U32 strideW = convParamSpec.stride_w;
-    U32 paddingB = convParamSpec.pad_before;
-    U32 paddingT = convParamSpec.pad_top;
-    U32 paddingL = convParamSpec.pad_left;
-    U32 dilateT = convParamSpec.dilatedRate_t;
-    U32 dilateH = convParamSpec.dilatedRate_h;
-    U32 dilateW = convParamSpec.dilatedRate_w;
-    U32 ocGroupSize = oc / group;
+    I32 group = convParamSpec.group;
+    I32 strideT = convParamSpec.stride_t;
+    I32 strideH = convParamSpec.stride_h;
+    I32 strideW = convParamSpec.stride_w;
+    I32 paddingB = convParamSpec.pad_before;
+    I32 paddingT = convParamSpec.pad_top;
+    I32 paddingL = convParamSpec.pad_left;
+    I32 dilateT = convParamSpec.dilatedRate_t;
+    I32 dilateH = convParamSpec.dilatedRate_h;
+    I32 dilateW = convParamSpec.dilatedRate_w;
+    I32 ocGroupSize = oc / group;
     CHECK_REQUIREMENT(fdf == DF_NCHW);
 
     // For BNN, accumulated values are always 0 or 1, which may lead to error if buf is floating point.
-    U32 ic8 = ic;
-    U32 oc8 = oc;
-    U32 i_off, o_off;
     U32 icx = 1;
     U32 ocx = 1;
     if (idf == DF_NCHWC16) {
         icx = 16;
-        ic8 /= 16;
     } else if (idf == DF_NCHWC8) {
         icx = 8;
-        ic8 /= 8;
     }
     if (odf == DF_NCHWC16) {
         ocx = 16;
-        oc8 /= 16;
     } else if (odf == DF_NCHWC8) {
         ocx = 8;
-        oc8 /= 8;
     }
-
-    for (U32 n = 0; n < in; n++) {
-        for (U32 o = 0; o < oc; o++) {
+    U32 ic8 = ic / icx;
+    U32 oc8 = oc / ocx;
+    U32 i_off;
+    for (U32 n = 0, o_off = 0; n < on; n++) {
+        for (U32 c = 0; c < oc8; c++) {
             for (U32 t = 0; t < ot; t++) {
                 for (U32 h = 0; h < oh; h++) {
                     for (U32 w = 0; w < ow; w++) {
-                        T4 value = 0;
-                        U32 groupId = o / ocGroupSize;
-                        U32 icStart = groupId * fc;
-                        U32 icEnd = (groupId + 1) * fc;
-                        if (odf == DF_NCHWC8 || odf == DF_NCHWC16) {
-                            o_off = ((((n * oc8 + (o / ocx)) * ot + t) * oh + h) * ow + w) * ocx +
-                                o % ocx;
-                        } else {
-                            o_off = (((n * oc + o) * ot + t) * oh + h) * ow + w;
-                        }
-                        for (U32 c = icStart, f_off = o * fc * ft * fh * fw; c < icEnd; c++) {
-                            for (I32 ft_idx = 0; ft_idx < (I32)ft; ft_idx++) {
-                                for (I32 fh_idx = 0; fh_idx < (I32)fh; fh_idx++) {
-                                    for (I32 fw_idx = 0; fw_idx < (I32)fw; fw_idx++, f_off++) {
-                                        I32 it_idx = t * strideT - paddingB + ft_idx * dilateT;
+                        for (U32 cc = 0; cc < ocx; cc++, o_off++) {
+                            U32 o = c * ocx + cc;
+                            T4 value = 0;
+                            U32 groupId = o / ocGroupSize;
+                            U32 icStart = groupId * fc;
+                            U32 icEnd = (groupId + 1) * fc;
+                            for (U32 fc_idx = icStart, f_off = o * fc * ft * fh * fw;
+                                 fc_idx < icEnd; fc_idx++) {
+                                for (U32 ft_idx = 0; ft_idx < ft; ft_idx++) {
+                                    I32 it_idx = t * strideT - paddingB + ft_idx * dilateT;
+                                    for (U32 fh_idx = 0; fh_idx < fh; fh_idx++) {
                                         I32 ih_idx = h * strideH - paddingT + fh_idx * dilateH;
-                                        I32 iw_idx = w * strideW - paddingL + fw_idx * dilateW;
-                                        if (it_idx >= 0 && it_idx < (I32)it && ih_idx >= 0 &&
-                                            ih_idx < (I32)ih && iw_idx >= 0 && iw_idx < (I32)iw) {
-                                            if (idf == DF_NCHWC8 || idf == DF_NCHWC16) {
-                                                i_off = ((((n * ic8 + (c / icx)) * it + it_idx) * ih +
+                                        for (U32 fw_idx = 0; fw_idx < fw; fw_idx++, f_off++) {
+                                            I32 iw_idx = w * strideW - paddingL + fw_idx * dilateW;
+                                            if (it_idx >= 0 && it_idx < (I32)it && ih_idx >= 0 &&
+                                                ih_idx < (I32)ih && iw_idx >= 0 && iw_idx < (I32)iw) {
+                                                if (idf == DF_NCHWC8 || idf == DF_NCHWC16) {
+                                                    i_off =
+                                                        ((((n * ic8 + (fc_idx / icx)) * it + it_idx) *
+                                                                 ih +
                                                              ih_idx) *
                                                                 iw +
                                                             iw_idx) *
-                                                        icx +
-                                                    c % icx;
+                                                            icx +
+                                                        fc_idx % icx;
+                                                } else {
+                                                    i_off = (((n * ic + fc_idx) * it + it_idx) * ih +
+                                                                ih_idx) *
+                                                            iw +
+                                                        iw_idx;
+                                                }
+                                                value += inArray[i_off] * (T4)filterArray[f_off];
                                             } else {
-                                                i_off = (((n * ic + c) * it + it_idx) * ih + ih_idx) *
-                                                        iw +
-                                                    iw_idx;
+                                                value += paddingValue * (T4)filterArray[f_off];
                                             }
-                                            value += inArray[i_off] * (T4)filterArray[f_off];
-                                        } else {
-                                            value += paddingValue * (T4)filterArray[f_off];
                                         }
                                     }
                                 }
                             }
+                            T4 scale = 1;
+                            if (scaleLength == 1) {
+                                scale = scaleArray[0];
+                            }
+                            if (scaleLength == 2) {
+                                scale = scaleArray[o];
+                            }
+                            value = scale * value + biasArray[o];
+                            CHECK_STATUS(activation_template<T4>(activationDesc, value, &value));
+                            outArray[o_off] = value;
                         }
-                        T4 scale = 1;
-                        if (scaleLength == 1) {
-                            scale = scaleArray[0];
-                        }
-                        if (scaleLength == 2) {
-                            scale = scaleArray[o];
-                        }
-                        value = scale * value + biasArray[o];
-                        CHECK_STATUS(activation_template<T4>(activationDesc, value, &value));
-                        outArray[o_off] = value;
                     }
                 }
             }
@@ -256,10 +252,12 @@ EE convolution_general(TensorDesc inputDesc,
                 (INT8 *)filter, convParamSpec, (F32 *)bias, &scaleN, outputDesc, (F32 *)tmpOutput,
                 activationDesc);
 #endif
+#ifdef _USE_INT8
             if (outputDesc.dt == DT_I8) {
                 CHECK_STATUS(quantize_cpu(
                     tmpDesc, tmpOutput, &outputDesc, output, (F32 *)scale + 1, CPU_GENERAL));
             }
+#endif
             break;
         }
 #endif

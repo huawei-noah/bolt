@@ -55,17 +55,7 @@ inline EE topk_checkpara_mali(GCLHandle_t handle,
 EE topk_infer_forward_tmp_bytes_mali(
     TensorDesc inputDesc, TopKParamSpec p, TensorDesc outputDesc, U32 *bytes)
 {
-    EE ret = SUCCESS;
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = topk_infer_forward_tmp_bytes_mali_fp16(inputDesc, p, outputDesc, bytes);
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return topk_infer_forward_tmp_bytes_mali_fp16(inputDesc, p, outputDesc, bytes);
 }
 
 EE topk_mali(GCLHandle_t handle,
@@ -78,18 +68,8 @@ EE topk_mali(GCLHandle_t handle,
     TensorDesc outputIndicesDesc,
     GCLMem_t outputIndices)
 {
-    EE ret = SUCCESS;
     CHECK_STATUS(topk_checkpara_mali(
         handle, inputDesc, input, p, tmpbuf, outputDesc, output, outputIndicesDesc, outputIndices));
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = topk_mali_fp16(handle, inputDesc, input, p, tmpbuf, outputDesc, output,
-                outputIndicesDesc, outputIndices);
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return topk_mali_fp16(
+        handle, inputDesc, input, p, tmpbuf, outputDesc, output, outputIndicesDesc, outputIndices);
 }

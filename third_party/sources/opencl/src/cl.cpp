@@ -1,20 +1,20 @@
-// Copyright (C) 2019. Huawei Technologies Co., Ltd. All rights reserved.
-
-// Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"),
-// to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense,
-// and/or sell copies of the Software, and to permit persons to whom the Software is furnished to do so, subject to the following conditions:
-
-// The above copyright notice and this permission notice shall be included in all copies or substantial portions of the Software.
-
-// THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE
-// WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
-// COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
-// OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
-
-#define CL_TARGET_OPENCL_VERSION 200
+/*******************************************************************************
+ * Copyright (c) 2008-2020 The Khronos Group Inc.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *    http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ ******************************************************************************/
 
 #include <CL/cl.h>
-#include <CL/cl_gl.h>
 
 /* Platform API */
 extern CL_API_ENTRY cl_int CL_API_CALL clGetPlatformIDs(
@@ -110,6 +110,15 @@ extern CL_API_ENTRY cl_int CL_API_CALL clGetContextInfo(cl_context context,
     size_t *param_value_size_ret) CL_API_SUFFIX__VERSION_1_0
 {}
 
+#ifdef CL_VERSION_3_0
+
+extern CL_API_ENTRY cl_int CL_API_CALL clSetContextDestructorCallback(cl_context context,
+    void(CL_CALLBACK *pfn_notify)(cl_context context, void *user_data),
+    void *user_data) CL_API_SUFFIX__VERSION_3_0
+{}
+
+#endif
+
 /* Command Queue APIs */
 
 #ifdef CL_VERSION_2_0
@@ -177,6 +186,27 @@ extern CL_API_ENTRY cl_mem CL_API_CALL clCreatePipe(cl_context context,
     cl_uint pipe_max_packets,
     const cl_pipe_properties *properties,
     cl_int *errcode_ret) CL_API_SUFFIX__VERSION_2_0
+{}
+
+#endif
+
+#ifdef CL_VERSION_3_0
+
+extern CL_API_ENTRY cl_mem CL_API_CALL clCreateBufferWithProperties(cl_context context,
+    const cl_mem_properties *properties,
+    cl_mem_flags flags,
+    size_t size,
+    void *host_ptr,
+    cl_int *errcode_ret) CL_API_SUFFIX__VERSION_3_0
+{}
+
+extern CL_API_ENTRY cl_mem CL_API_CALL clCreateImageWithProperties(cl_context context,
+    const cl_mem_properties *properties,
+    cl_mem_flags flags,
+    const cl_image_format *image_format,
+    const cl_image_desc *image_desc,
+    void *host_ptr,
+    cl_int *errcode_ret) CL_API_SUFFIX__VERSION_3_0
 {}
 
 #endif
@@ -347,9 +377,10 @@ extern CL_API_ENTRY cl_program CL_API_CALL clLinkProgram(cl_context context,
 
 #ifdef CL_VERSION_2_2
 
-extern CL_API_ENTRY cl_int CL_API_CALL clSetProgramReleaseCallback(cl_program program,
+extern CL_API_ENTRY CL_API_PREFIX__VERSION_2_2_DEPRECATED cl_int CL_API_CALL
+clSetProgramReleaseCallback(cl_program program,
     void(CL_CALLBACK *pfn_notify)(cl_program program, void *user_data),
-    void *user_data) CL_API_SUFFIX__VERSION_2_2
+    void *user_data)
 {}
 
 extern CL_API_ENTRY cl_int CL_API_CALL clSetProgramSpecializationConstant(cl_program program,
@@ -543,8 +574,8 @@ extern CL_API_ENTRY cl_int CL_API_CALL clEnqueueReadBuffer(cl_command_queue comm
 extern CL_API_ENTRY cl_int CL_API_CALL clEnqueueReadBufferRect(cl_command_queue command_queue,
     cl_mem buffer,
     cl_bool blocking_read,
-    const size_t *buffer_offset,
-    const size_t *host_offset,
+    const size_t *buffer_origin,
+    const size_t *host_origin,
     const size_t *region,
     size_t buffer_row_pitch,
     size_t buffer_slice_pitch,
@@ -574,8 +605,8 @@ extern CL_API_ENTRY cl_int CL_API_CALL clEnqueueWriteBuffer(cl_command_queue com
 extern CL_API_ENTRY cl_int CL_API_CALL clEnqueueWriteBufferRect(cl_command_queue command_queue,
     cl_mem buffer,
     cl_bool blocking_write,
-    const size_t *buffer_offset,
-    const size_t *host_offset,
+    const size_t *buffer_origin,
+    const size_t *host_origin,
     const size_t *region,
     size_t buffer_row_pitch,
     size_t buffer_slice_pitch,
@@ -888,12 +919,12 @@ extern CL_API_ENTRY void *CL_API_CALL clGetExtensionFunctionAddressForPlatform(
 extern CL_API_ENTRY cl_int CL_API_CALL clSetCommandQueueProperty(cl_command_queue command_queue,
     cl_command_queue_properties properties,
     cl_bool enable,
-    cl_command_queue_properties *old_properties)
+    cl_command_queue_properties *old_properties) CL_API_SUFFIX__VERSION_1_0_DEPRECATED
 {}
 #endif /* CL_USE_DEPRECATED_OPENCL_1_0_APIS */
 
 /* Deprecated OpenCL 1.1 APIs */
-extern CL_API_ENTRY CL_EXT_PREFIX__VERSION_1_1_DEPRECATED cl_mem CL_API_CALL clCreateImage2D(
+extern CL_API_ENTRY CL_API_PREFIX__VERSION_1_1_DEPRECATED cl_mem CL_API_CALL clCreateImage2D(
     cl_context context,
     cl_mem_flags flags,
     const cl_image_format *image_format,
@@ -904,7 +935,7 @@ extern CL_API_ENTRY CL_EXT_PREFIX__VERSION_1_1_DEPRECATED cl_mem CL_API_CALL clC
     cl_int *errcode_ret)
 {}
 
-extern CL_API_ENTRY CL_EXT_PREFIX__VERSION_1_1_DEPRECATED cl_mem CL_API_CALL clCreateImage3D(
+extern CL_API_ENTRY CL_API_PREFIX__VERSION_1_1_DEPRECATED cl_mem CL_API_CALL clCreateImage3D(
     cl_context context,
     cl_mem_flags flags,
     const cl_image_format *image_format,
@@ -917,34 +948,37 @@ extern CL_API_ENTRY CL_EXT_PREFIX__VERSION_1_1_DEPRECATED cl_mem CL_API_CALL clC
     cl_int *errcode_ret)
 {}
 
-extern CL_API_ENTRY CL_EXT_PREFIX__VERSION_1_1_DEPRECATED cl_int CL_API_CALL clEnqueueMarker(
+extern CL_API_ENTRY CL_API_PREFIX__VERSION_1_1_DEPRECATED cl_int CL_API_CALL clEnqueueMarker(
     cl_command_queue command_queue, cl_event *event)
 {}
 
-extern CL_API_ENTRY CL_EXT_PREFIX__VERSION_1_1_DEPRECATED cl_int CL_API_CALL clEnqueueWaitForEvents(
-    cl_command_queue command_queue, cl_uint num_events, const cl_event *event_list)
+extern CL_API_ENTRY CL_API_PREFIX__VERSION_1_1_DEPRECATED cl_int CL_API_CALL clEnqueueWaitForEvents(
+    cl_command_queue command_queue,
+    cl_uint num_events,
+    const cl_event *event_list)
 {}
 
-extern CL_API_ENTRY CL_EXT_PREFIX__VERSION_1_1_DEPRECATED cl_int CL_API_CALL clEnqueueBarrier(
+extern CL_API_ENTRY CL_API_PREFIX__VERSION_1_1_DEPRECATED cl_int CL_API_CALL clEnqueueBarrier(
     cl_command_queue command_queue)
 {}
 
-extern CL_API_ENTRY CL_EXT_PREFIX__VERSION_1_1_DEPRECATED cl_int CL_API_CALL clUnloadCompiler(void)
+extern CL_API_ENTRY CL_API_PREFIX__VERSION_1_1_DEPRECATED cl_int CL_API_CALL clUnloadCompiler(
+    void)
 {}
 
-extern CL_API_ENTRY CL_EXT_PREFIX__VERSION_1_1_DEPRECATED void *CL_API_CALL
+extern CL_API_ENTRY CL_API_PREFIX__VERSION_1_1_DEPRECATED void *CL_API_CALL
 clGetExtensionFunctionAddress(const char *func_name)
 {}
 
 /* Deprecated OpenCL 2.0 APIs */
-extern CL_API_ENTRY CL_EXT_PREFIX__VERSION_1_2_DEPRECATED cl_command_queue CL_API_CALL
+extern CL_API_ENTRY CL_API_PREFIX__VERSION_1_2_DEPRECATED cl_command_queue CL_API_CALL
 clCreateCommandQueue(cl_context context,
     cl_device_id device,
     cl_command_queue_properties properties,
     cl_int *errcode_ret)
 {}
 
-extern CL_API_ENTRY CL_EXT_PREFIX__VERSION_1_2_DEPRECATED cl_sampler CL_API_CALL clCreateSampler(
+extern CL_API_ENTRY CL_API_PREFIX__VERSION_1_2_DEPRECATED cl_sampler CL_API_CALL clCreateSampler(
     cl_context context,
     cl_bool normalized_coords,
     cl_addressing_mode addressing_mode,
@@ -952,88 +986,10 @@ extern CL_API_ENTRY CL_EXT_PREFIX__VERSION_1_2_DEPRECATED cl_sampler CL_API_CALL
     cl_int *errcode_ret)
 {}
 
-extern CL_API_ENTRY CL_EXT_PREFIX__VERSION_1_2_DEPRECATED cl_int CL_API_CALL clEnqueueTask(
+extern CL_API_ENTRY CL_API_PREFIX__VERSION_1_2_DEPRECATED cl_int CL_API_CALL clEnqueueTask(
     cl_command_queue command_queue,
     cl_kernel kernel,
     cl_uint num_events_in_wait_list,
     const cl_event *event_wait_list,
     cl_event *event)
-{}
-
-extern CL_API_ENTRY cl_mem CL_API_CALL clCreateFromGLBuffer(cl_context context,
-    cl_mem_flags flags,
-    cl_GLuint bufobj,
-    cl_int *errcode_ret) CL_API_SUFFIX__VERSION_1_0
-{}
-
-#ifdef CL_VERSION_1_2
-
-extern CL_API_ENTRY cl_mem CL_API_CALL clCreateFromGLTexture(cl_context context,
-    cl_mem_flags flags,
-    cl_GLenum target,
-    cl_GLint miplevel,
-    cl_GLuint texture,
-    cl_int *errcode_ret) CL_API_SUFFIX__VERSION_1_2
-{}
-
-#endif
-
-extern CL_API_ENTRY cl_mem CL_API_CALL clCreateFromGLRenderbuffer(cl_context context,
-    cl_mem_flags flags,
-    cl_GLuint renderbuffer,
-    cl_int *errcode_ret) CL_API_SUFFIX__VERSION_1_0
-{}
-
-extern CL_API_ENTRY cl_int CL_API_CALL clGetGLObjectInfo(cl_mem memobj,
-    cl_gl_object_type *gl_object_type,
-    cl_GLuint *gl_object_name) CL_API_SUFFIX__VERSION_1_0
-{}
-
-extern CL_API_ENTRY cl_int CL_API_CALL clGetGLTextureInfo(cl_mem memobj,
-    cl_gl_texture_info param_name,
-    size_t param_value_size,
-    void *param_value,
-    size_t *param_value_size_ret) CL_API_SUFFIX__VERSION_1_0
-{}
-
-extern CL_API_ENTRY cl_int CL_API_CALL clEnqueueAcquireGLObjects(cl_command_queue command_queue,
-    cl_uint num_objects,
-    const cl_mem *mem_objects,
-    cl_uint num_events_in_wait_list,
-    const cl_event *event_wait_list,
-    cl_event *event) CL_API_SUFFIX__VERSION_1_0
-{}
-
-extern CL_API_ENTRY cl_int CL_API_CALL clEnqueueReleaseGLObjects(cl_command_queue command_queue,
-    cl_uint num_objects,
-    const cl_mem *mem_objects,
-    cl_uint num_events_in_wait_list,
-    const cl_event *event_wait_list,
-    cl_event *event) CL_API_SUFFIX__VERSION_1_0
-{}
-
-/* Deprecated OpenCL 1.1 APIs */
-extern CL_API_ENTRY CL_EXT_PREFIX__VERSION_1_1_DEPRECATED cl_mem CL_API_CALL clCreateFromGLTexture2D(
-    cl_context context,
-    cl_mem_flags flags,
-    cl_GLenum target,
-    cl_GLint miplevel,
-    cl_GLuint texture,
-    cl_int *errcode_ret)
-{}
-
-extern CL_API_ENTRY CL_EXT_PREFIX__VERSION_1_1_DEPRECATED cl_mem CL_API_CALL clCreateFromGLTexture3D(
-    cl_context context,
-    cl_mem_flags flags,
-    cl_GLenum target,
-    cl_GLint miplevel,
-    cl_GLuint texture,
-    cl_int *errcode_ret)
-{}
-
-extern CL_API_ENTRY cl_int CL_API_CALL clGetGLContextInfoKHR(const cl_context_properties *properties,
-    cl_gl_context_info param_name,
-    size_t param_value_size,
-    void *param_value,
-    size_t *param_value_size_ret) CL_API_SUFFIX__VERSION_1_0
 {}

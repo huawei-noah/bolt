@@ -79,33 +79,12 @@ EE softmax_mali(GCLHandle_t handle,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
-    EE ret = SUCCESS;
     CHECK_STATUS(softmax_checkpara_mali(handle, inputDesc, input, p, outputDesc, output));
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = softmax_mali_fp16(handle, inputDesc, input, tmp, p.axis, outputDesc, output);
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return softmax_mali_fp16(handle, inputDesc, input, tmp, p.axis, outputDesc, output);
 }
 
 EE softmax_infer_forward_tmp_bytes_mali(
     TensorDesc inputDesc, GCLMemDesc gclmemInputDesc, SoftmaxParamSpec p, U32 *bytes)
 {
-    EE ret = SUCCESS;
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = softmax_infer_forward_tmp_bytes_mali_fp16(
-                inputDesc, gclmemInputDesc, p.axis, bytes);
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return softmax_infer_forward_tmp_bytes_mali_fp16(inputDesc, gclmemInputDesc, p.axis, bytes);
 }

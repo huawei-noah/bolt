@@ -684,7 +684,6 @@ TEST(TestCommon, Reshape1Dto2DUnit)
 TEST(TestCommon, Im2ColUnit)
 {
     PROFILE_TEST
-    // https://leonardoaraujosantos.gitbooks.io/artificial-inteligence/content/making_faster.html
 
     // basic
     {
@@ -1066,7 +1065,6 @@ TEST(TestCommon, Im2ColGEMMUnit)
 TEST(TestCommon, Col2ImUnit)
 {
     PROFILE_TEST
-    // https://leonardoaraujosantos.gitbooks.io/artificial-inteligence/content/making_faster.html
 
     // basic
     {

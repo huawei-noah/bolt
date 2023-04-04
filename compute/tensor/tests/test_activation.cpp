@@ -44,8 +44,7 @@ int activationFunctionTest(U32 in,
 
         // check
         ut_check_v(get_ptr_from_tensor(dataTensor, CPU_GENERAL),
-            get_ptr_from_tensor(dataTensorRef, CPU_GENERAL), dataTensor.length(), dt, 0.01,
-            __FILE__, __LINE__);
+            get_ptr_from_tensor(dataTensorRef, CPU_GENERAL), dataTensor.length(), dt, 0.01);
     }
 
     // benchmark

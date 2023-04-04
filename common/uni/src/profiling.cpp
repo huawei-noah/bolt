@@ -33,7 +33,7 @@ static std::vector<std::string> logs;
 
 #ifdef _USE_MEM_CHECK
 #include "memory_cpu.h"
-std::map<std::string, unsigned int> mem_statistics;
+std::map<std::string, size_t> mem_statistics;
 #endif
 
 double ut_time_ms()
@@ -46,10 +46,12 @@ double ut_time_ms()
 
 void ut_time_init()
 {
+#ifndef _USE_LITE
     UNI_THREAD_SAFE({
         time_statistics.clear();
         time_statistics_flag = true;
     });
+#endif
 }
 
 void ut_time_start()

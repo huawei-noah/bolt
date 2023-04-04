@@ -14,21 +14,21 @@
 #include "cpu/tensor_computing_cpu.h"
 
 template <typename T>
-static inline int non_zero_kernel(TensorDesc inputDesc, T *input, TensorDesc outputDesc, int *output)
+static inline U32 non_zero_kernel(TensorDesc inputDesc, T *input, TensorDesc outputDesc, I32 *output)
 {
-    int count = 0;
+    U32 count = 0;
     for (U32 i = 0; i < tensorNumElements(inputDesc); i++) {
         if (input[i] != 0) {
             count++;
         }
     }
-    int length = count;
+    U32 length = count;
     count = 0;
     for (U32 i = 0; i < tensorNumElements(inputDesc); i++) {
         if (input[i] != 0) {
             std::vector<U32> id = calculateLocalIndex(i, inputDesc.dims, inputDesc.nDims);
             for (U32 j = 0; j < inputDesc.nDims; j++) {
-                output[j * length + count] = id[j];
+                output[j * length + count] = id[inputDesc.nDims - 1 - j];
             }
             count++;
         }
@@ -53,6 +53,15 @@ EE non_zero_cpu(TensorDesc inputDesc, void *input, TensorDesc outputDesc, void *
             *length = non_zero_kernel<F16>(inputDesc, (F16 *)input, outputDesc, (I32 *)output);
             break;
 #endif
+        case DT_U32:
+            *length = non_zero_kernel<U32>(inputDesc, (U32 *)input, outputDesc, (I32 *)output);
+            break;
+        case DT_I32:
+            *length = non_zero_kernel<I32>(inputDesc, (I32 *)input, outputDesc, (I32 *)output);
+            break;
+        case DT_U8:
+            *length = non_zero_kernel<U8>(inputDesc, (UINT8 *)input, outputDesc, (I32 *)output);
+            break;
         default:
             ret = NOT_SUPPORTED;
             break;

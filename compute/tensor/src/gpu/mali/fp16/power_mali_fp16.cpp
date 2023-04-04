@@ -16,11 +16,7 @@
 
 inline EE power_checkpara_mali_fp16(TensorDesc inputDesc, TensorDesc outputDesc)
 {
-    EE ret = SUCCESS;
-    if (inputDesc.dt != outputDesc.dt || (inputDesc.dt != DT_F16 && inputDesc.dt != DT_I32)) {
-        ret = NOT_SUPPORTED;
-    }
-    return ret;
+    return SUCCESS;
 }
 
 inline EE power_core_mali_fp16(GCLHandle_t handle,
@@ -44,13 +40,13 @@ inline EE power_core_mali_fp16(GCLHandle_t handle,
     outbuf = output->mem;
     Kernel kernel;
     U32 gs[3];
-    U32 ls[3] = {16, 1, 1};
+    U32 ls[3] = {0, 0, 0};
     U32 dim = 3;
     char kernelName[128];
     KernelOpt kernelOpt;
-    bool useNchwFormat = (input->desc.memFormat == DF_NCHW) ? true : false;
-    CHECK_STATUS(set_power_opt_mali(
-        useNchwFormat, dt, input->desc.memType, output->desc.memType, kernelName, &kernelOpt));
+    bool useNchwFormat = (input->desc.memFormat != DF_NCHWC4) ? true : false;
+    CHECK_STATUS(set_power_opt_mali(useNchwFormat, input->desc.dt, output->desc.dt,
+        input->desc.memType, output->desc.memType, p, kernelName, &kernelOpt));
     CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
     if (useNchwFormat) {
         gs[0] = (iw + 3) / 4;
@@ -61,9 +57,8 @@ inline EE power_core_mali_fp16(GCLHandle_t handle,
         gs[1] = ih;
         gs[2] = (ic + 3) / 4 * in;
     }
-    U32 has_power = (p.power == (F32)1.0) ? 0 : 1;
     CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, ow_str, oh_str, i_off, o_off, iw, gs[0],
-        gs[1], has_power, p.scale, p.shift, p.power, inbuf, outbuf));
+        gs[1], p.scale, p.shift, p.power, inbuf, outbuf));
     gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
     return SUCCESS;
 }

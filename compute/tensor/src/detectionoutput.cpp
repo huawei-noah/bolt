@@ -78,7 +78,8 @@ EE detectionoutput(std::vector<Tensor> inputTensor,
     EE ret = NOT_SUPPORTED;
     if (IS_CPU(arch)) {
 #ifdef _USE_CPU
-        ret = detectionoutput_cpu(inputDesc, input, detectionOutputParamSpec, outputDesc, output);
+        ret = detectionoutput_cpu(
+            inputDesc, input, detectionOutputParamSpec, outputDesc, output, arch);
 #endif
     }
     return ret;

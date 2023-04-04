@@ -14,21 +14,13 @@
 #ifndef _H_BLAS_INT8
 #define _H_BLAS_INT8
 
-#include "sys.h"
-
-#include "error.h"
 #include "tensor_desc.h"
-
-EE matrix_vector_multiply_transform_weight_int8(TensorDesc desc, INT8 *src, INT8 *dst);
+#include "uni.h"
+#include "arm_neon_expand.h"
 
 EE mvm_int8(U32 row, U32 col, DataFormat df, INT8 *matrix, INT8 *vector, I32 *tmp, I32 *result);
 
-void matrix_matrix_multiply_tmp_bytes_int8(
-    U32 row1, U32 col1, U32 row2, U32 col2, DataType dt, U32 *bytes);
-
-EE matrix_matrix_multiply_transform_rhsN_int8(TensorDesc desc, INT8 *src, INT8 *dst);
-
-EE matrix_matrix_multiply_transform_rhsT_int8(TensorDesc desc, INT8 *src, INT8 *dst);
+void matrix_matrix_multiply_tmp_bytes_int8(U32 M, U32 N, U32 K, DataFormat bdf, U32 *bytes);
 
 EE mmm_int8(int M,
     int N,
@@ -39,4 +31,13 @@ EE mmm_int8(int M,
     INT8 *tmp,
     I32 *result,
     Arch arch);
+
+EE matrix_vector_multiply_transform_weight_int8(TensorDesc desc, INT8 *src, INT8 *dst);
+
+void matrix_matrix_multiply_transform_rhs_bytes_int8(
+    U32 M, U32 K, DataFormat bdf, U32 *bytes, U32 *rhsBytes);
+
+EE matrix_matrix_multiply_transform_rhsN_int8(TensorDesc desc, INT8 *src, INT8 *dst);
+
+EE matrix_matrix_multiply_transform_rhsT_int8(TensorDesc desc, INT8 *src, INT8 *dst);
 #endif

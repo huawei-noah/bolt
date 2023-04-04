@@ -245,7 +245,7 @@ EE power_fp32(TensorDesc inputDesc,
     TensorDesc outputDesc,
     F32 *output);
 
-EE layer_normalization_fp32(TensorDesc inputDesc,
+EE layer_norm_fp32(TensorDesc inputDesc,
     F32 *input,
     LayerNormParamSpec p,
     F32 *alpha,
@@ -294,4 +294,13 @@ EE dequantize_to_f32(TensorDesc qDesc,
     void *bData,
     TensorDesc dDesc,
     void *data);
+
+EE decode_priorbox_fp32(const F32 *location,
+    const F32 *priorbox,
+    const F32 *variance,
+    I32 num_total_priorbox,
+    F32 *xmin,
+    F32 *ymin,
+    F32 *xmax,
+    F32 *ymax);
 #endif

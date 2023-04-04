@@ -21,14 +21,17 @@ public:
     OclMemoryImg() : OclMemory()
     {
         this->desc.imgFormat.image_channel_order = CL_RGBA;
+#ifdef _USE_FP16
         this->desc.imgFormat.image_channel_data_type = CL_HALF_FLOAT;
+#else
+        this->desc.imgFormat.image_channel_data_type = CL_FLOAT;
+#endif
         this->desc.memType = GCL_MEM_IMG_3D;
     }
 
     OclMemoryImg(MemoryType type) : OclMemory()
     {
-        this->desc.imgFormat.image_channel_order = CL_RGBA;
-        this->desc.imgFormat.image_channel_data_type = CL_HALF_FLOAT;
+        new (this)OclMemoryImg();
         if (type == OCLMemImg) {
             this->desc.memType = GCL_MEM_IMG_3D;
         } else if (type == OCLMemImg2D) {
@@ -112,7 +115,7 @@ public:
         this->desc.offset[1] = 0;
         this->desc.offset[2] = 0;
         this->desc.num = this->desc.stride[0] * this->desc.stride[1] * this->desc.stride[2] * 4;
-        this->desc.byteSize = desc.num * bytesOf(DT_F16);
+        this->desc.byteSize = desc.num * bytesOf(this->desc.dt);
         this->alloc();
     }
 
@@ -212,8 +215,9 @@ public:
 private:
     void set_image_shape(TensorDesc cpuDesc)
     {
+        DataType dt;
         U32 n, c, t, h, w;
-        tensorSelectGet(cpuDesc, NULL, NULL, &n, &c, &h, &w, &t);
+        CHECK_STATUS(tensorSelectGet(cpuDesc, &dt, NULL, &n, &c, &h, &w, &t));
         if (cpuDesc.nDims > 5) {
             for (U32 i = 4; i < cpuDesc.nDims; i++) {
                 n = n * cpuDesc.dims[i];
@@ -248,6 +252,7 @@ private:
                 break;
             }
         }
+        this->desc.imgFormat.image_channel_data_type = get_channel_type(dt);
     }
 };
 #endif

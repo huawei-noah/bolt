@@ -187,44 +187,47 @@ EE pooling_bp_arm(
         ret = NOT_SUPPORTED;
     }
 
+    UNI_MEMSET(output, 0, tensorNumBytes(outputDesc));
     ic /= 8;
-    const U8 *src = (const U8 *)input;
-    U8 *dst = (U8 *)output;
-    int poolSize = p.kernel_t * p.kernel_h * p.kernel_w;
 #ifdef _USE_OPENMP
-#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#pragma omp parallel num_threads(OMP_NUM_THREADS)
 #endif
-    for (U32 o = 0; o < in * ic; o++) {
-        U32 n = o / ic;
-        U32 c = o % ic;
-        //for (U32 n = 0; n < in; n++) {
-        //    for (U32 c = 0; c < ic; c++) {
-        const U8 *src = (const U8 *)input + o * ih * iw * 8 * bytesOf(idt);
-        U8 *dst = (U8 *)output + o * oh * ow * 8 * bytesOf(idt);
-        for (U32 h = 0; h < ih; h++) {
-            for (U32 w = 0; w < iw; w++, src += 8 * bytesOf(idt)) {
+    {
+        int poolSize = p.kernel_t * p.kernel_h * p.kernel_w;
+#ifdef _USE_OPENMP
+#pragma omp for
+#endif
+        for (U32 o = 0; o < in * ic; o++) {
+            U32 n = o / ic;
+            U32 c = o % ic;
+            const U8 *src = (const U8 *)input + o * ih * iw * 8 * bytesOf(idt);
+            U8 *dst = (U8 *)output + o * oh * ow * 8 * bytesOf(idt);
+            for (U32 h = 0; h < ih; h++) {
                 int hstart = (int)h * (int)p.stride_h - (int)p.pad_top;
-                int wstart = (int)w * (int)p.stride_w - (int)p.pad_left;
                 int hend = UNI_MIN(hstart + p.kernel_h, oh);
-                int wend = UNI_MIN(wstart + p.kernel_w, ow);
                 hstart = UNI_MAX(hstart, 0);
-                wstart = UNI_MAX(wstart, 0);
-                if (!p.count_include_pad) {
-                    poolSize = (hend - hstart) * (wend - wstart);
-                }
-                switch (idt) {
+                for (U32 w = 0; w < iw; w++, src += 8 * bytesOf(idt)) {
+                    int wstart = (int)w * (int)p.stride_w - (int)p.pad_left;
+                    int wend = UNI_MIN(wstart + p.kernel_w, ow);
+                    wstart = UNI_MAX(wstart, 0);
+                    if (!p.count_include_pad) {
+                        poolSize = (hend - hstart) * (wend - wstart);
+                    }
+                    switch (idt) {
 #ifdef _USE_FP32
-                    case DT_F32:
-                        ret = pooling_bp_c8_fp32((const F32 *)src, hstart, hend, wstart, wend,
-                            poolSize, (F32 *)dst, ow, p);
-                        break;
+                        case DT_F32:
+                            ret = pooling_bp_c8_fp32((const F32 *)src, hstart, hend, wstart, wend,
+                                poolSize, (F32 *)dst, ow, p);
+                            break;
 #endif
-                    default:
-                        ret = NOT_SUPPORTED;
-                        break;
+                        default:
+                            ret = NOT_SUPPORTED;
+                            break;
+                    }
                 }
             }
         }
     }
+
     return ret;
 }

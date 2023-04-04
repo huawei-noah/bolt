@@ -11,7 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <float.h>
 #include "cpu/arm/fp32/tensor_computing_fp32.h"
 
 template <PoolingMode pm>
@@ -52,9 +51,8 @@ EE pooling_c8_fp32(const I32 &tstart,
         }
     }
     if (pm == POOLING_MEAN) {
-        float32x4_t poolSize_v = vdupq_n_f32(poolSize);
-        out0 = vdivq_f32(out0, poolSize_v);
-        out1 = vdivq_f32(out1, poolSize_v);
+        out0 = vmulq_n_f32(out0, 1. / poolSize);
+        out1 = vmulq_n_f32(out1, 1. / poolSize);
     }
     vst1q_f32(output, out0);
     vst1q_f32(output + 4, out1);
@@ -104,9 +102,9 @@ EE pooling_bp_c8_fp32(const F32 *input,
     if (pm != POOLING_MEAN) {
         ret = NOT_SUPPORTED;
     }
-    float32x4_t poolSize = vdupq_n_f32(pool);
-    float32x4_t in0 = vdivq_f32(vld1q_f32(input), poolSize);
-    float32x4_t in1 = vdivq_f32(vld1q_f32(input + 4), poolSize);
+    float32x4_t poolSize = vdupq_n_f32(1. / pool);
+    float32x4_t in0 = vmulq_f32(vld1q_f32(input), poolSize);
+    float32x4_t in1 = vmulq_f32(vld1q_f32(input + 4), poolSize);
     for (int kernelH = hstart; kernelH < hend; kernelH++) {
         for (int kernelW = wstart; kernelW < wend; kernelW++) {
             U32 index = (kernelH * stride + kernelW) * 8;

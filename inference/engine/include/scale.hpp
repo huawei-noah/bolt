@@ -30,20 +30,14 @@ public:
         return OT_Scale;
     }
 
-    bool can_input_output_the_same() override
-    {
-        return true;
-    }
-
     U32 find_target_axis_len(std::vector<Tensor *> inTensors)
     {
-        auto curOpWs = this->get_weightspec();
         int weightNum = 0;
         int vecNum = 0;
-        if (0 != curOpWs.bytes_of_weight) {
-            weightNum = curOpWs.bytes_of_weight / UNI_MAX(1, bytesOf(curOpWs.mdt));
-        } else if (0 != curOpWs.bytes_of_vec) {
-            vecNum = curOpWs.bytes_of_vec / UNI_MAX(1, bytesOf(curOpWs.mdt));
+        if (0 != this->ws.bytes_of_weight) {
+            weightNum = this->ws.bytes_of_weight / UNI_MAX(1, bytesOf(this->ws.mdt));
+        } else if (0 != this->ws.bytes_of_vec) {
+            vecNum = this->ws.bytes_of_vec / UNI_MAX(1, bytesOf(this->ws.mdt));
         }
         if (weightNum > 0 && vecNum > 0 && weightNum != vecNum) {
             UNI_ERROR_LOG(

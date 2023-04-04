@@ -21,7 +21,7 @@ const int DataDescMaxDims = 8;
 struct ModelHandleInfo {
     void *ms;
     void *cnn;
-    DEVICE_TYPE deviceType;
+    HARDWARE_TYPE deviceType;
     void *algoPath;
     bool useFileStream;
 };
@@ -42,7 +42,7 @@ typedef struct DataDesc {
 typedef struct {
     U32 num_outputs;
     DataDesc *outputArr;
-    DEVICE_TYPE deviceType;
+    HARDWARE_TYPE deviceType;
 } ResultHandleInner;
 
 inline AFFINITY_TYPE AffinityMapDLLite2c(bolt::AffinityType affinity)
@@ -398,7 +398,7 @@ bolt::ReturnStatus bolt::RunModel(bolt::ModelHandle modelHandle,
         return bolt::ReturnStatus::NULLPTR;
     }
     CNN *cnn = (CNN *)ihInfo->cnn;
-    DEVICE_TYPE device = ihInfo->deviceType;
+    HARDWARE_TYPE device = ihInfo->deviceType;
     ResultHandleInner *ir_inner = (ResultHandleInner *)resultHandle;
 
     std::map<std::string, U8 *> input;

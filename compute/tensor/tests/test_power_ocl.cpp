@@ -61,7 +61,7 @@ int powerTest(int argc, char **argv, DataType dt)
     MaliPara maliPara;
     maliPara.handle = handle;
     archInfo.archPara = &maliPara;
-    CHECK_STATUS(power_infer_output_size(&inputTensor, p, &outputTensor, &archInfo));
+    CHECK_STATUS(power_infer_output_size(&inputTensor, p, dt, &outputTensor, &archInfo));
     TensorDesc output_desc_gpu = outputTensor.get_desc();
     U8 *output_gpu = ut_input_v(on * oc * oh * ow, dt, UT_INIT_RANDOM);
 
@@ -79,19 +79,28 @@ int powerTest(int argc, char **argv, DataType dt)
 
     CHECK_STATUS(ocl_set_input(handle, input, input_desc_gpu, input_cpu, tmpbuf, true));
     CHECK_STATUS(power(inputTensor, p, outputTensor, &archInfo));
-    /*warp up*/
-    UNI_INFO_LOG("warm up gpu:\n")
-    for (U32 i = 0; i < 2; i++) {
+
+    for (U32 i = 0; i < UT_WARMUP; i++) {
         CHECK_STATUS(gcl_run_kernelVec(handle));
     }
+    CHECK_STATUS(gcl_finish(handle));
 
-    UNI_INFO_LOG("Run:\n")
+    double time = 0;
 #ifdef _DEBUG
-    CHECK_STATUS(gcl_run_kernelVec_timing(handle, 0, handle->kernelVec->size()));
-    double time = handle->t_execute * 0.001;
+    for (I32 i = 0; i < UT_LOOPS; i++) {
+        CHECK_STATUS(gcl_run_kernelVec_timing(handle, 0, handle->kernelVec->size()));
+        time += handle->t_execute * 0.001;
+    }
 #else
-    CHECK_STATUS(gcl_run_kernelVec(handle));
+    double start = ut_time_ms();
+    for (I32 i = 0; i < UT_LOOPS; i++) {
+        CHECK_STATUS(gcl_run_kernelVec(handle));
+        CHECK_STATUS(gcl_finish(handle));
+    }
+    double end = ut_time_ms();
+    time = (end - start);
 #endif
+    time /= UT_LOOPS;
 
     CHECK_STATUS(ocl_get_output(handle, output, output_desc_gpu, output_gpu, tmpbuf, true));
     output_gpu = output->mapPtrArray.back();
@@ -99,10 +108,8 @@ int powerTest(int argc, char **argv, DataType dt)
     char params[120];
     sprintf(params, "(%u %u %u %u) = (%u %u %u %u)", in, ic, ih, iw, on, oc, oh, ow);
     sprintf(buffer, "%20s, %80s", "Power", params);
-#ifdef _DEBUG
     double ops = (2.0 * on * oc * oh * ow);
     ut_log(dt, buffer, ops, time);
-#endif
     Tensor inputTensorCpu;
     inputTensorCpu.resize(input_desc_cpu);
     inputTensorCpu.alloc();
@@ -114,7 +121,7 @@ int powerTest(int argc, char **argv, DataType dt)
     outputTensorCpu.alloc();
 
     CHECK_STATUS(power(inputTensorCpu, p, outputTensorCpu, &UT_SERIAL_ARCHINFO));
-    ut_check_a(output_gpu, get_ptr_from_tensor(outputTensorCpu, CPU_GENERAL), on * oc * ow * oh, dt);
+    ut_check_v(output_gpu, get_ptr_from_tensor(outputTensorCpu, CPU_GENERAL), on * oc * ow * oh, dt, 0.3);
 
     CHECK_STATUS(gcl_finish(handle));
     CHECK_STATUS(gcl_clean_kernelVec(handle));

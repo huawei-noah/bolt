@@ -26,19 +26,82 @@
 EE matrix_vector_multiply_tmp_bytes(
     TensorDesc matrixDesc, TensorDesc vectorDesc, U32 *bytes, Arch arch)
 {
-    bool transpose = (matrixDesc.df == DF_TRANSPOSE);
+    DataType matrixDataType;
+    DataFormat matrixDataFormat;
+    U32 matrixRow, matrixColumn;
+    CHECK_STATUS(
+        tensor2dGet(matrixDesc, &matrixDataType, &matrixDataFormat, &matrixRow, &matrixColumn));
+    bool transpose = (matrixDataFormat == DF_TRANSPOSE);
+    if (transpose) {
+        std::swap(matrixRow, matrixColumn);
+    }
     EE ret = NOT_SUPPORTED;
-    if (IS_GENERAL(arch)) {
+    if (IS_X86(arch)) {
+#ifdef _USE_X86
+        ret = matrix_vector_multiply_tmp_bytes_x86(
+            matrixRow, matrixColumn, matrixDataType, matrixDataFormat, bytes);
+#endif
+    } else {
+        *bytes = 0;
+        ret = SUCCESS;
+    }
+    return ret;
+}
+
+DataFormat matrix_vector_multiply_weight_format(DataType dt)
+{
+    DataFormat ret;
+    switch (dt) {
+        case DT_I8: {
+            ret = DF_NKN32K4;
+            break;
+        }
+        case DT_F16: {
+            ret = DF_NKN64;
+            break;
+        }
+        case DT_F32: {
+            ret = DF_NKN16;
+            break;
+        }
+        case DT_U8_Q: {
+            ret = DF_NK;
+            break;
+        }
+        default: {
+            CHECK_STATUS(NOT_SUPPORTED);
+            break;
+        }
+    }
+    return ret;
+}
+
+EE matrix_vector_multiply_transform_weight_bytes(TensorDesc matrixDesc, U32 *bytes, Arch arch)
+{
+    DataType matrixDataType;
+    DataFormat matrixDataFormat;
+    U32 matrixRow, matrixColumn;
+    CHECK_STATUS(
+        tensor2dGet(matrixDesc, &matrixDataType, &matrixDataFormat, &matrixRow, &matrixColumn));
+    bool transpose = (matrixDataFormat == DF_TRANSPOSE);
+    if (transpose) {
+        std::swap(matrixRow, matrixColumn);
+    }
+    EE ret = NOT_SUPPORTED;
+    if (IS_ARM(arch)) {
+#ifdef _USE_NEON
+        ret = matrix_vector_multiply_transform_weight_bytes_arm(
+            matrixRow, matrixColumn, matrixDataType, matrixDataFormat, bytes);
+#endif
 #ifdef _USE_GENERAL
+    } else if (IS_GENERAL(arch)) {
+        *bytes = tensorNumBytes(matrixDesc);
         ret = SUCCESS;
 #endif
 #ifdef _USE_X86
     } else if (IS_X86(arch)) {
-        ret = matrix_vector_multiply_tmp_bytes_x86(transpose, matrixDesc, bytes);
-#endif
-#ifdef _USE_NEON
-    } else if (IS_ARM(arch)) {
-        ret = matrix_vector_multiply_tmp_bytes_arm(transpose, matrixDesc.dt, bytes);
+        ret = matrix_vector_multiply_transform_weight_bytes_x86(
+            matrixRow, matrixColumn, matrixDataType, matrixDataFormat, bytes);
 #endif
     }
     return ret;
@@ -77,30 +140,17 @@ EE matrix_vector_multiply(TensorDesc matrixDesc,
     const F32 *scale,
     Arch arch)
 {
-    if (bytes != 0 && tmp == nullptr) {
-        CHECK_STATUS(NULL_POINTER);
-    }
-    if (nullptr == matrix || nullptr == vector || nullptr == result) {
+    if ((bytes != 0 && tmp == nullptr) || nullptr == matrix || nullptr == vector ||
+        nullptr == result) {
         CHECK_STATUS(NULL_POINTER);
     }
     DataType matrixDataType, vectorDataType, resultDataType;
     DataFormat matrixDataFormat, vectorDataFormat, resultDataFormat;
     U32 matrixRow, matrixColumn, vectorColumn, resultColumn;
-
     CHECK_STATUS(
         tensor2dGet(matrixDesc, &matrixDataType, &matrixDataFormat, &matrixRow, &matrixColumn));
     CHECK_STATUS(tensor1dGet(vectorDesc, &vectorDataType, &vectorDataFormat, &vectorColumn));
     CHECK_STATUS(tensor1dGet(resultDesc, &resultDataType, &resultDataFormat, &resultColumn));
-
-    // if (matrixDataType != vectorDataType) {
-    //     CHECK_STATUS(NOT_MATCH);
-    // }
-    // if (matrixDataType != resultDataType) {
-    //     if (matrixDataType != DT_I8 || resultDataType != DT_I32) {
-    //         CHECK_STATUS(NOT_MATCH);
-    //     }
-    // }
-
     bool transpose = (matrixDataFormat == DF_TRANSPOSE);
     if (transpose) {
         std::swap(matrixRow, matrixColumn);
@@ -118,20 +168,17 @@ EE matrix_vector_multiply(TensorDesc matrixDesc,
 #ifdef _USE_X86
     } else if (IS_X86(arch)) {
         U8 *dataB = (U8 *)matrix;
-        U8 *offsetCBias = nullptr;
 #ifdef _USE_INT8
-        if (matrixDataType == DT_I8) {
+        if (matrixDataType == DT_U8_Q &&
+            matrixDataFormat == matrix_vector_multiply_weight_format(matrixDataType)) {
+            return NOT_SUPPORTED;
+        }
+        if (matrixDataType == DT_I8 &&
+            matrixDataFormat != matrix_vector_multiply_weight_format(matrixDataType)) {
+            dataB = ((U8 *)tmp);
             TensorDesc tranDescB;
-            if (matrixDataFormat != targetFormat4mvmMatrix(matrixDataType)) {
-                dataB = ((U8 *)tmp);
-                if (vectorDataType == DT_U8_Q && matrixDataType == DT_I8) {
-                    offsetCBias = (U8 *)tmp;
-                    // dataB += resultColumn * bytesOf(DT_I32);
-                }
-                // dataB += tensorNumBytes(vectorDesc);
-                ret = matrix_vector_multiply_transform_weight_x86(matrixDesc, matrix, &tranDescB,
-                    dataB + resultColumn * bytesOf(DT_I32), offsetCBias);
-            }
+            CHECK_STATUS(matrix_vector_multiply_transform_weight_x86(
+                matrixDesc, matrix, &tranDescB, dataB + resultColumn * bytesOf(DT_I32), dataB));
         }
 #endif
         ret = mvm_x86(matrixRow, matrixColumn, matrixDataType, matrixDataFormat, dataB, vector,

@@ -23,15 +23,10 @@ public:
         this->dt = dt;
         this->p = p;
     }
-
+    ~Clip(){}
     OperatorType get_type() override
     {
         return OT_Clip;
-    }
-
-    bool can_input_output_the_same() override
-    {
-        return true;
     }
 
 protected:

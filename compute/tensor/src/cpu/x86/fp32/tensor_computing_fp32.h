@@ -237,7 +237,7 @@ EE eltwise_u8(std::vector<void *> input,
     void *output,
     EltwiseMode eltwiseMode);
 
-EE layer_normalization_fp32(TensorDesc inputDesc,
+EE layer_norm_fp32(TensorDesc inputDesc,
     F32 *input,
     LayerNormParamSpec p,
     F32 *alpha,
@@ -245,7 +245,7 @@ EE layer_normalization_fp32(TensorDesc inputDesc,
     TensorDesc outputDesc,
     F32 *output);
 
-EE l2normalization_fp32(TensorDesc inputDesc, const F32 *input, TensorDesc outputDesc, F32 *output);
+EE l2norm_fp32(TensorDesc inputDesc, const F32 *input, TensorDesc outputDesc, F32 *output);
 
 EE rnncell_fp32(TensorDesc xDesc,
     const void *currentX,
@@ -299,13 +299,15 @@ EE pooling_nchw_fp32(TensorDesc inputDesc,
     const F32 *input,
     PoolingParamSpec poolingParamSpec,
     TensorDesc outputDesc,
-    F32 *output);
+    F32 *output,
+    I32 *idx);
 
 EE pooling_fp32(TensorDesc inputDesc,
     const F32 *input,
     PoolingParamSpec poolingParamSpec,
     TensorDesc outputDesc,
-    F32 *output);
+    F32 *output,
+    I32 *idx);
 
 EE pooling_c16_fp32(TensorDesc inputDesc,
     const F32 *input,
@@ -353,5 +355,14 @@ EE instance_norm_fp32(TensorDesc inputDesc,
     F32 *bias,
     InstanceNormParamSpec p,
     F32 *output);
+
+EE decode_priorbox_fp32(const F32 *location,
+    const F32 *priorbox,
+    const F32 *variance,
+    I32 num_total_priorbox,
+    F32 *xmin,
+    F32 *ymin,
+    F32 *xmax,
+    F32 *ymax);
 
 #endif  //CHEETAH_TENSOR_COMPUTING_FP32_H

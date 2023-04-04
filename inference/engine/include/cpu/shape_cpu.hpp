@@ -20,6 +20,7 @@ class ShapeCPU : public Shape {
 public:
     ShapeCPU() : Shape()
     {}
+    ~ShapeCPU(){}
 
     std::shared_ptr<Operator> clone() override
     {
@@ -33,7 +34,7 @@ public:
         Tensor inputTensor = this->inputTensors[0];
         TensorDesc inputDesc = inputTensor.get_desc();
         Tensor outputTensor = this->outputTensors[0];
-        U32 *ptr = (U32 *)((CpuMemory *)(outputTensor.get_memory()))->get_ptr();
+        I32 *ptr = (I32 *)((CpuMemory *)(outputTensor.get_memory()))->get_ptr();
         for (U32 i = 0; i < inputDesc.nDims; i++) {
             ptr[i] = inputDesc.dims[inputDesc.nDims - 1 - i];
         }
@@ -44,7 +45,7 @@ public:
     {
         TensorDesc inputDesc = inTensors[0]->get_desc();
         TensorDesc outputDesc;
-        outputDesc.dt = DT_U32;
+        outputDesc.dt = DT_I32;
         outputDesc.nDims = 1;
         outputDesc.dims[0] = inputDesc.nDims;
         for (U32 i = 0; i < inputDesc.nDims; i++) {
@@ -53,6 +54,7 @@ public:
         outTensors[0]->resize(outputDesc);
         return SUCCESS;
     }
+
 };
 
 #endif  // _SHAPE_CPU_H

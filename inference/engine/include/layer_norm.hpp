@@ -23,14 +23,13 @@ public:
         this->dt = dt;
         this->p = p;
         this->weightNum = weightNum;
-        this->hasBias = false;
     }
-
+    ~LayerNorm(){}
     OperatorType get_type() override
     {
         return OT_LayerNorm;
     }
-
+    
 protected:
     LayerNormParamSpec p;
     U32 weightNum;

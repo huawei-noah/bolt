@@ -62,6 +62,9 @@ EE convolution_gemm_icnchw_V7(TensorDesc inputDesc,
         case ACTIVATION_RELU:
             activation = 1;
             break;
+        case ACTIVATION_RELU6:
+            activation = 2;
+            break;
         default:
             return NOT_SUPPORTED;
     }
@@ -170,6 +173,21 @@ EE convolution_gemm_icnchw_V7(TensorDesc inputDesc,
                     "vmax.f32 q14, q14, q1\n"
                     "vmax.f32 q15, q15, q1\n"
                     "vmax.f32  q3,  q3, q1\n"
+                    "cmp %[activation], #1\n"
+                    "beq 1f\n"
+                    "vmov.f32 q1, #6.0\n"  // six
+                    "vmin.f32  q5,  q5, q1\n"
+                    "vmin.f32  q6,  q6, q1\n"
+                    "vmin.f32  q7,  q7, q1\n"
+                    "vmin.f32  q8,  q8, q1\n"
+                    "vmin.f32  q9,  q9, q1\n"
+                    "vmin.f32 q10, q10, q1\n"
+                    "vmin.f32 q11, q11, q1\n"
+                    "vmin.f32 q12, q12, q1\n"
+                    "vmin.f32 q13, q13, q1\n"
+                    "vmin.f32 q14, q14, q1\n"
+                    "vmin.f32 q15, q15, q1\n"
+                    "vmin.f32  q3,  q3, q1\n"
                     "1:\n"
                     "vst1.f32 {d10-d11}, [%[out_0]]!\n"
                     "vst1.f32 {d12-d13}, [%[out_0]]!\n"
@@ -250,6 +268,17 @@ EE convolution_gemm_icnchw_V7(TensorDesc inputDesc,
                     "vmax.f32 q10, q10, q1\n"
                     "vmax.f32 q11, q11, q1\n"
                     "vmax.f32 q12, q12, q1\n"
+                    "cmp %[activation], #1\n"
+                    "beq 1f\n"
+                    "vmov.f32 q1, #6.0\n"  // six
+                    "vmin.f32  q5,  q5, q1\n"
+                    "vmin.f32  q6,  q6, q1\n"
+                    "vmin.f32  q7,  q7, q1\n"
+                    "vmin.f32  q8,  q8, q1\n"
+                    "vmin.f32  q9,  q9, q1\n"
+                    "vmin.f32 q10, q10, q1\n"
+                    "vmin.f32 q11, q11, q1\n"
+                    "vmin.f32 q12, q12, q1\n"
                     "1:\n"
                     "vst1.f32 {d10-d11}, [%[out_0]]!\n"
                     "vst1.f32 {d12-d13}, [%[out_0]]!\n"
@@ -301,6 +330,11 @@ EE convolution_gemm_icnchw_V7(TensorDesc inputDesc,
                     "veor q1, q1, q1\n"  // zero
                     "vmax.f32 q5, q5, q1\n"
                     "vmax.f32 q6, q6, q1\n"
+                    "cmp %[activation], #1\n"
+                    "beq 1f\n"
+                    "vmov.f32 q1, #6.0\n"  // six
+                    "vmin.f32 q5, q5, q1\n"
+                    "vmin.f32 q6, q6, q1\n"
                     "1:\n"
                     "vst1.f32 {d10-d11}, [%[out_0]]!\n"
                     "vst1.f32 {d12-d13}, [%[out_0]]\n"

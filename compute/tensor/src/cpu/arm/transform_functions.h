@@ -21,7 +21,7 @@
 #endif
 #include "thread_affinity.h"
 
-#define _USE_CACHE
+//#define _USE_CACHE
 #ifdef _USE_CACHE
 #include <map>
 #include <vector>

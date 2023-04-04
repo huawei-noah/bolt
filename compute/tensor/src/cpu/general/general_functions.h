@@ -32,7 +32,7 @@ inline F32 array_mean_general(DataType dt, const void *data, I32 len)
             break;
 #endif
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
             break;
     }
     return result;
@@ -53,7 +53,7 @@ inline F32 array_var_general(DataType dt, const void *data, I32 len, F32 mean)
             break;
 #endif
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
             break;
     }
     return result;
@@ -79,7 +79,7 @@ inline void array_power_general(DataType dt, void *input, void *output, I32 len,
             array_power_template<U32>((U32 *)input, (U32 *)output, len, power);
             break;
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
             break;
     }
 }
@@ -99,7 +99,7 @@ inline void array_mul_general(
             break;
 #endif
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
             break;
     }
 }
@@ -119,7 +119,7 @@ inline void array_add_general(
             break;
 #endif
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
             break;
     }
 }
@@ -141,7 +141,7 @@ inline void array_mul_and_add_general(
             break;
 #endif
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
             break;
     }
 }
@@ -166,10 +166,39 @@ inline void array_scale_general(
         case DT_U32:
             array_scale_template<U32>((const U32 *)input, (U32 *)output, len, alpha, beta);
             break;
+        case DT_I8:
+            array_scale_template<INT8>((const INT8 *)input, (INT8 *)output, len, alpha, beta);
+            break;
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
             break;
     }
+}
+
+inline EE array_scale_round_general(
+    DataType dt, const void *input, INT8 *output, I32 len, F32 scale, bool clamp)
+{
+    EE ret = SUCCESS;
+    switch (dt) {
+#ifdef _USE_FP32
+        case DT_F32:
+            array_scale_round_template<F32>((const F32 *)input, output, len, scale, clamp);
+            break;
+#endif
+#ifdef _USE_FP16
+        case DT_F16:
+            array_scale_round_template<F16>((const F16 *)input, output, len, scale, clamp);
+            break;
+#endif
+        case DT_I32:
+            array_scale_round_template<I32>((const I32 *)input, output, len, scale, clamp);
+            break;
+        default:
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
+            ret = NOT_SUPPORTED;
+            break;
+    }
+    return ret;
 }
 
 inline F32 array_sum_general(DataType dt, const void *data, I32 len)
@@ -187,14 +216,14 @@ inline F32 array_sum_general(DataType dt, const void *data, I32 len)
             break;
 #endif
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
             break;
     }
     return result;
 }
 
 inline EE array_activation_general(
-    DataType dt, void *input, U32 len, ActivationParamSpec activationDesc, void *output)
+    DataType dt, void *input, U32 len, ActivationParamSpec activationDesc, void *output, F32 *scale)
 {
     EE ret = SUCCESS;
     switch (dt) {
@@ -218,6 +247,22 @@ inline EE array_activation_general(
             break;
         }
 #endif
+        case DT_U32: {
+            U32 *inPtr = (U32 *)input;
+            U32 *outPtr = (U32 *)output;
+            for (U32 i = 0; i < len; i++) {
+                activation_template<U32>(activationDesc, inPtr[i], &outPtr[i]);
+            }
+            break;
+        }
+        case DT_I32: {
+            I32 *inPtr = (I32 *)input;
+            I32 *outPtr = (I32 *)output;
+            for (U32 i = 0; i < len; i++) {
+                activation_template<I32>(activationDesc, inPtr[i], &outPtr[i]);
+            }
+            break;
+        }
         case DT_I8: {
             INT8 *inPtr = (INT8 *)input;
             INT8 *outPtr = (INT8 *)output;
@@ -235,7 +280,7 @@ inline EE array_activation_general(
             break;
         }
         default:
-            ret = NOT_SUPPORTED;
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
             break;
     }
     return ret;
@@ -256,7 +301,7 @@ inline void array_max_general(
             break;
 #endif
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
             break;
     }
 }
@@ -282,6 +327,7 @@ inline EE array_minmax_value_general(DataType dt, const void *data, I32 len, int
             ret = array_minmax_value_template<U32>((const U32 *)data, len, mode, result);
             break;
         default:
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
             ret = NOT_SUPPORTED;
             break;
     }
@@ -305,7 +351,7 @@ inline void array_norm_scalar_scale_general(
             break;
 #endif
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
             break;
     }
 }

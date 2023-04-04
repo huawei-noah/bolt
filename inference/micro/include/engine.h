@@ -12,7 +12,7 @@
 class Engine {
 public:
     Engine(std::string engineFilePath);
-
+    ~Engine(){}
     void generateOperators()
     {
         std::set<OperatorType> operatorList;
@@ -26,7 +26,7 @@ public:
             this->sourcesFiles.append(convolutionCodePath);
         }
     }
-
+    
     std::string generateEngineHeader();
 
     void generateMemorySegment()
@@ -73,7 +73,7 @@ public:
 
         generateEngine;
     }
-
+	
 private:
     Map<std::string, TensorDesc> tensorDescMap;
     Map<std::string, std::string> tensorDescNameMap;

@@ -20,10 +20,10 @@ class Power : public Operator {
 public:
     Power(DataType dt, PowerParamSpec p)
     {
-        this->dt = dt;
+        this->dt = noQuantDataType(dt);
         this->p = p;
     }
-
+    ~Power(){}
     OperatorType get_type() override
     {
         return OT_Power;

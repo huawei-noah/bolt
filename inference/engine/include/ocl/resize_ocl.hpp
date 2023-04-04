@@ -46,13 +46,12 @@ public:
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
         this->needSetKernelVec = true;
-        CHECK_STATUS(
-            resize_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo));
-        TensorDesc desc = inTensors[0]->get_desc();
-        if (desc.df == DF_NCHWC4 && check_tensors_image(inTensors)) {
-            CHECK_STATUS(set_tensors_image(outTensors, inTensors.size()));
+        EE ret = resize_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo);
+        if (ret == SUCCESS && check_tensors_image(inTensors) &&
+            inTensors[0]->get_desc().df == DF_NCHWC4) {
+            ret = set_tensors_image(outTensors, inTensors.size());
         }
-        return SUCCESS;
+        return ret;
     }
 
     U32 infer_tmp_memory_size() override

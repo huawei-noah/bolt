@@ -32,7 +32,6 @@ namespace raul
  *
  *  MEAN reduction works as 'batchmean' in torch
  *  @see
- *  https://en.wikipedia.org/wiki/Kullback%E2%80%93Leibler_divergence
  */
 class KLDivLoss : public BasicLayer
 {

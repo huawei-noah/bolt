@@ -192,7 +192,6 @@ class Common
      * A[k x m]
      * B[n x k]
      * C[n x m]
-     * https://software.intel.com/en-us/mkl-developer-reference-c-cblas-gemm
      * C = alpha * A * B + beta * C
      * bOffset - in elements (not bytes)
      */
@@ -518,7 +517,6 @@ class Common
 
     /*
      * Gaussian error linear unit
-     * @see https://arxiv.org/abs/1606.08415
      */
     static dtype GeLU_Erf(dtype x);
     static dtype GeLU_Tanh(dtype x);
@@ -790,9 +788,6 @@ class Common
 
     static std::vector<std::string> split(const std::string& string, char delimeter);
 
-    /*
-     * @see https://docs.scipy.org/doc/numpy-1.13.0/user/basics.broadcasting.html
-     */
     template<typename T>
     static bool shapeIsBroadcastable(const T& from, const T& to)
     {

@@ -144,9 +144,8 @@ public:
             this->biasTensors = std::vector<Tensor>(1);
             this->biasTensors[0].resize(tensor1d(this->dt, this->tdnn.num_outputs));
         }
-        CHECK_STATUS(convolution_infer_output_size(&tmpInputTensor, this->weightTensors[0], this->p,
-            outTensors[0], this->dt, &this->archInfo));
-        return SUCCESS;
+        return convolution_infer_output_size(&tmpInputTensor, this->weightTensors[0], this->p,
+            outTensors[0], this->dt, &this->archInfo);
     }
 
 private:

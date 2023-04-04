@@ -34,7 +34,7 @@ class WorkflowEager : public Workflow
         : Workflow(compressionMode, calculationMode, allocationMode, executionTarget, useCompiler, quantizer)
     {
     }
-
+    ~WorkflowEager(){}
     /**
      * @brief Create tensors and allocate memory for not optimized not batched tensors, create shapes for optimized not batched tensors
      */

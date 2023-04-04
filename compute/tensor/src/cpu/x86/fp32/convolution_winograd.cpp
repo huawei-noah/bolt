@@ -19,6 +19,7 @@
 #include "cpu/x86/fp32/convolution_functions.h"
 
 #define BLOCK_IC_DIM 32
+#define BLOCK_OC_DIM 32
 
 void transformInput4x4_3x3(
     F32 *input, F32 *output, F32 *tmp, U32 iw, U32 ih, U32 ic, U32 wSize, U32 blockIc)
@@ -968,6 +969,395 @@ void winoKernel1x32(ConvController &c)
         "%ymm9", "%ymm10", "%ymm11", "%ymm12", "%ymm13", "%ymm14", "%ymm15", "memory", "cc");
 }
 
+void winoKernel3x24(ConvController &c)
+{
+    __asm__ __volatile__(
+        "vxorps %%ymm0, %%ymm0, %%ymm0                             \n\t"
+        "vxorps %%ymm1, %%ymm1, %%ymm1                             \n\t"
+        "vxorps %%ymm2, %%ymm2, %%ymm2                             \n\t"
+        "vxorps %%ymm3, %%ymm3, %%ymm3                             \n\t"
+        "vxorps %%ymm4, %%ymm4, %%ymm4                             \n\t"
+        "vxorps %%ymm5, %%ymm5, %%ymm5                             \n\t"
+        "vxorps %%ymm6, %%ymm6, %%ymm6                             \n\t"
+        "vxorps %%ymm7, %%ymm7, %%ymm7                             \n\t"
+        "vxorps %%ymm8, %%ymm8, %%ymm8                             \n\t"
+
+        ".align 16                                         \n\t"
+        "1:                                                \n\t"
+        "vbroadcastss (%[input0]), %%ymm12                        \n\t"
+        "vbroadcastss (%[input1]), %%ymm13                 \n\t"
+        "vbroadcastss (%[input2]), %%ymm14              \n\t"
+        "vmovups 0x0(%[filter]), %%ymm15                          \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm0              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm1              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm14, %%ymm2              \n\t"
+        "vmovups 0x20(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm3              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm4              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm14, %%ymm5              \n\t"
+        "vmovups 0x40(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm6              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm7              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm14, %%ymm8              \n\t"
+
+        "vbroadcastss 0x4(%[input0]), %%ymm12                        \n\t"
+        "vbroadcastss 0x4(%[input1]), %%ymm13                 \n\t"
+        "vbroadcastss 0x4(%[input2]), %%ymm14              \n\t"
+        "vmovups 0x60(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm0              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm1              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm14, %%ymm2              \n\t"
+        "vmovups 0x80(%[filter]), %%ymm15                          \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm3              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm4              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm14, %%ymm5              \n\t"
+        "vmovups 0xA0(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm6              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm7              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm14, %%ymm8              \n\t"
+
+        "vbroadcastss 0x8(%[input0]), %%ymm12                        \n\t"
+        "vbroadcastss 0x8(%[input1]), %%ymm13                 \n\t"
+        "vbroadcastss 0x8(%[input2]), %%ymm14              \n\t"
+        "vmovups 0xC0(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm0              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm1              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm14, %%ymm2              \n\t"
+        "vmovups 0xE0(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm3              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm4              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm14, %%ymm5              \n\t"
+        "vmovups 0x100(%[filter]), %%ymm15                          \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm6              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm7              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm14, %%ymm8              \n\t"
+
+        "vbroadcastss 0xC(%[input0]), %%ymm12                        \n\t"
+        "vbroadcastss 0xC(%[input1]), %%ymm13                 \n\t"
+        "vbroadcastss 0xC(%[input2]), %%ymm14              \n\t"
+        "vmovups 0x120(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm0              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm1              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm14, %%ymm2              \n\t"
+        "vmovups 0x140(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm3              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm4              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm14, %%ymm5              \n\t"
+        "vmovups 0x160(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm6              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm7              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm14, %%ymm8              \n\t"
+
+        "vbroadcastss 0x10(%[input0]), %%ymm12                        \n\t"
+        "vbroadcastss 0x10(%[input1]), %%ymm13                 \n\t"
+        "vbroadcastss 0x10(%[input2]), %%ymm14              \n\t"
+        "vmovups 0x180(%[filter]), %%ymm15                          \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm0              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm1              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm14, %%ymm2              \n\t"
+        "vmovups 0x1A0(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm3              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm4              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm14, %%ymm5              \n\t"
+        "vmovups 0x1C0(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm6              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm7              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm14, %%ymm8              \n\t"
+
+        "vbroadcastss 0x14(%[input0]), %%ymm12                        \n\t"
+        "vbroadcastss 0x14(%[input1]), %%ymm13                 \n\t"
+        "vbroadcastss 0x14(%[input2]), %%ymm14              \n\t"
+        "vmovups 0x1E0(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm0              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm1              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm14, %%ymm2              \n\t"
+        "vmovups 0x200(%[filter]), %%ymm15                          \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm3              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm4              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm14, %%ymm5              \n\t"
+        "vmovups 0x220(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm6              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm7              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm14, %%ymm8              \n\t"
+
+        "vbroadcastss 0x18(%[input0]), %%ymm12                        \n\t"
+        "vbroadcastss 0x18(%[input1]), %%ymm13                 \n\t"
+        "vbroadcastss 0x18(%[input2]), %%ymm14              \n\t"
+        "vmovups 0x240(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm0              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm1              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm14, %%ymm2              \n\t"
+        "vmovups 0x260(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm3              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm4              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm14, %%ymm5              \n\t"
+        "vmovups 0x280(%[filter]), %%ymm15                          \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm6              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm7              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm14, %%ymm8              \n\t"
+
+        "vbroadcastss 0x1C(%[input0]), %%ymm12                        \n\t"
+        "vbroadcastss 0x1C(%[input1]), %%ymm13                 \n\t"
+        "vbroadcastss 0x1C(%[input2]), %%ymm14              \n\t"
+        "vmovups 0x2A0(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm0              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm1              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm14, %%ymm2              \n\t"
+        "vmovups 0x2C0(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm3              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm4              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm14, %%ymm5              \n\t"
+        "vmovups 0x2E0(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm6              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm7              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm14, %%ymm8              \n\t"
+
+        "add $0x20, %[input0]                                         \n\t"
+        "add $0x20, %[input1]                                         \n\t"
+        "add $0x20, %[input2]                                         \n\t"
+        "add $0x300, %[filter]                                         \n\t"
+        "dec %%rcx                                         \n\t"
+        "jg 1b                                             \n\t"
+
+        "vmovups %%ymm0, (%[output])                             \n\t"
+        "vmovups %%ymm3, 0x20(%[output])                             \n\t"
+        "vmovups %%ymm6, 0x40(%[output])                             \n\t"
+        "vmovups %%ymm1, 0x60(%[output])                             \n\t"
+        "vmovups %%ymm4, 0x80(%[output])                             \n\t"
+        "vmovups %%ymm7, 0xA0(%[output])                             \n\t"
+        "vmovups %%ymm2, 0xC0(%[output])                             \n\t"
+        "vmovups %%ymm5, 0xE0(%[output])                             \n\t"
+        "vmovups %%ymm8, 0x100(%[output])                             \n\t"
+        :
+        : [input0] "r"(c.input[0]), [input1] "r"(c.input[1]), [input2] "r"(c.input[2]),
+        [filter] "r"(c.filter), [output] "r"(c.output), [ic] "c"(c.ic)
+        : "%rax", "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm4", "%ymm5", "%ymm6", "%ymm7", "%ymm8",
+        "%ymm9", "%ymm10", "%ymm11", "%ymm12", "%ymm13", "%ymm14", "%ymm15", "memory", "cc");
+}
+
+void winoKernel2x24(ConvController &c)
+{
+    __asm__ __volatile__(
+        "vxorps %%ymm0, %%ymm0, %%ymm0                             \n\t"
+        "vxorps %%ymm1, %%ymm1, %%ymm1                             \n\t"
+        "vxorps %%ymm3, %%ymm3, %%ymm3                             \n\t"
+        "vxorps %%ymm4, %%ymm4, %%ymm4                             \n\t"
+        "vxorps %%ymm6, %%ymm6, %%ymm6                             \n\t"
+        "vxorps %%ymm7, %%ymm7, %%ymm7                             \n\t"
+
+        ".align 16                                         \n\t"
+        "1:                                                \n\t"
+        "vbroadcastss (%[input0]), %%ymm12                        \n\t"
+        "vbroadcastss (%[input1]), %%ymm13                 \n\t"
+        "vmovups 0x0(%[filter]), %%ymm15                          \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm0              \n\t"
+        "prefetcht0 0x100(%[filter])                              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm1              \n\t"
+        "vmovups 0x20(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm3              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm4              \n\t"
+        "vmovups 0x40(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm6              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm7              \n\t"
+
+        "vbroadcastss 0x4(%[input0]), %%ymm12                        \n\t"
+        "vbroadcastss 0x4(%[input1]), %%ymm13                 \n\t"
+        "vmovups 0x60(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm0              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm1              \n\t"
+        "prefetcht0 0x180(%[filter])                              \n\t"
+        "vmovups 0x80(%[filter]), %%ymm15                          \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm3              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm4              \n\t"
+        "vmovups 0xA0(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm6              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm7              \n\t"
+
+        "vbroadcastss 0x8(%[input0]), %%ymm12                        \n\t"
+        "vbroadcastss 0x8(%[input1]), %%ymm13                 \n\t"
+        "vmovups 0xC0(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm0              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm1              \n\t"
+        "prefetcht0 0x200(%[filter])                              \n\t"
+        "vmovups 0xE0(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm3              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm4              \n\t"
+        "vmovups 0x100(%[filter]), %%ymm15                          \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm6              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm7              \n\t"
+
+        "vbroadcastss 0xC(%[input0]), %%ymm12                        \n\t"
+        "vbroadcastss 0xC(%[input1]), %%ymm13                 \n\t"
+        "vmovups 0x120(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm0              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm1              \n\t"
+        "prefetcht0 0x280(%[filter])                              \n\t"
+        "vmovups 0x140(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm3              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm4              \n\t"
+        "vmovups 0x160(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm6              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm7              \n\t"
+
+        "vbroadcastss 0x10(%[input0]), %%ymm12                        \n\t"
+        "vbroadcastss 0x10(%[input1]), %%ymm13                 \n\t"
+        "vmovups 0x180(%[filter]), %%ymm15                          \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm0              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm1              \n\t"
+        "prefetcht0 0x300(%[filter])                              \n\t"
+        "vmovups 0x1A0(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm3              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm4              \n\t"
+        "vmovups 0x1C0(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm6              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm7              \n\t"
+
+        "vbroadcastss 0x14(%[input0]), %%ymm12                        \n\t"
+        "vbroadcastss 0x14(%[input1]), %%ymm13                 \n\t"
+        "vmovups 0x1E0(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm0              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm1              \n\t"
+        "prefetcht0 0x380(%[filter])                              \n\t"
+        "vmovups 0x200(%[filter]), %%ymm15                          \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm3              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm4              \n\t"
+        "vmovups 0x220(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm6              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm7              \n\t"
+
+        "vbroadcastss 0x18(%[input0]), %%ymm12                        \n\t"
+        "vbroadcastss 0x18(%[input1]), %%ymm13                 \n\t"
+        "vmovups 0x240(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm0              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm1              \n\t"
+        "prefetcht0 0x400(%[filter])                              \n\t"
+        "vmovups 0x260(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm3              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm4              \n\t"
+        "vmovups 0x280(%[filter]), %%ymm15                          \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm6              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm7              \n\t"
+
+        "vbroadcastss 0x1C(%[input0]), %%ymm12                        \n\t"
+        "vbroadcastss 0x1C(%[input1]), %%ymm13                 \n\t"
+        "vmovups 0x2A0(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm0              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm1              \n\t"
+        "prefetcht0 0x480(%[filter])                              \n\t"
+        "vmovups 0x2C0(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm3              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm4              \n\t"
+        "vmovups 0x2E0(%[filter]), %%ymm15                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm6              \n\t"
+        "vfmadd231ps %%ymm15, %%ymm13, %%ymm7              \n\t"
+
+        "add $0x20, %[input0]                                         \n\t"
+        "add $0x20, %[input1]                                         \n\t"
+        "add $0x300, %[filter]                                         \n\t"
+        "dec %%rcx                                         \n\t"
+        "jg 1b                                             \n\t"
+
+        "vmovups %%ymm0, (%[output])                             \n\t"
+        "vmovups %%ymm3, 0x20(%[output])                             \n\t"
+        "vmovups %%ymm6, 0x40(%[output])                             \n\t"
+        "vmovups %%ymm1, 0x60(%[output])                             \n\t"
+        "vmovups %%ymm4, 0x80(%[output])                             \n\t"
+        "vmovups %%ymm7, 0xA0(%[output])                             \n\t"
+        :
+        : [input0] "r"(c.input[0]), [input1] "r"(c.input[1]), [input2] "r"(c.input[2]),
+        [filter] "r"(c.filter), [output] "r"(c.output), [ic] "c"(c.ic)
+        : "%rax", "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm4", "%ymm5", "%ymm6", "%ymm7", "%ymm8",
+        "%ymm9", "%ymm10", "%ymm11", "%ymm12", "%ymm13", "%ymm14", "%ymm15", "memory", "cc");
+}
+
+void winoKernel1x24(ConvController &c)
+{
+    __asm__ __volatile__(
+        "vxorps %%ymm0, %%ymm0, %%ymm0                             \n\t"
+        "vxorps %%ymm3, %%ymm3, %%ymm3                             \n\t"
+        "vxorps %%ymm6, %%ymm6, %%ymm6                             \n\t"
+
+        ".align 16                                         \n\t"
+        "1:                                                \n\t"
+
+        "vbroadcastss (%[input0]), %%ymm12                        \n\t"
+        "vmovups 0x0(%[filter]), %%ymm15                          \n\t"
+        "vmovups 0x20(%[filter]), %%ymm10                         \n\t"
+        "vmovups 0x40(%[filter]), %%ymm13                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm0              \n\t"
+        "vfmadd231ps %%ymm10, %%ymm12, %%ymm3              \n\t"
+        "vfmadd231ps %%ymm13, %%ymm12, %%ymm6              \n\t"
+
+        "vbroadcastss 0x4(%[input0]), %%ymm12                        \n\t"
+        "vmovups 0x60(%[filter]), %%ymm15                          \n\t"
+        "vmovups 0x80(%[filter]), %%ymm10                         \n\t"
+        "vmovups 0xA0(%[filter]), %%ymm13                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm0              \n\t"
+        "vfmadd231ps %%ymm10, %%ymm12, %%ymm3              \n\t"
+        "vfmadd231ps %%ymm13, %%ymm12, %%ymm6              \n\t"
+
+        "vbroadcastss 0x8(%[input0]), %%ymm12                        \n\t"
+        "vmovups 0xC0(%[filter]), %%ymm15                          \n\t"
+        "vmovups 0xE0(%[filter]), %%ymm10                         \n\t"
+        "vmovups 0x100(%[filter]), %%ymm13                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm0              \n\t"
+        "vfmadd231ps %%ymm10, %%ymm12, %%ymm3              \n\t"
+        "vfmadd231ps %%ymm13, %%ymm12, %%ymm6              \n\t"
+
+        "vbroadcastss 0xC(%[input0]), %%ymm12                        \n\t"
+        "vmovups 0x120(%[filter]), %%ymm15                          \n\t"
+        "vmovups 0x140(%[filter]), %%ymm10                         \n\t"
+        "vmovups 0x160(%[filter]), %%ymm13                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm0              \n\t"
+        "vfmadd231ps %%ymm10, %%ymm12, %%ymm3              \n\t"
+        "vfmadd231ps %%ymm13, %%ymm12, %%ymm6              \n\t"
+
+        "vbroadcastss 0x10(%[input0]), %%ymm12                        \n\t"
+        "vmovups 0x180(%[filter]), %%ymm15                          \n\t"
+        "vmovups 0x1A0(%[filter]), %%ymm10                         \n\t"
+        "vmovups 0x1C0(%[filter]), %%ymm13                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm0              \n\t"
+        "vfmadd231ps %%ymm10, %%ymm12, %%ymm3              \n\t"
+        "vfmadd231ps %%ymm13, %%ymm12, %%ymm6              \n\t"
+
+        "vbroadcastss 0x14(%[input0]), %%ymm12                        \n\t"
+        "vmovups 0x1E0(%[filter]), %%ymm15                          \n\t"
+        "vmovups 0x200(%[filter]), %%ymm10                         \n\t"
+        "vmovups 0x220(%[filter]), %%ymm13                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm0              \n\t"
+        "vfmadd231ps %%ymm10, %%ymm12, %%ymm3              \n\t"
+        "vfmadd231ps %%ymm13, %%ymm12, %%ymm6              \n\t"
+
+        "vbroadcastss 0x18(%[input0]), %%ymm12                        \n\t"
+        "vmovups 0x240(%[filter]), %%ymm15                          \n\t"
+        "vmovups 0x260(%[filter]), %%ymm10                         \n\t"
+        "vmovups 0x280(%[filter]), %%ymm13                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm0              \n\t"
+        "vfmadd231ps %%ymm10, %%ymm12, %%ymm3              \n\t"
+        "vfmadd231ps %%ymm13, %%ymm12, %%ymm6              \n\t"
+
+        "vbroadcastss 0x1C(%[input0]), %%ymm12                        \n\t"
+        "vmovups 0x2A0(%[filter]), %%ymm15                          \n\t"
+        "vmovups 0x2C0(%[filter]), %%ymm10                         \n\t"
+        "vmovups 0x2E0(%[filter]), %%ymm13                         \n\t"
+        "vfmadd231ps %%ymm15, %%ymm12, %%ymm0              \n\t"
+        "vfmadd231ps %%ymm10, %%ymm12, %%ymm3              \n\t"
+        "vfmadd231ps %%ymm13, %%ymm12, %%ymm6              \n\t"
+
+        "add $0x20, %[input0]                                         \n\t"
+        "add $0x300, %[filter]                                         \n\t"
+        "dec %%rcx                                         \n\t"
+        "jg 1b                                             \n\t"
+
+        "vmovups %%ymm0, (%[output])                             \n\t"
+        "vmovups %%ymm3, 0x20(%[output])                             \n\t"
+        "vmovups %%ymm6, 0x40(%[output])                             \n\t"
+        :
+        : [input0] "r"(c.input[0]), [filter] "r"(c.filter), [output] "r"(c.output), [ic] "c"(c.ic)
+        : "%rax", "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm4", "%ymm5", "%ymm6", "%ymm7", "%ymm8",
+        "%ymm9", "%ymm10", "%ymm11", "%ymm12", "%ymm13", "%ymm14", "%ymm15", "memory", "cc");
+}
+
 void winoKernel3x16(ConvController &c)
 {
     __asm__ __volatile__(
@@ -1513,10 +1903,11 @@ EE convolution_winograd(TensorDesc inputDesc,
     }
 
     // get kernels
-    const kernelFunc wino[3][3] = {
-        {winoKernel1x8, winoKernel2x8, winoKernel3x8},
+    const kernelFunc wino[4][3] = {
+        {winoKernel1x8, winoKernel2x8,   winoKernel3x8},
         {winoKernel1x16, winoKernel2x16, winoKernel3x16},
-        {winoKernel1x32, winoKernel2x32, winoKernel3x32},
+        {winoKernel1x24, winoKernel2x24, winoKernel3x24},
+        {winoKernel1x32, winoKernel2x32, winoKernel3x32}
     };
 
     // get computing params
@@ -1540,16 +1931,20 @@ EE convolution_winograd(TensorDesc inputDesc,
     paddingB += oPaddingB;
 
     // infer block params
-    I32 ocBlockSizes[] = {8, 16, 32};
+    I32 ocBlockSizes[] = {8, 16, 24, 32};
     I32 wSizes[] = {1, 2, 3};
+    I32 hLoop = oh_pad / 4;
+    I32 ocLoop = (oc + BLOCK_OC_DIM - 1) / BLOCK_OC_DIM;
+    I32 hOcLoop = hLoop * ocLoop;
 
     // infer kernel params
-    ConvController convCtl;
-    convCtl.eltwise = nullptr;
-    F32 *iaddr[3];
-    convCtl.input = iaddr;
     bool noPadI = (paddingT == 0 && paddingB == 0 && paddingL == 0 && paddingR == 0);
     bool noPadO = (oPaddingB == 0 && oPaddingR == 0);
+
+#ifdef _USE_OPENMP
+#pragma omp parallel num_threads(OMP_NUM_THREADS) if (hLoop > (OMP_NUM_THREADS * 2))
+#endif
+        {
     for (U32 n = 0; n < in; ++n) {
         F32 *bInArray = inArray + n * ic * ih * iw;
         F32 *bOutArray = outArray + n * oc * oh * ow;
@@ -1564,12 +1959,28 @@ EE convolution_winograd(TensorDesc inputDesc,
                 mode = activationDesc.mode;
             }
 
-            for (I32 h = 0; h < oh_pad; h += 4) {
-                I32 ocSize = 0;
-                for (U32 ocb = 0; ocb < oc; ocb += ocSize) {
-                    ocSize = UNI_MIN(32, (int)oc - ocb);
-                    ocSize = ocBlockSizes[ocSize >> 4];
+#ifdef _USE_OPENMP
+#pragma omp for schedule(static)
+#endif
+            for (I32 l = 0; l < hLoop; ++l) {
+                I32 h = l * 4;
+
+#ifdef _USE_OPENMP
+                U32 nTmpBytes = (36 * 32 + 36 * 36) * 3 + 36 * icSize * (ow_pad / 4 + 1);
+                F32 *outer_tmp = (F32 *)tmp + nTmpBytes * omp_get_thread_num();
+                F32 *thread_in_tmp = (F32 *)outer_tmp + 36 * icSize * (ow_pad / 4 + 1);
+                F32 *ibuff = (F32 *)outer_tmp;
+#else
+                F32 *thread_in_tmp = (F32 *)tmp + 36 * icSize * (ow_pad / 4 + 1);
+                F32 *ibuff = (F32 *)tmp;
+#endif
+
+                for (I32 ocl = 0; ocl < ocLoop; ++ocl) {
+                    I32 ocb = ocl * BLOCK_OC_DIM;
+                    I32 ocSize = UNI_MIN(BLOCK_OC_DIM, (int)oc - ocb);
+                    ocSize = ocBlockSizes[(ocSize >> 3) - 1];
                     const F32 *bias = biasArray + ocb;
+
                     I32 wSize = 0;
                     for (I32 w = 0; w < ow_pad; w += 4 * wSize) {
                         wSize = UNI_MIN((int)ow_pad - w, 12);
@@ -1578,9 +1989,10 @@ EE convolution_winograd(TensorDesc inputDesc,
                         I32 in_h = h * strideH;
                         F32 *curI;
                         F32 *curO = bOutArray + ocb * oh * ow + (h * ow + w) * 8;
-                        F32 *tmpI = (F32 *)tmp + 36 * icSize * w / 4;
-                        F32 *buff = (F32 *)tmp + 36 * icSize * (ow_pad / 4 + 1);
+                        F32 *tmpI = ibuff + 36 * icSize * w / 4;
+                        F32 *buff = thread_in_tmp;
                         F32 *tmpO = (F32 *)buff + 36 * 36 * wSize;
+
                         if (ocb == 0) {
                             if (noPadI) {
                                 curI = bInArray + icb * ih * iw + (in_h * iw + in_w) * 8;
@@ -1596,6 +2008,10 @@ EE convolution_winograd(TensorDesc inputDesc,
                             }
                         }
 
+                        ConvController convCtl;
+                        convCtl.eltwise = nullptr;
+                        F32 *iaddr[3];
+                        convCtl.input = iaddr;
                         for (I32 i = 0; i < 36; ++i) {
                             convCtl.ic = icSize / 8;
                             convCtl.input[0] = tmpI + i * icSize;
@@ -1604,7 +2020,7 @@ EE convolution_winograd(TensorDesc inputDesc,
                             convCtl.output = tmpO + i * ocSize * wSize;
                             convCtl.filter = filterArray + icb * fn * 36 + ocb * icSize * 36 +
                                 i * ocSize * icSize;
-                            wino[ocSize >> 4][wSize - 1](convCtl);
+                            wino[(ocSize >> 3) - 1][wSize - 1](convCtl);
                         }
                         if (noPadO) {
                             transformOutput4x4_3x3(
@@ -1614,10 +2030,11 @@ EE convolution_winograd(TensorDesc inputDesc,
                                 wSize, addF, oPaddingR, oPaddingB, h, w, mode);
                         }
                     }
+
                 }
             }
         }
     }
-
+    }
     return SUCCESS;
 }

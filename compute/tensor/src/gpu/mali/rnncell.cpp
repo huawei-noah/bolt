@@ -204,6 +204,7 @@ EE rnncell_infer_forward_algorithm_mali(GCLHandle_t handle,
     double minTime = DBL_MAX;
     double minTimePro = DBL_MAX;
     ForwardRunInfoMali bestRunInfo;
+    UNI_MEMSET(&bestRunInfo, 0, sizeof(ForwardRunInfoMali));
     for (U32 i = 0; i < algosNum; i++) {
         GCLMem filter[2];
         GCLMem bias[2];
@@ -266,15 +267,15 @@ EE rnncell_transform_filter_bytes_mali(TensorDesc filterDesc,
     ForwardRunInfoMali_t forwardRunInfo,
     TensorDesc *ftmDesc)
 {
-    EE ret = SUCCESS;
+    EE ret = NOT_SUPPORTED;
     switch (filterDesc.dt) {
-        case DT_F16: {
+        case DT_F16:
+        case DT_F32: {
             ret = rnncell_transform_filter_bytes_mali_fp16(
                 filterDesc, rnnParamSpec, forwardRunInfo, ftmDesc);
             break;
         }
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
     return ret;
@@ -288,15 +289,15 @@ EE rnncell_transform_filter_mali(GCLHandle_t handle,
     GCLMem_t fltmem,
     ForwardRunInfoMali_t forwardRunInfo)
 {
-    EE ret = SUCCESS;
+    EE ret = NOT_SUPPORTED;
     switch (filterDesc.dt) {
-        case DT_F16: {
+        case DT_F16:
+        case DT_F32: {
             ret = rnncell_transform_filter_mali_fp16(
                 handle, filterDesc, filter, rnnParamSpec, fltmemDesc, fltmem, forwardRunInfo);
             break;
         }
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
     return ret;
@@ -309,15 +310,15 @@ EE rnncell_infer_forward_tmp_bytes_mali(TensorDesc inputDesc,
     U32 *bytes,
     ForwardRunInfoMali_t forwardRunInfo)
 {
-    EE ret = SUCCESS;
+    EE ret = NOT_SUPPORTED;
     switch (inputDesc.dt) {
-        case DT_F16: {
+        case DT_F16:
+        case DT_F32: {
             ret = rnncell_infer_forward_tmp_bytes_mali_fp16(
                 inputDesc, filterDesc, outputDesc, rnnPara, bytes, forwardRunInfo);
             break;
         }
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
     return ret;
@@ -340,18 +341,18 @@ EE rnncell_mali(GCLHandle_t handle,
     GCLMem_t output,
     ForwardRunInfoMali_t forwardRunInfo)
 {
-    EE ret = SUCCESS;
-    ret = rnncell_checkpara_mali(
-        handle, xDesc, currentX, filterDesc, filter, bias, state, rnnPara, tmpBuf, hDesc, output);
+    CHECK_STATUS(rnncell_checkpara_mali(
+        handle, xDesc, currentX, filterDesc, filter, bias, state, rnnPara, tmpBuf, hDesc, output));
+    EE ret = NOT_SUPPORTED;
     switch (xDesc.dt) {
-        case DT_F16: {
+        case DT_F16:
+        case DT_F32: {
             ret = rnncell_mali_fp16(handle, xDesc, currentX, filterDesc, filter, biasDesc, bias,
                 state, tmpBytes, tmpBuf, rnnPara, batchStrideX, batchStrideH, hDesc, output,
                 forwardRunInfo);
             break;
         }
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
     return ret;

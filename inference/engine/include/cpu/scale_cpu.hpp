@@ -55,20 +55,18 @@ public:
             this->dataID = 1;
         }
         U32 axisLen = find_target_axis_len(inTensors);
-        CHECK_STATUS(scale_infer_output_size(
-            inTensors[this->dataID], this->p, axisLen, outTensors[0], &this->archInfo));
-        return SUCCESS;
+        return scale_infer_output_size(
+            inTensors[this->dataID], this->p, axisLen, outTensors[0], &this->archInfo);
     }
 
     EE infer_weight_desc() override
     {
-        auto curOpWs = this->get_weightspec();
         this->weightTensors = std::vector<Tensor>(1);
         this->weightTensors[0].resize(
-            tensor1d(this->dt, curOpWs.bytes_of_weight / UNI_MAX(1, bytesOf(curOpWs.mdt))));
+            tensor1d(this->dt, this->ws.bytes_of_weight / UNI_MAX(1, bytesOf(this->ws.mdt))));
         this->biasTensors = std::vector<Tensor>(1);
         this->biasTensors[0].resize(
-            tensor1d(this->dt, curOpWs.bytes_of_vec / UNI_MAX(1, bytesOf(curOpWs.mdt))));
+            tensor1d(this->dt, this->ws.bytes_of_vec / UNI_MAX(1, bytesOf(this->ws.mdt))));
         return SUCCESS;
     }
 };

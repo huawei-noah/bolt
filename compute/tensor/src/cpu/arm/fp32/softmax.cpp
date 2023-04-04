@@ -29,6 +29,7 @@ static void softmax_lastAxis_fp32(const F32 *input, I32 loopOuter, I32 loops, F3
         }
         I32 j = 0;
         float32x4_t sum_v = vdupq_n_f32(0);
+#pragma unroll(4)
         for (; j < loops - 3; j += 4) {
             float32x4_t in = vld1q_f32(inputPtr + j);
             if (!logsoftmax) {

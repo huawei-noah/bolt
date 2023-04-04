@@ -26,8 +26,6 @@ namespace raul::postprocessing
  * normalize gradients like grad[i] * clipNorm / max(globalNorm, clipNorm),
  * where globalNorm = sqrt(sum([l2norm(g)**2 for g in grads]))
  *
- * @see
- * https://www.tensorflow.org/api_docs/python/tf/clip_by_global_norm
  */
 
 struct GradientClipping : public GradientPostprocessor

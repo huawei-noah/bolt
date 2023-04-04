@@ -137,13 +137,10 @@ int matmulTest(int argc, char *argv[], DataType dt)
     CHECK_STATUS(matmul(matrixATensor, transposeA, matrixBTensor, transposeB, biasTensor,
         tmpTensors, matrixCTensor, &archInfo));
 
-    /*warp up*/
-    UNI_INFO_LOG("warm up gpu:\n")
-    for (U32 i = 0; i < 2; i++) {
+    for (U32 i = 0; i < UT_WARMUP; i++) {
         CHECK_STATUS(gcl_run_kernelVec(handle));
     }
-
-#ifdef _DEBUG
+        CHECK_STATUS(gcl_finish(handle));
     std::vector<U32> kernelIndex;
     for (U32 i = 0; i < handle->kernelVec->size(); i++) {
         kernelIndex.push_back(i);
@@ -151,26 +148,22 @@ int matmulTest(int argc, char *argv[], DataType dt)
     CHECK_STATUS(gcl_run_kernelVec_select_ls(handle, kernelIndex));
     CHECK_STATUS(gcl_finish(handle));
     double time = 0;
-    double min_time = DBL_MAX;
-    double max_time = 0;
-    U32 loop = 16;
-    for (U32 i = 0; i < loop; i++) {
+#ifdef _DEBUG
+    for (I32 i = 0; i < UT_LOOPS; i++) {
         CHECK_STATUS(gcl_run_kernelVec_timing(handle, 0, handle->kernelVec->size()));
-        double t = handle->t_execute * 0.001;
-        if (t < min_time)
-            min_time = t;
-        if (t > max_time)
-            max_time = t;
-        time += t;
+        time += handle->t_execute * 0.001;
     }
-    time = (time - min_time - max_time) / (loop - 2);
-    UNI_INFO_LOG("min_time = %lf\n", min_time);
-    UNI_INFO_LOG("max_time = %lf\n", max_time);
-    UNI_INFO_LOG("avg_time = %lf\n", time);
-    time = min_time;
 #else
-    CHECK_STATUS(gcl_run_kernelVec(handle));
+    double start = ut_time_ms();
+    for (I32 i = 0; i < UT_LOOPS; i++) {
+        CHECK_STATUS(gcl_run_kernelVec(handle));
+        CHECK_STATUS(gcl_finish(handle));
+    }
+    double end = ut_time_ms();
+    time = (end - start);
 #endif
+    time /= UT_LOOPS;
+
     U32 cc, ch, cw;
     tensorSelectGet(matrixCDesc, NULL, NULL, NULL, &cc, &ch, &cw);
     U8 *matrixC_gpu = ut_input_v(cc * ch * cw, dt, UT_INIT_RANDOM);
@@ -179,7 +172,6 @@ int matmulTest(int argc, char *argv[], DataType dt)
     char params[120];
     sprintf(params, "(%u %u %u)+(%u %u %u)=(%u %u %u)", ac, ah, aw, bc, bh, bw, cc, ch, cw);
     sprintf(buffer, "%20s, %80s", "matmul", params);
-#ifdef _DEBUG
     U32 k = 0;
     if (transA) {
         k = ah;
@@ -188,7 +180,7 @@ int matmulTest(int argc, char *argv[], DataType dt)
     }
     double ops = 2.0 * cc * cw * ch * k + cc * cw * ch;
     ut_log(dt, buffer, ops, time);
-#endif
+
     matrixADesc.df = DF_NCHW;
     matrixBDesc.df = DF_NCHW;
     Tensor matrixATensorCpu;
@@ -217,7 +209,7 @@ int matmulTest(int argc, char *argv[], DataType dt)
 
     CHECK_STATUS(matmul(matrixATensorCpu, transposeA, matrixBTensorCpu, transposeB, biasTensor,
         tmpTensorsCpu, matrixCTensorCpu, &UT_SERIAL_ARCHINFO));
-    ut_check_a(matrixC_gpu, get_ptr_from_tensor(matrixCTensorCpu, CPU_GENERAL), cc * ch * cw, dt);
+    ut_check_v(matrixC_gpu, get_ptr_from_tensor(matrixCTensorCpu, CPU_GENERAL), cc * ch * cw, dt, 0.3);
 
     CHECK_STATUS(gcl_finish(handle));
     CHECK_STATUS(gcl_clean_kernelVec(handle));
@@ -229,8 +221,6 @@ int matmulTest(int argc, char *argv[], DataType dt)
 
 int main(int argc, char **argv)
 {
-#ifdef _USE_FP16
     matmulTest(argc, argv, DT_F16);
-#endif
     return 0;
 }

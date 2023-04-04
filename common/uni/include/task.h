@@ -86,7 +86,7 @@ public:
     {
         this->set(task->id, task->graphPath, task->data, task->status);
     }
-
+    ~Task(){}
     /**
      * @brief Task set function
      * @param  id             time series data stamp

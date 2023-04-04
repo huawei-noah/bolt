@@ -26,7 +26,7 @@ class Tensorflow2Caffe:
         self.weight_size_map = {}
         Operators.set_calculate(calculate)
         self.quantization = quantization
-        self.quantization_max = {}
+        self.quantization_values = {}
 
     def load_tensorflow_model_from_ckpt(self, tensorflow_model_path):
         from tensorflow.python.training import checkpoint_utils
@@ -103,6 +103,8 @@ class Tensorflow2Caffe:
             return self.load_tensorflow_model_from_pb(tensorflow_model_path)
         if (model_path_suffix[-1].startswith("ckpt")):
             return self.load_tensorflow_model_from_ckpt(tensorflow_model_path)
+        if (model_path_suffix[-1].startswith("meta")):
+            return self.load_tensorflow_model_from_ckpt(tensorflow_model_path[:-5])
         if (model_path_suffix[-1].startswith("h5") or model_path_suffix[-1].startswith("hdf5")):
             return self.load_keras_model_from_h5(tensorflow_model_path)
         print("[ERROR] unrecognized file type %s, currently only support *.ckpt, *.pb, *.h5, *.hdf5" % (tensorflow_model_path))
@@ -151,7 +153,17 @@ class Tensorflow2Caffe:
         weight1 = self.get_weight(weight1_name)
         if (len(names) == 3):
             return weight0, weight1
-        print("[ERROR] unsupported get_weights names array's length %d" (len(names)))
+        self.scopes[scope_id + 1] = names[3]
+        weight2_name = self.generate_name(self.scopes, scope_id + 2)
+        weight2 = self.get_weight(weight2_name)
+        if (len(names) == 4):
+            return weight0, weight1, weight2
+        self.scopes[scope_id + 1] = names[4]
+        weight3_name = self.generate_name(self.scopes, scope_id + 2)
+        weight3 = self.get_weight(weight3_name)
+        if (len(names) == 5):
+            return weight0, weight1, weight2, weight3
+        print("[ERROR] unsupported get_weights names array's length %d" % (len(names)))
         exit(1)
 
     def get_tensor(self, name):
@@ -198,12 +210,11 @@ class Tensorflow2Caffe:
         self.caffe_model.save_prototxt(self.caffe_model_path_prefix + ".prototxt")
         self.caffe_model.save(self.caffe_model_path_prefix + ".caffemodel")
         if (self.quantization):
-            print("[INFO] save int8 quantization max value to %s.*" % (self.caffe_model_path_prefix+"_quant.txt"))
-            quantizationMaxFile = open(self.caffe_model_path_prefix + "_quant.txt", "w")
-            for key, value in self.quantization_max.items():
-                if (value is not None):
-                    quantizationMaxFile.write("%s %f\n" % (key, value))
-            quantizationMaxFile.close()
+            import json
+            print("[INFO] save int8 quantization max value to %s.*" % (self.caffe_model_path_prefix+"_quant.json"))
+            quantization_file = self.caffe_model_path_prefix + "_quant.json"
+            with open(quantization_file, 'w') as outfile:
+                json.dump(self.quantization_values, outfile, indent=4)
 
     def print_tensor(self, name):
         Operators.print_data(self.get_tensor(name), name)
@@ -308,12 +319,16 @@ class Tensorflow2Caffe:
         for item in output_names:
             print("[INFO] add model output %s" % (item))
 
-    def add_quantization(self, scope_id, tensorflow_weight_name, output_name):
+    def add_quantization(self, scope_id, tensorflow_weight_name, layer_name, tensor_name, field):
         self.scopes[scope_id] = tensorflow_weight_name
         self.scopes[scope_id+1] = "a_quant_max"
         weight_name = self.generate_name(self.scopes, scope_id+2)
         weight = self.get_weight(weight_name)
-        self.quantization_max[output_name] = weight
+        layer_dict = self.quantization_values.get(layer_name, dict())
+        field_dict = layer_dict.get(field, dict())
+        field_dict[tensor_name] = weight
+        layer_dict[field] = field_dict
+        self.quantization_values[layer_name] = layer_dict
 
     def add_concat(self, input_names, output_name, axis):
         layer = caffe_net.LayerParameter(name=output_name, type='Concat',
@@ -843,6 +858,24 @@ class Tensorflow2Caffe:
                                           weight, axis, output_name)
         return output_name
 
+    def add_cum_sum(self, input_name, axis, exclusive, reverse, output_name):
+        operation = 1 # SUM
+        layer = caffe_net.LayerParameter(name=output_name, type='Cum',
+                    bottom=[input_name], top=[output_name])
+        layer.cum_param(operation, axis, exclusive, reverse)
+        self.caffe_model.add_layer(layer)
+        self.data_dict[output_name] = Operators.cum(self.data_dict[input_name], operation, axis, exclusive, reverse, output_name)
+        return output_name
+
+    def add_cum_prod(self, input_name, axis, exclusive, reverse, output_name):
+        operation = 0 # PROD
+        layer = caffe_net.LayerParameter(name=output_name, type='Cum',
+                    bottom=[input_name], top=[output_name])
+        layer.cum_param(operation, axis, exclusive, reverse)
+        self.caffe_model.add_layer(layer)
+        self.data_dict[output_name] = Operators.cum(self.data_dict[input_name], operation, axis, exclusive, reverse, output_name)
+        return output_name
+
     def add_reduce_mean(self, input_name, axis, keep_dim, output_name):
         operation = 4 # MEAN
         layer = caffe_net.LayerParameter(name=output_name, type='Reduction',
@@ -893,46 +926,67 @@ class Tensorflow2Caffe:
         self.data_dict[output_name] = Operators.argmax(self.data_dict[input_name], axis, output_name)
         return output_name
 
-    def extract_rnn(self, mode, input_name, state_name, output_name, scope_id,
+    def get_rnn_mode(self, mode):
+        if (mode == "LSTM"):
+            return 4
+        elif (mode == "GRU"):
+            return 3
+        elif (mode == "GRU_LBR"):
+            return 3
+        else:
+            print("[ERROR] RNN can not support %s" % (mode))
+            exit(1)
+
+    def extract_rnn(self, mode, input_name, state_name, output_names, scope_id,
             steps=-1, scope_name="basic_lstm_cell",
             use_proj=False, zoneout_cell=0, zoneout_output=0, linear_before_reset=False):
         if (isinstance(scope_name, str)):
             scope_name = [scope_name]
+        if (isinstance(output_names, str)):
+            output_names = [output_names]
         bottom = [input_name]
         if (state_name is not None):
             bottom.append(state_name)
-        layer = caffe_net.LayerParameter(name=output_name, type=mode,
-                    bottom=bottom, top=[output_name])
-        if (mode == "LSTM"):
-            factor = 4
-        elif (mode == "GRU"):
-            factor = 3
-        elif (mode == "GRU_LBR"):
-            factor = 3
-        else:
-            print("[ERROR] RNN can not support %s" % (mode))
-            exit(1)
+        layer = caffe_net.LayerParameter(name=output_names[0], type=mode,
+                    bottom=bottom, top=output_names)
+        factor = self.get_rnn_mode(mode)
         kernels = []
         biases = []
         projections = []
         projection_biases = []
         for i in range(len(scope_name)):
-            kernel, bias = self.get_weights(scope_id, [scope_name[i], "kernel", "bias"])
-            projection_size = 0;
-            projection = None
+            if self.quantization:
+                kernel, bias, range1, range2 = self.get_weights(scope_id, [scope_name[i], "kernel", "bias", "range1", "range2"])
+                layer_val = {}
+                if (range2 is not None) and (range2.size > 0) and (range2[0] > 0):
+                    layer_val["inputs"] = {input_name: float(range2[0])}
+                if (range1 is not None) and (range1.size > 0) and (range1[0] > 0):
+                    layer_val["weights"] = {output_names[0] + "_weight": float(range1[0])}
+                if layer_val:
+                    self.quantization_values[output_names[0]] = layer_val
+            else:
+                kernel, bias = self.get_weights(scope_id, [scope_name[i], "kernel", "bias"])
+
+            num_output_4 = len(kernel[0])
+            if (bias is not None) and (len(bias) != num_output_4):
+                print("[ERROR] extract_rnn failed")
+                exit(0)
+
+            projection_size = 0
             if (use_proj):
                 self.scopes[scope_id] = scope_name[i]
                 projection, projection_bias = self.get_weights(scope_id+1, ["projection", "kernel", "bias"])
                 projection_size = projection.shape[0]
-            num_output_4 = len(kernel[0])
-            if (bias is not None):
-                if (len(bias) != num_output_4):
-                    print("[ERROR] extract_rnn failed")
-                    exit(0)
-            if (use_proj):
                 num_output = projection.shape[1]
+                projections.append(projection.transpose([1, 0]))
+                if (projection_bias is not None):
+                    projection_bias = np.zeros(num_output)
+                projection_biases.append(projection_bias)
             else:
                 num_output = num_output_4 // factor
+                projections.append(None)
+                projection_biases.append(None)
+
             if (self.calculate and len(kernel) != self.get_tensor_shape(input_name)[-1] + num_output):
                 kernel_2, bias_2 = self.get_weights(scope_id, [scope_name[i], "recurrent_kernel", "bias"])
                 if (kernel_2 is not None):
@@ -941,14 +995,7 @@ class Tensorflow2Caffe:
             if (bias is None):
                 bias = np.zeros([num_output_4 // 2])
             biases.append(bias)
-            if (use_proj):
-                projections.append(projection.transpose([1, 0]))
-                if (projection_bias is not None):
-                    projection_bias = np.zeros(num_output)
-                projection_biases.append(projection_bias)
-            else:
-                projections.append(None)
-                projection_biases.append(None)
+
         if (use_proj):
             if (projection_biases[0] is not None):
                 layer.add_data(np.concatenate(kernels, axis=0), np.concatenate(biases, axis=0),
@@ -959,43 +1006,54 @@ class Tensorflow2Caffe:
         else:
             layer.add_data(np.concatenate(kernels, axis=0),
                 np.concatenate(biases, axis=0))
-        if (mode == "LSTM"):
-            layer.lstm_param(num_output, steps, projection_size, zoneout_cell, zoneout_output)
-        elif (mode == "GRU"):
-            layer.lstm_param(num_output, steps, projection_size, zoneout_cell, zoneout_output)
-        elif (mode == "GRU_LBR"):
-            layer.lstm_param(num_output, steps, projection_size, zoneout_cell, zoneout_output)
-        else:
-            print("[ERROR] RNN can not support %s" % (mode))
-            exit(1)
+
+        layer.lstm_param(num_output, steps, projection_size, zoneout_cell, zoneout_output)
+
         self.caffe_model.add_layer(layer)
+        state = None
         if (steps >= 0):
-            self.data_dict[output_name] = Operators.fw_rnn(mode, self.data_dict[input_name],
+            self.data_dict[output_names[0]], state = Operators.fw_rnn(mode, self.data_dict[input_name],
                 kernels[0],
                 biases[0],
                 projections[0],
                 projection_biases[0],
                 zoneout_cell, zoneout_output,
-                output_name)
+                output_names[0])
         elif (steps == -1):
-            self.data_dict[output_name], self.data_dict[state_name] = Operators.rnn(mode, self.data_dict[input_name],
+            self.data_dict[output_names[0]], self.data_dict[state_name] = Operators.rnn(mode, self.data_dict[input_name],
                 self.data_dict[state_name],
                 kernels[0],
                 biases[0],
                 projections[0],
                 projection_biases[0],
                 zoneout_cell, zoneout_output,
-                output_name,
+                output_names[0],
                 state_name)
         elif (steps == -2):
-            self.data_dict[output_name] = Operators.bi_rnn(mode, self.data_dict[input_name],
+            self.data_dict[output_names[0]], state = Operators.bi_rnn(mode, self.data_dict[input_name],
                 kernels,
                 biases,
                 projections,
                 projection_biases,
                 zoneout_cell, zoneout_output,
-                output_name)
-        return output_name
+                output_names[0])
+        if len(output_names) == 2:
+            self.data_dict[output_names[1]] = state
+        if len(output_names) == 3:
+            batch = self.data_dict[output_names[0]].shape[0]
+            num = 1
+            if (steps == -2):
+                num = 2
+            chdim = state.shape[-1] // num
+            hdim = num_output
+            cdim = chdim - hdim
+            self.data_dict[output_names[1]] = np.zeros([batch, hdim * num])
+            self.data_dict[output_names[2]] = np.zeros([batch, cdim * num])
+            for n in range(batch):
+                for i in range(num):
+                    self.data_dict[output_names[2]][n, i*cdim:(i+1)*cdim] = state[n, i*chdim:i*chdim+cdim]
+                    self.data_dict[output_names[1]][n, i*hdim:(i+1)*hdim] = state[n, i*chdim+cdim:(i+1)*chdim]
+        return output_names[0] 
 
     def add_check(self, left_name, right_name, condition, status_name):
         layer = caffe_net.LayerParameter(name=status_name, type='Check',
@@ -1141,4 +1199,14 @@ class Tensorflow2Caffe:
                     top=[output_name])
         self.caffe_model.add_layer(layer)
         self.data_dict[output_name] = Operators.mish(self.data_dict[input_name], output_name)
+        return output_name
+
+    def add_onehot(self, input_name, output_name, axis, depth, off_value=0, on_value=1):
+        layer = caffe_net.LayerParameter(name=output_name, type='OneHot',
+                    bottom=[input_name],
+                    top=[output_name])
+        layer.onehot_param(axis, depth, off_value, on_value)
+        self.caffe_model.add_layer(layer)
+        self.data_dict[output_name] = Operators.onehot(self.data_dict[input_name], axis, depth,
+            off_value, on_value, output_name)
         return output_name

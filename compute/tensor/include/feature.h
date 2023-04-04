@@ -224,7 +224,6 @@ inline void embedding_combine(const std::vector<T *> &input, const uint32_t &dim
         }
     } else {
         printf("[ERROR] currently not support combine function %d.\n", combiner);
-        exit(1);
     }
 }
 

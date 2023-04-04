@@ -16,23 +16,18 @@
 
 int fullyConnectedTest(int argc, char *argv[], DataType dt)
 {
-    U32 in, ic, ih, iw;
-    U32 fn, fc;
-    U32 on, oc, oh, ow;
-    U32 biasNum;
     ArchInfo archInfo;
     archInfo.arch = MALI;
     if (gcl_check_device_qualcomm(OCLContext::getInstance().handle.get())) {
         archInfo.arch = QUALCOMM;
     }
 
-    in = 1;
-    ic = 4;
-    ih = 4;
-    iw = 4;
-    fc = 64;
-    fn = 4;
-
+    U32 in = 1;
+    U32 ic = 4;
+    U32 ih = 4;
+    U32 iw = 4;
+    U32 fc = 64;
+    U32 fn = 4;
     if (argc == 7) {
         in = atoi(argv[1]);
         ic = atoi(argv[2]);
@@ -41,19 +36,17 @@ int fullyConnectedTest(int argc, char *argv[], DataType dt)
         fc = atoi(argv[5]);
         fn = atoi(argv[6]);
     }
-
     if (iw != fc && in * ic * ih * iw != fc) {
         CHECK_STATUS(NOT_MATCH);
     }
     U32 row = (in * ic * ih * iw) / fc;
+    U32 on, oc, oh, ow;
 
-    TensorDesc inputDesc, filterDesc, outputDesc, biasDesc;
-    TensorDesc filterDesc_cpu, outputDesc_cpu;
-
-    inputDesc = tensor4df(dt, DF_NCHW, in, ic, ih, iw);
-    filterDesc = tensor2df(dt, DF_NORMAL, fn, fc);
-    outputDesc_cpu = tensor2df(dt, DF_NORMAL, oh, ow);
-    biasDesc = tensor1d(dt, fn);
+    TensorDesc inputDesc = tensor4df(dt, DF_NCHW, in, ic, ih, iw);
+    TensorDesc filterDesc = tensor2df(dt, DF_NORMAL, fn, fc);
+    TensorDesc outputDesc_cpu = tensor2df(dt, DF_NORMAL, row, fn);
+    TensorDesc biasDesc = tensor1d(dt, fn);
+    TensorDesc outputDesc;
 
     U8 *input_cpu = ut_input_v(in * ic * ih * iw, dt, UT_INIT_RANDOM);
     U8 *filter_cpu = ut_input_v(fn * fc, dt, UT_INIT_RANDOM);
@@ -107,8 +100,7 @@ int fullyConnectedTest(int argc, char *argv[], DataType dt)
     alloc(filterTensor);
     CHECK_STATUS(gcl_fill_memory_zero(handle, input));
 
-    U32 item_m = runInfo.best_h[0];
-    biasNum = (fn + item_m - 1) / item_m * item_m;
+    U32 biasNum = UNI_ALIGN(fn, runInfo.best_h[0]);
     if (biasNum > fn) {
         U8 *bias_val = ut_input_v(biasNum, dt, UT_INIT_ZERO);
         UNI_MEMCPY(bias_val, bias_cpu, fn * bytesOf(dt));
@@ -141,17 +133,28 @@ int fullyConnectedTest(int argc, char *argv[], DataType dt)
     CHECK_STATUS(
         fully_connected(inputTensor, filterTensor, biasTensor, tmpTensors, outputTensor, &archInfo));
 
-    /*warp up*/
-    for (U32 i = 0; i < 2; i++) {
+    for (U32 i = 0; i < UT_WARMUP; i++) {
         CHECK_STATUS(gcl_run_kernelVec(handle));
     }
+    CHECK_STATUS(gcl_finish(handle));
 
+    double time = 0;
 #ifdef _DEBUG
-    CHECK_STATUS(gcl_run_kernelVec_timing(handle, 0, handle->kernelVec->size()));
-    double time = handle->t_execute * 0.001;
+    for (I32 i = 0; i < UT_LOOPS; i++) {
+        CHECK_STATUS(gcl_run_kernelVec_timing(handle, 0, handle->kernelVec->size()));
+        time += handle->t_execute * 0.001;
+    }
 #else
-    CHECK_STATUS(gcl_run_kernelVec(handle));
+    double start = ut_time_ms();
+    for (I32 i = 0; i < UT_LOOPS; i++) {
+        CHECK_STATUS(gcl_run_kernelVec(handle));
+        CHECK_STATUS(gcl_finish(handle));
+    }
+    double end = ut_time_ms();
+    time = (end - start);
 #endif
+    time /= UT_LOOPS;
+
     CHECK_STATUS(ocl_get_output(handle, output, outputDesc, output_gpu, tmpbuf, true));
 
     char buffer[150];
@@ -159,10 +162,9 @@ int fullyConnectedTest(int argc, char *argv[], DataType dt)
     tensorSelectGet(outputDesc, NULL, NULL, &on, &oc, &oh, &ow);
     sprintf(params, "(%u %u %u %u)+(%u %u)=(%u %u %u %u)", in, ic, ih, iw, fn, fc, on, oc, oh, ow);
     sprintf(buffer, "%20s, %80s", "InnerProdect", params);
-#ifdef _DEBUG
     double ops = 2.0 * ow * oh * fc + 1.0 * ow * oh;
     ut_log(dt, buffer, ops, time);
-#endif
+
     if (row > 1) {
         filterDesc = tensor2df(dt, DF_TRANSPOSE, fn, fc);
     }
@@ -190,13 +192,14 @@ int fullyConnectedTest(int argc, char *argv[], DataType dt)
     Tensor tmpTensorCpu;
     CHECK_STATUS(fully_connected_infer_forward_tmp_bytes(
         inputTensorCpu, filterTensorCpu, outputTensorCpu, &tmpBytes, &UT_SERIAL_ARCHINFO));
-    tmpTensorCpu.resize(tensor1d(DT_F16, tmpBytes / bytesOf(DT_F16)));
+    tmpTensorCpu.resize(tensor1d(dt, tmpBytes / bytesOf(dt)));
     tmpTensorCpu.alloc();
     std::vector<Tensor> tmpTensorsCpu(1, tmpTensorCpu);
 
     CHECK_STATUS(fully_connected(inputTensorCpu, filterTensorCpu, biasTensorCpu, tmpTensorsCpu,
         outputTensorCpu, &UT_SERIAL_ARCHINFO));
-    ut_check_a(output_gpu, get_ptr_from_tensor(outputTensorCpu, CPU_GENERAL), on * oc * ow * oh, dt);
+    ut_check_v(
+        output_gpu, get_ptr_from_tensor(outputTensorCpu, CPU_GENERAL), on * oc * ow * oh, dt, 0.01);
 
     free(input_cpu);
     free(filter_cpu);
@@ -209,6 +212,8 @@ int main(int argc, char **argv)
 {
 #ifdef _USE_FP16
     fullyConnectedTest(argc, argv, DT_F16);
+#else
+    fullyConnectedTest(argc, argv, DT_F32);
 #endif
     return 0;
 }

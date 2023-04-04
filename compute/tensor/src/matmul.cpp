@@ -179,18 +179,17 @@ EE mmm_infer_forward_tmp_bytes(U32 *bytes,
     Arch arch)
 {
     EE ret = NOT_SUPPORTED;
-    if (matrixADesc.dims[1 - kDimA] == 1 || matrixBDesc.dims[1 - kDimB] == 1) {
-        TensorDesc matrixDesc, vectorDesc;
-        if (matrixADesc.dims[1 - kDimA] == 1) {
-            matrixDesc =
-                tensor2df(matrixBDesc.dt, dataFormatB, matrixBDesc.dims[1], matrixBDesc.dims[0]);
-            vectorDesc = tensor1d(matrixADesc.dt, matrixADesc.dims[kDimA]);
-        } else {
-            matrixDesc =
-                tensor2df(matrixADesc.dt, dataFormatA, matrixADesc.dims[1], matrixADesc.dims[0]);
-            vectorDesc = tensor1d(matrixBDesc.dt, matrixBDesc.dims[kDimB]);
-        }
-        ret = matrix_vector_multiply_tmp_bytes(matrixDesc, vectorDesc, bytes, arch);
+    if (matrixADesc.dims[1 - kDimA] == 1) {
+        TensorDesc matrixA1DDesc = tensor1d(matrixADesc.dt, matrixADesc.dims[kDimA]);
+        TensorDesc matrixB2DDesc = tensor2df(matrixBDesc.dt,
+            (dataFormatB == DF_TRANSPOSE) ? DF_NORMAL : DF_TRANSPOSE, matrixBDesc.dims[1],
+            matrixBDesc.dims[0]);
+        ret = matrix_vector_multiply_tmp_bytes(matrixB2DDesc, matrixA1DDesc, bytes, arch);
+    } else if (matrixBDesc.dims[1 - kDimB] == 1) {
+        TensorDesc matrixA2DDesc =
+            tensor2df(matrixADesc.dt, dataFormatA, matrixADesc.dims[1], matrixADesc.dims[0]);
+        TensorDesc matrixB1DDesc = tensor1d(matrixBDesc.dt, matrixBDesc.dims[kDimB]);
+        ret = matrix_vector_multiply_tmp_bytes(matrixA2DDesc, matrixB1DDesc, bytes, arch);
     } else {
         TensorDesc matrixA2DDesc =
             tensor2df(matrixADesc.dt, dataFormatA, matrixADesc.dims[1], matrixADesc.dims[0]);
@@ -209,13 +208,12 @@ EE matmul_infer_forward_tmp_bytes(Tensor matrixATensor,
     U32 *bytes,
     ArchInfo_t archInfo)
 {
+    if (bytes == nullptr) {
+        return NULL_POINTER;
+    }
     TensorDesc matrixADesc = matrixATensor.get_desc();
     TensorDesc matrixBDesc = matrixBTensor.get_desc();
     TensorDesc matrixCDesc = matrixCTensor.get_desc();
-
-    if (bytes == nullptr) {
-        CHECK_STATUS(NULL_POINTER);
-    }
     if (IS_GPU(archInfo->arch)) {
 #ifdef _USE_GPU
         GCLMemDesc gclmemMatrixADesc = ocl_get_desc(matrixATensor);
@@ -224,6 +222,8 @@ EE matmul_infer_forward_tmp_bytes(Tensor matrixATensor,
         return matmul_infer_forward_tmp_bytes_mali(matrixADesc, transposeA, matrixBDesc, transposeB,
             matrixCDesc, gclmemMatrixADesc, gclmemMatrixBDesc, gclmemMatrixCDesc, bytes,
             ((MaliPara_t)(archInfo->archPara))->forwardRunInfo);
+#else
+        return NOT_SUPPORTED;
 #endif
     }
     bool quantA = false;
@@ -286,10 +286,10 @@ EE matmul_infer_forward_tmp_bytes(Tensor matrixATensor,
     *bytes *= loopsC;
 #endif
 
-    if (quantA) {
+    if (quantA || !isSameDataFormat(matrixADesc.df, DF_NCHW)) {
         *bytes += tensorNumBytes(matrixADesc);
     }
-    if (quantB) {
+    if (quantB || !isSameDataFormat(matrixBDesc.df, DF_NCHW)) {
         *bytes += tensorNumBytes(matrixBDesc);
     }
     if (quantC) {
@@ -321,7 +321,7 @@ EE matmul(Tensor matrixATensor,
     bool useINT8 =
         useINT8Type(matrixADesc.dt, matrixBDesc.dt, matrixCDesc.dt, matrixCTensor.get_scale());
     if (matrixA == nullptr || matrixB == nullptr || matrixC == nullptr) {
-        CHECK_STATUS(NULL_POINTER);
+        return NULL_POINTER;
     }
     if (IS_GPU(arch)) {
 #ifdef _USE_GPU
@@ -338,7 +338,25 @@ EE matmul(Tensor matrixATensor,
             (GCLMem_t)matrixA, matrixBDesc, transposeB, (GCLMem_t)matrixB, biasDesc, (GCLMem_t)bias,
             tmpVec, matrixCDesc, (GCLMem_t)matrixC,
             ((MaliPara_t)(archInfo->archPara))->forwardRunInfo);
+#else
+        return NOT_SUPPORTED;
 #endif
+    }
+    if (!isSameDataFormat(matrixADesc.df, DF_NCHW)) {
+        TensorDesc desc = matrixADesc;
+        desc.df = DF_NCHW;
+        transformToNCHW(matrixADesc, matrixA, desc, tmp);
+        matrixA = tmp;
+        tmp = (U8 *)tmp + tensorNumBytes(matrixADesc);
+        matrixADesc.df = DF_NCHW;
+    }
+    if (!isSameDataFormat(matrixBDesc.df, DF_NCHW)) {
+        TensorDesc desc = matrixBDesc;
+        desc.df = DF_NCHW;
+        transformToNCHW(matrixBDesc, matrixB, desc, tmp);
+        matrixB = tmp;
+        tmp = (U8 *)tmp + tensorNumBytes(matrixBDesc);
+        matrixBDesc.df = DF_NCHW;
     }
     if (matrixADesc.nDims == 1) {
         matrixADesc.nDims = 2;
@@ -433,21 +451,37 @@ EE matmul(Tensor matrixATensor,
     align_input_desc(&matrixADesc, &matrixBDesc);
     std::vector<U8 *> p = {(U8 *)matrixA, (U8 *)matrixB, (U8 *)matrixC, (U8 *)tmp};
 
-    if (biasTensor.bytes() > 0) {
-        U8 *bias = (U8 *)get_ptr_from_tensor(biasTensor, arch);
-        for (U32 i = 0; i < tensorNumBytes(matrixCDesc) / biasTensor.bytes(); i++) {
-            UNI_MEMCPY((U8 *)matrixC + i * biasTensor.bytes(), bias, biasTensor.bytes());
+#if defined(_USE_OPENMP) && defined(_USE_CPU)
+#pragma omp parallel num_threads(OMP_NUM_THREADS)
+#endif
+    {
+        if (biasTensor.bytes() > 0) {
+            U8 *bias = (U8 *)get_ptr_from_tensor(biasTensor, arch);
+#if defined(_USE_OPENMP)
+#pragma omp for
+#endif
+            for (U32 i = 0; i < tensorNumBytes(matrixCDesc) / biasTensor.bytes(); i++) {
+                UNI_MEMCPY((U8 *)matrixC + i * biasTensor.bytes(), bias, biasTensor.bytes());
+            }
+        } else {
+            U32 allBytes = tensorNumBytes(matrixCDesc);
+            U32 blockBytes = allBytes;
+#if defined(_USE_OPENMP)
+            blockBytes = 128;
+#pragma omp for nowait
+#endif
+            for (U32 i = 0; i < allBytes; i += blockBytes) {
+                UNI_MEMSET((U8 *)matrixC + i, 0, UNI_MIN(blockBytes, allBytes - i));
+            }
         }
-    } else {
-        UNI_MEMSET(matrixC, 0, tensorNumBytes(matrixCDesc));
     }
 
     U32 mmmBytes = 0;
-#if defined(_USE_OPENMP) && defined(_USE_CPU)
-    mmm_infer_forward_tmp_bytes(&mmmBytes, kDimA, kDimB, dataFormatA, dataFormatB, matrixADesc,
-        matrixBDesc, archInfo->arch);
-#pragma omp parallel num_threads(OMP_NUM_THREADS)
-#endif
+    // #if defined(_USE_OPENMP) && defined(_USE_CPU)
+    //     CHECK_STATUS(mmm_infer_forward_tmp_bytes(&mmmBytes, kDimA, kDimB, dataFormatA, dataFormatB,
+    //         matrixADesc, matrixBDesc, archInfo->arch));
+    // #pragma omp parallel num_threads(OMP_NUM_THREADS)
+    // #endif
     {
         U32 matrixA2DBytes = (matrixADesc.dims[1] * matrixADesc.dims[0]) * bytesOf(matrixADesc.dt);
         U32 matrixB2DBytes = (matrixBDesc.dims[1] * matrixBDesc.dims[0]) * bytesOf(matrixBDesc.dt);
@@ -455,9 +489,9 @@ EE matmul(Tensor matrixATensor,
         U32 loopsA = tensorNumElements(matrixADesc) / (matrixADesc.dims[1] * matrixADesc.dims[0]);
         U32 loopsB = tensorNumElements(matrixBDesc) / (matrixBDesc.dims[1] * matrixBDesc.dims[0]);
         U32 loopsC = tensorNumElements(matrixCDesc) / (matrixCDesc.dims[1] * matrixCDesc.dims[0]);
-#if defined(_USE_OPENMP)
-#pragma omp for
-#endif
+        // #if defined(_USE_OPENMP)
+        // #pragma omp for
+        // #endif
         for (U32 ic = 0; ic < loopsC; ic++) {
             U32 ia, ib;
             std::vector<U32> ADims, BDims, CDims;
@@ -492,42 +526,30 @@ EE matmul(Tensor matrixATensor,
             if (matrixADesc.dims[1 - kDimA] == 1) {
                 TensorDesc matrixA1DDesc = tensor1d(matrixADesc.dt, matrixADesc.dims[kDimA]);
                 TensorDesc matrixB2DDesc = tensor2df(matrixBDesc.dt,
-                    transposeB ? DF_NORMAL : DF_TRANSPOSE, matrixBDesc.dims[1], matrixBDesc.dims[0]);
+                    (dataFormatB == DF_TRANSPOSE) ? DF_NORMAL : DF_TRANSPOSE, matrixBDesc.dims[1],
+                    matrixBDesc.dims[0]);
                 TensorDesc matrixC1DDesc = tensor1d(matrixCDesc.dt, matrixCDesc.dims[0]);
-
                 CHECK_STATUS(
                     matrix_vector_multiply(matrixB2DDesc, matrixBPtr, matrixA1DDesc, matrixAPtr,
                         tmpBytes, tmpPtr, matrixC1DDesc, matrixCPtr, scalePtr, archInfo->arch));
+            } else if (matrixBDesc.dims[1 - kDimB] == 1) {
+                TensorDesc matrixA2DDesc = tensor2df(
+                    matrixADesc.dt, dataFormatA, matrixADesc.dims[1], matrixADesc.dims[0]);
+                TensorDesc matrixB1DDesc = tensor1d(matrixBDesc.dt, matrixBDesc.dims[kDimB]);
+                TensorDesc matrixC1DDesc = tensor1d(matrixCDesc.dt, matrixCDesc.dims[1]);
+                CHECK_STATUS(
+                    matrix_vector_multiply(matrixA2DDesc, matrixAPtr, matrixB1DDesc, matrixBPtr,
+                        tmpBytes, tmpPtr, matrixC1DDesc, matrixCPtr, scalePtr, archInfo->arch));
             } else {
-                if (matrixBDesc.dims[1 - kDimB] == 1) {
-                    TensorDesc matrixA2DDesc;
-                    if (transposeA) {
-                        matrixA2DDesc = tensor2df(
-                            matrixADesc.dt, DF_TRANSPOSE, matrixADesc.dims[1], matrixADesc.dims[0]);
-                    } else {
-                        matrixA2DDesc = tensor2df(
-                            matrixADesc.dt, DF_NORMAL, matrixADesc.dims[1], matrixADesc.dims[0]);
-                    }
-                    TensorDesc matrixB1DDesc = tensor1d(matrixBDesc.dt, matrixBDesc.dims[kDimB]);
-                    TensorDesc matrixC1DDesc = tensor1d(matrixCDesc.dt, matrixCDesc.dims[1]);
-
-                    CHECK_STATUS(
-                        matrix_vector_multiply(matrixA2DDesc, matrixAPtr, matrixB1DDesc, matrixBPtr,
-                            tmpBytes, tmpPtr, matrixC1DDesc, matrixCPtr, scalePtr, archInfo->arch));
-                } else {
-                    TensorDesc matrixA2DDesc = tensor2df(
-                        matrixADesc.dt, dataFormatA, matrixADesc.dims[1], matrixADesc.dims[0]);
-                    TensorDesc matrixB2DDesc = tensor2df(
-                        matrixBDesc.dt, dataFormatB, matrixBDesc.dims[1], matrixBDesc.dims[0]);
-                    TensorDesc matrixC2DDesc = tensor2df(
-                        matrixCDesc.dt, DF_NORMAL, matrixCDesc.dims[1], matrixCDesc.dims[0]);
-#if defined(_USE_X86) && defined(_USE_INT8)
-                    UNI_MEMSET(tmpPtr, 0, matrixCDesc.dims[0] * bytesOf(DT_I32));
-#endif
-                    CHECK_STATUS(
-                        matrix_matrix_multiply(matrixA2DDesc, matrixAPtr, matrixB2DDesc, matrixBPtr,
-                            tmpBytes, tmpPtr, matrixC2DDesc, matrixCPtr, scalePtr, archInfo->arch));
-                }
+                TensorDesc matrixA2DDesc = tensor2df(
+                    matrixADesc.dt, dataFormatA, matrixADesc.dims[1], matrixADesc.dims[0]);
+                TensorDesc matrixB2DDesc = tensor2df(
+                    matrixBDesc.dt, dataFormatB, matrixBDesc.dims[1], matrixBDesc.dims[0]);
+                TensorDesc matrixC2DDesc =
+                    tensor2df(matrixCDesc.dt, DF_NORMAL, matrixCDesc.dims[1], matrixCDesc.dims[0]);
+                CHECK_STATUS(
+                    matrix_matrix_multiply(matrixA2DDesc, matrixAPtr, matrixB2DDesc, matrixBPtr,
+                        tmpBytes, tmpPtr, matrixC2DDesc, matrixCPtr, scalePtr, archInfo->arch));
             }
         }
     }

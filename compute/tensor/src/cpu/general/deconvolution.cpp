@@ -13,16 +13,18 @@
 
 #include "cpu/general/tensor_computing_general.h"
 #include "cpu/general/general_functions.h"
+#include "cpu/tensor_computing_cpu.h"
 
-template <typename T>
+template <typename T1, typename T2, typename T3, typename T4, int scaleLength>
 inline EE deconvolution(TensorDesc inputDesc,
-    T *inArray,
+    T1 *inArray,
     TensorDesc filterDesc,
-    const T *filterArray,
+    const T2 *filterArray,
     ConvolutionParamSpec convParamSpec,
-    const T *biasArray,
+    const T4 *biasArray,
+    const T3 *scaleArray,
     TensorDesc outputDesc,
-    T *outArray,
+    T4 *outArray,
     ActivationParamSpec activationDesc)
 {
     DataType idt, fdt, odt;
@@ -39,11 +41,19 @@ inline EE deconvolution(TensorDesc inputDesc,
     U32 paddingT = convParamSpec.pad_top;
     U32 paddingL = convParamSpec.pad_left;
     U32 ocGroupSize = oc / group;
+    U32 icx = 8;
+    U32 ocx = 8;
+    if (idf == DF_NCHWC16) {
+        icx = 16;
+    }
+    if (odf == DF_NCHWC16) {
+        ocx = 16;
+    }
 
     // initialize outputs to 0
-    UNI_MEMSET(outArray, 0, tensorNumBytes(outputDesc));
-    U32 ic8 = ic / 8;
-    U32 oc8 = oc / 8;
+    UNI_MEMSET(outArray, 0, tensorNumElements(outputDesc) * sizeof(T4));
+    U32 ic8 = ic / icx;
+    U32 oc8 = oc / ocx;
     for (U32 n = 0; n < in; n++) {
         for (U32 o = 0; o < oc; o++) {
             U32 groupId = o / ocGroupSize;
@@ -53,10 +63,10 @@ inline EE deconvolution(TensorDesc inputDesc,
                 for (U32 h = 0; h < ih; h++) {
                     for (U32 w = 0; w < iw; w++) {
                         U32 i_off;
-                        if (idf != DF_NCHWC8) {
+                        if ((idf != DF_NCHWC8) && (idf != DF_NCHWC16)) {
                             i_off = ((n * ic + c) * ih + h) * iw + w;
                         } else {
-                            i_off = (((n * ic8 + (c / 8)) * ih + h) * iw + w) * 8 + c % 8;
+                            i_off = (((n * ic8 + (c / icx)) * ih + h) * iw + w) * icx + c % icx;
                         }
                         for (I32 fh_idx = 0; fh_idx < (I32)fh; fh_idx++) {
                             for (I32 fw_idx = 0; fw_idx < (I32)fw; fw_idx++) {
@@ -65,16 +75,16 @@ inline EE deconvolution(TensorDesc inputDesc,
                                 if (oh_idx >= 0 && oh_idx < (I32)oh && ow_idx >= 0 &&
                                     ow_idx < (I32)ow) {
                                     U32 o_off;
-                                    if (odf != DF_NCHWC8) {
+                                    if ((odf != DF_NCHWC8) && (odf != DF_NCHWC16)) {
                                         o_off = ((n * oc + o) * oh + oh_idx) * ow + ow_idx;
                                     } else {
                                         o_off =
-                                            (((n * oc8 + (o / 8)) * oh + oh_idx) * ow + ow_idx) * 8 +
-                                            o % 8;
+                                            (((n * oc8 + (o / ocx)) * oh + oh_idx) * ow + ow_idx) * ocx +
+                                            o % ocx;
                                     }
                                     U32 f_off =
                                         (((c - icStart) * fc + o) * fh + fh_idx) * fw + fw_idx;
-                                    outArray[o_off] += inArray[i_off] * filterArray[f_off];
+                                    outArray[o_off] += inArray[i_off] * (T4)filterArray[f_off];
                                 }
                             }
                         }
@@ -83,16 +93,21 @@ inline EE deconvolution(TensorDesc inputDesc,
             }
         }
     }
+
+    T4 scale = 1;
+    if (scaleLength == 1) {
+        scale = scaleArray[0];
+    }
     // bias
     U32 ohow = oh * ow;
     for (U32 i = 0; i < tensorNumElements(outputDesc); i++) {
         U32 o;
-        if (odf != DF_NCHWC8) {
+        if ((odf != DF_NCHWC8) && (odf != DF_NCHWC16)) {
             o = (i / ohow) % oc;
         } else {
-            o = (i / (ohow * 8)) % oc8 * 8 + i % 8;
+            o = (i / (ohow * ocx)) % oc8 * ocx + i % ocx;
         }
-        outArray[i] += biasArray[o];
+        outArray[i] = scale * outArray[i] + biasArray[o];
         switch (activationDesc.mode) {
             case ACTIVATION_NULL: {
                 break;
@@ -120,6 +135,8 @@ EE deconvolution_general(TensorDesc inputDesc,
     const void *scale,
     TensorDesc biasDesc,
     const void *bias,
+    U32 tmpBytes,
+    void *tmp,
     TensorDesc outputDesc,
     void *output,
     ActivationParamSpec activationDesc)
@@ -130,16 +147,54 @@ EE deconvolution_general(TensorDesc inputDesc,
 
     EE ret = SUCCESS;
     switch (inputDesc.dt) {
+#ifdef _USE_INT8
+        case DT_I8:{
+            F32 scaleI = ((F32 *)scale)[0];
+            if (inputDesc.dt != DT_I8) {
+                TensorDesc qDesc = inputDesc;
+                qDesc.dt = DT_I8;
+                CHECK_STATUS(quantize_cpu(inputDesc, input, &qDesc, tmp, &scaleI, CPU_GENERAL));
+                input = (void *)tmp;
+                inputDesc = qDesc;
+                tmp = (void *)((INT8 *)tmp + tensorNumBytes(inputDesc));
+            }
+            F32 scaleN = 1.0;
+            TensorDesc tmpDesc = outputDesc;
+            void *tmpOutput;
+            if (outputDesc.dt == DT_I8) {
+#ifdef _USE_FP16
+                tmpDesc.dt = DT_F16;
+#else
+                tmpDesc.dt = DT_F32;
+#endif
+                tmpOutput = tmp;
+            } else {
+                tmpOutput = output;
+            }
+#ifdef _USE_FP16
+            ret = deconvolution<INT8, INT8, F32, F16, 1>(inputDesc, (INT8 *)input, filterDesc, (INT8 *)filter,
+                convParamSpec, (F16 *)bias, &scaleN, outputDesc, (F16 *)output, activationDesc);
+#else
+            ret = deconvolution<INT8, INT8, F32, F32, 1>(inputDesc, (INT8 *)input, filterDesc, (INT8 *)filter,
+                convParamSpec, (F32 *)bias, &scaleN, outputDesc, (F32 *)output, activationDesc);
+#endif
+            if (outputDesc.dt == DT_I8) {
+                CHECK_STATUS(quantize_cpu(
+                    tmpDesc, tmpOutput, &outputDesc, output, (F32 *)scale + 1, CPU_GENERAL));
+            }
+            break;
+        }
+#endif
 #ifdef _USE_FP16
         case DT_F16:
-            ret = deconvolution<F16>(inputDesc, (F16 *)input, filterDesc, (F16 *)filter,
-                convParamSpec, (F16 *)bias, outputDesc, (F16 *)output, activationDesc);
+            ret = deconvolution<F16, F16, F16, F16, 0>(inputDesc, (F16 *)input, filterDesc, (F16 *)filter,
+                convParamSpec, (F16 *)bias, nullptr, outputDesc, (F16 *)output, activationDesc);
             break;
 #endif
 #ifdef _USE_FP32
         case DT_F32:
-            ret = deconvolution<F32>(inputDesc, (F32 *)input, filterDesc, (F32 *)filter,
-                convParamSpec, (F32 *)bias, outputDesc, (F32 *)output, activationDesc);
+            ret = deconvolution<F32, F32, F32, F32, 0>(inputDesc, (F32 *)input, filterDesc, (F32 *)filter,
+                convParamSpec, (F32 *)bias, nullptr, outputDesc, (F32 *)output, activationDesc);
             break;
 #endif
         default:

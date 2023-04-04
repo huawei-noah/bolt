@@ -16,7 +16,8 @@
 
 #define UNROLL_W 4
 
-typedef void (*pooling_max_func)(const F32 *curI, F32 *curO, U32 kw, U32 kh, U32 iStep, U32 stride);
+typedef void (*pooling_max_func)(
+    const F32 *curI, F32 *curO, I32 *idx, U32 kw, U32 kh, U32 iw, U32 ihw, U32 w, U32 iStep, U32 stride);
 typedef void (*pooling_mean_func)(
     const F32 *curI, F32 *curO, U32 kw, U32 kh, U32 iStep, U32 stride, F32 poolSize);
 
@@ -98,7 +99,7 @@ EE pooling_c16_fp32(
                     switch (pm) {
                         case POOLING_MAX: {
                             pooling_max[cx >> 4][wSize >> 1](
-                                curI, curO, kw, kh, iStep, strideW * cx * 4);
+                                curI, curO, nullptr, kw, kh, iw, 0, 0, iStep, strideW * cx * 4);
                             break;
                         }
                         case POOLING_MEAN: {

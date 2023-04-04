@@ -16,13 +16,20 @@
 #include "affinity_policy.h"
 #include "uni.h"
 
-EE power_cpu(
-    TensorDesc inputDesc, void *input, PowerParamSpec p, TensorDesc outputDesc, void *output, Arch arch)
+EE power_cpu(TensorDesc inputDesc,
+    void *_input,
+    PowerParamSpec p,
+    TensorDesc outputDesc,
+    void *_output,
+    Arch arch)
 {
-    UNUSED(outputDesc);
-    if (nullptr == input || nullptr == output) {
+    if (nullptr == _input || nullptr == _output) {
         return NULL_POINTER;
     }
+    U8 *input = (U8 *)_input;
+    U8 *output = (U8 *)_output;
+    int ie = bytesOf(inputDesc.dt);
+    int oe = bytesOf(outputDesc.dt);
     ArrayScaleFunction scale_func = get_array_scale_function(arch);
     ArrayPowerFunction power_func = get_array_power_function(arch);
     int size = tensorNumElements(inputDesc);
@@ -35,10 +42,17 @@ EE power_cpu(
     int tile = size;
 #endif
     {
-        int j = i * bytesOf(inputDesc.dt);
         int num = UNI_MIN(size - i, tile);
-        scale_func(inputDesc.dt, ((U8 *)input) + j, ((U8 *)output) + j, num, p.scale, p.shift);
-        power_func(outputDesc.dt, ((U8 *)output) + j, ((U8 *)output) + j, num, p.power);
+        U8* ptr;
+        if (inputDesc.dt != outputDesc.dt) {
+            ptr = output + i * oe;
+            CHECK_REQUIREMENT(transformDataType(inputDesc.dt, input + i * ie, NULL, outputDesc.dt,
+                                  ptr, NULL, num) == 0);
+        } else {
+            ptr = input + i * ie;
+        }
+        scale_func(outputDesc.dt, ptr, output + i * oe, num, p.scale, p.shift);
+        power_func(outputDesc.dt, output + i * oe, output + i * oe, num, p.power);
     }
     return SUCCESS;
 }

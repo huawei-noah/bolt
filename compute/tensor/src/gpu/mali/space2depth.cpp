@@ -23,10 +23,7 @@ inline EE space2depth_checkpara_mali(
     if (handle == nullptr || nullptr == input || nullptr == output) {
         return NULL_POINTER;
     }
-    if (inputDesc.dt != DT_F16) {
-        return NOT_SUPPORTED;
-    }
-    if (outputDesc.dt != DT_F16) {
+    if (inputDesc.dt != outputDesc.dt) {
         return NOT_SUPPORTED;
     }
     return SUCCESS;
@@ -40,8 +37,9 @@ inline EE space2depth_core_mali_fp16(GCLHandle_t handle,
     GCLMem_t output)
 {
     UNUSED(outputDesc);
+    DataType idt;
     U32 iw, ih, ic, in;
-    tensorSelectGet(inputDesc, NULL, NULL, &in, &ic, &ih, &iw);
+    tensorSelectGet(inputDesc, &idt, NULL, &in, &ic, &ih, &iw);
     U32 iw_str, ih_str, iw_off, ih_off, i_off;
     U32 ow_str, oh_str, ow_off, oh_off, o_off;
     CHECK_STATUS(gclmem_get_desc_padding(input->desc, &iw_str, &ih_str, NULL, &iw_off, &ih_off));
@@ -67,7 +65,7 @@ inline EE space2depth_core_mali_fp16(GCLHandle_t handle,
     KernelOpt kernelOpt;
     char kernelName[128];
     CHECK_STATUS(
-        set_space2depth_opt(useNchw, DT_F16, GCL_MEM_BUF, GCL_MEM_BUF, kernelName, &kernelOpt));
+        set_space2depth_opt(useNchw, idt, GCL_MEM_BUF, GCL_MEM_BUF, kernelName, &kernelOpt));
     CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
     CHECK_STATUS(gcl_set_kernelArgs(
         kernel, iw_str, ih_str, ow_str, oh_str, i_off, o_off, gs[0], gs[1], inbuf, outbuf));
@@ -91,7 +89,6 @@ EE space2depth_padding_input_mali(TensorDesc inputDesc,
     DataType idt;
     DataFormat idf;
     U32 iw, ih, ic, in;
-    U32 ow, oh, oc, on;
     tensorSelectGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw);
     if (iw % blockSize != 0) {
         CHECK_STATUS(NOT_MATCH);
@@ -99,11 +96,11 @@ EE space2depth_padding_input_mali(TensorDesc inputDesc,
     if (ih % blockSize != 0) {
         CHECK_STATUS(NOT_MATCH);
     }
-    on = in;
-    oc = oc * blockSize * blockSize;
-    oh = ih / blockSize;
-    ow = iw / blockSize;
-    *outputDesc = tensor4df(DT_F16, DF_NCHW, on, oc, oh, ow);
+    U32 on = in;
+    U32 oc = ic * blockSize * blockSize;
+    U32 oh = ih / blockSize;
+    U32 ow = iw / blockSize;
+    *outputDesc = tensor4df(idt, DF_NCHW, on, oc, oh, ow);
     return SUCCESS;
 }
 
@@ -114,9 +111,6 @@ EE space2depth_mali(GCLHandle_t handle,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
-    EE ret = SUCCESS;
     CHECK_STATUS(space2depth_checkpara_mali(handle, inputDesc, input, outputDesc, output));
-    CHECK_STATUS(
-        space2depth_core_mali_fp16(handle, inputDesc, input, space2DepthPara, outputDesc, output));
-    return ret;
+    return space2depth_core_mali_fp16(handle, inputDesc, input, space2DepthPara, outputDesc, output);
 }

@@ -14,19 +14,9 @@
 #ifndef _H_BLAS_FP32
 #define _H_BLAS_FP32
 
-#include "tensor_desc.h"
-#include "thread_affinity.h"
-#include "uni.h"
+#include "cpu/x86/fp32/blas_common_fp32.h"
 
-EE axpby_fp32(U32 len, F32 a, const F32 *x, F32 b, F32 *y);
-
-void mvm_col_fp32(U32 row, U32 col, F32 *matrix, F32 *vector, F32 *result);
-
-void mvm_row_fp32(U32 row, U32 col, F32 *matrix, F32 *vector, F32 *result);
-
-void mvm_pack_fp32(U32 row, U32 col, F32 *matrix, F32 *vector, F32 *result);
-
-EE matrix_vector_multiply_transform_weight_fp32(TensorDesc desc, F32 *src, F32 *dst);
+EE axpby_fp32(I32 len, F32 a, const F32 *x, F32 b, F32 *y);
 
 inline EE mvm_avx2_fp32(U32 row, U32 col, DataFormat df, F32 *matrix, F32 *vector, F32 *result)
 {
@@ -52,11 +42,7 @@ inline EE mvm_avx2_fp32(U32 row, U32 col, DataFormat df, F32 *matrix, F32 *vecto
 }
 
 void matrix_matrix_multiply_tmp_bytes_fp32(
-    U32 row1, U32 col1, U32 row2, U32 col2, DataType dt, U32 *bytes);
-
-EE matrix_matrix_multiply_transform_rhsN_fp32(TensorDesc desc, F32 *src, F32 *dst);
-
-EE matrix_matrix_multiply_transform_rhsT_fp32(TensorDesc desc, F32 *src, F32 *dst);
+    U32 M, U32 N, U32 K, DataFormat matrixA_df, DataFormat matrixB_df, U32 *bytes);
 
 EE mmm_avx2_fp32(int M,
     int N,
@@ -67,106 +53,12 @@ EE mmm_avx2_fp32(int M,
     F32 *tmp,
     F32 *result);
 
-inline void matrix1_trans_w(U32 size, U32 realSize, U32 blockK, U32 K, F32 *src, F32 *dst)
-{
-    U32 remain = realSize % 4;
-    U32 mainSize = realSize / 4 * 4;
-    __m128i vindex = _mm_set_epi32(K * 3, K * 2, K, 0);
-    F32 *rdst = dst;
-    for (U32 i = 0; i < blockK; ++i) {
-        U32 j;
-        for (j = 0; j < mainSize; j += 4) {
-            if (i % 16 == 0) {
-                _mm_prefetch(src + i + j * K + 16, _MM_HINT_NTA);
-                _mm_prefetch(src + i + (j + 1) * K + 16, _MM_HINT_NTA);
-                _mm_prefetch(src + i + (j + 2) * K + 16, _MM_HINT_NTA);
-                _mm_prefetch(src + i + (j + 3) * K + 16, _MM_HINT_NTA);
-            }
-            _mm_store_ps(dst, _mm_i32gather_ps(src + i + j * K, vindex, 4));
-            dst += 4;
-        }
-        for (; j < realSize; ++j) {
-            if (i % 16 == 0) {
-                _mm_prefetch(src + i + (j + mainSize) * K + 16, _MM_HINT_NTA);
-            }
-            *(dst++) = *(src + i + j * K);
-        }
+EE matrix_vector_multiply_transform_weight_fp32(TensorDesc desc, F32 *src, F32 *dst);
 
-        for (; j < size; ++j) {
-            *(dst++) = 0;
-        }
-    }
-}
+void matrix_matrix_multiply_transform_rhs_bytes_fp32(
+    U32 N, U32 K, DataFormat matrixB_df, U32 *bytes, U32 *rhsBytes);
 
-inline void matrix2_trans_w(U32 size, U32 realSize, U32 blockK, U32 M, F32 *src, F32 *dst)
-{
-    for (U32 i = 0; i < blockK; i++) {
-        for (U32 j = 0; j < size; j += 16) {
-            _mm_prefetch(src + M + j, _MM_HINT_NTA);
-        }
-        UNI_MEMCPY(dst, src, realSize * sizeof(F32));
-        dst += size;
-        src += M;
-    }
-}
+EE matrix_matrix_multiply_transform_rhsN_fp32(TensorDesc desc, F32 *src, F32 *dst);
 
-inline void matrix1_trans(U32 size, U32 blockK, U32 K, F32 *src, F32 *dst)
-{
-    U32 remain = size % 8;
-    size = size / 8 * 8;
-    __m256i vindex = _mm256_set_epi32(K * 7, K * 6, K * 5, K * 4, K * 3, K * 2, K, 0);
-    for (U32 i = 0; i < blockK; ++i) {
-        U32 j;
-        for (j = 0; j < size; j += 8) {
-            if (i % 16 == 0) {
-                _mm_prefetch(src + i + j * K + 16, _MM_HINT_NTA);
-                _mm_prefetch(src + i + (j + 1) * K + 16, _MM_HINT_NTA);
-                _mm_prefetch(src + i + (j + 2) * K + 16, _MM_HINT_NTA);
-                _mm_prefetch(src + i + (j + 3) * K + 16, _MM_HINT_NTA);
-            }
-            _mm256_storeu_ps(dst, _mm256_i32gather_ps(src + i + j * K, vindex, 4));
-            dst += 8;
-        }
-        for (; j < (remain + size); ++j) {
-            if (i % 16 == 0) {
-                _mm_prefetch(src + i + (j + size) * K + 16, _MM_HINT_NTA);
-            }
-            *(dst++) = *(src + i + j * K);
-        }
-    }
-}
-
-inline void matrix2_trans(U32 size, U32 blockK, U32 M, F32 *src, F32 *dst)
-{
-    for (U32 i = 0; i < blockK; i++) {
-        for (U32 j = 0; j < size; j += 16) {
-            _mm_prefetch(src + M + j, _MM_HINT_NTA);
-        }
-        UNI_MEMCPY(dst, src, size * sizeof(F32));
-        dst += size;
-        src += M;
-    }
-}
-
-inline void matrix2_trans_c8(U32 size, U32 blockK, U32 M, F32 *src, F32 *dst)
-{
-    // KNK8, blockK % 8 == 0
-    CHECK_REQUIREMENT(blockK % 8 == 0);
-    U32 remain = size % 4;
-    size = size / 4 * 4;
-    __m128i vindex = _mm_set_epi32(8 * 3, 8 * 2, 8, 0);
-    for (U32 i = 0; i < blockK; i += 8) {
-        for (U32 i8 = 0; i8 < 8; ++i8) {
-            U32 j;
-            for (j = 0; j < size; j += 4) {
-                _mm_store_ps(dst, _mm_i32gather_ps(src + i * M + j * 8 + i8, vindex, 4));
-                dst += 4;
-            }
-            for (; j < remain; ++j) {
-                *(dst++) = *(src + i * M + j * 8 + i8);
-            }
-        }
-    }
-}
-
+EE matrix_matrix_multiply_transform_rhsT_fp32(TensorDesc desc, F32 *src, F32 *dst);
 #endif

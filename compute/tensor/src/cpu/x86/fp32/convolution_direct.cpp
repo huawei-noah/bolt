@@ -1967,7 +1967,6 @@ EE convolution_direct(TensorDesc inputDesc,
     I32 ocBlockNums = InferConvDirectOcBlockNum(oc, ocbArray, unrollOc, unrollOcArray);
     I32 alpha = OMP_NUM_THREADS / gcd<I32>(ocBlockNums, OMP_NUM_THREADS);
     I32 blockHwDim = InferConvBlockHW(ohow, BLOCK_HW_DIM, alpha);
-    blockHwDim = (blockHwDim + unrollHwX - 1) / unrollHwX * unrollHwX;
     if ((ohow <= BLOCK_HW_DIM) && (ocBlockNums % OMP_NUM_THREADS == 0)) {
         blockHwDim = ohow;
     }
@@ -1977,7 +1976,8 @@ EE convolution_direct(TensorDesc inputDesc,
 
 #ifdef _USE_OPENMP
     OpenMPController ompCtr;
-    ompCtr.checkAndSetOpenMP(ohow, BLOCK_HW_DIM, ocBlockNums);
+    U32 computeBlock = oc * fh * fw * ic;
+    ompCtr.checkAndSetOpenMP(ohow, 64, ocBlockNums, computeBlock, 4096);
 #endif
 
     // infer kernel params
@@ -1998,8 +1998,8 @@ EE convolution_direct(TensorDesc inputDesc,
 
 #ifdef _USE_OPENMP
 #pragma omp parallel num_threads(OMP_NUM_THREADS) if (ompCtr.useOmp)
-        {
 #endif
+        {
             I32 flags = 0;
             I32 icSize = 0;
             for (I32 icbb = 0; icbb < (int)ic; icbb += icSize) {
@@ -2044,11 +2044,7 @@ EE convolution_direct(TensorDesc inputDesc,
                     }
                 }
             }
-
-#ifdef _USE_OPENMP
         }
-#endif
     }
-
     return SUCCESS;
 }

@@ -20,9 +20,6 @@
 
 inline EE argmax_checkpara_mali_fp16(TensorDesc inputDesc, TensorDesc outputDesc)
 {
-    if (inputDesc.dt != DT_F16) {
-        return NOT_SUPPORTED;
-    }
     if (outputDesc.dt != DT_U32 && outputDesc.dt != DT_I32) {
         return NOT_SUPPORTED;
     }
@@ -95,7 +92,7 @@ inline EE argmax_core_mali_fp16(GCLHandle_t handle,
             ih_off = oh_off;
             use_index = true;
             len = threadNum;
-#ifdef _DEBUG
+#if 0//def _DEBUG
             CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
             CHECK_STATUS(gcl_print_buffer<F16>(handle, inv1024, input->desc.num, "argmax_input"));
             CHECK_STATUS(gcl_print_buffer<F16>(handle, outv1024, outNum, "argmax_output_value"));
@@ -133,7 +130,7 @@ inline EE argmax_core_mali_fp16(GCLHandle_t handle,
             ih_off = oh_off;
             use_index = true;
             len = threadNum;
-#ifdef _DEBUG
+#if 0//def _DEBUG
             CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
             CHECK_STATUS(gcl_print_buffer<F16>(handle, outv128, outNum, "argmax_output_index"));
             CHECK_STATUS(gcl_print_buffer<U32>(handle, outi128, outNum, "argmax_output_value"));
@@ -152,7 +149,7 @@ inline EE argmax_core_mali_fp16(GCLHandle_t handle,
         CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, iw_off, ih_off, ow_str, oh_str,
             ow_off, oh_off, len, gs[0], gs[1], inv1, ini1, output->mem, output->mem));
         gcl_set_kernelVec(handle, kernel, dim, gs, ls, kernelName);
-#ifdef _DEBUG
+#if 0//def _DEBUG
         if (use_index) {
             CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelNameIndex));
         } else {
@@ -179,8 +176,8 @@ EE argmax_infer_forward_tmp_bytes_mali_fp16(
     ic = (inDims > 2) ? inputDesc.dims[2] : 1;
     U32 size = 1024 * ih * ic * bytesOf(dt);
     size += 1024 * ih * ic * bytesOf(DT_U32);
-    size += ALIGN(128 * ih * ic * bytesOf(dt), BUFFER_ALIGN_BASE);
-    size += ALIGN(128 * ih * ic * bytesOf(DT_U32), BUFFER_ALIGN_BASE);
+    size += UNI_ALIGN(128 * ih * ic * bytesOf(dt), BUFFER_ALIGN_BASE);
+    size += UNI_ALIGN(128 * ih * ic * bytesOf(DT_U32), BUFFER_ALIGN_BASE);
     *bytes = size;
     return SUCCESS;
 }

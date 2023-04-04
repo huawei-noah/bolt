@@ -29,102 +29,24 @@ public:
         return mem;
     }
 
-    Tensor get_data_tensor()
-    {
-        Tensor dataTensor;
-        if (this->p.data_desc.nDims > 0) {
-            CHECK_REQUIREMENT(0 < this->weightTensors.size());
-            dataTensor = this->weightTensors[0];
-        } else {
-            CHECK_REQUIREMENT(0 < this->inputTensors.size());
-            dataTensor = this->inputTensors[0];
-        }
-        return dataTensor;
-    }
-
-    Tensor get_index_tensor()
-    {
-        U32 inputCount = 0;
-        if (this->p.data_desc.nDims == 0) {
-            inputCount++;
-        }
-        Tensor indexTensor;
-        if (this->p.index_desc.nDims > 0) {
-            CHECK_REQUIREMENT(0 < this->biasTensors.size());
-            indexTensor = this->biasTensors[0];
-        } else {
-            CHECK_REQUIREMENT(inputCount < this->inputTensors.size());
-            indexTensor = this->inputTensors[inputCount];
-        }
-        return indexTensor;
-    }
-
-    Tensor get_update_tensor()
-    {
-        U32 inputCount = 0, weightCount = 0;
-        if (this->p.data_desc.nDims == 0) {
-            inputCount++;
-        } else {
-            weightCount++;
-        }
-        if (this->p.index_desc.nDims == 0) {
-            inputCount++;
-        }
-        Tensor updateTensor;
-        if (this->p.update_desc.nDims > 0) {
-            CHECK_REQUIREMENT(weightCount < this->weightTensors.size());
-            updateTensor = this->weightTensors[weightCount++];
-        } else {
-            CHECK_REQUIREMENT(inputCount < this->inputTensors.size());
-            updateTensor = this->inputTensors[inputCount];
-        }
-        return updateTensor;
-    }
-
     void run() override
     {
-        CHECK_STATUS(scatter(get_data_tensor(), get_index_tensor(), get_update_tensor(), this->p,
-            this->temp, this->outputTensors[0], &this->archInfo));
+        CHECK_STATUS(scatter(this->inputTensors[0], this->inputTensors[1], this->inputTensors[2],
+            this->p, this->temp, this->outputTensors[0], &this->archInfo));
     }
 
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
-        Tensor tensor;
-        Tensor *dataTensor;
-        if (this->p.data_desc.nDims > 0) {
-            tensor.resize(this->p.data_desc);
-            dataTensor = &tensor;
-        } else {
-            dataTensor = inTensors[0];
-        }
-        CHECK_STATUS(scatter_infer_output_size(dataTensor, outTensors[0], &this->archInfo));
-        return SUCCESS;
-    }
-
-    EE infer_weight_desc() override
-    {
-        Tensor dataTensor, indexTensor, updateTensor;
-        if (this->p.data_desc.nDims > 0) {
-            dataTensor.resize(this->p.data_desc);
-            this->weightTensors.push_back(dataTensor);
-        }
-        if (this->p.update_desc.nDims > 0) {
-            updateTensor.resize(this->p.update_desc);
-            this->weightTensors.push_back(updateTensor);
-        }
-        if (this->p.index_desc.nDims > 0) {
-            indexTensor.resize(this->p.index_desc);
-            this->biasTensors.push_back(indexTensor);
-        }
-        return SUCCESS;
+        return scatter_infer_output_size(
+            inTensors[0], inTensors[1], inTensors[2], this->p, outTensors[0], &this->archInfo);
     }
 
     U32 infer_tmp_memory_size() override
     {
         U32 bytes = 0;
         CHECK_STATUS(scatter_infer_forward_tmp_bytes(
-            get_data_tensor(), get_update_tensor(), &bytes, &this->archInfo));
+            this->inputTensors[0], this->inputTensors[2], &bytes, &this->archInfo));
         return bytes;
     }
 };

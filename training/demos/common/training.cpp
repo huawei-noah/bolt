@@ -51,7 +51,7 @@
 namespace {
 
 using namespace raul;
-void set_weights_for_training_model(ModelSpec &ms, Graph_t *graph, char *modified_output)
+void set_weights_for_training_model(ModelSpec &ms, Graph_t *graph, const char *modified_output_layer_name)
 {
     std::map<std::string, int> scale_position;
     for (int i = 0; i < ms.num_operator_specs; i++) {
@@ -66,7 +66,7 @@ void set_weights_for_training_model(ModelSpec &ms, Graph_t *graph, char *modifie
             continue;
         }
 
-        if (modified_output != nullptr && std::string(ws.op_name) == std::string(modified_output)) {
+        if (modified_output_layer_name != nullptr && std::string(ws.op_name) == std::string(modified_output_layer_name)) {
             continue;
         }
 
@@ -148,7 +148,7 @@ API_EXPORT API_STATUS add_training_model_from_model_spec(Graph_Description_t *de
                 } else if (softmax_axis == 3) {
                     paramDimStr = "width";
                 } else {
-                    std::cout << "Not support this softmax, exit(-1)...\n\n";
+                    std::cerr << "Not support this softmax, exit(-1)...\n\n";
                     exit(-1);
                 }
                 work->add<SoftMaxActivation>(op_spec.name,
@@ -182,7 +182,7 @@ API_EXPORT API_STATUS add_training_model_from_model_spec(Graph_Description_t *de
                 } else if (bn_axis == 3) {
                     paramDimStr = "width";
                 } else {
-                    std::cout << "Not support this softmax, exit(-1)...\n\n";
+                    std::cerr << "Not support this softmax, exit(-1)...\n\n";
                     exit(-1);
                 }
                 if (ms.ops[i + 1].type == OT_Scale) {
@@ -259,7 +259,7 @@ API_EXPORT API_STATUS add_training_model_from_model_spec(Graph_Description_t *de
                 work->add<LinearLayer>(
                     op_spec.name, LinearParams{{cur_input}, {cur_output_tensor}, fcps.num_outputs});
             } else if (op_spec.type == OT_SharedWeight) {
-                std::cout << "[WARNING] Encounter a shared weight op\n";
+                std::cerr << "[WARNING] Encounter a shared weight op\n";
                 continue;
             } else if (op_spec.type == OT_Unsqueeze) {
                 std::string cur_input = std::string(op_spec.input_tensors_name[0]);
@@ -317,7 +317,7 @@ API_EXPORT API_STATUS add_training_model_from_model_spec(Graph_Description_t *de
                     SlicingParams{cur_input, {"left_" + cur_output_tensor, cur_output_tensor},
                         Dimension::Depth, {-1, 1}});
             } else {
-                std::cout << "Encounter non-supporting operator["
+                std::cerr << "Encounter non-supporting operator["
                           << OperatorTypeName()[op_spec.type] << "]" << std::endl;
                 exit(-1);
             }
@@ -330,20 +330,21 @@ API_EXPORT API_STATUS add_training_model_from_model_spec(Graph_Description_t *de
 }
 
 }  // namespace
-API_STATUS create_general_training_model_from_bolt(Graph_t **graph,
-    const char *input_bolt_path,
-    size_t batch_size,
-    size_t target_size,
+
+API_EXPORT API_STATUS create_graph_from_bolt(const char *bolt_file_path,
+    Graph_t **graph,
     const char *loss_type,
-    bool use_fp16,
-    int *input_shape,
-    int shape_size,
-    char *modified_output)
+    size_t batch_size,
+    const size_t *input_shape,
+    size_t input_shape_count,
+    const char *modified_output_layer_name,
+    size_t modified_output_size,
+    bool use_fp16)
 {
+    CHECK_STRING(bolt_file_path);
     CHECK_NOT_NULL(graph);
-    CHECK_PRECONDITION(batch_size > 0);
-    CHECK_STRING(input_bolt_path);
     CHECK_STRING(loss_type);
+    CHECK_PRECONDITION(batch_size > 0);
 
     try {
         Graph_Description_t *desc = NULL;
@@ -358,17 +359,17 @@ API_STATUS create_general_training_model_from_bolt(Graph_t **graph,
         // deserialize the bolt from the input path in order to generate the model_spec
         ModelSpec ms;
         CHECK_STATUS(mt_create_model(&ms));
-        CHECK_STATUS(deserialize_model_from_file(input_bolt_path, &ms));
+        CHECK_STATUS(deserialize_model_from_file(bolt_file_path, &ms, DT_F32));
 
         // dynamically fix output size
         {
-            if (modified_output != nullptr) {
+            if (modified_output_layer_name != nullptr) {
                 for (int i = 0; i < ms.num_operator_specs; i++) {
-                    if (std::string(ms.ops[i].name) == std::string(modified_output)) {
+                    if (std::string(ms.ops[i].name) == std::string(modified_output_layer_name)) {
                         if (ms.ops[i].type == OT_FC) {
-                            ms.ops[i].ps.fc_spec.num_outputs = target_size;
+                            ms.ops[i].ps.fc_spec.num_outputs = modified_output_size;
                         } else if (ms.ops[i].type == OT_Conv) {
-                            ms.ops[i].ps.conv_spec.num_outputs = target_size;
+                            ms.ops[i].ps.conv_spec.num_outputs = modified_output_size;
                         } else {
                             std::cerr << "Not Fc or Conv layer, please check the layer name.\n\n";
                             return STATUS_ERROR_BAD_NAME;
@@ -386,13 +387,13 @@ API_STATUS create_general_training_model_from_bolt(Graph_t **graph,
                 TensorDesc tensor_desc = ms.input_dims[i];
                 std::vector<int> in_dims = {1, 1, 1, 1};
                 if (tensor_desc.nDims > 4) {
-                    std::cout << "Not support surpassing 4D tensor...\n";
+                    std::cerr << "Not support surpassing 4D tensor...\n";
                     return STATUS_NOT_IMPLEMENTED;
                 }
-                for (int j = 0; j < (int)tensor_desc.nDims; j++) {
+                for (unsigned int j = 0; j < tensor_desc.nDims; j++) {
                     in_dims[3 - j] = tensor_desc.dims[j];
                 }
-                if (shape_size == 4) {
+                if (input_shape_count == 4) {
                     in_dims[0] = input_shape[0];
                     in_dims[1] = input_shape[1];
                     in_dims[2] = input_shape[2];
@@ -412,7 +413,7 @@ API_STATUS create_general_training_model_from_bolt(Graph_t **graph,
         // Create labels layer
         {
             const char *tensors[] = {labels_tensor_name};
-            FORWARD_ERROR(add_data_layer(desc, "labels", tensors, 1, 1, 1, target_size));
+            FORWARD_ERROR(add_data_layer(desc, "labels", tensors, 1, 1, 1, modified_output_size));
         }
 
         // Traverse the operators and create the training graph layer by layer
@@ -440,8 +441,10 @@ API_STATUS create_general_training_model_from_bolt(Graph_t **graph,
 
         // set weights from ms(bolt) to graph(raul)
         {
-            set_weights_for_training_model(ms, *graph, modified_output);
+            set_weights_for_training_model(ms, *graph, modified_output_layer_name);
         }
+
+        mt_destroy_model(&ms);
     } catch (std::exception &e) {
         set_last_error(e.what());
         return STATUS_ERROR;
@@ -449,16 +452,11 @@ API_STATUS create_general_training_model_from_bolt(Graph_t **graph,
     return STATUS_OK;
 }
 
-API_STATUS save_training_model(Graph_t *graph, const char *bolt_path, bool overwrite)
+API_EXPORT API_STATUS save_graph(Graph_t *graph, const char *input_bolt_file_path, const char *output_bolt_file_path)
 {
-    std::string path = std::string(bolt_path);
-    if (overwrite == false) {
-        path = path.substr(0, path.length() - 5) + "_finetuned.bolt";
-    }
-
     ModelSpec ms;
     CHECK_STATUS(mt_create_model(&ms));
-    CHECK_STATUS(deserialize_model_from_file(bolt_path, &ms));
+    CHECK_STATUS(deserialize_model_from_file(input_bolt_file_path, &ms, DT_F32));
     // maybe need to extract trainable names at firstly
     for (int i = 0; i < ms.num_weight_specs; i++) {
         WeightSpec ws = ms.ws[i];
@@ -486,7 +484,7 @@ API_STATUS save_training_model(Graph_t *graph, const char *bolt_path, bool overw
 #ifdef _USE_DEBUG
     print_ms(ms);
 #endif
-    CHECK_STATUS(serialize_model_to_file(&ms, path.c_str()));
+    CHECK_STATUS(serialize_model_to_file(&ms, output_bolt_file_path));
     CHECK_STATUS(mt_destroy_model(&ms));
     return STATUS_OK;
 }

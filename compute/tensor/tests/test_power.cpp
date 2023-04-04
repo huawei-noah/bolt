@@ -31,7 +31,7 @@ int powerTest(int argc, char **argv, DataType dt)
     UNI_MEMCPY(get_ptr_from_tensor(inputTensor, CPU_GENERAL), input, tensorNumBytes(inputDesc));
     // set output
     Tensor outputTensor, outputTensorRef;
-    CHECK_STATUS(power_infer_output_size(&inputTensor, p, &outputTensor, &UT_CPU_ARCHINFO));
+    CHECK_STATUS(power_infer_output_size(&inputTensor, p, dt, &outputTensor, &UT_CPU_ARCHINFO));
     outputTensor.alloc();
     TensorDesc outputDesc_ref = outputTensor.get_desc();
     outputTensorRef.resize(outputDesc_ref);
@@ -45,7 +45,7 @@ int powerTest(int argc, char **argv, DataType dt)
 
         // check
         ut_check_v(get_ptr_from_tensor(outputTensor, CPU_GENERAL),
-            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), len, dt, 0.1, __FILE__, __LINE__);
+            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), len, dt, 0.1);
     }
 
     // benchmark

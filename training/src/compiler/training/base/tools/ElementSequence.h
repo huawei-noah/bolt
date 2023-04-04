@@ -37,6 +37,7 @@ class MonotonicSequence : public ElementSequence
 
     uint32_t getElement() final;
 
+~MonotonicSequence(){}
   private:
     uint32_t mMin;
     uint32_t mMax;
@@ -49,7 +50,7 @@ class RandomSequence : public ElementSequence
     RandomSequence(uint32_t min, uint32_t max);
 
     uint32_t getElement() final;
-
+~ RandomSequence(){}
   private:
     void shuffle();
 

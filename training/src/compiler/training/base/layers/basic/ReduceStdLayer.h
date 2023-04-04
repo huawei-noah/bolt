@@ -23,8 +23,6 @@ namespace raul
  * @brief Reduce Sum Layer
  * Computes the standard deviation of elements across dimensions of a tensor.
  *
- * @see
- * https://pytorch.org/docs/master/generated/torch.std.html
  */
 class ReduceStdLayer : public ReduceArithmeticLayer
 {

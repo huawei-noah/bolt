@@ -19,9 +19,6 @@ inline EE tile_checkpara_mali_fp16(TensorDesc inputDesc, TensorDesc outputDesc)
     if (inputDesc.dt != outputDesc.dt) {
         return NOT_SUPPORTED;
     }
-    if (outputDesc.dt != DT_F16) {
-        return NOT_SUPPORTED;
-    }
     return SUCCESS;
 }
 
@@ -33,9 +30,10 @@ inline EE tile_core_mali_fp16(GCLHandle_t handle,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
+    DataType idt;
     U32 iw, ih, ic, in, it;
     U32 ow, oh, oc, on, ot;
-    tensorSelectGet(inputDesc, NULL, NULL, &in, &ic, &ih, &iw, &it);
+    tensorSelectGet(inputDesc, &idt, NULL, &in, &ic, &ih, &iw, &it);
     tensorSelectGet(outputDesc, NULL, NULL, &on, &oc, &oh, &ow, &ot);
     U32 iDims = inputDesc.nDims;
     U32 oDims = outputDesc.nDims;
@@ -80,7 +78,7 @@ inline EE tile_core_mali_fp16(GCLHandle_t handle,
         U32 str[3] = {iDim[0], iDim[1], irDim};
         U32 off[3] = {0, 0, 0};
         MemFlags flag = CL_MEM_READ_WRITE;
-        CHECK_STATUS(gclmem_set_desc_padding(&desc, str, off, DT_F16, DF_NCHW, GCL_MEM_BUF, flag));
+        CHECK_STATUS(gclmem_set_desc_padding(&desc, str, off, idt, DF_NCHW, GCL_MEM_BUF, flag));
         tMem.desc = desc;
         CHECK_STATUS(gcl_create_sub_buffer(desc.byteSize, &offset, tmpbuf, &(tMem.mem)));
         if (use3dMode) {
@@ -100,7 +98,7 @@ inline EE tile_core_mali_fp16(GCLHandle_t handle,
         U32 str[3] = {oDim[0], oDim[1], orDim};
         U32 off[3] = {0, 0, 0};
         MemFlags flag = CL_MEM_READ_WRITE;
-        CHECK_STATUS(gclmem_set_desc_padding(&desc, str, off, DT_F16, DF_NCHW, GCL_MEM_BUF, flag));
+        CHECK_STATUS(gclmem_set_desc_padding(&desc, str, off, idt, DF_NCHW, GCL_MEM_BUF, flag));
         tMem.desc = desc;
         CHECK_STATUS(gcl_create_sub_buffer(desc.byteSize, &offset, tmpbuf, &(tMem.mem)));
         ow_str = oDim[0];
@@ -116,8 +114,7 @@ inline EE tile_core_mali_fp16(GCLHandle_t handle,
     U32 gs[3];
     U32 ls[3] = {0, 0, 0};
     U32 dim = 3;
-    CHECK_STATUS(
-        set_tile_opt_mali(oDims, DT_F16, inputMemType, outputMemType, kernelName, &kernelOpt));
+    CHECK_STATUS(set_tile_opt_mali(oDims, idt, inputMemType, outputMemType, kernelName, &kernelOpt));
     CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
     gs[0] = (oDim[0] + 3) / 4;
     gs[1] = oDim[1];
@@ -180,7 +177,7 @@ EE tile_infer_forward_tmp_bytes_mali_fp16(TensorDesc inputDesc,
     }
     if (inputDesc.dims[0] != outputDesc.dims[0] && (inputDesc.dims[0] & 3) != 0 &&
         gclmemOutputDesc.memType != GCL_MEM_BUF) {
-        size = ALIGN(size, BUFFER_ALIGN_BASE) + tensorNumBytes(outputDesc);
+        size = UNI_ALIGN(size, BUFFER_ALIGN_BASE) + tensorNumBytes(outputDesc);
     }
     *bytes = size;
     return SUCCESS;

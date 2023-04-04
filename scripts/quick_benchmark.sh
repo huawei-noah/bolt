@@ -6,7 +6,7 @@ log_file="upload.log"
 
 host_dir=""
 device=""
-device_dir=""
+device_dir="/data/local/tmp/bolt_$$"
 use_static_library=true
 cpu_mask="10"
 gpu=false
@@ -117,6 +117,10 @@ if [[ "${device}" == "android" ]] ; then
     ${script_dir}/push_third_party.sh -d ${device} -p ${device_dir} --platform=${platform} || exit 1
 else
     echo "[INFO] run quick benchmark on ${device} with cpu ${cpu_mask}"
+    if [[ ${gpu}  == true && -f "/c/Windows/System32/OpenCL.dll" ]]; then
+        cp /c/Windows/System32/OpenCL.dll ${host_dir}/lib/libOpenCL.dll
+        cp /c/Windows/System32/OpenCL.dll ${host_dir}/tests/libOpenCL.dll
+    fi
     export LD_LIBRARY_PATH=${host_dir}/lib:${LD_LIBRARY_PATH}
 fi
 
@@ -130,15 +134,14 @@ run_command() {
     if [[ "${device}" == "host" ]] ; then
         ${host_dir}/tests/$@ || exit 1
     elif [[ "${device}" != "apple" ]] ; then
-        adb -s ${device} shell "cd ${device_dir} && export LD_LIBRARY_PATH=./ && taskset -a ${cpu_mask} ./$@" || exit 1
+        #adb -s ${device} shell "cd ${device_dir} && export LD_LIBRARY_PATH=./ && taskset -a ${cpu_mask} ./$@" || exit 1
+        adb -s ${device} shell "cd ${device_dir} && export LD_LIBRARY_PATH=./ && ./$@" || exit 1
     fi
 }
 
 # mmm
 echo " " ; echo "--- CPU Matrix Matrix Multiplication"
-upload ${host_dir}/tests/test_mmm_int8 ${device_dir} || exit 1
 upload ${host_dir}/tests/test_mmm ${device_dir} || exit 1
-run_command test_mmm_int8 384 768 768
 run_command test_mmm 384 768 768
 
 # conv_ic=3
@@ -169,13 +172,13 @@ run_command test_depthwise_convolution 1 256 28 28 256 256 3 3 1 1 1 1 256 28 28
 if [[ ${gpu}  == true ]] ; then
     echo " " ; echo "--- GPU Conv"
     upload ${host_dir}/tests/test_convolution_ocl ${device_dir} || exit 1
-    upload ${host_dir}/tests/test_depthwise_convolution_ocl ${device_dir} || exit 1
-    upload ${host_dir}/tests/test_fully_connected_ocl ${device_dir} || exit 1
     run_command test_convolution_ocl 64 112 112 64 5 5 1 2
     run_command test_convolution_ocl 64 112 112 64 3 3 1 1
     echo " " ; echo "--- GPU Depthwise Conv"
+    upload ${host_dir}/tests/test_depthwise_convolution_ocl ${device_dir} || exit 1
     run_command test_depthwise_convolution_ocl 64 112 112 64 3 3 1 1
     echo " " ; echo "--- GPU Fc"
+    upload ${host_dir}/tests/test_fully_connected_ocl ${device_dir} || exit 1
     run_command test_fully_connected_ocl 24 1 1 96 
 fi
 

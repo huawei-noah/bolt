@@ -43,7 +43,7 @@ public:
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
         this->needSetKernelVec = true;
-        CHECK_STATUS(eltwise_infer_output_size(inTensors, outTensors[0], &this->archInfo));
+        CHECK_STATUS(eltwise_infer_output_size(inTensors, this->p, outTensors[0], &this->archInfo));
         if (check_tensors_image(inTensors)) {
             CHECK_STATUS(set_tensors_image(outTensors, inTensors.size()));
         }

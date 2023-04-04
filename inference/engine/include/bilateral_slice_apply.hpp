@@ -30,8 +30,33 @@ public:
         return OT_BilateralSliceApply;
     }
 
+    void update_guide(std::vector<Tensor *> inTensors)
+    {
+        TensorDesc guideDesc;
+        if (inTensors.size() > 2) {
+            guideDesc = inTensors[2]->get_desc();
+        } else {
+            guideDesc = inTensors[0]->get_desc();
+            int axis = -1;
+            if (guideDesc.dims[0] == 3) {
+                axis = 0;
+            }
+            if (guideDesc.dims[guideDesc.nDims - 2] == 3) {
+                axis = guideDesc.nDims - 2;
+            }
+            if (axis == -1) {
+                UNI_ERROR_LOG("can not infer guide tensor from input(%s).\n",
+                    tensorDesc2Str(guideDesc).c_str());
+            }
+            guideDesc.dims[axis] = 1;
+            guideDesc.dt = inTensors[1]->get_desc().dt;
+        }
+        this->guideTensor.resize(guideDesc);
+    }
+
 protected:
     BilateralSliceApplyParamSpec p;
+    Tensor guideTensor;
 };
 
 #endif  // _BILATERAL_SLICE_APPLY_H

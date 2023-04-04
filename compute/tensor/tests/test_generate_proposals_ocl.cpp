@@ -338,7 +338,7 @@ void generateProposals(I32 argc, char *argv[], DataType dt)
 
     U8 *outputGpu = ut_input_v(tensorNumElements(outputDesc), dt, UT_INIT_RANDOM);
     CHECK_STATUS(ocl_get_output(handle, output, outputDesc, outputGpu, tmpBuf, true));
-    ut_check_a(outputGpu, outputCpu, tensorNumElements(outputDesc), dt);
+    ut_check_v(outputGpu, outputCpu, tensorNumElements(outputDesc), dt, 0.3);
 
     free(deltaCpu);
     free(logitCpu);

@@ -18,6 +18,9 @@
 #ifdef _USE_FP16
 #include "cpu/arm/fp16/tensor_computing_fp16.h"
 #endif
+#ifdef _USE_INT8
+#include "cpu/arm/int8/tensor_computing_int8.h"
+#endif
 
 EE rnncell_arm(TensorDesc xDesc,
     const void *currentX,
@@ -25,6 +28,7 @@ EE rnncell_arm(TensorDesc xDesc,
     const void **filter,
     const TensorDesc *biasDesc,
     const void **bias,
+    float *scale,
     void *state,
     U32 tmpBytes,
     void *tmp,
@@ -46,6 +50,22 @@ EE rnncell_arm(TensorDesc xDesc,
 #endif
 #ifdef _USE_FP16
         case DT_F16: {
+#ifdef _USE_INT8
+//             bool useUltra = false;
+// #ifdef _USE_ULTRA_OPTIMIZATION
+//             if ((rnnParamSpec.mode == RNN_LSTM) &&
+//                 (rnnParamSpec.num_projection == 0) &&
+//                 (rnnParamSpec.steps >= 0) &&
+//                 (scale != nullptr))
+//             {
+//                 useUltra = true;
+//             }
+// #endif
+            if (filterDesc[0].dt == DT_I8) {
+                return rnncell_int8(xDesc, currentX, filterDesc, filter, biasDesc, bias, scale, state,
+                    tmpBytes, tmp, rnnParamSpec, batchStrideX, batchStrideH, hDesc, output, arch);
+            }
+#endif
             ret = rnncell_fp16(xDesc, currentX, filterDesc, filter, biasDesc, bias, state, tmpBytes,
                 tmp, rnnParamSpec, batchStrideX, batchStrideH, hDesc, output, arch);
             break;

@@ -21,47 +21,46 @@ extern "C" {
 #endif
 
 /**
- * @brief generate training graph from bolt model
- * @param  graph                   training graph
- * @param  input_bolt_path         original bolt model path
- * @param  batch_size              batch size
- * @param  target_size             target size, size of classification categories
- * @param  loss_type               type of the training loss
- * @param  use_fp16                use fp16 or not
- * @param  input_shape             resized input shapes
- * @param  shape_size              size of the input shape
- * @param  modified_output         name of the resized layer
+ * @brief create training graph from bolt model file
+ * @param  bolt_file_path                bolt model file on disk
+ * @param  graph                         training graph
+ * @param  loss_type                     training loss type
+ * @param  batch_size                    training batch size, default:1
+ * @param  input_shape                   new input shape, we support change input shape when training, default: NULL
+ * @param  input_shape_count             input shape count, default:0
+ * @param  modified_output_layer_name    name of output layer, we support change output category size when training, default: NULL
+ * @param  modified_output_layer_size    size of category, default:0
+ * @param  use_fp16                      training use fp16 or not, default:false
  *
  * @return API_STATUS which represents success or fail
  * @note
- * As to the option<loss_type>, choose one of the list["OpCrossEntropyLoss", "OpSoftmaxCrossEntropyLoss"]
- * Due to fp16's instability, please set option<use_fp16> as "false" currently.
- * If input shape is same with the original model, please set option<input_shape> as "nullptr".
- * If output size is same with the original model, please set option<modified_output> as "nullptr".
+ * currently we only test CNN model with single input and single output.
  */
-API_STATUS create_general_training_model_from_bolt(Graph_t **graph,
-    const char *input_bolt_path,
-    size_t batch_size,
-    size_t target_size,
+API_EXPORT API_STATUS create_graph_from_bolt(const char *bolt_file_path,
+    Graph_t **graph,
     const char *loss_type,
-    bool use_fp16,
-    int *input_shape,
-    int shape_size,
-    char *modified_output);
+    size_t batch_size=1,
+    const size_t *input_shape=nullptr,
+    size_t input_shape_count=0,
+    const char *modified_output_layer_name=nullptr,
+    size_t modified_output_size=0,
+    bool use_fp16=false);
 
 /**
- * @brief  write the updated ms into a bolt after fine-tunning
- * @param  graph        training graph
- * @param  bolt_path    path the input bolt model
- * @param  overwrite    overwrite the original model or not
+ * @brief  write training graph to bolt model file
+ * @param  graph                   training graph
+ * @param  input_bolt_file_path    original bolt model file path on disk
+ * @param  output_bolt_file_path   bolt model file path where we want to save training graph
  *
  * @return API_STATUS which represents success or fail
  * @note
- * As to option<overwrite>, if <overwrite> is 'true', bolt_path "xxx.bolt" will be overwritten with new weights.
- * If <overwrite> is 'false', based on bolt_path "xxx.bolt", a new file "xxx_finetuned.bolt" will be created and the new weights will be written into "xxx_finetuned.bolt". 
+ * bolt model contains layer topology and weights.
+ * currently we need to read bolt model topology from input_bolt_file_path, and combine weights from training graph.
  */
-API_STATUS save_training_model(Graph_t *graph, const char *bolt_path, bool overwrite);
+API_EXPORT API_STATUS save_graph(Graph_t *graph, const char *input_bolt_file_path, const char *output_bolt_file_path);
+
 #ifdef __cplusplus
 }
 #endif
+
 #endif

@@ -47,12 +47,11 @@ public:
                 this->p.axes[i] = i;
             }
         }
-
-        MemoryType type = CPUMem;
-        if (IS_MALI_GPU(this->archInfo.arch)) {
+        MemoryType type;
+        if (IS_CPU(this->archInfo.arch)) {
+            type = CPUMem;
+        } else {
             type = OCLMem;
-        } else if (IS_QUALCOMM_GPU(this->archInfo.arch)) {
-            type = OCLMemImg;
         }
         Tensor maskTensor(type);
         if (inTensors.size() > 1) {

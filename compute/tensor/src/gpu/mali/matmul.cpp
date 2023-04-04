@@ -133,7 +133,7 @@ EE matmul_padding_input_mali(TensorDesc matrixADesc,
     if (transposeA) {
         if (!needProcessA) {
             for (auto item_k : vecK) {
-                U32 i = ALIGN(aw, item_k);
+                U32 i = UNI_ALIGN(aw, item_k);
                 aw_align = (aw_align < i) ? i : aw_align;
             }
         }
@@ -147,7 +147,7 @@ EE matmul_padding_input_mali(TensorDesc matrixADesc,
     if (!transposeB) {
         if (!needProcessB) {
             for (auto item_h : vecH) {
-                U32 i = ALIGN(bw, item_h);
+                U32 i = UNI_ALIGN(bw, item_h);
                 bw_align = (bw_align < i) ? i : bw_align;
             }
         }
@@ -324,20 +324,16 @@ EE matmul_infer_forward_tmp_bytes_mali(TensorDesc matrixADesc,
     U32 *bytes,
     ForwardRunInfoMali_t forwardRunInfo)
 {
-    EE ret = SUCCESS;
+    EE ret = NOT_SUPPORTED;
     switch (matrixADesc.dt) {
-        case DT_F16: {
+        case DT_F16:
+        case DT_F32: {
             ret = matmul_infer_forward_tmp_bytes_mali_fp16(matrixADesc, transposeA, matrixBDesc,
                 transposeB, matrixCDesc, gclmemMatrixADesc, gclmemMatrixBDesc, gclmemMatrixCDesc,
                 bytes, forwardRunInfo);
             break;
         }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
     return ret;
@@ -357,21 +353,17 @@ EE matmul_mali(GCLHandle_t handle,
     GCLMem_t matrixC,
     ForwardRunInfoMali_t forwardRunInfo)
 {
-    EE ret = SUCCESS;
-    ret = matmul_checkpara_mali(handle, matrixADesc, transposeA, matrixA, matrixBDesc, transposeB,
-        matrixB, matrixCDesc, matrixC);
+    CHECK_STATUS(matmul_checkpara_mali(handle, matrixADesc, transposeA, matrixA, matrixBDesc,
+        transposeB, matrixB, matrixCDesc, matrixC));
+    EE ret = NOT_SUPPORTED;
     switch (matrixADesc.dt) {
-        case DT_F16: {
+        case DT_F16:
+        case DT_F32: {
             ret = matmul_mali_fp16(handle, matrixADesc, transposeA, matrixA, matrixBDesc,
                 transposeB, matrixB, biasDesc, bias, tmp, matrixCDesc, matrixC, forwardRunInfo);
             break;
         }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
     return ret;

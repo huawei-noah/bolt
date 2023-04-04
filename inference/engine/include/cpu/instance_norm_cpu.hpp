@@ -31,8 +31,8 @@ public:
 
     void run() override
     {
-        CHECK_STATUS(instance_norm(this->inputTensors[0], this->temp, this->weightTensors[0],
-            this->biasTensors[0], this->p, this->outputTensors[0], &this->archInfo));
+        CHECK_STATUS(instance_norm(this->inputTensors[0], this->weightTensors[0],
+            this->biasTensors[0], this->p, this->temp, this->outputTensors[0], &this->archInfo));
     }
 
     EE infer_output_tensors_size(
@@ -40,18 +40,6 @@ public:
     {
         outTensors[0]->resize(inTensors[0]->get_desc());
         return SUCCESS;
-    }
-
-    int get_channels_num()
-    {
-        int ret = 0;
-        auto curOpWs = this->get_weightspec();
-        if (0 != curOpWs.bytes_of_weight) {
-            ret = curOpWs.bytes_of_weight / UNI_MAX(1, bytesOf(curOpWs.mdt));
-        } else if (0 != curOpWs.bytes_of_vec) {
-            ret = curOpWs.bytes_of_vec / UNI_MAX(1, bytesOf(curOpWs.mdt));
-        }
-        return ret;
     }
 
     EE infer_weight_desc() override
@@ -66,10 +54,9 @@ public:
 
     U32 infer_tmp_memory_size() override
     {
-        TensorDesc inputDesc = this->inputTensors[0].get_desc();
         U32 bytes = 0;
         CHECK_STATUS(
-            instance_norm_infer_forward_tmp_bytes(inputDesc, this->p, &bytes, &this->archInfo));
+            instance_norm_infer_forward_tmp_bytes(this->inputTensors[0], this->p, &bytes, &this->archInfo));
         return bytes;
     }
 };

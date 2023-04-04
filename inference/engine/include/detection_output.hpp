@@ -23,30 +23,10 @@ public:
         this->dt = dt;
         this->p = p;
     }
-
-    std::shared_ptr<Operator> clone() override
-    {
-        std::shared_ptr<DetectionOutput> mem =
-            std::shared_ptr<DetectionOutput>(new DetectionOutput(this->dt, this->p));
-        *mem = *this;
-        return mem;
-    }
-
+    ~DetectionOutput(){}
     OperatorType get_type() override
     {
         return OT_DetectionOutput;
-    }
-
-    void run() override
-    {
-        CHECK_STATUS(
-            detectionoutput(this->inputTensors, this->p, this->outputTensors[0], &this->archInfo));
-    }
-
-    EE infer_output_tensors_size(
-        std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
-    {
-        return detectionoutput_infer_output_size(inTensors, this->p, outTensors[0], &this->archInfo);
     }
 
 protected:

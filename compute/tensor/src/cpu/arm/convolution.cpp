@@ -70,11 +70,13 @@ EE convolution_infer_forward_algorithm_arm(TensorDesc inputDesc,
 
         if ((idf != DF_NCHWC8 || ic / p.group % 8 != 0) && DT_I8 != idt) {
             *algorithm = CONVOLUTION_ALGORITHM_GEMM_ICNCHW;
+#ifndef _USE_X86_ARM_CONSISTENCY
         } else if (ft == 1 && fh == 3 && fw == 3 && p.stride_t == 1 && p.stride_h == 1 &&
             p.stride_w == 1 && p.pad_before == 0 && p.pad_after == 0 && p.pad_top == 1 &&
             p.pad_bottom == 1 && p.pad_left == 1 && p.pad_right == 1 && p.dilatedRate_t == 1 &&
             p.dilatedRate_h == 1 && p.dilatedRate_w == 1) {
             *algorithm = CONVOLUTION_ALGORITHM_WINOGRAD;
+#endif
         } else {
             *algorithm = CONVOLUTION_ALGORITHM_GEMM;
         }
@@ -349,7 +351,7 @@ EE convolution_infer_forward_tmp_bytes_arm(TensorDesc inputDesc,
             if (fdt == DT_I8) {
                 *bytes += ic * it * ih * iw;
             }
-            if (odt == DT_I8) {
+            if ((odt == DT_I8) || (odt == DT_F32)) {
                 // scaled bias + results before quantization
                 *bytes += (oc + on * oc * ot * oh * ow) * bytesOf(DT_I32);
             }

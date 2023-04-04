@@ -15,6 +15,9 @@
 #ifdef _USE_CPU
 #include "cpu/tensor_computing_cpu.h"
 #endif
+#ifdef _USE_GPU
+#include "gpu/mali/tensor_computing_mali.h"
+#endif
 
 inline EE priorbox_infer_output_size_cpu(
     std::vector<TensorDesc> inputDesc, PriorBoxParamSpec priorBoxParamSpec, TensorDesc *outputDesc)
@@ -98,6 +101,9 @@ EE priorbox(std::vector<Tensor> inputTensor,
     if (IS_CPU(arch)) {
 #ifdef _USE_CPU
         ret = priorbox_cpu(inputDesc, priorBoxParamSpec, outputDesc, output, arch);
+#endif
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
 #endif
     }
     return ret;

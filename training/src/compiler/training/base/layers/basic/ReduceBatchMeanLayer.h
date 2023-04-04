@@ -23,8 +23,6 @@ namespace raul
  * @brief Reduce Mean Layer
  * Computes the mean of elements across dimensions of a tensor.
  *
- * @see
- * https://pytorch.org/docs/master/generated/torch.mean.html
  */
 class ReduceBatchMeanLayer : public ReduceArithmeticLayer
 {

@@ -39,22 +39,21 @@ public:
         if (modelPtrShared != nullptr) {
             modelPtr = (*modelPtrShared).get();
         }
-        auto curOpWs = this->get_weightspec();
-        DataType filterDt = curOpWs.mdt;  // weight data type may not be the same as input and output
+        DataType filterDt = this->ws.mdt;  // weight data type may not be the same as input and output
         if (modelPtr != nullptr) {
             filterDt = this->dt;
         }
-        DataType dtNoQ = (dt == DT_F16_8Q) ? DT_F16 : ((dt == DT_F32_8Q) ? DT_F32 : dt);
+        DataType dtNoQ = noQuantDataType(this->dt);
         U32 isBNN = 0;
         if (filterDt == DT_BIN01 || filterDt == DT_BIN11) {
             isBNN = 1;
         }
 
-        if (curOpWs.num_quant_scale == this->weightTensors.size()) {
+        if (this->ws.num_quant_scale == this->weightTensors.size()) {
             for (U32 i = 0; i < this->weightTensors.size(); ++i) {
-                if (curOpWs.weight_scale[i].num_scale > 0) {
+                if (this->ws.weight_scale[i].num_scale > 0) {
                     this->weightTensors[i].set_scale_ptr(
-                        std::shared_ptr<F32>(curOpWs.weight_scale[i].scale, [](F32 *) {}));
+                        std::shared_ptr<F32>(this->ws.weight_scale[i].scale, [](F32 *) {}));
                 }
             }
         }
@@ -77,7 +76,7 @@ public:
             }
             this->biasTensors[i].resize(desc);
         }
-        std::shared_ptr<U8> weight_ptr = std::shared_ptr<U8>(curOpWs.weight, [](U8 *) {});
+        std::shared_ptr<U8> weight_ptr = std::shared_ptr<U8>(this->ws.weight, [](U8 *) {});
         U32 weight_offset = 0;
         U32 bias_offset = 0;
         for (U32 j = 0; j < this->weightTensors.size(); j++) {
@@ -89,7 +88,7 @@ public:
                 UNI_MEMCPY(((CpuMemory *)(this->weightTensors[j].get_memory()))->get_ptr(),
                     modelPtr, weight_bytes);
                 offset_bytes += weight_bytes;
-                if (this->hasBias) {
+                if (this->ws.bytes_of_vec != 0) {
                     this->biasTensors[j].alloc();
                     UNI_MEMCPY(((CpuMemory *)(this->biasTensors[j].get_memory()))->get_ptr(),
                         modelPtr + offset_bytes, bias_bytes);
@@ -102,14 +101,14 @@ public:
                         std::shared_ptr<U8>(weight_ptr, weight_ptr.get() + weight_offset));
 
                 weight_offset += weight_bytes;
-                if (this->hasBias) {
+                if (this->ws.bytes_of_vec != 0) {
                     this->biasTensors[j].alloc();
                     UNI_MEMCPY(((CpuMemory *)(this->biasTensors[j].get_memory()))->get_ptr(),
-                        curOpWs.vec + bias_offset, bias_bytes);
+                        this->ws.vec + bias_offset, bias_bytes);
                     bias_offset += bias_bytes;
                 }
             }
-            if (!this->hasBias) {
+            if (this->ws.bytes_of_vec == 0) {
                 this->biasTensors[j].alloc();
                 if (isBNN == 1) {
 #ifdef _USE_FP16
@@ -142,7 +141,7 @@ public:
 
         F32 *scalePtr = nullptr;
 #if defined(_USE_INT8)
-        if (DT_F16_8Q == this->dt || DT_F32_8Q == this->dt) {
+        if (isQuantMixDataType(this->dt) && this->scales.get() != nullptr) {
             TensorDesc inputDesc = inputTensor.get_desc();
             scalePtr = this->scales.get();
             scalePtr[0] = inputTensor.get_scale();
@@ -212,12 +211,8 @@ public:
         switch (this->p.convolution_type) {
             case CONVOLUTION_DILATION:
             case CONVOLUTION_POINTWISE: {
-                if (this->dt == DT_F16_8Q || this->dt == DT_F32_8Q) {
-#ifndef _USE_X86
-                    targetType = DT_I8;
-#else
-                    targetType = DT_U8_Q;
-#endif
+                if (isQuantMixDataType(this->dt)) {
+                    targetType = get_activation_quant_data_type();
                 }
                 if (algorithmMap->getAlgorithmInfoFromMap(this->name, &algo, 1)) {
                     this->pwAlg = (ConvolutionForwardAlgorithm)algo;
@@ -300,12 +295,8 @@ public:
         int numChannels = ic;
         if (this->p.convolution_type == CONVOLUTION_DILATION ||
             this->p.convolution_type == CONVOLUTION_POINTWISE) {
-            if (DT_F16_8Q == this->dt || DT_F32_8Q == this->dt) {
-#ifndef _USE_X86
-                targetType = DT_I8;
-#else
-                targetType = DT_U8_Q;
-#endif
+            if (isQuantMixDataType(this->dt)) {
+                targetType = get_activation_quant_data_type();
             }
             numChannels /= this->p.group;
         }
@@ -362,12 +353,8 @@ public:
         }
         TensorDesc outputDesc = outputTensor->get_desc();
         if (featureScale.size() > 0 && -2 == (featureScale.back())[0]) {
-            if (DT_F16_8Q == this->dt) {
-                outputDesc.dt = DT_F16;
-                outputTensor->resize(outputDesc);
-            }
-            if (DT_F32_8Q == this->dt) {
-                outputDesc.dt = DT_F32;
+            if (isQuantMixDataType(this->dt)) {
+                outputDesc.dt = noQuantDataType(this->dt);
                 outputTensor->resize(outputDesc);
             }
         }
@@ -398,7 +385,7 @@ public:
         inputTensor.resize(inputDesc);
         Tensor filterTensor = this->weightTensors[0];
         TensorDesc filterDesc = filterTensor.get_desc();
-        if (DT_F16_8Q == filterDesc.dt || DT_F32_8Q == filterDesc.dt) {
+        if (isQuantMixDataType(filterDesc.dt)) {
             filterDesc.dt = DT_I8;
             filterTensor.resize(filterDesc);
         }
@@ -466,15 +453,29 @@ public:
 
     EE transform_filter() override
     {
+#if 0  //defined(_USE_LITE) && !defined(_USE_NEON)
+        return SUCCESS;
+#endif
         Tensor filterTensor = this->weightTensors[0];
-        this->wtm = std::shared_ptr<Tensor>(new Tensor());
-
         TensorDesc wtmDesc;
+        Tensor wtm;
         // int8 winograd
-        if ((DT_F16_8Q == this->dt || DT_F32_8Q == this->dt) &&
-            CONVOLUTION_POINTWISE == this->p.convolution_type &&
+        if (isQuantMixDataType(this->dt) && CONVOLUTION_POINTWISE == this->p.convolution_type &&
             CONVOLUTION_ALGORITHM_WINOGRAD == this->pwAlg) {
 #if defined(_USE_INT8)
+            TensorDesc filterDesc = filterTensor.get_desc();
+            if ((filterDesc.dt != DT_F16_8Q) && (filterDesc.dt != DT_F16)) {
+                if (filterDesc.dt == DT_I8) {
+                    filterDesc.dt = DT_F16;
+                    Tensor f16Filter = Tensor::alloc_sized<CPUMem>(filterDesc);
+                    Tensor bias;
+                    F32 scale = filterTensor.get_scale();
+                    dequantize(filterTensor, &scale, bias, f16Filter, &(this->archInfo));
+                    filterTensor = f16Filter;
+                } else {
+                    return NOT_SUPPORTED;
+                }
+            }
             U32 ftBytes;
             CHECK_STATUS(convolution_transform_filter_bytes(
                 filterTensor, this->p, this->pwAlg, &ftBytes, &this->archInfo));
@@ -482,7 +483,6 @@ public:
             Tensor tFilter = Tensor::alloc_sized<CPUMem>(tensor1d(DT_U8, ftBytes));
 
             // To label as int8
-            TensorDesc filterDesc = filterTensor.get_desc();
             filterDesc.dt = DT_F16_8Q;
 
             filterTensor.resize(filterDesc);
@@ -490,13 +490,13 @@ public:
                 filterTensor, this->p, this->pwAlg, this->temp, &tFilter, &this->archInfo));
 
             U32 ftmBytes = ftBytes / bytesOf(DT_F16);
-            *(this->wtm.get()) = Tensor::alloc_sized<CPUMem>(tensor1d(DT_U8, ftmBytes));
+            wtm = Tensor::alloc_sized<CPUMem>(tensor1d(DT_U8, ftmBytes));
 
             this->scales = std::shared_ptr<F32>((F32 *)operator new(38 * bytesOf(DT_F32)));
             CHECK_STATUS(
-                quantize(tFilter, this->wtm.get(), this->scales.get() + 2, &(this->archInfo)));
+                quantize(tFilter, &wtm, this->scales.get() + 2, &(this->archInfo)));
             // int8 tilegemm
-        } else if ((DT_F16_8Q == this->dt || DT_F32_8Q == this->dt) &&
+        } else if (isQuantMixDataType(this->dt) &&
             (CONVOLUTION_POINTWISE == this->p.convolution_type ||
                 CONVOLUTION_DILATION == this->p.convolution_type)) {
             TensorDesc qDesc = filterTensor.get_desc();
@@ -516,28 +516,26 @@ public:
             U32 ftmBytes;
             CHECK_STATUS(convolution_transform_filter_bytes(
                 filterTensor, this->p, this->pwAlg, &ftmBytes, &this->archInfo));
-            *(this->wtm.get()) = Tensor::alloc_sized<CPUMem>(tensor1d(DT_U8, ftmBytes));
+            wtm = Tensor::alloc_sized<CPUMem>(tensor1d(DT_U8, ftmBytes));
 
             // trans filter
             CHECK_STATUS(convolution_transform_filter(
-                filterTensor, this->p, this->pwAlg, this->temp, this->wtm.get(), &this->archInfo));
+                filterTensor, this->p, this->pwAlg, this->temp, &wtm, &this->archInfo));
 #endif
         } else {  // All other cases
             U32 bytesExtra;
-            auto wtmBytes = this->infer_filter_transform_bytes(&bytesExtra);
-            wtm->resize(tensor1d(DT_U8, wtmBytes));
-            wtm->alloc();
-
+            auto ftmBytes = this->infer_filter_transform_bytes(&bytesExtra);
+            wtm = Tensor::alloc_sized<CPUMem>(tensor1d(DT_U8, ftmBytes));
             switch (this->p.convolution_type) {
                 case CONVOLUTION_DILATION:
                 case CONVOLUTION_POINTWISE: {
                     CHECK_STATUS(convolution_transform_filter(filterTensor, this->p, this->pwAlg,
-                        this->temp, this->wtm.get(), &this->archInfo));
+                        this->temp, &wtm, &this->archInfo));
                     break;
                 }
                 case CONVOLUTION_DEPTHWISE: {
                     CHECK_STATUS(depthwise_convolution_transform_filter(
-                        filterTensor, this->p, this->dwAlg, this->wtm.get(), &this->archInfo));
+                        filterTensor, this->p, this->dwAlg, &wtm, &this->archInfo));
                     break;
                 }
                 case CONVOLUTION_DEPTHWISE_POINTWISE: {
@@ -545,7 +543,7 @@ public:
                     pwTensor.resize(tensor1d(DT_U8, bytesExtra));
                     pwTensor.alloc();
                     CHECK_STATUS(depthwise_pointwise_convolution_transform_filter(filterTensor,
-                        weightTensors[1], this->p, this->dwAlg, this->wtm.get(), &pwTensor,
+                        weightTensors[1], this->p, this->dwAlg, &wtm, &pwTensor,
                         &this->archInfo));
                     weightTensors[1] = pwTensor;
                     break;
@@ -555,7 +553,7 @@ public:
                     return NOT_SUPPORTED;
             }
         }
-        this->weightTensors[0] = *this->get_wtm();
+        this->weightTensors[0] = wtm;
         return SUCCESS;
     }
 };

@@ -384,7 +384,6 @@ class TensorImpl
     [[nodiscard]] size_t getMaxIndex() const;
     [[nodiscard]] size_t getMaxIndex(size_t begin, size_t end) const;
 
-    // https://stackoverflow.com/questions/3582608/how-to-correctly-implement-custom-iterators-and-const-iterators
     template<typename pointer_type>
     class iterator_impl
     {
@@ -400,7 +399,7 @@ class TensorImpl
             : mPtr(ptr)
         {
         }
-
+	~iterator_impl(){}
         iterator_impl() = default;
         iterator_impl& operator=(const iterator_impl&) = default;
 
@@ -499,7 +498,6 @@ class TensorImpl
      * @param to_shape new tensor shape
      * @return true or false
      *
-     * @see https://docs.scipy.org/doc/numpy-1.13.0/user/basics.broadcasting.html
      */
     bool isBroadcastableTo(const shape& to_shape) const noexcept { return Common::shapeIsBroadcastable(getShape(), to_shape); }
 
@@ -530,7 +528,8 @@ class TensorImpl
             , mSize(size)
         {
         }
-        /**
+        ~broadcasted_viewer(){}
+	/**
          * @warning Write-access to returned element is not thread-safe as multiple broadcasted indices correspond to single underlying tensor element
          */
         dt& operator[](size_t index);
@@ -543,7 +542,6 @@ class TensorImpl
      * @param viewer_shape
      * @return Closure that returns element of broadcasted tenso
      *
-     * @see https://docs.scipy.org/doc/numpy-1.13.0/user/basics.broadcasting.html
      */
     broadcasted_viewer getBroadcastedViewer(const shape& viewer_shape) const;
     broadcasted_viewer getBroadcastedViewer(const shape& viewer_shape) { return const_cast<const TensorImpl*>(this)->getBroadcastedViewer(viewer_shape); }

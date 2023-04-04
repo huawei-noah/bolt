@@ -82,9 +82,11 @@ inline EE pooling_infer_output_size_cpu(
         }
     }
     DataFormat odf = idf;
+#ifdef _USE_AVX512_VNNI
     if (idt == DT_U8_Q) {
         odf = DF_NCHWC16;
     }
+#endif
     if (tensorIs3d(inputDesc)) {
         *outputDesc = tensor3df(idt, odf, in, ic, oh);
     } else if (tensorIs4d(inputDesc)) {
@@ -147,28 +149,36 @@ EE pooling_infer_output_size(
 EE pooling(Tensor inputTensor,
     PoolingParamSpec poolingParamSpec,
     Tensor tmpTensor,
-    Tensor outputTensor,
+    std::vector<Tensor> outputTensors,
     ArchInfo_t archInfo)
 {
     auto arch = archInfo->arch;
     TensorDesc inputDesc = transformDescTo4d(inputTensor.get_desc());
     void *input = get_ptr_from_tensor(inputTensor, arch);
-    TensorDesc outputDesc = transformDescTo4d(outputTensor.get_desc());
-    void *output = get_ptr_from_tensor(outputTensor, arch);
+    TensorDesc outputDesc = transformDescTo4d(outputTensors[0].get_desc());
+    void *output = get_ptr_from_tensor(outputTensors[0], arch);
+    void *idx = nullptr;
+    if (outputTensors.size() == 2) {
+        idx = get_ptr_from_tensor(outputTensors[1], arch);
+    }
     F32 scale[2] = {inputTensor.get_scale(), -1};
     void *tmp = get_ptr_from_tensor(tmpTensor, arch);
     poolingParamSpec = update_param(inputDesc, poolingParamSpec);
     EE ret = NOT_SUPPORTED;
     if (IS_GPU(arch)) {
 #ifdef _USE_GPU
-        ret = pooling_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc,
-            (const GCLMem_t)input, poolingParamSpec, scale, (GCLMem_t)tmp, outputDesc,
-            (GCLMem_t)output);
+        ret = pooling_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc, (GCLMem_t)input,
+            poolingParamSpec, scale, (GCLMem_t)tmp, outputDesc, (GCLMem_t)output);
 #endif
+#ifdef _USE_GENERAL
+    } else if (IS_GENERAL(arch)) {
+        ret = pooling_general(inputDesc, input, poolingParamSpec, scale, outputDesc, output);
+#endif
+#if defined(_USE_NEON) || defined(_USE_X86)
     } else if (IS_CPU(arch)) {
-#ifdef _USE_CPU
         U8 *inputCPU = (U8 *)input;
         U8 *outputCPU = (U8 *)output;
+        U8 *idxCPU = (U8 *)idx;
         TensorDesc inDescCPU = inputDesc;
         TensorDesc outDescCPU = outputDesc;
         DataFormat dstF = outputDesc.df;
@@ -179,16 +189,17 @@ EE pooling(Tensor inputTensor,
             if (dstF == DF_NCHW || dstF == DF_MTK) {
                 cx = 1;
             }
+#ifdef _USE_AVX512_VNNI
             if (inputDesc.dt == DT_U8_Q) {
                 dstF = DF_NCHWC16;  // padding to 16
                 cx = 16;
             }
+#endif
         } else {
             dstF = DF_NCHWC8;
         }
 
         U32 paddedC = (inputDesc.dims[channelAxis] + cx - 1) / cx * cx;
-
         if (paddedC != inputDesc.dims[channelAxis] || (inputDesc.df != dstF)) {
             inDescCPU.dims[channelAxis] = paddedC;
             inDescCPU.df = dstF;
@@ -196,21 +207,19 @@ EE pooling(Tensor inputTensor,
             tmp = (U8 *)tmp + tensorNumBytes(inDescCPU);
             transformFormat(inputDesc, input, inDescCPU, inputCPU);
         }
-
         if (paddedC != inputDesc.dims[channelAxis] || (outputDesc.df != dstF)) {
             outDescCPU.dims[channelAxis] = paddedC;
             outDescCPU.df = dstF;
             outputCPU = (U8 *)tmp;
+            if (idxCPU != nullptr) {
+                idxCPU = (U8 *)tmp + tensorNumBytes(outDescCPU);
+            }
         }
-
-        if (IS_GENERAL(arch)) {
-#ifdef _USE_GENERAL
-            ret = pooling_general(
-                inDescCPU, inputCPU, poolingParamSpec, scale, outDescCPU, outputCPU);
-#endif
+        if (0) {
 #ifdef _USE_X86
         } else if (IS_X86(arch)) {
-            ret = pooling_x86(inDescCPU, inputCPU, poolingParamSpec, scale, outDescCPU, outputCPU);
+            ret = pooling_x86(
+                inDescCPU, inputCPU, poolingParamSpec, scale, outDescCPU, outputCPU, idxCPU);
 #endif
 #ifdef _USE_NEON
         } else if (IS_ARM(arch)) {
@@ -220,11 +229,13 @@ EE pooling(Tensor inputTensor,
 
         if (paddedC != inputDesc.dims[channelAxis] || (outputDesc.df != outDescCPU.df)) {
             transformFormat(outDescCPU, outputCPU, outputDesc, output);
+            if (idx != nullptr) {
+                transformFormat(outDescCPU, idxCPU, outputDesc, idx);
+            }
         }
-        outputTensor.set_scale(scale[1]);
 #endif
     }
-
+    outputTensors[0].set_scale(scale[1]);
     return ret;
 }
 
@@ -241,10 +252,12 @@ EE pooling_infer_forward_tmp_bytes(
         ret = pooling_infer_forward_tmp_bytes_mali(
             inputDesc, bytes, ((MaliPara_t)(archInfo->archPara))->forwardRunInfo);
 #endif
+    } else if (IS_GENERAL(archInfo->arch)) {
+        *bytes = 0;
+        ret = SUCCESS;
     } else {
         *bytes = 0;
         ret = SUCCESS;
-
         TensorDesc outputDesc = transformDescTo4d(outputTensor.get_desc());
         DataFormat dstF = outputDesc.df;
         int channelAxis = inputDesc.nDims - 2;

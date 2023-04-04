@@ -13,28 +13,30 @@
 
 #include "cpu/tensor_computing_cpu.h"
 
-template <typename T>
+template <typename T, U32 align = 1>
 static U32 array_argmax(const T *input, U32 len, U32 stride)
 {
+    T value = input[0];
     U32 index = 0;
-    U32 j = stride;
-    for (U32 i = 1; i < len; i++, j += stride) {
-        if (input[j] > input[index]) {
-            index = j;
+    for (U32 i = 0, n = 0; i < len / align; i++) {
+        for (U32 j = 0; j < align; j++, n++) {
+            U32 k = i * stride * align + j;
+            if (input[k] > value) {
+                value = input[k];
+                index = n;
+            }
         }
     }
-    return index / stride;
+    return index;
 }
 
 template <typename T>
 static EE argmax(TensorDesc inputDesc, const T *input, I32 axis, TensorDesc outputDesc, U32 *output)
 {
     UNUSED(outputDesc);
-
     if (nullptr == input || nullptr == output) {
-        CHECK_STATUS(NULL_POINTER);
+        return NULL_POINTER;
     }
-
     if (axis < 0) {
         axis = inputDesc.nDims + axis;
     }
@@ -47,12 +49,42 @@ static EE argmax(TensorDesc inputDesc, const T *input, I32 axis, TensorDesc outp
     for (U32 i = axis + 1; i < inputDesc.nDims; i++) {
         loopOuter *= inputDesc.dims[i];
     }
-
+    int channel = inputDesc.nDims - 2;
+    int align = 1;
+    if (inputDesc.df == DF_NCHWC8) {
+        align = 8;
+    }
+    if (inputDesc.df == DF_NCHWC16) {
+        align = 16;
+    }
     U32 len = inputDesc.dims[axis];
-    for (U32 i = 0; i < loopOuter; i++) {
-        for (U32 j = 0; j < loopInner; j++) {
-            const T *array = input + i * (len * loopInner) + j;
-            output[i * loopInner + j] = array_argmax<T>(array, len, loopInner);
+    if (axis == channel && align != 1) {
+        if (inputDesc.df == DF_NCHWC8) {
+            for (U32 i = 0; i < loopOuter; i++) {
+                for (U32 j = 0; j < loopInner; j++) {
+                    const T *array = input + i * (len * loopInner) + j * align;
+                    output[i * loopInner + j] = array_argmax<T, 8>(array, len, loopInner);
+                }
+            }
+        }
+        if (inputDesc.df == DF_NCHWC16) {
+            for (U32 i = 0; i < loopOuter; i++) {
+                for (U32 j = 0; j < loopInner; j++) {
+                    const T *array = input + i * (len * loopInner) + j * align;
+                    output[i * loopInner + j] = array_argmax<T, 16>(array, len, loopInner);
+                }
+            }
+        }
+    } else {
+        if (axis > channel) {
+            loopOuter /= align;
+            loopInner *= align;
+        }
+        for (U32 i = 0; i < loopOuter; i++) {
+            for (U32 j = 0; j < loopInner; j++) {
+                const T *array = input + i * (len * loopInner) + j;
+                output[i * loopInner + j] = array_argmax<T>(array, len, loopInner);
+            }
         }
     }
     return SUCCESS;

@@ -86,6 +86,6 @@ public final class TaskFlowTest {
             outputPrefix += args[0] + ", ";
         }
         String rootPath = args[1];
-        GSR_TaskFlow(rootPath, outputPrefix, AffinityType.CPU_HIGH_PERFORMANCE, 16);
+        GSR_TaskFlow(rootPath, outputPrefix, AffinityType.CPU_HIGH_PERFORMANCE, 2);
     }
 }

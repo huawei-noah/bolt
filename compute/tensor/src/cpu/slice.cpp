@@ -43,7 +43,7 @@ EE slice_cpu(TensorDesc inputDesc,
 
     bool sameFormat = true;
     for (U32 j = 0; j < num; j++) {
-        if (inputDesc.df != outputDesc[j].df) {
+        if (!isSameDataFormat(inputDesc.df, outputDesc[j].df)) {
             sameFormat = false;
             break;
         }
@@ -71,6 +71,7 @@ EE slice_cpu(TensorDesc inputDesc,
         }
     } else {
         if (axis != dim - 2) {
+            CHECK_STATUS(NOT_SUPPORTED);
             return NOT_SUPPORTED;
         }
         U8 *iPtr = (U8 *)input;
@@ -78,12 +79,11 @@ EE slice_cpu(TensorDesc inputDesc,
         tileSize /= eleSize;
         U32 startDims = 0;
         U32 endDims = 0;
-        std::set<DataFormat> nativeFormat = {DF_NCHW, DF_MTK, DF_NORMAL};
 
         for (U32 j = 0; j < num; j++) {
             endDims += outputDesc[j].dims[axis];
             U8 *oPtr = (U8 *)output[j];
-            if (inputDesc.df == DF_NCHWC8 && nativeFormat.count(outputDesc[j].df)) {
+            if (inputDesc.df == DF_NCHWC8 && outputDesc[j].df != DF_NCHWC8) {
                 for (U32 i = 0; i < loops; i++) {
                     for (U32 d = startDims; d < endDims; ++d) {
                         U32 c8 = d % 8;
@@ -98,6 +98,7 @@ EE slice_cpu(TensorDesc inputDesc,
                     }
                 }
             } else {
+                CHECK_STATUS(NOT_SUPPORTED);
                 return NOT_SUPPORTED;
             }
             startDims = endDims;

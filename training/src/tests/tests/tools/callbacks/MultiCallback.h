@@ -28,7 +28,7 @@ class MultiCallback
         : mCallbacks{ std::move(callbacks) }
     {
     }
-
+    ~MultiCallback(){}
     void operator()(BasicLayer* layer, MemoryManager& memory_manager, NetworkParameters::CallbackPlace place)
     {
         for (const auto& callback : mCallbacks)

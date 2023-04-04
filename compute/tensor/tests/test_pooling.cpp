@@ -59,20 +59,21 @@ int poolingTest(int argc, char **argv, DataType dt)
     Tensor outputTensorRef = Tensor::alloc_sized<CPUMem>(outputDesc);
     U32 output_len = outputTensor.length();
     Tensor tmpTensor;
+    std::vector<Tensor> outputTensors = {outputTensor};
+    std::vector<Tensor> outputTensorsRef = {outputTensorRef};
     if (UT_CHECK) {
-        CHECK_STATUS(pooling(inputTensor, p, tmpTensor, outputTensor, &UT_CPU_ARCHINFO));
+        CHECK_STATUS(pooling(inputTensor, p, tmpTensor, outputTensors, &UT_CPU_ARCHINFO));
 
-        CHECK_STATUS(pooling(inputTensor, p, tmpTensor, outputTensorRef, &UT_SERIAL_ARCHINFO));
+        CHECK_STATUS(pooling(inputTensor, p, tmpTensor, outputTensorsRef, &UT_SERIAL_ARCHINFO));
         // check
         ut_check_v(get_ptr_from_tensor(outputTensor, CPU_GENERAL),
-            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), output_len, dt, 0.05, __FILE__,
-            __LINE__);
+            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), output_len, dt, 0.05);
     }
 
     // benchmark
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        CHECK_STATUS(pooling(inputTensor, p, tmpTensor, outputTensor, &UT_CPU_ARCHINFO));
+        CHECK_STATUS(pooling(inputTensor, p, tmpTensor, outputTensors, &UT_CPU_ARCHINFO));
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;

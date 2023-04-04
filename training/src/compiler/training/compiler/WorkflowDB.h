@@ -58,7 +58,7 @@ class WorkflowDB
         , mTensorNeeded{}
     {
     }
-
+    ~WorkflowDB(){}
     /**
      * Cell of the 3d table
      *

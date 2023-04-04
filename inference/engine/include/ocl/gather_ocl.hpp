@@ -36,7 +36,7 @@ public:
     inline void run_prepare()
     {
         OCLContext::getInstance().handle.get()->curOpName = this->get_name();
-        CHECK_STATUS(gather(get_data_tensor(), get_index_tensor(), this->p, this->temp,
+        CHECK_STATUS(gather(this->inputTensors[0], this->inputTensors[1], this->p, this->temp,
             this->outputTensors[0], &this->archInfo));
     }
 
@@ -44,35 +44,15 @@ public:
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
         this->needSetKernelVec = true;
-        Tensor tmpTensor0 = Tensor(OCLMem);
-        Tensor tmpTensor1 = Tensor(OCLMem);
-        Tensor *dataTensor = get_data_tensor_ptr(inTensors, &tmpTensor0);
-        Tensor *indexTensor = get_index_tensor_ptr(inTensors, &tmpTensor1);
-        CHECK_STATUS(gather_infer_output_size(
-            dataTensor, indexTensor, this->p, outTensors[0], &this->archInfo));
-        return SUCCESS;
-    }
-
-    EE infer_weight_desc() override
-    {
-        if (this->p.data_desc.nDims > 0) {
-            Tensor dataTensor = Tensor(OCLMem);
-            dataTensor.resize(this->p.data_desc);
-            this->weightTensors.push_back(dataTensor);
-        }
-        if (this->p.index_desc.nDims > 0) {
-            Tensor indexTensor = Tensor(OCLMem);
-            indexTensor.resize(this->p.index_desc);
-            this->biasTensors.push_back(indexTensor);
-        }
-        return SUCCESS;
+        return gather_infer_output_size(
+            inTensors[0], inTensors[1], this->p, outTensors[0], &this->archInfo);
     }
 
     U32 infer_tmp_memory_size() override
     {
         U32 bytes = 0;
-        CHECK_STATUS(gather_infer_forward_tmp_bytes(get_data_tensor(), get_index_tensor(), this->p,
-            this->outputTensors[0], &bytes, &this->archInfo));
+        CHECK_STATUS(gather_infer_forward_tmp_bytes(this->inputTensors[0], this->inputTensors[1],
+            this->p, this->outputTensors[0], &bytes, &this->archInfo));
         return bytes;
     }
 

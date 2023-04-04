@@ -58,8 +58,7 @@ public:
         if (ps.num_shape == 0 && inTensors.size() > 1) {
             ps = get_param(inTensors[1]->get_desc());
         }
-        CHECK_STATUS(expand_infer_output_size(inTensors[0], ps, outTensors[0], &this->archInfo));
-        return SUCCESS;
+        return expand_infer_output_size(inTensors[0], ps, outTensors[0], &this->archInfo);
     }
 };
 

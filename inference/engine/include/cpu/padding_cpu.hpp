@@ -33,15 +33,57 @@ public:
     {
         Tensor inputTensor = this->inputTensors[0];
         Tensor outputTensor = this->outputTensors[0];
-        CHECK_STATUS(padding(inputTensor, this->p, outputTensor, &this->archInfo));
+        PadParamSpec ps = p;
+        if (ps.top == UNI_RESERVE && inputTensors.size() > 1) {
+            ps = get_param(inputTensors[1].get_desc());
+        }
+        CHECK_STATUS(padding(inputTensor, ps, outputTensor, &this->archInfo));
+    }
+
+    PadParamSpec get_param(TensorDesc desc)
+    {
+        PadParamSpec ps = this->p;
+        int num = tensorNumElements(desc);
+        switch (num) {
+            case 8: {
+                ps.front = desc.dims[desc.nDims + 1];
+                ps.top = desc.dims[desc.nDims + 2];
+                ps.left = desc.dims[desc.nDims + 3];
+                ps.back = desc.dims[desc.nDims + num / 2 + 1];
+                ps.bottom = desc.dims[desc.nDims + num / 2 + 2];
+                ps.right = desc.dims[desc.nDims + num / 2 + 3];
+                break;
+            }
+            case 6: {
+                ps.front = desc.dims[desc.nDims + 1];
+                ps.top = desc.dims[desc.nDims + 2];
+                ps.back = desc.dims[desc.nDims + num / 2 + 1];
+                ps.bottom = desc.dims[desc.nDims + num / 2 + 2];
+                ps.left = ps.right = 0;
+                break;
+            }
+            case 4: {
+                ps.front = desc.dims[desc.nDims + 1];
+                ps.back = desc.dims[desc.nDims + num / 2 + 1];
+                ps.top = ps.bottom = 0;
+                ps.left = ps.right = 0;
+                break;
+            }
+            default:
+                UNI_ERROR_LOG("can not process pad's parameter from input.\n");
+                break;
+        }
+        return ps;
     }
 
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
-        CHECK_STATUS(
-            padding_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo));
-        return SUCCESS;
+        PadParamSpec ps = p;
+        if (ps.top == UNI_RESERVE && inTensors.size() > 1) {
+            ps = get_param(inTensors[1]->get_desc());
+        }
+        return padding_infer_output_size(inTensors[0], ps, outTensors[0], &this->archInfo);
     }
 };
 

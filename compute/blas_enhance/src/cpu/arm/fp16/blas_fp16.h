@@ -11,30 +11,29 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifdef _USE_FP16
 #ifndef _H_BLAS_FP16
 #define _H_BLAS_FP16
 
-#include "sys.h"
-
-#include "error.h"
 #include "tensor_desc.h"
-
-EE matrix_vector_multiply_transform_weight_fp16(TensorDesc desc, F16 *src, F16 *dst);
+#include "uni.h"
+#include "arm_neon_expand.h"
 
 EE mvm_fp16(U32 row, U32 col, DataFormat df, F16 *matrix, F16 *vector, F16 *result, Arch arch);
 
-void matrix_matrix_multiply_tmp_bytes_fp16(
-    U32 row1, U32 col1, U32 row2, U32 col2, DataType dt, U32 *bytes);
-
-EE matrix_matrix_multiply_transform_rhsN_fp16(TensorDesc desc, F16 *src, F16 *dst);
-
-EE matrix_matrix_multiply_transform_rhsT_fp16(TensorDesc desc, F16 *src, F16 *dst);
+void matrix_matrix_multiply_tmp_bytes_fp16(U32 M, U32 N, U32 K, DataFormat bdf, U32 *bytes);
 
 EE mmm_fp16(
     int M, int N, int K, bool transposeA, F16 *matrix1, F16 *matrix2, F16 *tmp, F16 *result, Arch arch);
 
-EE axpby_fp16(U32 len, F32 a, const F16 *x, F32 b, F16 *y);
+EE axpby_fp16(I32 len, F32 a, const F16 *x, F32 b, F16 *y);
 
-#endif
+// preorder weight for mvm/mmm
+EE matrix_vector_multiply_transform_weight_fp16(TensorDesc desc, F16 *src, F16 *dst);
+
+void matrix_matrix_multiply_transform_rhs_bytes_fp16(
+    U32 M, U32 K, DataFormat bdf, U32 *bytes, U32 *rhsBytes);
+
+EE matrix_matrix_multiply_transform_rhsN_fp16(TensorDesc desc, F16 *src, F16 *dst);
+
+EE matrix_matrix_multiply_transform_rhsT_fp16(TensorDesc desc, F16 *src, F16 *dst);
 #endif

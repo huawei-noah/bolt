@@ -32,9 +32,8 @@ public:
 
     EE infer_weight_desc() override
     {
-        auto curOpWs = this->get_weightspec();
-        DataType fdt = curOpWs.mdt;
-        if (curOpWs.weight == nullptr) {
+        DataType fdt = this->ws.mdt;
+        if (this->ws.weight == nullptr) {
             fdt = this->dt;
         }
         if (fdt == DT_BIN01 || fdt == DT_BIN11) {
@@ -43,8 +42,8 @@ public:
         TensorDesc filterTensorDesc = tensor4df(
             fdt, DF_NCHW, this->numInputs, this->p.num_outputs, this->p.kernel_h, this->p.kernel_w);
         // bias data type should be the same as input and output
-        DataType dtNoQ = (dt == DT_F16_8Q) ? DT_F16 : ((dt == DT_F32_8Q) ? DT_F32 : dt);
-        TensorDesc vectorTensorDesc = tensor1d(dtNoQ, this->numInputs * this->p.group);
+        TensorDesc vectorTensorDesc =
+            tensor1d(noQuantDataType(this->dt), this->p.num_outputs * this->p.group);
         this->weightTensors = std::vector<Tensor>(1);
         this->weightTensors[0].resize(filterTensorDesc);
         this->biasTensors = std::vector<Tensor>(1);
@@ -62,10 +61,37 @@ public:
         outputTensor.resize(transformDescTo4d(oriOutputDesc));
         Tensor filterTensor = this->weightTensors[0];
         Tensor biasTensor = this->biasTensors[0];
-        CHECK_STATUS(deconvolution(inputTensor, filterTensor, p, this->alg, nullptr, biasTensor,
+
+        F32 scales[3] = {-1};
+#ifdef _USE_INT8
+        TensorDesc inputDesc = inputTensor.get_desc();
+        TensorDesc outputDesc = outputTensor.get_desc();
+        scales[0] = inputTensor.get_scale();
+        if (featureScale.size() > 1 && featureScale[0][0] > 0 && DT_I8 != inputDesc.dt &&
+            DT_U8_Q != inputDesc.dt) {
+            // inputTensor.set_scale(featureScale[0][0]);
+            scales[0] = featureScale[0][0];
+        }
+        if (DT_I8 == outputDesc.dt || DT_U8_Q == outputDesc.dt) {
+            if (featureScale.size() > 0) {
+                // outputTensor.set_scale((featureScale.back())[0]);
+                scales[1] = (featureScale.back())[0];
+            } else {
+                scales[1] = -1;
+            }
+        }
+        scales[2] = filterTensor.get_scale();
+#endif
+
+        CHECK_STATUS(deconvolution(inputTensor, filterTensor, p, this->alg, scales, biasTensor,
             this->temp, outputTensor, this->activationDesc, &this->archInfo));
         inputTensor.resize(oriInputDesc);
         outputTensor.resize(oriOutputDesc);
+#if defined(_USE_INT8)
+        if (DT_I8 == outputDesc.dt || DT_U8_Q == outputDesc.dt) {
+            outputTensor.set_scale(scales[1]);
+        }
+#endif
     }
 
     EE infer_forward_algorithm(std::shared_ptr<AlgorithmMap> algorithmMap) override
@@ -112,10 +138,8 @@ public:
             this->p.kernel_h, this->p.kernel_w);
         filterTensor.resize(filterDim);
 
-        DataType targetType = this->dt;
-        if (DT_F16_8Q == this->dt || DT_F32_8Q == this->dt) {
-            targetType = DT_I8;
-        }
+        DataType targetType = isQuantMixDataType(this->dt) ? get_activation_quant_data_type()
+                                                           : this->dt;
 
         CHECK_STATUS(deconvolution_infer_output_size(
             inputTensor, filterTensor, p, outTensors[0], targetType, &this->archInfo));
@@ -126,6 +150,13 @@ public:
             U32 on, oc, oh, ow;
             CHECK_STATUS(tensor4dGet(outTensors[0]->get_desc(), &odt, &odf, &on, &oc, &oh, &ow));
             outTensors[0]->resize(tensor3df(odt, odf, on, oc, oh));
+        }
+        TensorDesc outputDesc = outTensors[0]->get_desc();
+        if (featureScale.size() > 0 && -2 == (featureScale.back())[0]) {
+            if (isQuantMixDataType(this->dt)) {
+                outputDesc.dt = noQuantDataType(this->dt);
+                outTensors[0]->resize(outputDesc);
+            }
         }
         return SUCCESS;
     }
@@ -146,20 +177,26 @@ public:
         return bytes;
     }
 
-    U32 infer_wtm_memory_size() override
-    {
-        U32 bytes = 0;
-        CHECK_STATUS(deconvolution_transform_filter_bytes(
-            this->weightTensors[0], this->p, this->alg, &bytes, &this->archInfo));
-        return bytes;
-    }
-
     EE transform_filter() override
     {
-        this->wtm = std::shared_ptr<Tensor>(new Tensor());
         Tensor filterTensor = this->weightTensors[0];
-        auto wtmBytes = this->infer_wtm_memory_size();
+        U32 wtmBytes = 0;
+        CHECK_STATUS(deconvolution_transform_filter_bytes(
+            filterTensor, this->p, this->alg, &wtmBytes, &this->archInfo));
         Tensor wtm = Tensor::alloc_sized<CPUMem>(tensor1d(DT_U8, wtmBytes));
+#ifdef _USE_INT8
+        TensorDesc desc = filterTensor.get_desc();
+        bool thisIsNoQuant = (featureScale.size() > 1 && featureScale[0].back() == 0);
+        if (isQuantMixDataType(this->dt) && !thisIsNoQuant && (desc.dt != DT_I8)) {
+            desc.dt = DT_I8;
+            Tensor qTensor = Tensor::alloc_sized<CPUMem>(desc);
+            F32 scale = -1;
+            CHECK_STATUS(quantize(filterTensor, &qTensor, &scale, &(this->archInfo)));
+            qTensor.set_scale(scale);
+            filterTensor = qTensor;
+        }
+        wtm.set_scale(filterTensor.get_scale());
+#endif
         EE ret = deconvolution_transform_filter(
             filterTensor, this->p, this->alg, this->temp, &wtm, &this->archInfo);
         this->weightTensors[0] = wtm;

@@ -111,8 +111,10 @@ class ChannelPaddingOptimizer : public OPOptimizer {
                     UNI_MEMSET((U8 *)(spec->ws[weightIndex].vec + vecSize), 0, vecSizeNew - vecSize);
                     mt_free(vec, spec);
                 }
-                std::string channelResizeName1 = channelResizeNamePrefix + std::to_string(i);
-                std::string channelResizeName2 = channelResizeNamePrefix + std::to_string(i + 2);
+                std::string channelResizeName1 =
+                    allocName(channelResizeNamePrefix + std::to_string(i));
+                std::string channelResizeName2 =
+                    allocName(channelResizeNamePrefix + std::to_string(i + 2));
                 insertChannelResizeOperator(spec, i, channelResizeName1.c_str(),
                     currentOperator.input_tensors_name[0], channelResizeName2.c_str(), 1,
                     numKernels, numKernelsNew);
@@ -209,9 +211,9 @@ class ChannelPaddingOptimizer : public OPOptimizer {
                 int channelResizeIndex1 = i;
                 int channelResizeIndex2 = i + 2;
                 std::string channelResizeName1 =
-                    channelResizeNamePrefix + std::to_string(channelResizeIndex1);
+                    allocName(channelResizeNamePrefix + std::to_string(channelResizeIndex1));
                 std::string channelResizeName2 =
-                    channelResizeNamePrefix + std::to_string(channelResizeIndex2);
+                    allocName(channelResizeNamePrefix + std::to_string(channelResizeIndex2));
                 if (inputChannels != inputChannelsNew) {
                     const char *symmetric = channelResizeName2.c_str();
                     if (numKernels == numKernelsNew) {
@@ -225,8 +227,8 @@ class ChannelPaddingOptimizer : public OPOptimizer {
                 if (numKernels != numKernelsNew) {
                     if (inputChannels == inputChannelsNew) {
                         channelResizeIndex2 = i + 1;
-                        channelResizeName2 =
-                            channelResizeNamePrefix + std::to_string(channelResizeIndex2);
+                        channelResizeName2 = allocName(
+                            channelResizeNamePrefix + std::to_string(channelResizeIndex2));
                     }
                     insertChannelResizeOperator(spec, channelResizeIndex2,
                         channelResizeName2.c_str(), currentOperator.output_tensors_name[0], nullptr,

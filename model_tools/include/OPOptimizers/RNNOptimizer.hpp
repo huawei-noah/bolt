@@ -38,6 +38,19 @@ class RNNOptimizer : public OPOptimizer {
         return hasOptimized;
     }
 
+    template <typename T>
+    bool transpose(int length, T *input, unsigned int *trans, T *output)
+    {
+        bool same = true;
+        for (int j = 0; j < length; j++) {
+            output[j] = input[trans[j]];
+            if (output[j] != (T)j) {
+                same = false;
+            }
+        }
+        return same;
+    }
+
     bool padding(ModelSpec *spec)
     {
         int alignBase = 32;
@@ -163,7 +176,7 @@ class RNNOptimizer : public OPOptimizer {
                 mt_free(oldWeight, spec);
                 mt_free(oldVec, spec);
 
-                std::string name = std::string(spec->ops[i].name) + std::string("_slice");
+                std::string name = allocName(std::string(spec->ops[i].name) + std::string("_slice"));
                 OperatorSpec tfsliceOperator = mt_create_operator(name.c_str(), OT_TfSlice, 1, 1);
                 TfSliceParamSpec tfSlicePs;
                 UNI_MEMSET(&tfSlicePs, 0, sizeof(tfSlicePs));
@@ -188,19 +201,6 @@ class RNNOptimizer : public OPOptimizer {
             }
         }
         return hasOptimized;
-    }
-
-    template <typename T>
-    bool transpose(int length, T *input, unsigned int *trans, T *output)
-    {
-        bool same = true;
-        for (int j = 0; j < length; j++) {
-            output[j] = input[trans[j]];
-            if (output[j] != (T)j) {
-                same = false;
-            }
-        }
-        return same;
     }
 
     bool simplifyONNXRNN(ModelSpec *spec)
@@ -267,6 +267,9 @@ class RNNOptimizer : public OPOptimizer {
                             3, spec->ops[prevOpIndex].ps.reshape_spec.shape, dims, out);
                         UNI_MEMCPY(
                             spec->ops[prevOpIndex].ps.reshape_spec.shape, out, sizeof(int) * 3);
+                        rnnInputId = prevOpIndex;
+                    }
+                    if (spec->ops[prevOpIndex].type == OT_Concat) {
                         rnnInputId = prevOpIndex;
                     }
                 }
@@ -365,10 +368,10 @@ class RNNOptimizer : public OPOptimizer {
                             mt_free(spec->ops[index].input_tensors_name[k]);
                         }
                         spec->ops[index].num_inputs = 1;
-                        for (U32 k = 1; k < spec->ops[index].num_outputs; k++) {
-                            mt_free(spec->ops[index].output_tensors_name[k]);
-                        }
-                        spec->ops[index].num_outputs = 1;
+                        //for (U32 k = 1; k < spec->ops[index].num_outputs; k++) {
+                        //    mt_free(spec->ops[index].output_tensors_name[k]);
+                        //}
+                        //spec->ops[index].num_outputs = 1;
                     }
                     hasOptimized = true;
                 }
@@ -381,11 +384,28 @@ class RNNOptimizer : public OPOptimizer {
                     std::vector<std::pair<int, int>> nextOpIndexes2 = searchOperatorIndexByInput(
                         spec, spec->ops[nextOpIndex1].output_tensors_name[0], nextOpIndex1 + 1,
                         spec->num_operator_specs);
-                    if (nextOpIndexes2.size() != 1) {
+                    if (nextOpIndexes2.size() == 0) {
                         continue;
                     }
                     int nextOpIndex2 = nextOpIndexes2[0].first;
-
+                    // onnx-rnn + reshape(-1,0,0)/squeeze(axis=1) + transpose(1,0,2)/rnn
+                    if (spec->ops[nextOpIndex1].type == OT_Squeeze ||
+                        spec->ops[nextOpIndex1].type == OT_Reshape) {
+                        setOperatorInvalid(spec, nextOpIndex1, true);
+                        if (spec->ops[nextOpIndex2].type == OT_Transpose &&
+                            spec->ops[nextOpIndex2].ps.transpose_spec.num_axes == 3) {
+                            unsigned int dims[3] = {1, 0, 2};
+                            bool remove = this->transpose<unsigned int>(3, dims,
+                                spec->ops[nextOpIndex2].ps.transpose_spec.axes,
+                                spec->ops[nextOpIndex2].ps.transpose_spec.axes);
+                            if (remove) {
+                                setOperatorInvalid(spec, nextOpIndex2, true);
+                            }
+                        }
+                    }
+                    if (nextOpIndexes2.size() != 1) {
+                        continue;
+                    }
                     // onnx-scan + transpose(1,0,2)
                     if (spec->ops[nextOpIndex1].type == OT_Transpose &&
                         spec->ops[nextOpIndex1].ps.transpose_spec.num_axes == 3 &&
@@ -395,27 +415,6 @@ class RNNOptimizer : public OPOptimizer {
                         str_copy(spec->ops[i].output_tensors_name[0],
                             spec->ops[nextOpIndex1].output_tensors_name[0], NAME_LEN);
                         setOperatorInvalid(spec, nextOpIndex1);
-                    }
-                    // onnx-rnn + reshape(-1,0,0)/squeeze(axis=1) + transpose(1,0,2)/rnn
-                    if (spec->ops[nextOpIndex1].type == OT_Squeeze ||
-                        spec->ops[nextOpIndex1].type == OT_Reshape) {
-                        str_copy(spec->ops[i].output_tensors_name[0],
-                            spec->ops[nextOpIndex1].output_tensors_name[0], NAME_LEN);
-                        setOperatorInvalid(spec, nextOpIndex1);
-                        if (spec->ops[nextOpIndex2].type == OT_Transpose &&
-                            spec->ops[nextOpIndex2].ps.transpose_spec.num_axes == 3) {
-                            unsigned int dims[3] = {1, 0, 2};
-                            bool remove = this->transpose<unsigned int>(
-                                3, spec->ops[nextOpIndex2].ps.transpose_spec.axes, dims, dims);
-                            if (remove) {
-                                str_copy(spec->ops[i].output_tensors_name[0],
-                                    spec->ops[nextOpIndex2].output_tensors_name[0], NAME_LEN);
-                                setOperatorInvalid(spec, nextOpIndex2);
-                            } else {
-                                UNI_MEMCPY(spec->ops[nextOpIndex2].ps.transpose_spec.axes, dims,
-                                    sizeof(int) * 3);
-                            }
-                        }
                     }
                     // onnx-rnn + transpose(2,0,1,3) + reshape(0,0,-1)
                     if (spec->ops[nextOpIndex1].type == OT_Transpose &&

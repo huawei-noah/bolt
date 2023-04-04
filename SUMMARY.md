@@ -30,6 +30,9 @@
 * [Kit Example](docs/KIT.md)
 
 
+* [Lite for Cortex-M](docs/LITE.md)
+
+
 * [Changelog](docs/CHANGELOG.md)
 
 

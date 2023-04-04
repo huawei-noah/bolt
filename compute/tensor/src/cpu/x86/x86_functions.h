@@ -19,7 +19,11 @@
 #include "cpu/x86/fp32/x86_functions_fp32.h"
 #endif
 #ifdef _USE_INT8
-#include "cpu/x86/int8/x86_functions_int8.h"
+#ifdef _USE_AVX512_VNNI
+#include "cpu/x86/int8/avx512/x86_functions_int8.h"
+#else
+#include "cpu/x86/int8/avx/x86_functions_int8.h"
+#endif
 #endif
 
 inline void array_add_x86(DataType dt, const void *inputA, const void *inputB, void *output, I32 len)
@@ -31,7 +35,7 @@ inline void array_add_x86(DataType dt, const void *inputA, const void *inputB, v
             break;
 #endif
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
             break;
     }
 }
@@ -45,7 +49,7 @@ inline void array_mul_x86(DataType dt, const void *inputA, const void *inputB, v
             break;
 #endif
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
             break;
     }
 }
@@ -61,7 +65,7 @@ inline void array_mul_and_add_x86(
             break;
 #endif
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
             break;
     }
 }
@@ -77,7 +81,7 @@ inline F32 array_mean_x86(DataType dt, const void *data, I32 len)
             break;
 #endif
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
             break;
     }
     return result;
@@ -101,7 +105,7 @@ inline void array_power_x86(DataType dt, void *input, void *output, I32 len, F32
             array_power_template<U32>((U32 *)input, (U32 *)output, len, power);
             break;
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
             break;
     }
 }
@@ -120,7 +124,7 @@ inline F32 array_sum_x86(DataType dt, const void *data, I32 len)
             result = array_sum_i32((const I32 *)data, len);
             break;
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
             break;
     }
     return result;
@@ -144,8 +148,11 @@ inline void array_scale_x86(
         case DT_U32:
             array_scale_template<U32>((const U32 *)input, (U32 *)output, len, alpha, beta);
             break;
+        case DT_I8:
+            array_scale_template<INT8>((const INT8 *)input, (INT8 *)output, len, alpha, beta);
+            break;
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
             break;
     }
 }
@@ -160,15 +167,18 @@ inline F32 array_var_x86(DataType dt, const void *data, I32 len, F32 mean)
             result = array_var_f32((const F32 *)data, len, mean);
             break;
 #endif
+	case DT_I32:
+	        result = array_var_i32((const I32 *)data, len);
+	        break;    
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
             break;
     }
     return result;
 }
 
 inline EE array_activation_x86(
-    DataType dt, void *input, U32 len, ActivationParamSpec activationDesc, void *output)
+    DataType dt, void *input, U32 len, ActivationParamSpec activationDesc, void *output, F32 *scale)
 {
     EE result = SUCCESS;
     switch (dt) {
@@ -179,11 +189,11 @@ inline EE array_activation_x86(
 #endif
 #ifdef _USE_INT8
         case DT_U8_Q:
-            result = activation_offset_int8((UINT8 *)input, len, activationDesc, (UINT8 *)output);
+            result = activation_offset_int8((UINT8 *)input, len, activationDesc, (UINT8 *)output, scale);
             break;
 #endif
         default:
-            result = array_activation_general(dt, input, len, activationDesc, output);
+            result = array_activation_general(dt, input, len, activationDesc, output, nullptr);
             break;
     }
     return result;
@@ -205,6 +215,7 @@ inline EE array_minmax_value_x86(DataType dt, const void *data, I32 len, int mod
             ret = array_minmax_value_i32((const I32 *)data, len, mode, result);
             break;
         default:
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
             ret = NOT_SUPPORTED;
             break;
     }
@@ -220,7 +231,7 @@ inline void array_max_x86(DataType dt, const void *inputA, const void *inputB, v
             break;
 #endif
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
             break;
     }
 }
@@ -236,7 +247,7 @@ inline void array_norm_scalar_scale_x86(
             break;
 #endif
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
             break;
     }
 }

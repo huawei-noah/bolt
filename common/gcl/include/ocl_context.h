@@ -14,13 +14,13 @@
 #ifndef H_OCL_CONTEXT
 #define H_OCL_CONTEXT
 
+#include <memory>
 #include "gcl_common.h"
 
 class OCLContext {
 public:
     static OCLContext &getInstance();
 
-protected:
     OCLContext();
     ~OCLContext();
 

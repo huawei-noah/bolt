@@ -189,7 +189,6 @@ TEST(TestZoneout, SimpleTrainForwardRandUnit)
     ASSERT_TRUE(TODTYPE(outputs.size()) * prev_prob * (1.0_dt - prev_prob) >= 10.0_dt);
 
     // The confident interval for p estimation
-    // See https://www.wolframalpha.com/input/?i=confidence+99.999%25
     const auto z_ci = 4.417_dt; // 99.999%
     const auto prev_ci = z_ci * sqrt(prev_prob * (1.0_dt - prev_prob) / TODTYPE(outputs.size()));
     const auto curr_ci = z_ci * sqrt(curr_prob * (1.0_dt - curr_prob) / TODTYPE(outputs.size()));

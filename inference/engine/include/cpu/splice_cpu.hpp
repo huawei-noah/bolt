@@ -98,15 +98,13 @@ public:
 
     int get_num_indexes()
     {
-        auto curOpWs = this->get_weightspec();
-        return curOpWs.bytes_of_weight / bytesOf(curOpWs.mdt);
+        return this->ws.bytes_of_weight / bytesOf(this->ws.mdt);
     }
 
     EE infer_weight_desc() override
     {
-        auto curOpWs = this->get_weightspec();
         int num_indexes = this->get_num_indexes();
-        if (curOpWs.weight != nullptr) {
+        if (this->ws.weight != nullptr) {
             Tensor weightTensor;
             weightTensor.resize(tensor1d(DT_U32, num_indexes));
             this->weightTensors.push_back(weightTensor);

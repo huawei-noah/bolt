@@ -51,9 +51,8 @@ public:
         GenerateProposals::init_generate_proposals_info(inTensors);
         Tensor *deltaTensor = inTensors[this->deltaTensorId];
         Tensor *logitTensor = inTensors[this->logitTensorId];
-        CHECK_STATUS(generate_proposals_infer_output_size(
-            deltaTensor, logitTensor, this->p, outTensors[0], &this->archInfo));
-        return SUCCESS;
+        return generate_proposals_infer_output_size(
+            deltaTensor, logitTensor, this->p, outTensors[0], &this->archInfo);
     }
 
     U32 infer_tmp_memory_size() override

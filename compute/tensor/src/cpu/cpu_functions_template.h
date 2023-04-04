@@ -55,6 +55,15 @@ inline void array_scale_template(const T *input, T *output, I32 len, F32 alpha, 
 }
 
 template <typename T>
+inline void array_scale_round_template(const T *input, INT8 *output, I32 len, F32 scale, bool clamp)
+{
+    for (I32 i = 0; i < len; i++) {
+        // output[i] = round_towards_zero(input[i] * scale, clamp);
+        output[i] = round(input[i] * scale);
+    }
+}
+
+template <typename T>
 inline void array_power_template(T *input, T *output, I32 len, F32 power)
 {
     for (I32 i = 0; i < len; i++) {
@@ -74,6 +83,14 @@ inline EE activation_template(const ActivationParamSpec &activationDesc, const F
         }
         case ACTIVATION_RELU: {
             result = UNI_MAX(activationDesc.value[0] * input, input);
+            break;
+        }
+        case ACTIVATION_ELU: {
+            if (input < 0) {
+                result = activationDesc.value[0] * (exp(input) - 1);
+            } else {
+                result = input;
+            }
             break;
         }
         case ACTIVATION_RELU6: {
@@ -165,7 +182,16 @@ inline EE activation_template(const ActivationParamSpec &activationDesc, const F
             result = 1 / input;
             break;
         }
+        case ACTIVATION_SIN: {
+            result = sin(input);
+            break;
+        }
+        case ACTIVATION_COS: {
+            result = cos(input);
+            break;
+        }
         default:
+            UNI_ERROR_LOG("%s not support new activation.\n", __func__);
             ret = NOT_SUPPORTED;
             break;
     }

@@ -15,8 +15,10 @@
 #define _H_QUANTIZATIONOPTIMIZER
 
 // ptr->feature_scale[0].scale[0] 0: no quant
-// ptr->feature_scale[0].scale[0] -1: quant, output int8
-// ptr->feature_scale[0].scale[0] -2: quant, output float32/float16
+// ptr->feature_scale[0].scale[0] -1: quant, input int8, output int8 (x86->u8, arm->i8)
+// ptr->feature_scale[0].scale[0] -2: quant, input int8, output float32/float16
+// ptr->feature_scale[0].scale[0] -3: quant, input float32/float16, output float32/float16
+// ptr->feature_scale[0].scale[0] -5: quant, input int8, output int8 (x86->i8, arm->i8)
 #include <set>
 #include <unordered_map>
 #include "OPOptimizer.hpp"
@@ -25,10 +27,13 @@
 #include <json/json.h>
 
 const static std::set<OperatorType> NoQuantOP = {OT_HSwish, OT_HSigmoid, OT_Sigmoid, OT_Clip,
-    OT_Gelu, OT_TanH, OT_Resize, OT_LayerNorm, OT_Deconvolution, OT_HSwishNoDiv, OT_Eltwise,
-    OT_Softmax, OT_DetectionOutput, OT_Scale, OT_SharedWeight, OT_Concat, OT_Swish};
-const static std::set<OperatorType> QuantOP = {OT_Conv, OT_MatMul, OT_FC};
-const static std::set<OperatorType> IntegerOP = {OT_Gather, OT_Embedding};
+    OT_Gelu, OT_TanH, OT_Resize, OT_LayerNorm, OT_HSwishNoDiv, OT_Eltwise, OT_PRelu,
+    OT_Softmax, OT_LogSoftmax, OT_DetectionOutput, OT_Scale, OT_SharedWeight, OT_Concat,
+    OT_Swish, OT_OneHot, OT_Where, OT_Cast, OT_TopK, OT_Round, OT_Range, OT_NonMaxSuppression, OT_Exp,
+    OT_Log, OT_Floor, OT_Reduction}; // 0
+const static std::set<OperatorType> QuantOP = {OT_Conv, OT_MatMul, OT_FC, OT_Deconvolution}; // -1 or -2
+const static std::set<OperatorType> FQuantOP = {OT_RNN}; // -3
+const static std::set<OperatorType> DependPreOP = {OT_Gather, OT_Embedding};
 const static std::set<OperatorType> C8OP = {OT_Conv};
 
 class QuantizationOptimizer : public OPOptimizer {
@@ -159,7 +164,11 @@ public:
             }
             CHECK_REQUIREMENT(spec->ops[i].num_quant_feature > 0);
             CHECK_REQUIREMENT(spec->ops[i].feature_scale[0].num_scale > 0);
-            if (spec->ops[i].feature_scale[0].scale[0] == 0) {
+            if ((spec->ops[i].feature_scale[0].scale[0] == 0) ||
+                (spec->ops[i].feature_scale[0].scale[0] == -3) ||
+                ((spec->ops[i].num_quant_feature > spec->ops[i].num_inputs) &&
+                 (spec->ops[i].feature_scale[spec->ops[i].num_inputs].scale[0] == -3)))
+            {
                 continue;
             }
             for (unsigned k = 0; k < spec->ops[i].num_inputs; ++k) {
@@ -169,17 +178,16 @@ public:
 
                 int prevNumQuant = 0;
                 int prevOutputScale = 0;
+                int insertIdx = i;
                 if (!prevIndex.empty()) {
                     prevNumQuant = spec->ops[prevIndex[0].first].num_quant_feature;
                     prevOutputScale =
                         spec->ops[prevIndex[0].first].feature_scale[prevNumQuant - 1].scale[0];
+                    insertIdx = prevIndex[0].first + 1;
                 }
-                if (IntegerOP.count(spec->ops[i].type)) {
-                    continue;
-                }
-                if (prevOutputScale == 0 || prevOutputScale == -2) {
-                    std::string quantizeName = "Quantize_" + curIn + std::to_string(i);
-                    insertQuantizeLinearKernel(spec, i, i, k, curIn, quantizeName);
+                if (prevOutputScale != -1) {
+                    std::string quantizeName = allocName("Quantize_" + curIn + std::to_string(i));
+                    insertQuantizeLinearKernel(spec, insertIdx, i, k, curIn, quantizeName);
                     ++i;
                 }
             }
@@ -192,13 +200,16 @@ public:
         std::vector<std::pair<int, int>> nextIndex(1, std::make_pair(i, 0));
         while (nextIndex.size() > 0) {
             int nextId = nextIndex[0].first;
-            if (spec->ops[nextId].num_quant_feature > 0) {
-                return std::make_pair(nextId, paths);
-            }
-            paths.push_back(nextId);
             if (nextIndex.size() > 1 || spec->ops[nextId].num_outputs > 1) {
                 return std::make_pair(-2, paths);
             }
+            if (spec->ops[nextId].num_quant_feature > 0) {
+                if (spec->ops[nextId].feature_scale[0].scale[0] == -3) {
+                    return std::make_pair(-2, paths);
+                }
+                return std::make_pair(nextId, paths);
+            }
+            paths.push_back(nextId);
             std::string curOut = spec->ops[nextId].output_tensors_name[0];
             nextIndex =
                 searchOperatorIndexByInput(spec, curOut, nextId + 1, spec->num_operator_specs);
@@ -218,13 +229,18 @@ public:
 
     bool isDepthWiseConv(OperatorSpec *op)
     {
-        return ((op->type == OT_Conv) && (op->ps.conv_spec.num_outputs == op->ps.conv_spec.group));
+        return ((op->type == OT_Conv) && (op->ps.conv_spec.convolution_type == CONVOLUTION_DEPTHWISE));
+    }
+
+    bool isDepthWiseDeConv(OperatorSpec *op)
+    {
+        return ((op->type == OT_Deconvolution) && (op->ps.conv_spec.num_outputs_origin == op->ps.conv_spec.group));
     }
 
     bool isNoQuantOp(OperatorSpec *op)
     {
         return (NoQuantOP.count(op->type) || isDepthWiseConv(op) || isAvgPooling(op) ||
-            isNotNaiveRelu(op));
+            isNotNaiveRelu(op) || isDepthWiseDeConv(op));
     }
 
     bool isQuantOp(OperatorSpec *op)
@@ -232,7 +248,7 @@ public:
         return (QuantOP.count(op->type) && !isNoQuantOp(op));
     }
 
-    void parseAndPreLabel(ModelSpec *spec)
+    void parseAndPreLabel(ModelSpec *spec, Json::Value value)
     {
         for (int i = 0; i < spec->num_operator_specs; i++) {
             if (spec->ops[i].type == OT_None) {
@@ -250,8 +266,58 @@ public:
                 // All quantized nodes are labeled float output at first.
                 label_OP_as_quant_float(spec->ops + i);
             }
-            if (isNoQuantOp(spec->ops + i)) {
+
+            if (FQuantOP.count(spec->ops[i].type)) {
+                label_OP_as_float_quant_float(spec->ops + i);
+            }
+
+            bool isOutputOp = false;
+            for (unsigned j = 0; j < spec->ops[i].num_outputs; ++j) {
+                if (outputNames.count(std::string(spec->ops[i].output_tensors_name[j]))) {
+                    isOutputOp = true;
+                    break;
+                }
+            }
+            if (isNoQuantOp(spec->ops + i) ||
+                (isOutputOp && !QuantOP.count(spec->ops[i].type) && !FQuantOP.count(spec->ops[i].type))) {
                 label_OP_as_no_quant(spec->ops + i);
+            }
+        }
+
+        if (value != Json::Value::null &&
+            (value.get("quantization", Json::Value::null).asString() == "dynamic"))
+        {
+            auto quanOpsVal = value.get("quant_ops", Json::Value::null);
+            auto noQuantOpsVal = value.get("no_quant_ops", Json::Value::null);
+            std::set<std::string> quantOps;
+            std::set<std::string> noQuantOps;
+            if (quanOpsVal != Json::Value::null) {
+                for (auto v: quanOpsVal) {
+                    quantOps.insert(v.asString());
+                }
+            }
+            if (noQuantOpsVal != Json::Value::null) {
+                for (auto v: noQuantOpsVal) {
+                    noQuantOps.insert(v.asString());
+                }
+            }
+            for (int i = 0; i < spec->num_operator_specs; i++) {
+                if (spec->ops[i].type == OT_None) {
+                    continue;
+                }
+                if (quantOps.count(std::string(spec->ops[i].name))) {
+                    if (QuantOP.count(spec->ops[i].type)) {
+                        // All quantized nodes are labeled float output at first.
+                        label_OP_as_quant_float(spec->ops + i);
+                    }
+
+                    if (FQuantOP.count(spec->ops[i].type)) {
+                        label_OP_as_float_quant_float(spec->ops + i);
+                    }
+                }
+                if (noQuantOps.count(std::string(spec->ops[i].name))) {
+                    label_OP_as_no_quant(spec->ops + i);
+                }
             }
         }
     }
@@ -263,7 +329,7 @@ public:
         if (nextIndex.empty()) {
             return 0;
         }
-        float scale = -2;
+        float scale = -99;
         for (auto index : nextIndex) {
             float tmp = 0;
             if (spec->ops[index.first].num_quant_feature == 0) {
@@ -272,11 +338,11 @@ public:
                 tmp = spec->ops[index.first]
                           .feature_scale[spec->ops[index.first].num_quant_feature - 1]
                           .scale[0];
-                if (tmp != 0) {
-                    tmp = -1;
+                if (tmp < -1) {
+                    tmp += 1;
                 }
             }
-            if (scale != -2 && tmp != scale) {
+            if (scale != -99 && tmp != scale) {
                 scale = 0;
                 break;
             }
@@ -293,6 +359,10 @@ public:
     {
         for (int i = 0; i < spec->num_operator_specs; i++) {
             if (spec->ops[i].num_quant_feature > 0 || spec->ops[i].type == OT_None) {
+                continue;
+            }
+            if (DependPreOP.count(spec->ops[i].type)) {
+                label_OP(spec->ops + i, 0);
                 continue;
             }
             std::pair<int, std::vector<int>> path = FindPathToNextLabeledOP(spec, i);
@@ -326,8 +396,8 @@ public:
                 std::vector<std::pair<int, int>> nextIndex =
                     searchOperatorIndexByInput(spec, curOut, i + 1, spec->num_operator_specs);
                 int flag = -1;
-                if (nextIndex.empty()) {
-                    flag = -2;
+                if (nextIndex.empty() || outputNames.count(curOut)) {
+                    continue;
                 }
                 for (auto nextNode : nextIndex) {
                     if (spec->ops[nextNode.first].feature_scale[0].scale[0] != -1 &&
@@ -406,6 +476,11 @@ public:
         label_OP(ptr, -1);
     }
 
+    void label_OP_as_float_quant_float(OperatorSpec *ptr)
+    {
+        label_OP(ptr, -3);
+    }
+
     bool is_kin_to_model_input(ModelSpec *spec, std::string name, int bound)
     {
         if (0 == bound) {
@@ -441,7 +516,7 @@ public:
                 return true;
             }
         }
-        if (OT_Conv == ot || OT_FC == ot || OT_MatMul == ot) {
+        if (OT_Deconvolution == ot || OT_Conv == ot || OT_FC == ot || OT_MatMul == ot) {
             return false;
         }
         for (U32 i = 0; i < spec->ops[prevIndex].num_inputs; i++) {
@@ -452,10 +527,10 @@ public:
         return true;
     }
 
-    bool optimizeNormal(ModelSpec *spec)
+    bool optimizeNormal(ModelSpec *spec, Json::Value value)
     {
         // Label the key quant and no-quant OP
-        parseAndPreLabel(spec);
+        parseAndPreLabel(spec, value);
 
         // Label the other OP, depending on the graph
         // If a continuous path ends at a quantized node, these nodes will be labeled as quantized nodes with int8 output.
@@ -492,23 +567,17 @@ public:
         return true;
     }
 
-    bool optimizeQATWithScale(ModelSpec *spec)
+    bool optimizeQATWithScale(ModelSpec *spec, Json::Value value)
     {
-        std::fstream file(std::string(this->scaleFile), std::ios::in);
-        Json::Value value;
-        Json::Reader reader;
-        if (!reader.parse(file, value)) {
-            UNI_ERROR_LOG("%s is not a valid JSON file.", scaleFile);
-        }
-        file.close();
-
-        parseAndPreLabel(spec);
+        parseAndPreLabel(spec, Json::Value::null);
 
         for (I32 i = 0; i < spec->num_operator_specs; i++) {
             if (spec->ops[i].type == OT_None) {
                 continue;
             }
-            if (spec->ops[i].num_quant_feature == 1 && spec->ops[i].feature_scale[0].scale[0] == 0) {
+            if ((spec->ops[i].type != OT_SharedWeight) && 
+                (spec->ops[i].num_quant_feature == 1) && 
+                (spec->ops[i].feature_scale[0].scale[0] == 0)) {
                 continue;
             }
             std::string layerName = std::string(spec->ops[i].name);
@@ -528,11 +597,15 @@ public:
             // all nodes are set to F32 default
             U32 inputNum = spec->ops[i].num_inputs;
             U32 outputNum = spec->ops[i].num_outputs;
+            F32 scaleVal = -2;
+            if (FQuantOP.count(spec->ops[i].type)) {
+                scaleVal = -3;
+            }
             for (U32 j = 0; j < inputNum; j++) {
-                scales.push_back({-2});
+                scales.push_back({scaleVal});
             }
             for (U32 j = 0; j < outputNum; j++) {
-                scales.push_back({-2});
+                scales.push_back({scaleVal});
             }
             if (value[layerName]["inputs"].isObject()) {
                 for (U32 j = 0; j < inputNum; j++) {
@@ -558,8 +631,18 @@ public:
             if (value[layerName]["weights"].isObject() && value[layerName]["weights"].size() >= 1) {
                 CHECK_REQUIREMENT(value[layerName]["weights"].size() == 1);
                 Json::Value::Members members = value[layerName]["weights"].getMemberNames();
-                CHECK_REQUIREMENT(value[layerName]["weights"][members[0]].isDouble());
-                clip_weight(spec, i, value[layerName]["weights"][members[0]].asFloat());
+                float val = 0;
+                if (value[layerName]["weights"][members[0]].isDouble()) {
+                    val = value[layerName]["weights"][members[0]].asFloat();
+                } else {
+                    // val = value[layerName]["weights"][members[0]][0].asFloat();
+                // } else {
+                    CHECK_STATUS(NOT_SUPPORTED);
+                }
+                clip_weight(spec, i, val);
+                if (spec->ops[i].type == OT_SharedWeight) {
+                    scales[0] = {127.0f / value[layerName]["weights"][members[0]].asFloat()};
+                }
             }
 
             // Store scales into result model
@@ -621,14 +704,31 @@ public:
 
     bool optimize(ModelSpec *spec)
     {
+        for (int i = 0; i < spec->num_outputs; ++i) {
+            outputNames.insert(std::string(spec->output_names[i]));
+        }
         if (this->scaleFile != nullptr) {
-            optimizeQATWithScale(spec);
+            std::fstream file(std::string(this->scaleFile), std::ios::in);
+            Json::Value value;
+            Json::Reader reader;
+            if (!reader.parse(file, value)) {
+                UNI_ERROR_LOG("%s is not a valid JSON file.", scaleFile);
+            }
+            file.close();
+            if ("static" == value.get("quantization", Json::Value("static")).asString()) {
+                optimizeQATWithScale(spec, value);
+            } else if ("dynamic" == value["quantization"].asString()) {
+                optimizeNormal(spec, value);
+            } else {
+                UNI_ERROR_LOG("\"quantization\" must be static or dynamic, now it is %s\n",
+                    value["quantization"].asString().c_str());
+            }
         } else if (this->clipVal > 0) {
             optimizeQATWithGlobalClip(spec);
         } else if (this->actFP) {
             optimizeActFP(spec);
         } else {
-            optimizeNormal(spec);
+            optimizeNormal(spec, Json::Value::null);
         }
 
         // Insert QuantizeLinearOP between the OP with float output and the quantized OP.
@@ -641,5 +741,6 @@ private:
     bool actFP;
     const char *scaleFile;
     F32 clipVal;
+    std::set<std::string> outputNames;
 };
 #endif

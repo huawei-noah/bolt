@@ -42,8 +42,7 @@ public:
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
         this->needSetKernelVec = true;
-        CHECK_STATUS(cast_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo));
-        return SUCCESS;
+        return cast_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo);
     }
     REGISTER_OCL_OPERATOR_RUN
 };

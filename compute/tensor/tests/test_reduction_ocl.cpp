@@ -100,19 +100,27 @@ int reductionTest(int argc, char **argv, DataType dt)
     CHECK_STATUS(ocl_set_input(handle, input, inputDesc, input_cpu, tmpbuf, true));
     CHECK_STATUS(reduction(inputTensor, maskTensor, p, tmpTensor, outputTensor, &archInfo));
 
-    /*warp up*/
-    UNI_INFO_LOG("warm up gpu:\n")
-    for (U32 i = 0; i < 2; i++) {
+    for (U32 i = 0; i < UT_WARMUP; i++) {
         CHECK_STATUS(gcl_run_kernelVec(handle));
     }
+    CHECK_STATUS(gcl_finish(handle));
 
-    UNI_INFO_LOG("Run:\n")
+    double time = 0;
 #ifdef _DEBUG
-    CHECK_STATUS(gcl_run_kernelVec_timing(handle, 0, handle->kernelVec->size()));
-    double time = handle->t_execute * 0.001;
+    for (I32 i = 0; i < UT_LOOPS; i++) {
+        CHECK_STATUS(gcl_run_kernelVec_timing(handle, 0, handle->kernelVec->size()));
+        time += handle->t_execute * 0.001;
+    }
 #else
-    CHECK_STATUS(gcl_run_kernelVec(handle));
+    double start = ut_time_ms();
+    for (I32 i = 0; i < UT_LOOPS; i++) {
+        CHECK_STATUS(gcl_run_kernelVec(handle));
+        CHECK_STATUS(gcl_finish(handle));
+    }
+    double end = ut_time_ms();
+    time = (end - start);
 #endif
+    time /= UT_LOOPS;
     outputDesc = outputTensor.get_desc();
     CHECK_STATUS(ocl_get_output(handle, output, outputDesc, output_gpu, tmpbuf, true));
 
@@ -120,11 +128,9 @@ int reductionTest(int argc, char **argv, DataType dt)
     char params[120];
     sprintf(params, "(%u %u %u %u) %d =(%u %u %u %u)", in, ic, ih, iw, p.num_axes, on, oc, oh, ow);
     sprintf(buffer, "%20s, %80s", "Reduction", params);
-#ifdef _DEBUG
     double ops = len;
     ut_log(dt, buffer, ops, time);
-#endif
-    ut_check_a(output_gpu, get_ptr_from_tensor(outputTensorCpu, CPU_GENERAL), on * oc * oh * ow, dt);
+    ut_check_v(output_gpu, get_ptr_from_tensor(outputTensorCpu, CPU_GENERAL), on * oc * oh * ow, dt, 0.3);
     CHECK_STATUS(gcl_finish(handle));
     CHECK_STATUS(gcl_clean_kernelVec(handle));
     free(input_cpu);

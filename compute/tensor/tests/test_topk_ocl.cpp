@@ -16,17 +16,20 @@
 
 inline void topk_cpu_max(F16 *input, U32 len, U32 topk, F16 *output, I32 *outputId)
 {
+    F32 min_val = -UNI_F16_MAX;
     for (U32 i = 0; i < topk; i++) {
         U32 index = 0;
-        F16 max_val = -UNI_F16_MAX;
+        F32 max_val = min_val;
         for (U32 j = 0; j < len; j++) {
-            if (input[j] > max_val) {
-                max_val = input[j];
+            F32 val;
+            transformToFloat(DT_F16, input + j, &val, 1);
+            if (val > max_val) {
+                max_val = val;
                 index = j;
             }
         }
-        input[index] = -UNI_F16_MAX;
-        output[i] = max_val;
+        transformFromFloat(DT_F16, &min_val, input + index, 1);
+        transformFromFloat(DT_F16, &max_val, output + i, 1);
         outputId[i] = index;
     }
 }
@@ -36,7 +39,7 @@ inline void sort_gpu_result(
 {
     std::vector<U32> skip_j;
     for (U32 i = 0; i < topk; i++) {
-        F16 max_val = -UNI_F16_MAX;
+        F32 max_val = -UNI_F16_MAX;
         I32 index = UNI_F16_MAX;
         U32 sj = 0;
         for (U32 j = 0; j < topk; j++) {
@@ -47,11 +50,13 @@ inline void sort_gpu_result(
                 }
             }
             if (!skip) {
-                if (res_gpu[j] > max_val) {
-                    max_val = res_gpu[j];
+                F32 val;
+                transformToFloat(DT_F16, res_gpu + j, &val, 1);
+                if (val > max_val) {
+                    max_val = val;
                     index = res_id_gpu[j];
                     sj = j;
-                } else if (res_gpu[j] == max_val) {
+                } else if (val == max_val) {
                     if (res_id_gpu[j] < index) {
                         index = res_id_gpu[j];
                         sj = j;
@@ -59,7 +64,7 @@ inline void sort_gpu_result(
                 }
             }
         }
-        res_gpu_sort[i] = max_val;
+        transformFromFloat(DT_F16, &max_val, res_gpu_sort + i, 1);
         res_id_gpu_sort[i] = index;
         skip_j.push_back(sj);
     }
@@ -143,19 +148,28 @@ int topkTest(int argc, char **argv, DataType dt)
 
     CHECK_STATUS(ocl_set_input(handle, input, input_desc_gpu, input_cpu, tmpbuf, true));
     CHECK_STATUS(topk(inputTensor, p, tmpTensor, outputTensor, outputIndicesTensor, &archInfo));
-    /*warp up*/
-    UNI_INFO_LOG("Warp up gpu:\n")
-    for (U32 i = 0; i < 2; i++) {
+
+    for (U32 i = 0; i < UT_WARMUP; i++) {
         CHECK_STATUS(gcl_run_kernelVec(handle));
     }
+    CHECK_STATUS(gcl_finish(handle));
 
-    UNI_INFO_LOG("Run:\n")
+    double time = 0;
 #ifdef _DEBUG
-    CHECK_STATUS(gcl_run_kernelVec_timing(handle, 0, handle->kernelVec->size()));
-    double time = handle->t_execute * 0.001;
+    for (I32 i = 0; i < UT_LOOPS; i++) {
+        CHECK_STATUS(gcl_run_kernelVec_timing(handle, 0, handle->kernelVec->size()));
+        time += handle->t_execute * 0.001;
+    }
 #else
-    CHECK_STATUS(gcl_run_kernelVec(handle));
+    double start = ut_time_ms();
+    for (I32 i = 0; i < UT_LOOPS; i++) {
+        CHECK_STATUS(gcl_run_kernelVec(handle));
+        CHECK_STATUS(gcl_finish(handle));
+    }
+    double end = ut_time_ms();
+    time = (end - start);
 #endif
+    time /= UT_LOOPS;
 
     CHECK_STATUS(ocl_get_output(handle, output, output_desc_gpu, output_gpu, tmpbuf, true));
     CHECK_STATUS(ocl_get_output(
@@ -164,7 +178,9 @@ int topkTest(int argc, char **argv, DataType dt)
     char buffer[150];
     char params[120];
     sprintf(params, "(%u %u %u %u) = (%u %u %u %u)", in, ic, ih, iw, on, oc, oh, ow);
-    sprintf(buffer, "16bit%20s, %80s", "topk", params);
+    sprintf(buffer, "%20s, %80s", "Topk", params);
+    double ops = tensorNumElements(output_desc_gpu);
+    ut_log(dt, buffer, ops, time);
 
     F16 *output_cpu = (F16 *)malloc(sizeof(F16) * p.k);
     I32 *output_id_cpu = (I32 *)malloc(sizeof(I32) * p.k);
@@ -174,8 +190,8 @@ int topkTest(int argc, char **argv, DataType dt)
     sort_gpu_result(
         (F16 *)output_gpu, (I32 *)output_indices_gpu, p.k, res_gpu_sort, res_id_gpu_sort);
 
-    ut_check_a(res_gpu_sort, output_cpu, p.k, dt);
-    ut_check_a(res_id_gpu_sort, output_id_cpu, p.k, dt);
+    ut_check_v(res_gpu_sort, output_cpu, p.k, dt, 0.1);
+    ut_check_v(res_id_gpu_sort, output_id_cpu, p.k, dt, 0.1);
 
     CHECK_STATUS(gcl_finish(handle));
     CHECK_STATUS(gcl_clean_kernelVec(handle));

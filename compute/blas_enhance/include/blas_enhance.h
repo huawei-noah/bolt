@@ -21,6 +21,18 @@
 extern "C" {
 #endif
 
+// a * x[N] + b = y[N]
+EE vector_vector_axpby(
+    F32 a, TensorDesc xDesc, const void *x, F32 b, TensorDesc yDesc, void *y, Arch arch);
+
+// A[M x K] * B[K x N] = C[M, N]
+// A = Normal     MxK    tensor2df(DF_NORMAL, M, K)
+// A = Transpose  KxM    tensor2df(DF_TRANSPOSE, K, M)
+// A = ????       MxK    tensor2df(????, M, K)           deprecated
+// B = Normal     KxN    tensor2df(DF_NORMAL, K, N)
+// B = Transpose  NxK    tensor2df(DF_TRANSPOSE, N, K)
+// B = NKNx       NxK    tensor2df(NKNx, N, K)
+// If B is weight, B can be prereordered before inference, you can see below.
 EE matrix_matrix_multiply_tmp_bytes(
     TensorDesc matrixADesc, TensorDesc matrixBDesc, U32 *bytes, Arch arch);
 
@@ -35,6 +47,11 @@ EE matrix_matrix_multiply(TensorDesc matrixADesc,
     const F32 *scale,
     Arch arch);
 
+// matrix[N x K] * vector[K] = result[N]
+// matrix = Normal     NxK    tensor2df(DF_NORMAL, N, K)
+// matrix = Transpose  KxN    tensor2df(DF_TRANSPOSE, K, N)
+// matrix = NKNx       NxK    tensor2df(NKNx, M, K)
+// If matrix is weight, matrix can be prereordered before inference, you can see below.
 EE matrix_vector_multiply_tmp_bytes(TensorDesc matrixDesc, TensorDesc vectorDesc, U32 *bytes, Arch);
 
 EE matrix_vector_multiply(TensorDesc matrixDesc,
@@ -48,62 +65,25 @@ EE matrix_vector_multiply(TensorDesc matrixDesc,
     const F32 *scale,
     Arch arch);
 
-inline DataFormat targetFormat4MatrixB(DataType dt)
-{
-    switch (dt) {
-        case DT_F16: {
-            return DF_NKN24;
-        }
-        case DT_F32: {
-#ifdef __aarch64__
-            return DF_NKN12;
-#else
-            return DF_NKN8;
-#endif
-        }
-        case DT_I8: {
-            return DF_NKN12K4;
-        }
-        default: {
-            CHECK_STATUS(NOT_SUPPORTED);
-            return DF_NCHWC8;
-        }
-    }
-}
+// If you want to reorder weight matrix for mmm, you can use these functions.
+DataFormat matrix_matrix_multiply_rhs_format(DataType dt);
 
-inline DataFormat targetFormat4mvmMatrix(DataType dt)
-{
-    switch (dt) {
-        case DT_I8: {
-            return DF_NKN32K4;
-        }
-        case DT_F16: {
-            return DF_NKN64;
-        }
-        case DT_F32: {
-            return DF_NKN16;
-        }
-        case DT_U8_Q: {
-            return DF_NK;
-        }
-        default: {
-            CHECK_STATUS(NOT_SUPPORTED);
-            return DF_NCHWC8;
-        }
-    }
-}
+// bytes contains all needed, and rhsBytes only contains packed matrix bytes.
+EE matrix_matrix_multiply_transform_rhs_bytes(TensorDesc desc, U32 *bytes, U32 *rhsBytes, Arch arch);
 
+// dst contains transformed matrix and offset array for uint8.
 EE matrix_matrix_multiply_transform_rhs(
     TensorDesc desc, const void *src, TensorDesc *descTran, void *dst, Arch arch);
 
+// If you want to reorder weight matrix for mvm, you can use these functions.
+DataFormat matrix_vector_multiply_weight_format(DataType dt);
+
+EE matrix_vector_multiply_transform_weight_bytes(TensorDesc desc, U32 *bytes, Arch arch);
+
+// dst contains offset array for uint8 and transformed matrix.
 EE matrix_vector_multiply_transform_weight(
     TensorDesc desc, const void *src, TensorDesc *descTran, void *dst, Arch arch);
-
-EE vector_vector_axpby(
-    F32 a, TensorDesc xDesc, const void *x, F32 b, TensorDesc yDesc, void *y, Arch arch);
-
 #ifdef __cplusplus
 }
 #endif
-
 #endif

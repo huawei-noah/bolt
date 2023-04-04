@@ -121,7 +121,7 @@ int rnncellTest(int argc, char **argv, DataType dt, RNNMode mode)
         filterTensorCpu, rnnParamSpec, tmpTensorCpu, ftmTensorPtrCpu, &UT_SERIAL_ARCHINFO));
 
     CHECK_STATUS(rnncell(inputTensorCpu, ftmTensorCpu, biasTensorCpu, stateTensorCpu, rnnParamSpec,
-        xDim, col, 0, tmpTensorCpu, outputTensorCpu, &UT_SERIAL_ARCHINFO));
+        xDim, col, 0, tmpTensorCpu, outputTensorCpu, nullptr, &UT_SERIAL_ARCHINFO));
 
     std::shared_ptr<GCLHandle> handleSharedPtr = OCLContext::getInstance().handle;
     GCLHandle_t handle = handleSharedPtr.get();
@@ -199,54 +199,45 @@ int rnncellTest(int argc, char **argv, DataType dt, RNNMode mode)
     CHECK_STATUS(ocl_set_input(handle, input, inputDesc, input_cpu, tmpbuf, true));
     CHECK_STATUS(ocl_set_input(handle, state, stateDesc, state_cpu, tmpbuf, true));
     CHECK_STATUS(rnncell(inputTensor, ftmTensor, biasTensor, stateTensor, rnnParamSpec, xDim, col,
-        0, tmpTensor, outputTensor, &archInfo));
-    /*warp up*/
-    UNI_INFO_LOG("warm up gpu:\n");
-    for (U32 i = 0; i < 0; i++) {
+        0, tmpTensor, outputTensor, nullptr, &archInfo));
+
+    for (U32 i = 0; i < UT_WARMUP; i++) {
         CHECK_STATUS(gcl_run_kernelVec(handle));
     }
-#ifdef _DEBUG
+    CHECK_STATUS(gcl_finish(handle));
     double time = 0;
-    double min_time = DBL_MAX;
-    double max_time = 0;
-    U32 loop = 1;
-    for (U32 i = 0; i < loop; i++) {
+#ifdef _DEBUG
+    for (I32 i = 0; i < UT_LOOPS; i++) {
         CHECK_STATUS(gcl_run_kernelVec_timing(handle, 0, handle->kernelVec->size()));
-        double t = handle->t_execute * 0.001;
-        if (t < min_time)
-            min_time = t;
-        if (t > max_time)
-            max_time = t;
-        time += t;
+        time += handle->t_execute * 0.001;
     }
-    time = (time - min_time - max_time) / (loop - 2);
-    UNI_INFO_LOG("min_time = %lf\n", min_time);
-    UNI_INFO_LOG("max_time = %lf\n", max_time);
-    UNI_INFO_LOG("avg_time = %lf\n", time);
-    time = min_time;
 #else
-    CHECK_STATUS(gcl_run_kernelVec(handle));
+    double start = ut_time_ms();
+    for (I32 i = 0; i < UT_LOOPS; i++) {
+        CHECK_STATUS(gcl_run_kernelVec(handle));
+        CHECK_STATUS(gcl_finish(handle));
+    }
+    double end = ut_time_ms();
+    time = (end - start);
 #endif
-    CHECK_STATUS(ocl_get_output(handle, output, outputDesc, output_gpu, tmpbuf, true));
-    // log performance data
+    time /= UT_LOOPS;
     char buffer[150];
     char params[120];
     sprintf(params, "%u (%u %u %u)=(%u %u)", 1, 1, xDim, hDim, 1, hDim);
     sprintf(buffer, "%20s, %80s", "RNN", params);
-#ifdef _DEBUG
     double hxDim = hDim + xDim;
     double ops = 1.0 *
         (2.0 * hxDim * col * 4 + col * 4 + rnnParamSpec.num_projection * rnnParamSpec.num_outputs);
     ut_log(dt, buffer, ops, time);
-#endif
-    ut_check_a(output_gpu, get_ptr_from_tensor(outputTensorCpu, CPU_GENERAL),
-        tensorNumElements(outputDesc), outputDesc.dt);
-    UNI_INFO_LOG("state:\n");
+
+    CHECK_STATUS(ocl_get_output(handle, output, outputDesc, output_gpu, tmpbuf, true));
+    ut_check_v(output_gpu, get_ptr_from_tensor(outputTensorCpu, CPU_GENERAL),
+        tensorNumElements(outputDesc), outputDesc.dt, 0.3);
     U32 stateSize = tensorNumBytes(stateDesc);
     CHECK_STATUS(
         gcl_trans_memory(handle, state, state_gpu_host, &stateSize, DEVICE_BUF_TO_HOST, true));
-    ut_check_a(state_gpu_host, get_ptr_from_tensor(stateTensorCpu, CPU_GENERAL),
-        tensorNumElements(stateDesc), stateDesc.dt);
+    ut_check_v(state_gpu_host, get_ptr_from_tensor(stateTensorCpu, CPU_GENERAL),
+        tensorNumElements(stateDesc), stateDesc.dt, 0.3);
 
     free(input_cpu);
     free(state_cpu);
@@ -259,8 +250,6 @@ int rnncellTest(int argc, char **argv, DataType dt, RNNMode mode)
 
 int main(int argc, char **argv)
 {
-#ifdef _USE_FP16
     rnncellTest(argc, argv, DT_F16, RNN_LSTM);
-#endif
     return 0;
 }

@@ -64,7 +64,7 @@ int expandTest(int argc, char **argv, DataType dt)
         }
 
         // check
-        ut_check_s(sum1 * outLen / len, sum2, 0, __FILE__, __LINE__, 0);
+        ut_check_s(sum1 * outLen / len, sum2, 0, 0);
     }
 
     double time_start = ut_time_ms();

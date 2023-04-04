@@ -109,7 +109,7 @@ EE deconvolution_overlap_crop_arm(void *input,
     ConvolutionParamSpec convParamSpec)
 {
     EE ret = SUCCESS;
-    switch (inputDesc.dt) {
+    switch (outputDesc.dt) {
 #ifdef _USE_FP32
         case DT_F32: {
             ret = deconvolution_overlap_crop_arm_kernel<F32>(
@@ -121,6 +121,18 @@ EE deconvolution_overlap_crop_arm(void *input,
         case DT_F16: {
             ret = deconvolution_overlap_crop_arm_kernel<F16>(
                 (F16 *)input, (F16 *)output, inputDesc, outputDesc, convParamSpec);
+            break;
+        }
+#endif
+#ifdef _USE_INT8
+        case DT_I32: {
+            ret = deconvolution_overlap_crop_arm_kernel<I32>(
+                (I32 *)input, (I32 *)output, inputDesc, outputDesc, convParamSpec);
+            break;
+        }
+        case DT_I8: {
+            ret = deconvolution_overlap_crop_arm_kernel<INT8>(
+                (INT8 *)input, (INT8 *)output, inputDesc, outputDesc, convParamSpec);
             break;
         }
 #endif

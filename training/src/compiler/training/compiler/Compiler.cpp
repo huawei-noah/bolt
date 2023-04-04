@@ -231,7 +231,6 @@ Constraint::Constraint(const Name& layerFrom, const Name& layerTo, ConstraintImp
         THROW_NONAME("Constraint", "Empty layerTo name");
     }
 }
-
 Compiler::Compiler(ExecutionTarget executionTarget)
     : mImplementationResolved(false)
     , mGlobalExecutionTarget(executionTarget)
@@ -756,5 +755,4 @@ bool Compiler::isConstraintRequireFP32CopyOfTrainableParams(const Constraint& co
     // assume all other types no need for conversions
     return constraint.getConstraintImpl() == ConstraintImpl::CPUFP16FP32MasterWeights;
 }
-
 } // namespace raul

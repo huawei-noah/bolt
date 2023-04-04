@@ -22,7 +22,7 @@ public:
     {
         this->p = p;
     }
-
+    ~Pooling(){}
     OperatorType get_type() override
     {
         return OT_Pooling;

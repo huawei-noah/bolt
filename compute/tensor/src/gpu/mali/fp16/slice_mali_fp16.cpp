@@ -33,11 +33,8 @@ bool slice_axis_c_align4(U32 target_axis, std::vector<TensorDesc> outputDesc)
 
 inline EE slice_checkpara_mali_fp16(TensorDesc inputDesc, std::vector<TensorDesc> outputDesc)
 {
-    if (inputDesc.dt != DT_F16) {
-        return NOT_SUPPORTED;
-    }
     for (auto p : outputDesc) {
-        if (p.dt != DT_F16) {
+        if (p.dt != inputDesc.dt) {
             return NOT_SUPPORTED;
         }
     }
@@ -52,9 +49,10 @@ inline EE slice_core_mali_fp16(GCLHandle_t handle,
     std::vector<TensorDesc> outputDesc,
     std::vector<void *> *output)
 {
+    DataType idt;
     U32 in, ic, ih, iw;
     U32 iw_str, ih_str, iw_off, ih_off, i_off;
-    CHECK_STATUS(gclmem_get_desc_dim(input->desc, NULL, NULL, &in, &ic, &ih, &iw));
+    CHECK_STATUS(gclmem_get_desc_dim(input->desc, &idt, NULL, &in, &ic, &ih, &iw));
     CHECK_STATUS(gclmem_get_desc_padding(input->desc, &iw_str, &ih_str, NULL, &iw_off, &ih_off));
     i_off = ih_off * iw_str + iw_off;
     Mem inbuf = input->mem;
@@ -143,8 +141,8 @@ inline EE slice_core_mali_fp16(GCLHandle_t handle,
         }
         gs[target_axis] = axis_total;
 
-        CHECK_STATUS(set_slice_opt_mali(
-            useNchwFormat, target_axis, slice_num, DT_F16, kernelName, &kernelOpt));
+        CHECK_STATUS(
+            set_slice_opt_mali(useNchwFormat, target_axis, slice_num, idt, kernelName, &kernelOpt));
         CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
         switch (slice_num) {
             case 1:
@@ -187,7 +185,7 @@ inline EE slice_core_mali_fp16(GCLHandle_t handle,
             } else if (target_axis == 1) {
                 in_size += slice_len * iw_str * 4;
             } else if (target_axis == 2) {
-                in_size += slice_len * iw_str * ih_str * 4;
+                in_size += slice_len * iw_str * ih_str;
             }
         }
 #ifdef _DEBUG

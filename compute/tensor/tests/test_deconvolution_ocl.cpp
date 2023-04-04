@@ -134,28 +134,38 @@ int deconvolutionTest(int argc, char *argv[], DataType dt)
 
     CHECK_STATUS(deconvolution(inputTensor, filterTensor, convParamSpec, alg, nullptr, biasTensor,
         tmpTensor, outputTensor, activationDesc, &archInfo));
-    /*warp up*/
-    UNI_INFO_LOG("warm up gpu:\n")
-    for (U32 i = 0; i < 2; i++) {
+
+    for (U32 i = 0; i < UT_WARMUP; i++) {
         CHECK_STATUS(gcl_run_kernelVec(handle));
     }
+    CHECK_STATUS(gcl_finish(handle));
 
+    double time = 0;
 #ifdef _DEBUG
-    CHECK_STATUS(gcl_run_kernelVec_timing(handle, 0, handle->kernelVec->size()));
-    double time = handle->t_execute * 0.001;
+    for (I32 i = 0; i < UT_LOOPS; i++) {
+        CHECK_STATUS(gcl_run_kernelVec_timing(handle, 0, handle->kernelVec->size()));
+        time += handle->t_execute * 0.001;
+    }
 #else
-    CHECK_STATUS(gcl_run_kernelVec(handle));
+    double start = ut_time_ms();
+    for (I32 i = 0; i < UT_LOOPS; i++) {
+        CHECK_STATUS(gcl_run_kernelVec(handle));
+        CHECK_STATUS(gcl_finish(handle));
+    }
+    double end = ut_time_ms();
+    time = (end - start);
 #endif
+    time /= UT_LOOPS;
+
     CHECK_STATUS(ocl_get_output(handle, output, outputDesc, output_gpu, tmpbuf, true));
     char buffer[150];
     char params[120];
     sprintf(params, "(%u %u %u %u)+(%u %u %u %u)/(%u %u)=(%u %u %u %u)", in, ic, ih, iw, fn, fc, fh,
         fw, stride, padding, on, oc, oh, ow);
     sprintf(buffer, "%20s, %80s", "Deonvolution", params);
-#ifdef _DEBUG
     double ops = (1.0 * on * oc * ih * iw) * (2.0 * ic * fh * fw + fh * fw);
     ut_log(dt, buffer, ops, time);
-#endif
+
     inputDesc.df = DF_NCHW;
     outputDesc.df = DF_NCHW;
     Tensor inputTensorCpu;
@@ -183,7 +193,7 @@ int deconvolutionTest(int argc, char *argv[], DataType dt)
     CHECK_STATUS(deconvolution(inputTensorCpu, filterTensorCpu, convParamSpec,
         CONVOLUTION_ALGORITHM_GEMM, nullptr, biasTensorCpu, tmpTensorCpu, outputTensorCpu,
         activationDesc, &UT_SERIAL_ARCHINFO));
-    ut_check_a(output_gpu, get_ptr_from_tensor(outputTensorCpu, CPU_GENERAL), on * oc * ow * oh, dt);
+    ut_check_v(output_gpu, get_ptr_from_tensor(outputTensorCpu, CPU_GENERAL), on * oc * ow * oh, dt, 0.3);
 
     CHECK_STATUS(gcl_finish(handle));
     CHECK_STATUS(gcl_clean_kernelVec(handle));
@@ -196,8 +206,6 @@ int deconvolutionTest(int argc, char *argv[], DataType dt)
 
 int main(int argc, char **argv)
 {
-#ifdef _USE_FP16
     deconvolutionTest(argc, argv, DT_F16);
-#endif
     return 0;
 }

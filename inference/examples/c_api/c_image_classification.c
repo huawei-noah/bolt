@@ -15,7 +15,13 @@
 
 int main(int argc, char *argv[])
 {
-    ParseOptions(argc, argv);
+    int ret = ParseOptions(argc, argv);
+    if (ret) {
+        return ret;
+    }
+
+    SetNumThreads(threadsNum);
+
     ModelHandle inferenceHandle;
     ResultHandle resultHandle;
     if (useFileStream) {
@@ -35,11 +41,6 @@ int main(int argc, char *argv[])
     CreateInputTensorDesc(inferenceHandle, &inputNum, &inputName, &inputN, &inputC, &inputH,
         &inputW, &inputDT, &inputDF);
     MallocTensor(inputNum, inputName, inputN, inputC, inputH, inputW, inputDT, inputDF, &inputData);
-    InitTensor(inputNum, inputName, inputN, inputC, inputH, inputW, inputDT, inputDF, inputData, 1);
-
-    PrintTensor(inputNum, inputName, inputN, inputC, inputH, inputW, inputDT, inputDF, inputData,
-        "input ", 8);
-    RunModel(inferenceHandle, resultHandle, inputNum, (const char **)inputName, inputData);
 
     int outputNum, *outputN, *outputC, *outputH, *outputW;
     DATA_TYPE *outputDT;
@@ -49,9 +50,24 @@ int main(int argc, char *argv[])
     CreateOutputTensorDesc(resultHandle, &outputNum, &outputName, &outputN, &outputC, &outputH,
         &outputW, &outputDT, &outputDF);
     outputData = (void **)malloc(sizeof(void *) * outputNum);
-    GetOutputDataFromResultHandle(resultHandle, outputNum, outputData);
-    PrintTensor(outputNum, outputName, outputN, outputC, outputH, outputW, outputDT, outputDF,
-        outputData, "output ", 8);
+
+    for (int i = 0; i < loopTime; i++) {
+        if (inputDataPath != NULL) {
+            LoadTensor(inputNum, inputName, inputN, inputC, inputH, inputW, inputDT, inputDF,
+                inputData, inputDataPath);
+        } else {
+            InitTensor(inputNum, inputName, inputN, inputC, inputH, inputW, inputDT, inputDF,
+                inputData, 1);
+        }
+
+        PrintTensor(inputNum, inputName, inputN, inputC, inputH, inputW, inputDT, inputDF,
+            inputData, "input ", 8);
+        RunModel(inferenceHandle, resultHandle, inputNum, (const char **)inputName, inputData);
+
+        GetOutputDataFromResultHandle(resultHandle, outputNum, outputData);
+        PrintTensor(outputNum, outputName, outputN, outputC, outputH, outputW, outputDT, outputDF,
+            outputData, "output ", 8);
+    }
 
     FreeTensor(inputNum, inputName, inputN, inputC, inputH, inputW, inputDT, inputDF, inputData);
     FreeTensorDesc(outputNum, outputName, outputN, outputC, outputH, outputW, outputDT, outputDF);

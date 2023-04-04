@@ -105,7 +105,7 @@ EE depthwise_pointwise_convolution_padding_input_mali(TensorDesc inputDesc,
 
         U32 ih_align = oh;
         for (auto item_h : vecHD) {
-            U32 i = ALIGN(oh, item_h);
+            U32 i = UNI_ALIGN(oh, item_h);
             ih_align = (ih_align < i) ? i : ih_align;
         }
         ih_align *= sh;
@@ -131,8 +131,8 @@ EE depthwise_pointwise_convolution_infer_forward_algorithm_mali(GCLHandle_t hand
     GCLMemDesc outputMemDesc,
     ConvolutionParamSpec convParamSpec,
     ConvolutionPolicy policy,
-    ActivationMode depthwiseActivationMode,
-    ActivationMode pointwiseActivationMode,
+    ActivationParamSpec depthwiseActivationParamSpec,
+    ActivationParamSpec pointwiseActivationParamSpec,
     ForwardRunInfoMali_t forwardRunInfo)
 {
     if (forwardRunInfo == nullptr) {
@@ -340,7 +340,7 @@ EE depthwise_pointwise_convolution_infer_forward_algorithm_mali(GCLHandle_t hand
                 if (depthwise_pointwise_convolution_mali(handle, inputDesc, input, dwFilterDesc,
                         pwFilterDesc, dwFilter, pwFilter, convParamSpec, &runInfos[j], dwBiasDesc,
                         pwBiasDesc, dwBias, pwBias, maxBytes[0], tmp, outputDesc, output,
-                        depthwiseActivationMode, pointwiseActivationMode) == SUCCESS) {
+                        depthwiseActivationParamSpec, pointwiseActivationParamSpec) == SUCCESS) {
                     U32 kernelVecSize = handle->kernelVec->size();
                     gcl_run_kernelVec_timing(handle, kernelVecSize - 2, kernelVecSize - 1);
                     if (minTimeDepthwise[i] > handle->t_execute) {
@@ -356,7 +356,7 @@ EE depthwise_pointwise_convolution_infer_forward_algorithm_mali(GCLHandle_t hand
                 if (depthwise_pointwise_convolution_mali(handle, inputDesc, input, dwFilterDesc,
                         pwFilterDesc, dwFilter, pwFilter, convParamSpec, &runInfos[j], dwBiasDesc,
                         pwBiasDesc, dwBias, pwBias, maxBytes[0], tmp, outputDesc, output,
-                        depthwiseActivationMode, pointwiseActivationMode) == SUCCESS) {
+                        depthwiseActivationParamSpec, pointwiseActivationParamSpec) == SUCCESS) {
                     U32 kernelVecSize = handle->kernelVec->size();
                     gcl_run_kernelVec_timing(handle, kernelVecSize - 1, kernelVecSize);
                     if (minTimePointwise[i] > handle->t_execute) {
@@ -407,19 +407,15 @@ EE depthwise_pointwise_convolution_transform_filter_bytes_mali(TensorDesc dwFilt
     TensorDesc *dwFtmDesc,
     TensorDesc *pwFtmDesc)
 {
-    EE ret = SUCCESS;
+    EE ret = NOT_SUPPORTED;
     switch (dwFilterDesc.dt) {
-        case DT_F16: {
+        case DT_F16:
+        case DT_F32: {
             ret = depthwise_pointwise_convolution_transform_filter_bytes_mali_fp16(
                 dwFilterDesc, pwFilterDesc, forwardRunInfo, dwFtmDesc, pwFtmDesc);
             break;
         }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
     return ret;
@@ -436,20 +432,16 @@ EE depthwise_pointwise_convolution_transform_filter_mali(GCLHandle_t handle,
     GCLMem_t dwfltmem,
     GCLMem_t pwfltmem)
 {
-    EE ret = SUCCESS;
+    EE ret = NOT_SUPPORTED;
     switch (dwFilterDesc.dt) {
-        case DT_F16: {
+        case DT_F16:
+        case DT_F32: {
             ret = depthwise_pointwise_convolution_transform_filter_mali_fp16(handle, dwFilterDesc,
                 pwFilterDesc, dwFilter, pwFilter, forwardRunInfo, dwfltmemDesc, pwfltmemDesc,
                 dwfltmem, pwfltmem);
             break;
         }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
     return ret;
@@ -463,15 +455,15 @@ EE depthwise_pointwise_convolution_infer_forward_tmp_bytes_mali(TensorDesc input
     ForwardRunInfoMali_t forwardRunInfo,
     U32 *bytes)
 {
-    EE ret = SUCCESS;
+    EE ret = NOT_SUPPORTED;
     switch (inputDesc.dt) {
-        case DT_F16: {
+        case DT_F16:
+        case DT_F32: {
             ret = depthwise_pointwise_convolution_infer_forward_tmp_bytes_mali_fp16(inputDesc,
                 dwFilterDesc, pwFilterDesc, outputDesc, convParamSpec, forwardRunInfo, bytes);
             break;
         }
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
     return ret;
@@ -494,24 +486,20 @@ EE depthwise_pointwise_convolution_mali(GCLHandle_t handle,
     std::vector<GCLMem_t> tmp,
     TensorDesc outputDesc,
     GCLMem_t output,
-    ActivationMode depthwiseActivationMode,
-    ActivationMode pointwiseActivationMode)
+    ActivationParamSpec depthwiseActivationParamSpec,
+    ActivationParamSpec pointwiseActivationParamSpec)
 {
-    EE ret = SUCCESS;
+    EE ret = NOT_SUPPORTED;
     switch (inputDesc.dt) {
-        case DT_F16: {
+        case DT_F16:
+        case DT_F32: {
             ret = depthwise_pointwise_convolution_mali_fp16(handle, inputDesc, input, dwFilterDesc,
                 pwFilterDesc, dwFilter, pwFilter, convParamSpec, forwardRunInfo, dwBiasDesc,
                 pwBiasDesc, dwBias, pwBias, tmpBytes, tmp, outputDesc, output,
-                depthwiseActivationMode, pointwiseActivationMode);
-            break;
-        }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
+                depthwiseActivationParamSpec, pointwiseActivationParamSpec);
             break;
         }
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
     return ret;

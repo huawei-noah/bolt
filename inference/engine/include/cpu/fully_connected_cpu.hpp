@@ -33,17 +33,15 @@ public:
 
     EE infer_weight_desc() override
     {
-        DataType dtNoQ = (dt == DT_F16_8Q) ? DT_F16 : ((dt == DT_F32_8Q) ? DT_F32 : dt);
-        auto curOpWs = this->get_weightspec();
-        DataType weightDt = curOpWs.mdt;
-        if (curOpWs.bytes_of_weight > 0) {
+        DataType weightDt = this->ws.mdt;
+        if (this->ws.bytes_of_weight > 0) {
             this->weightTensors = std::vector<Tensor>(1);
             this->weightTensors[0].resize(
                 tensor2df(weightDt, DF_TRANSPOSE, this->p.num_outputs, this->numInput));
         }
-        if (curOpWs.bytes_of_vec > 0) {
+        if (this->ws.bytes_of_vec > 0) {
             this->biasTensors = std::vector<Tensor>(1);
-            this->biasTensors[0].resize(tensor1d(dtNoQ, this->p.num_outputs));
+            this->biasTensors[0].resize(tensor1d(noQuantDataType(this->dt), this->p.num_outputs));
         }
         return SUCCESS;
     }
@@ -112,10 +110,9 @@ public:
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
         TensorDesc inputDesc = inTensors[0]->get_desc();
-        auto curOpWs = this->get_weightspec();
-        if (curOpWs.bytes_of_weight > 0) {
+        if (this->ws.bytes_of_weight > 0) {
             this->numInput =
-                curOpWs.bytes_of_weight / this->p.num_outputs / UNI_MAX(1, bytesOf(curOpWs.mdt));
+                this->ws.bytes_of_weight / this->p.num_outputs / UNI_MAX(1, bytesOf(this->ws.mdt));
         } else {
             this->numInput = inputDesc.dims[0];
         }
@@ -135,15 +132,11 @@ public:
             inTensors[0], tmpFilter, outTensors[0], &this->archInfo));
         if (1 == this->p.num_slices) {
             TensorDesc outputDesc = outTensors[0]->get_desc();
-            if (DT_F16_8Q == this->dt || DT_F32_8Q == this->dt) {
+            if (isQuantMixDataType(this->dt)) {
                 if (featureScale.size() > 0 && -2 == (featureScale.back())[0]) {
-                    outputDesc.dt = (DT_F16_8Q == this->dt) ? DT_F16 : DT_F32;
+                    outputDesc.dt = noQuantDataType(this->dt);
                 } else {
-#ifdef _USE_X86
-                    outputDesc.dt = DT_U8_Q;
-#else
-                    outputDesc.dt = DT_I8;
-#endif
+                    outputDesc.dt = get_activation_quant_data_type((featureScale.back())[0]);
                 }
             }
             outTensors[0]->resize(outputDesc);
@@ -152,16 +145,11 @@ public:
             for (U32 i = 0; i < this->p.num_slices; i++) {
                 TensorDesc outputDesc = outTensors[i]->get_desc();
                 outputDesc.dims[0] = this->p.slice_point[i];
-                UNI_INFO_LOG("-- %d %d\n", p.num_slices, p.slice_point[i]);
-                if (DT_F16_8Q == this->dt || DT_F32_8Q == this->dt) {
+                if (isQuantMixDataType(this->dt)) {
                     if (featureScale.size() > 0 && -2 == (featureScale.back())[0]) {
-                        outputDesc.dt = (DT_F16_8Q == this->dt) ? DT_F16 : DT_F32;
+                        outputDesc.dt = noQuantDataType(this->dt);
                     } else {
-#ifdef _USE_X86
-                        outputDesc.dt = DT_U8_Q;
-#else
-                        outputDesc.dt = DT_I8;
-#endif
+                        outputDesc.dt = get_activation_quant_data_type((featureScale.back())[0]);
                     }
                 }
                 outTensors[i]->resize(outputDesc);
@@ -179,16 +167,6 @@ public:
         return bytes;
     }
 
-    U32 infer_wtm_memory_size() override
-    {
-        U32 bytes = 0;
-        if (weightTensors.size() > 0) {
-            CHECK_STATUS(
-                fully_connected_transform_filter_bytes(weightTensors[0], &bytes, &this->archInfo));
-        }
-        return bytes;
-    }
-
     EE transform_filter() override
     {
         EE ret = SUCCESS;
@@ -198,64 +176,74 @@ public:
         return ret;
     }
 
-    virtual EE transform_filter(const TensorDesc &originalInputDesc)
+    bool use_nchwc8(const TensorDesc &inputDesc)
     {
-        TensorDesc inputDesc = originalInputDesc;
-        Tensor weightTensor = this->weightTensors[0];
-        TensorDesc weightDesc = weightTensor.get_desc();
-        TensorDesc wtmDesc;
-        auto wtm_bytes = this->infer_wtm_memory_size();
-
-        TensorDesc tmpDesc;
-        Tensor tmpFilter;
-
-        Tensor tmpInput;
-        tmpInput.resize(inputDesc);
+        bool ret = false;
         int hw = 1;
         for (int i = 0; i < (int)inputDesc.nDims - 2; i++) {
             hw *= inputDesc.dims[i];
         }
         if (inputDesc.df == DF_NCHWC8 && hw > 1) {
-            tmpFilter.resize(tensor1d(DT_U8, wtm_bytes));
-            tmpFilter.alloc();
-            CHECK_STATUS(fully_connected_transform_filter(
-                tmpInput, weightTensors[0], &tmpFilter, &this->archInfo));
+            ret = true;
+        }
+        return ret;
+    }
+
+    virtual EE transform_filter(const TensorDesc &inputDesc)
+    {
+        Tensor tTensor;
+        Tensor wTensor = this->weightTensors[0];
+        if (use_nchwc8(inputDesc)) {
+            Tensor input;
+            input.resize(inputDesc);
+            U32 wtmBytes = 0;
+            CHECK_STATUS(fully_connected_transform_filter_bytes(wTensor, &wtmBytes, &this->archInfo));
+            tTensor = Tensor::alloc_sized<CPUMem>(tensor1d(DT_U8, wtmBytes));
+            CHECK_STATUS(
+                fully_connected_transform_filter(input, wTensor, &tTensor, &this->archInfo));
         } else {
-            tmpDesc = weightDesc;
+            tTensor = wTensor;
+            TensorDesc desc = wTensor.get_desc();
             if (this->mvm) {
-                tmpDesc.df = DF_NORMAL;
+                desc.df = DF_NORMAL;
             }
-            tmpFilter = weightTensor;
-            tmpFilter.resize(tmpDesc);
+            tTensor.resize(desc);
         }
 
 #ifdef _USE_INT8
+        TensorDesc desc = tTensor.get_desc();
         bool thisIsNoQuant = (featureScale.size() > 1 && featureScale[0].back() == 0);
-        if ((DT_F16_8Q == this->dt || DT_F32_8Q == this->dt) && !thisIsNoQuant && (tmpDesc.dt != DT_I8)) {
-            tmpDesc.dt = DT_I8;
-            Tensor qFilter = Tensor::alloc_sized<CPUMem>(tmpDesc);
+        if (isQuantMixDataType(this->dt) && !thisIsNoQuant && (desc.dt != DT_I8)) {
+            desc.dt = DT_I8;
+            Tensor qTensor = Tensor::alloc_sized<CPUMem>(desc);
             F32 scale = -1;
-            CHECK_STATUS(quantize(tmpFilter, &qFilter, &scale, &(this->archInfo)));
-            qFilter.set_scale(scale);
-            tmpFilter = qFilter;
+            CHECK_STATUS(quantize(tTensor, &qTensor, &scale, &(this->archInfo)));
+            qTensor.set_scale(scale);
+            tTensor = qTensor;
         }
 #endif
-        this->wtm = std::shared_ptr<Tensor>(new Tensor());
-        wtm->resize(tensor1d(DT_U8, wtm_bytes));
-        wtm->alloc();
-        wtm->set_scale(tmpFilter.get_scale());
+
+        TensorDesc fDesc = tTensor.get_desc();
+        auto f = ((CpuMemory *)(tTensor.get_memory()))->get_ptr();
+        Tensor wtm;
+        TensorDesc tDesc;
+        U32 tBytes = 0;
         if (this->mvm) {
-            CHECK_STATUS(matrix_vector_multiply_transform_weight(tmpFilter.get_desc(),
-                ((CpuMemory *)(tmpFilter.get_memory()))->get_ptr(), &wtmDesc,
-                ((CpuMemory *)(wtm->get_memory()))->get_ptr(), this->archInfo.arch));
-            wtm->resize(wtmDesc);
+            CHECK_STATUS(
+                matrix_vector_multiply_transform_weight_bytes(fDesc, &tBytes, this->archInfo.arch));
+            wtm = Tensor::alloc_sized<CPUMem>(tensor1d(DT_U8, tBytes));
+            CHECK_STATUS(matrix_vector_multiply_transform_weight(fDesc, f, &tDesc,
+                ((CpuMemory *)(wtm.get_memory()))->get_ptr(), this->archInfo.arch));
         } else {
-            CHECK_STATUS(matrix_matrix_multiply_transform_rhs(tmpFilter.get_desc(),
-                ((CpuMemory *)(tmpFilter.get_memory()))->get_ptr(), &wtmDesc,
-                ((CpuMemory *)(wtm->get_memory()))->get_ptr(), this->archInfo.arch));
-            wtm->resize(wtmDesc);
+            CHECK_STATUS(matrix_matrix_multiply_transform_rhs_bytes(
+                fDesc, &tBytes, nullptr, this->archInfo.arch));
+            wtm = Tensor::alloc_sized<CPUMem>(tensor1d(DT_U8, tBytes));
+            CHECK_STATUS(matrix_matrix_multiply_transform_rhs(fDesc, f, &tDesc,
+                ((CpuMemory *)(wtm.get_memory()))->get_ptr(), this->archInfo.arch));
         }
-        this->weightTensors[0] = *this->get_wtm();
+        wtm.resize(tDesc);
+        wtm.set_scale(tTensor.get_scale());
+        this->weightTensors[0] = wtm;
         return SUCCESS;
     }
 

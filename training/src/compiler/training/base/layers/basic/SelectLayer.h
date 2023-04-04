@@ -28,8 +28,6 @@ namespace raul
  * All input tensors must be broadcastable.
  *
  * First input is condition tensor.
- * @see
- * https://pytorch.org/docs/master/generated/torch.where.html?highlight=where#torch.where
  */
 class SelectLayer : public BroadcastingLayer
 {

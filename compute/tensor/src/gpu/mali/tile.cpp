@@ -33,22 +33,8 @@ EE tile_infer_forward_tmp_bytes_mali(TensorDesc inputDesc,
     GCLMemDesc gclmemOutputDesc,
     U32 *bytes)
 {
-    EE ret = SUCCESS;
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = tile_infer_forward_tmp_bytes_mali_fp16(
-                inputDesc, outputDesc, gclmemInputDesc, gclmemOutputDesc, bytes);
-            break;
-        }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return tile_infer_forward_tmp_bytes_mali_fp16(
+        inputDesc, outputDesc, gclmemInputDesc, gclmemOutputDesc, bytes);
 }
 
 EE tile_mali(GCLHandle_t handle,
@@ -59,20 +45,6 @@ EE tile_mali(GCLHandle_t handle,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
-    EE ret = SUCCESS;
     CHECK_STATUS(tile_checkpara_mali(handle, inputDesc, input, outputDesc, output));
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = tile_mali_fp16(handle, inputDesc, input, p, tmpbuf, outputDesc, output);
-            break;
-        }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return tile_mali_fp16(handle, inputDesc, input, p, tmpbuf, outputDesc, output);
 }

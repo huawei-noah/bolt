@@ -49,7 +49,7 @@ int scaleTest(int argc, char **argv, DataType dt)
 
         // check
         ut_check_v(get_ptr_from_tensor(dataTensor, CPU_GENERAL),
-            get_ptr_from_tensor(dataTensorRef, CPU_GENERAL), len, dt, 1.0, __FILE__, __LINE__);
+            get_ptr_from_tensor(dataTensorRef, CPU_GENERAL), len, dt, 1.0);
     }
 
     // benchmark

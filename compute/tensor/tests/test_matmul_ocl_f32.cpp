@@ -210,7 +210,7 @@ inline U8 *matmulF32Gpu(TensorDesc matrixADesc,
                 if (item_m * item_n == 1) {
                     continue;
                 }
-                CHECK_STATUS(set_gemm_tn_opt_mali(item_m, item_n, NO_BIAS, false, ACTIVATION_NULL,
+                CHECK_STATUS(set_gemm_tn_opt_mali(item_m, item_n, NO_BIAS, false, {},
                     DT_F32, GCL_MEM_BUF, GCL_MEM_BUF, GCL_MEM_BUF, kernelName, &kernelOpt));
                 CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
                 gs[0] = (n + item_n - 1) / item_n;
@@ -236,7 +236,7 @@ inline U8 *matmulF32Gpu(TensorDesc matrixADesc,
         CHECK_STATUS(gcl_finish(handle));
 
         /*set best gemm config*/
-        CHECK_STATUS(set_gemm_tn_opt_mali(best_m, best_n, NO_BIAS, false, ACTIVATION_NULL, DT_F32,
+        CHECK_STATUS(set_gemm_tn_opt_mali(best_m, best_n, NO_BIAS, false, {}, DT_F32,
             GCL_MEM_BUF, GCL_MEM_BUF, GCL_MEM_BUF, kernelName, &kernelOpt));
         CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
         gs[0] = (n + best_n - 1) / best_n;

@@ -37,7 +37,8 @@ public:
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
-        return where_infer_output_size(inTensors[1], inTensors[2], outTensors[0], &this->archInfo);
+        return where_infer_output_size(
+            inTensors[0], inTensors[1], inTensors[2], outTensors[0], &this->archInfo);
     }
 };
 

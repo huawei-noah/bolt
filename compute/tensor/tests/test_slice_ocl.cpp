@@ -99,50 +99,36 @@ int sliceTest(int argc, char **argv, DataType dt)
     CHECK_STATUS(ocl_set_input(handle, input, inDesc, (U8 *)inputCpu, tmpbuf, true));
     CHECK_STATUS(slice(inputTensor, p, tmpTensor, outputTensors, &archInfo));
 
-    /*warp up*/
-    UNI_INFO_LOG("warm up gpu:\n")
-    for (U32 i = 0; i < 2; i++) {
-        CHECK_STATUS(gcl_run_kernelVec(handle));
-    }
-
-#ifdef _DEBUG
-    CHECK_STATUS(gcl_finish(handle));
     double time = 0;
-    double min_time = DBL_MAX;
-    double max_time = 0;
-    U32 loop = 1;
-    for (U32 i = 0; i < loop; i++) {
+#ifdef _DEBUG
+    for (I32 i = 0; i < UT_LOOPS; i++) {
         CHECK_STATUS(gcl_run_kernelVec_timing(handle, 0, handle->kernelVec->size()));
-        double t = handle->t_execute * 0.001;
-        if (t < min_time)
-            min_time = t;
-        if (t > max_time)
-            max_time = t;
-        time += t;
+        time += handle->t_execute * 0.001;
     }
-    time = (time - min_time - max_time) / (loop - 2);
-    UNI_INFO_LOG("min_time = %lf\n", min_time);
-    UNI_INFO_LOG("max_time = %lf\n", max_time);
-    UNI_INFO_LOG("avg_time = %lf\n", time);
-    time = min_time;
 #else
-    CHECK_STATUS(gcl_run_kernelVec(handle));
+    double start = ut_time_ms();
+    for (I32 i = 0; i < UT_LOOPS; i++) {
+        CHECK_STATUS(gcl_run_kernelVec(handle));
+        CHECK_STATUS(gcl_finish(handle));
+    }
+    double end = ut_time_ms();
+    time = (end - start);
 #endif
-    // log performance data
+    time /= UT_LOOPS;
+
     char buffer[150];
     char params[120];
     sprintf(params, "(%u %u %u %u)=(%u %u %u %u)/%u", in, ic, ih, iw, in, ic, ih, iw, num);
     sprintf(buffer, "%20s, %80s", "Slice", params);
-#ifdef _DEBUG
     double ops = num * len;
     ut_log(dt, buffer, ops, time);
-#endif
+
     for (I32 i = 0; i < num; i++) {
         TensorDesc outputDesc = outputTensors[i].get_desc();
         U8 *output_gpu = ut_input_v(tensorNumElements(outputDesc), dt, UT_INIT_RANDOM);
         CHECK_STATUS(ocl_get_output(handle, outputVec[i], outputDesc, output_gpu, tmpbuf, true));
         U8 *output_cpu = (U8 *)get_ptr_from_tensor(outputTensorsCpu[i], CPU_GENERAL);
-        ut_check_a(output_gpu, output_cpu, tensorNumElements(outputDesc), outputDesc.dt);
+        ut_check_v(output_gpu, output_cpu, tensorNumElements(outputDesc), outputDesc.dt, 0.1);
         free(output_gpu);
     }
 
@@ -154,8 +140,6 @@ int sliceTest(int argc, char **argv, DataType dt)
 
 int main(int argc, char **argv)
 {
-#ifdef _USE_FP16
     sliceTest(argc, argv, DT_F16);
-#endif
     return 0;
 }

@@ -13,7 +13,6 @@
 
 #include "cpu/arm/fp32/tensor_computing_fp32.h"
 #include "cpu/arm/transform_functions.h"
-#include "thread_affinity.h"
 
 EE convolution_gemm_V7(TensorDesc inputDesc,
     F32 *inArray,
@@ -71,28 +70,31 @@ EE convolution_gemm_V7(TensorDesc inputDesc,
         std::to_string(p.stride_h) + std::to_string(p.stride_w);
     U32 *padding_input_offsets =
         get_convolution_padding_input_offset<6, 8>(key, ih_pad, iw_pad, p, oh, ow, ohow);
+#else
+    std::vector<U32> padding_input_offsets(6 * OMP_NUM_THREADS);
 #endif
     for (U32 n = 0; n < in; n++) {
         F32 *inArray_pad = convolution_input_padding_per_channel<F32, 8>(
             n, ic, it, ih, iw, p, inArray, (F32 *)tmp);
 
+            // For NDK on ARMv7, OpenMP loop cannot reference more than 14 outside variables
         // ohow / 6
 #ifdef _USE_OPENMP
 #pragma omp parallel for num_threads(OMP_NUM_THREADS)
 #endif
         for (I32 hw = 0; hw < ohow - 5; hw += 6) {
 #ifdef _USE_OPENMP
-            // For NDK on ARMv7, OpenMP loop cannot reference more than 14 outside variables
-            F32 *thread_in_pack = in_pack + 6 * K * omp_get_thread_num();
+            I32 thread_id = omp_get_thread_num();
 #else
-            F32 *thread_in_pack = in_pack;
+            I32 thread_id = 0;
 #endif
+            F32 *thread_in_pack = in_pack + 6 * K * thread_id;
             // pack input
             // NCHWc8 => NHWChw6 + im2col
 #ifdef _USE_CACHE
             U32 *padding_input_offset = padding_input_offsets + hw;
 #else
-            U32 padding_input_offset[6];
+            U32 *padding_input_offset = padding_input_offsets.data() + 6 * thread_id;
             convolution_padding_input_offset<6, 8>(
                 params[2], params[3], p, params[10], params[11], hw, padding_input_offset);
 #endif

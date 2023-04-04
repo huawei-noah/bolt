@@ -71,8 +71,8 @@ int main(int argc, char *argv[])
         return 1;
     }
     int filelen = f_stat.st_size;
-    std::string str = "#include \"inline_" + std::string(binMapName) + ".h\"\n\nCU32 " +
-        std::string(charName) + "_len = " + std::to_string(filelen_st) + ";\nCU8 " +
+    std::string str = "#include \"inline_" + std::string(binMapName) + ".h\"\n\nconst U32 " +
+        std::string(charName) + "_len = " + std::to_string(filelen_st) + ";\nconst U8 " +
         std::string(charName) + "[] = {";
     std::stringstream ss;
     for (int i = 0; i < filelen; i++) {

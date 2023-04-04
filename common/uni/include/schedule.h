@@ -262,7 +262,6 @@ private:
         }
 
         pthread_mutex_unlock(&(schedule->taskQueueLock));
-        pthread_exit(NULL);
         UNI_DEBUG_LOG("worker end\n");
         return (NULL);
     }

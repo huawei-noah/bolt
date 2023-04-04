@@ -58,6 +58,6 @@ EE depthwise_pointwise_convolution_direct_mali_fp16(GCLHandle_t handle,
     GCLMem_t tmpBuf,
     TensorDesc outputDesc,
     GCLMem_t output,
-    ActivationMode depthwiseActivationMode,
-    ActivationMode pointwiseActivationMode);
+    ActivationParamSpec depthwiseActivationParamSpec,
+    ActivationParamSpec pointwiseActivationParamSpec);
 #endif

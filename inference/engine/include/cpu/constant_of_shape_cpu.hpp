@@ -47,6 +47,11 @@ public:
         for (U32 i = 0; i < outDesc.nDims; i++) {
             outDesc.dims[i] = inDesc.dims[inDesc.nDims + inDesc.dims[0] - 1 - i];
         }
+        if (tensorIsShape(inDesc) && tensorIsShape(outDesc)) {
+            for (U32 i = 0; i < tensorNumElements(outDesc); i++) {
+                outDesc.dims[outDesc.nDims + i] = p.value;
+            }
+        }
         outTensors[0]->resize(outDesc);
         return SUCCESS;
     }

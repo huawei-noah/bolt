@@ -13,17 +13,40 @@
 
 #include "cpu/tensor_computing_cpu.h"
 
-template <typename TA, typename TB>
+template <typename TA, typename TB, bool samea, bool sameb>
 static inline EE check_kernel(
     TensorDesc aDesc, TA *a, TensorDesc bDesc, TB *b, CheckParamSpec p, TensorDesc outDesc, U8 *out)
 {
-    int aLen = tensorNumElements(aDesc);
-    int bLen = tensorNumElements(bDesc);
-    int len = tensorNumElements(outDesc);
+    bool singleb = (tensorNumElements(bDesc) == 1);
+    bool singlea = (tensorNumElements(aDesc) == 1);
     EE ret = SUCCESS;
-    for (int i = 0; i < len; i++) {
-        TA va = a[i % aLen];
-        TB vb = b[i % bLen];
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
+#endif
+    for (U32 i = 0; i < tensorNumElements(outDesc); i++) {
+        int ai, bi;
+        if (samea) {
+            ai = i;
+        } else if (singlea) {
+            ai = 0;
+        } else {
+            std::vector<U32> index = calculateLocalIndex(i, outDesc.dims, outDesc.nDims);
+            std::vector<U32> relativeIndex =
+                calculateRelativeLocalIndex(index.data(), aDesc.dims, aDesc.nDims);
+            ai = calculateGlobalIndex(relativeIndex.data(), aDesc.dims, aDesc.nDims);
+        }
+        if (sameb) {
+            bi = i;
+        } else if (singleb) {
+            bi = 0;
+        } else {
+            std::vector<U32> index = calculateLocalIndex(i, outDesc.dims, outDesc.nDims);
+            std::vector<U32> relativeIndex =
+                calculateRelativeLocalIndex(index.data(), bDesc.dims, bDesc.nDims);
+            bi = calculateGlobalIndex(relativeIndex.data(), bDesc.dims, bDesc.nDims);
+        }
+        TA va = a[ai];
+        TB vb = b[bi];
         switch (p.mode) {
             case CHECK_GREATER: {
                 out[i] = (va > (TA)vb) ? 1 : 0;
@@ -57,6 +80,29 @@ static inline EE check_kernel(
     return ret;
 }
 
+template <typename TA, typename TB>
+static inline EE check_kernel(
+    TensorDesc aDesc, TA *a, TensorDesc bDesc, TB *b, CheckParamSpec p, TensorDesc outDesc, U8 *out)
+{
+    int aLen = tensorNumElements(aDesc);
+    int bLen = tensorNumElements(bDesc);
+    int oLen = tensorNumElements(outDesc);
+    EE ret;
+    if (aLen == oLen) {
+        if (bLen == oLen) {
+            ret = check_kernel<TA, TB, true, true>(aDesc, a, bDesc, b, p, outDesc, out);
+        } else {
+            ret = check_kernel<TA, TB, true, false>(aDesc, a, bDesc, b, p, outDesc, out);
+        }
+    } else {
+        if (bLen == oLen) {
+            ret = check_kernel<TA, TB, false, true>(aDesc, a, bDesc, b, p, outDesc, out);
+        } else {
+            ret = check_kernel<TA, TB, false, false>(aDesc, a, bDesc, b, p, outDesc, out);
+        }
+    }
+    return ret;
+}
 template <typename TA>
 EE check_wrapper(TensorDesc inputDescA,
     TA *inputA,

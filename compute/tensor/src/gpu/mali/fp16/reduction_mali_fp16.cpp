@@ -18,7 +18,7 @@
 
 inline EE reduction_checkpara_mali_fp16(TensorDesc inputDesc, TensorDesc outputDesc)
 {
-    if (inputDesc.dt != outputDesc.dt || inputDesc.dt != DT_F16) {
+    if (inputDesc.dt != outputDesc.dt) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
     return SUCCESS;
@@ -35,7 +35,7 @@ inline EE reduction_core_mali_fp16(GCLHandle_t handle,
     GCLMem_t output)
 {
     int axisTran[6];
-    int axis;
+    int axis = 0;
     for (int i = 0; i < p.num_axes; i++) {
         axis = p.axes[i];
         if (axis < 0) {
@@ -45,12 +45,13 @@ inline EE reduction_core_mali_fp16(GCLHandle_t handle,
         axisTran[i] = axis;
     }
 
+    DataType idt;
     DataFormat imf, omf;
     U32 in, ic, ih, iw;
     U32 on, oc, oh, ow;
     U32 iw_str, ih_str, ic_str, iw_off, ih_off, i_off;
     U32 ow_str, oh_str, oc_str, ow_off, oh_off, o_off;
-    tensorSelectGet(inputDesc, NULL, NULL, &in, &ic, &ih, &iw);
+    tensorSelectGet(inputDesc, &idt, NULL, &in, &ic, &ih, &iw);
     tensorSelectGet(outputDesc, NULL, NULL, &on, &oc, &oh, &ow);
     get_gclmem_dim(input->desc, &iw_str, &ih_str, &ic_str, &iw_off, &ih_off);
     get_gclmem_dim(output->desc, &ow_str, &oh_str, &oc_str, &ow_off, &oh_off);
@@ -98,7 +99,7 @@ inline EE reduction_core_mali_fp16(GCLHandle_t handle,
         edge = ow;
     }
     CHECK_STATUS(set_reduction_opt_mali(
-        useNchw, useOc4, axis, p.mode, DT_F16, GCL_MEM_BUF, GCL_MEM_BUF, kernelName, &kernelOpt));
+        useNchw, useOc4, axis, p.mode, idt, GCL_MEM_BUF, GCL_MEM_BUF, kernelName, &kernelOpt));
     CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
     CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, ow_str, oh_str, i_off, o_off, iw, ih,
         ic, edge, keep_dim, od, gs[0], gs[1], inbuf, outbuf));

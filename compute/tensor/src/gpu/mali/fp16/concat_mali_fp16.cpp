@@ -21,10 +21,76 @@ inline EE concat_checkpara_mali_fp16(std::vector<TensorDesc> inputDesc, TensorDe
             return NOT_SUPPORTED;
         }
     }
-    if (outputDesc.dt != DT_F16) {
-        return NOT_SUPPORTED;
-    }
     return SUCCESS;
+}
+
+inline int to4d(TensorDesc &desc, int &axis)
+{
+    int left = 0;
+    int right = -1;
+    switch (desc.nDims) {
+        case 4:
+            break;
+        case 5: {
+            desc.nDims = 4;
+            if (axis == 2) {
+                desc.dims[1] *= desc.dims[2];
+                left = 2;
+                right = 3;
+                axis = 1;
+            } else {
+                desc.dims[2] *= desc.dims[3];
+                left = 3;
+                right = 3;
+                if (axis >= 3) {
+                    axis -= 1;
+                }
+            }
+            break;
+        }
+        default:
+            CHECK_STATUS(NOT_SUPPORTED);
+            break;
+    }
+    for (int i = left; i <= right; i++) {
+        desc.dims[i] = desc.dims[i + 1];
+    }
+    return axis;
+}
+
+inline int to4d(GCLMemDesc &desc, int axis)
+{
+    int left = 0;
+    int right = -1;
+    switch (desc.nDims) {
+        case 4:
+            break;
+        case 5: {
+            desc.nDims = 4;
+            if (axis == 2) {
+                desc.dims[1] *= desc.dims[2];
+                desc.stride[1] *= desc.dims[2];
+                left = 2;
+                right = 3;
+                axis = 1;
+            } else {
+                desc.dims[2] *= desc.dims[3];
+                left = 3;
+                right = 3;
+                if (axis >= 3) {
+                    axis -= 1;
+                }
+            }
+            break;
+        }
+        default:
+            CHECK_STATUS(NOT_SUPPORTED);
+            break;
+    }
+    for (int i = left; i <= right; i++) {
+        desc.dims[i] = desc.dims[i + 1];
+    }
+    return axis;
 }
 
 inline EE concat_core_mali_nchw_fp16(GCLHandle_t handle,
@@ -35,10 +101,12 @@ inline EE concat_core_mali_nchw_fp16(GCLHandle_t handle,
     GCLMem_t tmpbuf,
     I32 concatDim)
 {
-    U32 ow, oh, oc, on;
+    DataType odt;
+    U32 ow, oh, ot, oc, on;
     U32 ow_str, oh_str, oc_str, ow_off, oh_off, ohw_str, o_off;
     GCLMemType outputMemType = output->desc.memType;
-    CHECK_STATUS(gclmem_get_desc_dim(output->desc, NULL, NULL, &on, &oc, &oh, &ow));
+    CHECK_STATUS(gclmem_get_desc_dim_5d(output->desc, &odt, NULL, &on, &oc, &ot, &oh, &ow));
+    oc *= ot;
     CHECK_STATUS(gclmem_get_desc_padding(output->desc, &ow_str, &oh_str, &oc_str, &ow_off, &oh_off));
     ohw_str = ow_str * oh_str;
     o_off = oh_off * ow_str + ow_off;
@@ -70,7 +138,7 @@ inline EE concat_core_mali_nchw_fp16(GCLHandle_t handle,
 
     U32 bn = (num + 3) / 4;
     U32 iw[4];
-    U32 axis_len[4];
+    U32 axis_len[4] = {0};
     U32 en, nmax, axis_max;
     U32 out_size = 0;
     U32 ih_str[4];
@@ -95,6 +163,12 @@ inline EE concat_core_mali_nchw_fp16(GCLHandle_t handle,
 
             iw[j] = inputDesc[i * 4 + j].dims[0];
             axis_len[j] = inputDesc[i * 4 + j].dims[concatDim];
+            if (inputDesc[i * 4 + j].nDims > 4 && concatDim >= 2) {
+                axis_len[j] = 1;
+                for (U32 k = 2; k < inputDesc[i * 4 + j].nDims; k++) {
+                    axis_len[j] *= inputDesc[i * 4 + j].dims[k];
+                }
+            }
             if (concatDim == 0) {
                 axis_len[j] = (axis_len[j] + 3) / 4;
             }
@@ -108,7 +182,7 @@ inline EE concat_core_mali_nchw_fp16(GCLHandle_t handle,
         }
         U32 ls[3] = {0, 0, 0};
         U32 dim = 3;
-        CHECK_STATUS(set_concat_opt_mali(concatDim, en, true, concatDimWAlign, DT_F16, inputMemType,
+        CHECK_STATUS(set_concat_opt_mali(concatDim, en, true, concatDimWAlign, odt, inputMemType,
             outputMemType, kernelName, &kernelOpt));
         Kernel kernel;
         CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
@@ -170,43 +244,45 @@ inline EE concat_core_mali_fp16(GCLHandle_t handle,
     GCLMem_t tmpbuf,
     I32 concatDim)
 {
+    concatDim = (concatDim + outputDesc.nDims) % outputDesc.nDims;
+    concatDim = outputDesc.nDims - 1 - concatDim;
+
+    auto desc0 = output->desc;
+    to4d(desc0, concatDim);
+    int axis = to4d(outputDesc, concatDim);
+
+    GCLMemType outputMemType = desc0.memType;
+    DataType odt;
     U32 ow, oh, oc, on;
     U32 ow_str, oh_str, oc_str, ow_off, oh_off, o_off;
-    GCLMemType outputMemType;
-    CHECK_STATUS(gclmem_get_desc_dim(output->desc, NULL, NULL, &on, &oc, &oh, &ow));
-    CHECK_STATUS(gclmem_get_desc_padding(output->desc, &ow_str, &oh_str, &oc_str, &ow_off, &oh_off));
+    CHECK_STATUS(gclmem_get_desc_dim(desc0, &odt, NULL, &on, &oc, &oh, &ow));
+    CHECK_STATUS(gclmem_get_desc_padding(desc0, &ow_str, &oh_str, &oc_str, &ow_off, &oh_off));
     o_off = oh_off * ow_str + ow_off;
-    outputMemType = output->desc.memType;
 
     U32 num = input.size();
     GCLMem_t inputMem[4];
     cl_mem inbuf[4];
-    I32 dim = outputDesc.nDims;
-    concatDim = (concatDim + dim) % dim;
-    concatDim = dim - 1 - concatDim;
     char kernelName[128];
     KernelOpt kernelOpt;
     bool concatDimCAlign = true;
     U32 bn = (num + 3) / 4;
-    if (concatDim == 2) {
+    if (axis == 2) {
         for (auto p : inputDesc) {
-            U32 tc;
-            CHECK_STATUS(tensorSelectGet(p, NULL, NULL, NULL, &tc, NULL, NULL));
-            if (tc % 4 != 0) {
+            if (p.dims[p.nDims - 2] % 4 != 0) {
                 concatDimCAlign = false;
                 break;
             }
         }
     }
-    U32 ic[4];
+    U32 ic[4] = {0};
     U32 axis_len[4];
     U32 en, nmax, axis_max;
     U32 out_size = 0;
-    U32 ih_str[4];
-    U32 iw_str[4];
-    U32 ih_off[4];
-    U32 iw_off[4];
-    U32 i_off[4];
+    U32 ih_str[4] = {0};
+    U32 iw_str[4] = {0};
+    U32 ih_off[4] = {0};
+    U32 iw_off[4] = {0};
+    U32 i_off[4] = {0};
     GCLMemType inputMemType[4];
 
     U32 ow_val = ow_str;
@@ -234,36 +310,45 @@ inline EE concat_core_mali_fp16(GCLHandle_t handle,
             GCLMem subInMem;
             inputMem[j] = (GCLMem_t)input[i * 4 + j];
             if (inputMem[j]->desc.memFormat == DF_NCHW) {
-                GCLMemDesc desc = inputMem[j]->desc;
+                auto desc1 = inputDesc[i * 4 + j];
+                to4d(desc1, concatDim);
+                DataType dt;
+                U32 iw, ih, ic, in;
+                CHECK_STATUS(tensorSelectGet(desc1, &dt, NULL, &in, &ic, &ih, &iw));
                 Mem subIn;
-                U32 size = tensorNumBytes(inputDesc[i * 4 + j]);
+                U32 size = in * (ic + 3) / 4 * 4 * ih * iw * bytesOf(dt);
                 CHECK_STATUS(gcl_create_sub_buffer(size, &offset, tmpbuf, &subIn));
                 subInMem.mem = subIn;
-                U32 iw, ih, ic, in;
-                CHECK_STATUS(tensorSelectGet(inputDesc[i * 4 + j], NULL, NULL, &in, &ic, &ih, &iw));
+                GCLMemDesc desc = inputMem[j]->desc;
                 desc.stride[0] = iw;
                 desc.stride[1] = ih;
-                desc.stride[2] = (ic + 3) / 4 * in;
+                desc.stride[2] = (ic + 3) / 4 * 4 * in;
+                desc.byteSize = size;
                 desc.offset[0] = 0;
                 desc.offset[1] = 0;
                 desc.offset[2] = 0;
                 desc.memFormat = DF_NCHWC4;
                 desc.memType = GCL_MEM_BUF;
-                subInMem.mem = subIn;
+                to4d(desc, concatDim);
                 subInMem.desc = desc;
+                subInMem.mem = subIn;
                 CHECK_STATUS(
                     ocl_data_trans_form(handle, inputMem[j], &subInMem, 0, 0, NCHW_TO_NCHWC4));
                 inputMem[j] = &subInMem;
             }
             inbuf[j] = inputMem[j]->mem;
-            get_gclmem_dim(inputMem[j]->desc, &iw_str[j], &ih_str[j], NULL, &iw_off[j], &ih_off[j]);
+            auto desc1 = inputMem[j]->desc;
+            to4d(desc1, concatDim);
+            get_gclmem_dim(desc1, &iw_str[j], &ih_str[j], NULL, &iw_off[j], &ih_off[j]);
             i_off[j] = ih_off[j] * iw_str[j] + iw_off[j];
             inputMemType[j] = inputMem[j]->desc.memType;
         }
         for (U32 j = 0; j < en; ++j) {
-            axis_len[j] = inputDesc[i * 4 + j].dims[concatDim];
+            auto desc1 = inputDesc[i * 4 + j];
+            to4d(desc1, concatDim);
+            axis_len[j] = desc1.dims[concatDim];
             ic[j] = 0;
-            if (concatDim == 2) {
+            if (axis == 2) {
                 ic[j] = axis_len[j];
                 axis_len[j] = (axis_len[j] + 3) / 4;
             }
@@ -271,13 +356,13 @@ inline EE concat_core_mali_fp16(GCLHandle_t handle,
         }
         U32 gs[3] = {ow, oh, (oc + 3) / 4 * on};
         gs[concatDim] = axis_max;
-        if (concatDim == 2) {
+        if (axis == 2) {
             gs[2] *= on;
         }
         U32 ls[3] = {0, 0, 0};
         U32 dim = 3;
-        CHECK_STATUS(set_concat_opt_mali(concatDim, en, false, concatDimCAlign, DT_F16,
-            inputMemType, outputMemTypeVal, kernelName, &kernelOpt));
+        CHECK_STATUS(set_concat_opt_mali(axis, en, false, concatDimCAlign, odt, inputMemType,
+            outputMemTypeVal, kernelName, &kernelOpt));
         Kernel kernel;
         CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
         switch (en) {
@@ -336,10 +421,11 @@ inline EE concat_core_mali_fp16(GCLHandle_t handle,
     if (!concatDimCAlign) {
         GCLMem tMem;
         GCLMemDesc desc = output->desc;
+        to4d(desc, concatDim);
         U32 str[3] = {ow, oh, oc * on};
         U32 off[3] = {0, 0, 0};
         MemFlags flag = CL_MEM_READ_WRITE;
-        CHECK_STATUS(gclmem_set_desc_padding(&desc, str, off, DT_F16, DF_NCHW, GCL_MEM_BUF, flag));
+        CHECK_STATUS(gclmem_set_desc_padding(&desc, str, off, odt, DF_NCHW, GCL_MEM_BUF, flag));
         tMem.desc = desc;
         tMem.mem = tmpbuf->mem;
         CHECK_STATUS(ocl_data_trans_form(handle, &tMem, output, 0, 0, NCHW_TO_NCHWC4));
@@ -372,15 +458,15 @@ EE concat_infer_forward_tmp_bytes_mali_fp16(
             for (auto p : inputDesc) {
                 size += tensorNumBytes(p);
             }
-            size = ALIGN(size, BUFFER_ALIGN_BASE);
+            size = UNI_ALIGN(size, BUFFER_ALIGN_BASE);
         }
         for (U32 i = 0; i < gclmemInputDesc.size(); i++) {
             if (gclmemInputDesc[i].memFormat == DF_NCHW) {
                 DataType dt;
                 U32 iw, ih, ic, in;
                 CHECK_STATUS(tensorSelectGet(inputDesc[i], &dt, NULL, &in, &ic, &ih, &iw));
-                U32 sizeAlignC4 = iw * ih * ALIGN(ic, 4) * in * bytesOf(dt);
-                size += ALIGN(sizeAlignC4, BUFFER_ALIGN_BASE);
+                U32 sizeAlignC4 = iw * ih * UNI_ALIGN(ic, 4) * in * bytesOf(dt);
+                size += UNI_ALIGN(sizeAlignC4, BUFFER_ALIGN_BASE);
             }
         }
     }

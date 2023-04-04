@@ -38,10 +38,10 @@ inline EE gather_checkpara_mali(GCLHandle_t handle,
         U32 nDims = inputDesc.nDims;
         U32 axis = (p.axis + nDims) % nDims;
         axis = nDims - 1 - axis;
-        if (tensorNumElements(indexDesc) == 1 && p.index_scalar) {
-            if (outputDesc.nDims != inputDesc.nDims - 1) {
-                CHECK_STATUS(NOT_MATCH);
-            }
+        if (tensorNumElements(indexDesc) == 1 && indexDesc.df == DF_SCALAR) {
+            //if (outputDesc.nDims != inputDesc.nDims - 1) {
+            //    CHECK_STATUS(NOT_MATCH);
+            //}
         } else {
             if (outputDesc.nDims != inputDesc.nDims + indexDesc.nDims - 1) {
                 CHECK_STATUS(NOT_MATCH);
@@ -76,22 +76,8 @@ EE gather_infer_forward_tmp_bytes_mali(TensorDesc inputDesc,
     GCLMemDesc gclmemOutputDesc,
     U32 *bytes)
 {
-    EE ret = SUCCESS;
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = gather_infer_forward_tmp_bytes_mali_fp16(
-                inputDesc, gclmemInputDesc, indexDesc, p, outputDesc, gclmemOutputDesc, bytes);
-            break;
-        }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return gather_infer_forward_tmp_bytes_mali_fp16(
+        inputDesc, gclmemInputDesc, indexDesc, p, outputDesc, gclmemOutputDesc, bytes);
 }
 
 EE gather_mali(GCLHandle_t handle,
@@ -104,22 +90,8 @@ EE gather_mali(GCLHandle_t handle,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
-    EE ret = SUCCESS;
     CHECK_STATUS(
         gather_checkpara_mali(handle, inputDesc, input, indexDesc, index, p, outputDesc, output));
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = gather_mali_fp16(
-                handle, inputDesc, input, indexDesc, index, p, tmpbuf, outputDesc, output);
-            break;
-        }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return gather_mali_fp16(
+        handle, inputDesc, input, indexDesc, index, p, tmpbuf, outputDesc, output);
 }

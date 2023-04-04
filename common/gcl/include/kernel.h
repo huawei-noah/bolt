@@ -49,7 +49,7 @@ inline EE get_kernel_info(Kernel kernel, cl_kernel_info info, void **value, size
     map_cl_error_2_ee(ret);
 }
 
-inline EE get_kernel_name(Kernel kernel, char* name, U32 *len)
+inline EE get_kernel_name(Kernel kernel, char *name, U32 *len)
 {
     if (NULL == name || NULL == len) {
         return NULL_POINTER;
@@ -103,7 +103,7 @@ inline EE create_kernels_in_program(Program program, U32 num_kernel, Kernel *ker
     map_cl_error_2_ee(ret);
 }
 
-inline EE create_kernel(Program program, CI8 *name, Kernel *kernel)
+inline EE create_kernel(Program program, const char *name, Kernel *kernel)
 {
     if (kernel == nullptr) {
         return NULL_POINTER;
@@ -141,9 +141,9 @@ inline EE set_kernel_arg(Kernel kernel, U32 arg_index, U32 arg_size, const void 
 inline EE enqueue_ndrange_kernel(CommandQueue queue,
     Kernel kernel,
     U32 work_dim,
-    CU32 *global_work_offset,
-    CU32 *global_work_size,
-    CU32 *local_work_size,
+    const U32 *global_work_offset,
+    const U32 *global_work_size,
+    const U32 *local_work_size,
     U32 num_events_in_wait_list,
     const Event *event_in_wait_list,
     Event *event)

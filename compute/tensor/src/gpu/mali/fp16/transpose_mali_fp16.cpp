@@ -16,7 +16,7 @@
 
 inline EE transpose_checkpara_mali_fp16(TensorDesc inputDesc, TensorDesc outputDesc)
 {
-    if (inputDesc.dt != outputDesc.dt || inputDesc.dt != DT_F16) {
+    if (inputDesc.dt != outputDesc.dt) {
         return NOT_SUPPORTED;
     }
     return SUCCESS;
@@ -30,10 +30,11 @@ inline EE transpose_core_mali_fp16(GCLHandle_t handle,
     GCLMem_t tmpbuf,
     U32 *dims)
 {
+    DataType idt, odt;
     U32 in, ic, ih, iw, it;
     U32 on, oc, oh, ow, ot;
-    tensorSelectGet(inputDesc, NULL, NULL, &in, &ic, &ih, &iw, &it);
-    tensorSelectGet(outputDesc, NULL, NULL, &on, &oc, &oh, &ow, &ot);
+    tensorSelectGet(inputDesc, &idt, NULL, &in, &ic, &ih, &iw, &it);
+    tensorSelectGet(outputDesc, &odt, NULL, &on, &oc, &oh, &ow, &ot);
     U32 iDims = inputDesc.nDims;
     U32 oDims = outputDesc.nDims;
     if (iDims > 8 || oDims > 8) {
@@ -78,7 +79,7 @@ inline EE transpose_core_mali_fp16(GCLHandle_t handle,
         U32 str[3] = {iDim[0], iDim[1], rDim};
         U32 off[3] = {0, 0, 0};
         MemFlags flag = CL_MEM_READ_WRITE;
-        CHECK_STATUS(gclmem_set_desc_padding(&desc, str, off, DT_F16, DF_NCHW, GCL_MEM_BUF, flag));
+        CHECK_STATUS(gclmem_set_desc_padding(&desc, str, off, idt, DF_NCHW, GCL_MEM_BUF, flag));
         tMem.desc = desc;
         U32 size = tensorNumBytes(inputDesc);
         CHECK_STATUS(gcl_create_sub_buffer(size, &subMemOff, tmpbuf, &(tMem.mem)));
@@ -112,7 +113,7 @@ inline EE transpose_core_mali_fp16(GCLHandle_t handle,
         o_off = 0;
     }
     CHECK_STATUS(
-        set_transpose_opt_mali(iDims, DT_F16, inputMemType, GCL_MEM_BUF, kernelName, &kernelOpt));
+        set_transpose_opt_mali(iDims, idt, inputMemType, GCL_MEM_BUF, kernelName, &kernelOpt));
     CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
     gs[0] = (iDim[0] + 3) / 4;
     gs[1] = iDim[1];
@@ -170,7 +171,7 @@ inline EE transpose_core_mali_fp16(GCLHandle_t handle,
         U32 str[3] = {oDim[0], oDim[1], rDim};
         U32 off[3] = {0, 0, 0};
         MemFlags flag = CL_MEM_READ_WRITE;
-        CHECK_STATUS(gclmem_set_desc_padding(&desc, str, off, DT_F16, DF_NCHW, GCL_MEM_BUF, flag));
+        CHECK_STATUS(gclmem_set_desc_padding(&desc, str, off, idt, DF_NCHW, GCL_MEM_BUF, flag));
         tMem.desc = desc;
         tMem.mem = outbuf;
         MemTransFormType type = (output->desc.memFormat == DF_NCHW) ? NCHW_TO_NCHW : NCHW_TO_NCHWC4;
@@ -189,7 +190,7 @@ EE transpose_infer_forward_tmp_bytes_mali_fp16(TensorDesc inputDesc,
     U32 outputSize = 0;
     if (gclmemInputDesc->memFormat == DF_NCHWC4) {
         inputSize = tensorNumBytes(inputDesc);
-        inputSize = ALIGN(inputSize, BUFFER_ALIGN_BASE);
+        inputSize = UNI_ALIGN(inputSize, BUFFER_ALIGN_BASE);
     }
     if (gclmemOutputDesc->memType != GCL_MEM_BUF) {
         outputSize = tensorNumBytes(outputDesc);

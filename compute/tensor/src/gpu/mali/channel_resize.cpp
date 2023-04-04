@@ -59,16 +59,6 @@ EE channel_resize_mali(GCLHandle_t handle,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
-    EE ret = SUCCESS;
     CHECK_STATUS(channel_resize_checkpara_mali(handle, inputDesc, input, p, outputDesc, output));
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = channel_resize_mali_fp16(handle, inputDesc, input, p, outputDesc, output);
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return channel_resize_mali_fp16(handle, inputDesc, input, p, outputDesc, output);
 }

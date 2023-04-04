@@ -25,5 +25,8 @@ public enum DataFormat {
     NCHW,   ///< batch->channel->high->width data order
     NHWC,   ///< batch->high->width->channel data order
     MTK,    ///< batch->time->unit data order
-    NORMAL  ///< vectorize input of row major
+    NORMAL, ///< vectorize input of row major
+    NCHWC8, ///< batch->channel/8->width->high->channel eight element data order
+    NCHWC4, ///< batch->channel/4->width->high->channel four element data order
+    SCALAR  ///< 1-dim data
 }

@@ -53,23 +53,24 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
         elif norm_type == 'pre_ln':
             output = self.extract_layer_norm(output, output_name_prefix+"_FF_ln", scope_id+1, ["LayerNorm", "gamma", "beta"])
         # add quantization scale here
-        self.add_quantization(scope_id + 1, "quant_ffn_input", output)
         if (self.encoder_FFN_decomposition):
+            self.add_quantization(scope_id + 1, "quant_ffn_input", output_name_prefix+"_FF_fc1_proj_down", output, "inputs")
             output = self.extract_dense(output, output_name_prefix+"_FF_fc1_proj_down", scope_id+1, scope_name="layer_1_proj_down")
-            self.add_quantization(scope_id + 1, "quant_ffn_input", output)
+            self.add_quantization(scope_id + 1, "quant_ffn_input", output_name_prefix+"_FF_fc1_proj_up", output, "inputs")
             output = self.extract_dense(output, output_name_prefix+"_FF_fc1_proj_up", scope_id+1, scope_name="layer_1_proj_up")
 
             output = self.add_relu(output, output+"_FF_relu")
             # add quantization scale here
-            self.add_quantization(scope_id + 1, "quant_ffn_middle", output)
+            self.add_quantization(scope_id + 1, "quant_ffn_middle", output_name_prefix+"_FF_fc2_proj_down", output, "inputs")
             output = self.extract_dense(output, output_name_prefix+"_FF_fc2_proj_down", scope_id+1, scope_name="layer_2_proj_down")
-            self.add_quantization(scope_id + 1, "quant_ffn_input", output)
+            self.add_quantization(scope_id + 1, "quant_ffn_input", output_name_prefix+"_FF_fc2_proj_up", output, "inputs")
             output = self.extract_dense(output, output_name_prefix+"_FF_fc2_proj_up", scope_id+1, scope_name="layer_2_proj_up")
         else:
+            self.add_quantization(scope_id + 1, "quant_ffn_input", output_name_prefix + "_FF_fc1", output, "inputs")
             output = self.extract_dense(output, output_name_prefix + "_FF_fc1", scope_id + 1, scope_name="layer_1")
             output = self.add_relu(output, output + "_FF_relu")
             # add quantization scale here
-            self.add_quantization(scope_id + 1, "quant_ffn_middle", output)
+            self.add_quantization(scope_id + 1, "quant_ffn_middle", output_name_prefix + "_FF_fc2", output, "inputs")
             output = self.extract_dense(output, output_name_prefix + "_FF_fc2", scope_id + 1, scope_name="layer_2")
         output = self.add_sum([output, input], output_name=output_name_prefix+"_FF_sum")
         if norm_type == 'ln':
@@ -188,7 +189,7 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
             groups = filters
         if data_format == "channels_last":
             inputs = self.add_transpose(inputs, output_name_prefix+"_pre_t", [0, 3, 1, 2])
-        self.add_quantization(scope_id, "quant_" + name, inputs)
+        self.add_quantization(scope_id, "quant_" + name, output_name_prefix+"_conv", inputs, "inputs")
         input_shape = self.get_tensor_shape(inputs)
         proj_filters = input_shape[1]
         # add quantization scale here
@@ -353,7 +354,7 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
             groups = filters
         if data_format == "channels_last" and layer_id == 0:
             inputs = self.add_transpose(inputs, output_name_prefix+"_pre_t", [0, 3, 1, 2])
-        self.add_quantization(scope_id, "quant_" + name, inputs)
+        self.add_quantization(scope_id, "quant_" + name, output_name_prefix+"_conv", inputs, "inputs")
         input_shape = self.get_tensor_shape(inputs)
         proj_filters = input_shape[1]
         # add quantization scale here
@@ -449,7 +450,11 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
                 axis = 1
             else:
                 axis = 2
+                shape = self.get_tensor_shape(inputs)
                 decode_state_shape = self.get_tensor_shape(decode_state)
+                #if decode_state_shape[1] % 8 != 0:
+                #    self.data_dict[inputs] = self.data_dict[inputs].reshape(
+                #            [self.batch, shape[1] * 8, shape[2], shape[3]])
                 if ((len(decode_state_shape) == 4) and (norm_type != 'layer_norm') and (norm_type != 'post_layer_norm')):
                     self.data_dict[decode_state] = self.data_dict[decode_state].reshape(
                         [self.batch, decode_state_shape[1]//8, -1, decode_state_shape[3], 8])
@@ -561,13 +566,13 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
             w_norm = w
             ms_norm = memory
         # add quantization scale here
-        self.add_quantization(scope_id + 1, "quant_attn_input", w_norm)
-        if memory is not None:
-            self.add_quantization(scope_id + 1, "quant_attn_input", ms_norm)
+        #if memory is not None:
+        #    self.add_quantization(scope_id + 1, "quant_attn_input", ms_norm)
 
         w_head_q = output_name_prefix + "_multihead_q"
         w_head_k = output_name_prefix + "_multihead_k"
         w_head_v = output_name_prefix + "_multihead_v"
+        self.add_quantization(scope_id + 1, "quant_attn_input", w_head_q, w_norm, "inputs")
         if use_mq_attn:
             key_depth = 1 * d_head
             value_depth = 1 * d_head
@@ -577,11 +582,13 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
                 a = ms_norm
             else:
                 a = w_norm
+            self.add_quantization(scope_id + 1, "quant_attn_input", w_head_k, a, "inputs")
+            self.add_quantization(scope_id + 1, "quant_attn_input", w_head_v, a, "inputs")
             self.extract_denses(a, [w_head_k, w_head_v], [key_depth, value_depth], scope_id+1, "shead_kv")
             # add quantization scale here
-            self.add_quantization(scope_id + 1, "quant_heads_q", w_head_q)
-            self.add_quantization(scope_id + 1, "quant_heads_kv", w_head_k)
-            self.add_quantization(scope_id + 1, "quant_heads_kv", w_head_v)
+            self.add_quantization(scope_id + 1, "quant_heads_q", w_head_q, w_head_q, "outputs")
+            self.add_quantization(scope_id + 1, "quant_heads_kv", w_head_k, w_head_k, "outputs")
+            self.add_quantization(scope_id + 1, "quant_heads_kv", w_head_v, w_head_v, "outputs")
             w_head_q = self.add_reshape(w_head_q, w_head_q+"_r", [self.batch, -1, n_head, d_head])
             w_head_k = self.add_reshape(w_head_k, w_head_k+"_r", [self.batch, -1, 1, d_head])
             w_head_v = self.add_reshape(w_head_v, w_head_v+"_r", [self.batch, -1, 1, d_head])
@@ -591,15 +598,21 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
             value_depth = n_head * d_head
 
             if memory is not None:
+                self.add_quantization(scope_id + 1, "quant_attn_input", w_head_qv, w_norm, "inputs")
+                self.add_quantization(scope_id + 1, "quant_attn_input", w_head_k, ms_norm, "inputs")
+                self.add_quantization(scope_id + 1, "quant_attn_input", w_head_v, ms_norm, "inputs")
                 #self.extract_dense(w_norm, w_head_q, scope_id+1, "mhead_q")
                 self.extract_denses(w_norm, [w_head_q, w_head_qv], [key_depth, key_depth], scope_id+1, "q")
                 self.extract_denses(ms_norm, [w_head_k, w_head_v], [key_depth, value_depth], scope_id+1, "kv")
+                self.add_quantization(scope_id + 1, "quant_heads_qkv", w_head_qv, w_head_qv, "outputs")
             else:
+                self.add_quantization(scope_id + 1, "quant_attn_input", w_head_k, w_norm, "inputs")
+                self.add_quantization(scope_id + 1, "quant_attn_input", w_head_v, w_norm, "inputs")
                 self.extract_denses(w_norm, [w_head_q, w_head_k, w_head_v], [key_depth, key_depth, value_depth], scope_id+1, "qkv")
             # add quantization scale here
-            self.add_quantization(scope_id + 1, "quant_heads_qkv", w_head_q)
-            self.add_quantization(scope_id + 1, "quant_heads_qkv", w_head_k)
-            self.add_quantization(scope_id + 1, "quant_heads_qkv", w_head_v)
+            self.add_quantization(scope_id + 1, "quant_heads_qkv", w_head_q, w_head_q, "outputs")
+            self.add_quantization(scope_id + 1, "quant_heads_qkv", w_head_v, w_head_v, "outputs")
+            self.add_quantization(scope_id + 1, "quant_heads_qkv", w_head_k, w_head_k, "outputs")
             w_head_q = self.add_reshape(w_head_q, w_head_q+"_r", [self.batch, -1, n_head, d_head])
             w_head_k = self.add_reshape(w_head_k, w_head_k+"_r", [self.batch, -1, n_head, d_head])
             w_head_v = self.add_reshape(w_head_v, w_head_v+"_r", [self.batch, -1, n_head, d_head])
@@ -673,21 +686,21 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
             name = output_name_prefix + "_talk_head_prob_proj"
             attn_prob = self.extract_dense(attn_prob, name, scope_id+1, "talk_head_prob_proj")
         # add quantization scale here
-        self.add_quantization(scope_id + 1, "quant_attn_prob", attn_prob)
+        w_head_vt = self.add_transpose(w_head_v, w_head_v+"_t", [0, 2, 1, 3])
+        self.add_quantization(scope_id + 1, "quant_attn_prob", w_head_vt, attn_prob, "inputs")
 
         if use_mq_attn:
-            w_head_vt = self.add_transpose(w_head_v, w_head_v+"_t", [0, 2, 1, 3])
             attn_prob = self.add_reshape(attn_prob, attn_prob+"_r", [self.batch, 1, -1, 0])
             attn_vec = self.add_matmul(attn_prob, w_head_vt, output_name_prefix+"_cont")
             attn_vec = self.add_reshape(attn_vec, attn_vec+"_r", [self.batch, n_head, -1, 0])
         else:
-            w_head_vt = self.add_transpose(w_head_v, w_head_v+"_t", [0, 2, 1, 3])
+            #w_head_vt = self.add_transpose(w_head_v, w_head_v+"_t", [0, 2, 1, 3])
             attn_vec = self.add_matmul(attn_prob, w_head_vt, output_name_prefix+"_cont")
 
         attn_vec = self.add_transpose(attn_vec,  output_name_prefix+"_cont_t", [0, 2, 1, 3])
         attn_vec = self.add_reshape(attn_vec, output_name_prefix+"_cont_rr", [self.batch, -1, n_head*d_head])
         # add quantization scale here
-        self.add_quantization(scope_id + 1, "quant_attn_vec", attn_vec)
+        self.add_quantization(scope_id + 1, "quant_attn_vec", attn_vec+"_fc", attn_vec, "inputs")
         attn_out = self.extract_dense(attn_vec, attn_vec+"_fc", scope_id+1, scope_name="o")
         output = self.add_sum([attn_out, w], output_name_prefix+"_rel_multihead_sum")
         if norm_type == 'ln':
@@ -1293,13 +1306,13 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
         prediction_net_output = input_dict["prediction_net"]
         fc0_name = "joint_encoder_fc"
         # add quantization scale here
-        self.add_quantization(scope_id, "quant_enc_joint_input", encoder_output)
+        self.add_quantization(scope_id, "quant_enc_joint_input", fc0_name, encoder_output, "inputs")
         self.extract_dense(encoder_output, fc0_name, scope_id, scope_name="joint_encoder_fc")
         #ep0_name = "joint_net_expand0"
         #self.add_expand_dims(fc0_name, axis=2, output_name=ep0_name)
         fc1_name = "joint_pred_net_fc"
         # add quantization scale here
-        self.add_quantization(scope_id, "quant_pred_joint_input", prediction_net_output)
+        self.add_quantization(scope_id, "quant_pred_joint_input", fc1_name, prediction_net_output, "inputs")
         self.extract_dense(prediction_net_output, fc1_name, scope_id, scope_name="joint_pred_net_fc")
         #ep1_name = "joint_net_expand1"
         #self.add_expand_dims(fc1_name, axis=1, output_name=ep1_name)
@@ -1313,7 +1326,7 @@ class Tensorflow2CaffeConvolutionTransformer(Tensorflow2Caffe):
         else:
             print("[ERROR] unsupported activation function" % (activation_fn))
             exit(1)
-        self.add_quantization(scope_id, "quant_joint_middle", result_name)
+        self.add_quantization(scope_id, "quant_joint_middle", "joint_output_fc", result_name, "inputs")
         result_name = self.extract_dense(result_name, "joint_output_fc", scope_id, scope_name="joint_output_fc")
         argmax_name = self.add_argmax(result_name, axis=-1, output_name="output_argmax")
         return argmax_name

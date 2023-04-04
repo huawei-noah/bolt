@@ -62,17 +62,7 @@ inline EE argmax_checkpara_mali(GCLHandle_t handle, GCLMem_t input, GCLMem_t tmp
 EE argmax_infer_forward_tmp_bytes_mali(
     TensorDesc inputDesc, ArgMaxParamSpec p, TensorDesc outputDesc, U32 *bytes)
 {
-    EE ret = SUCCESS;
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = argmax_infer_forward_tmp_bytes_mali_fp16(inputDesc, p.axis, outputDesc, bytes);
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return argmax_infer_forward_tmp_bytes_mali_fp16(inputDesc, p.axis, outputDesc, bytes);
 }
 
 EE argmax_mali(GCLHandle_t handle,
@@ -83,16 +73,6 @@ EE argmax_mali(GCLHandle_t handle,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
-    EE ret = SUCCESS;
     CHECK_STATUS(argmax_checkpara_mali(handle, input, tmpbuf, output));
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = argmax_mali_fp16(handle, inputDesc, input, p.axis, tmpbuf, outputDesc, output);
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return argmax_mali_fp16(handle, inputDesc, input, p.axis, tmpbuf, outputDesc, output);
 }

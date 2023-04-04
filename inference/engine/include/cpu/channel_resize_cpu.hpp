@@ -85,9 +85,11 @@ public:
             this->valid = false;
         }
         // don't need to cut
+#if !defined(_USE_LITE) || defined(_USE_NEON)
         if (this->p.channel_after < this->p.channel_before && inDesc.df == DF_NCHW) {
             this->valid = false;
         }
+#endif
         if (!this->valid) {
             outTensors[0]->resize(inDesc);
             return SUCCESS;

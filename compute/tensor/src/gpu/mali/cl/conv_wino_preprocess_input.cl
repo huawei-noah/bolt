@@ -67,29 +67,33 @@ __kernel void MANGLE_NAME(conv_wino_preprocess_input_, IOM, FM)(const int iw_str
         if (ix >= 0 && ix < iw) {
             LOAD_MEM_V4_COMMON(val[0], ix, iy, idz, iw_str, ih_str, i_off, in);  
         }
-        if (ix + 1 >= 0 && ix < iw) {
+        if (ix + 1 >= 0 && ix + 1 < iw) {
             LOAD_MEM_V4_COMMON(val[1], (ix + 1), iy, idz, iw_str, ih_str, i_off, in);  
         }
-        if (ix + 2 >= 0 && ix < iw) {
+        if (ix + 2 >= 0 && ix + 2 < iw) {
             LOAD_MEM_V4_COMMON(val[2], (ix + 2), iy, idz, iw_str, ih_str, i_off, in);  
         }
-        if (ix + 3 >= 0 && ix < iw) {
+        if (ix + 3 >= 0 && ix + 3 < iw) {
             LOAD_MEM_V4_COMMON(val[3], (ix + 3), iy, idz, iw_str, ih_str, i_off, in);  
         }
     }
     int oz = idz << 2;
-    STORE_MEM_V4_C1_COMMON((T4)(val[0].x, val[1].x, val[2].x, val[3].x),
+    T4 v = (val[0].x, val[1].x, val[2].x, val[3].x);
+    STORE_MEM_V4_C1_COMMON(v,
         idx, idy, oz, ow_str, oh_str, 0, ow_str, out);
     if (oz + 1 < ic) {
-        STORE_MEM_V4_C1_COMMON((T4)(val[0].y, val[1].y, val[2].y, val[3].y),
+        T4 v = (val[0].y, val[1].y, val[2].y, val[3].y);
+        STORE_MEM_V4_C1_COMMON(v,
             idx, idy, (oz + 1), ow_str, oh_str, 0, ow_str, out);
     }
     if (oz + 2 < ic) {
-        STORE_MEM_V4_C1_COMMON((T4)(val[0].z, val[1].z, val[2].z, val[3].z),
+        T4 v = (val[0].z, val[1].z, val[2].z, val[3].z);
+        STORE_MEM_V4_C1_COMMON(v,
             idx, idy, (oz + 2), ow_str, oh_str, 0, ow_str, out);
     }
     if (oz + 3 < ic) {
-        STORE_MEM_V4_C1_COMMON((T4)(val[0].w, val[1].w, val[2].w, val[3].w),
+        T4 v = (val[0].w, val[1].w, val[2].w, val[3].w);
+        STORE_MEM_V4_C1_COMMON(v,
             idx, idy, (oz + 3), ow_str, oh_str, 0, ow_str, out);
     }
 }

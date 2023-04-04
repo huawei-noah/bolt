@@ -23,12 +23,12 @@ public:
         this->dt = dt;
         this->p = p;
     }
-
+    ~MatMul(){}
     OperatorType get_type() override
     {
         return OT_MatMul;
     }
-
+    
 protected:
     MatMulParamSpec p;
 };

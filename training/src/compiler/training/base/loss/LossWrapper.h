@@ -134,6 +134,7 @@ class LossWrapper
 {
   public:
     LossWrapper(const Name& name, const LossParams& params, NetworkParameters& networkParameters);
+    ~LossWrapper(){}
 
   private:
     Name mInputName;
@@ -234,7 +235,6 @@ LossWrapper<T>::LossWrapper(const Name& name, const LossParams& params, NetworkP
 
     networkParameters.mWorkflow.add<LossWrapperHelperLayer>(name / "helper", raul::BasicParams{ { preFinalName }, { mOutputName } }, params.mIsFinal);
 }
-
 } // raul namespace
 
 #endif

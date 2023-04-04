@@ -143,24 +143,23 @@ int rnnTest(int argc, char **argv, DataType dt, RNNMode mode)
     if (UT_CHECK) {
         UNI_MEMSET(get_ptr_from_tensor(tmpTensor, UT_CPU_ARCHINFO.arch), 0, tmpBytes);
         CHECK_STATUS(rnn(inputTensorVec, ftmTensor, biasTensor, rnnParamSpec, tmpTensorVec,
-            outputTensorVec, &UT_CPU_ARCHINFO));
+            outputTensorVec, nullptr, &UT_CPU_ARCHINFO));
 
         // naive implement
         UNI_MEMSET(get_ptr_from_tensor(tmpTensor, UT_CPU_ARCHINFO.arch), 0, tmpBytes);
         CHECK_STATUS(rnn(inputTensorVec, ftmTensorRef, biasTensor, rnnParamSpec, tmpTensorVec,
-            outputTensorRefVec, &UT_SERIAL_ARCHINFO));
+            outputTensorRefVec, nullptr, &UT_SERIAL_ARCHINFO));
 
         // check
         ut_check_v(get_ptr_from_tensor(outputTensor, CPU_GENERAL),
-            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), outputLength, dt, threshold,
-            __FILE__, __LINE__);
+            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), outputLength, dt, threshold);
     }
 
     // benchmark
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
         CHECK_STATUS(rnn(inputTensorVec, ftmTensor, biasTensor, rnnParamSpec, tmpTensorVec,
-            outputTensorVec, &UT_CPU_ARCHINFO));
+            outputTensorVec, nullptr, &UT_CPU_ARCHINFO));
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;

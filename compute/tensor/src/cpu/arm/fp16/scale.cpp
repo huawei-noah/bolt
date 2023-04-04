@@ -19,17 +19,22 @@ EE scale_nchwc8_fp16(
 {
     float16x8_t one = vdupq_n_f16(1.);
     float16x8_t zero = vdupq_n_f16(0.);
-    U32 index = 0;
-    for (I32 n = 0; n < in; n++) {
-        for (I32 c = 0; c < ic; c += 8) {
-            float16x8_t alpha_vec = (alpha == nullptr) ? one : vld1q_f16(alpha + c);
-            float16x8_t beta_vec = (beta == nullptr) ? zero : vld1q_f16(beta + c);
-            for (I32 i = 0; i < elements_per_channel; i++) {
-                float16x8_t in_vec = vld1q_f16(input + index);
-                float16x8_t out_vec = vfmaq_f16(beta_vec, alpha_vec, in_vec);
-                vst1q_f16(output + index, out_vec);
-                index += 8;
-            }
+    ic /= 8;
+#ifdef _USE_OPENMP
+#pragma omp parallel for schedule(static) num_threads(OMP_NUM_THREADS)
+#endif
+    for (int j = 0; j < in * ic; j++) {
+        int n = j / ic;
+        int c = j % ic;
+        int c8 = c * 8;
+        int index = j * elements_per_channel * 8;
+        float16x8_t alpha_vec = (alpha == nullptr) ? one : vld1q_f16(alpha + c8);
+        float16x8_t beta_vec = (beta == nullptr) ? zero : vld1q_f16(beta + c8);
+        for (I32 i = 0; i < elements_per_channel; i++) {
+            float16x8_t in_vec = vld1q_f16(input + index);
+            float16x8_t out_vec = vfmaq_f16(beta_vec, alpha_vec, in_vec);
+            vst1q_f16(output + index, out_vec);
+            index += 8;
         }
     }
     return SUCCESS;
@@ -41,34 +46,37 @@ EE scale_nchw_fp16(
 {
     float16x8_t one = vdupq_n_f16(1.);
     float16x8_t zero = vdupq_n_f16(0.);
-    U32 dst = 0, src = 0;
-    for (I32 n = 0; n < in; n++) {
-        for (I32 c = 0; c < ic; c++) {
-            float16x8_t alpha_vec = (alpha == nullptr) ? one : vdupq_n_f16(alpha[c]);
-            float16x8_t beta_vec = (beta == nullptr) ? zero : vdupq_n_f16(beta[c]);
-            I32 i = 0;
-            for (; i < elements_per_channel - 7; i += 8) {
-                if (icoc_equal) {
-                    src = (n * ic + c) * elements_per_channel + i;
-                } else {
-                    src = n * elements_per_channel + i;
-                }
-                float16x8_t in_vec = vld1q_f16(input + src);
-                float16x8_t out_vec = vfmaq_f16(beta_vec, alpha_vec, in_vec);
-                vst1q_f16(output + dst, out_vec);
-                dst += 8;
+#ifdef _USE_OPENMP
+#pragma omp parallel for schedule(static) num_threads(OMP_NUM_THREADS)
+#endif
+    for (int j = 0; j < in * ic; j++) {
+        int n = j / ic;
+        int c = j % ic;
+        U32 dst = j * elements_per_channel, src = 0;
+        float16x8_t alpha_vec = (alpha == nullptr) ? one : vdupq_n_f16(alpha[c]);
+        float16x8_t beta_vec = (beta == nullptr) ? zero : vdupq_n_f16(beta[c]);
+        I32 i = 0;
+        for (; i < elements_per_channel - 7; i += 8) {
+            if (icoc_equal) {
+                src = dst;
+            } else {
+                src = n * elements_per_channel + i;
             }
-            for (; i < elements_per_channel; i++) {
-                if (icoc_equal) {
-                    src = (n * ic + c) * elements_per_channel + i;
-                } else {
-                    src = n * elements_per_channel + i;
-                }
-                float alpha_s = (alpha == nullptr) ? 1 : alpha[c];
-                float beta_s = (beta == nullptr) ? 0 : beta[c];
-                output[dst] = alpha_s * input[src] + beta_s;
-                dst++;
+            float16x8_t in_vec = vld1q_f16(input + src);
+            float16x8_t out_vec = vfmaq_f16(beta_vec, alpha_vec, in_vec);
+            vst1q_f16(output + dst, out_vec);
+            dst += 8;
+        }
+        for (; i < elements_per_channel; i++) {
+            if (icoc_equal) {
+                src = dst;
+            } else {
+                src = n * elements_per_channel + i;
             }
+            float alpha_s = (alpha == nullptr) ? 1 : alpha[c];
+            float beta_s = (beta == nullptr) ? 0 : beta[c];
+            output[dst] = alpha_s * input[src] + beta_s;
+            dst++;
         }
     }
     return SUCCESS;
@@ -129,7 +137,7 @@ EE scale_fp16(F16 *input,
     }
     EE ret = SUCCESS;
     // If oc is 1, it means that weights/vectors have only one param, so we need use the calculation logic of nchw.
-    if (axis == 1 || axis == 0 || oc == 1) {
+    if (axis < (nDims - 1) || oc == 1) {
         if (ic == oc) {
             ret = scale_nchw_fp16<true>(input, alpha, beta, on, oc, elements_per_channel, output);
         } else {

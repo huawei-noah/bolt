@@ -13,7 +13,7 @@
 
 #ifndef _GCLMEM_DESC_INFER
 #define _GCLMEM_DESC_INFER
-#include <stdio.h>
+
 #include "tensor_desc.h"
 #include "gcl_func.h"
 #include "fill_memory_zero_vec4_opt.h"
@@ -58,6 +58,41 @@ inline void get_gclmem_dim(
     }
 }
 
+inline cl_channel_type get_channel_type(DataType dt)
+{
+    cl_channel_type ret;
+    switch (dt) {
+        case DT_F16: {
+            ret = CL_HALF_FLOAT;
+            break;
+        }
+        case DT_F32: {
+            ret = CL_FLOAT;
+            break;
+        }
+        //case DT_U8: {
+        //    ret = CL_UNSIGNED_INT8;
+        //    break;
+        //}
+        //case DT_I8: {
+        //    ret = CL_SIGNED_INT8;
+        //    break;
+        //}
+        //case DT_U32: {
+        //    ret = CL_UNSIGNED_INT32;
+        //    break;
+        //}
+        //case DT_I32: {
+        //    ret = CL_SIGNED_INT32;
+        //    break;
+        //}
+        default: {
+            UNI_ERROR_LOG("not support to create %s type image.\n", DataTypeName()[dt]);
+        }
+    }
+    return ret;
+}
+
 inline GCLMemDesc gclmem_build_desc()
 {
     GCLMemDesc desc;
@@ -77,7 +112,11 @@ inline GCLMemDesc gclmem_build_desc()
     desc.num = 0;
     desc.flags = CL_MEM_READ_WRITE;
     desc.imgFormat.image_channel_order = CL_RGBA;
+#ifdef _USE_FP16
     desc.imgFormat.image_channel_data_type = CL_HALF_FLOAT;
+#else
+    desc.imgFormat.image_channel_data_type = CL_FLOAT;
+#endif
     desc.host_ptr = NULL;
     desc.need_pad = false;
     return desc;
@@ -119,6 +158,7 @@ inline EE gclmem_set_desc_padding(GCLMemDesc *desc,
     if (mt != GCL_MEM_BUF) {
         bytes = bytes * 4;
     }
+    desc->imgFormat.image_channel_data_type = get_channel_type(dt);
     desc->num = num;
     desc->byteSize = bytes;
     return SUCCESS;

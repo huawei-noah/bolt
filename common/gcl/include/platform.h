@@ -14,8 +14,8 @@
 #ifndef _H_PLATFORM
 #define _H_PLATFORM
 
-#include <string.h>
 #include <string>
+#include "file.h"
 
 #if defined(__cplusplus)
 extern "C" {
@@ -23,114 +23,99 @@ extern "C" {
 
 typedef enum {
     VENDOR_ARM = 0,
+    VENDOR_QUALCOMM = 1,
+    VENDOR_INTEL = 2,
+    VENDOR_NVIDIA = 3,
 } PlatformVendor;
-
-inline EE get_platforms(U32 *numPlatforms, Platform **platforms)
-{
-    if (NULL == platforms || NULL == numPlatforms) {
-        return NULL_POINTER;
-    }
-    U32 num;
-    I32 ret = clGetPlatformIDs(0, NULL, &num);
-    if (SUCCESS == ret) {
-        *numPlatforms = num;
-        Platform *p = (Platform *)malloc(num * sizeof(Platform));
-        if (NULL == p) {
-            return ALLOC_FAILED;
-        }
-
-        ret = clGetPlatformIDs(num, p, NULL);
-        if (SUCCESS != ret) {
-            free(p);
-        } else {
-            *platforms = p;
-        }
-    }
-
-    map_cl_error_2_ee(ret);
-}
-
-static cl_bool stringContains(char *big, const char *s)
-{
-    for (unsigned int i = 0; i < strlen(big); i++) {
-        big[i] = tolower(big[i]);
-    }
-    std::string str(big);
-    return std::string::npos != str.find(s);
-}
-
-/**
- * @brief get information from platform
- *
- * @param value         value associate with info, memory is allocate by this
- * function
- * @param len           the lengith of value, return by this function
- *
- **/
 
 inline EE get_platform_info(Platform platform, cl_platform_info info, void **value, U32 *len)
 {
-    if (NULL == len || NULL == value) {
+    if (NULL == value) {
         return NULL_POINTER;
     }
-    size_t sizeRet;
-    I32 ret = clGetPlatformInfo(platform, info, 0, NULL, &sizeRet);
+    size_t size;
+    I32 ret = clGetPlatformInfo(platform, info, 0, NULL, &size);
     if (CL_SUCCESS == ret) {
-        if (len) {
-            *len = (U32)sizeRet;
+        if (len != NULL) {
+            *len = size;
         }
-        void *data = malloc(sizeRet + 1);
+        char *data = (char *)malloc(size + 1);
         if (NULL == data) {
             return ALLOC_FAILED;
         }
-
-        ret = clGetPlatformInfo(platform, info, sizeRet + 1, data, NULL);
+        data[size] = '\0';
+        ret = clGetPlatformInfo(platform, info, size + 1, data, NULL);
         if (CL_SUCCESS != ret) {
             free(data);
         } else {
             *value = data;
         }
     }
-
     map_cl_error_2_ee(ret);
 }
 
-/**
- * @brief select platfrom by platform type
- *
- * @param numPlatforms              the number of platforms
- * @param platforms                 platform array need to be selected
- * @param type                      the type of platform we want
- * @param index                     index of the selected platform
- *
- **/
+inline EE get_platforms(U32 *num, Platform **platforms)
+{
+    if (NULL == platforms || NULL == num) {
+        return NULL_POINTER;
+    }
+    I32 ret = clGetPlatformIDs(0, NULL, num);
+    UNI_DETAIL_LOG("platform num:%d.\n", *num);
+    if (CL_SUCCESS == ret) {
+        Platform *p = (Platform *)malloc((*num) * sizeof(Platform));
+        if (NULL == p) {
+            return ALLOC_FAILED;
+        }
+        ret = clGetPlatformIDs(*num, p, NULL);
+        if (CL_SUCCESS != ret) {
+            free(p);
+        } else {
+            *platforms = p;
+#if _DEBUG
+            for (U32 i = 0; i < *num; i++) {
+                char *name = NULL;
+                CHECK_STATUS(get_platform_info(p[i], CL_PLATFORM_NAME, (void **)&name, NULL));
+                UNI_DETAIL_LOG("platform %d is %s.\n", i, name);
+                if (name != NULL) {
+                    free(name);
+                }
+            }
+#endif
+        }
+    }
+    map_cl_error_2_ee(ret);
+}
+
 inline EE select_platform(PlatformVendor vendor, Platform *platform)
 {
     if (NULL == platform) {
         return NULL_POINTER;
     }
-
-    const static char *key[] = {"arm", "qualcomm"};
-    U32 num_platforms;
-    Platform *platforms;
+    const static char *key[] = {"arm", "qualcomm", "intel"};
+    U32 num_platforms = 0;
+    Platform *platforms = NULL;
     EE ret = get_platforms(&num_platforms, &platforms);
     if (SUCCESS == ret) {
         const char *platform_vendor = key[vendor];
         for (U32 i = 0; i < num_platforms; i++) {
             Platform p = platforms[i];
-            U32 nameLen;
-            char *name;
-            ret = get_platform_info(p, CL_PLATFORM_NAME, (void **)&name, &nameLen);
+            char *name = NULL;
+            ret = get_platform_info(p, CL_PLATFORM_NAME, (void **)&name, NULL);
+            UNI_DETAIL_LOG("platform %d is %s.\n", i, name);
             if (SUCCESS == ret) {
-                if (stringContains(name, platform_vendor)) {
+                if (contains(name, platform_vendor)) {
+                    UNI_DETAIL_LOG("use platform %s.\n", name);
                     *platform = p;
                 }
-                free(name);
+                if (name != NULL) {
+                    free(name);
+                }
             }
         }
     }
-    free(platforms);
-
+    if (platforms != NULL) {
+        free(platforms);
+    }
     map_cl_error_2_ee(ret);
 }
 
@@ -165,61 +150,78 @@ inline EE list_platform_info(Platform p)
     return SUCCESS;
 }
 
-/**
- * @brief get devices in platform, and allocate space for storing devices
- * @warning please free space of devices allocated in this function
- *
- * @param p		input, specify platform, device will be retrieved from this platform
- * @param type		input, specify device type
- * @param num_devices	output, return device number with type in platform p
- * @param devices	output, return devices
- *
- * @return
- *      0 means sucess
- *      -1 means fail
- *
- */
-inline EE platform_get_devices(
-    Platform platform, cl_device_type type, U32 *num_devices, Device **devices)
+inline EE get_device_info(Device device, cl_device_info info, void **value, U32 *len)
 {
-    if (NULL == devices || NULL == num_devices) {
+    if (NULL == value) {
         return NULL_POINTER;
     }
 
-    U32 num;
-    I32 ret = clGetDeviceIDs(platform, type, 0, NULL, &num);
+    size_t size;
+    I32 ret = clGetDeviceInfo(device, info, 0, NULL, &size);
     if (CL_SUCCESS == ret) {
-        *num_devices = num;
-
-        Device *did = (Device *)malloc(num * sizeof(Device));
-        if (NULL == did) {
+        if (NULL != len) {
+            *len = size;
+        }
+        char *data = (char *)malloc(size + 1);
+        if (NULL == data) {
             return ALLOC_FAILED;
         }
-
-        ret = clGetDeviceIDs(platform, type, num, did, NULL);
+        data[size] = '\0';
+        ret = clGetDeviceInfo(device, info, size + 1, data, NULL);
         if (CL_SUCCESS != ret) {
-            free(did);
+            free(data);
         } else {
-            *devices = did;
+            *value = data;
+        }
+    }
+    map_cl_error_2_ee(ret);
+}
+
+inline EE get_devices(Platform platform, cl_device_type type, U32 *num, Device **devices)
+{
+    if (NULL == devices || NULL == num) {
+        return NULL_POINTER;
+    }
+    I32 ret = clGetDeviceIDs(platform, type, 0, NULL, num);
+    UNI_DETAIL_LOG("devices num:%d.\n", *num);
+    if (CL_SUCCESS == ret) {
+        Device *p = (Device *)malloc((*num) * sizeof(Device));
+        if (NULL == p) {
+            return ALLOC_FAILED;
+        }
+        ret = clGetDeviceIDs(platform, type, (*num), p, NULL);
+        if (CL_SUCCESS != ret) {
+            free(p);
+        } else {
+            *devices = p;
+#if _DEBUG
+            for (U32 i = 0; i < *num; i++) {
+                char *name = NULL;
+                CHECK_STATUS(get_device_info(p[i], CL_DEVICE_NAME, (void **)&name, NULL));
+                UNI_DETAIL_LOG("device %d is %s.\n", i, name);
+                if (name != NULL) {
+                    free(name);
+                }
+            }
+#endif
         }
     }
     map_cl_error_2_ee(ret);
 }
 
 inline EE create_sub_device(
-    Device device, const cl_device_partition_property *properties, U32 *num_devices, Device **devices)
+    Device device, const cl_device_partition_property *properties, U32 *num, Device **devices)
 {
-    U32 len;
-    I32 ret = clCreateSubDevices(device, properties, 0, NULL, &len);
+    if (num == NULL || devices == NULL) {
+        return NULL_POINTER;
+    }
+    I32 ret = clCreateSubDevices(device, properties, 0, NULL, num);
     if (CL_SUCCESS == ret) {
-        if (NULL != num_devices) {
-            *num_devices = len;
-        }
-        Device *d = (Device *)malloc(sizeof(Device) * len);
+        Device *d = (Device *)malloc(sizeof(Device) * (*num));
         if (NULL == d) {
             return ALLOC_FAILED;
         }
-        ret = clCreateSubDevices(device, properties, len, d, NULL);
+        ret = clCreateSubDevices(device, properties, *num, d, NULL);
         if (CL_SUCCESS == ret) {
             *devices = d;
         } else {
@@ -238,41 +240,6 @@ inline EE retain_device(Device device)
 inline EE release_device(Device device)
 {
     I32 ret = clReleaseDevice(device);
-    map_cl_error_2_ee(ret);
-}
-
-/**
- *
- *@brief get device information
- *
- * @warning please free memory space allocated for value
- *
- **/
-
-inline EE get_device_info(Device device, cl_device_info info, void **value, U32 *len)
-{
-    if (NULL == value) {
-        return NULL_POINTER;
-    }
-
-    size_t size;
-    I32 ret = clGetDeviceInfo(device, info, 0, NULL, &size);
-    if (CL_SUCCESS == ret) {
-        if (NULL != len) {
-            *len = (U32)(size);
-        }
-        void *data = malloc(size);
-        if (NULL == data) {
-            return ALLOC_FAILED;
-        }
-        ret = clGetDeviceInfo(device, info, size, data, NULL);
-        if (CL_SUCCESS != ret) {
-            free(data);
-        } else {
-            *value = data;
-        }
-    }
-
     map_cl_error_2_ee(ret);
 }
 
@@ -322,7 +289,7 @@ inline EE get_device_max_work_group_size(Device device, U32 *size)
     map_cl_error_2_ee(ret);
 }
 
-#define V_Q_Info(device, info, type, str, modifier)                      \
+#define V_Q_Info(device, info, type, str)                                \
     {                                                                    \
         type v;                                                          \
         I32 ret = clGetDeviceInfo(device, info, sizeof(type), &v, NULL); \
@@ -330,7 +297,7 @@ inline EE get_device_max_work_group_size(Device device, U32 *size)
             map_cl_error_2_ee(ret);                                      \
         }                                                                \
                                                                          \
-        printf(str "%" modifier "\n", v);                                \
+        printf(str "%lld\n", (long long)v);                              \
     }
 
 #define B_Q_Info(device, info, str)                                         \
@@ -348,13 +315,13 @@ inline EE get_device_max_work_group_size(Device device, U32 *size)
     {                                                           \
         size_t len;                                             \
         I32 ret = clGetDeviceInfo(device, info, 0, NULL, &len); \
-        if (SUCCESS != ret) {                                   \
+        if (CL_SUCCESS != ret) {                                \
             map_cl_error_2_ee(ret);                             \
         }                                                       \
                                                                 \
         char *v = (char *)malloc(len + 1);                      \
         ret = clGetDeviceInfo(device, info, len, v, NULL);      \
-        if (SUCCESS != ret) {                                   \
+        if (CL_SUCCESS != ret) {                                \
             map_cl_error_2_ee(ret);                             \
         }                                                       \
                                                                 \
@@ -376,7 +343,7 @@ inline EE list_device_info(Device device)
 {
     printf("..........Device Info..............\n");
     STR_Q_Info(device, CL_DEVICE_NAME, "Device name : ");
-    V_Q_Info(device, CL_DEVICE_ADDRESS_BITS, U32, "Address Bits : ", "u");
+    V_Q_Info(device, CL_DEVICE_ADDRESS_BITS, U32, "Address Bits : ");
     B_Q_Info(device, CL_DEVICE_AVAILABLE, "Device Available : ");
     B_Q_Info(device, CL_DEVICE_COMPILER_AVAILABLE, "Device Compiler Available : ");
     B_Q_Info(device, CL_DEVICE_ENDIAN_LITTLE, "Device is little Endian : ");
@@ -384,7 +351,7 @@ inline EE list_device_info(Device device)
     STR_Q_Info(device, CL_DEVICE_EXTENSIONS, "Device Extensions : ");
     STR_Q_Info(device, CL_DEVICE_OPENCL_C_VERSION, "OpenCL C Version : ");
     STR_Q_Info(device, CL_DEVICE_PROFILE, "Device Profile : ");
-    V_Q_Info(device, CL_DEVICE_PROFILING_TIMER_RESOLUTION, size_t, "Timer Resolution : ", "ld");
+    V_Q_Info(device, CL_DEVICE_PROFILING_TIMER_RESOLUTION, size_t, "Timer Resolution : ");
     {
         cl_device_fp_config v;
         I32 ret = clGetDeviceInfo(
@@ -417,18 +384,18 @@ inline EE list_device_info(Device device)
     }
 
     STR_Q_Info(device, CL_DEVICE_VENDOR, "Device Vendor : ");
-    V_Q_Info(device, CL_DEVICE_VENDOR_ID, U32, "Device Vendor ID : ", "u");
+    V_Q_Info(device, CL_DEVICE_VENDOR_ID, U32, "Device Vendor ID : ");
     STR_Q_Info(device, CL_DEVICE_VERSION, "Device Version : ");
     STR_Q_Info(device, CL_DRIVER_VERSION, "Driver Version : ");
     B_Q_Info(device, CL_DEVICE_HOST_UNIFIED_MEMORY, "Unified Memory Supported : ");
-    V_Q_Info(device, CL_DEVICE_MAX_PARAMETER_SIZE, size_t, "Max Parameter Size : ", "ld");
+    V_Q_Info(device, CL_DEVICE_MAX_PARAMETER_SIZE, size_t, "Max Parameter Size : ");
 
     printf("..............Global Memory Configuration.............\n");
-    V_Q_Info(device, CL_DEVICE_MAX_MEM_ALLOC_SIZE, cl_ulong, "Max Memory Allocate Size : ", "lu");
-    V_Q_Info(device, CL_DEVICE_MEM_BASE_ADDR_ALIGN, U32, "Max Base Address Align Size : ", "u");
-    V_Q_Info(device, CL_DEVICE_MIN_DATA_TYPE_ALIGN_SIZE, U32, "Min Data Type align Size :", "u");
+    V_Q_Info(device, CL_DEVICE_MAX_MEM_ALLOC_SIZE, cl_ulong, "Max Memory Allocate Size : ");
+    V_Q_Info(device, CL_DEVICE_MEM_BASE_ADDR_ALIGN, U32, "Max Base Address Align Size : ");
+    V_Q_Info(device, CL_DEVICE_MIN_DATA_TYPE_ALIGN_SIZE, U32, "Min Data Type align Size :");
 
-    V_Q_Info(device, CL_DEVICE_GLOBAL_MEM_CACHE_SIZE, cl_ulong, "Global Memory Cache Size : ", "lu");
+    V_Q_Info(device, CL_DEVICE_GLOBAL_MEM_CACHE_SIZE, cl_ulong, "Global Memory Cache Size : ");
     {
         cl_device_mem_cache_type v;
         I32 ret = clGetDeviceInfo(
@@ -452,24 +419,23 @@ inline EE list_device_info(Device device)
         }
     }
 
-    V_Q_Info(
-        device, CL_DEVICE_GLOBAL_MEM_CACHELINE_SIZE, U32, "Global Memory, Cacheline Size : ", "u");
-    V_Q_Info(device, CL_DEVICE_GLOBAL_MEM_SIZE, cl_ulong, "Global Memory Size : ", "lu");
+    V_Q_Info(device, CL_DEVICE_GLOBAL_MEM_CACHELINE_SIZE, U32, "Global Memory, Cacheline Size : ");
+    V_Q_Info(device, CL_DEVICE_GLOBAL_MEM_SIZE, cl_ulong, "Global Memory Size : ");
     // CL_DEVICE_HALF_FP_CONFIG
 
     printf("..................Image Information...................\n");
     B_Q_Info(device, CL_DEVICE_IMAGE_SUPPORT, "Image Supported : ");
-    V_Q_Info(device, CL_DEVICE_IMAGE2D_MAX_HEIGHT, size_t, "2D Image Max Height : ", "ld");
-    V_Q_Info(device, CL_DEVICE_IMAGE2D_MAX_WIDTH, size_t, "2D Image Max Width : ", "ld");
-    V_Q_Info(device, CL_DEVICE_IMAGE3D_MAX_DEPTH, size_t, "3D Image Max Depth : ", "ld");
-    V_Q_Info(device, CL_DEVICE_IMAGE3D_MAX_HEIGHT, size_t, "3D Image Max Height : ", "ld");
-    V_Q_Info(device, CL_DEVICE_IMAGE3D_MAX_WIDTH, size_t, "3D Image Max Width : ", "ld");
-    V_Q_Info(device, CL_DEVICE_MAX_READ_IMAGE_ARGS, U32, "Max Read Image Args : ", "u");
-    V_Q_Info(device, CL_DEVICE_MAX_WRITE_IMAGE_ARGS, U32, "Max Write Image Args : ", "u");
-    V_Q_Info(device, CL_DEVICE_MAX_SAMPLERS, U32, "Max Samples : ", "u");
+    V_Q_Info(device, CL_DEVICE_IMAGE2D_MAX_HEIGHT, size_t, "2D Image Max Height : ");
+    V_Q_Info(device, CL_DEVICE_IMAGE2D_MAX_WIDTH, size_t, "2D Image Max Width : ");
+    V_Q_Info(device, CL_DEVICE_IMAGE3D_MAX_DEPTH, size_t, "3D Image Max Depth : ");
+    V_Q_Info(device, CL_DEVICE_IMAGE3D_MAX_HEIGHT, size_t, "3D Image Max Height : ");
+    V_Q_Info(device, CL_DEVICE_IMAGE3D_MAX_WIDTH, size_t, "3D Image Max Width : ");
+    V_Q_Info(device, CL_DEVICE_MAX_READ_IMAGE_ARGS, U32, "Max Read Image Args : ");
+    V_Q_Info(device, CL_DEVICE_MAX_WRITE_IMAGE_ARGS, U32, "Max Write Image Args : ");
+    V_Q_Info(device, CL_DEVICE_MAX_SAMPLERS, U32, "Max Samples : ");
 
     printf(".................Local Memory...............................\n");
-    V_Q_Info(device, CL_DEVICE_LOCAL_MEM_SIZE, cl_ulong, "Local Memory Size : ", "lu");
+    V_Q_Info(device, CL_DEVICE_LOCAL_MEM_SIZE, cl_ulong, "Local Memory Size : ");
     {
         cl_device_local_mem_type v;
         I32 ret = clGetDeviceInfo(
@@ -490,17 +456,16 @@ inline EE list_device_info(Device device)
     }
 
     printf("...................CU Information...........................\n");
-    V_Q_Info(device, CL_DEVICE_MAX_CLOCK_FREQUENCY, U32, "Max Clock Frequency : ", "u");
-    V_Q_Info(device, CL_DEVICE_MAX_COMPUTE_UNITS, U32, "Max Compute Units : ", "u");
+    V_Q_Info(device, CL_DEVICE_MAX_CLOCK_FREQUENCY, U32, "Max Clock Frequency : ");
+    V_Q_Info(device, CL_DEVICE_MAX_COMPUTE_UNITS, U32, "Max Compute Units : ");
 
     printf(".................Constant Memory Information.............\n");
-    V_Q_Info(device, CL_DEVICE_MAX_CONSTANT_ARGS, U32, "Max Constant Args : ", "u");
-    V_Q_Info(
-        device, CL_DEVICE_MAX_CONSTANT_BUFFER_SIZE, cl_ulong, "Max Constant Buffer Size : ", "lu");
+    V_Q_Info(device, CL_DEVICE_MAX_CONSTANT_ARGS, U32, "Max Constant Args : ");
+    V_Q_Info(device, CL_DEVICE_MAX_CONSTANT_BUFFER_SIZE, cl_ulong, "Max Constant Buffer Size : ");
 
     printf("...................ND Range Information........................\n");
-    V_Q_Info(device, CL_DEVICE_MAX_WORK_GROUP_SIZE, size_t, "Max Work Group Size : ", "ld");
-    V_Q_Info(device, CL_DEVICE_MAX_WORK_ITEM_DIMENSIONS, U32, "Work Item Dimensions : ", "u");
+    V_Q_Info(device, CL_DEVICE_MAX_WORK_GROUP_SIZE, size_t, "Max Work Group Size : ");
+    V_Q_Info(device, CL_DEVICE_MAX_WORK_ITEM_DIMENSIONS, U32, "Work Item Dimensions : ");
 
     {
         size_t v[3];
@@ -509,33 +474,26 @@ inline EE list_device_info(Device device)
         if (CL_SUCCESS != ret) {
             map_cl_error_2_ee(ret);
         }
-        printf("Max Work Item size : %ld %ld %ld\n", v[0], v[1], v[2]);
+        printf("Max Work Item size : %zu %zu %zu\n", v[0], v[1], v[2]);
     }
 
     printf(".....................Vector Information..................\n");
-    V_Q_Info(device, CL_DEVICE_NATIVE_VECTOR_WIDTH_CHAR, U32, "Native Vector Width Char : ", "u");
-    V_Q_Info(device, CL_DEVICE_NATIVE_VECTOR_WIDTH_SHORT, U32, "Native Vector Width Short : ", "u");
-    V_Q_Info(device, CL_DEVICE_NATIVE_VECTOR_WIDTH_INT, U32, "Native Vector Width Int : ", "u");
-    V_Q_Info(device, CL_DEVICE_NATIVE_VECTOR_WIDTH_LONG, U32, "Native Vector Width Long : ", "u");
-    V_Q_Info(device, CL_DEVICE_NATIVE_VECTOR_WIDTH_FLOAT, U32, "Native Vector Width Float : ", "u");
-    V_Q_Info(
-        device, CL_DEVICE_NATIVE_VECTOR_WIDTH_DOUBLE, U32, "Native Vector Width Double : ", "u");
-    V_Q_Info(device, CL_DEVICE_NATIVE_VECTOR_WIDTH_HALF, U32, "Native Vector Width Half : ", "u");
+    V_Q_Info(device, CL_DEVICE_NATIVE_VECTOR_WIDTH_CHAR, U32, "Native Vector Width Char : ");
+    V_Q_Info(device, CL_DEVICE_NATIVE_VECTOR_WIDTH_SHORT, U32, "Native Vector Width Short : ");
+    V_Q_Info(device, CL_DEVICE_NATIVE_VECTOR_WIDTH_INT, U32, "Native Vector Width Int : ");
+    V_Q_Info(device, CL_DEVICE_NATIVE_VECTOR_WIDTH_LONG, U32, "Native Vector Width Long : ");
+    V_Q_Info(device, CL_DEVICE_NATIVE_VECTOR_WIDTH_FLOAT, U32, "Native Vector Width Float : ");
+    V_Q_Info(device, CL_DEVICE_NATIVE_VECTOR_WIDTH_DOUBLE, U32, "Native Vector Width Double : ");
+    V_Q_Info(device, CL_DEVICE_NATIVE_VECTOR_WIDTH_HALF, U32, "Native Vector Width Half : ");
 
+    V_Q_Info(device, CL_DEVICE_PREFERRED_VECTOR_WIDTH_CHAR, U32, "Preferred Vector Width Char : ");
+    V_Q_Info(device, CL_DEVICE_PREFERRED_VECTOR_WIDTH_SHORT, U32, "Preferred Vector Width Short : ");
+    V_Q_Info(device, CL_DEVICE_PREFERRED_VECTOR_WIDTH_INT, U32, "Preferred Vector Width Int : ");
+    V_Q_Info(device, CL_DEVICE_PREFERRED_VECTOR_WIDTH_LONG, U32, "Preferred Vector Width Long : ");
+    V_Q_Info(device, CL_DEVICE_PREFERRED_VECTOR_WIDTH_FLOAT, U32, "Preferred Vector Width Float : ");
     V_Q_Info(
-        device, CL_DEVICE_PREFERRED_VECTOR_WIDTH_CHAR, U32, "Preferred Vector Width Char : ", "u");
-    V_Q_Info(device, CL_DEVICE_PREFERRED_VECTOR_WIDTH_SHORT, U32,
-        "Preferred Vector Width Short : ", "u");
-    V_Q_Info(
-        device, CL_DEVICE_PREFERRED_VECTOR_WIDTH_INT, U32, "Preferred Vector Width Int : ", "u");
-    V_Q_Info(
-        device, CL_DEVICE_PREFERRED_VECTOR_WIDTH_LONG, U32, "Preferred Vector Width Long : ", "u");
-    V_Q_Info(device, CL_DEVICE_PREFERRED_VECTOR_WIDTH_FLOAT, U32,
-        "Preferred Vector Width Float : ", "u");
-    V_Q_Info(device, CL_DEVICE_PREFERRED_VECTOR_WIDTH_DOUBLE, U32,
-        "Preferred Vector Width Double : ", "u");
-    V_Q_Info(
-        device, CL_DEVICE_PREFERRED_VECTOR_WIDTH_HALF, U32, "Preferred Vector Width Half : ", "u");
+        device, CL_DEVICE_PREFERRED_VECTOR_WIDTH_DOUBLE, U32, "Preferred Vector Width Double : ");
+    V_Q_Info(device, CL_DEVICE_PREFERRED_VECTOR_WIDTH_HALF, U32, "Preferred Vector Width Half : ");
 
     return SUCCESS;
 }

@@ -58,7 +58,6 @@ using namespace raul;
  * @param ldc stride in matrix C
  * @param bOffset offset in matrix b
  *
- * @see http://www.netlib.org/clapack/cblas/dgemm.c
  */
 template<typename T>
 void matrixMul(const CBLAS_TRANSPOSE transA,
@@ -181,7 +180,6 @@ void split(const string& st, char delimeter, Out result)
 template<typename T>
 void transpose(T* matrix, size_t cols, size_t size)
 {
-    // https://stackoverflow.com/questions/9227747/in-place-transposition-of-a-matrix
     const size_t mn1 = size - 1;
     const size_t n = size / cols;
     vector<bool> visited(size);
@@ -265,7 +263,7 @@ void gemmCPUImpl(OPENBLAS_CONST CBLAS_TRANSPOSE transA,
         TensorDesc matrixCDesc = tensor1d(DT_F32, static_cast<U32>(n));
         if (0 == beta)
         {
-            memset(c, 0, tensorNumBytes(matrixCDesc));
+            memset(static_cast<void*>(c), 0, tensorNumBytes(matrixCDesc));
         }
         CHECK_STATUS(matrix_vector_multiply(matrixBDesc, b + bOffset, matrixADesc, a, 0, nullptr, matrixCDesc, c, nullptr, get_cpu_arch()));
     }
@@ -275,7 +273,7 @@ void gemmCPUImpl(OPENBLAS_CONST CBLAS_TRANSPOSE transA,
         TensorDesc matrixCDesc = tensor1d(DT_F32, static_cast<U32>(m));
         if (0 == beta)
         {
-            memset(c, 0, tensorNumBytes(matrixCDesc));
+            memset(static_cast<void*>(c), 0, tensorNumBytes(matrixCDesc));
         }
         CHECK_STATUS(matrix_vector_multiply(matrixADesc, a, matrixBDesc, b + bOffset, 0, nullptr, matrixCDesc, c, nullptr, get_cpu_arch()));
     }
@@ -287,7 +285,7 @@ void gemmCPUImpl(OPENBLAS_CONST CBLAS_TRANSPOSE transA,
         vector<char> tmp(bytes);
         if (0 == beta)
         {
-            memset(c, 0, tensorNumBytes(matrixCDesc));
+            memset(static_cast<void*>(c), 0, tensorNumBytes(matrixCDesc));
         }
         CHECK_STATUS(matrix_matrix_multiply(matrixADesc, a, matrixBDesc, b + bOffset, bytes, tmp.data(), matrixCDesc, c, nullptr, get_cpu_arch()));
     }
@@ -402,7 +400,7 @@ void gemmCPUImpl(OPENBLAS_CONST CBLAS_TRANSPOSE transA,
         TensorDesc matrixCDesc = tensor1d(DT_F16, static_cast<U32>(n));
         if (0 == beta)
         {
-            memset(static_cast<void*>(c), 0, tensorNumBytes(matrixCDesc));
+            memset(c, 0, tensorNumBytes(matrixCDesc));
         }
         CHECK_STATUS(matrix_vector_multiply(matrixBDesc, b + bOffset, matrixADesc, a, 0, nullptr, matrixCDesc, c, nullptr, get_cpu_arch()));
     }
@@ -412,7 +410,7 @@ void gemmCPUImpl(OPENBLAS_CONST CBLAS_TRANSPOSE transA,
         TensorDesc matrixCDesc = tensor1d(DT_F16, static_cast<U32>(m));
         if (0 == beta)
         {
-            memset(static_cast<void*>(c), 0, tensorNumBytes(matrixCDesc));
+            memset(c, 0, tensorNumBytes(matrixCDesc));
         }
         CHECK_STATUS(matrix_vector_multiply(matrixADesc, a, matrixBDesc, b + bOffset, 0, nullptr, matrixCDesc, c, nullptr, get_cpu_arch()));
     }
@@ -424,7 +422,7 @@ void gemmCPUImpl(OPENBLAS_CONST CBLAS_TRANSPOSE transA,
         vector<char> tmp(bytes);
         if (0 == beta)
         {
-            memset(static_cast<void*>(c), 0, tensorNumBytes(matrixCDesc));
+            memset(c, 0, tensorNumBytes(matrixCDesc));
         }
         CHECK_STATUS(matrix_matrix_multiply(matrixADesc, a, matrixBDesc, b + bOffset, bytes, tmp.data(), matrixCDesc, c, nullptr, get_cpu_arch()));
     }
@@ -971,7 +969,6 @@ void Common::im2col(const T* image,
                     T* matrix,
                     bool reversedOrder)
 {
-    // https://github.com/pluskid/Mocha.jl/blob/master/deps/im2col.cpp
 
     // resulted matrix width (widthCol * heightCol)
     const size_t widthCol = (imageWidth + 2 * paddingWidth - filterWidth) / strideWidth + 1;
@@ -1048,7 +1045,6 @@ void Common::col2im(const T* matrix,
                     bool reversedOrder,
                     bool zeroOutput)
 {
-    // https://github.com/pluskid/Mocha.jl/blob/master/deps/im2col.cpp
 
     // input matrix width (widthCol * heightCol)
     size_t widthCol = (imageWidth + 2 * paddingWidth - filterWidth) / strideWidth + 1;

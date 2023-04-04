@@ -23,10 +23,9 @@ public:
         this->dt = dt;
         this->p = p;
         this->activationDesc = activationDesc;
-        this->hasBias = false;
         this->alg = CONVOLUTION_ALGORITHM_NULL;
     }
-
+    ~Deconvolution(){}
     OperatorType get_type() override
     {
         return OT_Deconvolution;

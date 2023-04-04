@@ -16,12 +16,12 @@
 
 #define UNROLL_W 4
 
-typedef void (*pooling_max_func)(const F32 *curI, F32 *curO, U32 kw, U32 kh, U32 iStep, U32 stride);
+typedef void (*pooling_max_func)(const F32 *curI, F32 *curO, I32 *idx, U32 kw, U32 kh, U32 iw, U32 ihw, U32 w, U32 iStep, U32 stride);
 typedef void (*pooling_mean_func)(
     const F32 *curI, F32 *curO, U32 kw, U32 kh, U32 iStep, U32 stride, F32 poolSize);
 
 EE pooling_fp32(
-    TensorDesc inputDesc, const F32 *input, PoolingParamSpec p, TensorDesc outputDesc, F32 *output)
+    TensorDesc inputDesc, const F32 *input, PoolingParamSpec p, TensorDesc outputDesc, F32 *output, I32 *idx)
 {
     if (nullptr == input || nullptr == output) {
         CHECK_STATUS(NULL_POINTER);
@@ -49,9 +49,6 @@ EE pooling_fp32(
     U32 paddingL = p.pad_left;
     U32 kernelSizeH = p.kernel_h;
     U32 kernelSizeW = p.kernel_w;
-    U32 wSize, kh, kw, iStep;
-    F32 *curO;
-    const F32 *curI;
     if (paddingT >= kernelSizeH || paddingL >= kernelSizeW) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
@@ -59,55 +56,70 @@ EE pooling_fp32(
     ic /= 8;
     U32 owInter = (iw + paddingL - kernelSizeW) / strideW + 1;
     U32 wSizes[3] = {1, 2, 4};
-    pooling_max_func pooling_max[3] = {pooling_max_w1, pooling_max_w2, pooling_max_w4};
+    pooling_max_func pooling_max_without_idx[3] = {pooling_max_w1, pooling_max_w2, pooling_max_w4};
+    pooling_max_func pooling_max_with_idx[3] = {pooling_max_with_idx_w1, pooling_max_with_idx_w2, pooling_max_with_idx_w4};
+    pooling_max_func *pooling_max = pooling_max_without_idx;
+    if (idx != nullptr) {
+        pooling_max = pooling_max_with_idx;
+    }
     pooling_mean_func pooling_mean[3] = {pooling_mean_w1, pooling_mean_w2, pooling_mean_w4};
-    F32 poolSize = kernelSizeH * kernelSizeW;
-    for (U32 n = 0; n < in; n++) {
-        for (U32 c = 0; c < ic; c++) {
-            for (U32 h = 0; h < oh; h++) {
-                for (U32 w = 0; w < ow; w += wSize) {
-                    if (w < owInter) {
-                        wSize = UNI_MIN(owInter - w, UNROLL_W);
-                    } else {
-                        wSize = 1;
-                    }
-                    wSize = wSizes[wSize >> 1];
-                    int hstart = (int)h * (int)strideH - (int)paddingT;
-                    int wstart = (int)w * (int)strideW - (int)paddingL;
-                    int hend = UNI_MIN(hstart + kernelSizeH, ih);
-                    int wend = UNI_MIN(wstart + kernelSizeW, iw);
-                    hstart = UNI_MAX(hstart, 0);
-                    wstart = UNI_MAX(wstart, 0);
+ 
+    U32 loop = in * ic * oh;
+    EE ret = SUCCESS;
 
-                    curI = input + (hstart * iw + wstart) * 8;
-                    curO = output + (h * ow + w) * 8;
-                    kh = hend - hstart;
-                    kw = wend - wstart;
-                    iStep = (iw - kw) * 32;
-                    if (!p.count_include_pad) {
-                        poolSize = kh * kw;
-                    }
-                    if (kw < kernelSizeW) {
-                        wSize = 1;
-                    }
-                    switch (pm) {
-                        case POOLING_MAX: {
-                            pooling_max[wSize >> 1](curI, curO, kw, kh, iStep, strideW * 32);
-                            break;
-                        }
-                        case POOLING_MEAN: {
-                            pooling_mean[wSize >> 1](
-                                curI, curO, kw, kh, iStep, strideW * 32, poolSize);
-                            break;
-                        }
-                        default:
-                            return NOT_SUPPORTED;
-                    }
-                }
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
+    for (U32 l = 0; l < loop; ++l) {
+        U32 n = l / (ic * oh);
+        U32 c = l % (ic * oh) / oh;
+        U32 h = l % oh;
+
+        const F32 *tmpI = input + n * ic * 8 * ih * iw + c * 8 * ih * iw;
+        F32 *tmpO = output + n * ic * 8 * oh * ow + c * 8 * oh * ow;
+        I32 *tmpIdx = idx + n * ic * 8 * oh * ow + c * 8 * oh * ow;
+        U32 wSize = 0;
+        for (U32 w = 0; w < ow; w += wSize) {
+            if (w < owInter) {
+                wSize = UNI_MIN(owInter - w, UNROLL_W);
+            } else {
+                wSize = 1;
             }
-            input += ih * iw * 8;
-            output += oh * ow * 8;
+            wSize = wSizes[wSize >> 1];
+            int hstart = (int)h * (int)strideH - (int)paddingT;
+            int wstart = (int)w * (int)strideW - (int)paddingL;
+            int hend = UNI_MIN(hstart + kernelSizeH, ih);
+            int wend = UNI_MIN(wstart + kernelSizeW, iw);
+            hstart = UNI_MAX(hstart, 0);
+            wstart = UNI_MAX(wstart, 0);
+
+            const F32 *curI = tmpI + (hstart * iw + wstart) * 8;
+            F32 *curO = tmpO + (h * ow + w) * 8;
+            I32 *curIdx = tmpIdx + (h * ow + w) * 8;
+            U32 kh = hend - hstart;
+            U32 kw = wend - wstart;
+            U32 iStep = (iw - kw) * 32;
+            F32 poolSize = kernelSizeH * kernelSizeW;
+            if (!p.count_include_pad) {
+                poolSize = kh * kw;
+            }
+            if (kw < kernelSizeW) {
+                wSize = 1;
+            }
+            switch (pm) {
+                case POOLING_MAX: {
+                    pooling_max[wSize >> 1](curI, curO, curIdx, kw, kh, iw, ih * iw, hstart * iw + wstart + c * ih * iw * 8, iStep, strideW * 32);
+                    break;
+                }
+                case POOLING_MEAN: {
+                    pooling_mean[wSize >> 1](
+                        curI, curO, kw, kh, iStep, strideW * 32, poolSize);
+                    break;
+                }
+                default:
+                    ret = NOT_SUPPORTED;
+            }
         }
     }
-    return SUCCESS;
+    return ret;
 }

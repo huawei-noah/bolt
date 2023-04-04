@@ -21,95 +21,19 @@ class WeightOperator : public Operator {
 public:
     WeightOperator()
     {
-        this->hasBias = false;
-        this->lenOfWtm = 0;
-
-        this->ws.mdt = DT_U8;
-        this->ws.bytes_of_weight = 0;
-        this->ws.weight = nullptr;
-        this->ws.bytes_of_vec = 0;
-        this->ws.vec = nullptr;
-        this->wtmType = CPUMem;
+        UNI_MEMSET(&(this->ws), 0, sizeof(WeightSpec));
+        this->ws.mdt = DT_NUM;
     }
 
     bool is_weight() override
     {
-        return true;
-    }
-
-    U32 get_weight_size()
-    {
-        U32 ret = 0;
-        for (auto tensor : this->weightTensors) {
-            TensorDesc desc = tensor.get_desc();
-            ret += tensorNumBytes(desc);
-        }
+        bool ret = (this->ws.mdt == DT_NUM) ? false : true;
         return ret;
     }
 
-    virtual void set_weight_tensors(std::vector<Tensor> weightTensors)
-    {
-        this->weightTensors = weightTensors;
-    }
-
-    virtual std::vector<Tensor> get_weight_tensors()
-    {
-        return this->weightTensors;
-    }
-
-    virtual void set_bias_tensors(std::vector<Tensor> biasTensors)
-    {
-        this->biasTensors = biasTensors;
-    }
-
-    virtual std::vector<Tensor> get_bias_tensors()
-    {
-        return this->biasTensors;
-    }
-
-    virtual U32 infer_wtm_memory_size()
-    {
-        this->lenOfWtm = 0;
-        this->wtm = std::shared_ptr<Tensor>();
-        return 0;
-    }
-
-    virtual EE alloc_wtm_memory()
-    {
-        this->lenOfWtm = 0;
-        this->wtm = std::shared_ptr<Tensor>();
-        return SUCCESS;
-    }
-
-    virtual void set_wtm_memory(U32 len, Tensor wtm)
-    {
-        this->lenOfWtm = len;
-        this->temp = wtm;
-    }
-
-    virtual U32 get_lenOfWtm()
-    {
-        return this->lenOfWtm;
-    }
-
-    virtual Tensor *get_wtm()
-    {
-        return this->wtm.get();
-    }
-
-    virtual void set_weightspec_ptr(WeightSpec ws)
+    void set_weightspec(const WeightSpec &ws)
     {
         this->ws = ws;
-    }
-
-    virtual WeightSpec get_weightspec()
-    {
-        return this->ws;
-    }
-
-    virtual void set_hasBias(bool hasBiasOrNot)
-    {
-        this->hasBias = hasBiasOrNot;
     }
 
     virtual EE infer_weight_desc()
@@ -123,15 +47,14 @@ public:
         if (ret != SUCCESS) {
             return ret;
         }
-        auto curOpWs = this->get_weightspec();
         CpuMemory weight_mem_src, bias_mem_src;
         std::shared_ptr<U8> weight_ptr, bias_ptr;
         if (modelPtr != nullptr) {
             weight_ptr = *modelPtr;
             bias_ptr = *modelPtr;
         } else {
-            weight_ptr = std::shared_ptr<U8>(curOpWs.weight, [](U8 *) {});
-            bias_ptr = std::shared_ptr<U8>(curOpWs.vec, [](U8 *) {});
+            weight_ptr = std::shared_ptr<U8>(this->ws.weight, [](U8 *) {});
+            bias_ptr = std::shared_ptr<U8>(this->ws.vec, [](U8 *) {});
         }
 
         std::set<OperatorType> weightReuseSet = {OT_Conv, OT_FC, OT_Deconvolution, OT_RNN};
@@ -148,38 +71,42 @@ public:
                 weight_mem_dst->copy_from(&weight_mem_src);
             }
             weight_offset += tensorNumBytes(desc);
+            update_desc_from_tensor(&weight_tensor);
         }
 
-        if (curOpWs.num_quant_scale == this->weightTensors.size()) {
+        if (this->ws.num_quant_scale >= this->weightTensors.size()) {
             for (U32 i = 0; i < this->weightTensors.size(); ++i) {
-                if (curOpWs.weight_scale[i].num_scale > 0) {
+                if (this->ws.weight_scale[i].num_scale > 0) {
                     this->weightTensors[i].set_scale_ptr(
-                        std::shared_ptr<F32>(curOpWs.weight_scale[i].scale, [](F32 *) {}));
+                        std::shared_ptr<F32>(this->ws.weight_scale[i].scale, [](F32 *) {}));
+                }
+            }
+        } else if (this->ws.num_quant_scale == 1) {
+            for (U32 i = 0; i < this->weightTensors.size(); ++i) {
+                if (this->ws.weight_scale[0].num_scale > 0) {
+                    this->weightTensors[i].set_scale_ptr(
+                        std::shared_ptr<F32>(this->ws.weight_scale[0].scale, [](F32 *) {}));
                 }
             }
         }
 
         U32 bias_offset = (modelPtr != nullptr) ? weight_offset : 0;
-        if (this->hasBias) {
-            for (auto bias_tensor : this->biasTensors) {
-                TensorDesc desc = bias_tensor.get_desc();
-                auto bias_mem_dst = bias_tensor.get_memory();
-                bias_mem_src.resize(desc);
+        for (auto bias_tensor : this->biasTensors) {
+            TensorDesc desc = bias_tensor.get_desc();
+            auto bias_mem_dst = bias_tensor.get_memory();
+            bias_mem_src.resize(desc);
+            if (this->ws.bytes_of_vec > 0) {
                 bias_mem_src.set_shared_ptr(
                     std::shared_ptr<U8>(bias_ptr, bias_ptr.get() + bias_offset));
                 bias_mem_dst->copy_from(&bias_mem_src);
                 bias_offset += tensorNumBytes(desc);
-            }
-        } else {
-            for (auto bias_tensor : this->biasTensors) {
-                TensorDesc desc = bias_tensor.get_desc();
-                auto bias_mem_dst = bias_tensor.get_memory();
-                bias_mem_src.resize(desc);
+            } else {
                 bias_mem_src.alloc();
                 U8 *tmp = (U8 *)bias_mem_src.get_ptr();
                 UNI_MEMSET(tmp, 0, bias_mem_src.bytes());
                 bias_mem_dst->reuse(&bias_mem_src);
             }
+            update_desc_from_tensor(&bias_tensor);
         }
         if (modelPtr != nullptr) {
             *modelPtr = std::shared_ptr<U8>(bias_ptr, bias_ptr.get() + bias_offset);
@@ -191,8 +118,10 @@ public:
     {
         return SUCCESS;
     }
+
 #ifdef _USE_GPU
-    virtual EE set_wtm_image(TensorDesc desc, std::shared_ptr<Tensor> *targetWtm = nullptr)
+protected:
+    EE set_wtm_image(TensorDesc desc, std::shared_ptr<Tensor> *targetWtm = nullptr)
     {
         if (IS_QUALCOMM_GPU(this->archInfo.arch)) {
             std::shared_ptr<Tensor> tensor = std::shared_ptr<Tensor>(new Tensor(OCLMemImg));
@@ -211,17 +140,13 @@ public:
         }
         return SUCCESS;
     }
+    std::shared_ptr<Tensor> wtm;
 #endif
 
 protected:
+    WeightSpec ws;
     std::vector<Tensor> weightTensors;
     std::vector<Tensor> biasTensors;
-    bool hasBias;
-
-    U32 lenOfWtm;
-    std::shared_ptr<Tensor> wtm;
-    MemoryType wtmType;
-    WeightSpec ws;
 };
 
 #endif  // _WEIGHTOPERATOR_H

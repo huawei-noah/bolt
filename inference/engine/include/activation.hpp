@@ -26,11 +26,12 @@ public:
             {ACTIVATION_H_SWISH_NODIV, OT_HSwishNoDiv}, {ACTIVATION_SIGMOID, OT_Sigmoid},
             {ACTIVATION_H_SIGMOID, OT_HSigmoid}, {ACTIVATION_GELU, OT_Gelu},
             {ACTIVATION_TANH, OT_TanH}, {ACTIVATION_MISH, OT_Mish}, {ACTIVATION_GREATER, OT_Greater},
-            {ACTIVATION_EXP, OT_Exp}, {ACTIVATION_SOFTPLUS, OT_SoftPlus}, {ACTIVATION_ABS, OT_Abs},
+            {ACTIVATION_EXP, OT_Exp}, {ACTIVATION_SOFTPLUS, OT_Softplus}, {ACTIVATION_ABS, OT_Abs},
             {ACTIVATION_SIGN, OT_Sign}, {ACTIVATION_NOT, OT_Not}, {ACTIVATION_LOG, OT_Log},
             {ACTIVATION_NEG, OT_Neg}, {ACTIVATION_ROUND, OT_Round}, {ACTIVATION_FLOOR, OT_Floor},
             {ACTIVATION_CEIL, OT_Ceil}, {ACTIVATION_SWISH, OT_Swish},
-            {ACTIVATION_RECIPROCAL, OT_Reciprocal}};
+            {ACTIVATION_RECIPROCAL, OT_Reciprocal}, {ACTIVATION_SIN, OT_Sin},
+            {ACTIVATION_COS, OT_Cos}, {ACTIVATION_ELU, OT_Elu}};
         if (activationMap.find(p.mode) == activationMap.end()) {
             UNI_ERROR_LOG("can not map ActivationMode(%d) to OperatorType.\n", p.mode);
         } else {
@@ -38,14 +39,11 @@ public:
         }
     }
 
+    ~Activation() {}
+
     OperatorType get_type() override
     {
         return this->opt;
-    }
-
-    bool can_input_output_the_same() override
-    {
-        return true;
     }
 
 protected:

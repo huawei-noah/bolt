@@ -20,6 +20,7 @@ class Shape : public Operator {
 public:
     Shape()
     {}
+    ~Shape(){}
 
     OperatorType get_type() override
     {

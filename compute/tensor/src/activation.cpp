@@ -19,49 +19,52 @@
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
 
-inline EE activation_infer_output_size_cpu(TensorDesc inputDesc, TensorDesc *outputDesc)
+inline EE activation_infer_output_size_cpu(
+    TensorDesc inputDesc, ActivationParamSpec p, TensorDesc *outputDesc, Arch arch)
 {
-    if (nullptr == outputDesc) {
-        CHECK_STATUS(NULL_POINTER);
-    }
-
+    EE ret = SUCCESS;
     *outputDesc = inputDesc;
-    return SUCCESS;
+#ifdef _USE_CPU
+    if (IS_CPU(arch) && ret == SUCCESS && tensorIsShape(inputDesc) && tensorIsShape(*outputDesc)) {
+        ret = activation_cpu(inputDesc, inputDesc.dims + inputDesc.nDims, p, *outputDesc,
+            outputDesc->dims + outputDesc->nDims, NULL, arch);
+    }
+#endif
+    return ret;
 }
 
-EE activation_infer_output_size(Tensor *inputTensor, Tensor *outputTensor, ArchInfo_t archInfo)
+EE activation_infer_output_size(
+    Tensor *inputTensor, ActivationParamSpec p, Tensor *outputTensor, ArchInfo_t archInfo)
 {
-    if (inputTensor == nullptr) {
-        CHECK_STATUS(NULL_POINTER);
+    if (inputTensor == nullptr || outputTensor == nullptr) {
+        return NULL_POINTER;
     }
-    if (outputTensor == nullptr) {
-        CHECK_STATUS(NULL_POINTER);
-    }
+    auto arch = archInfo->arch;
     TensorDesc inputDesc = inputTensor->get_desc();
     TensorDesc outputDesc = outputTensor->get_desc();
-    EE ret = activation_infer_output_size_cpu(inputDesc, &outputDesc);
+    EE ret = activation_infer_output_size_cpu(inputDesc, p, &outputDesc, arch);
     outputTensor->resize(outputDesc);
     return ret;
 }
 
-EE activation(
-    Tensor inputTensor, ActivationParamSpec activationDesc, Tensor outputTensor, ArchInfo_t archInfo)
+EE activation(Tensor inputTensor, ActivationParamSpec p, Tensor outputTensor, ArchInfo_t archInfo)
 {
     auto arch = archInfo->arch;
     TensorDesc inputDesc = inputTensor.get_desc();
     void *input = get_ptr_from_tensor(inputTensor, arch);
     TensorDesc outputDesc = outputTensor.get_desc();
     void *output = get_ptr_from_tensor(outputTensor, arch);
+    F32 scale = inputTensor.get_scale();
 
     EE ret = NOT_SUPPORTED;
     if (IS_CPU(arch)) {
 #ifdef _USE_CPU
-        ret = activation_cpu(inputDesc, input, activationDesc, outputDesc, output, arch);
+        ret = activation_cpu(inputDesc, input, p, outputDesc, output, &scale, arch);
 #endif
 #ifdef _USE_GPU
     } else if (IS_GPU(arch)) {
         ret = activation_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc,
-            (GCLMem_t)input, outputDesc, (GCLMem_t)output, activationDesc.mode);
+            (GCLMem_t)input, p, outputDesc, (GCLMem_t)output);
 #endif
     }
     return ret;

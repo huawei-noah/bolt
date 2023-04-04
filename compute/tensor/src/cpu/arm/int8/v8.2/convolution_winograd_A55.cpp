@@ -34,7 +34,7 @@ EE convolution_winograd_A55(TensorDesc inputDesc,
     UNUSED(biasDesc);
     UNUSED(tmpBytes);
 
-    // not truly one_step. Compute hw12*(6*6)*ic at one time.
+    // not truely one_step. Compute hw12*(6*6)*ic at one time.
     DataType idt, fdt, odt;
     DataFormat idf, fdf, odf;
     U32 in, ic, ih, iw;

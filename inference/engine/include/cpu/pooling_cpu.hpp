@@ -31,7 +31,7 @@ public:
     void run() override
     {
         CHECK_STATUS(pooling(
-            this->inputTensors[0], this->p, this->temp, this->outputTensors[0], &this->archInfo));
+            this->inputTensors[0], this->p, this->temp, this->outputTensors, &this->archInfo));
     }
 
     EE infer_output_tensors_size(
@@ -40,9 +40,13 @@ public:
         if (this->p.kernel_h == 0 && this->p.kernel_w == 0) {
             Pooling::set_stride(1, 1);
         }
-        CHECK_STATUS(
-            pooling_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo));
-        return SUCCESS;
+        EE ret = pooling_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo);
+        if (outTensors.size() == 2) {
+            TensorDesc desc = outTensors[0]->get_desc();
+            desc.dt = DT_I32;
+            outTensors[1]->resize(desc);
+        }
+        return ret;
     }
 
     U32 infer_tmp_memory_size() override

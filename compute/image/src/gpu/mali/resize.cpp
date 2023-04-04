@@ -31,12 +31,13 @@ inline EE resize_trans_image_to_buf(
 {
     if (inputDesc.df == DF_NCHW && input->desc.memType != GCL_MEM_BUF) {
         GCLMemDesc desc;
+        DataType idt;
         U32 iw, ih, ic, in;
-        tensorSelectGet(inputDesc, NULL, NULL, &in, &ic, &ih, &iw);
+        tensorSelectGet(inputDesc, &idt, NULL, &in, &ic, &ih, &iw);
         U32 str[3] = {iw, ih, ic * in};
         U32 off[3] = {0, 0, 0};
         MemFlags flag = CL_MEM_READ_WRITE;
-        CHECK_STATUS(gclmem_set_desc_padding(&desc, str, off, DT_F16, DF_NCHW, GCL_MEM_BUF, flag));
+        CHECK_STATUS(gclmem_set_desc_padding(&desc, str, off, idt, DF_NCHW, GCL_MEM_BUF, flag));
         tmpbuf->desc = desc;
         CHECK_STATUS(ocl_data_trans_form(handle, input, tmpbuf, 0, 0, NCHW_TO_NCHW));
         *inputTran = tmpbuf;
@@ -44,7 +45,7 @@ inline EE resize_trans_image_to_buf(
     return SUCCESS;
 }
 
-EE resize_nearest_mali(GCLHandle_t handle,
+EE resize_mali(GCLHandle_t handle,
     TensorDesc inputDesc,
     GCLMem_t input,
     ResizeParamSpec p,
@@ -52,49 +53,8 @@ EE resize_nearest_mali(GCLHandle_t handle,
     GCLMem_t tmpbuf,
     GCLMem_t output)
 {
-    EE ret = SUCCESS;
     CHECK_STATUS(resize_checkpara_mali(handle, inputDesc, input, outputDesc, output));
     GCLMem_t inputTran = input;
     CHECK_STATUS(resize_trans_image_to_buf(handle, inputDesc, input, tmpbuf, &inputTran));
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = resize_nearest_mali_fp16(handle, inputDesc, inputTran, p, outputDesc, output);
-            break;
-        }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
-}
-
-EE resize_bilinear_mali(GCLHandle_t handle,
-    TensorDesc inputDesc,
-    GCLMem_t input,
-    TensorDesc outputDesc,
-    GCLMem_t tmpbuf,
-    GCLMem_t output)
-{
-    EE ret = SUCCESS;
-    CHECK_STATUS(resize_checkpara_mali(handle, inputDesc, input, outputDesc, output));
-    GCLMem_t inputTran = input;
-    CHECK_STATUS(resize_trans_image_to_buf(handle, inputDesc, input, tmpbuf, &inputTran));
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = resize_bilinear_mali_fp16(handle, inputDesc, inputTran, outputDesc, output);
-            break;
-        }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return resize_mali_fp16(handle, inputDesc, inputTran, p, outputDesc, output);
 }

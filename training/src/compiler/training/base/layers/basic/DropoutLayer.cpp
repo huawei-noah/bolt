@@ -62,5 +62,4 @@ DropoutLayer::DropoutLayer(const Name& name, const DropoutParams& params, Networ
         mName, mName / "random", WShape{ BS(), mDepth, mHeight, mWidth }, raul::Workflow::Usage::Forward, raul::Workflow::Mode::Write, true, true, false, false, false);
     mNetworkParams.mWorkflow.copyDeclaration(mName, mName / "random", DEC_BACK_READ);
 }
-
 } // namespace raul

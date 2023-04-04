@@ -2,6 +2,8 @@ file(GLOB srcs ${CMAKE_CURRENT_SOURCE_DIR}/*.cpp)
 
 # shared library
 add_library(${PROJECT_NAME} SHARED ${srcs})
+target_link_libraries(${PROJECT_NAME} kernelsource)
+link_opencl(${PROJECT_NAME})
 
 # static library
 add_library(${PROJECT_NAME}_static STATIC ${srcs})

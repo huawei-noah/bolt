@@ -42,7 +42,7 @@ class Regularizer : public IOptimizer
     void operator()(MemoryManagerFP16& memory_manager, TensorFP16& param, TensorFP16& grad) override;
     void setLearningRate(dtype lr) override;
     [[nodiscard]] dtype getLearningRate() final;
-
+~ Regularizer(){}
   private:
     void addPenalty(Tensor& param, Tensor& grad);
 

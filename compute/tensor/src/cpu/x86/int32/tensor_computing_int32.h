@@ -28,4 +28,6 @@ EE scale_int32(I32 *input,
     I32 elements_per_channel,
     I32 ic,
     I32 *output);
+
+EE clip_int32(I32 *input, I32 *output, I32 len, I32 minValue, I32 maxValue);
 #endif

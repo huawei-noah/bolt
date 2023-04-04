@@ -24,7 +24,7 @@ inline EE padding_checkpara_mali_fp16(GCLHandle_t handle,
     if (handle == nullptr || nullptr == input || nullptr == output) {
         return NULL_POINTER;
     }
-    if (inputDesc.dt != outputDesc.dt || inputDesc.dt != DT_F16) {
+    if (inputDesc.dt != outputDesc.dt) {
         return NOT_SUPPORTED;
     }
     if (padParamSpec.pad_mode == PAD_REFLECT &&
@@ -45,9 +45,10 @@ inline EE padding_core_mali_fp16(GCLHandle_t handle,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
+    DataType idt;
     U32 iw, ih, ic, in;
     U32 ow, oh, oc, on;
-    tensorSelectGet(inputDesc, NULL, NULL, &in, &ic, &ih, &iw);
+    tensorSelectGet(inputDesc, &idt, NULL, &in, &ic, &ih, &iw);
     tensorSelectGet(outputDesc, NULL, NULL, &on, &oc, &oh, &ow);
 
     cl_mem inbuf, outbuf;
@@ -77,7 +78,7 @@ inline EE padding_core_mali_fp16(GCLHandle_t handle,
     KernelOpt kernelOpt;
     bool useNchw = (inputDesc.df == DF_NCHWC4) ? false : true;
     CHECK_STATUS(set_padding_opt_mali(
-        useNchw, padParamSpec.pad_mode, DT_F16, GCL_MEM_BUF, GCL_MEM_BUF, kernelName, &kernelOpt));
+        useNchw, padParamSpec.pad_mode, idt, GCL_MEM_BUF, GCL_MEM_BUF, kernelName, &kernelOpt));
 
     U32 gs[3] = {0, 0, 0};
     U32 ls[3] = {0, 0, 0};

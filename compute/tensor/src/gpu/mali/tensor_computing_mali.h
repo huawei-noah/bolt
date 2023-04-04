@@ -59,7 +59,7 @@ EE convolution_infer_forward_algorithm_mali(GCLHandle_t handle,
     GCLMemDesc inputMemDesc,
     GCLMemDesc outputMemDesc,
     ConvolutionPolicy policy,
-    ActivationMode activationMode,
+    ActivationParamSpec activationDesc,
     ForwardRunInfoMali_t forwardRunInfo);
 
 EE convolution_transform_filter_bytes_mali(
@@ -95,7 +95,7 @@ EE convolution_mali(GCLHandle_t handle,
     std::vector<GCLMem_t> tmpBuf,
     TensorDesc outputDesc,
     GCLMem_t output,
-    ActivationMode activationMode);
+    ActivationParamSpec activationDesc);
 
 EE depthwise_pointwise_convolution_padding_input_mali(TensorDesc inputDesc,
     TensorDesc dwFilterDesc,
@@ -114,8 +114,8 @@ EE depthwise_pointwise_convolution_infer_forward_algorithm_mali(GCLHandle_t hand
     GCLMemDesc outputMemDesc,
     ConvolutionParamSpec convParamSpec,
     ConvolutionPolicy policy,
-    ActivationMode depthwiseActivationMode,
-    ActivationMode pointwiseActivationMode,
+    ActivationParamSpec depthwiseActivationParamSpec,
+    ActivationParamSpec pointwiseActivationParamSpec,
     ForwardRunInfoMali_t forwardRunInfo);
 
 EE depthwise_pointwise_convolution_infer_forward_tmp_bytes_mali(TensorDesc inputDesc,
@@ -160,8 +160,8 @@ EE depthwise_pointwise_convolution_mali(GCLHandle_t handle,
     std::vector<GCLMem_t> tmp,
     TensorDesc outputDesc,
     GCLMem_t output,
-    ActivationMode depthwiseActivationMode,
-    ActivationMode pointwiseActivationMode);
+    ActivationParamSpec depthwiseActivationParamSpec,
+    ActivationParamSpec pointwiseActivationParamSpec);
 
 EE depthwise_convolution_padding_input_mali(TensorDesc inputDesc,
     TensorDesc filterDesc,
@@ -178,7 +178,7 @@ EE depthwise_convolution_infer_forward_algorithm_mali(GCLHandle_t handle,
     GCLMemDesc outputMemDesc,
     ConvolutionParamSpec convParamSpec,
     ConvolutionPolicy policy,
-    ActivationMode depthwiseActivationMode,
+    ActivationParamSpec depthwiseActivationParamSpec,
     ForwardRunInfoMali_t forwardRunInfo);
 
 EE depthwise_convolution_transform_filter_bytes_mali(
@@ -211,7 +211,7 @@ EE depthwise_convolution_mali(GCLHandle_t handle,
     GCLMem_t tmpBuf,
     TensorDesc outputDesc,
     GCLMem_t output,
-    ActivationMode depthwiseActivationMode);
+    ActivationParamSpec depthwiseActivationParamSpec);
 
 EE deconvolution_padding_input_mali(TensorDesc inputDesc,
     TensorDesc filterDesc,
@@ -226,7 +226,7 @@ EE deconvolution_infer_forward_algorithm_mali(GCLHandle_t handle,
     ConvolutionParamSpec convParamSpec,
     TensorDesc outputDesc,
     ConvolutionPolicy policy,
-    ActivationMode activationMode,
+    ActivationParamSpec activationMode,
     GCLMemDesc inputMemDesc,
     GCLMemDesc outputMemDesc,
     ForwardRunInfoMali_t forwardRunInfo);
@@ -264,7 +264,7 @@ EE deconvolution_mali(GCLHandle_t handle,
     GCLMem_t tmpBuf,
     TensorDesc outputDesc,
     GCLMem_t output,
-    ActivationMode activationMode);
+    ActivationParamSpec activationMode);
 
 EE bilateral_slice_padding_input_mali(TensorDesc inputDesc,
     TensorDesc guideDesc,
@@ -330,9 +330,9 @@ EE softmax_infer_forward_tmp_bytes_mali(
 EE activation_mali(GCLHandle_t handle,
     TensorDesc inputDesc,
     GCLMem_t input,
+    ActivationParamSpec p,
     TensorDesc outputDesc,
-    GCLMem_t output,
-    ActivationMode activationMode);
+    GCLMem_t output);
 
 EE fully_connected_padding_input_mali(TensorDesc inputDesc,
     TensorDesc filterDesc,
@@ -499,9 +499,9 @@ EE embedding_mali(GCLHandle_t handle,
     TensorDesc outputDesc,
     GCLMem_t output);
 
-EE normalization_infer_forward_tmp_bytes_mali(GCLMemDesc gclmemInputDesc, U32 *bytes);
+EE layer_norm_infer_forward_tmp_bytes_mali(GCLMemDesc gclmemInputDesc, U32 *bytes);
 
-EE layer_normalization_mali(GCLHandle_t handle,
+EE layer_norm_mali(GCLHandle_t handle,
     TensorDesc inputDesc,
     GCLMem_t input,
     GCLMem_t alpha,
@@ -750,7 +750,7 @@ EE multihead_attention_infer_forward_algorithm_mali(GCLHandle_t handle,
     U32 *firstFCSliceNum,
     U32 matmulSliceLen,
     std::vector<bool> eltwiseWithLayerNormIn,
-    ActivationMode activation,
+    ActivationParamSpec activation,
     TensorDesc outputDesc,
     ForwardRunInfoMali_t forwardRunInfo);
 
@@ -788,7 +788,7 @@ EE multihead_attention_mali(GCLHandle_t handle,
     U32 *firstFCSliceNum,
     U32 matmulSliceLen,
     std::vector<bool> eltwiseWithLayerNormIn,
-    ActivationMode activation,
+    ActivationParamSpec activation,
     U32 tmpBytes,
     GCLMem_t tmpBuf,
     TensorDesc outputDesc,
@@ -941,6 +941,18 @@ EE gather_mali(GCLHandle_t handle,
     GCLMem_t index,
     GatherParamSpec p,
     GCLMem_t tmpbuf,
+    TensorDesc outputDesc,
+    GCLMem_t output);
+
+EE instance_norm_infer_forward_tmp_bytes_mali(GCLMemDesc gclmemInputDesc, InstanceNormParamSpec p, U32 *bytes);
+
+EE instance_norm_mali(GCLHandle_t handle,
+    TensorDesc inputDesc,
+    GCLMem_t input,
+    GCLMem_t alpha,
+    GCLMem_t beta,
+    InstanceNormParamSpec p,
+    GCLMem_t tmp,
     TensorDesc outputDesc,
     GCLMem_t output);
 #endif

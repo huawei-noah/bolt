@@ -43,7 +43,7 @@ raul::dtype GradientClipping::calcGlobalNorm(const std::vector<ParamAndGrad>& tr
     {
         for (size_t j = 0; j < trainableParams.size(); ++j)
         {
-            auto& [param, grad] = trainableParams[j];
+            auto& grad = trainableParams[j].Gradient;
             for (size_t i = 0; i < grad.size(); ++i)
             {
                 qSum += grad[i] * grad[i];
@@ -56,7 +56,7 @@ raul::dtype GradientClipping::calcGlobalNorm(const std::vector<ParamAndGrad>& tr
 #pragma omp parallel for reduction(+ : qSum)
         for (size_t j = 0; j < trainableParams.size(); ++j)
         {
-            auto& [param, grad] = trainableParams[j];
+            auto& grad = trainableParams[j].Gradient;
             for (size_t i = 0; i < grad.size(); ++i)
             {
                 qSum += grad[i] * grad[i];
@@ -80,7 +80,7 @@ raul::dtype GradientClipping::calcGlobalNorm(const std::vector<ParamAndGradImpl<
     {
         for (size_t j = 0; j < trainableParams.size(); ++j)
         {
-            auto& [param, grad] = trainableParams[j];
+            auto& grad = trainableParams[j].Gradient;
             for (size_t i = 0; i < grad.size(); ++i)
             {
                 qSum += TODTYPE(grad[i]) * TODTYPE(grad[i]);
@@ -93,7 +93,7 @@ raul::dtype GradientClipping::calcGlobalNorm(const std::vector<ParamAndGradImpl<
 #pragma omp parallel for reduction(+ : qSum)
         for (size_t j = 0; j < trainableParams.size(); ++j)
         {
-            auto& [param, grad] = trainableParams[j];
+            auto& grad = trainableParams[j].Gradient;
             for (size_t i = 0; i < grad.size(); ++i)
             {
                 qSum += TODTYPE(grad[i]) * TODTYPE(grad[i]);
@@ -119,7 +119,7 @@ raul::dtype GradientClipping::calcGlobalNormMixedPrecision(std::vector<ParamAndG
     {
         for (size_t j = 0; j < trainableParams.size(); ++j)
         {
-            auto& [param, grad] = trainableParams[j];
+            auto& grad = trainableParams[j].Gradient;
             for (size_t i = 0; i < grad.size(); ++i)
             {
                 qSum += grad[i] * grad[i];
@@ -128,7 +128,7 @@ raul::dtype GradientClipping::calcGlobalNormMixedPrecision(std::vector<ParamAndG
 
         for (size_t j = 0; j < trainableParamsFP16.size(); ++j)
         {
-            auto& [param, grad] = trainableParamsFP16[j];
+            auto& grad = trainableParamsFP16[j].Gradient;
             for (size_t i = 0; i < grad.size(); ++i)
             {
                 qSum += grad[i] * grad[i];
@@ -141,7 +141,7 @@ raul::dtype GradientClipping::calcGlobalNormMixedPrecision(std::vector<ParamAndG
 #pragma omp parallel for reduction(+ : qSum)
         for (size_t j = 0; j < trainableParams.size(); ++j)
         {
-            auto& [param, grad] = trainableParams[j];
+            auto& grad = trainableParams[j].Gradient;
             for (size_t i = 0; i < grad.size(); ++i)
             {
                 qSum += grad[i] * grad[i];
@@ -151,7 +151,7 @@ raul::dtype GradientClipping::calcGlobalNormMixedPrecision(std::vector<ParamAndG
 #pragma omp parallel for reduction(+ : qSum)
         for (size_t j = 0; j < trainableParamsFP16.size(); ++j)
         {
-            auto& [param, grad] = trainableParamsFP16[j];
+            auto& grad = trainableParamsFP16[j].Gradient;
             for (size_t i = 0; i < grad.size(); ++i)
             {
                 qSum += grad[i] * grad[i];
@@ -190,7 +190,7 @@ void GradientClipping::processGradients(std::vector<ParamAndGrad>& trainablePara
 #endif
     for (size_t j = 0; j < trainableParams.size(); ++j)
     {
-        auto& [param, grad] = trainableParams[j];
+        auto& grad = trainableParams[j].Gradient;
         std::transform(grad.begin(), grad.end(), grad.begin(), [&factor](auto& element) { return element * factor; });
     }
 }
@@ -217,7 +217,7 @@ void GradientClipping::processGradients(std::vector<ParamAndGradImpl<TensorFP16>
 #endif
     for (size_t j = 0; j < trainableParams.size(); ++j)
     {
-        auto& [param, grad] = trainableParams[j];
+        auto& grad = trainableParams[j].Gradient;
         std::transform(grad.begin(), grad.end(), grad.begin(), [&factor](auto& element) -> half { return element * TOHTYPE(factor); });
     }
 }
@@ -245,7 +245,7 @@ void GradientClipping::processGradientsMixedPrecision(std::vector<ParamAndGrad>&
 #endif
     for (size_t j = 0; j < trainableParams.size(); ++j)
     {
-        auto& [param, grad] = trainableParams[j];
+        auto& grad = trainableParams[j].Gradient;
         std::transform(grad.begin(), grad.end(), grad.begin(), [&factor](auto& element) { return element * factor; });
     }
 
@@ -254,7 +254,7 @@ void GradientClipping::processGradientsMixedPrecision(std::vector<ParamAndGrad>&
 #endif
     for (size_t j = 0; j < trainableParamsFP16.size(); ++j)
     {
-        auto& [param, grad] = trainableParamsFP16[j];
+        auto& grad = trainableParamsFP16[j].Gradient;
         std::transform(grad.begin(), grad.end(), grad.begin(), [&factor](auto& element) -> half { return element * TOHTYPE(factor); });
     }
 }

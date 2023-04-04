@@ -19,16 +19,18 @@
 #include "operator_type.h"
 #include "parameter_spec.h"
 #include "error.h"
-#include "array_transpose.h"
 #include "memory_cpu.h"
 #include "affinity_policy.h"
+#include "tensor_transpose.h"
 
 #define UNUSED(x) (void)x
 #define UNI_MIN(a, b) (((a) < (b)) ? (a) : (b))
 #define UNI_MAX(a, b) (((a) > (b)) ? (a) : (b))
 #define UNI_ABS(a) (((a) > 0) ? (a) : (-1 * (a)))
 #define UNI_SIGN(a) (((a) > 0) ? 1 : (((a) < 0) ? -1 : 0))
-#define UNI_ALIGN(a, b) (((a + b - 1) / b) * b)
+#define UNI_ALIGN(x, align) (((align) == 0) ? 0 : (((x) + (align)-1) / (align) * (align)))
 #define UNI_F16_MIN -65504.0f
 #define UNI_F16_MAX 65504.0f
+#define UNI_RESERVE 9035
+#define UNI_DYNAMIC_SHAPE 11
 #endif

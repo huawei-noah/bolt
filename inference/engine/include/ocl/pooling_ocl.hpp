@@ -36,7 +36,7 @@ public:
     {
         OCLContext::getInstance().handle.get()->curOpName = this->get_name();
         CHECK_STATUS(pooling(
-            this->inputTensors[0], this->p, this->temp, this->outputTensors[0], &this->archInfo));
+            this->inputTensors[0], this->p, this->temp, this->outputTensors, &this->archInfo));
     }
 
     inline bool use_output_tensor_image(Tensor *inputTensor)
@@ -58,12 +58,12 @@ public:
         if (this->p.kernel_h == 0 && this->p.kernel_w == 0) {
             Pooling::set_stride(1, 1);
         }
-        CHECK_STATUS(
-            pooling_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo));
-        if (check_tensors_image(inTensors) && use_output_tensor_image(inTensors[0])) {
-            CHECK_STATUS(set_tensors_image(outTensors, inTensors.size()));
+        EE ret = pooling_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo);
+        if (ret == SUCCESS && check_tensors_image(inTensors) &&
+            use_output_tensor_image(inTensors[0])) {
+            ret = set_tensors_image(outTensors, inTensors.size());
         }
-        return SUCCESS;
+        return ret;
     }
 
     U32 infer_tmp_memory_size() override

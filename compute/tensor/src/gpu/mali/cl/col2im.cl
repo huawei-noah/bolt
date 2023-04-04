@@ -66,7 +66,7 @@ __kernel void MANGLE_NAME(col2im_, IOM)(const int iw,
     int in_str_h = iw * (ih * fw * sw - 1);
     int in_off_w = in_wx + in_wy * ih * iw;
     int in_str_w = ih * iw * sw - 1;
-    T4 sum = read_imageh(bias, sampler, idz);
+    T4 sum = READ_IMAGE(bias, sampler, idz);
 
     for (int i = 0; i < in_hl; i++) {
         for (int j = 0; j < in_wl; j++) {

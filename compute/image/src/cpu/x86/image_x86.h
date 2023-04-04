@@ -24,4 +24,7 @@ EE resize_bilinear_x86(TensorDesc inputDesc,
     void *tmp,
     TensorDesc outputDesc,
     void *output);
+
+EE resize_nearest_x86(
+    TensorDesc inputDesc, void *input, ResizeParamSpec p, TensorDesc outputDesc, void *output);
 #endif

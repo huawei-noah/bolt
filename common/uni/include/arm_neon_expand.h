@@ -20,11 +20,27 @@
 #include "error.h"
 
 #ifndef __aarch64__
+inline float32x4_t vrndaq_f32(float32x4_t a)
+{
+    int32x4_t b = vcvtq_n_s32_f32(a, 1);
+    b = vsraq_n_s32(b, b, 31);
+    b = vrshrq_n_s32(b, 1);
+    return vcvtq_f32_s32(b);
+}
+
+inline int32x4_t vcvtaq_s32_f32(float32x4_t a)
+{
+    int32x4_t b = vcvtq_n_s32_f32(a, 1);
+    b = vsraq_n_s32(b, b, 31);
+    return vrshrq_n_s32(b, 1);
+}
+
 inline int32x4_t vpaddq_s32(int32x4_t a, int32x4_t b)
 {
     int32x2_t low = vpadd_s32(vget_low_s32(a), vget_low_s32(b));
     int32x2_t high = vpadd_s32(vget_high_s32(a), vget_high_s32(b));
-    return vcombine_s32(low, high);
+    int32x2x2_t v = vzip_s32(low, high);
+    return vcombine_s32(v.val[0], v.val[1]);
 }
 
 inline float32x4_t vdivq_f32(float32x4_t a, float32x4_t b)
@@ -62,7 +78,7 @@ inline float vmaxvq_f32(float32x4_t x)
     return vget_lane_f32(max, 0);
 }
 
-#if !defined(__ANDROID__) && !defined(__APPLE__)
+#if !defined(__ANDROID__) && !defined(__APPLE__) && !defined(__WIN32)
 #ifndef __ARM_FEATURE_FMA
 inline float32x4_t vfmaq_f32(float32x4_t c, float32x4_t a, float32_t b)
 {
@@ -83,11 +99,18 @@ inline float vaddvq_f32(float32x4_t x)
     return vget_lane_f32(sum, 0);
 }
 
-inline unsigned int vaddvq_u32(uint32x4_t x)
+inline int vaddvq_s32(int32x4_t x)
 {
-    uint32x2_t sum = vadd_u32(vget_low_u32(x), vget_high_u32(x));
-    sum = vpadd_u32(sum, sum);
-    return vget_lane_u32(sum, 0);
+    int32x2_t sum = vadd_s32(vget_low_s32(x), vget_high_s32(x));
+    sum = vpadd_s32(sum, sum);
+    return vget_lane_s32(sum, 0);
+}
+
+inline int vaddvq_s8(int8x16_t x)
+{
+    int16x8_t y0 = vaddl_s8(vget_low_s8(x), vget_high_s8(x));
+    int32x4_t y1 = vaddl_s16(vget_low_s16(y0), vget_high_s16(y0));
+    return vaddvq_s32(y1);
 }
 #endif
 
@@ -179,6 +202,69 @@ inline float32x4_t vtanhq_f32(float32x4_t x)
     return result_v;
 }
 
+inline void vsincosq_f32(float32x4_t x, float32x4_t *ysin, float32x4_t *ycos)
+{
+    const float32x4_t c_dp = vdupq_n_f32(-0.7853981633974483);
+    const float32x4_t c_4_div_pi = vdupq_n_f32(1.27323954473516);
+    const float32x4_t c_sin_p0 = vdupq_n_f32(-1.9515295891E-4);
+    const float32x4_t c_sin_p1 = vdupq_n_f32(8.3321608736E-3);
+    const float32x4_t c_sin_p2 = vdupq_n_f32(-1.6666654611E-1);
+    const float32x4_t c_cos_p0 = vdupq_n_f32(2.443315711809948E-005);
+    const float32x4_t c_cos_p1 = vdupq_n_f32(-1.388731625493765E-003);
+    const float32x4_t c_cos_p2 = vdupq_n_f32(4.166664568298827E-002);
+    const uint32x4_t c_2 = vdupq_n_u32(2);
+    const uint32x4_t c_4 = vdupq_n_u32(4);
+
+    uint32x4_t mask = vcltq_f32(x, vdupq_n_f32(0));
+    x = vabsq_f32(x);
+
+    float32x4_t y = vmulq_f32(x, c_4_div_pi);
+
+    uint32x4_t emm2 = vcvtq_u32_f32(y);
+    emm2 = vaddq_u32(emm2, vdupq_n_u32(1));
+    emm2 = vandq_u32(emm2, vdupq_n_u32(~1));
+    y = vcvtq_f32_u32(emm2);
+
+    uint32x4_t poly_mask = vtstq_u32(emm2, c_2);
+
+    x = vfmaq_f32(x, y, c_dp);
+
+    uint32x4_t sin_sign = veorq_u32(mask, vtstq_u32(emm2, c_4));
+    uint32x4_t cos_sign = vtstq_u32(vsubq_u32(emm2, c_2), c_4);
+
+    float32x4_t z = vmulq_f32(x, x);
+    float32x4_t y1 = vfmaq_f32(c_cos_p1, z, c_cos_p0);
+    float32x4_t y2 = vfmaq_f32(c_sin_p1, z, c_sin_p0);
+    y1 = vfmaq_f32(c_cos_p2, y1, z);
+    y2 = vfmaq_f32(c_sin_p2, y2, z);
+    y1 = vmulq_f32(y1, z);
+    y2 = vmulq_f32(y2, z);
+    y1 = vmulq_f32(y1, z);
+    y2 = vmulq_f32(y2, x);
+    y1 = vsubq_f32(y1, vmulq_f32(z, vdupq_n_f32(0.5f)));
+    y2 = vaddq_f32(y2, x);
+    y1 = vaddq_f32(y1, vdupq_n_f32(1));
+
+    float32x4_t ys = vbslq_f32(poly_mask, y1, y2);
+    float32x4_t yc = vbslq_f32(poly_mask, y2, y1);
+    *ysin = vbslq_f32(sin_sign, vnegq_f32(ys), ys);
+    *ycos = vbslq_f32(cos_sign, yc, vnegq_f32(yc));
+}
+
+inline float32x4_t vsinq_f32(float32x4_t x)
+{
+    float32x4_t ysin, ycos;
+    vsincosq_f32(x, &ysin, &ycos);
+    return ysin;
+}
+
+inline float32x4_t vcosq_f32(float32x4_t x)
+{
+    float32x4_t ysin, ycos;
+    vsincosq_f32(x, &ysin, &ycos);
+    return ycos;
+}
+
 #ifdef _USE_FP16
 inline float16x8_t vaddq_f16_f32(float16x8_t a, float16x8_t b)
 {
@@ -250,6 +336,65 @@ inline float16x8_t vexpq_f16_4_percent_error_half_time(float16x8_t x)
     return in3;
 }
 
+inline void vsincosq_f16(float16x8_t x, float16x8_t *ysin, float16x8_t *ycos)
+{
+#ifdef _USE_F16_MIX_PRECISION
+    float32x4_t a0 = vcvt_f32_f16(vget_low_f16(x));
+    float32x4_t a1 = vcvt_f32_f16(vget_high_f16(x));
+    float32x4_t s0, s1, c0, c1;
+    vsincosq_f32(a0, &s0, &c0);
+    vsincosq_f32(a1, &s1, &c1);
+    *ysin = vcombine_f16(vcvt_f16_f32(s0), vcvt_f16_f32(s1));
+    *ycos = vcombine_f16(vcvt_f16_f32(c0), vcvt_f16_f32(c1));
+#else
+    const float16x8_t c_dp = vdupq_n_f16(-0.7853981633974483);
+    const float16x8_t c_4_div_pi = vdupq_n_f16(1.27323954473516);
+    const float16x8_t c_sin_p0 = vdupq_n_f16(-1.9515295891E-4);
+    const float16x8_t c_sin_p1 = vdupq_n_f16(8.3321608736E-3);
+    const float16x8_t c_sin_p2 = vdupq_n_f16(-1.6666654611E-1);
+    const float16x8_t c_cos_p0 = vdupq_n_f16(2.443315711809948E-005);
+    const float16x8_t c_cos_p1 = vdupq_n_f16(-1.388731625493765E-003);
+    const float16x8_t c_cos_p2 = vdupq_n_f16(4.166664568298827E-002);
+    const uint16x8_t c_2 = vdupq_n_u16(2);
+    const uint16x8_t c_4 = vdupq_n_u16(4);
+
+    uint16x8_t mask = vcltq_f16(x, vdupq_n_f16(0));
+    x = vabsq_f16(x);
+
+    float16x8_t y = vmulq_f16(x, c_4_div_pi);
+
+    uint16x8_t emm2 = vcvtq_u16_f16(y);
+    emm2 = vaddq_u16(emm2, vdupq_n_u16(1));
+    emm2 = vandq_u16(emm2, vdupq_n_u16(~1));
+    y = vcvtq_f16_u16(emm2);
+
+    uint16x8_t poly_mask = vtstq_u16(emm2, c_2);
+
+    x = vfmaq_f16(x, y, c_dp);
+
+    uint16x8_t sin_sign = veorq_u16(mask, vtstq_u16(emm2, c_4));
+    uint16x8_t cos_sign = vtstq_u16(vsubq_u16(emm2, c_2), c_4);
+
+    float16x8_t z = vmulq_f16(x, x);
+    float16x8_t y1 = vfmaq_f16(c_cos_p1, z, c_cos_p0);
+    float16x8_t y2 = vfmaq_f16(c_sin_p1, z, c_sin_p0);
+    y1 = vfmaq_f16(c_cos_p2, y1, z);
+    y2 = vfmaq_f16(c_sin_p2, y2, z);
+    y1 = vmulq_f16(y1, z);
+    y2 = vmulq_f16(y2, z);
+    y1 = vmulq_f16(y1, z);
+    y2 = vmulq_f16(y2, x);
+    y1 = vsubq_f16(y1, vmulq_f16(z, vdupq_n_f16(0.5f)));
+    y2 = vaddq_f16(y2, x);
+    y1 = vaddq_f16(y1, vdupq_n_f16(1));
+
+    float16x8_t ys = vbslq_f16(poly_mask, y1, y2);
+    float16x8_t yc = vbslq_f16(poly_mask, y2, y1);
+    *ysin = vbslq_f16(sin_sign, vnegq_f16(ys), ys);
+    *ycos = vbslq_f16(cos_sign, yc, vnegq_f16(yc));
+#endif
+}
+
 inline float16x8_t vexpq_f16_f32(float16x8_t a)
 {
 #ifdef _USE_F16_MIX_PRECISION
@@ -308,6 +453,20 @@ inline float vaddvq_f16(float16x8_t x)
     float32x4_t b = vcvt_f32_f16(vget_low_f16(x));
     float sum = vaddvq_f32(vaddq_f32(a, b));
     return sum;
+}
+
+inline float16x8_t vsinq_f16(float16x8_t x)
+{
+    float16x8_t ysin, ycos;
+    vsincosq_f16(x, &ysin, &ycos);
+    return ysin;
+}
+
+inline float16x8_t vcosq_f16(float16x8_t x)
+{
+    float16x8_t ysin, ycos;
+    vsincosq_f16(x, &ysin, &ycos);
+    return ycos;
 }
 
 inline void vst1q_lane_f16_builtin(__fp16 *address, float16x8_t vec, const int laneId)

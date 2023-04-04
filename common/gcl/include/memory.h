@@ -16,6 +16,8 @@
 
 #include "event.h"
 
+//#define _USE_OPENCL_IMPORT
+
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -320,11 +322,10 @@ inline EE enqueue_unmap_memory(CommandQueue queue,
     map_cl_error_2_ee(ret);
 }
 
-inline EE create_buffer(Context context, cl_mem_flags flags, U32 size, void *host_ptr, Mem *buffe)
+inline EE create_buffer(Context context, cl_mem_flags flags, U32 size, void *host_ptr, Mem *buffer)
 {
     I32 ret;
-    size_t len = size;
-    *buffe = clCreateBuffer(context, flags, len, host_ptr, &ret);
+    *buffer = clCreateBuffer(context, flags, size, host_ptr, &ret);
     map_cl_error_2_ee(ret);
 }
 
@@ -334,6 +335,21 @@ inline EE create_sub_buffer(Mem buffer, cl_mem_flags flags, U32 offset, U32 size
     cl_buffer_region region = {offset, size};
     *sub = clCreateSubBuffer(buffer, flags, CL_BUFFER_CREATE_TYPE_REGION, &region, &ret);
     map_cl_error_2_ee(ret);
+}
+
+inline EE import_buffer(Context context, U32 size, void *host_ptr, Mem *buffer)
+{
+#ifdef _USE_OPENCL_IMPORT
+    I32 ret;
+    const cl_import_properties_arm import_properties[] = {CL_IMPORT_TYPE_ARM,
+        CL_IMPORT_TYPE_HOST_ARM,
+        //CL_IMPORT_TYPE_DMA_BUF_ARM,
+        0};
+    *buffer = clImportMemoryARM(context, CL_MEM_READ_WRITE, import_properties, host_ptr, size, &ret);
+    map_cl_error_2_ee(ret);
+#else
+    return NOT_SUPPORTED;
+#endif
 }
 
 inline EE enqueue_read_buffer(CommandQueue queue,
@@ -351,20 +367,6 @@ inline EE enqueue_read_buffer(CommandQueue queue,
     map_cl_error_2_ee(ret);
 }
 
-/*
-    inline EE enqueue_read_buffer_rect(CommandQueue queue, Mem buffer, cl_bool blocking,
-            const U32 *buffer_origin, const U32 *host_origin, const U32 *region,
-            U32 buffer_row_pitch, U32 buffer_slice_pitch, U32 host_row_pitch,
-            U32 host_slice_pitch, void *ptr, U32 num_wait_events,
-            const Event *wait_events, Event *event) {
-
-        I32 ret = clEnqueueReadBufferRect(queue, buffer, blocking,
-                buffer_origin, host_origin, region,
-                buffer_row_pitch, buffer_slice_pitch, host_row_pitch,
-                host_slice_pitch, ptr, num_wait_events, wait_events, event);
-        map_cl_error_2_ee(ret);
-    }
- */
 inline EE enqueue_write_buffer(CommandQueue queue,
     Mem buffer,
     cl_bool blocking,
@@ -444,20 +446,6 @@ inline EE enqueue_copy_buffer(CommandQueue queue,
         num_wait_events, wait_events, event);
     map_cl_error_2_ee(ret);
 }
-
-/*
-    EE enqueue_copy_buffer_rect(CommandQueue queue, Mem src_buffer, Mem dst_buffer,
-            const U32 *src_origin, const U32 *dst_origin, const U32 *region,
-            U32 src_row_pitch, U32 src_slice_pitch, U32 dst_row_pitch,
-            U32 dst_slice_pitch, U32 num_wait_events,
-            const Event *wait_events, Event *event) {
-        I32 ret = clEnqueueCopyBufferRect(queue, src_buffer, dst_buffer,
-                const size_t *src_origin, const size_t *dst_origin, const size_t *region,
-                src_row_pitch, src_slice_pitch, dst_row_pitch,
-                dst_slice_pitch, num_wait_events, wait_events, event);
-        map_cl_error_2_ee(ret);
-    }
- */
 
 inline EE enqueue_map_buffer(CommandQueue queue,
     Mem buffer,
@@ -595,31 +583,6 @@ inline EE enqueue_copy_buffer_to_image(CommandQueue queue,
         queue, src_buffer, dst_image, src_offset, org, reg, num_wait_events, wait_events, event);
     map_cl_error_2_ee(ret);
 }
-/*
-
-    EE enqueue_copy_image(CommandQueue queue, Mem src_image, Mem dst_image,
-            const U32 *src_origin, const U32 *dst_origin, const U32 *region,
-            U32 num_wait_events, const cl_event *wait_events, cl_event *event) {
-        I32 ret = clEnqueueCopyImage(queue, src_image, dst_image,
-                const size_t *src_origin, const size_t *dst_origin, const size_t *region,
-                num_wait_events, wait_events, event);
-        map_cl_error_2_ee(ret);
-    }
-
-
-
-    EE enqueue_map_image(CommandQueue queue, Mem image, cl_bool blocking_map,
-            cl_map_flags map_flags, const U32 *origin, const U32 *region,
-            U32 *image_row_pitch, U32 *image_slice_pitch, U32 num_wait_events,
-            const cl_event *wait_events, cl_event *event, void* *ptr) {
-        I32 ret;
- * ptr = clEnqueueMapImage(queue, image, blocking_map,
-                map_flags, const size_t *origin, const size_t *region,
-                size_t *image_row_pitch, size_t *image_slice_pitch,
-                num_wait_events, wait_events, event, &ret);
-        map_cl_error_2_ee(ret);
-    }
- */
 
 inline EE create_sampler(Context context, const cl_sampler_properties *properties, Sampler *s)
 {

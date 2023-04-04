@@ -27,7 +27,7 @@ void printHelp()
     printf("-O or --options to specify OpenCL compiling options\n");
 }
 
-bool GetFileLength(CI8 *filename, U32 *len)
+bool GetFileLength(const char *filename, U32 *len)
 {
     if ((NULL == filename) || (0 == strlen(filename))) {
         return false;
@@ -45,7 +45,7 @@ bool GetFileLength(CI8 *filename, U32 *len)
     return true;
 }
 
-bool LoadBinFile(CI8 *filename, I8 *str, U32 len)
+bool LoadBinFile(const char *filename, I8 *str, U32 len)
 {
     if ((NULL == filename) || (0 == strlen(filename))) {
         return false;
@@ -63,7 +63,7 @@ bool LoadBinFile(CI8 *filename, I8 *str, U32 len)
     return true;
 }
 
-bool StoreToBinFile(CI8 *filename, U32 length, CU8 *s)
+bool StoreToBinFile(const char *filename, U32 length, const U8 *s)
 {
     if ((NULL == s) || (NULL == filename) || (0 == strlen(filename))) {
         return false;
@@ -80,7 +80,7 @@ bool StoreToBinFile(CI8 *filename, U32 length, CU8 *s)
     return true;
 }
 
-void parseCommandLine(I32 argc, I8 *argv[], I8 **inputFilename, I8 **outputFilename, I8 **options)
+int parseCommandLine(I32 argc, I8 *argv[], I8 **inputFilename, I8 **outputFilename, I8 **options)
 {
     const struct option long_options[] = {{"input", 1, nullptr, 'i'}, {"output", 1, nullptr, 'o'},
         {"options", 1, nullptr, 'O'}, {nullptr, 1, nullptr, '0'}};
@@ -96,7 +96,7 @@ void parseCommandLine(I32 argc, I8 *argv[], I8 **inputFilename, I8 **outputFilen
                 *inputFilename = optarg;
                 if (setInput) {
                     printf("you specify input file name twice, program will exit\n");
-                    exit(0);
+                    return 1;
                 }
                 setInput = true;
                 break;
@@ -105,7 +105,7 @@ void parseCommandLine(I32 argc, I8 *argv[], I8 **inputFilename, I8 **outputFilen
                 *outputFilename = optarg;
                 if (setOutput) {
                     printf("you specify output file name twice, program will exit\n");
-                    exit(0);
+                    return 1;
                 }
                 setOutput = true;
                 break;
@@ -114,39 +114,44 @@ void parseCommandLine(I32 argc, I8 *argv[], I8 **inputFilename, I8 **outputFilen
                 *options = optarg;
                 if (setOptions) {
                     printf("you specify compiling options twice, program will exit\n");
-                    exit(0);
+                    return 1;
                 }
                 setOptions = true;
                 break;
             default:
                 printf("not support option:%c\n", ch);
+                return 1;
         }
     }
     if (!setInput) {
         printf("you don't specify the input cl file name, program will exit\n");
-        exit(0);
+        return 1;
     }
     if (!setOutput) {
         printf("you don't specify the output file name, program will exit\n");
-        exit(0);
+        return 1;
     }
     if (!setOptions) {
         printf("you don't specify the options for compiling cl file, default is empty\n");
         *options = (char *)"";
     }
+    return 0;
 }
 
 int main(I32 argc, I8 *argv[])
 {
     if (1 == argc) {
         printHelp();
-        return 0;
+        return 1;
     }
 
     I8 *FLAGS_inputFilename;
     I8 *FLAGS_outputFilename;
     I8 *FLAGS_options;
-    parseCommandLine(argc, argv, &FLAGS_inputFilename, &FLAGS_outputFilename, &FLAGS_options);
+    if (0 !=
+        parseCommandLine(argc, argv, &FLAGS_inputFilename, &FLAGS_outputFilename, &FLAGS_options)) {
+        return 1;
+    }
 
     GCLHandle_t handle;
     CHECK_STATUS(gcl_create_handle(&handle));
@@ -159,7 +164,7 @@ int main(I32 argc, I8 *argv[])
     bool FileStatus = GetFileLength(FLAGS_inputFilename, &clcodeLen);
     if (!FileStatus) {
         printf("get file length failed\n");
-        return 0;
+        return 1;
     }
     U32 srcLen = imageLen + half16Len + clcodeLen;
     I8 *source = new I8[srcLen];
@@ -171,7 +176,7 @@ int main(I32 argc, I8 *argv[])
     if (!FileStatus) {
         printf("load bin file failed\n");
         delete[] source;
-        return 0;
+        return 1;
     }
 
     Program program;
@@ -186,10 +191,12 @@ int main(I32 argc, I8 *argv[])
     FileStatus = StoreToBinFile(FLAGS_outputFilename, size, binary);
     if (!FileStatus) {
         printf("store bin file failed\n");
+        return 1;
     }
     free(binary);
     delete[] source;
     CHECK_STATUS(release_program(program));
     CHECK_STATUS(release_kernel(kernel));
     gcl_destroy_handle(handle);
+    return 0
 }

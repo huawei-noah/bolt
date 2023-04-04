@@ -18,8 +18,6 @@
 #include "model_spec.h"
 #include "memory_cpu.h"
 
-EE str_copy(I8 *dst, const I8 *src, I32 src_len, I32 dst_len = NAME_LEN);
-
 inline void *mt_malloc(U32 size)
 {
     return UNI_OPERATOR_NEW(size);
@@ -37,11 +35,22 @@ inline void mt_free(T *&p)
 template <typename T>
 inline void mt_free(T *&p, ModelSpec *spec)
 {
-    if (spec == nullptr || spec->mfd == nullptr || (uintptr_t(p) < uintptr_t(spec->mfd->bytes)) ||
-        (uintptr_t(p) >= uintptr_t(spec->mfd->bytes + spec->mfd->fileLength))) {
+    if (spec == nullptr || spec->file == nullptr || (uintptr_t(p) < uintptr_t(spec->file->content)) ||
+        (uintptr_t(p) >= uintptr_t(spec->file->content + spec->file->length))) {
         UNI_OPERATOR_DELETE(p);
     }
     p = nullptr;
+}
+
+inline EE str_copy(char *dst, const char *src, I32 src_len, I32 dst_len = NAME_LEN)
+{
+    UNI_MEMSET(dst, 0, dst_len);
+    I32 length = NAME_LEN - 1;
+    if (length > src_len) {
+        length = src_len;
+    }
+    UNI_MEMCPY(dst, src, length * sizeof(I8));
+    return SUCCESS;
 }
 
 OperatorSpec mt_create_operator(
@@ -49,14 +58,14 @@ OperatorSpec mt_create_operator(
 
 EE mt_insert_operator(ModelSpec *ms, int index, OperatorSpec newOperator);
 
+EE mt_insert_weight(ModelSpec *ms, WeightSpec *newWeight, int num);
+
 WeightSpec mt_create_weight(
     const char *name, DataType dataType, U32 bytesOfWeight, U32 bytesOfVec, U32 numQuantScale);
 
 bool isDeprecatedOp(OperatorType opType);
 
 bool isDeprecatedOpWeight(const ModelSpec *spec, int index);
-
-std::string concat_dir_file(std::string dir, std::string file);
 
 void modify_ms_inputs_and_outputs(
     ModelSpec *ms, std::string modifiedInputs, std::string modifiedOutputs);

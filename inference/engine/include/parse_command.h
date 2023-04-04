@@ -19,8 +19,7 @@
 
 #include "error.h"
 
-#ifdef _USE_FP16
-inline U32 getBinFileSize(CI8 *directory, CI8 *name)
+inline U32 getBinFileSize(const char *directory, const char *name)
 {
     std::string path = std::string(directory) + std::string("/") + std::string(name);
     FILE *file = fopen(path.c_str(), "rb");
@@ -35,7 +34,7 @@ inline U32 getBinFileSize(CI8 *directory, CI8 *name)
     return size;
 }
 
-inline void writeF16ToF32Bin(F16 *data, U32 num, CI8 *directory, CI8 *name)
+inline void writeF16ToF32Bin(U8 *data, U32 num, const char *directory, const char *name)
 {
     std::string path = std::string(directory) + std::string("/") + std::string(name);
     FILE *file = fopen(path.c_str(), "wb");
@@ -50,7 +49,7 @@ inline void writeF16ToF32Bin(F16 *data, U32 num, CI8 *directory, CI8 *name)
     UNI_FREE(buffer);
 }
 
-inline void readF32BinToF16(F16 *data, U32 num, CI8 *directory, CI8 *name)
+inline void readF32BinToF16(U8 *data, U32 num, const char *directory, const char *name)
 {
     std::string path = std::string(directory) + std::string("/") + std::string(name);
     FILE *file = fopen(path.c_str(), "rb");
@@ -64,22 +63,14 @@ inline void readF32BinToF16(F16 *data, U32 num, CI8 *directory, CI8 *name)
     fclose(file);
     UNI_FREE(buffer);
 }
-#endif
 
-const struct option long_options[]{
-    {"model", 1, nullptr, 'm'},
-    {"inputPath", 1, nullptr, 'i'},
-    {"archInfo", 1, nullptr, 'a'},
-    {"algoPath", 1, nullptr, 'p'},
-    {"imageFormat", 1, nullptr, 'f'},
-    {"scaleValue", 1, nullptr, 's'},
-    {"topK", 1, nullptr, 't'},
-    {"correctLable", 1, nullptr, 'c'},
-    {"loopTime", 1, nullptr, 'l'},
-    {"subNetworkName", 1, nullptr, 'S'},
-    {"help", 1, nullptr, 'h'},
-    {"readInputBinName", 1, nullptr, 1},
-    {"writeOutputBinName", 1, nullptr, 2},
+const struct option long_options[] {
+    {"model", 1, nullptr, 'm'}, {"inputPath", 1, nullptr, 'i'}, {"archInfo", 1, nullptr, 'a'},
+        {"algoPath", 1, nullptr, 'p'}, {"imageFormat", 1, nullptr, 'f'},
+        {"scaleValue", 1, nullptr, 's'}, {"topK", 1, nullptr, 't'},
+        {"correctLable", 1, nullptr, 'c'}, {"loopTime", 1, nullptr, 'l'},
+        {"subNetworkName", 1, nullptr, 'S'}, {"help", 1, nullptr, 'h'},
+        {"readInputBinName", 1, nullptr, 1}, {"writeOutputBinName", 1, nullptr, 2},
 };
 
 const char optstring[] = "m:i:a:p:f:s:t:c:l:S:h:";

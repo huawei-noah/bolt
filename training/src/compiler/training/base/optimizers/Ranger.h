@@ -26,11 +26,10 @@ namespace raul::optimizers
  * @brief Ranger algorithm
  *
  * The Ranger optimizer combines two very new developments - RAdam + Lookahead + Gradient Centralization - into
- * a single optimizer for deep learning. Implementation follows https://github.com/lessw2020/Ranger-Deep-Learning-Optimizer
+ * a single optimizer for deep learning.
  *
  *  @see
  *  - Gradient Centralization: H. Yong, J. Huang, X. Hua, L. Zhang, "Gradient Centralization: A New Optimization Technique for Deep Neural Networks"  arXiv:2004.01461v2 [cs.CV],
- * https://arxiv.org/abs/2004.01461v2
  *  - LookAhead: M. Zhang, J. Lucas, G. Hinton, J. Ba, "Lookahead Optimizer: k steps forward, 1 step back" arXiv:1907.08610 [cs], Dec 2019
  *  - RAdam: L. Liu, H. Jiang, P. He, W. Chen, X. Liu, J. Gao, J. Han, "On the variance of the adaptive learning rate and beyond" arXiv:1908.03265 [cs], Apr 2020
  */

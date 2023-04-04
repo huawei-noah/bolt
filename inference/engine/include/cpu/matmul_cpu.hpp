@@ -63,22 +63,18 @@ public:
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
-        CHECK_STATUS(matmul_infer_output_size(inTensors[0], this->p.transpose_a, inTensors[1],
-            this->p.transpose_b, outTensors[0], &this->archInfo));
-        if (DT_F16_8Q == this->dt || DT_F32_8Q == this->dt) {
+        EE ret = matmul_infer_output_size(inTensors[0], this->p.transpose_a, inTensors[1],
+            this->p.transpose_b, outTensors[0], &this->archInfo);
+        if (isQuantMixDataType(this->dt)) {
             auto outputDesc = outTensors[0]->get_desc();
             if (featureScale.size() > 0 && -2 == (featureScale.back())[0]) {
-                outputDesc.dt = (DT_F16_8Q == this->dt) ? DT_F16 : DT_F32;
+                outputDesc.dt = noQuantDataType(this->dt);
             } else {
-#ifdef _USE_X86
-                outputDesc.dt = DT_U8_Q;
-#else
-                outputDesc.dt = DT_I8;
-#endif
+                outputDesc.dt = get_activation_quant_data_type();
             }
             outTensors[0]->resize(outputDesc);
         }
-        return SUCCESS;
+        return ret;
     }
 
     U32 infer_tmp_memory_size() override

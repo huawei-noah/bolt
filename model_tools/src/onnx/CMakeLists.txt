@@ -13,7 +13,8 @@ include_directories(../)
 # shared library
 add_library(${PROJECT_NAME}_onnx SHARED ${srcs} ${ONNX_PROTO_HDRS} ${ONNX_PROTO_SRCS})
 
-target_link_libraries(${PROJECT_NAME}_onnx LINK_PUBLIC model_spec uni ${Protobuf_SHARED_LIBRARY})
+target_link_libraries(${PROJECT_NAME}_onnx ${Protobuf_SHARED_LIBRARY})
+link_model_spec(${PROJECT_NAME}_onnx)
 
 # static library
 add_library(${PROJECT_NAME}_onnx_static STATIC ${srcs} ${ONNX_PROTO_HDRS} ${ONNX_PROTO_SRCS})
@@ -21,6 +22,6 @@ add_library(${PROJECT_NAME}_onnx_static STATIC ${srcs} ${ONNX_PROTO_HDRS} ${ONNX
 set_target_properties(${PROJECT_NAME}_onnx_static PROPERTIES OUTPUT_NAME "${PROJECT_NAME}_onnx")
 set_target_properties(${PROJECT_NAME}_onnx PROPERTIES CLEAN_DIRECT_OUTPUT 1)
 set_target_properties(${PROJECT_NAME}_onnx_static PROPERTIES CLEAN_DIRECT_OUTPUT 1)
-install(TARGETS ${PROJECT_NAME}_onnx ${PROJECT_NAME}_onnx_static
-        LIBRARY DESTINATION lib
-        ARCHIVE DESTINATION lib)
+install(TARGETS ${PROJECT_NAME}_onnx
+        RUNTIME DESTINATION lib
+        LIBRARY DESTINATION lib)

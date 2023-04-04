@@ -155,6 +155,7 @@ class ConstantPaddingCalculation : public PaddingLayer::CalculationStrategy
     {
         throw std::logic_error("PaddingLayer[PaddingLayer] padded values in delta must not affect to derivative in constant padding");
     }
+ ~ConstantPaddingCalculation(){}
 };
 
 class ReflectionPaddingCalculation : public PaddingLayer::CalculationStrategy
@@ -225,7 +226,7 @@ class ReplicationPaddingCalculation : public PaddingLayer::CalculationStrategy
         : CalculationStrategy(layerParameters, networkParameters)
     {
     }
-
+    ~ReplicationPaddingCalculation(){}
     bool isNeedToGetFillingValueFromInput(const Coordinates& /* outputElementPosition */) const final { return true; }
 
     Coordinates getFillingValuePositionInInputAccordingFillingMode(const Coordinates& outputElementPosition) const final
@@ -243,7 +244,7 @@ class ReplicationPaddingCalculation : public PaddingLayer::CalculationStrategy
         size_t widthIdxInDerivative = calculatePositionUsing(mInputWidth, mLeftPadding, deltaElementPosition.WidthIdx);
         return { deltaElementPosition.BatchIdx, deltaElementPosition.DepthIdx, heightIdxInDerivative, widthIdxInDerivative };
     }
-
+ 
   private:
     static size_t calculatePositionUsing(size_t inputDimension, size_t paddingBeforeInput, size_t outputPosition)
     {

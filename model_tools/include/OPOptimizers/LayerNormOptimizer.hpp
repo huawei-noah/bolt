@@ -140,8 +140,8 @@ class LayerNormOptimizer : public OPOptimizer {
             if (k < spec->num_operator_specs && spec->ops[k].type == OT_Power &&
                 spec->ops[k].ps.power_spec.scale == 1 && spec->ops[k].ps.power_spec.power == 1 &&
                 UNI_ABS(spec->ops[k].ps.power_spec.shift) < 0.0001) {
-	        k++;
-	    }
+                k++;
+            }
             if (k < spec->num_operator_specs && spec->ops[k].type == OT_Eltwise &&
                 spec->ops[k].num_inputs == 2 && spec->ops[k].ps.eltwise_spec.mode == ELTWISE_DIV) {
                 k++;
@@ -185,7 +185,8 @@ class LayerNormOptimizer : public OPOptimizer {
                 for (int j = i; j < k; j++) {
                     setOperatorInvalid(spec, j, true);
                 }
-                UNI_STRCPY(spec->ops[k].output_tensors_name[0], spec->ops[k + 4].output_tensors_name[0]);
+                UNI_STRCPY(
+                    spec->ops[k].output_tensors_name[0], spec->ops[k + 4].output_tensors_name[0]);
                 for (int j = 1; j < 5; j++) {
                     setOperatorInvalid(spec, k + j, false);
                 }

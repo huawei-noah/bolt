@@ -708,3 +708,19 @@ class LayerParameter():
         exp_param.scale = scale
         exp_param.shift = shift
         self.layerParameter.exp_param.CopyFrom(exp_param)
+
+    def cum_param(self, operation, axis, exclusive, reverse):
+        cum_param = pb.CumParameter()
+        cum_param.operation = operation
+        cum_param.axis = axis
+        cum_param.exclusive = exclusive
+        cum_param.reverse = reverse
+        self.layerParameter.cum_param.CopyFrom(cum_param)
+
+    def onehot_param(self, axis, depth, off_value, on_value):
+        onehot_param = pb.OneHotParameter()
+        onehot_param.axis = axis
+        onehot_param.depth = depth
+        onehot_param.off_value = off_value
+        onehot_param.on_value = on_value
+        self.layerParameter.onehot_param.CopyFrom(onehot_param)

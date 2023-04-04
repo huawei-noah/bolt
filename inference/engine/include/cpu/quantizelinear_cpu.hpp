@@ -43,6 +43,9 @@ public:
         if (featureScale.size() > 0 && featureScale[0].size() > 0 && featureScale[0][0] > 0) {
             scale = featureScale[0][0];
         }
+        if (scale <= 0) {
+            scale = this->inputTensors[0].get_scale();
+        }
         CHECK_STATUS(
             quantize(this->inputTensors[0], &this->outputTensors[0], &scale, &this->archInfo));
         this->outputTensors[0].set_scale(scale);
@@ -52,18 +55,19 @@ public:
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
         TensorDesc outputDesc = inTensors[0]->get_desc();
-        if (this->dt == DT_F32_8Q || this->dt == DT_F16_8Q) {
-#ifdef _USE_X86
-            outputDesc.dt = p.dt;
-
-            // special case, matmul mvm
-            if (outputDesc.nDims >= 2 && outputDesc.dims[1] != 1) {
-                outputDesc.dt = DT_U8_Q;
+#ifdef _USE_INT8
+        if (isQuantMixDataType(this->dt)) {
+            if (IS_X86(this->archInfo.arch)) {
+                outputDesc.dt = p.dt;
+                // special case, matmul mvm
+                if (outputDesc.nDims >= 2 && outputDesc.dims[1] != 1) {
+                    outputDesc.dt = get_activation_quant_data_type();
+                }
+            } else {
+                outputDesc.dt = get_activation_quant_data_type();
             }
-#else
-            outputDesc.dt = DT_I8;
-#endif
         }
+#endif
         outTensors[0]->resize(outputDesc);
         return SUCCESS;
     }

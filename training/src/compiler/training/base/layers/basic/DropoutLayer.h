@@ -32,7 +32,7 @@ class DropoutLayer : public BasicLayer
 {
   public:
     DropoutLayer(const Name& name, const DropoutParams& params, NetworkParameters& networkParameters);
-
+    ~DropoutLayer(){}
   private:
     // typedef std::vector<float> Random;
     // Random mRandom;

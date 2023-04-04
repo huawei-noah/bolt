@@ -12,10 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "cpu/arm/int8/blas_int8.h"
-#include "cpu/arm/blas_arm.h"
-#include "cpu/arm/int8/blas_matrix_transpose.h"
-#include "uni.h"
-#include "thread_affinity.h"
+#include "cpu/arm/int8/v7/blas_matrix_transpose.h"
 
 EE matrix_matrix_multiply_transform_rhsN_int8(TensorDesc desc, INT8 *src, INT8 *dst)
 {
@@ -23,7 +20,7 @@ EE matrix_matrix_multiply_transform_rhsN_int8(TensorDesc desc, INT8 *src, INT8 *
     DataFormat df;
     U32 N, K;
     CHECK_STATUS(tensor2dGet(desc, &dt, &df, &K, &N));
-    U32 K4 = pad_to_4_multiple(K);
+    U32 K4 = UNI_ALIGN(K, 4);
     int i = 0;
     for (; i < (int)N - 7; i += 8) {
         matrix2_trans_int8(8, K, N, src + i, dst + i * K4);
@@ -40,7 +37,7 @@ EE matrix_matrix_multiply_transform_rhsT_int8(TensorDesc desc, INT8 *src, INT8 *
     DataFormat df;
     U32 N, K;
     CHECK_STATUS(tensor2dGet(desc, &dt, &df, &N, &K));
-    U32 K4 = pad_to_4_multiple(K);
+    U32 K4 = UNI_ALIGN(K, 4);
     int i = 0;
     for (; i < (int)N - 7; i += 8) {
         matrix1_trans_int8(8, K, K, src + i * K, dst + i * K4);
@@ -233,7 +230,7 @@ inline void mmm_N4_MTail(U32 MInner, U32 M, U32 K, INT8 *matrix1, INT8 *matrix2,
             res[i][1] = vaddw_s16(res[i][1], vget_high_s16(res_s16[i]));
         }
     }
-    int tmp[8];
+    I32 tmp[8];
     for (int i = 0; i < 4; i++) {
         vst1q_s32(tmp, res[i][0]);
         vst1q_s32(tmp + 4, res[i][1]);
@@ -247,7 +244,7 @@ EE mmm_int8(
     int M, int N, int K, bool transposeA, INT8 *matrix1, INT8 *matrix2, INT8 *tmp, I32 *result, Arch arch)
 {
     int blockK = K;
-    U32 K4 = pad_to_4_multiple(K);
+    U32 K4 = UNI_ALIGN(K, 4);
     int blockM = 96;
     for (int k = 0; k < K; k += blockK) {
         int KInner = UNI_MIN(blockK, K - k);

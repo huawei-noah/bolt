@@ -96,7 +96,7 @@ int MatmulTest(int argc, char **argv, DataType dt, DataType filterDataType)
 
         // check
         ut_check_v(get_ptr_from_tensor(matrixCTensor, CPU_GENERAL),
-            get_ptr_from_tensor(matrixCTensorRef, CPU_GENERAL), m * n, dt, 0.0, __FILE__, __LINE__);
+            get_ptr_from_tensor(matrixCTensorRef, CPU_GENERAL), m * n, dt, 0.0);
     }
 
     // benchmark
@@ -124,7 +124,11 @@ int MatmulTest(int argc, char **argv, DataType dt, DataType filterDataType)
 int main(int argc, char **argv)
 {
 #ifdef _USE_INT8
+#ifdef _USE_FP16
     MatmulTest(argc, argv, DT_F32, DT_F32);
+#else
+    MatmulTest(argc, argv, DT_F16, DT_F16);
+#endif
 #endif
     return 0;
 }

@@ -25,7 +25,6 @@ namespace raul
  * @brief BinaryCrossEntropyLoss
  * This is used for measuring the error of a reconstruction in for example an auto-encoder. Note that the targets y should be numbers between 0 and 1
  * @see
- * https://pytorch.org/docs/stable/generated/torch.nn.BCELoss.html
  */
 class BinaryCrossEntropyLoss : public BasicLayer
 {

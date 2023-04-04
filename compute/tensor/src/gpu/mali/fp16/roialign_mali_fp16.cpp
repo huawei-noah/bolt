@@ -15,7 +15,7 @@
 #include "gpu/mali/cl/kernel_option/roialign_opt.h"
 inline EE roialign_checkpara_mali_fp16(std::vector<TensorDesc> inputDescs, TensorDesc outputDesc)
 {
-    if (outputDesc.dt != DT_F16 || inputDescs[0].dt != DT_F16 || inputDescs[1].dt != DT_F16) {
+    if (outputDesc.dt != inputDescs[0].dt || outputDesc.dt != inputDescs[1].dt) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
     return SUCCESS;
@@ -43,7 +43,7 @@ inline EE process_input(GCLHandle_t handle, TensorDesc inputDesc, GCLMem_t input
     U32 off[3] = {0, 0, 0};
     MemFlags flag = CL_MEM_READ_WRITE;
     CHECK_STATUS(
-        gclmem_set_desc_padding(&(InTmp.desc), str, off, DT_F16, DF_NCHW, GCL_MEM_BUF, flag));
+        gclmem_set_desc_padding(&(InTmp.desc), str, off, dt, DF_NCHW, GCL_MEM_BUF, flag));
     CHECK_STATUS(ocl_data_trans_form(handle, input, &InTmp, 0, 0, type));
     return SUCCESS;
 }
@@ -71,7 +71,7 @@ inline EE process_output(GCLHandle_t handle, TensorDesc outputDesc, Mem outMem, 
     U32 off[3] = {0, 0, 0};
     MemFlags flag = CL_MEM_READ_WRITE;
     CHECK_STATUS(
-        gclmem_set_desc_padding(&(outTmp.desc), str, off, DT_F16, DF_NCHWC4, GCL_MEM_BUF, flag));
+        gclmem_set_desc_padding(&(outTmp.desc), str, off, dt, DF_NCHWC4, GCL_MEM_BUF, flag));
     CHECK_STATUS(ocl_data_trans_form(handle, &outTmp, output, 0, 0, type));
     return SUCCESS;
 }
@@ -130,7 +130,7 @@ inline EE roialign_core_mali_fp16(GCLHandle_t handle,
     char kernelName[128];
     KernelOpt kernelOpt;
     CHECK_STATUS(set_roialign_opt_mali(
-        useNchwFormat, roiAlignParamSpec.mode, DT_F16, imt, omt, kernelName, &kernelOpt));
+        useNchwFormat, roiAlignParamSpec.mode, dt, imt, omt, kernelName, &kernelOpt));
     Kernel kernel;
     U32 gs[3] = {1, 1, 1};
     U32 ls[3] = {0, 0, 0};
@@ -162,7 +162,7 @@ EE roialign_infer_forward_tmp_bytes_mali_fp16(
 {
     *bytes = 0;
     if (need_process_input(inputDesc, gclmemInputDesc)) {
-        *bytes = ALIGN(tensorNumBytes(inputDesc), BUFFER_ALIGN_BASE);
+        *bytes = UNI_ALIGN(tensorNumBytes(inputDesc), BUFFER_ALIGN_BASE);
     }
     if (need_process_output(inputDesc, outputDesc)) {
         *bytes += tensorNumBytes(outputDesc);

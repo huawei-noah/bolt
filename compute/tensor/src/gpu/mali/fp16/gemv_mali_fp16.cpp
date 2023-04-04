@@ -37,13 +37,14 @@ inline bool gemvNeedTransInput(TensorDesc cpuDesc, GCLMemDesc desc)
 
 inline EE gemvTransInput(GCLHandle_t handle, GCLMem_t input, GCLMem_t inputTran)
 {
+    DataType idt;
     U32 iw, ih, ic, in;
-    gclmem_get_desc_dim(input->desc, NULL, NULL, &in, &ic, &ih, &iw);
+    gclmem_get_desc_dim(input->desc, &idt, NULL, &in, &ic, &ih, &iw);
     GCLMemDesc desc = input->desc;
     U32 str[3] = {iw, ih, ic * in};
     U32 off[3] = {0, 0, 0};
     MemFlags flag = CL_MEM_READ_WRITE;
-    CHECK_STATUS(gclmem_set_desc_padding(&desc, str, off, DT_F16, DF_NCHW, GCL_MEM_BUF, flag));
+    CHECK_STATUS(gclmem_set_desc_padding(&desc, str, off, idt, DF_NCHW, GCL_MEM_BUF, flag));
     inputTran->desc = desc;
     MemTransFormType type = (input->desc.memFormat == DF_NCHWC4) ? NCHWC4_TO_NCHW : NCHW_TO_NCHW;
     CHECK_STATUS(ocl_data_trans_form(handle, input, inputTran, 0, 0, type));
@@ -54,7 +55,7 @@ inline EE gemv_build_run_info_core(GCLHandle_t handle,
     U32 item_c,
     U32 row,
     U32 pitch,
-    ActivationMode activeMode,
+    ActivationParamSpec activeMode,
     bool useBias,
     bool useOutputNchwc4,
     DataType dt,
@@ -122,7 +123,7 @@ EE gemv_build_run_info(GCLHandle_t handle,
     U32 item_c,
     U32 row,
     U32 pitch,
-    ActivationMode activeMode,
+    ActivationParamSpec activeMode,
     bool useBias,
     bool useOutputNchwc4,
     DataType dt,
@@ -160,7 +161,7 @@ EE gemv_run(GCLHandle_t handle,
 EE gemv(GCLHandle_t handle,
     TensorDesc vecDesc,
     TensorDesc outputDesc,
-    ActivationMode activeMode,
+    ActivationParamSpec activeMode,
     bool useOutputNchwc4,
     U32 *tmpOff,
     GCLMem_t tmpBuf,
@@ -201,7 +202,7 @@ EE gemv(GCLHandle_t handle,
     if (useOutputNchwc4) {
         row = outputDesc.dims[outputDesc.nDims - 2];
         pitch = outputDesc.dims[outputDesc.nDims - 1];
-        on_str = ow_str * oh_str * ALIGN(row, 4);
+        on_str = ow_str * oh_str * UNI_ALIGN(row, 4);
     } else {
         row = outputDesc.dims[0];
         pitch = (outputDesc.nDims > 1) ? outputDesc.dims[1] : 1;
@@ -225,13 +226,13 @@ TensorDesc gemv_transform_filter_desc(TensorDesc filterDesc, U32 item_h, U32 ite
     U32 fn = filterDesc.dims[filterDesc.nDims - 1];
     TensorDesc desc;
     desc.df = DF_NCHW;
-    desc.dt = DT_F16;
+    desc.dt = filterDesc.dt;
     desc.nDims = 4;
     desc.dims[3] = 1;
     desc.dims[2] = 1;
     if (item_c > 16) {
         item_c = item_c >> 4;
-        desc.dims[0] = ALIGN(fc, item_c);
+        desc.dims[0] = UNI_ALIGN(fc, item_c);
         desc.dims[1] = fn;
     } else {
         desc.dims[0] = fn * item_c;
@@ -254,7 +255,7 @@ inline EE gemv_transform_filter_core(
         useReduceMode = true;
         item_c = item_c >> 4;
     }
-    U32 fcAlign = ALIGN(fc, item_c);
+    U32 fcAlign = UNI_ALIGN(fc, item_c);
     gs[0] = fcAlign >> 2;
     gs[1] = fn;
     CHECK_STATUS(set_gemv_trans_mat_opt(item_c, useReduceMode, dt, kernelName, &kernelOpt));
@@ -303,7 +304,7 @@ EE gemv_infer_forward_tmp_bytes_mali_fp16(
         }
     }
     if (item_c > 16) {
-        size = ALIGN(size, BUFFER_ALIGN_BASE) + row * pitch * 32 * bytesOf(inputDesc.dt);
+        size = UNI_ALIGN(size, BUFFER_ALIGN_BASE) + row * pitch * 32 * bytesOf(inputDesc.dt);
     }
     *bytes = size;
     return SUCCESS;

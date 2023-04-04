@@ -25,8 +25,6 @@ namespace raul
  *
  *  Computes half the L2 norm of a tensor without sqrt.
  *
- *  @see
- *  https://www.tensorflow.org/api_docs/python/tf/nn/l2_loss
  */
 class L2SquaredNormLayer : public BasicLayer
 {

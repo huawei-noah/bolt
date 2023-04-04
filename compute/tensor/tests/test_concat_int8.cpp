@@ -98,7 +98,7 @@ int int8ConcatTest(int argc, char **argv, DataType dt)
         }
 
         // check
-        ut_check_v(out_d, tmp, in_len, dt, 0.05, __FILE__, __LINE__);
+        ut_check_v(out_d, tmp, in_len, dt, 0.05);
         free(tmp);
         free(out_d);
     }
@@ -126,7 +126,11 @@ int int8ConcatTest(int argc, char **argv, DataType dt)
 int main(int argc, char **argv)
 {
 #ifdef _USE_INT8
+#ifdef _USE_FP16
     int8ConcatTest(argc, argv, DT_F16);
+#else
+    int8ConcatTest(argc, argv, DT_F32);
+#endif
 #endif
     return 0;
 }

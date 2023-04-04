@@ -22,7 +22,7 @@ public:
     {
         this->dt = dt;
     }
-
+    ~PReLU(){}
     OperatorType get_type() override
     {
         return OT_PRelu;

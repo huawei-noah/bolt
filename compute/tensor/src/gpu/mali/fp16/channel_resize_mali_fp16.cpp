@@ -16,7 +16,7 @@
 
 inline EE channel_resize_checkpara_mali_fp16(TensorDesc inputDesc, TensorDesc outputDesc)
 {
-    if (inputDesc.dt != outputDesc.dt || inputDesc.dt != DT_F16) {
+    if (inputDesc.dt != outputDesc.dt) {
         return NOT_SUPPORTED;
     }
     return SUCCESS;

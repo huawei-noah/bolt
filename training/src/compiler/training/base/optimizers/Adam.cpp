@@ -665,7 +665,6 @@ std::vector<dtype> AdamQuantized::createQuantileMap(const std::vector<dtype>& pa
 
 std::vector<dtype> AdamQuantized::createNormalQuantileMap(bool isSigned)
 {
-    //https://github.com/facebookresearch/bitsandbytes
     //bitsandbytes/functional.py optimal_normal, optimal_half_normal
 
     std::vector<dtype> ret;
@@ -684,7 +683,6 @@ std::vector<dtype> AdamQuantized::createNormalQuantileMap(bool isSigned)
 
 std::vector<half> AdamQuantized::createNormalQuantileMapFP16(bool isSigned)
 {
-    //https://github.com/facebookresearch/bitsandbytes
     //bitsandbytes/functional.py optimal_normal, optimal_half_normal
 
     std::vector<half> ret;
@@ -703,7 +701,6 @@ std::vector<half> AdamQuantized::createNormalQuantileMapFP16(bool isSigned)
 
 std::vector<dtype> AdamQuantized::createDynamicMap(bool isSigned, int n)
 {
-    //https://github.com/facebookresearch/bitsandbytes
     //bitsandbytes/functional.py create_dynamic_map()
     std::vector<dtype> ret;
 

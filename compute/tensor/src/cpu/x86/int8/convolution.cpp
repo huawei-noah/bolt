@@ -40,7 +40,7 @@ EE convolution_infer_forward_tmp_bytes_int8(TensorDesc inputDesc,
     U32 ih_pad = ih + paddingT + paddingB;
     U32 iw_pad = iw + paddingL + paddingR;
 
-    U32 icAlignSize = 8;
+    U32 icAlignSize = 16;
     U32 icPadding = (ic + icAlignSize - 1) / icAlignSize * icAlignSize;
 
     EE ret = SUCCESS;
@@ -124,19 +124,20 @@ EE convolution_int8(TensorDesc inputDesc,
     CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
     CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
 
-    if (!(odf == DF_NCHWC16)) {
+    if (!(odf == DF_NCHWC16 || odf == DF_NCHWC8)) {
         CHECK_STATUS(NOT_MATCH);
     }
-    if (!(ic == fc && oc == fn)) {
-        CHECK_STATUS(NOT_MATCH);
-    }
+    // if (!(ic == fc && oc == fn)) {
+    //     CHECK_STATUS(NOT_MATCH);
+    // }
 
     EE ret = SUCCESS;
     switch (algorithm) {
-        case CONVOLUTION_ALGORITHM_DIRECT:
+        case CONVOLUTION_ALGORITHM_DIRECT: {
             ret = convolution_direct(inputDesc, input, eltwiseInput, filterDesc, filter, convParamSpec, biasDesc,
                 bias, tmpBytes, tmp, outputDesc, output, scale, activationDesc);
             break;
+        }
         case CONVOLUTION_ALGORITHM_POINTWISE:
             ret = convolution_1x1_direct(inputDesc, input, eltwiseInput, filterDesc, filter, convParamSpec,
                 biasDesc, bias, tmpBytes, tmp, outputDesc, output, scale, activationDesc);

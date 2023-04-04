@@ -37,7 +37,8 @@ static ArchInfo UT_SERIAL_ARCHINFO = {CPU_GENERAL, NULL};
 
 // whether to check right
 const int UT_CHECK = 1;
-
+// loop times to warm up
+const int UT_WARMUP = 6;
 // loop times to benchmark
 const int UT_LOOPS = 6;
 
@@ -57,14 +58,7 @@ inline F32 ut_init_s(DataType dt, UT_RANDOM_TYPE type)
     }
 
     F32 s = 0;
-    if (0
-#ifdef _USE_FP32
-        || dt == DT_F32
-#endif
-#ifdef _USE_FP16
-        || dt == DT_F16
-#endif
-    ) {
+    if (0 || dt == DT_F32 || dt == DT_F32_8Q || dt == DT_F16 || dt == DT_F16_8Q || dt == DT_BF16) {
         s = rand() % 1000 / 1000.0 - 0.5;
     } else {
         s = rand() % 100 - 50;
@@ -88,43 +82,50 @@ inline void ut_init_v(U8 *data, U32 len, DataType dt, UT_RANDOM_TYPE type)
 
     for (U32 i = 0; i < len; i++) {
         switch (dt) {
-#ifdef _USE_FP32
             case DT_F32: {
-                F32 *dataPtr = (F32 *)data;
-                dataPtr[i] = ut_init_s(dt, type);
+                F32 *p = (F32 *)data;
+                p[i] = ut_init_s(dt, type);
                 break;
             }
-#endif
-#ifdef _USE_FP16
             case DT_F16: {
-                F16 *dataPtr = (F16 *)data;
-                dataPtr[i] = ut_init_s(dt, type);
+                unsigned short *p = (unsigned short *)data;
+                p[i] = float32ToFloat16(ut_init_s(dt, type));
                 break;
             }
-#endif
+            case DT_BF16: {
+                unsigned short *p = (unsigned short *)data;
+                p[i] = float32ToBfloat16(ut_init_s(dt, type));
+                break;
+            }
             case DT_I32: {
-                I32 *dataPtr = (I32 *)data;
-                dataPtr[i] = ut_init_s(dt, type);
+                I32 *p = (I32 *)data;
+                p[i] = ut_init_s(dt, type);
                 break;
             }
             case DT_U32: {
-                U32 *dataPtr = (U32 *)data;
-                dataPtr[i] = ut_init_s(dt, type);
+                U32 *p = (U32 *)data;
+                p[i] = ut_init_s(dt, type);
                 break;
             }
             case DT_I8: {
-                INT8 *dataPtr = (INT8 *)data;
-                dataPtr[i] = ut_init_s(dt, type);
+                INT8 *p = (INT8 *)data;
+                p[i] = ut_init_s(dt, type);
+                break;
+            }
+            case DT_U8:
+            case DT_U8_Q: {
+                UINT8 *p = (UINT8 *)data;
+                p[i] = ut_init_s(dt, type);
                 break;
             }
             case DT_BIN11: {
-                BIN8 *dataPtr = (BIN8 *)data;
-                dataPtr[i] = ut_init_s(dt, type);
+                BIN8 *p = (BIN8 *)data;
+                p[i] = ut_init_s(dt, type);
                 break;
             }
             case DT_BIN01: {
-                BIN8 *dataPtr = (BIN8 *)data;
-                dataPtr[i] = ut_init_s(dt, type);
+                BIN8 *p = (BIN8 *)data;
+                p[i] = ut_init_s(dt, type);
                 break;
             }
             default:
@@ -142,98 +143,71 @@ inline U8 *ut_input_v(U32 len, DataType dt, UT_RANDOM_TYPE type)
 }
 
 // unit test element check
-inline void ut_check_s(F32 a, F32 b, F32 threshold, const char *file, int line, int index)
+inline void ut_check_s(F32 a, F32 b, F32 threshold, int index)
 {
     if (!((a <= b + threshold) && (a >= b - threshold))) {
-        printf("check in %s at line %d, %d @ %f %f\n", file, line, index, a, b);
-        exit(1);
+        UNI_ERROR_LOG("check failed: %d @ %f %f\n", index, a, b);
     }
+}
+
+inline F32 ut_get(DataType dt, U8 *A)
+{
+    F32 a;
+    switch (dt) {
+        case DT_F32:
+            a = *((F32 *)A);
+            break;
+        case DT_F16:
+            a = float16ToFloat32(*((unsigned short *)A));
+            break;
+        case DT_BF16:
+            a = bfloat16ToFloat32(*((unsigned short *)A));
+            break;
+        case DT_I32:
+            a = *((I32 *)A);
+            break;
+        case DT_U32:
+            a = *((U32 *)A);
+            break;
+        case DT_I8:
+            a = *((INT8 *)A);
+            break;
+        case DT_U8:
+            a = *((U8 *)A);
+            break;
+        case DT_BIN11:
+            a = *((BIN8 *)A);
+            break;
+        case DT_BIN01:
+            a = *((BIN8 *)A);
+            break;
+        default:
+            UNI_ERROR_LOG("unsupported data type.\n");
+    }
+    return a;
 }
 
 // unit test array check
-inline void ut_check_v(
-    void *A, void *B, U32 len, DataType dt, F32 threshold, const char *file, int line)
+inline void ut_check_v(void *A, void *B, U32 len, DataType dt, F32 threshold)
 {
-    F32 a = 0, b = 0;
+    U8 *p0 = (U8 *)A;
+    U8 *p1 = (U8 *)B;
     for (U32 i = 0; i < len; i++) {
-        switch (dt) {
-#ifdef _USE_FP32
-            case DT_F32:
-                a = ((F32 *)A)[i];
-                b = ((F32 *)B)[i];
-                break;
-#endif
-#ifdef _USE_FP16
-            case DT_F16:
-                a = ((F16 *)A)[i];
-                b = ((F16 *)B)[i];
-                break;
-#endif
-            case DT_I32:
-                a = ((I32 *)A)[i];
-                b = ((I32 *)B)[i];
-                break;
-            case DT_U32:
-                a = ((U32 *)A)[i];
-                b = ((U32 *)B)[i];
-                break;
-            case DT_I8:
-                a = ((INT8 *)A)[i];
-                b = ((INT8 *)B)[i];
-                break;
-            case DT_U8:
-                a = ((U8 *)A)[i];
-                b = ((U8 *)B)[i];
-                break;
-            case DT_BIN11:
-                a = ((BIN8 *)A)[i];
-                b = ((BIN8 *)B)[i];
-                break;
-            case DT_BIN01:
-                a = ((BIN8 *)A)[i];
-                b = ((BIN8 *)B)[i];
-                break;
-            default:
-                UNI_ERROR_LOG("unsupported data type.\n");
-        }
-        ut_check_s(a, b, threshold, file, line, i);
+        F32 a = ut_get(dt, p0);
+        F32 b = ut_get(dt, p1);
+        p0 += bytesOf(dt);
+        p1 += bytesOf(dt);
+        ut_check_s(a, b, threshold, i);
     }
 }
 
-inline void ut_check_v(void *A, F32 val, U32 len, DataType dt, const char *file, int line)
+inline void ut_check_v(void *A, F32 val, U32 len, DataType dt)
 {
-    F32 a;
+    U8 *p0 = (U8 *)A;
     for (U32 i = 0; i < len; i++) {
-        switch (dt) {
-#ifdef _USE_FP32
-            case DT_F32:
-                a = ((F32 *)A)[i];
-                break;
-#endif
-#ifdef _USE_FP16
-            case DT_F16:
-                a = ((F16 *)A)[i];
-                break;
-#endif
-            case DT_I32:
-                a = ((I32 *)A)[i];
-                break;
-            case DT_U32:
-                a = ((U32 *)A)[i];
-                break;
-            case DT_U8:
-                a = ((U8 *)A)[i];
-                break;
-            case DT_BIN11:
-                a = ((BIN8 *)A)[i];
-                break;
-            case DT_BIN01:
-                a = ((BIN8 *)A)[i];
-                break;
-            default:
-                UNI_ERROR_LOG("unsupported data type.\n");
-        }
-        ut_check_s(a, val, 0, file, line, i);
+        F32 a = ut_get(dt, p0);
+        p0 += bytesOf(dt);
+        ut_check_s(a, val, 0, i);
     }
 }
 
@@ -252,6 +226,7 @@ inline void ut_check_a(void *A, void *B, U32 len, DataType dt)
     switch (dt) {
         case DT_F32:
         case DT_F16:
+        case DT_BF16:
             UNI_MEMCPY(threshold, threshold_float, sizeof(F32) * num);
             break;
         case DT_U8:
@@ -261,25 +236,13 @@ inline void ut_check_a(void *A, void *B, U32 len, DataType dt)
             UNI_ERROR_LOG("unsupported data type.\n");
     }
 
+    U8 *p0 = (U8 *)A;
+    U8 *p1 = (U8 *)B;
     for (U32 i = 0; i < len; i++) {
-        switch (dt) {
-            case DT_F32:
-                a = ((F32 *)A)[i];
-                b = ((F32 *)B)[i];
-                break;
-#ifdef _USE_FP16
-            case DT_F16:
-                a = ((F16 *)A)[i];
-                b = ((F16 *)B)[i];
-                break;
-#endif
-            case DT_U8:
-                a = ((U8 *)A)[i];
-                b = ((U8 *)B)[i];
-                break;
-            default:
-                break;
-        }
+        F32 a = ut_get(dt, p0);
+        F32 b = ut_get(dt, p1);
+        p0 += bytesOf(dt);
+        p1 += bytesOf(dt);
 
         if (isnan((float)a) || isinf((float)a)) {
             UNI_ERROR_LOG("nan or inf value in ut_check_a of input A\n");

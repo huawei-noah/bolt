@@ -155,7 +155,6 @@ TEST(TestActivationFuncHSwish, ForwardRandUnit)
     const auto eps = TODTYPE(1e-4);
     const auto tensor_size = 1000U;
     // We have a significant change in the range [-4,4]
-    // See https://www.wolframalpha.com/input/?i=x%2F6*min%28max%28x%2B3%2C0%29%2C6%29
     const auto random_range = std::pair<raul::dtype, raul::dtype>(-4.0f, 4.0f);
 
     // Random generator
@@ -202,7 +201,6 @@ TEST(TestActivationFuncHSwish, BackwardRandUnit)
     const auto eps = 1e-6_dt;
     const auto tensor_size = 1000U;
     // We have a significant change in the range [-5,5]
-    // See https://www.wolframalpha.com/input/?i=x%2F6*min%28max%28x%2B3%2C0%29%2C6%29
     const auto random_range = std::pair<raul::dtype, raul::dtype>(-4.0f, 4.0f);
 
     // Random generator

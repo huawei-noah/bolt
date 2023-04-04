@@ -16,8 +16,6 @@
 namespace raul
 {
 
-// https://www.geeksforgeeks.org/interval-tree/
-
 IntervalTree::IntervalTree(size_t totalNodes)
     : mRoot(nullptr)
     , mNodes(totalNodes)
@@ -148,5 +146,4 @@ std::vector<const IntervalTree::Interval*> IntervalTree::findAll(const Interval*
 
     return ret;
 }
-
 } // namespace raul

@@ -117,12 +117,12 @@ int main(int argc, char *argv[])
 #endif
     } else if (affinityPolicyName == "GPU") {
         UNI_ERROR_LOG("Unsupport GPU now\n");
-        exit(-1);
+        return 1;
     } else {
         UNI_ERROR_LOG("Unknow archInfo %s, please use "
                       "CPU_AFFINITY_HIGH_PERFORMANCE/CPU_AFFINITY_LOW_POWER/GPU\n",
             affinityPolicyName.c_str());
-        exit(-1);
+        return 1;
     }
     return 0;
 }

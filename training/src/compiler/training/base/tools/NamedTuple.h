@@ -20,7 +20,6 @@
 namespace
 {
 
-// http://vitiy.info/named-tuple-for-cplusplus/
 
 namespace foonathan
 {

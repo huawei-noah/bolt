@@ -37,7 +37,7 @@ class Normalize : public Transform
     }
 
     std::unique_ptr<Tensor> operator()(const Tensor& tensor) final;
-
+ ~Normalize(){}
   private:
     dtype mNormalizationCoefficient;
 };
@@ -51,7 +51,7 @@ class BuildOneHotVector : public Transform
     }
 
     std::unique_ptr<Tensor> operator()(const Tensor& tensor) final;
-
+~BuildOneHotVector(){}
   private:
     bool hasFractionalPart(dtype v);
 
@@ -69,7 +69,7 @@ class Resize : public Transform
     }
 
     std::unique_ptr<Tensor> operator()(const Tensor&) final;
-
+~Resize(){}
   private:
     size_t mNewHeight;
     size_t mNewWidth;

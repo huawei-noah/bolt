@@ -17,6 +17,9 @@
 template <bool logsoftmax>
 static void softmax_lastAxis_fp32(const F32 *input, I32 loopOuter, I32 loops, F32 *output)
 {
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) if (loopOuter > 1)
+#endif
     for (I32 i = 0; i < loopOuter; i++) {
         const F32 *inputPtr = input + i * loops;
         F32 *outputPtr = output + i * loops;

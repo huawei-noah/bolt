@@ -20,13 +20,15 @@ class ResizeFuseOptimizer : public OPOptimizer {
     bool optimize(ModelSpec *spec) override
     {
         bool hasOptimized = false;
-        for (int i = 0; i < spec->num_operator_specs - 5; i++) {
+        for (int i = 0; i < spec->num_operator_specs - 4; i++) {
             if (spec->ops[i + 1].type == OT_Shape) {
                 if (spec->ops[i + 2].type == OT_TfSlice) {
                     if (spec->ops[i + 3].type == OT_Concat) {
                         std::vector<std::pair<int, int>> prevOpIndexes = searchOperatorIndexByOutput(
                             spec, spec->ops[i + 3].input_tensors_name[1], 0, i);
-                        CHECK_REQUIREMENT(prevOpIndexes.size() == 1);
+                        if (prevOpIndexes.size() != 1) {
+                            continue;
+                        }
                         int weightIndex =
                             searchWeightIndex(spec, spec->ops[prevOpIndexes[0].first].name);
                         if (weightIndex == -1) {

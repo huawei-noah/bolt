@@ -23,12 +23,12 @@ public:
         this->dt = dt;
         this->p = p;
     }
-
+    ~NonMaxSuppression(){}
     OperatorType get_type() override
     {
         return OT_NonMaxSuppression;
     }
-
+      
 protected:
     NonMaxSuppressionParamSpec p;
 };

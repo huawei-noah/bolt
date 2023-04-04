@@ -30,8 +30,6 @@ namespace raul
  * It is also known as a fractionally-strided convolution or a deconvolution
  * (although it is not an actual deconvolution operation).
  *
- * @see
- * https://pytorch.org/docs/stable/generated/torch.nn.ConvTranspose2d.html
  */
 class TransposedConvolution2DLayer : public TrainableLayer
 {

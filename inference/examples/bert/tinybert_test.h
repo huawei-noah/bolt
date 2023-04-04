@@ -110,7 +110,7 @@ static std::string tinybertTestKernel(U32 sequenceIndex,
     return log;
 }
 
-inline void tinybertTest(int argc,
+inline int tinybertTest(int argc,
     char **argv,
     const char **inputNames,
     const char **outputNames,
@@ -128,7 +128,7 @@ inline void tinybertTest(int argc,
     int loopTime = 1;
 
     if (!parse_res.model.second) {
-        exit(-1);
+        return 1;
     }
     if (parse_res.model.second) {
         modelPath = parse_res.model.first;
@@ -186,7 +186,6 @@ inline void tinybertTest(int argc,
     {
         if (useGPU) {
             UNI_ERROR_LOG("GPU mode has not support OpenMP for tinybert\n");
-            exit(1);
         }
         std::shared_ptr<CNN> pipeline = std::shared_ptr<CNN>(new CNN());
         int threadId = omp_get_thread_num();
@@ -228,5 +227,6 @@ inline void tinybertTest(int argc,
     UNI_CI_LOG("intent correct rate: %f %%\n", *intentRate);
     UNI_CI_LOG("slot   correct rate: %f %%\n", *slotRate);
     UNI_CI_LOG("avg_time:%fms/sequence\n", 1.0 * totalTime / validSequence);
+    return 0;
 }
 #endif  // _H_TINYBERT_TEST

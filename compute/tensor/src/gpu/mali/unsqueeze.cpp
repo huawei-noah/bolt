@@ -36,22 +36,8 @@ EE unsqueeze_infer_forward_tmp_bytes_mali(TensorDesc inputDesc,
     GCLMemDesc gclmemOutputDesc,
     U32 *bytes)
 {
-    EE ret = SUCCESS;
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = unsqueeze_infer_forward_tmp_bytes_mali_fp16(
-                inputDesc, gclmemInputDesc, outputDesc, gclmemOutputDesc, bytes);
-            break;
-        }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return unsqueeze_infer_forward_tmp_bytes_mali_fp16(
+        inputDesc, gclmemInputDesc, outputDesc, gclmemOutputDesc, bytes);
 }
 
 EE unsqueeze_mali(GCLHandle_t handle,
@@ -61,20 +47,6 @@ EE unsqueeze_mali(GCLHandle_t handle,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
-    EE ret = SUCCESS;
     CHECK_STATUS(unsqueeze_checkpara_mali(handle, inputDesc, input, outputDesc, output));
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = unsqueeze_mali_fp16(handle, inputDesc, input, tmpbuf, outputDesc, output);
-            break;
-        }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return unsqueeze_mali_fp16(handle, inputDesc, input, tmpbuf, outputDesc, output);
 }

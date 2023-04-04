@@ -36,17 +36,6 @@ EE embedding_mali(GCLHandle_t handle,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
-    EE ret = SUCCESS;
     CHECK_STATUS(embedding_checkpara_mali(handle, input, weight, output));
-    switch (outputDesc.dt) {
-        case DT_F16: {
-            ret = embedding_mali_fp16(
-                handle, inputDesc, input, weightDesc, weight, p, outputDesc, output);
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return embedding_mali_fp16(handle, inputDesc, input, weightDesc, weight, p, outputDesc, output);
 }

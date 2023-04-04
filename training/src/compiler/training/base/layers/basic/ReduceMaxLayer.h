@@ -25,8 +25,6 @@ namespace raul
  * If chosen dimension is raul::Dimension::Default (or no dimension specified),
  * layer returns global maximum.
  *
- * @see
- * https://www.tensorflow.org/api_docs/python/tf/math/reduce_max
  */
 using ReduceMaxLayer = ReduceExtremumLayer<raul::Max>;
 

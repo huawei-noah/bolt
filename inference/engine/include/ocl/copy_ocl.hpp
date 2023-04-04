@@ -54,13 +54,13 @@ public:
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
         this->needSetKernelVec = true;
-        CHECK_STATUS(copy_infer_output_size(inTensors, &this->archInfo));
+        EE ret = copy_infer_output_size(inTensors, &this->archInfo);
         auto desc = outTensors[0]->get_desc();
         desc.dt = this->dt;
         desc.df = getTensorDefaultDataFormat(0);
         desc.nDims = 0;
         outTensors[0]->resize(desc);
-        return SUCCESS;
+        return ret;
     }
 
     REGISTER_OCL_OPERATOR_RUN

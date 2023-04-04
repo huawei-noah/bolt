@@ -22,6 +22,7 @@ inline static void gather(const TensorDesc &dataDesc,
     const TensorDesc &outputDesc,
     T *output)
 {
+    int src_length = tensorNumElements(dataDesc);
     int axis = (p.axis + dataDesc.nDims) % dataDesc.nDims;
     axis = dataDesc.nDims - 1 - axis;
     int outer_loop = 1, k = dataDesc.dims[axis], loop = tensorNumElements(indexDesc), inner_loop = 1;
@@ -43,7 +44,9 @@ inline static void gather(const TensorDesc &dataDesc,
         //for (U32 j = 0; j < loop; j++, dst_index += tile_size)
         int stable_index = index[j] < 0 ? index[j] + k : index[j];
         int src_index = (i * k + stable_index) * tile_size;
-        UNI_MEMCPY(output + dst_index, data + src_index, tile_size * sizeof(T));
+        if (src_index < src_length) {
+            UNI_MEMCPY(output + dst_index, data + src_index, tile_size * sizeof(T));
+        }
     }
 }
 
@@ -83,40 +86,39 @@ inline static void gatherND(const TensorDesc &dataDesc,
         int k = indexDesc.dims[indexDesc.nDims - 1 - i];
         batch_dims_size *= k;
     }
-    int k = indexDesc.dims[indexDesc.nDims - 1];
-    int t = tensorNumElements(indexDesc) / batch_dims_size / k;
-    TensorDesc newDataDesc = dataDesc;
-    int axis = (p.batch_dims + dataDesc.nDims) % dataDesc.nDims;
-    axis = dataDesc.nDims - 1 - axis;
-    newDataDesc.dims[axis + 1] = batch_dims_size;
-    newDataDesc.nDims = axis + 1 + 1;
-
-    int tile_dims = newDataDesc.nDims - (k + 1);
+    TensorDesc desc = dataDesc;
+    if (p.batch_dims > 0) {
+        desc.nDims = desc.nDims - p.batch_dims + 1;
+        desc.dims[desc.nDims - 1] = batch_dims_size;
+    }
+    int k = indexDesc.dims[0];
+    int t = tensorNumElements(indexDesc) / k;
+    int tile_dims = dataDesc.nDims - p.batch_dims - k;
     U32 tile_size = 1;
     for (int i = 0; i < tile_dims; i++) {
-        tile_size *= newDataDesc.dims[i];
+        tile_size *= dataDesc.dims[i];
     }
 #ifdef _USE_OPENMP
 #pragma omp parallel num_threads(OMP_NUM_THREADS)
 #endif
     {
-        U32 gather_index[16] = {0};
-        gather_index[tile_dims + k] = p.batch_dims;
+        TensorDesc src = desc;
 #ifdef _USE_OPENMP
 #pragma omp for
 #endif
         for (int o = 0; o < batch_dims_size * t; o++) {
-            int batch_dim = o / t;
             int outer_dim = o % t;
-            int i = o * k;
-            int dst_index = o * tile_size;
-            //for (int batch_dim = 0, i = 0, dst_index = 0; batch_dim < batch_dims_size; batch_dim++)
-            //    for (int outer_dim = 0; outer_dim < t; outer_dim++, i += k, dst_index += tile_size) {
-            for (int j = 0; j < k; j++) {
-                gather_index[tile_dims + k - 1 - j] = index[i + j];
+            int i = outer_dim * k;
+            int r = src.nDims - 1;
+            if (p.batch_dims > 0) {
+                int batch_dim = o / t;
+                src.dims[r--] = batch_dim;
             }
-            U32 src_index = calculateGlobalIndex(gather_index, newDataDesc.dims, newDataDesc.nDims);
-            UNI_MEMCPY(output + dst_index, data + src_index, tile_size * sizeof(T));
+            for (int j = 0; j < k; j++) {
+                src.dims[r--] = index[i + j];
+            }
+            U32 src_index = calculateGlobalIndex(src.dims, desc.dims, desc.nDims);
+            UNI_MEMCPY(output + o * tile_size, data + src_index, tile_size * sizeof(T));
         }
     }
 }

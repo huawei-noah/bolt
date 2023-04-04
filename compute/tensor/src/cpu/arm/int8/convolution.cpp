@@ -15,7 +15,9 @@
 #if defined(_USE_FP16)
 #include "cpu/arm/int8/v8.2/convolution_winograd.h"
 #include "cpu/arm/int8/v8.2/convolution_gemm.h"
-#elif !defined(__aarch64__)
+#elif defined(__aarch64__)
+#include "cpu/arm/int8/v8/convolution_gemm.h"
+#else
 #include "cpu/arm/int8/v7/convolution_gemm.h"
 #endif
 #include "tensor_transpose.h"
@@ -77,7 +79,7 @@ EE convolution_int8(TensorDesc inputDesc,
         //algorithm = CONVOLUTION_ALGORITHM_GEMM;
     }
 
-    EE ret = SUCCESS;
+    EE ret = NOT_SUPPORTED;
     switch (algorithm) {
 #if defined(_USE_FP16)
         case CONVOLUTION_ALGORITHM_WINOGRAD:
@@ -86,7 +88,7 @@ EE convolution_int8(TensorDesc inputDesc,
                 activationDesc, arch);
             break;
 #endif
-#if defined(_USE_FP16) || !defined(__aarch64__)
+#if 1//defined(_USE_FP16) || !defined(__aarch64__)
         case CONVOLUTION_ALGORITHM_GEMM:
             ret = convolution_gemm(inputDesc, inputPtr, scales, filterDesc, filter, scales + 2,
                 convParamSpec, biasDesc, bias, tmpBytes, tmpPtr, outputDesc, output, scales + 1,
@@ -94,7 +96,6 @@ EE convolution_int8(TensorDesc inputDesc,
             break;
 #endif
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
     return ret;

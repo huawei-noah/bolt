@@ -13,75 +13,19 @@
 
 #include "cpu/tensor_computing_cpu.h"
 
-EE reshape_infer_output_size_cpu(TensorDesc inputDesc, ReshapeParamSpec p, TensorDesc *outputDesc)
-{
-    if (nullptr == outputDesc) {
-        return NULL_POINTER;
-    }
-    I32 *shape = p.shape;
-    I32 shape_size = p.num_shape;
-    int inputElementNum = tensorNumElements(inputDesc);
-    int outputElementNum = 1;
-    for (int i = 0; i < shape_size; i++) {
-        outputElementNum *= shape[i];
-    }
-    int index_range = ((int)inputDesc.nDims > shape_size) ? shape_size : inputDesc.nDims;
-    if (inputElementNum > 0 && outputElementNum > 0 && inputElementNum != outputElementNum) {
-        for (int i = 0; i < index_range; i++) {
-            if ((inputElementNum / (int)inputDesc.dims[inputDesc.nDims - 1 - i]) ==
-                (outputElementNum / shape[i])) {
-                shape[i] = inputDesc.dims[inputDesc.nDims - 1 - i];
-                break;
+template <typename T>
+inline void trans(T *input, T *output, U32 in, U32 ic, U32 ihiw, U32 cx) {
+    for (U32 n = 0; n < in; n++) {
+        for (U32 c = 0; c < ic; c++) {
+            for (U32 hw = 0; hw < ihiw; hw++) {
+                for (U32 c8 = 0; c8 < cx; c8++) {
+                    U32 iidx = ((n * ic + c) * ihiw + hw) * cx + c8;
+                    U32 oidx = ((n * ic + c) * cx + c8) * ihiw + hw;
+                    output[oidx] = input[iidx];
+                }
             }
         }
     }
-
-    *outputDesc = inputDesc;
-    (*outputDesc).nDims = shape_size;
-    if (shape_size == 2) {
-        (*outputDesc).df = DF_NORMAL;
-    }
-    if (shape_size == 3) {
-        (*outputDesc).df = DF_MTK;
-    }
-    if (shape_size >= 4) {
-        (*outputDesc).df = DF_NCHW;
-    }
-
-    U32 factor = 1;
-    I32 count = 0;
-    for (I32 i = 0; i < shape_size; i++) {
-        I32 value = shape[i];
-        if (value == 0) {
-            value = inputDesc.dims[inputDesc.nDims - 1 - i];
-        }
-        if (value == -1) {
-            value = 0;
-            count++;
-        } else {
-            factor *= value;
-        }
-
-        (*outputDesc).dims[shape_size - 1 - i] = value;
-    }
-    if (count > 1) {
-        return NOT_SUPPORTED;
-    }
-
-    bool sameDim = ((*outputDesc).nDims == inputDesc.nDims);
-    for (I32 i = 0; i < shape_size; i++) {
-        if ((*outputDesc).dims[i] == 0) {
-            (*outputDesc).dims[i] = tensorNumElements(inputDesc) / factor;
-        }
-        if ((*outputDesc).dims[i] != inputDesc.dims[i]) {
-            sameDim = false;
-        }
-    }
-    if (sameDim) {
-        (*outputDesc).df = inputDesc.df;
-    }
-
-    return SUCCESS;
 }
 
 EE reshape_cpu(TensorDesc inputDesc, void *input, TensorDesc outputDesc, void *output)
@@ -103,6 +47,9 @@ EE reshape_cpu(TensorDesc inputDesc, void *input, TensorDesc outputDesc, void *o
             sameDim = false;
         }
     }
+    if (!sameDim && ((inputDesc.df == DF_NCHWC8) || (inputDesc.df == DF_NCHWC16))) {
+        sameDim = isC8HasSameDim(inputDesc, outputDesc);
+    }
 
     if ((DF_NCHWC8 != inputDesc.df && DF_NCHWC16 != inputDesc.df) || sameDim) {
         if (output != input) {
@@ -123,23 +70,29 @@ EE reshape_cpu(TensorDesc inputDesc, void *input, TensorDesc outputDesc, void *o
         }
 
         U32 cx = (DF_NCHWC8 == inputDesc.df) ? 8 : 16;
-        U32 elementBytes = bytesOf(idt);
         ic /= cx;
-        U8 *inPtr = (U8 *)input;
-        U8 *outPtr = (U8 *)output;
-        for (U32 n = 0; n < in; n++) {
-            for (U32 c = 0; c < ic; c++) {
-                for (U32 hw = 0; hw < ih * iw; hw++) {
-                    for (U32 c8 = 0; c8 < cx; c8++) {
-                        UNI_MEMCPY(outPtr +
-                                elementBytes * (n * ic * cx * ih * iw + (c * cx + c8) * ih * iw + hw),
-                            inPtr +
-                                elementBytes *
-                                    (n * ic * ih * iw * cx + c * ih * iw * cx + hw * cx + c8),
-                            elementBytes);
-                    }
-                }
+        U32 ihiw = ih * iw;
+
+        switch (inputDesc.dt) {
+            case DT_I32:
+            case DT_F32: {
+                trans<F32>((F32 *)input, (F32 *)output, in, ic, ihiw, cx);
+                break;
             }
+#ifdef _USE_FP16
+            case DT_F16: {
+                trans<F16>((F16 *)input, (F16 *)output, in, ic, ihiw, cx);
+                break;
+            }
+#endif
+            case DT_U8:
+            case DT_U8_Q:
+            case DT_I8: {
+                trans<INT8>((INT8 *)input, (INT8 *)output, in, ic, ihiw, cx);
+                break;
+            }
+            default:
+                return NOT_SUPPORTED;
         }
     }
     return SUCCESS;

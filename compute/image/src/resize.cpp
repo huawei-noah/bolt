@@ -44,7 +44,16 @@ EE resize_infer_output_size_cpu(TensorDesc inputDesc, ResizeParamSpec p, TensorD
     } else {
         UNI_ERROR_LOG("can support to resize %d-dim tensor.\n", inputDesc.nDims);
     }
-    if (p.num_sizes > 0) {
+
+    if (p.zoom_factor > 0) {
+        int height_in_eff = ih + p.pad_begin + p.pad_end;
+        int width_in_eff = iw + p.pad_begin + p.pad_end;
+        float shrink_factor = 1.0;
+        oh = (height_in_eff - 1) / shrink_factor + 1;
+        ow = (width_in_eff - 1) / shrink_factor + 1;
+        oh = oh + (oh - 1) * (p.zoom_factor - 1);
+        ow = ow + (ow - 1) * (p.zoom_factor - 1);
+    } else if (p.num_sizes > 0) {
         oh = p.sizes[0];
         if (p.num_sizes > 1) {
             ow = p.sizes[1];
@@ -60,6 +69,11 @@ EE resize_infer_output_size_cpu(TensorDesc inputDesc, ResizeParamSpec p, TensorD
     } else {
         odf = idf;
     }
+#ifdef _USE_INT8
+    if (idf == DF_NCHWC16) {
+        odf = idf;
+    }
+#endif
     if (tensorIs3d(inputDesc)) {
         *outputDesc = tensor3df(idt, odf, in, ic, oh);
     } else if (tensorIs4d(inputDesc)) {
@@ -153,8 +167,8 @@ EE resize_bilinear(TensorDesc inputDesc,
 #endif
 #ifdef _USE_GPU
     } else if (IS_GPU(arch)) {
-        ret = resize_bilinear_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc,
-            (GCLMem_t)input, outputDesc, (GCLMem_t)tmp, (GCLMem_t)output);
+        ret = resize_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc, (GCLMem_t)input, p,
+            outputDesc, (GCLMem_t)tmp, (GCLMem_t)output);
 #endif
     }
     return ret;
@@ -170,14 +184,18 @@ EE resize_nearest(TensorDesc inputDesc,
 {
     auto arch = archInfo->arch;
     EE ret = NOT_SUPPORTED;
-    if (IS_CPU(arch)) {
+    if (IS_X86(arch)) {
+#ifdef _USE_X86
+        ret = resize_nearest_x86(inputDesc, input, p, outputDesc, output);
+#endif
 #ifdef _USE_CPU
+    } else if (IS_CPU(arch)) {
         ret = resize_nearest_cpu(inputDesc, input, p, outputDesc, output);
 #endif
 #ifdef _USE_GPU
     } else if (IS_GPU(arch)) {
-        ret = resize_nearest_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc,
-            (GCLMem_t)input, p, outputDesc, (GCLMem_t)tmp, (GCLMem_t)output);
+        ret = resize_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc, (GCLMem_t)input, p,
+            outputDesc, (GCLMem_t)tmp, (GCLMem_t)output);
 #endif
     }
     return ret;

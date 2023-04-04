@@ -29,7 +29,8 @@ inline EE convolution_infer_output_size_cpu(TensorDesc inputDesc,
     TensorDesc filterDesc,
     ConvolutionParamSpec p,
     TensorDesc *outputDesc,
-    DataType targetDataType)
+    DataType targetDataType,
+    Arch arch)
 {
     if (nullptr == outputDesc) {
         CHECK_STATUS(NULL_POINTER);
@@ -57,17 +58,58 @@ inline EE convolution_infer_output_size_cpu(TensorDesc inputDesc,
     U32 ftDilated = (ft - 1) * p.dilatedRate_t + 1;
     U32 fhDilated = (fh - 1) * p.dilatedRate_h + 1;
     U32 fwDilated = (fw - 1) * p.dilatedRate_w + 1;
-    ot = (it + p.pad_before + p.pad_after - ftDilated) / p.stride_t + 1;
-    oh = (ih + p.pad_top + p.pad_bottom - fhDilated) / p.stride_h + 1;
-    ow = (iw + p.pad_left + p.pad_right - fwDilated) / p.stride_w + 1;
+
+    RoundMode rm = p.round_mode;
+    switch (rm) {
+        case ROUND_SAME_UPPER: {
+            ot = (U32)(ceil((double(it) / p.stride_t)));
+            oh = (U32)(ceil((double(ih) / p.stride_h)));
+            ow = (U32)(ceil((double(iw) / p.stride_w)));
+            break;
+        }
+        case ROUND_SAME_LOWER: {
+            ot = (U32)(floor((double(it) / p.stride_t)));
+            oh = (U32)(floor((double(ih) / p.stride_h)));
+            ow = (U32)(floor((double(iw) / p.stride_w)));
+            break;
+        }
+        default: {
+            ot = (it + p.pad_before + p.pad_after - ftDilated) / p.stride_t + 1;
+            oh = (ih + p.pad_top + p.pad_bottom - fhDilated) / p.stride_h + 1;
+            ow = (iw + p.pad_left + p.pad_right - fwDilated) / p.stride_w + 1;
+            break;
+        }
+    }
+
     if (ot < 0 || oh < 0 || ow < 0) {
         ret = NOT_MATCH;
     }
 
+    DataFormat odf = DF_NCHW;
+#if defined(_USE_LITE) && !defined(_USE_NEON)
+    if (1) {
+#else
+    if (0) {
+#endif
+    } else if (IS_CPU(arch)) {
+        if (fn % 8 != 0) {
+            return NOT_SUPPORTED;
+        }
+        odf = DF_NCHWC8;
+#ifdef _USE_INT8
+        if (IS_X86_AVX512(arch) && (targetDataType == DT_U8_Q) && (fn != 8)) {
+            odf = DF_NCHWC16;
+        }
+#endif
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
+        odf = DF_NCHW;
+#endif
+    }
     if (tensorIs4d(inputDesc)) {
-        *outputDesc = tensor4df(targetDataType, DF_NCHWC8, in, fn, oh, ow);
+        *outputDesc = tensor4df(targetDataType, odf, in, fn, oh, ow);
     } else if (tensorIs5d(inputDesc)) {
-        *outputDesc = tensor5df(targetDataType, DF_NCHWC8, in, fn, ot, oh, ow);
+        *outputDesc = tensor5df(targetDataType, odf, in, fn, ot, oh, ow);
     }
     return ret;
 }
@@ -89,23 +131,13 @@ EE convolution_infer_output_size(Tensor *inputTensor,
     TensorDesc filterDesc = filterTensor.get_desc();
     TensorDesc outputDesc = outputTensor->get_desc();
     CHECK_STATUS(convolution_infer_output_size_cpu(
-        inputDesc, filterDesc, convParamSpec, &outputDesc, targetDataType));
+        inputDesc, filterDesc, convParamSpec, &outputDesc, targetDataType, archInfo->arch));
     if (IS_GPU(archInfo->arch)) {
 #ifdef _USE_GPU
         OclMemory *inputMem = (OclMemory *)inputTensor->get_memory();
         OclMemory *outputMem = (OclMemory *)outputTensor->get_memory();
         CHECK_STATUS(convolution_padding_input_mali(
             inputDesc, filterDesc, convParamSpec, &outputDesc, inputMem, outputMem));
-#endif
-    } else {
-        U32 fn = filterDesc.dims[filterDesc.nDims - 1];
-        if (fn % 8 != 0) {
-            CHECK_STATUS(NOT_SUPPORTED);
-        }
-#ifdef _USE_INT8
-        if (IS_X86_AVX512(archInfo->arch) && (targetDataType == DT_U8_Q)) {
-            outputDesc.df = DF_NCHWC16;
-        }
 #endif
     }
     outputTensor->resize(outputDesc);
@@ -148,7 +180,7 @@ EE convolution_infer_forward_algorithm(Tensor inputTensor,
         GCLMemDesc gclmemOutputDesc = ocl_get_desc(outputTensor);
         ret = convolution_infer_forward_algorithm_mali(((MaliPara_t)(archInfo->archPara))->handle,
             inputDesc, filterDesc, convParamSpec, outputDesc, gclmemInputDesc, gclmemOutputDesc,
-            policy, activationDesc.mode, ((MaliPara_t)(archInfo->archPara))->forwardRunInfo);
+            policy, activationDesc, ((MaliPara_t)(archInfo->archPara))->forwardRunInfo);
 #endif
     }
     return ret;
@@ -294,6 +326,44 @@ inline void convolution_process_bnn_scale(
     *bias += vecLen * bytesOf(DT_F16);
 }
 
+void autoPadding(TensorDesc inputDesc,
+    TensorDesc outputDesc,
+    ConvolutionParamSpec &p)
+{
+    DataType idt, odt;
+    DataFormat idf, odf;
+    U32 in, ic, it, ih, iw;
+    U32 on, oc, ot, oh, ow;
+    it = ot = 1;
+    if (tensorIs4d(inputDesc)) {
+        CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+        CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
+    } else if (tensorIs5d(inputDesc)) {
+        CHECK_STATUS(tensor5dGet(inputDesc, &idt, &idf, &in, &ic, &it, &ih, &iw));
+        CHECK_STATUS(tensor5dGet(outputDesc, &odt, &odf, &on, &oc, &ot, &oh, &ow));
+    } else {
+        CHECK_STATUS(NOT_SUPPORTED);
+    }
+    RoundMode rm = p.round_mode;
+    if (rm == ROUND_SAME_LOWER || rm == ROUND_SAME_UPPER) {
+        U32 tlane = ot * p.stride_t - it + p.kernel_t - p.stride_t;
+        U32 hlane = oh * p.stride_h - ih + p.kernel_h - p.stride_h;
+        U32 wlane = ow * p.stride_w - iw + p.kernel_w - p.stride_w;
+        if (rm == ROUND_SAME_LOWER) {
+            p.pad_before = (tlane + 1) / 2;
+            p.pad_top = (hlane + 1) / 2;
+            p.pad_left = (wlane + 1) / 2;
+        } else {
+            p.pad_before = tlane / 2;
+            p.pad_top = hlane / 2;
+            p.pad_left = wlane / 2;
+        }
+        p.pad_after = tlane - p.pad_before;
+        p.pad_bottom = hlane - p.pad_top;
+        p.pad_right = wlane - p.pad_left;
+    }
+}
+
 EE convolution(std::vector<Tensor> inputTensors,
     Tensor filterTensor,
     ConvolutionParamSpec convParamSpec,
@@ -352,6 +422,8 @@ EE convolution(std::vector<Tensor> inputTensors,
     }
 #endif
 
+    autoPadding(inputDesc, outputDesc, convParamSpec);
+
     if (IS_GENERAL(arch)) {
 #ifdef _USE_GENERAL
         ret = convolution_general(inputDesc, input, eltwiseInput, filterDesc, filter, convParamSpec,
@@ -378,7 +450,7 @@ EE convolution(std::vector<Tensor> inputTensors,
         ret = convolution_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc,
             (GCLMem_t)input, filterDesc, (GCLMem_t)filter, convParamSpec,
             ((MaliPara_t)(archInfo->archPara))->forwardRunInfo, scaleDesc, (GCLMem_t)scale, biasDesc,
-            (GCLMem_t)bias, tmpBytes, tmpVec, outputDesc, (GCLMem_t)output, activationDesc.mode);
+            (GCLMem_t)bias, tmpBytes, tmpVec, outputDesc, (GCLMem_t)output, activationDesc);
 #endif
     }
 

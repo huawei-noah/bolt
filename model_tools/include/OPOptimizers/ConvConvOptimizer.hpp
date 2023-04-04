@@ -77,7 +77,7 @@ class ConvConvOptimizer : public OPOptimizer {
                 vec += spec->ws[id].bytes_of_vec;
                 spec->ws[id].bytes_of_vec = vecSize;
 
-                std::string name = "slice_" + std::to_string(i);
+                std::string name = allocName("slice_" + std::to_string(i));
                 OperatorSpec sliceOperator =
                     mt_create_operator(name.c_str(), OT_Slice, 1, convOps.size());
                 UNI_STRCPY(sliceOperator.input_tensors_name[0], name.c_str());

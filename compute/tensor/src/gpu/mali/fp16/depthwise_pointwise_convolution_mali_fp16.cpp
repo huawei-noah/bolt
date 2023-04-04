@@ -34,7 +34,7 @@ inline EE depthwise_pointwise_convolution_checkpara_mali_fp16(GCLHandle_t handle
         CHECK_STATUS(NULL_POINTER);
     }
     if (inputDesc.dt != outputDesc.dt || inputDesc.dt != dwFilterDesc.dt ||
-        inputDesc.dt != pwFilterDesc.dt || inputDesc.dt != DT_F16) {
+        inputDesc.dt != pwFilterDesc.dt) {
         CHECK_STATUS(NOT_MATCH);
     }
     return SUCCESS;
@@ -125,7 +125,7 @@ EE depthwise_pointwise_convolution_infer_forward_tmp_bytes_mali_fp16(TensorDesc 
         U32 size = 0;
         GCLMemDesc desc = depthwise_convolution_get_input_nchwc4_desc(
             inputDesc, dwFilterDesc, convParamSpec, outputDesc, forwardRunInfo->best_h[0]);
-        size = ALIGN(desc.byteSize, BUFFER_ALIGN_BASE);
+        size = UNI_ALIGN(desc.byteSize, BUFFER_ALIGN_BASE);
         if (desc.memType == GCL_MEM_IMG_3D) {
             bytes[1] = desc.stride[0];
             bytes[2] = desc.stride[1];
@@ -154,8 +154,8 @@ EE depthwise_pointwise_convolution_mali_fp16(GCLHandle_t handle,
     std::vector<GCLMem_t> tmp,
     TensorDesc outputDesc,
     GCLMem_t output,
-    ActivationMode depthwiseActivationMode,
-    ActivationMode pointwiseActivationMode)
+    ActivationParamSpec depthwiseActivationParamSpec,
+    ActivationParamSpec pointwiseActivationParamSpec)
 {
     EE ret = SUCCESS;
     DepthwiseConvolutionForwardAlgorithm algorithm =
@@ -217,13 +217,13 @@ EE depthwise_pointwise_convolution_mali_fp16(GCLHandle_t handle,
             ret = depthwise_pointwise_convolution_direct_mali_fp16(handle, inputDesc, inputPtr,
                 dwFilterDesc, pwFilterDesc, dwFilter, pwFilter, convParamSpec, forwardRunInfo,
                 dwBiasDesc, pwBiasDesc, dwBias, pwBias, tmpBytes, tmpPtr, outputDesc, output,
-                depthwiseActivationMode, pointwiseActivationMode);
+                depthwiseActivationParamSpec, pointwiseActivationParamSpec);
             break;
         case DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_GEMM:
             ret = depthwise_pointwise_convolution_gemm_mali_fp16(handle, inputDesc, inputPtr,
                 dwFilterDesc, pwFilterDesc, dwFilter, pwFilter, convParamSpec, forwardRunInfo,
                 dwBiasDesc, pwBiasDesc, dwBias, pwBias, tmpBytes, tmpPtr, outputDesc, output,
-                depthwiseActivationMode, pointwiseActivationMode);
+                depthwiseActivationParamSpec, pointwiseActivationParamSpec);
             break;
         default:
             ret = NOT_SUPPORTED;

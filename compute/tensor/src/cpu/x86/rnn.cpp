@@ -40,17 +40,24 @@ EE rnncell_x86(TensorDesc xDesc,
     switch (xDesc.dt) {
 #ifdef _USE_FP32
         case DT_F32: {
-            if (0) {
-#if defined(_USE_INT8) && defined(_USE_ULTRA_OPTIMIZATION)
-            } else if (arch == X86_AVX512 && rnnParamSpec.mode == RNN_LSTM &&
-                rnnParamSpec.num_projection == 0) {
-                ret = rnncell_int8(xDesc, currentX, filterDesc, filter, biasDesc, bias, scale, state,
-                    tmpBytes, tmp, rnnParamSpec, batchStrideX, batchStrideH, hDesc, output, arch);
+#ifdef _USE_INT8
+            bool useUltra = false;
+#ifdef _USE_ULTRA_OPTIMIZATION
+            if ((rnnParamSpec.mode == RNN_LSTM) &&
+                (rnnParamSpec.num_projection == 0) &&
+                (rnnParamSpec.steps >= 0) &&
+                (scale != nullptr))
+            {
+                useUltra = true;
+            }
 #endif
-            } else {
-                ret = rnncell_fp32(xDesc, currentX, filterDesc, filter, biasDesc, bias, state,
+            if ((filterDesc[0].dt == DT_I8) || useUltra) {
+                return rnncell_int8(xDesc, currentX, filterDesc, filter, biasDesc, bias, scale, state,
                     tmpBytes, tmp, rnnParamSpec, batchStrideX, batchStrideH, hDesc, output, arch);
             }
+#endif
+            ret = rnncell_fp32(xDesc, currentX, filterDesc, filter, biasDesc, bias, state,
+                tmpBytes, tmp, rnnParamSpec, batchStrideX, batchStrideH, hDesc, output, arch);
             break;
         }
 #endif

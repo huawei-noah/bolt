@@ -22,7 +22,7 @@ EE attention(
         CHECK_STATUS(NULL_POINTER);
     }
 
-    T minValue = -10000.0;
+    T minValue = -10000;
     for (U32 n = 0; n < batch; n++) {
         U32 count = array_sum_template<T>(input + n * toSequenceLength, toSequenceLength);
         U32 valid = UNI_MIN(count, fromSequenceLength);

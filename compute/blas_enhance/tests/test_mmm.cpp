@@ -14,104 +14,161 @@
 #include "blas_enhance.h"
 #include "ut_util.h"
 
-// #define COVERTEST
-
-int mmmTestKernel(U32 m, U32 k, U32 n, DataType dt)
+void mmmTestKernel(U32 m,
+    U32 k,
+    U32 n,
+    DataType adt,
+    DataType bdt,
+    DataType odt,
+    bool transform,
+    bool at,
+    bool bt,
+    bool log = true)
 {
     float threshold = 0.0001;
-    if (dt == DT_F16) {
+    if (odt == DT_F16) {
         threshold = 1;
     }
 
-    TensorDesc A_desc = tensor2df(dt, DF_TRANSPOSE, k, m);
-    TensorDesc B_desc = tensor2df(dt, DF_NORMAL, k, n);
-    TensorDesc tranDescB;
-    TensorDesc C_desc = tensor2df(dt, DF_NORMAL, m, n);
+    TensorDesc A_desc, B_desc;
+    if (at) {
+        A_desc = tensor2df(adt, DF_TRANSPOSE, k, m);
+    } else {
+        A_desc = tensor2df(adt, DF_NORMAL, m, k);
+    }
+    TensorDesc A_ref_desc = A_desc;
+    if (bt) {
+        B_desc = tensor2df(bdt, DF_TRANSPOSE, n, k);
+    } else {
+        B_desc = tensor2df(bdt, DF_NORMAL, k, n);
+    }
+    TensorDesc C_desc = tensor2df(odt, DF_NORMAL, m, n);
+
+    U8 *A = ut_input_v(m * k, adt, UT_INIT_RANDOM);
+    U8 *A_ref = ut_input_v(m * k, adt, UT_INIT_ZERO);
+    UNI_MEMCPY(A_ref, A, m * k * bytesOf(adt));
+    U8 *B = ut_input_v(k * n, bdt, UT_INIT_RANDOM);
+    U8 *C = ut_input_v(m * n, odt, UT_INIT_RANDOM);
+    U8 *C_ref = ut_input_v(m * n, odt, UT_INIT_ZERO);
+    UNI_MEMCPY(C_ref, C, m * n * bytesOf(odt));
+
+#ifdef _USE_X86
+    if (adt == DT_U8_Q) {
+        A_ref_desc.dt = DT_I8;
+        UINT8 *p = (UINT8 *)A;
+        for (U32 i = 0; i < m * k; ++i) {
+            p[i] = (UINT8)((I32)A[i] + 128);
+        }
+    }
+#endif
+
+    TensorDesc trans_desc = B_desc;
+    U8 *mat_trans = B;
+    U32 mat_trans_bytes = 0;
+    U32 offset = 0;
+    if (transform) {
+        CHECK_STATUS(
+            matrix_matrix_multiply_transform_rhs_bytes(B_desc, &mat_trans_bytes, &offset, UT_ARCH));
+        mat_trans = ut_input_v(mat_trans_bytes, DT_I8, UT_INIT_ZERO);
+        CHECK_STATUS(
+            matrix_matrix_multiply_transform_rhs(B_desc, B, &trans_desc, mat_trans, UT_ARCH));
+    }
 
     U32 bytes = 0;
-    U8 *A = ut_input_v(m * k, dt, UT_INIT_RANDOM);
-    U8 *B = ut_input_v(k * n, dt, UT_INIT_RANDOM);
+    CHECK_STATUS(matrix_matrix_multiply_tmp_bytes(A_desc, trans_desc, &bytes, UT_ARCH));
+    U8 *tmp = ut_input_v(bytes, DT_I8, UT_INIT_ZERO);
 
-    U32 alignedN = (n + 7) / 8 * 8;
-    U8 *B_tran = ut_input_v(k * alignedN + 32, dt, UT_INIT_ZERO);
-    U8 *C = ut_input_v(m * n, dt, UT_INIT_ZERO);
-    U8 *C_ref = ut_input_v(m * n, dt, UT_INIT_ZERO);
-    CHECK_STATUS(matrix_matrix_multiply_tmp_bytes(A_desc, B_desc, &bytes, UT_ARCH));
-    U8 *tmp = ut_input_v(bytes / bytesOf(dt), dt, UT_INIT_ZERO);
+#ifdef _USE_X86
+    if (adt == DT_U8_Q || bdt == DT_U8_Q) {
+        if (transform) {
+            UNI_MEMCPY(tmp, mat_trans + offset, n * bytesOf(DT_I32));
+        }
+    }
+#endif
 
-    matrix_matrix_multiply_transform_rhs(B_desc, B, &tranDescB, B_tran, UT_ARCH);
     if (UT_CHECK) {
         CHECK_STATUS(matrix_matrix_multiply(
-            A_desc, A, tranDescB, B_tran, bytes, tmp, C_desc, C, nullptr, UT_ARCH));
+            A_desc, A, trans_desc, mat_trans, bytes, tmp, C_desc, C, nullptr, UT_ARCH));
 
         // naive implement
         CHECK_STATUS(matrix_matrix_multiply(
-            A_desc, A, B_desc, B, bytes, tmp, C_desc, C_ref, nullptr, CPU_GENERAL));
+            A_ref_desc, A_ref, B_desc, B, bytes, tmp, C_desc, C_ref, nullptr, CPU_GENERAL));
 
         // check
-        ut_check_v(C, C_ref, m * n, dt, threshold, __FILE__, __LINE__);
+        ut_check_v(C, C_ref, m * n, odt, threshold);
     }
 
     // benchmark
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        matrix_matrix_multiply(
-            A_desc, A, tranDescB, B_tran, bytes, tmp, C_desc, C, nullptr, UT_ARCH);
+        CHECK_STATUS(matrix_matrix_multiply(
+            A_desc, A, trans_desc, mat_trans, bytes, tmp, C_desc, C, nullptr, UT_ARCH));
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;
 
     // log performance data
-    char buffer[150];
-    char params[120];
-    sprintf(params, "(%u %u)+(%u %u)=(%u %u)", m, k, k, n, m, n);
-    sprintf(buffer, "%20s, %80s", "MatrixMultiply", params);
-    double ops = 2.0 * m * n * k + 1.0 * m * n;
-    ut_log(dt, buffer, ops, time);
-
+    if (log) {
+        char buffer[150];
+        char params[120];
+        char NT[2] = {'N', 'T'};
+        const char *trans[2] = {"", " transform"};
+        sprintf(params, "%c(%u %u)+%c(%u %u)=(%u %u)%s", NT[at], m, k, NT[bt], k, n, m, n,
+            trans[transform]);
+        sprintf(buffer, "%20s, %80s", "MatrixMultiply", params);
+        double ops = 2.0 * m * n * k + 1.0 * m * n;
+        ut_log(bdt, buffer, ops, time);
+    }
     free(A);
+    free(A_ref);
     free(B);
-    free(B_tran);
+    if (transform) {
+        free(mat_trans);
+    }
     free(C);
     free(C_ref);
     free(tmp);
-
-    return 0;
 }
 
-int mmmTest(int argc, char **argv, DataType dt)
+void mmmTest(U32 m, U32 k, U32 n, bool log = true)
 {
-#ifndef COVERTEST
-    CHECK_REQUIREMENT(argc == 4);
-    U32 m = atoi(argv[1]);
-    U32 k = atoi(argv[2]);
-    U32 n = atoi(argv[3]);
-    return mmmTestKernel(m, k, n, dt);
+    for (int transform = 0; transform <= 1; transform++) {
+        for (int at = 0; at <= 1; at++) {
+            for (int bt = 0; bt <= 1; bt++) {
+#ifdef _USE_INT8
+#ifdef _USE_X86
+                mmmTestKernel(m, k, n, DT_U8_Q, DT_I8, DT_I32, transform, at, bt, log);
 #else
-    U32 mmin = 1, mmax = 100;
-    U32 kmin = 1, kmax = 100;
-    U32 nmin = 1, nmax = 100;
-    int ret = 0;
-    for (U32 m = mmin; m <= mmax; ++m) {
-        for (U32 k = kmin; k <= kmax; ++k) {
-            for (U32 n = nmin; n <= nmax; ++n) {
-                if (ret = mmmTestKernel(m, k, n, dt)) {
-                    return ret;
-                }
+                mmmTestKernel(m, k, n, DT_I8, DT_I8, DT_I32, transform, at, bt, log);
+#endif
+#endif
+#ifdef _USE_FP16
+                mmmTestKernel(m, k, n, DT_F16, DT_F16, DT_F16, transform, at, bt, log);
+#endif
+#ifdef _USE_FP32
+                mmmTestKernel(m, k, n, DT_F32, DT_F32, DT_F32, transform, at, bt, log);
+#endif
             }
         }
     }
-    return 0;
-#endif
 }
 
 int main(int argc, char **argv)
 {
-#ifdef _USE_FP16
-    mmmTest(argc, argv, DT_F16);
-#endif
-#ifdef _USE_FP32
-    mmmTest(argc, argv, DT_F32);
-#endif
+    if (argc == 4) {
+        U32 m = atoi(argv[1]);
+        U32 k = atoi(argv[2]);
+        U32 n = atoi(argv[3]);
+        mmmTest(m, k, n);
+    } else {
+        UNI_INFO_LOG("running matrix matrix multiply cover test...\n");
+        for (U32 m = 1; m <= 33; ++m) {
+            for (U32 k = 1; k <= 33; ++k) {
+                for (U32 n = 1; n <= 33; ++n) {
+                    mmmTest(m, k, n, false);
+                }
+            }
+        }
+    }
     return 0;
 }

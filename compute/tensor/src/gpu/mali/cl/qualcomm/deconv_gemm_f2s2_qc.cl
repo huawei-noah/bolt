@@ -170,9 +170,9 @@ __kernel void MANGLE_NAME(deconv_gemm_f2s2_qc_, IOM, AM, ON, KN)(const int iw_st
     T4 out_val[KN][ON];
 
 #if (KN == 2)
-    out_val[0][0] = read_imageh(bias, sampler, (idz >> 1));
+    out_val[0][0] = READ_IMAGE(bias, sampler, (idz >> 1));
 #elif (KN == 4)
-    out_val[0][0] = read_imageh(bias, sampler, idz);
+    out_val[0][0] = READ_IMAGE(bias, sampler, idz);
 #endif
     for (uchar i = 0; i < KN; i++) {
         for (uchar j = 0; j < ON; j++) {

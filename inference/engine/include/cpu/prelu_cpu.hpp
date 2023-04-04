@@ -30,10 +30,9 @@ public:
 
     EE infer_weight_desc() override
     {
-        auto curOpWs = this->get_weightspec();
-        U32 weightNum = (curOpWs.weight == nullptr)
+        U32 weightNum = (this->ws.weight == nullptr)
             ? 0
-            : curOpWs.bytes_of_weight / UNI_MAX(1, bytesOf(curOpWs.mdt));
+            : this->ws.bytes_of_weight / UNI_MAX(1, bytesOf(this->ws.mdt));
         if (weightNum > 0) {
             Tensor weightTensor;
             weightTensor.resize(tensor1d(this->dt, weightNum));
@@ -65,8 +64,7 @@ public:
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
-        CHECK_STATUS(prelu_infer_output_size(inTensors[0], outTensors[0], &this->archInfo));
-        return SUCCESS;
+        return prelu_infer_output_size(inTensors[0], outTensors[0], &this->archInfo);
     }
 };
 #endif  // _PRELU_CPU_H

@@ -27,8 +27,6 @@ namespace raul
  * has input.dims(i) * multiples[i] elements, and the values of input are replicated multiples[i] times along the 'i'th dimension.
  * If no dimension specified, whole tensor will be replicated, otherwise - only needed dimension.
  *
- * @see
- * https://www.tensorflow.org/api_docs/python/tf/tile
  *
  */
 class TileLayer : public BasicLayer

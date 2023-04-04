@@ -48,4 +48,20 @@ EE grid_sample(Tensor inputTensor,
     Tensor tmpTensor,
     Tensor outputTensor,
     ArchInfo_t archInfo);
+
+EE convert_color_infer_output_size(
+    Tensor *inputTensor, ConvertColorParamSpec p, Tensor *outputTensor, ArchInfo_t archInfo);
+
+EE convert_color(
+    Tensor inputTensor, ConvertColorParamSpec p, Tensor outputTensor, ArchInfo_t archInfo);
+
+EE lut_preprocess_infer_output_size(Tensor *inputTensor, DataType dt, Tensor *outputTensor, ArchInfo_t archInfo);
+
+EE lut_preprocess(Tensor inputTensor, Tensor outputTensor, ArchInfo_t archInfo);
+
+EE lut_infer_output_size(
+    Tensor *inputTensor, Tensor *lutTensor, LutParamSpec p, Tensor *outputTensor, ArchInfo_t archInfo);
+
+EE lut(
+    Tensor inputTensor, Tensor lutTensor, LutParamSpec p, Tensor outputTensor, ArchInfo_t archInfo);
 #endif

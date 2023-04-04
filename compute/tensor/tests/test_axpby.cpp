@@ -36,7 +36,7 @@ int axpbyTest(int argc, char **argv, DataType dt)
         // naive implement
         CHECK_STATUS(vector_vector_axpby(a, xDesc, x, b, yDesc, y_ref, CPU_GENERAL));
 
-        ut_check_v(y, y_ref, len, dt, 0.01, __FILE__, __LINE__);
+        ut_check_v(y, y_ref, len, dt, 0.01);
     }
 
     // benchmark

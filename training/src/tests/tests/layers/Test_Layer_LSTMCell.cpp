@@ -662,7 +662,6 @@ TEST(TestLSTMCell, ZoneoutTrainForwardRandUnit)
         ASSERT_TRUE(TODTYPE(hidden_new_tensor.size()) * prev_prob * (1.0_dt - prev_prob) >= 10.0_dt);
 
         // The confident interval for p estimation
-        // See https://www.wolframalpha.com/input/?i=confidence+99.999%25
         const auto z_ci = 4.417_dt; // 99.999%
         const auto prev_ci = z_ci * std::sqrt(prev_prob * (1.0_dt - prev_prob) / TODTYPE(hidden_new_tensor.size()));
         const auto curr_ci = z_ci * std::sqrt(curr_prob * (1.0_dt - curr_prob) / TODTYPE(hidden_new_tensor.size()));
@@ -700,7 +699,6 @@ TEST(TestLSTMCell, ZoneoutTrainForwardRandUnit)
         ASSERT_TRUE(TODTYPE(cell_new_tensor.size()) * prev_prob * (1.0_dt - prev_prob) >= 10.0_dt);
 
         // The confident interval for p estimation
-        // See https://www.wolframalpha.com/input/?i=confidence+99.999%25
         const auto z_ci = 4.417_dt; // 99.999%
         const auto prev_ci = z_ci * std::sqrt(prev_prob * (1.0_dt - prev_prob) / TODTYPE(cell_new_tensor.size()));
         const auto curr_ci = z_ci * std::sqrt(curr_prob * (1.0_dt - curr_prob) / TODTYPE(cell_new_tensor.size()));
@@ -927,7 +925,7 @@ TEST(TestLSTMCell, SingleParamsLoadedNoBiasForgetForwardUnit)
     /// 3. If we need two tensors ih and hh, we have to split the weights tensor into 2 parts the weights tensor (axis=0).
     ///    They must be dumped in transposed mode.
     ///    weights_ih, weights_hh = np.split(weights, [input_size], axis=0)
-    /// 4. If we need one tensor,  we have to dump concatenate weights in transposed mode.
+    /// 4. If we need one tensor,  we have to dump concatenate weights in in transposed mode.
 
     // Test parameters
     const auto eps_rel = 1e-5_dt;
@@ -1007,7 +1005,7 @@ TEST(TestLSTMCell, SingleParamsLoadedWithBiasForgetForwardUnit)
     /// 3. If we need two tensors ih and hh, we have to split the weights tensor into 2 parts the weights tensor (axis=0).
     ///    They must be dumped in transposed mode.
     ///    weights_ih, weights_hh = np.split(weights, [input_size], axis=0)
-    /// 4. If we need one tensor,  we have to dump concatenate weights in transposed mode.
+    /// 4. If we need one tensor,  we have to dump concatenate weights in in transposed mode.
 
     // Test parameters
     const auto eps_rel = 1e-5_dt;

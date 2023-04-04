@@ -15,137 +15,13 @@
 #ifdef _USE_GENERAL
 #include "cpu/general/tensor_computing_general.h"
 #endif
-#if defined(_USE_X86) || defined(_USE_NEON)
+#ifdef _USE_CPU
 #include "cpu/tensor_computing_cpu.h"
 #endif
 #ifdef _USE_GPU
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
 #include <algorithm>
-
-EE transpose(Tensor inputTensor,
-    TransposeParamSpec p,
-    Tensor tmpTensor,
-    Tensor outputTensor,
-    ArchInfo_t archInfo)
-{
-    auto arch = archInfo->arch;
-    TensorDesc inputDesc = inputTensor.get_desc();
-    void *input = get_ptr_from_tensor(inputTensor, arch);
-    TensorDesc outputDesc = outputTensor.get_desc();
-    void *output = get_ptr_from_tensor(outputTensor, arch);
-    std::vector<U32> tmpDims(p.axes, p.axes + p.num_axes);
-    if (IS_CPU(arch)) {
-        // Keep transDims unchanged so that input resize does not lead to error
-        //if (inputDesc.nDims == 4 && p.num_axes == 3 && inputDesc.dims[0] == 1) {
-        //    inputDesc = tensor3df(inputDesc.dt, inputDesc.df, inputDesc.dims[3], inputDesc.dims[2],
-        //        inputDesc.dims[1]);
-        //}
-
-        if (DF_NCHWC8 == inputDesc.df || DF_NCHWC16 == inputDesc.df) {
-            U32 cx = 8;
-            if (DF_NCHWC16 == inputDesc.df) {
-                cx = 16;
-                CHECK_REQUIREMENT(inputDesc.dims[inputDesc.nDims - 2] % 16 == 0);
-            }
-            if (inputDesc.nDims == p.num_axes) {
-                auto ptr = std::find(tmpDims.begin(), tmpDims.end(), 1);
-                tmpDims.insert(ptr + 1, inputDesc.nDims);
-            }
-            inputDesc.nDims = inputDesc.nDims + 1;
-            for (int i = inputDesc.nDims - 1; i > 0; i--) {
-                inputDesc.dims[i] = inputDesc.dims[i - 1];
-            }
-            inputDesc.dims[0] = cx;
-            inputDesc.dims[inputDesc.nDims - 2] /= cx;
-
-            TensorDesc desc = outputDesc;
-            desc.nDims = inputDesc.nDims;
-            U32 idx = inputDesc.nDims - 1;
-            for (int i = inputDesc.nDims - 2; i >= 0; i--) {
-                if (1 == tmpDims[inputDesc.nDims - 2 - i]) {  // C
-                    desc.dims[idx] = outputDesc.dims[i] / cx;
-                    idx--;
-                    desc.dims[idx] = cx;
-                    idx--;
-                } else {
-                    desc.dims[idx] = outputDesc.dims[i];
-                    idx--;
-                }
-            }
-            outputDesc = desc;
-        }
-        if (outputDesc.df == DF_NCHWC8) {
-            int icaxis = inputDesc.nDims - 1 - p.axes[1];
-            for (int i = inputDesc.nDims; i > icaxis; i--) {
-                inputDesc.dims[i] = inputDesc.dims[i - 1];
-            }
-            inputDesc.nDims++;
-            inputDesc.dims[icaxis] = 8;
-            inputDesc.dims[icaxis + 1] /= 8;
-            for (int i = outputDesc.nDims; i > 0; i--) {
-                outputDesc.dims[i] = outputDesc.dims[i - 1];
-            }
-            outputDesc.nDims++;
-            outputDesc.dims[0] = 8;
-            outputDesc.dims[outputDesc.nDims - 2] /= 8;
-            tmpDims.push_back(tmpDims.size());
-        }
-    }
-    EE ret = NOT_SUPPORTED;
-    if (IS_GENERAL(arch)) {
-#ifdef _USE_GENERAL
-        ret = transpose_general(inputDesc, input, tmpDims.data(), outputDesc, output);
-#endif
-#if defined(_USE_X86) || defined(_USE_NEON)
-    } else if (IS_CPU(arch)) {
-        ret = transpose_cpu(inputDesc, input, tmpDims.data(), outputDesc, output);
-#endif
-#ifdef _USE_GPU
-    } else if (IS_GPU(arch)) {
-        void *tmp = get_ptr_from_tensor(tmpTensor, arch);
-        ret = transpose_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc,
-            (const GCLMem_t)input, p, (GCLMem_t)tmp, outputDesc, (GCLMem_t)output);
-#endif
-    }
-    return ret;
-}
-
-inline EE transpose_infer_output_size_cpu(
-    TensorDesc inputDesc, TransposeParamSpec p, TensorDesc *outputDesc)
-{
-    if (nullptr == outputDesc) {
-        CHECK_STATUS(NULL_POINTER);
-    }
-
-    U32 *dim = p.axes;
-    *outputDesc = inputDesc;
-    U32 num = inputDesc.nDims;
-    U32 index = 0;
-    for (U32 i = 0; i < p.num_axes; i++) {
-        // use 5-dim array to transpose a NCHWC8 tensor. skip c8 axis
-        if (dim[i] >= num) {
-            continue;
-        }
-        // NOTE: TensorDesc.dims array is in [W H C N] order.
-        // so if you want to transpose [N C H W] format data, we use (dims - 1 - *)
-        // [5 6 7 8] + [0 3 2 1] = [5 8 7 6]
-        // [8 7 6 5] + [0 3 2 1] = [6 7 8 5]
-        outputDesc->dims[num - 1 - index] = inputDesc.dims[num - 1 - dim[i]];
-        index++;
-    }
-    if (inputDesc.df == DF_NCHWC8) {
-        outputDesc->df = DF_NCHW;
-    }
-    //if (outputDesc->nDims == 4 && p.num_axes == 3 && outputDesc->dims[0] == 1) {
-    //    (*outputDesc) = tensor3df(inputDesc.dt, DF_NCHW, outputDesc->dims[3],
-    //        outputDesc->dims[2], outputDesc->dims[1]);
-    //}
-    if (p.df == DF_NCHWC8 && outputDesc->dims[num - 2] % 8 == 0) {
-        outputDesc->df = DF_NCHWC8;
-    }
-    return SUCCESS;
-}
 
 EE transpose_infer_output_size(
     Tensor *inputTensor, TransposeParamSpec p, Tensor *outputTensor, ArchInfo_t archInfo)
@@ -168,6 +44,12 @@ EE transpose_infer_output_size(
 #endif
     } else {
         ret = transpose_infer_output_size_cpu(inputDesc, p, &outputDesc);
+#ifdef _USE_CPU
+        if (ret == SUCCESS && tensorIsShape(inputDesc)) {
+            ret = transpose_cpu(inputDesc, inputDesc.dims, inputDesc.dims + inputDesc.nDims, p.axes,
+                outputDesc, outputDesc.dims, outputDesc.dims + outputDesc.nDims);
+        }
+#endif
     }
     outputTensor->resize(outputDesc);
     return ret;
@@ -189,6 +71,80 @@ EE transpose_infer_forward_tmp_bytes(
     } else {
         *bytes = 0;
         ret = SUCCESS;
+    }
+    return ret;
+}
+
+bool processC8Desc(DataFormat df, std::vector<U32> &dims, U32 cx)
+{
+    if (DF_NCHWC8 == df || DF_NCHWC16 == df) {
+        CHECK_REQUIREMENT(dims[dims.size() - 2] % cx == 0);
+        dims[dims.size() - 2] /= cx;
+        dims.insert(dims.begin(), cx);
+        return true;
+    }
+    return false;
+}
+
+EE transpose(Tensor inputTensor,
+    TransposeParamSpec p,
+    Tensor tmpTensor,
+    Tensor outputTensor,
+    ArchInfo_t archInfo)
+{
+    auto arch = archInfo->arch;
+    TensorDesc inputDesc = inputTensor.get_desc();
+    void *input = get_ptr_from_tensor(inputTensor, arch);
+    TensorDesc outputDesc = outputTensor.get_desc();
+    void *output = get_ptr_from_tensor(outputTensor, arch);
+    std::vector<U32> tmpDims(p.axes, p.axes + p.num_axes);
+    std::vector<U32> inDims(inputDesc.dims, inputDesc.dims + inputDesc.nDims);
+    std::vector<U32> outDims(outputDesc.dims, outputDesc.dims + outputDesc.nDims);
+    if (IS_CPU(arch)) {
+        U32 cx = 8;
+        if (DF_NCHWC16 == inputDesc.df) {
+            cx = 16;
+        }
+        bool padDimI = processC8Desc(inputDesc.df, inDims, cx);
+        bool padDimO = processC8Desc(outputDesc.df, outDims, cx);
+        if (p.axes[1] == 1 && padDimI && padDimO) {
+            tmpDims.push_back(tmpDims.size());
+        } else {
+            if (padDimI) {
+                auto ptr = std::find(tmpDims.begin(), tmpDims.end(), 1);
+                U32 s = outputDesc.nDims - 1 - (ptr - tmpDims.begin());
+                tmpDims.insert(ptr + 1, inputDesc.nDims);
+                outDims[s] /= cx;
+                outDims.insert(outDims.begin() + s, cx);
+            }
+            if (padDimO) {
+                U32 s = p.axes[1];
+                for (U32 &t : tmpDims) {
+                    if (t > s) {
+                        t += 1;
+                    }
+                }
+                tmpDims.push_back(s + 1);
+                s = inputDesc.nDims - 1 - p.axes[1];
+                inDims[s] /= cx;
+                inDims.insert(inDims.begin() + s, cx);
+            }
+        }
+        inputDesc.nDims = inDims.size();
+        outputDesc.nDims = outDims.size();
+    }
+    EE ret = NOT_SUPPORTED;
+#ifdef _USE_CPU
+    if (IS_CPU(arch)) {
+        ret = transpose_cpu(
+            inputDesc, inDims.data(), input, tmpDims.data(), outputDesc, outDims.data(), output);
+#endif
+#ifdef _USE_GPU
+    } else if (IS_GPU(arch)) {
+        void *tmp = get_ptr_from_tensor(tmpTensor, arch);
+        ret = transpose_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc,
+            (GCLMem_t)input, p, (GCLMem_t)tmp, outputDesc, (GCLMem_t)output);
+#endif
     }
     return ret;
 }

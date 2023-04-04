@@ -15,8 +15,8 @@ struct GCLKernelOption {
 };
 
 struct GCLKernelOptionExt {
-    char option[1024];
-    char sourceName[128];
+    char option[1024] = {0};
+    char sourceName[128] = {0};
     DataType kernelDataType;
 };
 typedef GCLKernelOptionExt KernelOpt;

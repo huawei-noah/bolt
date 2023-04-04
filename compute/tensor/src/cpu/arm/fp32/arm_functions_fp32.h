@@ -27,6 +27,7 @@ inline F32 array_sum_f32(const F32 *data, I32 len)
     I32 i = 0;
     F32 sum_s = 0;
     float32x4_t sum_v = vdupq_n_f32(0);
+#pragma unroll(4)
     for (i = 0; i < len - 3; i += 4) {
         float32x4_t in = vld1q_f32(data + i);
         sum_v = vaddq_f32(sum_v, in);
@@ -57,6 +58,7 @@ inline F32 array_var_f32(const F32 *data, I32 len, F32 mean)
     I32 i = 0;
     F32 sum_s = 0;
     float32x4_t mean_v = vdupq_n_f32(mean);
+#pragma unroll(4)
     for (i = 0; i < len - 3; i += 4) {
         float32x4_t in = vld1q_f32(data + i);
         float32x4_t tmp_v = vsubq_f32(in, mean_v);
@@ -80,6 +82,7 @@ inline static void array_minmax_value_f32_template(const F32 *data, I32 len, F32
     if (len >= 4) {
         float32x4_t min_v, max_v, tmp_v;
         min_v = max_v = vld1q_f32(data);
+#pragma unroll(4)
         for (i = 4; i < len - 3; i += 4) {
             tmp_v = vld1q_f32(data + i);
             if (mode & 1)
@@ -137,6 +140,7 @@ inline static void array_minmax_value_i32_template(const I32 *data, I32 len, F32
     if (len >= 4) {
         int32x4_t min_v, max_v, tmp_v;
         min_v = max_v = vld1q_s32(data);
+#pragma unroll(4)
         for (i = 4; i < len - 3; i += 4) {
             tmp_v = vld1q_s32(data + i);
             if (mode & 1)
@@ -190,6 +194,7 @@ inline void array_scale_f32(const F32 *input, F32 *output, I32 len, F32 alpha, F
     float32x4_t alpha_v = vdupq_n_f32(alpha);
     float32x4_t beta_v = vdupq_n_f32(beta);
     I32 i = 0;
+#pragma unroll(4)
     for (i = 0; i < len - 3; i += 4) {
         float32x4_t in = vld1q_f32(input + i);
         float32x4_t tmp_v = vfmaq_f32(beta_v, alpha_v, in);
@@ -200,11 +205,45 @@ inline void array_scale_f32(const F32 *input, F32 *output, I32 len, F32 alpha, F
     }
 }
 
+inline void array_scale_round_f32(const F32 *input, INT8 *output, I32 len, F32 alpha, bool clamp)
+{
+    float32x4_t alpha_v = vdupq_n_f32(alpha);
+    I32 i = 0;
+#pragma unroll(4)
+    for (i = 0; i < len - 7; i += 8) {
+        float32x4_t in0 = vld1q_f32(input + i);
+        float32x4_t in1 = vld1q_f32(input + i + 4);
+        int16x4_t t0 = vmovn_s32(vcvtaq_s32_f32(vmulq_f32(alpha_v, in0)));
+        int16x4_t t1 = vmovn_s32(vcvtaq_s32_f32(vmulq_f32(alpha_v, in1)));
+        int8x8_t t2 = vmovn_s16(vcombine_s16(t0, t1));
+        vst1_s8(output + i, t2);
+    }
+    for (; i < len; i++) {
+        output[i] = round(alpha * input[i]);
+    }
+}
+
+inline void array_scale_round_f32_i32(const F32 *input, I32 *output, I32 len, F32 alpha, bool clamp)
+{
+    float32x4_t alpha_v = vdupq_n_f32(alpha);
+    I32 i = 0;
+#pragma unroll(4)
+    for (i = 0; i < len - 3; i += 4) {
+        float32x4_t in0 = vld1q_f32(input + i);
+        int32x4_t t0 = vcvtaq_s32_f32(vmulq_f32(alpha_v, in0));
+        vst1q_s32(output + i, t0);
+    }
+    for (; i < len; i++) {
+        output[i] = round(alpha * input[i]);
+    }
+}
+
 inline void array_power_f32(F32 *input, F32 *output, I32 len, F32 power)
 {
     I32 i = 0;
     if (power == -1) {
         float32x4_t one_v = vdupq_n_f32(1);
+#pragma unroll(4)
         for (i = 0; i < len - 3; i += 4) {
             float32x4_t in = vld1q_f32(input + i);
             float32x4_t tmp_v = vdivq_f32(one_v, in);
@@ -213,6 +252,7 @@ inline void array_power_f32(F32 *input, F32 *output, I32 len, F32 power)
     } else if (power == -0.5) {
 #ifdef __aarch64__
         float32x4_t one_v = vdupq_n_f32(1);
+#pragma unroll(4)
         for (i = 0; i < len - 3; i += 4) {
             float32x4_t in = vld1q_f32(input + i);
             float32x4_t tmp_v = vdivq_f32(one_v, vsqrtq_f32(in));
@@ -221,6 +261,7 @@ inline void array_power_f32(F32 *input, F32 *output, I32 len, F32 power)
 #endif
     } else if (power == 0.5) {
 #ifdef __aarch64__
+#pragma unroll(4)
         for (i = 0; i < len - 3; i += 4) {
             float32x4_t in = vld1q_f32(input + i);
             float32x4_t tmp_v = vsqrtq_f32(in);
@@ -233,6 +274,7 @@ inline void array_power_f32(F32 *input, F32 *output, I32 len, F32 power)
         }
         i = len;
     } else if (power == 2) {
+#pragma unroll(4)
         for (i = 0; i < len - 3; i += 4) {
             float32x4_t in = vld1q_f32(input + i);
             float32x4_t tmp_v = vmulq_f32(in, in);
@@ -263,7 +305,7 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
         case ACTIVATION_RELU: {
             if (activationDesc.value[0] == 0) {
 #ifdef _USE_OPENMP
-#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
 #endif
                 for (U32 i = 0; i < loops; i += 4) {
                     float32x4_t in = vld1q_f32(input + i);
@@ -273,7 +315,7 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
             } else {
                 float32x4_t scale = vdupq_n_f32(activationDesc.value[0]);
 #ifdef _USE_OPENMP
-#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
 #endif
                 for (U32 i = 0; i < loops; i += 4) {
                     float32x4_t in = vld1q_f32(input + i);
@@ -284,9 +326,24 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
             }
             break;
         }
+        case ACTIVATION_ELU: {
+            float32x4_t alpha = vdupq_n_f32(activationDesc.value[0]);
+            float32x4_t beta = vdupq_n_f32(-activationDesc.value[0]);
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
+#endif
+            for (U32 i = 0; i < loops; i += 4) {
+                float32x4_t in = vld1q_f32(input + i);
+                uint32x4_t mask = vcgtq_f32(in, zero);
+                float32x4_t t = vfmaq_f32(beta, alpha, vexpq_f32_03_percent_error(in));
+                float32x4_t out = vbslq_f32(mask, in, t);
+                vst1q_f32(output + i, out);
+            }
+            break;
+        }
         case ACTIVATION_RELU6: {
 #ifdef _USE_OPENMP
-#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
 #endif
             for (U32 i = 0; i < loops; i += 4) {
                 float32x4_t in = vld1q_f32(input + i);
@@ -298,7 +355,7 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
         }
         case ACTIVATION_H_SIGMOID: {
 #ifdef _USE_OPENMP
-#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
 #endif
             for (U32 i = 0; i < loops; i += 4) {
                 float32x4_t in = vld1q_f32(input + i);
@@ -312,7 +369,7 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
         }
         case ACTIVATION_H_SWISH: {
 #ifdef _USE_OPENMP
-#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
 #endif
             for (U32 i = 0; i < loops; i += 4) {
                 float32x4_t in = vld1q_f32(input + i);
@@ -327,7 +384,7 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
         }
         case ACTIVATION_H_SWISH_NODIV: {
 #ifdef _USE_OPENMP
-#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
 #endif
             for (U32 i = 0; i < loops; i += 4) {
                 float32x4_t in = vld1q_f32(input + i);
@@ -344,7 +401,7 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
             float32x4_t vec1 = vdupq_n_f32(0.044715);
             float32x4_t vec2 = vdupq_n_f32(0.5);
 #ifdef _USE_OPENMP
-#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
 #endif
             for (U32 i = 0; i < loops; i += 4) {
                 float32x4_t in = vld1q_f32(input + i);
@@ -362,7 +419,7 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
         }
         case ACTIVATION_TANH: {
 #ifdef _USE_OPENMP
-#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
 #endif
             for (U32 i = 0; i < loops; i += 4) {
                 float32x4_t in = vld1q_f32(input + i);
@@ -373,7 +430,7 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
         }
         case ACTIVATION_SIGMOID: {
 #ifdef _USE_OPENMP
-#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
 #endif
             for (U32 i = 0; i < loops; i += 4) {
                 float32x4_t in = vld1q_f32(input + i);
@@ -384,7 +441,9 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
         }
         case ACTIVATION_SWISH: {
 #ifdef _USE_OPENMP
-#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
+#else
+#pragma unroll(4)
 #endif
             for (U32 i = 0; i < loops; i += 4) {
                 float32x4_t in = vld1q_f32(input + i);
@@ -395,7 +454,7 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
         }
         case ACTIVATION_MISH: {
 #ifdef _USE_OPENMP
-#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
 #endif
             for (U32 i = 0; i < loops; i += 4) {
                 float32x4_t in = vld1q_f32(input + i);
@@ -407,7 +466,7 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
         }
         case ACTIVATION_SOFTPLUS: {
 #ifdef _USE_OPENMP
-#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
 #endif
             for (U32 i = 0; i < loops; i += 4) {
                 float32x4_t in = vld1q_f32(input + i);
@@ -418,7 +477,7 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
         }
         case ACTIVATION_EXP: {
 #ifdef _USE_OPENMP
-#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
 #endif
             for (U32 i = 0; i < loops; i += 4) {
                 float32x4_t in = vld1q_f32(input + i);
@@ -429,7 +488,7 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
         }
         case ACTIVATION_ABS: {
 #ifdef _USE_OPENMP
-#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
 #endif
             for (U32 i = 0; i < loops; i += 4) {
                 float32x4_t in = vld1q_f32(input + i);
@@ -440,7 +499,7 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
         }
         case ACTIVATION_RECIPROCAL: {
 #ifdef _USE_OPENMP
-#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
 #endif
             for (U32 i = 0; i < loops; i += 4) {
                 float32x4_t in = vld1q_f32(input + i);
@@ -449,14 +508,70 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
             }
             break;
         }
+        case ACTIVATION_SIN: {
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
+#endif
+            for (U32 i = 0; i < loops; i += 4) {
+                float32x4_t in = vld1q_f32(input + i);
+                float32x4_t out = vsinq_f32(in);
+                vst1q_f32(output + i, out);
+            }
+            break;
+        }
+        case ACTIVATION_COS: {
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
+#endif
+            for (U32 i = 0; i < loops; i += 4) {
+                float32x4_t in = vld1q_f32(input + i);
+                float32x4_t out = vcosq_f32(in);
+                vst1q_f32(output + i, out);
+            }
+            break;
+        }
+        case ACTIVATION_ROUND: {
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
+#endif
+            for (U32 i = 0; i < loops; i += 4) {
+                float32x4_t in = vld1q_f32(input + i);
+                float32x4_t out = vrndaq_f32(in);
+                vst1q_f32(output + i, out);
+            }
+            break;
+        }
+        case ACTIVATION_CEIL: {
+#ifdef __aarch64__
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
+#endif
+            for (U32 i = 0; i < loops; i += 4) {
+                float32x4_t in = vld1q_f32(input + i);
+                float32x4_t out = vrndpq_f32(in);
+                vst1q_f32(output + i, out);
+            }
+            break;
+#endif
+        }
+        case ACTIVATION_FLOOR: {
+#ifdef __aarch64__
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
+#endif
+            for (U32 i = 0; i < loops; i += 4) {
+                float32x4_t in = vld1q_f32(input + i);
+                float32x4_t out = vrndmq_f32(in);
+                vst1q_f32(output + i, out);
+            }
+            break;
+#endif
+        }
         case ACTIVATION_SIGN:
         case ACTIVATION_LOG:
         case ACTIVATION_NOT:
         case ACTIVATION_GREATER:
-        case ACTIVATION_NEG:
-        case ACTIVATION_ROUND:
-        case ACTIVATION_CEIL:
-        case ACTIVATION_FLOOR: {
+        case ACTIVATION_NEG: {
             loops = 0;
             break;
         }
@@ -466,7 +581,7 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
     }
     if (ret == SUCCESS) {
 #ifdef _USE_OPENMP
-#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
 #endif
         for (U32 i = loops; i < len; i++) {
             ret = activation_template<F32>(activationDesc, input[i], output + i);
@@ -477,15 +592,16 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
 
 inline void array_mul_f32(const F32 *inputA, const F32 *inputB, F32 *output, I32 len)
 {
-    I32 i = 0;
-    for (i = 0; i < len - 3; i += 4) {
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
+#endif
+    for (I32 i = 0; i < len - 3; i += 4) {
         float32x4_t a = vld1q_f32(inputA + i);
         float32x4_t b = vld1q_f32(inputB + i);
         float32x4_t c = vmulq_f32(a, b);
         vst1q_f32(output + i, c);
     }
-
-    for (; i < len; i++) {
+    for (I32 i = len / 4 * 4; i < len; i++) {
         output[i] = inputA[i] * inputB[i];
     }
 }
@@ -493,48 +609,54 @@ inline void array_mul_f32(const F32 *inputA, const F32 *inputB, F32 *output, I32
 inline void array_mul_and_add_f32(
     const F32 *inputA, const F32 *inputB, const F32 *inputC, F32 *output, I32 len)
 {
-    I32 i = 0;
-    for (i = 0; i < len - 3; i += 4) {
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
+#else
+#pragma unroll(4)
+#endif
+    for (I32 i = 0; i < len - 3; i += 4) {
         float32x4_t a = vld1q_f32(inputA + i);
-        float32x4_t b;
-        if (inputA == inputB) {
-            b = a;
-        } else {
-            b = vld1q_f32(inputB + i);
-        }
-        float32x4_t c = vaddq_f32(vmulq_f32(a, b), vld1q_f32(inputC + i));
+        float32x4_t b = vld1q_f32(inputB + i);
+        float32x4_t c = vld1q_f32(inputC + i);
+        c = vfmaq_f32(c, a, b);
         vst1q_f32(output + i, c);
     }
-
-    for (; i < len; i++) {
+    for (I32 i = len / 4 * 4; i < len; i++) {
         output[i] = inputA[i] * inputB[i] + inputC[i];
     }
 }
 
 inline void array_add_f32(const F32 *inputA, const F32 *inputB, F32 *output, I32 len)
 {
-    I32 i = 0;
-    for (i = 0; i < len - 3; i += 4) {
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
+#else
+#pragma unroll(4)
+#endif
+    for (I32 i = 0; i < len - 3; i += 4) {
         float32x4_t a = vld1q_f32(inputA + i);
         float32x4_t b = vld1q_f32(inputB + i);
         float32x4_t c = vaddq_f32(a, b);
         vst1q_f32(output + i, c);
     }
-
-    for (; i < len; i++) {
+    for (I32 i = len / 4 * 4; i < len; i++) {
         output[i] = inputA[i] + inputB[i];
     }
 }
 
 inline void array_max_f32(const F32 *inputA, const F32 *inputB, F32 *output, I32 len)
 {
-    I32 i = 0;
-    for (; i < len - 3; i += 4) {
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
+#else
+#pragma unroll(4)
+#endif
+    for (I32 i = 0; i < len - 3; i += 4) {
         float32x4_t a = vld1q_f32(inputA + i);
         float32x4_t b = vld1q_f32(inputB + i);
         vst1q_f32(output + i, vmaxq_f32(a, b));
     }
-    for (; i < len; i++) {
+    for (I32 i = len / 4 * 4; i < len; i++) {
         output[i] = UNI_MAX(inputA[i], inputB[i]);
     }
 }
@@ -549,15 +671,19 @@ inline void array_norm_scalar_scale_fp32(
     float32x4_t alpha_v = vdupq_n_f32(*alpha);
     float32x4_t beta_v = vdupq_n_f32(*beta);
 
-    I32 i = 0;
-    for (i = 0; i < len - 3; i += 4) {
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
+#else
+#pragma unroll(4)
+#endif
+    for (I32 i = 0; i < len - 3; i += 4) {
         float32x4_t in = vld1q_f32(input + i);
         float32x4_t tmp_v = vsubq_f32(in, mean_v);
         tmp_v = vdivq_f32(tmp_v, std_v);
         tmp_v = vfmaq_f32(beta_v, alpha_v, tmp_v);
         vst1q_f32(output + i, tmp_v);
     }
-    for (; i < len; i++) {
+    for (I32 i = len / 4 * 4; i < len; i++) {
         output[i] = *alpha * (input[i] - mean) / std_value + *beta;
     }
 }

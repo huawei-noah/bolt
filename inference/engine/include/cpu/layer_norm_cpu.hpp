@@ -31,11 +31,10 @@ public:
 
     EE infer_weight_desc() override
     {
-        auto curOpWs = this->get_weightspec();
-        DataType dtNoQ = (dt == DT_F16_8Q) ? DT_F16 : ((dt == DT_F32_8Q) ? DT_F32 : dt);
-        if (0 != curOpWs.bytes_of_weight) {
-            this->weightNum = curOpWs.bytes_of_weight / bytesOf(curOpWs.mdt);
+        if (0 != this->ws.bytes_of_weight) {
+            this->weightNum = this->ws.bytes_of_weight / bytesOf(this->ws.mdt);
         }
+        DataType dtNoQ = noQuantDataType(this->dt);
         Tensor weightTensor;
         weightTensor.resize(tensor1d(dtNoQ, this->weightNum));
         this->weightTensors.push_back(weightTensor);
@@ -67,23 +66,19 @@ public:
         Tensor biasTensor = this->biasTensors[0];
         Tensor outputTensor = this->outputTensors[0];
 
-        CHECK_STATUS(layer_normalization(inputTensor, this->p, weightTensor, biasTensor, this->temp,
+        CHECK_STATUS(layer_norm(inputTensor, this->p, weightTensor, biasTensor, this->temp,
             outputTensor, &this->archInfo));
     }
 
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
-        EE ret = normalization_infer_output_size(inTensors[0], outTensors[0], &this->archInfo);
+        EE ret = layer_norm_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo);
 #ifdef _USE_INT8
-        if (DT_F16_8Q == this->dt || DT_F32_8Q == this->dt) {
+        if (isQuantMixDataType(this->dt)) {
             if (featureScale.size() > 0 && -1 == (featureScale.back())[0]) {
                 TensorDesc outputDesc = outTensors[0]->get_desc();
-#ifdef _USE_X86
-                outputDesc.dt = DT_U8_Q;
-#else
-                outputDesc.dt = DT_I8;
-#endif
+                outputDesc.dt = get_activation_quant_data_type();
                 outTensors[0]->resize(outputDesc);
             }
         }

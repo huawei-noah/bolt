@@ -19,6 +19,9 @@
 #include <string>
 #include "model_common.h"
 #include "uni.h"
+#include "string_functions.h"
+
+static U32 nameIndex = 0;
 
 class OPOptimizer {
 public:
@@ -27,21 +30,20 @@ public:
 
     virtual bool optimize(ModelSpec *spec) = 0;
 
-    template <int bufferSize>
-    std::string copyBuffer(void *ptr, int size)
+    template <int SIZE>
+    std::string copyBuffer(void *data, int size)
     {
-        size = UNI_MIN(size, bufferSize);
-        char buffer[bufferSize];
-        UNI_MEMCPY(buffer, ptr, size);
-        if (size < bufferSize)
-            buffer[size] = '\0';
-        else
-            buffer[bufferSize - 1] = '\0';
-        for (int j = 0; j < size - 1; j++) {
-            if (buffer[j] == '\0')
-                buffer[j] = '-';
+        int length = UNI_MIN(size, SIZE);
+        std::string key;
+        key.reserve(8 * length);
+        U8 *p = (U8 *)data;
+        for (int j = 0, i = 0; j < size && i < SIZE; j++) {
+            if (p[j] != 0) {
+                key += std::to_string(j) + "/" + std::to_string(p[j]) + " ";
+                i++;
+            }
         }
-        return buffer;
+        return key;
     }
 
     bool isModelOutput(ModelSpec *spec, int opIndex)
@@ -60,7 +62,7 @@ public:
         return ret;
     }
 
-    static int searchWeightIndex(ModelSpec *spec, std::string op_name)
+    int searchWeightIndex(ModelSpec *spec, std::string op_name)
     {
         if (spec->num_weight_specs <= 0) {
             return -1;
@@ -88,7 +90,8 @@ public:
         }
     }
 
-    void setOperatorInvalid(ModelSpec *spec, int index, bool removeEdge = false)
+    void setOperatorInvalid(
+        ModelSpec *spec, int index, bool removeEdge = false, int searchStart = -1)
     {
         if (index >= spec->num_operator_specs || index < 0) {
             return;
@@ -108,8 +111,11 @@ public:
             }
             if (spec->ops[index].num_inputs > 0) {
                 for (U32 i = 0; i < spec->ops[index].num_outputs; i++) {
+                    if (searchStart == -1) {
+                        searchStart = index + 1;
+                    }
                     std::vector<std::pair<int, int>> operatorIndexes0 = searchOperatorIndexByInput(
-                        spec, spec->ops[index].output_tensors_name[i], index + 1);
+                        spec, spec->ops[index].output_tensors_name[i], searchStart);
                     for (U32 j = 0; j < operatorIndexes0.size(); j++) {
                         str_copy(spec->ops[operatorIndexes0[j].first]
                                      .input_tensors_name[operatorIndexes0[j].second],
@@ -128,6 +134,9 @@ public:
 
     void setWeightOperatorInvalid(ModelSpec *spec, int index)
     {
+        if (index >= spec->num_weight_specs || index < 0) {
+            return;
+        }
         UNI_DEBUG_LOG("remove weight operator:%s.\n", spec->ws[index].op_name);
         spec->ws[index].bytes_of_weight = 0;
         mt_free(spec->ws[index].weight, spec);
@@ -135,6 +144,19 @@ public:
         mt_free(spec->ws[index].vec, spec);
         spec->ws[index].num_quant_scale = 0;
         mt_free(spec->ws[index].weight_scale, spec);
+    }
+
+    void setSharedWeightInvalid(ModelSpec *spec, int index)
+    {
+        if (index >= spec->num_operator_specs || index < 0 ||
+            spec->ops[index].type != OT_SharedWeight) {
+            return;
+        }
+        auto next = searchOperatorIndexByInput(spec, spec->ops[index].output_tensors_name[0], index);
+        if (next.size() > 0) {
+            return;
+        }
+        setOperatorInvalid(spec, index);
     }
 
     int searchOperatorIndexByName(ModelSpec *spec, std::string name)
@@ -289,5 +311,19 @@ public:
         }
         return k;
     }
+
+    std::string allocName(std::string suggest = "")
+    {
+        std::string name = suggest;
+        if (name == "" || name.length() >= NAME_LEN) {
+            name = "_" + int2Any(nameIndex, 60);
+            nameIndex += 1;
+        }
+        if (name.length() >= NAME_LEN) {
+            UNI_ERROR_LOG("NAME_LEN(%d) is not big enough to store %s.\n", NAME_LEN, name.c_str());
+        }
+        return name;
+    }
+
 };
 #endif

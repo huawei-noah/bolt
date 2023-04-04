@@ -102,23 +102,5 @@ EE check_mali(GCLHandle_t handle,
     if (dt == DT_U32) {
         dt = DT_I32;
     }
-    switch (dt) {
-        case DT_F16: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
-        case DT_I32: {
-            ret = check_core_mali(
-                handle, inputDescA, inputA, inputDescB, inputB, p, outputDesc, output);
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return check_core_mali(handle, inputDescA, inputA, inputDescB, inputB, p, outputDesc, output);
 }

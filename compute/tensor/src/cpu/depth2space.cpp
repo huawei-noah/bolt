@@ -13,9 +13,12 @@
 
 #include "cpu/tensor_computing_cpu.h"
 
-template <typename T>
-static inline EE depth2space_kernel(
-    TensorDesc inputDesc, T *input, Depth2SpaceParamSpec p, TensorDesc outputDesc, T *output)
+template <typename T, int mode, int cx>
+static EE depth2space_kernel(const TensorDesc &inputDesc,
+    T *input,
+    const Depth2SpaceParamSpec &p,
+    const TensorDesc &outputDesc,
+    T *output)
 {
     DataType idt, odt;
     DataFormat idf, odf;
@@ -34,14 +37,6 @@ static inline EE depth2space_kernel(
     } else {
         return NOT_SUPPORTED;
     }
-
-    int cx = 1;
-    if (idf == DF_NCHWC8) {
-        cx = 8;
-    }
-    if (idf == DF_NCHWC16) {
-        cx = 16;
-    }
     U32 icx = ic / cx;
     for (U32 n = 0, o_i = 0; n < in; n++) {
         for (U32 c = 0; c < oc; c++) {
@@ -49,7 +44,12 @@ static inline EE depth2space_kernel(
                 for (int i = 0; i < bh; i++) {
                     for (U32 w = 0; w < iw; w++) {
                         for (int j = 0; j < bw; j++, o_i++) {
-                            int i_c = (c * bh + i) * bw + j;
+                            int i_c;
+                            if (mode == 0) {
+                                i_c = (i * bw + j) * oc + c;
+                            } else {
+                                i_c = (c * bh + i) * bw + j;
+                            }
                             int c1 = i_c / cx;
                             int c2 = i_c % cx;
                             int i_i = (((n * icx + c1) * ih + h) * iw + w) * cx + c2;
@@ -61,6 +61,41 @@ static inline EE depth2space_kernel(
         }
     }
     return SUCCESS;
+}
+
+template <typename T, int mode>
+static EE depth2space_kernel(const TensorDesc &inputDesc,
+    T *input,
+    const Depth2SpaceParamSpec &p,
+    const TensorDesc &outputDesc,
+    T *output)
+{
+    EE ret;
+    DataFormat idf = inputDesc.df;
+    if (idf == DF_NCHWC8) {
+        ret = depth2space_kernel<T, mode, 8>(inputDesc, input, p, outputDesc, output);
+    } else if (idf == DF_NCHWC16) {
+        ret = depth2space_kernel<T, mode, 16>(inputDesc, input, p, outputDesc, output);
+    } else {
+        ret = depth2space_kernel<T, mode, 1>(inputDesc, input, p, outputDesc, output);
+    }
+    return ret;
+}
+
+template <typename T>
+static EE depth2space_kernel(const TensorDesc &inputDesc,
+    T *input,
+    const Depth2SpaceParamSpec &p,
+    const TensorDesc &outputDesc,
+    T *output)
+{
+    EE ret;
+    if (p.mode == std::string("DCR")) {
+        ret = depth2space_kernel<T, 0>(inputDesc, input, p, outputDesc, output);
+    } else {
+        ret = depth2space_kernel<T, 1>(inputDesc, input, p, outputDesc, output);
+    }
+    return ret;
 }
 
 EE depth2space_cpu(

@@ -26,7 +26,6 @@ namespace raul
  *
  * Impelements Bahdanau-style (cumulative) scoring function. The attention is location-based
  *
- * Implementation follows https://rnd-gitlab-msc.huawei.com/voice-assistant/tts/release_code/-/blob/feature/experimental/tacotron/models/attention.py#L453
  *
  * Inputs:
  *     1. Query  [batch, 1, 1, decoder_output_size]

@@ -34,10 +34,9 @@ public:
 
     EE infer_weight_desc() override
     {
-        auto curOpWs = this->get_weightspec();
         U32 weightNum = 0;
-        if (curOpWs.weight != nullptr) {
-            weightNum = curOpWs.bytes_of_weight / UNI_MAX(1, bytesOf(curOpWs.mdt));
+        if (this->ws.weight != nullptr) {
+            weightNum = this->ws.bytes_of_weight / UNI_MAX(1, bytesOf(this->ws.mdt));
         }
         CHECK_REQUIREMENT(weightNum != 0);
         if (weightNum == 1) {
@@ -63,11 +62,11 @@ public:
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
         this->needSetKernelVec = true;
-        CHECK_STATUS(prelu_infer_output_size(inTensors[0], outTensors[0], &this->archInfo));
-        if (check_tensors_image(inTensors)) {
-            CHECK_STATUS(set_tensors_image(outTensors, inTensors.size()));
+        EE ret = prelu_infer_output_size(inTensors[0], outTensors[0], &this->archInfo);
+        if (ret == SUCCESS && check_tensors_image(inTensors)) {
+            ret = set_tensors_image(outTensors, inTensors.size());
         }
-        return SUCCESS;
+        return ret;
     }
 
     REGISTER_OCL_OPERATOR_RUN

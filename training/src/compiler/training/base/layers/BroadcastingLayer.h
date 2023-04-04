@@ -29,7 +29,6 @@ class BroadcastingLayer : public BasicLayer
 {
   public:
     BroadcastingLayer(const raul::Name& name, const std::string& typeName, const BasicParams& params, NetworkParameters& networkParams, std::pair<bool, bool> doChecks = { false, false });
-
   protected:
     void determineBroadcastFlags();
     std::vector<bool> mBroadcastQuery;

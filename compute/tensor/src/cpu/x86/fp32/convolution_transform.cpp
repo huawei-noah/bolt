@@ -50,7 +50,8 @@ inline EE convolution_transform_filter_kernel_fp32(TensorDesc filterDesc,
     TensorDesc *ftmDesc,
     F32 *ftmArray,
     DataFormat ftmDataFormat,
-    U32 cx)
+    U32 cx,
+    bool paddingC)
 {
     if (nullptr == filterArray || nullptr == ftmDesc || nullptr == ftmArray) {
         CHECK_STATUS(NULL_POINTER);
@@ -66,6 +67,9 @@ inline EE convolution_transform_filter_kernel_fp32(TensorDesc filterDesc,
     }
     if (fdf != DF_NCHW) {
         CHECK_STATUS(NOT_SUPPORTED);
+    }
+    if (paddingC) {
+        fc = CeilDivide(fc, 8) * 8;
     }
     EE ret = SUCCESS;
     switch (ftmDataFormat) {
@@ -96,54 +100,92 @@ EE convolution_transform_filter_fp32(TensorDesc filterDesc,
     TensorDesc *ftmDesc,
     F32 *filterTransformed)
 {
-    if (algorithm == CONVOLUTION_ALGORITHM_WINOGRAD) {
-        return convolution_winograd_transform_filter_fp32(
-            filterDesc, filter, convParamSpec, algorithm, ftmDesc, filterTransformed);
-    }
-
     DataFormat ftmDataFormat;
     DataType fdt;
     DataFormat fdf;
-    U32 fn, fc, fh, fw;
-    CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-    U32 cx = 0;
-    U32 fnBlock = 0;
-    fn = CeilDivide(fn, 8) * 8 / convParamSpec.group;
-    switch (algorithm) {
-        case CONVOLUTION_ALGORITHM_DIRECT: {
-            fnBlock = InferConvDirectUnrollOc(fn);
-            cx = 8;
-            break;
+    U32 fn, fc, ft, fh, fw;
+    TensorDesc originalDesc = filterDesc;
+    if (tensorIs4d(filterDesc)) {
+        CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
+        ft = 1;
+    } else if (tensorIs5d(filterDesc)) {
+        U32 pb = convParamSpec.pad_before;
+        U32 pa = convParamSpec.pad_after;
+        U32 st = convParamSpec.stride_t;
+        U32 dt = convParamSpec.dilatedRate_t;
+        CHECK_STATUS(tensor5dGet(filterDesc, &fdt, &fdf, &fn, &fc, &ft, &fh, &fw));
+        if ((ft != 1 && fh != 1 && fw != 1) ||
+            (pb != 0) ||
+            (pa != 0) ||
+            (st > 1) ||
+            (dt > 1))
+        {
+            return NOT_SUPPORTED;
         }
-        case CONVOLUTION_ALGORITHM_POINTWISE: {
-            fnBlock = InferConvPointwiseUnrollOc(fn);
-            cx = 128;
-            break;
+        if (ft == 1) {
+            fh *= ft;
+        } else {
+            fw *= fh;
+            fh = ft;
         }
-        case CONVOLUTION_ALGORITHM_GEMM_ICNCHW: {
-            fnBlock = InferConvPointwiseUnrollOc(fn);
-            cx = 1;
-            break;
-        }
-        default:
-            return NOT_MATCH;
+        filterDesc = tensor4df(fdt, fdf, fn, fc, fh, fw);
+    } else {
+        return NOT_SUPPORTED;
     }
-    CHECK_STATUS(InferConvWeightFormat(ftmDataFormat, fnBlock));
 
-    U32 channelAxis = filterDesc.nDims - 1;
-    TensorDesc tmpFilterDesc = filterDesc;
-    tmpFilterDesc.dims[channelAxis] /= convParamSpec.group;
-    U32 fnPadding = CeilDivide(tmpFilterDesc.dims[channelAxis], 8) * 8;
-    U32 originalTileSize = tensorNumElements(tmpFilterDesc);
-    for (U32 g = 0; g < convParamSpec.group; g++) {
-        CHECK_STATUS(convolution_transform_filter_kernel_fp32(
-            tmpFilterDesc, filter, ftmDesc, filterTransformed, ftmDataFormat, cx));
-        U32 newTileSize = tensorNumElements(*ftmDesc) / tmpFilterDesc.dims[channelAxis] * fnPadding;
-        filter += originalTileSize;
-        filterTransformed += newTileSize;
+    EE ret = NOT_SUPPORTED;
+    bool paddingC = false;
+    if (algorithm == CONVOLUTION_ALGORITHM_WINOGRAD) {
+        ret = convolution_winograd_transform_filter_fp32(
+            filterDesc, filter, convParamSpec, algorithm, ftmDesc, filterTransformed);
+    } else {
+        U32 cx = 0;
+        U32 fnBlock = 0;
+        fn = CeilDivide(fn, 8) * 8 / convParamSpec.group;
+        switch (algorithm) {
+            case CONVOLUTION_ALGORITHM_DIRECT: {
+                fnBlock = InferConvDirectUnrollOc(fn);
+                cx = 8;
+                break;
+            }
+            case CONVOLUTION_ALGORITHM_POINTWISE: {
+                fnBlock = InferConvPointwiseUnrollOc(fn);
+                cx = 128;
+                paddingC = true;
+                break;
+            }
+            case CONVOLUTION_ALGORITHM_GEMM_ICNCHW: {
+                fnBlock = InferConvPointwiseUnrollOc(fn);
+                cx = 1;
+                break;
+            }
+            default:
+                return NOT_MATCH;
+        }
+        CHECK_STATUS(InferConvWeightFormat(ftmDataFormat, fnBlock));
+
+        U32 channelAxis = filterDesc.nDims - 1;
+        TensorDesc tmpFilterDesc = filterDesc;
+        tmpFilterDesc.dims[channelAxis] /= convParamSpec.group;
+        U32 fnPadding = CeilDivide(tmpFilterDesc.dims[channelAxis], 8) * 8;
+        U32 originalTileSize = tensorNumElements(tmpFilterDesc);
+        for (U32 g = 0; g < convParamSpec.group; g++) {
+            CHECK_STATUS(convolution_transform_filter_kernel_fp32(
+                tmpFilterDesc, filter, ftmDesc, filterTransformed, ftmDataFormat, cx, paddingC));
+            U32 newTileSize = tensorNumElements(*ftmDesc) / tmpFilterDesc.dims[channelAxis] * fnPadding;
+            filter += originalTileSize;
+            filterTransformed += newTileSize;
+        }
+        ftmDesc->dims[channelAxis] = filterDesc.dims[channelAxis];
+        ret = SUCCESS;
     }
-    ftmDesc->dims[channelAxis] = filterDesc.dims[channelAxis];
-    return SUCCESS;
+
+    if (tensorIs5d(originalDesc)) {
+        originalDesc.df = ftmDesc->df;
+        *ftmDesc = originalDesc;
+    }
+
+    return ret;
 }
 
 void transformWeight4x4_3x3(
@@ -162,7 +204,7 @@ void transformWeight4x4_3x3(
     __m256 v025 = _mm256_set1_ps(0.25f);
 
     // U32 fn32 = fn / 32;
-    U32 fnBlocks[3] = {8, 16, 32};
+    U32 fnBlocks[] = {8, 16, 24, 32};
     U32 lstep = fc * fh * fw;
     __m256i vindex = _mm256_set_epi32(
         lstep * 7, lstep * 6, lstep * 5, lstep * 4, lstep * 3, lstep * 2, lstep, 0);
@@ -173,7 +215,7 @@ void transformWeight4x4_3x3(
         U32 nSize = 0;
         for (U32 n = 0; n < fn; n += nSize) {
             nSize = UNI_MIN(32, fn - n);
-            nSize = fnBlocks[nSize >> 4];
+            nSize = fnBlocks[(nSize >> 3) - 1];
             F32 *curO = output + (c * fn + n * cx) * 36;
             for (U32 cb = 0; cb < cx; ++cb) {
                 for (U32 ni = 0; ni < (nSize / 8); ++ni) {

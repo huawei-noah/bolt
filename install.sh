@@ -12,7 +12,11 @@ use_neon="on"
 use_fp32="on"
 use_fp16="on"
 use_int8="on"
+use_int32="on"
 clean="off"
+build_test="on"
+build_example="off"
+use_lite="off"
 
 find . -name "*.sh" | xargs chmod +x
 
@@ -32,11 +36,14 @@ EOF
     print_targets
     cat <<EOF
   --converter=<ON|OFF>       set to use model converter(default: ON).
+  --test=<ON|OFF>            set to build test(default: ON).
   --example                  set to build example(default: OFF).
+  --opencv                   set to build OpenCV(default: OFF).
   --debug                    set to use debug(default: OFF).
+  --lite                     set to build lite verion, library size is about 1MB, run in serial mode.(default: OFF).
   --profile                  set to print performance profiling information(default: OFF).
   --shared                   set to use shared library(default: OFF).
-  --secure                   set to use Huawei secure C(default: OFF).
+  --securec                  set to use Huawei secure C(default: OFF).
   --gpu                      set to use arm mali/qualcomm gpu(default: OFF).
   --openmp                   set to use OpenMP multi-threads parallel operator(default: OFF).
   --flow                     set to use flow to process pipeline data(default: OFF).
@@ -46,6 +53,8 @@ EOF
   --fp32=<ON|OFF>            set to use float32 calculation(default: ON).
   --fp16=<ON|OFF>            set to use float16 calculation on arm aarch64(default: ON on aarch64, OFF on others).
   --int8=<ON|OFF>            set to use int8 calculation on arm aarch64(default: ON on aarch64, OFF on others).
+  --cpp_api                  set to use C++ API(default: OFF)
+  --python_api               set to use Python API(default: OFF)
   -t, --threads=8            use parallel build(default: 8).
   --clean                    remove build and install files.
 EOF
@@ -53,7 +62,7 @@ EOF
 }
 
 cmake_options=""
-TEMP=`getopt -o "ht:c:" -al target:,threads:,help,converter:,example,debug,profile,shared,gpu,openmp,flow,serial:,neon:,fp32:,fp16:,int8:,train,clean,secure -- "$@"`
+TEMP=`getopt -o "ht:c:" -al target:,threads:,help,converter:,test:,lite,example,opencv,debug,profile,shared,gpu,openmp,flow,serial:,neon:,fp32:,fp16:,int8:,train,clean,securec,cpp_api,python_api -- "$@"`
 if [[ $? != 0 ]]; then
     echo "[ERROR] ${script_name} terminating..." >&2
     exit 1
@@ -79,8 +88,17 @@ while true ; do
         -c|--converter)
             converter=$2
             shift 2 ;;
+        --test)
+            build_test=$2
+            shift 2 ;;
         --example)
-            cmake_options="${cmake_options} -DBUILD_TEST=ON"
+            build_example="on"
+            shift ;;
+        --lite)
+            use_lite="on"
+            shift ;;
+        --opencv)
+            cmake_options="${cmake_options} -DUSE_OPENCV=ON"
             shift ;;
         --debug)
             cmake_options="${cmake_options} -DUSE_DEBUG=ON"
@@ -118,8 +136,14 @@ while true ; do
         --train)
             cmake_options="${cmake_options} -DUSE_TRAINING=ON -DRAUL_CONFIG_BLAS_VENDOR=Huawei"
             shift ;;
-        --secure)
+        --securec)
             cmake_options="${cmake_options} -DUSE_SECURE_C=ON"
+            shift ;;
+        --cpp_api)
+            cmake_options="${cmake_options} -DUSE_API_CPP=ON"
+            shift ;;
+        --python_api)
+            cmake_options="${cmake_options} -DUSE_API_CPP=ON -DUSE_API_PYTHON=ON"
             shift ;;
         --clean)
             clean="on"
@@ -136,6 +160,14 @@ if [[ "${target}" == "" ]]; then
     exit 1
 fi
 
+if [[ "${use_lite}" == "on" || "${use_lite}" == "ON" ]]; then
+    use_fp16=off
+    use_int32=off
+    use_general=on
+    build_test=off
+    build_example=off
+    cmake_options="${cmake_options} -DUSE_LITE=ON"
+fi
 target=$(map_target ${target})
 check_target ${target}
 
@@ -147,7 +179,7 @@ source ${script_dir}/scripts/setup_compiler.sh || exit 1
 cmake_options="${CMAKE_OPTIONS} ${cmake_options}"
 
 platform="${target}"
-if [[ "${clean}" == "on" ]]; then
+if [[ "${clean}" == "on" || "${clean}" == "ON" ]]; then
     ${script_dir}/third_party/install.sh --target=${target} --threads=${build_threads} --clean || exit 1
     if [[ -d ${script_dir}/build_${platform} ]]; then
         rm -rf ${script_dir}/build_${platform} || exit 1
@@ -174,6 +206,11 @@ if [[ "${use_serial}" == "ON" || "${use_serial}" == "on" ]]; then
 else
     cmake_options="${cmake_options} -DUSE_GENERAL=OFF"
 fi
+if [[ "${use_int32}" == "ON" || "${use_int32}" == "on" ]]; then
+    cmake_options="${cmake_options} -DUSE_INT32=ON"
+else
+    cmake_options="${cmake_options} -DUSE_INT32=OFF"
+fi
 if [[ "${use_fp32}" == "ON" || "${use_fp32}" == "on" ]]; then
     cmake_options="${cmake_options} -DUSE_FP32=ON"
 else
@@ -183,16 +220,13 @@ if [[ ${target} =~ aarch64 ]]; then
     if [[ "${use_neon}" == "ON" || "${use_neon}" == "on" ]]; then
         cmake_options="${cmake_options} -DUSE_NEON=ON"
     fi
-    if [[ ${cmake_options} =~ USE_GPU=ON ]]; then
-        use_fp16="on"
-    fi
     if [[ "${use_fp16}" == "ON" || "${use_fp16}" == "on" ]]; then
-        ${CC} ${CFLAGS} ${aarch64_fp16_cflags} ${script_dir}/common/cmakes/blank.c -o main &> test.log && cmake_options="${cmake_options} -DUSE_FP16=ON"
+        ${CC} ${CFLAGS} ${aarch64_fp16_cflags} ${script_dir}/common/cmakes/blank_main.c -o main &> test.log && cmake_options="${cmake_options} -DUSE_FP16=ON"
         if [[ ! ${cmake_options} =~ USE_FP16=ON ]]; then
             echo "[WARNING] not build armv8.2 fp16 library."
         fi
         if [[ "${use_int8}" == "ON" || "${use_int8}" == "on" ]]; then
-            ${CC} ${CFLAGS} ${aarch64_int8_cflags} ${script_dir}/common/cmakes/blank.c -o main &> test.log && cmake_options="${cmake_options} -DUSE_INT8=ON"
+            ${CC} ${CFLAGS} ${aarch64_int8_cflags} ${script_dir}/common/cmakes/blank_main.c -o main &> test.log && cmake_options="${cmake_options} -DUSE_INT8=ON"
             if [[ ! ${cmake_options} =~ USE_INT8=ON ]]; then
                 echo "[WARNING] not build armv8.2 int8 library."
             fi
@@ -203,19 +237,24 @@ if [[ ${target} =~ aarch64 ]]; then
             cmake_options="${cmake_options} -DUSE_INT8=ON"
         fi
     fi
-elif [[ ${target} =~ avx ]]; then
-    cmake_options="${cmake_options} -DUSE_X86=ON"
-    if [[ ${target} =~ avx512 ]]; then
-        if [[ "${use_int8}" == "ON" || "${use_int8}" == "on" ]]; then
-            cmake_options="${cmake_options} -DUSE_INT8=ON"
-        fi
-        if [[ ${target} =~ vnni ]]; then
-            cmake_options="${cmake_options} -DUSE_AVX512_VNNI=ON"
-        fi
+    if [[ ${target} =~ aarch64_v9 ]]; then
+        cmake_options="${cmake_options} -DUSE_MATRIX=ON"
     fi
 else
-    if [[ "${use_int8}" == "ON" || "${use_int8}" == "on" ]]; then
-        cmake_options="${cmake_options} -DUSE_INT8=ON"
+    if [[ ${target} =~ avx ]]; then
+        cmake_options="${cmake_options} -DUSE_X86=ON"
+        if [[ ${target} =~ avx_vnni ]]; then
+            if [[ "${use_int8}" == "ON" || "${use_int8}" == "on" ]]; then
+                cmake_options="${cmake_options} -DUSE_INT8=ON"
+            fi
+            cmake_options="${cmake_options} -DUSE_AVX_VNNI=ON"
+        fi
+        if [[ ${target} =~ avx512_vnni ]]; then
+            if [[ "${use_int8}" == "ON" || "${use_int8}" == "on" ]]; then
+                cmake_options="${cmake_options} -DUSE_INT8=ON"
+            fi
+            cmake_options="${cmake_options} -DUSE_AVX512_VNNI=ON"
+        fi
     fi
 fi
 if [[ "${target}" == "linux-arm_himix100" || ${target} =~ armv7 || "${target}" == "linux-arm_musleabi" ]]; then
@@ -227,10 +266,21 @@ if [[ "${target}" == "linux-arm_himix100" || ${target} =~ armv7 || "${target}" =
     fi
 fi
 if [[ ${target} =~ android ]]; then
-    cmake_options="${cmake_options} -DUSE_JNI=ON"
+    cmake_options="${cmake_options} -DUSE_API_JAVA=ON"
     cmake_options="${cmake_options} -DUSE_ANDROID_LOG=ON"
 fi
 cmake_options="${cmake_options} -DCMAKE_INSTALL_PREFIX=${script_dir}/install_${platform}"
+
+if [[ ${build_test} == "on" || ${build_test} == "ON" ]]; then
+    cmake_options="${cmake_options} -DBUILD_TEST=ON"
+else
+    cmake_options="${cmake_options} -DBUILD_TEST=OFF"
+fi
+if [[ ${build_example} == "on" || ${build_example} == "ON" ]]; then
+    cmake_options="${cmake_options} -DBUILD_EXAMPLE=ON"
+else
+    cmake_options="${cmake_options} -DBUILD_EXAMPLE=OFF"
+fi
 
 export cmake_options="${cmake_options}"
 

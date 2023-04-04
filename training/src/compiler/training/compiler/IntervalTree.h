@@ -26,7 +26,7 @@ class IntervalTree
 {
   public:
     IntervalTree(size_t totalNodes);
-
+    ~IntervalTree(){}
     typedef WorkflowPool<MemoryManager>::Interval Interval;
 
     void insert(const Interval* interval);

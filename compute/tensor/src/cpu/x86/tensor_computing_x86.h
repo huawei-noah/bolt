@@ -155,7 +155,7 @@ EE eltwise_x86(DataType dataType,
     void *output,
     EltwiseMode eltwiseMode);
 
-EE layer_normalization_x86(TensorDesc inputDesc,
+EE layer_norm_x86(TensorDesc inputDesc,
     void *input,
     LayerNormParamSpec p,
     void *alpha,
@@ -193,7 +193,8 @@ EE pooling_x86(TensorDesc inputDesc,
     PoolingParamSpec poolingParamSpec,
     void *scale,
     TensorDesc outputDesc,
-    void *output);
+    void *output,
+    void *idx);
 
 EE pooling_bp_x86(TensorDesc inputDesc,
     const void *input,
@@ -226,6 +227,8 @@ EE deconvolution_pointwise_x86(TensorDesc inputDesc,
     TensorDesc filterDesc,
     const void *filter,
     ConvolutionParamSpec convParamSpec,
+    TensorDesc scaleDesc,
+    void *scale,
     TensorDesc biasDesc,
     const void *bias,
     U32 tmpBytes,
@@ -261,7 +264,7 @@ EE quantize_bias_offsetC(const void *bias,
     const F32 *scale,
     void *qBias);
 
-EE quantize_x86(TensorDesc dDesc, const void *data, TensorDesc *qDesc, void *qData, F32 *scale);
+EE quantize_x86(TensorDesc dDesc, const void *data, TensorDesc *qDesc, void *qData, F32 *scale, int mode=0);
 
 EE dequantize_x86(TensorDesc qDesc,
     void *qData,
@@ -270,5 +273,15 @@ EE dequantize_x86(TensorDesc qDesc,
     void *bData,
     TensorDesc dDesc,
     void *dData);
+
+template <typename T>
+EE decode_priorbox_x86(const T *location,
+    const T *priorbox,
+    const T *variance,
+    I32 num_total_priorbox,
+    T *xmin,
+    T *ymin,
+    T *xmax,
+    T *ymax);
 
 #endif  //CHEETAH_TENSOR_COMPUTING_X86_H

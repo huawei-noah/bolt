@@ -23,10 +23,23 @@ public:
         this->dt = dt;
         this->p = p;
     }
-
+    ~Squeeze(){}
     OperatorType get_type() override
     {
         return OT_Squeeze;
+    }
+
+    SqueezeParamSpec get_param(const TensorDesc &desc)
+    {
+        SqueezeParamSpec ps = this->p;
+        if (ps.num_axes == 0) {
+            for (I32 i = desc.nDims - 1; i >= 0; i--) {
+                if (desc.dims[i] == 1) {
+                    ps.axes[ps.num_axes++] = desc.nDims - 1 - i;
+                }
+            }
+        }
+        return ps;
     }
 
 protected:

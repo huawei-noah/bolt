@@ -8,7 +8,7 @@ android {
 
     defaultConfig {
         applicationId "com.huawei.noah"
-        minSdkVersion 16
+        minSdkVersion 24
         targetSdkVersion 32
         versionCode 1
         versionName "1.0"
@@ -22,6 +22,7 @@ android {
 
     buildTypes {
         release {
+            debuggable false
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }

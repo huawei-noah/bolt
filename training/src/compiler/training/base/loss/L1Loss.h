@@ -26,7 +26,6 @@ namespace raul
  * Creates a criterion that measures the mean absolute error(MAE)
  * between each element in the input x and target y
  * @see
- * https://en.wikipedia.org/wiki/Mean_absolute_error
  */
 class L1Loss : public BasicLayer
 {

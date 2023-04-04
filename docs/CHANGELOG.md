@@ -7,6 +7,36 @@ The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 
 and this project adheres to [Semantic Versioning](<https://semver.org/spec/v2.0.0.html>).
 
+### [1.5.0] - 2023-2-23
+
+#### Added
+
+- Support Python API 
+- Support AVX-VNNI and ARMv9 instruction set
+- Support Intel Desktop GPU (float16 and float32)
+- Support Windows on arm platform
+- Support more operators : Random, Sin, Cos, Einsum, Elu, UnPooling, Flatten, ConvertColor, BilateralSliceApply, Lut
+- Support more networks : ViTAE, CMT, EfficientFormer, hdrnet, 3dLut, ConvTT, Wenet, NFM, AFM, ONN, wide&deep, DeepFM, MMOE, etc
+- Improve multi-threads parallel inference performance on CPU
+- Add simple chinese deployment guide
+- Support model file compatibility
+- Support using outer memory(CPU array or OpenCL cl_mem) by using SetInputOutput API
+- Support data type and format transform by using C API
+
+#### Changed
+
+- TensorDesc's dim array is changed to 20.
+- Remove __FILE__ macro usage and warning log under release mode
+- change enum data and operator parameter size
+
+#### Fixed
+
+- Fix GPU resize bug
+- Fix GPU concurrent inference bug
+- Fix ONNX converter bug
+- Add missed chinese automatic speech recognition model
+
+
 ### [1.3.0] - 2022-2-28
 
 #### Added

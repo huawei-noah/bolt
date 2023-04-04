@@ -18,7 +18,7 @@
 EE activation_mali_fp16(GCLHandle_t handle,
     TensorDesc inputDesc,
     GCLMem_t input,
+    ActivationParamSpec p,
     TensorDesc outputDesc,
-    GCLMem_t output,
-    ActivationMode activationMode);
+    GCLMem_t output);
 #endif

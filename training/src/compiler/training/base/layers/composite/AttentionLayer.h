@@ -25,7 +25,6 @@ namespace raul
  *
  * This layer is a dot-product attention layer with additional scaling.
  *
- * Implementation follows http://nlp.seas.harvard.edu/2018/04/03/attention.html#attention
  *
  * Inputs: Query, Value, Key[, Mask] or Query[, Mask]. In latter case Value=Key=Query
  * Outputs: Attention[, Probabilities]

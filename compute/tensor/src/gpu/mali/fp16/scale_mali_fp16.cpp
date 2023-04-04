@@ -16,7 +16,7 @@
 
 inline EE scale_checkpara_mali_fp16(TensorDesc inputDesc, TensorDesc outputDesc)
 {
-    if (inputDesc.dt != outputDesc.dt || inputDesc.dt != DT_F16) {
+    if (inputDesc.dt != outputDesc.dt) {
         return NOT_SUPPORTED;
     }
     return SUCCESS;
@@ -31,9 +31,10 @@ inline EE scale_core_mali_fp16(GCLHandle_t handle,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
+    DataType idt;
     U32 iw, ih, ic, in;
     U32 ow, oh, oc, on;
-    tensorSelectGet(inputDesc, NULL, NULL, &in, &ic, &ih, &iw);
+    tensorSelectGet(inputDesc, &idt, NULL, &in, &ic, &ih, &iw);
     tensorSelectGet(outputDesc, NULL, NULL, &on, &oc, &oh, &ow);
     U32 iw_str, ih_str, iw_off, ih_off;
     U32 ow_str, oh_str, ow_off, oh_off;
@@ -69,7 +70,7 @@ inline EE scale_core_mali_fp16(GCLHandle_t handle,
         gs[2] = oc;
         useNchwFormat = true;
     }
-    CHECK_STATUS(set_scale_opt_mali(useAlpha, useBeta, useNchwFormat, useBroadCast, axis, DT_F16,
+    CHECK_STATUS(set_scale_opt_mali(useAlpha, useBeta, useNchwFormat, useBroadCast, axis, idt,
         input->desc.memType, output->desc.memType, kernelName, &kernelOpt));
     CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
     CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, ow_str, oh_str, i_off, o_off, iw, ih,

@@ -27,11 +27,10 @@ public:
         this->p = p;
         this->dwActivationParamSpec = dwActivationParamSpec;
         this->pwActivationParamSpec = pwActivationParamSpec;
-        this->hasBias = false;
         this->pwAlg = CONVOLUTION_ALGORITHM_NULL;
         this->dwAlg = DEPTHWISE_CONVOLUTION_ALGORITHM_NULL;
     }
-
+    ~Convolution(){}
     OperatorType get_type() override
     {
         return OT_Conv;

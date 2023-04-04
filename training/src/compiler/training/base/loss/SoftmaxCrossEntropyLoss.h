@@ -25,7 +25,6 @@ namespace raul
  * @brief SoftmaxCrossEntropyLoss
  * Measures the probability error in discrete classification tasks in which the classes are mutually exclusive (each entry is in exactly one class)
  * @see
- * https://www.tensorflow.org/api_docs/python/tf/nn/softmax_cross_entropy_with_logits
  */
 class SoftmaxCrossEntropyLoss : public BasicLayer
 {

@@ -14,33 +14,46 @@
 #ifndef _H_THREAD_AFFINITY
 #define _H_THREAD_AFFINITY
 
-#ifndef _WIN32
+#if defined(__GLIBC__) || defined(__linux__)
 #include <sys/syscall.h>
 #include <sched.h>
-#else
+#endif
+
+#ifdef _WIN32
 #include <windows.h>
 #endif
+
 #include <unistd.h>
+
 #include "sys.h"
 #include "error.h"
 #include "data_type.h"
 #include "affinity_policy.h"
 
 #ifdef _USE_X86
-#define __cpuid(data, eaxIn, ecxIn)                                                   \
+#define get_cpuid_ax(data, eaxIn)                                                      \
+    __asm__ __volatile__("cpuid\n"                                                    \
+                         : "=a"(data[0]), "=b"(data[1]), "=c"(data[2]), "=d"(data[3]) \
+                         : "0"(eaxIn))
+
+#define get_cpuid_axcx(data, eaxIn, ecxIn)                                             \
     __asm__ __volatile__("cpuid\n"                                                    \
                          : "=a"(data[0]), "=b"(data[1]), "=c"(data[2]), "=d"(data[3]) \
                          : "0"(eaxIn), "2"(ecxIn))
+#define get_bv(data)                                             \
+    __asm__ __volatile__("xgetbv\n"                       \
+                         : "=a"(data[0]), "=d"(data[3]) \
+                         : "c"(0))
 #endif
 
 inline int get_cpus_num()
 {
-    int cpuNum = 0;
+    int cpuNum = 4;
 #if defined(__APPLE__)
     cpuNum = 6;
 #elif defined(_WIN32)
     cpuNum = atoi(getenv("NUMBER_OF_PROCESSORS"));
-#else
+#elif defined(__GLIBC__) || defined(__linux__)
     cpuNum = sysconf(_SC_NPROCESSORS_ONLN);
 #endif
     if (cpuNum == 0) {
@@ -66,8 +79,11 @@ inline void get_cpus_arch(Arch *archs, int cpuNum)
     _MM_SET_DENORMALS_ZERO_MODE(_MM_DENORMALS_ZERO_ON);
     _MM_SET_FLUSH_ZERO_MODE(_MM_FLUSH_ZERO_ON);
     U32 data[4] = {};
+    const U32 &eax = data[0];
     const U32 &ebx = data[1];
     const U32 &ecx = data[2];
+    const U32 &edx = data[3];
+    uint64_t bv = 0;
 
     const U32 osxsave = 1U << 0;
     const U32 avx = 1U << 1;
@@ -75,33 +91,54 @@ inline void get_cpus_arch(Arch *archs, int cpuNum)
     const U32 avx2_fma = 1U << 3;
     const U32 avx512f = 1U << 4;
     const U32 avx512_vnni = 1U << 5;
+    const U32 avx_vnni = 1U << 6;
+
+    get_cpuid_ax(data, 0);
+    const U32 maxNum = eax;
 
     U32 cpuArch = 0;
-    __cpuid(data, 0, 0);
-    __cpuid(data, 1, 0);
+    get_cpuid_ax(data, 1);
     if (ecx & (1U << 27)) {
         cpuArch |= osxsave;
     }
     if (cpuArch & osxsave) {
-        if (ecx & (1U << 28)) {
-            cpuArch |= avx;
-        }
-        if (ecx & (1U << 12)) {
-            cpuArch |= fma;
-        }
-        __cpuid(data, 7, 0);
-        if ((cpuArch & avx) && (ebx & (1U << 5))) {
-            cpuArch |= avx2_fma;
-        }
-        if (ebx & (1U << 16)) {
-            cpuArch |= avx512f;
-        }
-        if ((cpuArch & avx512f) && (ebx & (1U << 11))) {
-            cpuArch |= avx512_vnni;
+        get_bv(data);
+        bv = ((uint64_t)edx << 32) | eax;
+        if ((bv & (1U << 1)) && (bv & (1U << 2))) { // xmm & ymm
+            if (ecx & (1U << 28)) {
+                cpuArch |= avx;
+            }
+            if (ecx & (1U << 12)) {
+                cpuArch |= fma;
+            }
+            if ((bv & (1U << 6)) && (bv & (1U << 7))) { // zmm0-15 && zmm16-31
+                get_cpuid_axcx(data, 7, 0);
+                if (ebx & (1U << 16)) {
+                    cpuArch |= avx512f;
+                }
+                if ((cpuArch & avx512f) && (ecx & (1U << 11))) {
+                    cpuArch |= avx512_vnni;
+                }
+            }
         }
     }
 
-    if (cpuArch & avx512_vnni) {
+    if (maxNum >= 7) {
+        get_cpuid_axcx(data, 7, 0);
+        if ((cpuArch & avx) && (ebx & (1U << 5))) {
+            cpuArch |= avx2_fma;
+        }
+        if (eax >= 1) {
+            get_cpuid_axcx(data, 7, 1);
+            if (eax & (1U << 4)) {
+                cpuArch |= avx_vnni;
+            }
+        }
+    }
+
+    if (cpuArch & avx_vnni) {
+        archs[0] = X86_AVXVNNI;
+    }else if (cpuArch & avx512_vnni) {
         archs[0] = X86_AVX512;
     } else if (cpuArch & avx2_fma) {
         archs[0] = X86_AVX2;
@@ -112,8 +149,12 @@ inline void get_cpus_arch(Arch *archs, int cpuNum)
 
     int cpuid = 0;
 #ifdef _USE_NEON
+#ifdef _USE_LITE
+    *archs = ARM_V7;
+#else
     FILE *fp = fopen("/proc/cpuinfo", "rb");
     if (!fp) {
+        UNI_WARNING_LOG("can not open /proc/cpuinfo\n");
         return;
     }
     const int bufferSize = 1024;
@@ -130,70 +171,37 @@ inline void get_cpus_arch(Arch *archs, int cpuNum)
             UNI_SSCANF(buffer, "CPU part\t: %x", &id);
             switch (id) {
                 case 0xc07:
-                    arch = ARM_V7;
-                    break;
                 case 0xc0f:
-                    arch = ARM_V7;
-                    break;
-                case 0xd01:
-                    arch = ARM_A76;
-                    break;
-                case 0xd03:
-                    arch = ARM_V8;
-                    break;
                 case 0xd04:
                     arch = ARM_V7;
                     break;
-                case 0xd05:
-                    arch = ARM_A55;
-                    break;
+                case 0x801:
+                case 0x800:
+                case 0x205:
+                case 0xd03:
                 case 0xd07:
-                    arch = ARM_V8;
-                    break;
                 case 0xd08:
-                    arch = ARM_V8;
-                    break;
                 case 0xd09:
                     arch = ARM_V8;
                     break;
-                case 0xd0a:
-                    arch = ARM_A76;
-                    break;
-                case 0xd0b:
-                    arch = ARM_A76;
-                    break;
-                case 0xd0d:
-                    arch = ARM_A76;
-                    break;
-                case 0xd40:
-                    arch = ARM_A76;
-                    break;
-                case 0xd41:
-                    arch = ARM_A76;
-                    break;
-                case 0xd44:
-                    arch = ARM_A76;
-                    break;
-                case 0x804:
-                    arch = ARM_A76;
-                    break;
                 case 0x805:
-                    arch = ARM_A55;
-                    break;
-                case 0x802:
-                    arch = ARM_A76;
-                    break;
+                case 0xd05:
                 case 0x803:
+                case 0xd46:
                     arch = ARM_A55;
                     break;
-                case 0x801:
-                    arch = ARM_V8;
-                    break;
-                case 0x800:
-                    arch = ARM_V8;
-                    break;
-                case 0x205:
-                    arch = ARM_V8;
+                case 0xd01:
+                case 0xd0a:
+                case 0xd0b:
+                case 0xd0d:
+                case 0xd40:
+                case 0xd41:
+                case 0xd44:
+                case 0x804:
+                case 0x802:
+                case 0xd47:
+                case 0xd48:
+                    arch = ARM_A76;
                     break;
                 default:
                     UNI_DEBUG_LOG("unknown CPU %d arch %x, set to ARM_V8\n", cpuid, id);
@@ -203,6 +211,7 @@ inline void get_cpus_arch(Arch *archs, int cpuNum)
         }
     }
     fclose(fp);
+#endif
 #endif
     for (; cpuid < cpuNum; cpuid++) {
         archs[cpuid] = archs[0];
@@ -374,7 +383,7 @@ inline int set_thread_affinity(int threadid, const int *cpuids, int num)
     }
     HANDLE thread = GetCurrentThread();
     SetThreadAffinityMask(thread, mask);
-#elif !defined(__APPLE__)
+#elif defined(__GLIBC__) || defined(__linux__)
     UNI_THREADID;
     cpu_set_t mask;
     CPU_ZERO(&mask);
@@ -409,14 +418,22 @@ inline Arch thread_affinity_set_by_policy(
     int i = cpuNum - 1 - threadId;
     switch (policy) {
         case AFFINITY_CPU_LOW_POWER: {
+#ifdef _USE_X86
+            i = cpuNum - 1 - threadId;
+#else
             i = threadId;
+#endif
             while (cpuids[i] == -1 && i < cpuNum - 1) {
                 i++;
             }
             break;
         }
         case AFFINITY_CPU_HIGH_PERFORMANCE: {
+#ifdef _USE_X86
+            i = threadId;
+#else
             i = cpuNum - 1 - threadId;
+#endif
             while (cpuids[i] == -1 && i > 0) {
                 i--;
             }
@@ -517,4 +534,25 @@ inline void set_cpu_dynamic(DeviceInfo *deviceInfo, int threadId)
         deviceInfo->schedule = MALI;
     }
 }
+
+inline DataType getTargetDtFromAffinity(AffinityPolicy affinityPolicy)
+{
+    if (affinityPolicy == AFFINITY_GPU) {
+        return DT_NUM;
+    }
+    Arch arch = get_cpu_arch();
+    if (0) {
+#ifdef _USE_FP16
+    } else if (IS_ARM_LG_V8(arch)) {
+        return DT_F16_8Q;
+#endif
+#ifdef _USE_INT8
+    } else if (IS_X86_AVX512(arch) || IS_ARM(arch)) {
+        return DT_F32_8Q;
+#endif
+    } else {
+        return DT_F32;
+    }
+}
+
 #endif

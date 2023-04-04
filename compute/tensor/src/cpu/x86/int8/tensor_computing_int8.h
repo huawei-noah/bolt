@@ -21,6 +21,8 @@
 
 EE dequantizeI32ToF32(TensorDesc qDesc, I32 *qData, const F32 *scale, TensorDesc dDesc, F32 *data);
 
+EE dequantizeU8ToF32(TensorDesc qDesc, UINT8 *qData, const F32 *scale, TensorDesc dDesc, F32 *data);
+
 EE quantizeBiasOffsetCI32(const F32 *bias,
     TensorDesc biasDesc,
     INT8 *filter,
@@ -28,9 +30,9 @@ EE quantizeBiasOffsetCI32(const F32 *bias,
     const F32 *scale,
     I32 *offsetCBias);
 
-EE quantizeF32ToI8(TensorDesc dDesc, const F32 *data, TensorDesc *qDesc, INT8 *qData, F32 *scale);
+EE quantizeF32ToI8(TensorDesc dDesc, const F32 *data, TensorDesc *qDesc, INT8 *qData, F32 *scale, int mode);
 
-EE quantizeF32ToU8(TensorDesc dDesc, const F32 *data, TensorDesc *qDesc, UINT8 *qData, F32 *scale);
+EE quantizeF32ToU8(TensorDesc dDesc, const F32 *data, TensorDesc *qDesc, UINT8 *qData, F32 *scale, int mode);
 
 EE transformU8ToI8(TensorDesc dDesc, const UINT8 *data, TensorDesc *qDesc, INT8 *qData);
 
@@ -56,6 +58,21 @@ EE convolution_int8(TensorDesc inputDesc,
     Arch arch);
 
 EE convolution_direct(TensorDesc inputDesc,
+    UINT8 *inArray,
+    F32 *eltwiseInput,
+    TensorDesc filterDesc,
+    const INT8 *filterArray,
+    ConvolutionParamSpec convParamSpec,
+    TensorDesc biasDesc,
+    const F32 *biasArray,
+    U32 tmpBytes,
+    void *tmp,
+    TensorDesc outputDesc,
+    void *outArray,
+    F32 *scale,
+    ActivationParamSpec activationDesc);
+
+EE convolution_direct_avx_vnni(TensorDesc inputDesc,
     UINT8 *inArray,
     F32 *eltwiseInput,
     TensorDesc filterDesc,
@@ -99,7 +116,7 @@ EE convolution_1x1_direct(TensorDesc inputDesc,
     F32 *scale,
     ActivationParamSpec activationDesc);
 
-EE pooling_c16_uint8(TensorDesc inputDesc,
+EE pooling_uint8(TensorDesc inputDesc,
     const UINT8 *input,
     PoolingParamSpec poolingParamSpec,
     TensorDesc outputDesc,
@@ -174,4 +191,11 @@ EE depthwise_pointwise_convolution_transform_filter_int8(TensorDesc dwFilterDesc
     INT8 *dwFilterTransformed,
     TensorDesc *pwFtmDesc,
     INT8 *pwFilterTransformed);
+
+EE deconvolution_transform_filter_int8(TensorDesc filterDesc,
+    const INT8 *filter,
+    ConvolutionForwardAlgorithm algorithm,
+    TensorDesc *ftmDesc,
+    INT8 *filterTransformed);
+
 #endif  //CHEETAH_TENSOR_COMPUTING_INT8_H

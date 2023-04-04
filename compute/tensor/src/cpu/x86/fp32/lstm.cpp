@@ -83,16 +83,18 @@ EE lstmcell_fp32(TensorDesc xDesc,
     U32 currentStateStride = column + hDim;
     U32 currentHStride = column + hDim;
     __m256 forgetBiasVector = _mm256_set1_ps(forgetBias);
+    const F32 *mBias = nullptr;
     for (U32 m = 0; m < batch; m++) {
         F32 *lastBatchH = lastHArray + m * lastHStride;
         if (xDim > 0) {
             UNI_MEMCPY(xhArray, currentXArray + m * batchStrideX, xDim * sizeof(F32));
             UNI_MEMCPY(xhArray + xDim, lastBatchH, hDim * sizeof(F32));
+            mBias = (const F32 *)bias[0];
         } else {
             intermediateH = tmpArray;
             xhArray = lastBatchH;
+            mBias = (const F32 *)bias[0] + m * steps * column * 4;
         }
-        const F32 *mBias = (const F32 *)bias[0] + m * steps * column * 4;
         mvm_nkn32_with_bias(fn, fk, (const F32 *)filter[0], xhArray, intermediateH, mBias);
 
         F32 *out_i = intermediateH;

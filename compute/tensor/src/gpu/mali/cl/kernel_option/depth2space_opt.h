@@ -16,7 +16,7 @@ inline EE set_depth2space_nchwc4_2x2_opt(bool useOutputNchw,
     }
     char ioMemName[128] = "";
     CHECK_STATUS(set_io_mem_name(inputMemType, outputMemType, ioMemName));
-    kernelOpt->kernelDataType = DT_F16;
+    kernelOpt->kernelDataType = dt;
     std::string kernel = std::string("depth2space_nchwc4_2x2_") + ioMemName + outputFormatName;
     UNI_STRCPY(kernelName, kernel.c_str());
     UNI_STRCPY(kernelOpt->sourceName, "depth2space_nchwc4_2x2");

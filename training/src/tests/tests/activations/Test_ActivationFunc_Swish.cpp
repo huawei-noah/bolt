@@ -36,7 +36,6 @@ raul::dtype golden_swish(const raul::dtype x)
     return x * golden_sigmoid(x);
 }
 
-// See https://www.wolframalpha.com/input/?i=derivative+x*+sigmoid%28x%29
 raul::dtype golden_swish_grad(const raul::dtype x, const raul::dtype grad)
 {
     return grad * (golden_sigmoid(x) + x * golden_sigmoid(x) * (1.0_dt - golden_sigmoid(x)));
@@ -51,7 +50,6 @@ TEST(TestActivationFuncSwish, ForwardRandUnit)
     const auto eps = 1e-6_dt;
     const auto tensor_size = 1000U;
     // We have a significant change in the range [-5,5]
-    // See https://www.wolframalpha.com/input/?i=x*sigmoid%28x%29
     const auto random_range = std::pair<raul::dtype, raul::dtype>(-5.0f, 5.0f);
 
     // Random generator
@@ -100,7 +98,6 @@ TEST(TestActivationFuncSwish, BackwardRandUnit)
     const auto eps = 1e-5_dt;
     const auto tensor_size = 1000U;
     // We have a significant change in the range [-5,5]
-    // See https://www.wolframalpha.com/input/?i=x*sigmoid%28x%29
     const auto random_range = std::pair<raul::dtype, raul::dtype>(-5.0f, 5.0f);
 
     // Random generator

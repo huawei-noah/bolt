@@ -35,13 +35,11 @@ namespace raul::optimizers
  * Where:
  * r1 - L2-norm of weights.
  * r2 - L2-norm of the Adam update rule with weight decay.
- * Implementation follows https://github.com/cybertronai/pytorch-lamb/blob/master/pytorch_lamb/lamb.py
  *
  *  @see
  *  - Yang You, Jing Li, Sashank Reddi, Jonathan Hseu, Sanjiv Kumar, Srinadh Bhojanapalli, Xiaodan Song, James Demmel, Kurt Keutzer, Cho-Jui Hsieh,
- *    “Large Batch Optimization for Deep Learning: Training BERT in 76 minutes” arXiv:1904.00962 [cs], Apr. 2019. https://arxiv.org/pdf/1904.00962.pdf
+ *    “Large Batch Optimization for Deep Learning: Training BERT in 76 minutes” arXiv:1904.00962 [cs], Apr. 2019.
  *
- *  - Intuitive description: https://towardsdatascience.com/an-intuitive-understanding-of-the-lamb-optimizer-46f8c0ae4866
  */
 struct LAMB : public Optimizer
 {

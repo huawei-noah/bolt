@@ -98,7 +98,7 @@ class TransConcatTransOptimizer : public OPOptimizer {
                     transPs.axes[1] = 2;
                     transPs.axes[2] = 3;
                     transPs.axes[3] = 1;
-                    std::string name = "concat_transpose_" + std::to_string(i);
+                    std::string name = allocName("concat_transpose_" + std::to_string(i));
                     OperatorSpec transposeOperator =
                         mt_create_operator(name.c_str(), OT_Transpose, 1, 1);
                     transposeOperator.ps.transpose_spec = transPs;

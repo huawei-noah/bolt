@@ -23,7 +23,7 @@ public:
         this->dt = dt;
         this->p = p;
     }
-
+    ~Space2Depth(){}
     OperatorType get_type() override
     {
         return OT_Space2Depth;

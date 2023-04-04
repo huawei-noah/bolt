@@ -25,7 +25,7 @@ class TestInitLayer : public raul::BasicLayer
         , mBS(0)
     {
     }
-
+    ~TestInitLayer(){}
     void onBatchSizeChanged(size_t size) override { mBS = size; }
 
     void forwardComputeImpl(raul::NetworkMode) override {}

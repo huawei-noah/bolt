@@ -26,20 +26,20 @@ EE rnn_transform_filter(std::vector<Tensor> filterTensors,
     RNNParamSpec rnnParamSpec,
     Tensor tmpTensor,
     std::vector<Tensor *> ftmTensors,
-    ArchInfo_t archInfo)
+    ArchInfo_t archInfo,
+    void *scale)
 {
     auto arch = archInfo->arch;
     std::vector<TensorDesc> filterDescs = get_desc_from_tensors(filterTensors);
     std::vector<void *> filters = get_data_from_tensors<void *>(filterTensors, arch);
     std::vector<TensorDesc> ftmDescs(ftmTensors.size());
     std::vector<void *> ftms = get_data_from_tensor_ptrs<void *>(ftmTensors, arch);
-    std::vector<float> scale(ftmTensors.size(), -1);
 
     EE ret = NOT_SUPPORTED;
     if (IS_CPU(arch)) {
 #ifdef _USE_CPU
         ret = rnn_transform_filter_cpu(filterDescs.data(), (const void **)filters.data(),
-            rnnParamSpec, ftmDescs.data(), ftms.data(), scale.data(), arch);
+            rnnParamSpec, ftmDescs.data(), ftms.data(), (F32 *)scale, arch);
 #endif
 #ifdef _USE_GPU
     } else if (IS_GPU(arch)) {
@@ -59,7 +59,9 @@ EE rnn_transform_filter(std::vector<Tensor> filterTensors,
     }
     for (U32 i = 0; i < ftmTensors.size(); i++) {
         ftmTensors[i]->resize(ftmDescs[i]);
-        ftmTensors[i]->set_scale(scale[i]);
+        if (scale != nullptr) {
+            ftmTensors[i]->set_scale(((F32 *)scale)[i + 1]);
+        }
     }
     return ret;
 }
@@ -120,9 +122,9 @@ EE rnn_infer_output_size(std::vector<Tensor *> inputTensors,
         }
         outputDescs.push_back(outputDesc);
     } else if (outputTensors.size() == 3) {
-        outputDesc = tensor2df(idt, DF_NORMAL, batch, column);
-        outputDescs.push_back(outputDesc);
         outputDesc = tensor2df(idt, DF_NORMAL, batch, hDim);
+        outputDescs.push_back(outputDesc);
+        outputDesc = tensor2df(idt, DF_NORMAL, batch, column);
         outputDescs.push_back(outputDesc);
     }
     for (U32 i = 0; i < outputDescs.size(); i++) {
@@ -189,6 +191,7 @@ EE rnn(std::vector<Tensor> inputTensors,
     RNNParamSpec rnnParamSpec,
     std::vector<Tensor> tmpTensors,
     std::vector<Tensor> outputTensors,
+    void *scale,
     ArchInfo_t archInfo)
 {
     auto arch = archInfo->arch;
@@ -206,12 +209,8 @@ EE rnn(std::vector<Tensor> inputTensors,
     EE ret = NOT_SUPPORTED;
     if (IS_CPU(arch)) {
 #ifdef _USE_CPU
-        std::vector<float> scale(filterTensors.size());
-        for (U32 i = 0; i < filterTensors.size(); i++) {
-            scale[i] = filterTensors[i].get_scale();
-        }
         ret = rnn_cpu(inputDescs[0], inputs[0], filterDescs.data(), (const void **)filters.data(),
-            biasDescs.data(), (const void **)biases.data(), scale.data(), rnnParamSpec, tmpBytes,
+            filterTensors.size(), biasDescs.data(), (const void **)biases.data(), (F32 *)scale, rnnParamSpec, tmpBytes,
             tmp, outputDescs[0], outputs[0], arch);
 #endif
     } else if (IS_GPU(archInfo->arch)) {
@@ -394,6 +393,7 @@ EE rnncell(Tensor xTensor,
     U32 tmpOffset,
     Tensor tmpTensor,
     Tensor hTensor,
+    void *scale,
     ArchInfo_t archInfo)
 {
     auto arch = archInfo->arch;
@@ -414,12 +414,8 @@ EE rnncell(Tensor xTensor,
     EE ret = NOT_SUPPORTED;
     if (IS_CPU(arch)) {
 #ifdef _USE_CPU
-        std::vector<float> scale(filterTensors.size());
-        for (U32 i = 0; i < filterTensors.size(); i++) {
-            scale[i] = filterTensors[i].get_scale();
-        }
         ret = rnncell_cpu(xDesc, currentX, filterDescs.data(), (const void **)filters.data(),
-            biasDescs.data(), (const void **)biases.data(), scale.data(), state, rnnParamSpec,
+            biasDescs.data(), (const void **)biases.data(), (F32 *)scale, state, rnnParamSpec,
             batchStrideX, batchStrideH, tmpBytes, tmp, hDesc, currentH, archInfo->arch);
 #endif
 #ifdef _USE_GPU

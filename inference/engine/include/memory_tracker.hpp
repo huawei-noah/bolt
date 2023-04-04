@@ -27,7 +27,7 @@ public:
         this->tensorStoragePosition.clear();
         this->memoryNeedAssign = true;
     }
-
+    ~MemoryTracker(){}
     void trackOpTensorSizes(std::shared_ptr<Operator> op, std::vector<std::string> tensorNames)
     {
         I32 *pos = op->get_tensor_positions().data();
@@ -112,6 +112,7 @@ public:
         return this->memoryNeedAssign;
     }
 
+     
 protected:
     void trackSingleTensor(Tensor tensor)
     {

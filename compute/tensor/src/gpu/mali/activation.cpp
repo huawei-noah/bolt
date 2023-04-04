@@ -18,12 +18,12 @@
 #include "gpu/mali/tensor_computing_mali.h"
 #include "gpu/mali/fp16/activation_mali_fp16.h"
 
-inline EE activation_checkpara_mali(GCLHandle_t handle,
+static EE activation_checkpara_mali(GCLHandle_t handle,
     TensorDesc inputDesc,
     GCLMem_t input,
+    ActivationParamSpec p,
     TensorDesc outputDesc,
-    GCLMem_t output,
-    ActivationMode activationMode)
+    GCLMem_t output)
 {
     if (handle == nullptr || nullptr == input || nullptr == output) {
         CHECK_STATUS(NULL_POINTER);
@@ -31,13 +31,14 @@ inline EE activation_checkpara_mali(GCLHandle_t handle,
     if (inputDesc.df != outputDesc.df) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
-    if (activationMode != ACTIVATION_NULL && activationMode != ACTIVATION_RELU &&
-        activationMode != ACTIVATION_RELU6 && activationMode != ACTIVATION_H_SIGMOID &&
-        activationMode != ACTIVATION_H_SWISH && activationMode != ACTIVATION_GELU &&
-        activationMode != ACTIVATION_TANH && activationMode != ACTIVATION_SIGMOID &&
-        activationMode != ACTIVATION_ABS && activationMode != ACTIVATION_LOG &&
-        activationMode != ACTIVATION_NEG && activationMode != ACTIVATION_EXP &&
-        activationMode != ACTIVATION_SWISH) {
+    if (p.mode != ACTIVATION_NULL && p.mode != ACTIVATION_RELU &&
+        p.mode != ACTIVATION_RELU6 && p.mode != ACTIVATION_H_SIGMOID &&
+        p.mode != ACTIVATION_H_SWISH && p.mode != ACTIVATION_GELU &&
+        p.mode != ACTIVATION_TANH && p.mode != ACTIVATION_SIGMOID &&
+        p.mode != ACTIVATION_ABS && p.mode != ACTIVATION_LOG &&
+        p.mode != ACTIVATION_NEG && p.mode != ACTIVATION_EXP &&
+        p.mode != ACTIVATION_SWISH && p.mode != ACTIVATION_FLOOR &&
+        p.mode != ACTIVATION_ROUND && p.mode != ACTIVATION_CEIL) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
     if (input->desc.memFormat != output->desc.memFormat) {
@@ -49,25 +50,11 @@ inline EE activation_checkpara_mali(GCLHandle_t handle,
 EE activation_mali(GCLHandle_t handle,
     TensorDesc inputDesc,
     GCLMem_t input,
+    ActivationParamSpec p,
     TensorDesc outputDesc,
-    GCLMem_t output,
-    ActivationMode activationMode)
+    GCLMem_t output)
 {
-    EE ret = SUCCESS;
     CHECK_STATUS(
-        activation_checkpara_mali(handle, inputDesc, input, outputDesc, output, activationMode));
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = activation_mali_fp16(handle, inputDesc, input, outputDesc, output, activationMode);
-            break;
-        }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+        activation_checkpara_mali(handle, inputDesc, input, p, outputDesc, output));
+    return activation_mali_fp16(handle, inputDesc, input, p, outputDesc, output);
 }

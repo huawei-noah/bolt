@@ -18,30 +18,19 @@
 #include <string>
 #ifdef _USE_MEM_CHECK
 #include <map>
-extern std::map<std::string, unsigned int> mem_statistics;
+extern std::map<std::string, size_t> mem_statistics;
 #endif
 
-inline std::string ptr2Str(const void *p)
-{
-    char b[64];
-#ifdef _USE_SECURE_C
-    sprintf_s(b, 64, "%p", p);
-#else
-    sprintf(b, "%p", p);
-#endif
-    return std::string(b);
-}
-
-inline void *UNI_MALLOC(unsigned int size)
+inline void *UNI_MALLOC(size_t size)
 {
     void *p = nullptr;
     if (size > 0) {
         p = malloc(size);
         if (p == nullptr) {
-            UNI_ERROR_LOG("cpu malloc ptr:%p bytes:%u error.\n", p, size);
+            UNI_ERROR_LOG("cpu malloc ptr:%p bytes:%zu error.\n", p, size);
         }
 #ifdef _USE_MEM_CHECK
-        UNI_DEBUG_LOG("cpu malloc ptr:%p bytes:%u.\n", p, size);
+        UNI_DEBUG_LOG("cpu malloc ptr:%p bytes:%zu.\n", p, size);
         std::string key = ptr2Str(p) + std::string("(alloc by malloc)");
         mem_statistics[key] = size;
 #endif
@@ -55,28 +44,29 @@ inline void UNI_FREE(void *p)
         return;
     }
 #ifdef _USE_MEM_CHECK
-    UNI_DEBUG_LOG("cpu free ptr:%p.\n", p);
+    size_t size = 0;
     std::string key = ptr2Str(p) + std::string("(alloc by malloc)");
     if (mem_statistics.find(key) == mem_statistics.end()) {
         UNI_ERROR_LOG("try to free unalloc ptr:%p.\n", p);
     } else {
+        size = mem_statistics[key];
         mem_statistics.erase(key);
     }
+    UNI_DEBUG_LOG("cpu free ptr:%p bytes:%zu.\n", p, size);
 #endif
     free(p);
 }
 
-inline void *UNI_OPERATOR_NEW(unsigned int size)
+inline void *UNI_OPERATOR_NEW(size_t size)
 {
     void *p = nullptr;
     if (size > 0) {
-        try {
-            p = operator new(size);
-        } catch (const std::bad_alloc &e) {
-            UNI_ERROR_LOG("cpu operator new ptr:%p bytes:%u error.\n", p, size);
+        p = operator new(size);
+        if (p == nullptr) {
+            UNI_ERROR_LOG("cpu operator new ptr:%p bytes:%zu error.\n", p, size);
         }
 #ifdef _USE_MEM_CHECK
-        UNI_DEBUG_LOG("cpu operator new ptr:%p bytes:%u.\n", p, size);
+        UNI_DEBUG_LOG("cpu operator new ptr:%p bytes:%zu.\n", p, size);
         std::string key = ptr2Str(p) + std::string("(alloc by operator new)");
         mem_statistics[key] = size;
 #endif
@@ -90,15 +80,59 @@ inline void UNI_OPERATOR_DELETE(void *p)
         return;
     }
 #ifdef _USE_MEM_CHECK
-    UNI_DEBUG_LOG("cpu operator delete ptr:%p.\n", p);
+    size_t size = 0;
     std::string key = ptr2Str(p) + std::string("(alloc by operator new)");
     if (mem_statistics.find(key) == mem_statistics.end()) {
         UNI_ERROR_LOG("try to operator delete unalloc ptr:%p.\n", p);
     } else {
+        size = mem_statistics[key];
         mem_statistics.erase(key);
     }
+    UNI_DEBUG_LOG("cpu operator delete ptr:%p bytes:%zu.\n", p, size);
 #endif
     operator delete(p);
+}
+
+inline void *UNI_ALIGNED_MALLOC(size_t alignment, size_t size)
+{
+    void *p = nullptr;
+    if (size > 0) {
+        size_t bytes = size + sizeof(void *) + alignment - 1;
+        void *pp = (void *)malloc(bytes);
+        if (pp == nullptr) {
+            UNI_ERROR_LOG(
+                "cpu aligned_alloc ptr:%p alignment:%zu bytes:%zu error.\n", pp, alignment, size);
+        }
+        void **ppp =
+            (void **)(((uintptr_t)(pp) + sizeof(void *) + alignment - 1) & ~(alignment - 1));
+        ppp[-1] = pp;
+        p = ppp;
+#ifdef _USE_MEM_CHECK
+        UNI_DEBUG_LOG("cpu aligned_alloc ptr:%p alignment:%zu bytes:%zu.\n", p, alignment, size);
+        std::string key = ptr2Str(p) + std::string("(alloc by aligned_alloc)");
+        mem_statistics[key] = size;
+#endif
+    }
+    return p;
+}
+
+inline void UNI_ALIGNED_FREE(void *p)
+{
+    if (p == nullptr) {
+        return;
+    }
+#ifdef _USE_MEM_CHECK
+    size_t size = 0;
+    std::string key = ptr2Str(p) + std::string("(alloc by aligned_alloc)");
+    if (mem_statistics.find(key) == mem_statistics.end()) {
+        UNI_ERROR_LOG("try to aligned_free unalloc ptr:%p.\n", p);
+    } else {
+        size = mem_statistics[key];
+        mem_statistics.erase(key);
+    }
+    UNI_DEBUG_LOG("cpu aligned_free ptr:%p bytes:%zu.\n", p, size);
+#endif
+    free(((void **)p)[-1]);
 }
 
 inline size_t UNI_MEM_SIZE()
@@ -116,7 +150,7 @@ inline void UNI_MEM_STATISTICS()
 {
 #ifdef _USE_MEM_CHECK
     for (auto iter : mem_statistics) {
-        UNI_ERROR_LOG("ptr:%s bytes:%u is not free.\n", iter.first.c_str(), iter.second);
+        UNI_ERROR_LOG("ptr:%s bytes:%zu is not free.\n", iter.first.c_str(), iter.second);
     }
 #endif
 }

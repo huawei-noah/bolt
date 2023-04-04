@@ -68,7 +68,7 @@ class LayerTypeStatistics
 {
   public:
     LayerTypeStatistics() {}
-
+    ~LayerTypeStatistics(){}
     void operator()(BasicLayer* layer, const MemoryManager&, NetworkParameters::CallbackPlace place)
     {
         auto name = layer->getName();

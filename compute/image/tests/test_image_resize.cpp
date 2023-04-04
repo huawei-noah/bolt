@@ -70,8 +70,7 @@ int resizeTest(int argc, char *argv[], DataType dt)
 
         // check
         ut_check_v(get_ptr_from_tensor(outputTensor, UT_ARCH),
-            get_ptr_from_tensor(outputTensorRef, UT_ARCH), outputTensor.length(), dt, 0.05,
-            __FILE__, __LINE__);
+            get_ptr_from_tensor(outputTensorRef, UT_ARCH), outputTensor.length(), dt, 0.05);
     }
 
     // benchmark

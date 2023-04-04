@@ -14,7 +14,7 @@
 #ifndef _H_MMM_V8
 #define _H_MMM_V8
 
-#include "data_type.h"
+#include "cpu/arm/int8/v8.2/blas_matrix_transpose.h"
 
 void mmm_A55(
     int M, int N, int K, bool transposeA, INT8 *matrix1, INT8 *matrix2, INT8 *tmp, I32 *result);

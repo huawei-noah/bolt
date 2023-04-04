@@ -173,7 +173,7 @@ EE power_fp16(TensorDesc inputDesc,
     TensorDesc outputDesc,
     F16 *output);
 
-EE layer_normalization_fp16(TensorDesc inputDesc,
+EE layer_norm_fp16(TensorDesc inputDesc,
     F16 *input,
     LayerNormParamSpec p,
     F16 *alpha,
@@ -222,4 +222,13 @@ EE dequantize_to_f16(TensorDesc qDesc,
     void *bData,
     TensorDesc dDesc,
     void *data);
+
+EE decode_priorbox_fp16(const F16 *location,
+    const F16 *priorbox,
+    const F16 *variance,
+    I32 num_total_priorbox,
+    F16 *xmin,
+    F16 *ymin,
+    F16 *xmax,
+    F16 *ymax);
 #endif

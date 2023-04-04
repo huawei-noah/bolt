@@ -30,6 +30,9 @@ EE scale_x86(TensorDesc inputDesc,
     I32 on = outputDesc.dims[outputDesc.nDims - 1];
     I32 oc = outputDesc.dims[outputDesc.nDims - 1 - axis];
     I32 ic = inputDesc.dims[inputDesc.nDims - 1 - axis];
+    if (axis == 0) {
+        on = 1;
+    }
     I32 elements_per_channel = length / (on * oc);
     if (outputDesc.df == DF_NCHWC8) {
         axis = outputDesc.nDims;

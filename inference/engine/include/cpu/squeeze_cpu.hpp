@@ -33,16 +33,15 @@ public:
     {
         Tensor inputTensor = this->inputTensors[0];
         Tensor outputTensor = this->outputTensors[0];
-        squeeze(inputTensor, this->temp, outputTensor, &this->archInfo);
+        CHECK_STATUS(squeeze(inputTensor, this->temp, outputTensor, &this->archInfo));
         outputTensor.set_scale(inputTensor.get_scale());
     }
 
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
-        CHECK_STATUS(
-            squeeze_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo));
-        return SUCCESS;
+        auto ps = this->get_param(inTensors[0]->get_desc());
+        return squeeze_infer_output_size(inTensors[0], ps, outTensors[0], &this->archInfo);
     }
 };
 

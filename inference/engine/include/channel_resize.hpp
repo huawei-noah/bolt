@@ -25,7 +25,7 @@ public:
         this->rearrange = true;
         this->p = p;
     }
-
+    ~ChannelResize(){}
     OperatorType get_type() override
     {
         return OT_ChannelResize;

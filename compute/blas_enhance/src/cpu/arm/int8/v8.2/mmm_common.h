@@ -14,12 +14,13 @@
 #ifndef _H_MMM_COMMON_V8
 #define _H_MMM_COMMON_V8
 
+#include "data_type.h"
+#include "uni.h"
 #include "arm_neon_expand.h"
 
 inline void mmm_N8_MTail(U32 MInner, U32 M, U32 K, INT8 *matrix1, INT8 *matrix2, I32 *result)
 {
-    int8x16_t mat1[2];
-    int8x16_t mat2;
+    int8x16_t mat1[2], mat2;
     int32x4_t res[4][2] = {{0}};
     I32 tmp[8] = {0};
 
@@ -42,22 +43,19 @@ inline void mmm_N8_MTail(U32 MInner, U32 M, U32 K, INT8 *matrix1, INT8 *matrix2,
         for (U32 q = 0; q < 8; q++) {
             result[q * M + p] += tmp[q];
         }
-        res[p][0] = vdupq_n_s32(0);
-        res[p][1] = vdupq_n_s32(0);
     }
 }
 
 inline void mmm_N4_MTail(U32 MInner, U32 M, U32 K, INT8 *matrix1, INT8 *matrix2, I32 *result)
 {
-    int8x16_t mat1 = {0};
-    int8x16_t mat2 = {0};
+    int8x16_t mat1, mat2;
     int32x4_t res[4] = {0};
     I32 tmp[8] = {0};
 
     CHECK_REQUIREMENT(MInner < 4);
 
     for (U32 i = 0; i < K; i += 4) {
-        mat1 = vld1q_s8(matrix1 + i * 8);
+        mat1 = vld1q_s8(matrix1 + i * 4);
 
         mat2 = vld1q_s8(matrix2 + i * MInner);
 
@@ -67,18 +65,16 @@ inline void mmm_N4_MTail(U32 MInner, U32 M, U32 K, INT8 *matrix1, INT8 *matrix2,
     }
     for (U32 p = 0; p < MInner; p++) {
         vst1q_s32(tmp, res[p]);
-        for (U32 q = 0; q < 8; q++) {
+        for (U32 q = 0; q < 4; q++) {
             result[q * M + p] += tmp[q];
         }
-        res[p] = vdupq_n_s32(0);
     }
 }
 
 inline void mmm_NTail_M12(U32 M, U32 N, U32 K, INT8 *matrix1, INT8 *matrix2, I32 *result)
 {
-    int8x16_t mat1 = {0};
-    int8x16_t mat2[3] = {0};
-    int32x4_t res[4][3] = {{0}};
+    int8x16_t mat1, mat2[3];
+    int32x4_t res[4][3];
 
     for (U32 i = 0; i < N; i++) {
         res[i][0] = vld1q_s32(result + i * M);
@@ -109,9 +105,8 @@ inline void mmm_NTail_M12(U32 M, U32 N, U32 K, INT8 *matrix1, INT8 *matrix2, I32
 
 inline void mmm_NTail_M8(U32 M, U32 N, U32 K, INT8 *matrix1, INT8 *matrix2, I32 *result)
 {
-    int8x16_t mat1 = {0};
-    int8x16_t mat2[2] = {0};
-    int32x4_t res[4][2] = {{0}};
+    int8x16_t mat1, mat2[2];
+    int32x4_t res[4][2];
 
     for (U32 i = 0; i < N; i++) {
         res[i][0] = vld1q_s32(result + i * M);
@@ -135,12 +130,10 @@ inline void mmm_NTail_M8(U32 M, U32 N, U32 K, INT8 *matrix1, INT8 *matrix2, I32 
         vst1q_s32(result + i * M + 4, res[i][1]);
     }
 }
-
 inline void mmm_NTail_M4(U32 M, U32 N, U32 K, INT8 *matrix1, INT8 *matrix2, I32 *result)
 {
-    int8x16_t mat1 = {0};
-    int8x16_t mat2 = {0};
-    int32x4_t res[4] = {0};
+    int8x16_t mat1, mat2;
+    int32x4_t res[4];
 
     for (U32 i = 0; i < N; i++) {
         res[i] = vld1q_s32(result + i * M);
@@ -148,9 +141,7 @@ inline void mmm_NTail_M4(U32 M, U32 N, U32 K, INT8 *matrix1, INT8 *matrix2, I32 
 
     for (U32 q = 0; q < K; q += 4) {
         mat1 = vld1q_s8(matrix1 + q * N);
-
         mat2 = vld1q_s8(matrix2 + q * 4);
-
         for (U32 n = 0; n < N; n++) {
             res[n] = vdotq_laneq_s32_builtin(res[n], mat2, mat1, n);
         }
@@ -164,20 +155,12 @@ inline void mmm_NTail_M4(U32 M, U32 N, U32 K, INT8 *matrix1, INT8 *matrix2, I32 
 // matrix2 has been transformed to MKm(MInner)K4
 inline void mmm_NTail_M(U32 MInner, U32 M, U32 N, U32 K, INT8 *matrix1, INT8 *matrix2, I32 *result)
 {
-    int8x16_t mat1 = {0};
-    int8x16_t mat2 = {0};
+    int8x16_t mat1, mat2;
     int32x4_t res[3] = {0};
     I32 buf[4];
-
-    // for (U32 i = 0; i < N; i++) {
-    //    res[i] = vld1q_s32(result + i*M);
-    // }
-
     for (U32 q = 0; q < K; q += 4) {
         mat1 = vld1q_s8(matrix1 + q * N);
-
         mat2 = vld1q_s8(matrix2 + q * MInner);
-
         for (U32 n = 0; n < N; n++) {
             res[n] = vdotq_laneq_s32_builtin(res[n], mat2, mat1, n);
         }

@@ -169,6 +169,7 @@ EE rnncell_arm(TensorDesc xDesc,
     const void **filter,
     const TensorDesc *biasDesc,
     const void **bias,
+    float *scale,
     void *state,
     U32 tmpBytes,
     void *tmp,
@@ -176,10 +177,10 @@ EE rnncell_arm(TensorDesc xDesc,
     U32 batchStrideX,
     U32 batchStrideH,
     TensorDesc hDesc,
-    void *currentH,
+    void *output,
     Arch arch);
 
-EE layer_normalization_arm(TensorDesc inputDesc,
+EE layer_norm_arm(TensorDesc inputDesc,
     void *input,
     LayerNormParamSpec p,
     void *alpha,
@@ -244,4 +245,21 @@ EE dequantize_arm(TensorDesc qDesc,
     void *bData,
     TensorDesc dDesc,
     void *data);
+
+EE requantize_arm(TensorDesc inputDesc,
+    INT8 *input,
+    F32 inputScale,
+    TensorDesc outputDesc,
+    INT8 *output,
+    F32 outputScale);
+
+template <typename T>
+EE decode_priorbox_arm(const T *location,
+    const T *priorbox,
+    const T *variance,
+    I32 num_total_priorbox,
+    T *xmin,
+    T *ymin,
+    T *xmax,
+    T *ymax);
 #endif

@@ -55,7 +55,7 @@ EE concat_padding_input_mali(std::vector<TensorDesc> inputDesc,
     if (use_nchw) {
         for (U32 i = 0; i < inputDesc.size(); i++) {
             U32 iw = inputDesc[i].dims[0];
-            U32 pr = ALIGN(iw, 4) - iw;
+            U32 pr = UNI_ALIGN(iw, 4) - iw;
             inputMems[i]->padding(0, pr, 0, 0);
         }
         (*outputDesc).df = DF_NCHW;
@@ -94,17 +94,7 @@ inline EE concat_checkpara_mali(GCLHandle_t handle,
 EE concat_infer_forward_tmp_bytes_mali(
     std::vector<TensorDesc> inputDesc, std::vector<GCLMemDesc> gclmemInputDesc, U32 *bytes)
 {
-    EE ret = SUCCESS;
-    switch (inputDesc[0].dt) {
-        case DT_F16: {
-            ret = concat_infer_forward_tmp_bytes_mali_fp16(inputDesc, gclmemInputDesc, bytes);
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return concat_infer_forward_tmp_bytes_mali_fp16(inputDesc, gclmemInputDesc, bytes);
 }
 
 EE concat_mali(GCLHandle_t handle,
@@ -119,16 +109,6 @@ EE concat_mali(GCLHandle_t handle,
 {
     UNUSED(inputScale);
     UNUSED(outputScale);
-    EE ret = SUCCESS;
     CHECK_STATUS(concat_checkpara_mali(handle, inputDesc, input, p, outputDesc, output));
-    switch (inputDesc[0].dt) {
-        case DT_F16: {
-            ret = concat_mali_fp16(handle, inputDesc, input, outputDesc, output, tmpbuf, p.axis);
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return concat_mali_fp16(handle, inputDesc, input, outputDesc, output, tmpbuf, p.axis);
 }

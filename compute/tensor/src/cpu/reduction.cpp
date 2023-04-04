@@ -14,14 +14,14 @@
 #include "cpu/tensor_computing_cpu.h"
 #include "cpu/cpu_functions.h"
 
-template <typename T>
-static EE reduction_kernel(TensorDesc inputDesc,
+template <typename T, typename T1>
+static EE reduction_kernel(const TensorDesc &inputDesc,
     const T *input,
-    TensorDesc maskDesc,
-    const float *mask,
+    const TensorDesc &maskDesc,
+    const T1 *mask,
     I32 axis,
     ReductionMode reductionMode,
-    TensorDesc outputDesc,
+    const TensorDesc & outputDesc,
     T *output,
     Arch arch)
 {
@@ -134,6 +134,34 @@ static EE reduction_kernel(TensorDesc inputDesc,
     return ret;
 }
 
+template <typename T>
+static EE reduction_kernel(const TensorDesc &inputDesc,
+    const T *input,
+    const TensorDesc &maskDesc,
+    const void *mask,
+    I32 axis,
+    ReductionMode reductionMode,
+    const TensorDesc & outputDesc,
+    T *output,
+    Arch arch)
+{
+    EE ret = NOT_SUPPORTED;
+    DataType mdt = maskDesc.dt;
+    if (mask == nullptr || mdt == DT_F32) {
+        ret = reduction_kernel<T, F32>(inputDesc, input,
+        maskDesc, (const F32 *)mask,
+        axis, reductionMode,
+        outputDesc, output, arch);
+#ifdef _USE_FP16
+    } else if (mdt == DT_F16) {
+        ret = reduction_kernel<T, F16>(inputDesc, input,
+        maskDesc, (const F16 *)mask,
+        axis, reductionMode,
+        outputDesc, output, arch);
+#endif
+    }
+    return ret;
+}
 EE reduction_cpu(TensorDesc inputDesc,
     const void *input,
     TensorDesc maskDesc,
@@ -168,11 +196,12 @@ EE reduction_cpu(TensorDesc inputDesc,
     }
     const void *tmp1 = input;
     void *tmp2 = nullptr;
+    int chunk = UNI_MAX(tensorNumBytes(inputDesc), tensorNumBytes(outputDesc));
     for (int i = start; i < p.num_axes; i++) {
         if (p.num_axes - start == 1) {
             tmp2 = output;
         } else {
-            tmp2 = (char *)tmp + (i - start) % 2 * (tmpBytes / 2);
+            tmp2 = (char *)tmp + (i - start) % 2 * chunk;
         }
         int axis;
         if (i == -1) {
@@ -185,25 +214,30 @@ EE reduction_cpu(TensorDesc inputDesc,
 #ifdef _USE_FP32
             case DT_F32: {
                 ret = reduction_kernel<F32>(tmpDesc, (const F32 *)tmp1, maskDesc,
-                    (const float *)mask, axis, p.mode, outputDesc, (F32 *)tmp2, arch);
+                    mask, axis, p.mode, outputDesc, (F32 *)tmp2, arch);
                 break;
             }
 #endif
 #ifdef _USE_FP16
             case DT_F16: {
                 ret = reduction_kernel<F16>(tmpDesc, (const F16 *)tmp1, maskDesc,
-                    (const float *)mask, axis, p.mode, outputDesc, (F16 *)tmp2, arch);
+                    mask, axis, p.mode, outputDesc, (F16 *)tmp2, arch);
                 break;
             }
 #endif
             case DT_I32: {
                 ret = reduction_kernel<I32>(tmpDesc, (const I32 *)tmp1, maskDesc,
-                    (const float *)mask, axis, p.mode, outputDesc, (I32 *)tmp2, arch);
+                    mask, axis, p.mode, outputDesc, (I32 *)tmp2, arch);
                 break;
             }
             case DT_U32: {
                 ret = reduction_kernel<U32>(tmpDesc, (const U32 *)tmp1, maskDesc,
-                    (const float *)mask, axis, p.mode, outputDesc, (U32 *)tmp2, arch);
+                    mask, axis, p.mode, outputDesc, (U32 *)tmp2, arch);
+                break;
+            }
+            case DT_I8: {
+                ret = reduction_kernel<INT8>(tmpDesc, (const INT8 *)tmp1, maskDesc,
+                    mask, axis, p.mode, outputDesc, (INT8 *)tmp2, arch);
                 break;
             }
             default:

@@ -24,9 +24,22 @@ public:
         this->p = p;
     }
 
+    ~InstanceNorm(){}
+
     OperatorType get_type() override
     {
         return OT_InstanceNorm;
+    }
+
+    int get_channels_num()
+    {
+        int ret = 0;
+        if (0 != this->ws.bytes_of_weight) {
+            ret = this->ws.bytes_of_weight / UNI_MAX(1, bytesOf(this->ws.mdt));
+        } else if (0 != this->ws.bytes_of_vec) {
+            ret = this->ws.bytes_of_vec / UNI_MAX(1, bytesOf(this->ws.mdt));
+        }
+        return ret;
     }
 
 protected:

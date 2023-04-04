@@ -13,19 +13,21 @@
 
 #include "cpu/x86/fp32/blas_fp32.h"
 
-EE axpby_fp32(U32 len, F32 a, const F32 *x, F32 b, F32 *y)
+EE axpby_fp32(I32 len, F32 a, const F32 *x, F32 b, F32 *y)
 {
     __m256 alpha = _mm256_set1_ps(a);
     __m256 beta = _mm256_set1_ps(b);
-    I32 i = 0;
-    for (; i < ((I32)len) - 7; i += 8) {
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
+#endif
+    for (I32 i = 0; i < len - 7; i += 8) {
         __m256 in = _mm256_loadu_ps(x + i);
         __m256 out = _mm256_loadu_ps(y + i);
         out = _mm256_mul_ps(out, beta);
         out = _mm256_fmadd_ps(alpha, in, out);
         _mm256_storeu_ps(y + i, out);
     }
-    for (; i < (I32)len; i++) {
+    for (I32 i = len / 8 * 8; i < len; i++) {
         y[i] = a * x[i] + b * y[i];
     }
     return SUCCESS;

@@ -83,6 +83,26 @@
     export IOS_SDK_ROOT=/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk
     ```
 
+### Windows Target System Cross-Compilation Tools
+
+- #### Cross compiler for Windows(x86_64) on Ubuntu(x86_64)
+
+    ```
+    sudo apt-get install mingw-w64
+    ```
+
+- #### Cross compiler for Windows(x86_64) on Windows(x86_64)
+
+    Install [llvm-mingw-20230130-msvcrt-x86_64](https://github.com/mstorsjo/llvm-mingw/releases/download/20230130/llvm-mingw-20230130-msvcrt-x86_64.zip) and set shell environment **PATH**.
+
+- #### Cross compiler for Windows(arm, aarch64) on Ubuntu(x86_64)
+
+    Install [llvm-mingw-20230130-msvcrt-ubuntu-18.04-x86_64](https://github.com/mstorsjo/llvm-mingw/releases/download/20230130/llvm-mingw-20230130-msvcrt-ubuntu-18.04-x86_64.tar.xz) and set shell environment **PATH**.
+
+- #### Cross compiler for Windows(arm, aarch64) on Windows(x86_64)
+
+    Install [llvm-mingw-20230130-msvcrt-x86_64](https://github.com/mstorsjo/llvm-mingw/releases/download/20230130/llvm-mingw-20230130-msvcrt-x86_64.zip) and set shell environment **PATH**.
+
 ### Tools
 
 - #### Android adb
@@ -122,8 +142,8 @@ We will install Bolt to *install_[target]* directory. These subdirectories will 
     - [C API](../inference/engine/api/c) header file
     - [Java API](../inference/engine/api/java) class file
 - lib
-    - libBoltModel.so: build for Java application
     - libbolt.so: build for C/C++ application
+    - libbolt_jni.so: build for Java application
     - libflow.so: flow sub project library, when using *--flow* option
     - libengine.so: inference sub project library
     - libtensor.so: tensor computing sub project library
@@ -137,6 +157,8 @@ We will install Bolt to *install_[target]* directory. These subdirectories will 
     - *post_training_quantization* for generating bolt int8 inference model
     - *tensorflow2caffe* for converting tensorflow model to caffe model
     - *pytorch2caffe* for converting pytorch model to caffe model
+    - *preprocess_ocl* for GPU reduce preprocess time
+    - *update_ocl* for Windows system GPU algorithm map library update
 - tests
     - operator unit test
 - examples
@@ -172,8 +194,8 @@ We will install Bolt to *install_[target]* directory. These subdirectories will 
   3. save <https://github.com/google/flatbuffers/tree/master/include> to *third_party/sources/flatbuffers/include*.
   4. save <https://raw.githubusercontent.com/tensorflow/tensorflow/v1.15.0/tensorflow/lite/schema/schema_generated.h> *third_party/sources/tflite/include/tensorflow/lite/schema/schema_generated.h*.
   5. save <https://github.com/open-source-parsers/jsoncpp/archive/refs/tags/1.9.4.zip> to *third_party/sources/jsoncpp-1.9.4.zip*.
-  6. optional. save <https://github.com/KhronosGroup/OpenCL-Headers/tree/master/CL> to *third_party/sources/opencl/include/CL** when using ARM MALI/Qualcomm GPU.
-  7. optional. save <http://www.ijg.org/files/jpegsrc.v9c.tar.gz> to *third_party/sources/jpegsrc.v9c.tar.gz* when using example.
+  6. optional. save <https://github.com/KhronosGroup/OpenCL-Headers/tree/master/CL> to *third_party/sources/opencl/include/CL** when using GPU.
+  7. optional. save <http://www.ijg.org/files/jpegsrc.v9e.tar.gz> to *third_party/sources/jpegsrc.v9e.tar.gz* when using example.
   8. optional. save <https://codeload.github.com/anthonix/ffts/zip/master> to *third_party/sources/ffts-master.zip* when using Flow.
   9. optional. save <https://github.com/opencv/opencv/archive/refs/tags/4.5.2.zip> to *third_party/sources/opencv-4.5.2.zip* when using face detection example.
   10. optional. save <https://codeload.github.com/agruzdev/Yato/zip/9b5a49f6ec4169b67b9e5ffd11fdae9c238b0a3d> to *third_party/sources/half-2.2.0.zip* when using on-device training.

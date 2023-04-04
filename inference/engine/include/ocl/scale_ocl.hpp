@@ -35,14 +35,13 @@ public:
 
     EE infer_weight_desc() override
     {
-        auto curOpWs = this->get_weightspec();
         U32 weightNum = 0;
         U32 vecNum = 0;
-        if (0 != curOpWs.bytes_of_weight) {
-            weightNum = curOpWs.bytes_of_weight / UNI_MAX(1, bytesOf(curOpWs.mdt));
+        if (0 != this->ws.bytes_of_weight) {
+            weightNum = this->ws.bytes_of_weight / UNI_MAX(1, bytesOf(this->ws.mdt));
         }
-        if (0 != curOpWs.bytes_of_vec) {
-            vecNum = curOpWs.bytes_of_vec / UNI_MAX(1, bytesOf(curOpWs.mdt));
+        if (0 != this->ws.bytes_of_vec) {
+            vecNum = this->ws.bytes_of_vec / UNI_MAX(1, bytesOf(this->ws.mdt));
         }
         if (weightNum) {
             Tensor modelWeightTensor = Tensor(OCLMem);
@@ -127,12 +126,12 @@ public:
             alphaMem->padding(0, pr, 0, 0);
         }
         U32 axisLen = find_target_axis_len(inTensors);
-        CHECK_STATUS(scale_infer_output_size(
-            inTensors[this->dataID], this->p, axisLen, outTensors[0], &this->archInfo));
-        if (check_tensors_image(inTensors, this->dataID)) {
-            CHECK_STATUS(set_tensors_image(outTensors, inTensors.size()));
+        EE ret = scale_infer_output_size(
+            inTensors[this->dataID], this->p, axisLen, outTensors[0], &this->archInfo);
+        if (ret == SUCCESS && check_tensors_image(inTensors, this->dataID)) {
+            ret = set_tensors_image(outTensors, inTensors.size());
         }
-        return SUCCESS;
+        return ret;
     }
 
     REGISTER_OCL_OPERATOR_RUN

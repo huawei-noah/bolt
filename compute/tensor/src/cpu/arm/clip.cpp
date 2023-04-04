@@ -12,6 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "cpu/arm/tensor_computing_arm.h"
+#include "cpu/arm/int32/tensor_computing_int32.h"
 #ifdef _USE_FP32
 #include "cpu/arm/fp32/tensor_computing_fp32.h"
 #endif
@@ -22,7 +23,7 @@
 EE clip_arm(TensorDesc inputDesc, void *input, ClipParamSpec p, TensorDesc outputDesc, void *output)
 {
     UNUSED(outputDesc);
-    EE ret = SUCCESS;
+    EE ret = NOT_SUPPORTED;
     switch (inputDesc.dt) {
 #ifdef _USE_FP32
         case DT_F32: {
@@ -36,8 +37,12 @@ EE clip_arm(TensorDesc inputDesc, void *input, ClipParamSpec p, TensorDesc outpu
             break;
         }
 #endif
+        case DT_I32: {
+            ret =
+                clip_int32((I32 *)input, (I32 *)output, tensorNumElements(inputDesc), p.min, p.max);
+            break;
+        }
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
     return ret;

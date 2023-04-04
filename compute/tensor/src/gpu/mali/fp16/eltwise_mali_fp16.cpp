@@ -90,9 +90,6 @@ inline EE eltwise_checkpara_mali_fp16(
             return NOT_SUPPORTED;
         }
     }
-    if (outputDesc.dt != DT_F16) {
-        return NOT_SUPPORTED;
-    }
     return SUCCESS;
 }
 
@@ -104,10 +101,11 @@ inline EE eltwise_core_mali_fp16(GCLHandle_t handle,
     GCLMem_t output,
     EltwiseParamSpec eltwiseDesc)
 {
+    DataType idt;
     U32 iw, ih, ic, in, it;
     U32 arrayDimMax;
     bool sameDesc = eltwise_same_desc(inputDesc, &arrayDimMax);
-    tensorSelectGet(inputDesc[arrayDimMax], NULL, NULL, &in, &ic, &ih, &iw, &it);
+    tensorSelectGet(inputDesc[arrayDimMax], &idt, NULL, &in, &ic, &ih, &iw, &it);
 
     U32 num = input.size();
     if (num > 4) {
@@ -148,7 +146,8 @@ inline EE eltwise_core_mali_fp16(GCLHandle_t handle,
     char kernelName[128];
     bool useNchwFormat = (inputMem[arrayDimMax]->desc.memFormat == DF_NCHW) ? true : false;
     EltwiseMode eltwiseMode = eltwiseDesc.mode;
-    ActivationMode activeMode = eltwiseDesc.activation_type;
+    ActivationParamSpec activeMode;
+    activeMode.mode = eltwiseDesc.activation_type;
     U32 gs[3] = {iw, ih, (ic + 3) / 4 * in * it};
     U32 ls[3] = {0, 0, 0};
     U32 dim = 3;
@@ -159,7 +158,7 @@ inline EE eltwise_core_mali_fp16(GCLHandle_t handle,
     }
 
     if (sameDesc) {
-        CHECK_STATUS(set_eltwise_opt_mali(num, useNchwFormat, eltwiseMode, activeMode, DT_F16,
+        CHECK_STATUS(set_eltwise_opt_mali(num, useNchwFormat, eltwiseMode, activeMode, idt,
             inputMemType.data(), outputMemType, kernelName, &kernelOpt));
         ic = ic * in * it;
         CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
@@ -260,7 +259,7 @@ inline EE eltwise_core_mali_fp16(GCLHandle_t handle,
         }
         CHECK_STATUS(
             set_eltwise_broadcast_opt_mali(useNchwFormat, axisSpeMode, arrayDimMax, eltwiseMode,
-                activeMode, DT_F16, inputMemType.data(), outputMemType, kernelName, &kernelOpt));
+                activeMode, idt, inputMemType.data(), outputMemType, kernelName, &kernelOpt));
         CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
         CHECK_STATUS(gcl_set_kernelArgs(kernel, mw_str, mh_str, bw_str, bh_str, ow_str, oh_str,
             m_off, b_off, o_off, iw, ic, bw, bh, bc, bn, gs[0], gs[1], iMaxMem, broadMem, outbuf));

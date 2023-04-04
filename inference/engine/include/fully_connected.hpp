@@ -23,8 +23,9 @@ public:
         this->dt = dt;
         this->p = p;
         this->numInput = numInput;
-        this->hasBias = false;
     }
+
+    ~FullyConnected(){}
 
     OperatorType get_type() override
     {

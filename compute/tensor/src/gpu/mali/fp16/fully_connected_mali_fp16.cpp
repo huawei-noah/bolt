@@ -21,7 +21,7 @@
 inline EE fully_connected_checkpara_mali_fp16(
     TensorDesc inputDesc, TensorDesc filterDesc, TensorDesc outputDesc)
 {
-    if (inputDesc.dt != outputDesc.dt || inputDesc.dt != filterDesc.dt || inputDesc.dt != DT_F16) {
+    if (inputDesc.dt != outputDesc.dt || inputDesc.dt != filterDesc.dt) {
         return NOT_MATCH;
     }
     return SUCCESS;
@@ -41,7 +41,7 @@ inline EE fully_connected_gemv_mali_fp16(GCLHandle_t handle,
     ForwardRunInfoMali_t forwardRunInfo)
 {
     U32 tmpOff = 0;
-    CHECK_STATUS(gemv(handle, inputDesc, outputDesc, ACTIVATION_NULL, false, &tmpOff, tmpBuf, input,
+    CHECK_STATUS(gemv(handle, inputDesc, outputDesc, {}, false, &tmpOff, tmpBuf, input,
         bias, filter, output, forwardRunInfo));
     return SUCCESS;
 }
@@ -87,8 +87,8 @@ inline EE gemm_reshape_input(GCLHandle_t handle,
     U32 str[3] = {dim[0], dim[1], dim[2]};
     U32 off[3] = {0, 0, 0};
     MemFlags flag = CL_MEM_READ_WRITE;
-    CHECK_STATUS(
-        gclmem_set_desc_padding(&(inputTran->desc), str, off, DT_F16, DF_NCHW, GCL_MEM_BUF, flag));
+    CHECK_STATUS(gclmem_set_desc_padding(
+        &(inputTran->desc), str, off, input->desc.dt, DF_NCHW, GCL_MEM_BUF, flag));
     CHECK_STATUS(gcl_create_sub_buffer(inputTran->desc.byteSize, tmpOff, tmp, &inputTran->mem));
     CHECK_STATUS(ocl_data_trans_form(handle, input, inputTran, 0, 0, type));
     return SUCCESS;
@@ -133,7 +133,7 @@ inline EE gemm_trans_fc_input(GCLHandle_t handle,
     inputDesc.dims[1] = w;
     OclMemory *memPtr = (tmpImg) ? (OclMemory *)(&tmpOclImg) : &tmpOclMem;
     memPtr->resize(inputDesc);
-    U32 pr = ALIGN(h, item) - h;
+    U32 pr = UNI_ALIGN(h, item) - h;
     memPtr->padding(0, pr, 0, 0);
     inputTran->desc = memPtr->get_desc();
     if (tmpImg) {
@@ -186,13 +186,14 @@ inline EE fully_connected_gemm_mali_fp16(GCLHandle_t handle,
     if (M != outputDesc.dims[1]) {
         CHECK_STATUS(NOT_MATCH);
     }
-    M = ALIGN(M, item_m);
+    M = UNI_ALIGN(M, item_m);
     K = inputDesc.dims[0];
-    N = ALIGN(outputDesc.dims[0], item_n);
+    N = UNI_ALIGN(outputDesc.dims[0], item_n);
 
+    DataType odt;
     U32 ow, oh, oc;
     U32 oh_str, ow_str, oh_off, ow_off;
-    CHECK_STATUS(gclmem_get_desc_dim(output->desc, NULL, NULL, NULL, &oc, &oh, &ow));
+    CHECK_STATUS(gclmem_get_desc_dim(output->desc, &odt, NULL, NULL, &oc, &oh, &ow));
     CHECK_STATUS(gclmem_get_desc_padding(output->desc, &ow_str, &oh_str, NULL, &ow_off, &oh_off));
 
     U32 A_str = M * K;
@@ -210,7 +211,7 @@ inline EE fully_connected_gemm_mali_fp16(GCLHandle_t handle,
     KernelOpt kernelOpt;
     GCLMemType amt = inputTran[1].desc.memType;
     GCLMemType bmt = filter->desc.memType;
-    CHECK_STATUS(set_gemm_tn_opt_mali(item_m, item_n, biasMode, false, ACTIVATION_NULL, DT_F16, amt,
+    CHECK_STATUS(set_gemm_tn_opt_mali(item_m, item_n, biasMode, false, {}, odt, amt,
         bmt, output->desc.memType, kernelName, &kernelOpt));
     CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
     CHECK_STATUS(gcl_set_kernelArgs(kernel, M, N, K, A_str, B_str, C_str, A_off, B_off, C_off,
@@ -226,12 +227,12 @@ inline TensorDesc gemm_transform_filter_desc(
     U32 fn = filterDesc.dims[filterDesc.nDims - 1];
     TensorDesc desc;
     desc.df = DF_NCHW;
-    desc.dt = DT_F16;
+    desc.dt = filterDesc.dt;
     desc.nDims = 4;
     desc.dims[3] = 1;
     desc.dims[2] = 1;
     desc.dims[1] = fc;
-    desc.dims[0] = ALIGN(fn, item_h);
+    desc.dims[0] = UNI_ALIGN(fn, item_h);
     return desc;
 }
 
@@ -292,7 +293,7 @@ EE fully_connected_infer_forward_tmp_bytes_mali_fp16(TensorDesc inputDesc,
         U32 size = 0;
         bool useImg = check_qualcomm_device();
         if (gemm_need_reshape_input(gclmemInputDesc)) {
-            size += ALIGN(tensorNumBytes(inputDesc), BUFFER_ALIGN_BASE);
+            size += UNI_ALIGN(tensorNumBytes(inputDesc), BUFFER_ALIGN_BASE);
         }
         DataType dt = inputDesc.dt;
         U32 iw = inputDesc.dims[0];
@@ -313,7 +314,7 @@ EE fully_connected_infer_forward_tmp_bytes_mali_fp16(TensorDesc inputDesc,
             }
         }
         if (!useImg) {
-            size += ALIGN(ih, item_k) * iw * bytesOf(dt);
+            size += UNI_ALIGN(ih, item_k) * iw * bytesOf(dt);
         }
         bytes[0] = size;
     }

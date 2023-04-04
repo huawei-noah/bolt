@@ -17,6 +17,71 @@
 #include "OPOptimizer.hpp"
 
 class TransposeConvOptimizer : public OPOptimizer {
+    bool recursive(ModelSpec *spec, int i, int j)
+    {
+        if (nchwc8.find(spec->ops[i].type) != nchwc8.end()) {
+            return true;
+        }
+        if ((spec->ops[i].type == OT_Eltwise || spec->ops[i].type == OT_Concat) &&
+            spec->ops[i].num_inputs == 2) {
+            auto prevOpIndexes =
+                searchOperatorIndexByOutput(spec, spec->ops[i].input_tensors_name[1 - j], 0, i);
+            if (prevOpIndexes.size() == 0) {
+                int id = -1;
+                for (int k = 0; k < spec->num_inputs; k++) {
+                    if (spec->input_names[k] == std::string(spec->ops[i].input_tensors_name[1 - j])) {
+                        id = k;
+                        break;
+                    }
+                }
+                if (id == -1) {
+                    UNI_ERROR_LOG(
+                        "encounter unknown tensor %s.\n", spec->ops[i].input_tensors_name[1 - j]);
+                    return false;
+                }
+                auto nextop = searchOperatorIndexByInput(
+                    spec, spec->input_names[id], 0, spec->num_operator_specs);
+                if (nextop.size() != 1) {
+                    return false;
+                }
+                nextop = searchOperatorIndexByInput(
+                    spec, spec->ops[i].output_tensors_name[0], i + 1, spec->num_operator_specs);
+                U32 count = 0;
+                for (U32 k = 0; k < nextop.size(); k++) {
+                    count += this->recursive(spec, nextop[k].first, nextop[k].second);
+                }
+                if (count == nextop.size()) {
+                    TensorDesc iDesc = spec->input_dims[id];
+                    spec->input_dims[id].df = DF_NCHWC8;
+                    UNI_WARNING_LOG("change input %s dimension from %s to %s.\n",
+                        spec->input_names[id], tensorDesc2Str(iDesc).c_str(),
+                        tensorDesc2Str(spec->input_dims[id]).c_str());
+                    return true;
+                } else {
+                    return false;
+                }
+            }
+            //if ((prevOpIndexes.size() != 1) || (-1 == prevOpIndexes[0].first)) {
+            //    return false;
+            //}
+            if (nchwc8.find(spec->ops[prevOpIndexes[0].first].type) == nchwc8.end() &&
+                bypass.find(spec->ops[prevOpIndexes[0].first].type) == bypass.end()) {
+                return false;
+            }
+            return true;
+        }
+        if (bypass.find(spec->ops[i].type) != bypass.end()) {
+            auto nextop = searchOperatorIndexByInput(
+                spec, spec->ops[i].output_tensors_name[0], i + 1, spec->num_operator_specs);
+            U32 count = 0;
+            for (U32 k = 0; k < nextop.size(); k++) {
+                count += this->recursive(spec, nextop[k].first, nextop[k].second);
+            }
+            return (count == nextop.size());
+        }
+        return false;
+    }
+
     bool optimize(ModelSpec *spec) override
     {
         bool hasOptimized = false;
@@ -33,19 +98,14 @@ class TransposeConvOptimizer : public OPOptimizer {
                         spec->ops[i].ps.transpose_spec.axes[2] == 1))) {
                 auto nextop = searchOperatorIndexByInput(
                     spec, spec->ops[i].output_tensors_name[0], i + 1, spec->num_operator_specs);
-                if (nextop.size() != 1) {
+                if (nextop.size() == 0) {
                     continue;
                 }
-                int next = nextop[0].first;
-                if (spec->ops[next].type == OT_Where) {
-                    nextop = searchOperatorIndexByInput(spec,
-                        spec->ops[next].output_tensors_name[0], next + 1, spec->num_operator_specs);
-                    if (nextop.size() != 1) {
-                        continue;
-                    }
-                    next = nextop[0].first;
+                U32 count = 0;
+                for (U32 j = 0; j < nextop.size(); j++) {
+                    count += this->recursive(spec, nextop[j].first, nextop[j].second);
                 }
-                if (spec->ops[next].type == OT_Conv) {
+                if (count == nextop.size()) {
                     spec->ops[i].ps.transpose_spec.df = DF_NCHWC8;
                     hasOptimized = true;
                 }
@@ -53,5 +113,9 @@ class TransposeConvOptimizer : public OPOptimizer {
         }
         return hasOptimized;
     }
+
+private:
+    std::set<OperatorType> nchwc8 = {OT_Conv, OT_Pooling};
+    std::set<OperatorType> bypass = {OT_Where, OT_Reshape};
 };
 #endif

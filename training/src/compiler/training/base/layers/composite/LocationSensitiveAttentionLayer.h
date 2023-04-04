@@ -31,7 +31,6 @@ namespace raul
  * tion by jointly learning to align and translate,” in Proceedings of ICLR, 2015."
  * to use previous alignments as additional location features.
  *
- * Implementation follows https://rnd-gitlab-msc.huawei.com/voice-assistant/tts/release_code/-/blob/feature/experimental/tacotron/models/attention.py#L101
  *
  * Inputs:
  *     1. Query  [batch, 1, 1, decoder_output_size]

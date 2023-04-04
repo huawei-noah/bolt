@@ -16,6 +16,8 @@
 
 #include "tensor_desc.h"
 #include "parameter_spec.h"
+#include "uni.h"
 
-EE resize_bilinear_general(TensorDesc inputDesc, void *input, ResizeParamSpec p, TensorDesc outputDesc, void *output);
+EE resize_bilinear_general(
+    TensorDesc inputDesc, void *input, ResizeParamSpec p, TensorDesc outputDesc, void *output);
 #endif

@@ -20,7 +20,7 @@ EE convolution_winograd_V8(TensorDesc inputDesc,
     F32 *inArray,
     TensorDesc filterDesc,
     const F32 *filterArray,
-    ConvolutionParamSpec convParamSpec,
+    ConvolutionParamSpec p,
     TensorDesc biasDesc,
     const F32 *biasArray,
     U32 tmpBytes,
@@ -40,11 +40,6 @@ EE convolution_winograd_V8(TensorDesc inputDesc,
     CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
     CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
     CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
-    U32 paddingT = convParamSpec.pad_top;
-    U32 paddingB = convParamSpec.pad_bottom;
-    U32 paddingL = convParamSpec.pad_left;
-    U32 paddingR = convParamSpec.pad_right;
-
     if (fdf != DF_HWNCN8) {
         CHECK_STATUS(NOT_MATCH);
     }
@@ -59,11 +54,11 @@ EE convolution_winograd_V8(TensorDesc inputDesc,
     U32 tile_w = (ow + 3) / 4;
     // num of 6x6 tiles
     I32 tiles = tile_h * tile_w;
-    U32 pad_left = paddingL;
-    U32 pad_right = paddingR + (tile_w * 4 - ow);
+    U32 pad_left = p.pad_left;
+    U32 pad_right = p.pad_right + (tile_w * 4 - ow);
     U32 pad_w_mod_4 = tile_w * 4 - ow;
-    U32 pad_top = paddingT;
-    U32 pad_bottom = paddingB + (tile_h * 4 - oh);
+    U32 pad_top = p.pad_top;
+    U32 pad_bottom = p.pad_bottom + (tile_h * 4 - oh);
     U32 pad_h_mod_4 = tile_h * 4 - oh;
     U32 ih_pad = ih + pad_top + pad_bottom;
     U32 iw_pad = iw + pad_left + pad_right;
@@ -78,10 +73,10 @@ EE convolution_winograd_V8(TensorDesc inputDesc,
     EE ret = SUCCESS;
     // copy input into a input with padding
     for (U32 n = 0; n < in; n++) {
-        convParamSpec.pad_bottom = pad_bottom;
-        convParamSpec.pad_right = pad_right;
-        F32 *inArray_pad = convolution_input_padding_per_channel<F32, 8>(
-            n, ic, 1, ih, iw, convParamSpec, inArray, (F32 *)tmp);
+        p.pad_bottom = pad_bottom;
+        p.pad_right = pad_right;
+        F32 *inArray_pad =
+            convolution_input_padding_per_channel<F32, 8>(n, ic, 1, ih, iw, p, inArray, (F32 *)tmp);
 
         // tiles / 12
 #ifdef _USE_OPENMP

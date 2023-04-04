@@ -13,8 +13,8 @@
 
 #include "cpu/tensor_computing_cpu.h"
 
-template <typename T>
-static inline EE space2depth_kernel(
+template <typename T, int cx>
+static EE space2depth_kernel(
     TensorDesc inputDesc, T *input, Space2DepthParamSpec p, TensorDesc outputDesc, T *output)
 {
     DataType idt, odt;
@@ -33,14 +33,6 @@ static inline EE space2depth_kernel(
         bw = 1;
     } else {
         return NOT_SUPPORTED;
-    }
-
-    int cx = 1;
-    if (idf == DF_NCHWC8) {
-        cx = 8;
-    }
-    if (idf == DF_NCHWC16) {
-        cx = 16;
     }
     U32 icx = ic / cx;
     for (U32 n = 0, o_i = 0; n < in; n++) {
@@ -61,6 +53,22 @@ static inline EE space2depth_kernel(
         }
     }
     return SUCCESS;
+}
+
+template <typename T>
+static EE space2depth_kernel(
+    TensorDesc inputDesc, T *input, Space2DepthParamSpec p, TensorDesc outputDesc, T *output)
+{
+    EE ret;
+    DataFormat idf = inputDesc.df;
+    if (idf == DF_NCHWC8) {
+        ret = space2depth_kernel<T, 8>(inputDesc, input, p, outputDesc, output);
+    } else if (idf == DF_NCHWC16) {
+        ret = space2depth_kernel<T, 16>(inputDesc, input, p, outputDesc, output);
+    } else {
+        ret = space2depth_kernel<T, 1>(inputDesc, input, p, outputDesc, output);
+    }
+    return ret;
 }
 
 EE space2depth_cpu(

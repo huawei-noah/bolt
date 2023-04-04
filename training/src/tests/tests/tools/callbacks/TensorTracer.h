@@ -70,7 +70,7 @@ class TensorTracer
     {
         write_header();
     }
-
+    ~TensorTracer(){}
     void operator()(BasicLayer* layer, const MemoryManager& memory_manager, NetworkParameters::CallbackPlace place)
     {
         if (mPlace && *mPlace != place)
@@ -83,7 +83,7 @@ class TensorTracer
         }
         trace_tensors(layer, memory_manager, callbackPlaceToName(place));
     }
-
+ 
   private:
     template<typename T>
     int get_exp(T value)

@@ -16,7 +16,7 @@
 #include "cpu/x86/fp32/blas_fp32.h"
 #endif
 
-EE axpby_x86(U32 len, DataType dt, F32 a, const void *x, F32 b, void *y)
+EE axpby_x86(I32 len, DataType dt, F32 a, const void *x, F32 b, void *y)
 {
     EE ret = NOT_SUPPORTED;
     switch (dt) {

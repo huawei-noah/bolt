@@ -54,6 +54,7 @@ while true ; do
     esac
 done
 
+echo "[INFO] Test $0 on device ${device} in ${device_dir}"
 echo "[WARNING] Please make sure ${model_zoo_dir} is valid to find all inference models"
 echo "[WARNING] Please make sure to use models in ${model_zoo_dir} in ${script_dir}/*.prototxt configure files"
 echo "[WARNING] Please make sure you have modified ${script_dir}/pinyin2hanzi_flow.prototxt to find pinyin_lm_embedding.bin file"

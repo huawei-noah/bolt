@@ -91,5 +91,4 @@ void BroadcastingLayer::determineBroadcastFlags()
         THROW_NONAME("BroadcastingLayer", "unsupported execution target");
     }
 }
-
 } // raul namespace

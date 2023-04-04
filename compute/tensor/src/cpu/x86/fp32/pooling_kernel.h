@@ -14,7 +14,7 @@
 #ifndef _H_POOLING_KERNEL
 #define _H_POOLING_KERNEL
 
-inline void pooling_max_w4(const F32 *curI, F32 *curO, U32 kw, U32 kh, U32 iStep, U32 stride)
+inline void pooling_max_w4(const F32 *curI, F32 *curO, I32 *idx, U32 kw, U32 kh, U32 iw, U32 ihw, U32 w, U32 iStep, U32 stride)
 {
     __asm__ __volatile__("mov %%eax, %%eax                                  \n\t"
                          "mov %4, %%eax                                  \n\t"
@@ -75,7 +75,7 @@ inline void pooling_max_w4(const F32 *curI, F32 *curO, U32 kw, U32 kh, U32 iStep
                          "%ymm3", "%ymm4", "%ymm5", "%ymm6", "%ymm7", "memory", "cc");
 }
 
-inline void pooling_max_w2(const F32 *curI, F32 *curO, U32 kw, U32 kh, U32 iStep, U32 stride)
+inline void pooling_max_w2(const F32 *curI, F32 *curO, I32 *idx, U32 kw, U32 kh, U32 iw, U32 ihw, U32 w, U32 iStep, U32 stride)
 {
     __asm__ __volatile__(
         "mov %%eax, %%eax                                  \n\t"
@@ -110,7 +110,7 @@ inline void pooling_max_w2(const F32 *curI, F32 *curO, U32 kw, U32 kh, U32 iStep
         : "%eax", "%rax", "%ecx", "%rdi", "%ymm0", "%ymm1", "%ymm4", "%ymm5", "memory", "cc");
 }
 
-inline void pooling_max_w1(const F32 *curI, F32 *curO, U32 kw, U32 kh, U32 iStep, U32 stride)
+inline void pooling_max_w1(const F32 *curI, F32 *curO, I32 *idx, U32 kw, U32 kh, U32 iw, U32 ihw, U32 w, U32 iStep, U32 stride)
 {
     __asm__ __volatile__("mov %%eax, %%eax                                  \n\t"
                          "mov %4, %%eax                                  \n\t"
@@ -258,7 +258,7 @@ inline void pooling_mean_w1(const F32 *curI, F32 *curO, U32 kw, U32 kh, U32 iSte
         : "%eax", "%rax", "%ecx", "%rdi", "%ymm0", "%ymm4", "memory", "cc");
 }
 
-inline void pooling_c16_max_w4(const F32 *curI, F32 *curO, U32 kw, U32 kh, U32 iStep, U32 stride)
+inline void pooling_c16_max_w4(const F32 *curI, F32 *curO, I32 *idx, U32 kw, U32 kh, U32 iw, U32 ihw, U32 w, U32 iStep, U32 stride)
 {
     __asm__ __volatile__("mov %%eax, %%eax                                  \n\t"
                          "mov %4, %%eax                                  \n\t"
@@ -319,7 +319,7 @@ inline void pooling_c16_max_w4(const F32 *curI, F32 *curO, U32 kw, U32 kh, U32 i
                          "%zmm3", "%zmm4", "%zmm5", "%zmm6", "%zmm7", "memory", "cc");
 }
 
-inline void pooling_c16_max_w2(const F32 *curI, F32 *curO, U32 kw, U32 kh, U32 iStep, U32 stride)
+inline void pooling_c16_max_w2(const F32 *curI, F32 *curO, I32 *idx, U32 kw, U32 kh, U32 iw, U32 ihw, U32 w, U32 iStep, U32 stride)
 {
     __asm__ __volatile__(
         "mov %%eax, %%eax                                  \n\t"
@@ -354,7 +354,7 @@ inline void pooling_c16_max_w2(const F32 *curI, F32 *curO, U32 kw, U32 kh, U32 i
         : "%eax", "%rax", "%ecx", "%rdi", "%zmm0", "%zmm1", "%zmm4", "%zmm5", "memory", "cc");
 }
 
-inline void pooling_c16_max_w1(const F32 *curI, F32 *curO, U32 kw, U32 kh, U32 iStep, U32 stride)
+inline void pooling_c16_max_w1(const F32 *curI, F32 *curO, I32 *idx, U32 kw, U32 kh, U32 iw, U32 ihw, U32 w, U32 iStep, U32 stride)
 {
     __asm__ __volatile__("mov %%eax, %%eax                                  \n\t"
                          "mov %4, %%eax                                  \n\t"
@@ -503,6 +503,113 @@ inline void pooling_c16_mean_w1(
         :
         : "r"(curI), "r"(curO), "r"(kw), "b"(kh), "r"(iStep), "r"(stride), "r"(&poolSize)
         : "%eax", "%rax", "%ecx", "%rdi", "%zmm0", "%zmm4", "memory", "cc");
+}
+
+inline void pooling_max_with_idx_w4(const F32 *curI, F32 *curO, I32 *idx, U32 kw, U32 kh, U32 iw, U32 ihw, U32 w, U32 iStep, U32 stride)
+{
+    stride /= 4;
+    iStep /= 4;
+    __m256 x1, x2, x3, x4;
+    __m256 t1, t2, t3, t4;
+    __m256 b1, b2;
+    __m256 i1, i2, i3, i4;
+    x1 = _mm256_loadu_ps(curI);
+    x2 = _mm256_loadu_ps(curI + stride);
+    x3 = _mm256_loadu_ps(curI + stride * 2);
+    x4 = _mm256_loadu_ps(curI + stride * 3);
+    __m256 diff = _mm256_set_ps(ihw * 7, ihw * 6, ihw * 5, ihw * 4, ihw * 3, ihw * 2, ihw, 0);
+    i1 = _mm256_add_ps(diff, _mm256_set1_ps(w));
+    i2 = _mm256_add_ps(diff, _mm256_set1_ps(w + stride / 8));
+    i3 = _mm256_add_ps(diff, _mm256_set1_ps(w + stride / 8 * 2));
+    i4 = _mm256_add_ps(diff, _mm256_set1_ps(w + stride / 8 * 3));
+    for (U32 fh = 0; fh < kh; ++fh) {
+        for (U32 fw = 0; fw < kw; ++fw) {
+            t1 = _mm256_loadu_ps(curI);
+            t2 = _mm256_loadu_ps(curI + stride);
+            t3 = _mm256_loadu_ps(curI + stride * 2);
+            t4 = _mm256_loadu_ps(curI + stride * 3);
+            b1 = _mm256_cmp_ps(x1, t1, 1);
+            b2 = _mm256_cmp_ps(x2, t2, 1);
+            x1 = _mm256_blendv_ps(x1, t1, b1);
+            x2 = _mm256_blendv_ps(x2, t2, b2);
+            i1 = _mm256_blendv_ps(i1, _mm256_add_ps(diff, _mm256_set1_ps(fh * iw + fw + w)), b1);
+            i2 = _mm256_blendv_ps(i2, _mm256_add_ps(diff, _mm256_set1_ps(fh * iw + fw + w + stride / 8)), b2);
+            b1 = _mm256_cmp_ps(x3, t3, 1);
+            b2 = _mm256_cmp_ps(x4, t4, 1);
+            x3 = _mm256_blendv_ps(x3, t3, b1);
+            x4 = _mm256_blendv_ps(x4, t4, b2);
+            i3 = _mm256_blendv_ps(i3, _mm256_add_ps(diff, _mm256_set1_ps(fh * iw + fw + w + stride / 8 * 2)), b1);
+            i4 = _mm256_blendv_ps(i4, _mm256_add_ps(diff, _mm256_set1_ps(fh * iw + fw + w + stride / 8 * 3)), b2);
+            curI += 8;
+        }
+        curI += iStep;
+    }
+    _mm256_storeu_ps(curO, x1);
+    _mm256_storeu_ps(curO + 8, x2);
+    _mm256_storeu_ps(curO + 16, x3);
+    _mm256_storeu_ps(curO + 24, x4);
+    _mm256_store_si256((__m256i*)(idx), _mm256_cvtps_epi32(i1));
+    _mm256_store_si256((__m256i*)(idx + 8), _mm256_cvtps_epi32(i2));
+    _mm256_store_si256((__m256i*)(idx + 16), _mm256_cvtps_epi32(i3));
+    _mm256_store_si256((__m256i*)(idx + 24), _mm256_cvtps_epi32(i4));
+}
+
+inline void pooling_max_with_idx_w2(const F32 *curI, F32 *curO, I32 *idx, U32 kw, U32 kh, U32 iw, U32 ihw, U32 w, U32 iStep, U32 stride)
+{
+    stride /= 4;
+    iStep /= 4;
+    __m256 x1, x2;
+    __m256 t1, t2;
+    __m256 b1, b2;
+    __m256 i1, i2;
+    x1 = _mm256_loadu_ps(curI);
+    x2 = _mm256_loadu_ps(curI + stride);
+    __m256 diff = _mm256_set_ps(ihw * 7, ihw * 6, ihw * 5, ihw * 4, ihw * 3, ihw * 2, ihw, 0);
+    i1 = _mm256_add_ps(diff, _mm256_set1_ps(w));
+    i2 = _mm256_add_ps(diff, _mm256_set1_ps(w + stride / 8));
+    for (U32 fh = 0; fh < kh; ++fh) {
+        for (U32 fw = 0; fw < kw; ++fw) {
+            t1 = _mm256_loadu_ps(curI);
+            t2 = _mm256_loadu_ps(curI + stride);
+            b1 = _mm256_cmp_ps(x1, t1, 1);
+            b2 = _mm256_cmp_ps(x2, t2, 1);
+            x1 = _mm256_blendv_ps(x1, t1, b1);
+            x2 = _mm256_blendv_ps(x2, t2, b2);
+            i1 = _mm256_blendv_ps(i1, _mm256_add_ps(diff, _mm256_set1_ps(fh * iw + fw + w)), b1);
+            i2 = _mm256_blendv_ps(i2, _mm256_add_ps(diff, _mm256_set1_ps(fh * iw + fw + w + stride / 8)), b2);
+            curI += 8;
+        }
+        curI += iStep;
+    }
+    _mm256_storeu_ps(curO, x1);
+    _mm256_storeu_ps(curO + 8, x2);
+    _mm256_store_si256((__m256i*)(idx), _mm256_cvtps_epi32(i1));
+    _mm256_store_si256((__m256i*)(idx + 8), _mm256_cvtps_epi32(i2));
+}
+
+inline void pooling_max_with_idx_w1(const F32 *curI, F32 *curO, I32 *idx, U32 kw, U32 kh, U32 iw, U32 ihw, U32 w, U32 iStep, U32 stride)
+{
+    stride /= 4;
+    iStep /= 4;
+    __m256 x1;
+    __m256 t1;
+    __m256 b1;
+    __m256 i1;
+    x1 = _mm256_loadu_ps(curI);
+    __m256 diff = _mm256_set_ps(ihw * 7, ihw * 6, ihw * 5, ihw * 4, ihw * 3, ihw * 2, ihw, 0);
+    i1 = _mm256_add_ps(diff, _mm256_set1_ps(w));
+    for (U32 fh = 0; fh < kh; ++fh) {
+        for (U32 fw = 0; fw < kw; ++fw) {
+            t1 = _mm256_loadu_ps(curI);
+            b1 = _mm256_cmp_ps(x1, t1, 1);
+            x1 = _mm256_blendv_ps(x1, t1, b1);
+            i1 = _mm256_blendv_ps(i1, _mm256_add_ps(diff, _mm256_set1_ps(fh * iw + fw + w)), b1);
+            curI += 8;
+        }
+        curI += iStep;
+    }
+    _mm256_storeu_ps(curO, x1);
+    _mm256_store_si256((__m256i*)(idx), _mm256_cvtps_epi32(i1));
 }
 
 #endif

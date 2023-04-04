@@ -79,7 +79,7 @@ EE yolov3detectionoutput(std::vector<void *> input,
                 for (U32 nw = 0; nw < w; nw++) {
                     T box_score = 0;
                     CHECK_STATUS(activation_cpu(tmpDesc, &in[idx + 4 * hw_stride],
-                        activationdesc_sigmoid, tmpDesc, &box_score, arch));
+                        activationdesc_sigmoid, tmpDesc, &box_score, nullptr, arch));
                     U32 label = 0;
                     T class_score_max = in[idx + 5 * hw_stride];
                     T class_score = 0;
@@ -91,16 +91,16 @@ EE yolov3detectionoutput(std::vector<void *> input,
                         }
                     }
                     CHECK_STATUS(activation_cpu(tmpDesc, &class_score_max, activationdesc_sigmoid,
-                        tmpDesc, &class_score, arch));
+                        tmpDesc, &class_score, nullptr, arch));
                     F32 score_conf = static_cast<F32>(box_score * class_score);
                     T cx, cy;
                     cx = cy = 0;
                     if (score_conf >= confidence_threshold) {
                         CHECK_STATUS(activation_cpu(
-                            tmpDesc, &in[idx], activationdesc_sigmoid, tmpDesc, &cx, arch));
+                            tmpDesc, &in[idx], activationdesc_sigmoid, tmpDesc, &cx, nullptr, arch));
                         F32 box_cx = static_cast<F32>((nw + cx) / w);
                         CHECK_STATUS(activation_cpu(tmpDesc, &in[idx + 1 * hw_stride],
-                            activationdesc_sigmoid, tmpDesc, &cy, arch));
+                            activationdesc_sigmoid, tmpDesc, &cy, nullptr, arch));
                         F32 box_cy = static_cast<F32>((nh + cy) / h);
                         F32 box_w = static_cast<F32>(exp(in[idx + 2 * hw_stride]) * bias_w / net_w);
                         F32 box_h = static_cast<F32>(exp(in[idx + 3 * hw_stride]) * bias_h / net_h);

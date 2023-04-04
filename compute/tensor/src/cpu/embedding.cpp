@@ -45,6 +45,14 @@ EE embedding_cpu(TensorDesc inputDesc,
                 wordIndex = ((F16 *)input)[i];
                 break;
 #endif
+#ifdef _USE_INT8
+            case DT_U8_Q:
+                wordIndex = ((UINT8 *)input)[i] - 128;
+                break;
+            case DT_I8:
+                wordIndex = ((INT8 *)input)[i];
+                break;
+#endif
             default:
                 ret = NOT_SUPPORTED;
                 break;

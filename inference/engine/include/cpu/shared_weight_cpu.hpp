@@ -37,6 +37,11 @@ public:
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
         UNUSED(inTensors);
+#ifdef _USE_INT8
+        if (featureScale.size() > 0 && 0 < (featureScale.back())[0]) {
+            this->desc.dt = get_activation_quant_data_type();
+        }
+#endif
         outTensors[0]->resize(this->desc);
         return SUCCESS;
     }
@@ -65,12 +70,17 @@ public:
                 ((CpuMemory *)(modelWeightTensor.get_memory()))->get_ptr(), modelPtr, weightBytes);
             *modelPtrShared = std::shared_ptr<U8>(*modelPtrShared, modelPtr + weightBytes);
         } else {
-            auto curOpWs = this->get_weightspec();
-            UNI_MEMCPY(((CpuMemory *)(modelWeightTensor.get_memory()))->get_ptr(), curOpWs.weight,
+            UNI_MEMCPY(((CpuMemory *)(modelWeightTensor.get_memory()))->get_ptr(), this->ws.weight,
                 weightBytes);
         }
         this->weightTensors.push_back(modelWeightTensor);
         (*this->tensorMapPtr)[this->outputTensorName]->reuse(&(this->weightTensors[0]));
+
+        if ((this->ws.num_quant_scale > 0) && (this->ws.weight_scale[0].num_scale > 0) && (this->ws.weight_scale[0].scale[0] > 0)) {
+            (*this->tensorMapPtr)[this->outputTensorName]->set_scale(
+                this->ws.weight_scale[0].scale[0]);
+        }
+
         return SUCCESS;
     }
 };

@@ -1,5 +1,6 @@
-#ifndef CAST_OPT
-#define CAST_OPT
+#ifndef _H_CAST_OPT
+#define _H_CAST_OPT
+
 #include "common_opt.h"
 
 inline EE set_cast_opt_mali(bool useNchwFormat,
@@ -10,39 +11,20 @@ inline EE set_cast_opt_mali(bool useNchwFormat,
     char *kernelName,
     KernelOpt *kernelOpt)
 {
-    char *opt = kernelOpt->option;
-    std::string formatName = "";
-    if (useNchwFormat) {
-        formatName = "nchw_";
-    }
-    char ioMemName[128] = "";
-    CHECK_STATUS(set_io_mem_name(inputMemType, outputMemType, ioMemName));
     kernelOpt->kernelDataType = DT_F16;
-    std::string idtName = "f16";
-    std::string odtName = "f16";
-    if (idt == DT_F16) {
-        CHECK_STATUS(set_chars_define_opt("INPUT_F16", opt));
-    } else if (idt == DT_I32) {
-        CHECK_STATUS(set_chars_define_opt("INPUT_I32", opt));
-        idtName = "i32";
-    } else {
-        CHECK_STATUS(NOT_SUPPORTED);
-    }
-    if (odt == DT_F16) {
-        CHECK_STATUS(set_chars_define_opt("OUTPUT_F16", opt));
-    } else if (odt == DT_I32) {
-        CHECK_STATUS(set_chars_define_opt("OUTPUT_I32", opt));
-        odtName = "i32";
-    } else {
-        CHECK_STATUS(NOT_SUPPORTED);
-    }
-    std::string kernel = std::string("cast_") + formatName + idtName + std::string("_to_") + odtName;
-    UNI_STRCPY(kernelName, kernel.c_str());
-    UNI_STRCPY(kernelOpt->sourceName, "cast");
-    if (useNchwFormat) {
-        CHECK_STATUS(set_chars_define_opt("USE_NCHW", opt));
-    }
-    CHECK_STATUS(set_io_mem_define_opt(inputMemType, outputMemType, opt));
+    std::string source = "cast";
+    UNI_STRCPY(kernelOpt->sourceName, source.c_str());
+    char *opt = kernelOpt->option;
+    std::string idtName = gcl_get_type(idt);
+    std::string odtName = gcl_get_type(odt);
+    CHECK_STATUS(add_macro(opt, "IT1", idtName));
+    CHECK_STATUS(add_macro(opt, "IT4", idtName + std::string("4")));
+    CHECK_STATUS(add_macro(opt, "OT1", odtName));
+    CHECK_STATUS(add_macro(opt, "OT4", odtName + std::string("4")));
+    CHECK_STATUS(add_macro_format(opt, useNchwFormat));
+    std::string name = get_kernel_name(source, kernelOpt->option);
+    CHECK_STATUS(add_macro(opt, "KERNEL_NAME", name.c_str()));
+    UNI_STRCPY(kernelName, name.c_str());
     return SUCCESS;
 }
 #endif

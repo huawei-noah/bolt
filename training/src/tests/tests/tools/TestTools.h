@@ -207,12 +207,12 @@ class Checker : public ListenerHelper
         : mEps(1e-5_dt)
     {
     }
-
+    
     Checker(raul::dtype eps)
         : mEps(eps)
     {
     }
-
+    ~Checker(){}
   protected:
     void check(const Workflow& work) const;
 
@@ -226,8 +226,9 @@ class CheckerAfterForward : public Checker
         : Checker(eps)
     {
     }
-
+    ~CheckerAfterForward(){}
     void AfterForward(Workflow& work) override { check(work); }
+
 };
 
 class CheckerAfterBackward : public Checker
@@ -237,16 +238,18 @@ class CheckerAfterBackward : public Checker
         : Checker(eps)
     {
     }
-
+    ~CheckerAfterBackward(){}
     void AfterBackward(Workflow& work) override { check(work); }
+ 
 };
 
 class FillerBeforeBackward : public ListenerHelper
 {
   public:
     FillerBeforeBackward() {}
-
+    ~FillerBeforeBackward(){}
     void BeforeBackward(Workflow& work) override;
+
 };
 }
 

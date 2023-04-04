@@ -57,6 +57,13 @@
 #include "ocl/roialign_ocl.hpp"
 #include "ocl/generate_proposals_ocl.hpp"
 #include "ocl/gather_ocl.hpp"
+#include "ocl/prior_box_ocl.hpp"
+#include "ocl/detection_output_ocl.hpp"
+#include "ocl/flatten_ocl.hpp"
+#include "ocl/convert_color_ocl.hpp"
+#include "ocl/lut_preprocess_ocl.hpp"
+#include "ocl/lut_ocl.hpp"
+#include "ocl/instance_norm_ocl.hpp"
 
 class FactoryOCL : public Factory {
 public:
@@ -309,13 +316,13 @@ public:
 
     std::shared_ptr<Operator> createPriorBox(DataType dt, PriorBoxParamSpec p) override
     {
-        OP_UNSUP(2, dt, p);
+        auto cep = new PriorBoxOCL(dt, p);
         return std::shared_ptr<Operator>(cep);
     }
 
     std::shared_ptr<Operator> createDetectionOutput(DataType dt, DetectionOutputParamSpec p) override
     {
-        OP_UNSUP(2, dt, p);
+        auto cep = new DetectionOutputOCL(dt, p);
         return std::shared_ptr<Operator>(cep);
     }
 
@@ -332,7 +339,7 @@ public:
         return std::shared_ptr<Operator>(cep);
     }
 
-    std::shared_ptr<Operator> createL2Normalization(DataType dt) override
+    std::shared_ptr<Operator> createL2Norm(DataType dt) override
     {
         OP_UNSUP(1, dt);
         return std::shared_ptr<Operator>(cep);
@@ -394,7 +401,7 @@ public:
 
     std::shared_ptr<Operator> createInstanceNorm(DataType dt, InstanceNormParamSpec p) override
     {
-        OP_UNSUP(2, dt, p);
+        auto cep = (InstanceNorm *)new InstanceNormOCL(dt, p);
         return std::shared_ptr<Operator>(cep);
     }
 
@@ -446,11 +453,14 @@ public:
         OP_UNSUP(2, dt, p);
         return std::shared_ptr<Operator>(cep);
     }
+
+#ifdef _USE_INT8
     std::shared_ptr<Operator> createQuantizeLinear(DataType dt, QuantizeLinearParamSpec p) override
     {
         OP_UNSUP(2, dt, p);
         return std::shared_ptr<Operator>(cep);
     }
+#endif
 
     std::shared_ptr<Operator> createGridSample(DataType dt, GridSampleParamSpec p) override
     {
@@ -464,7 +474,7 @@ public:
         return std::shared_ptr<Operator>(cep);
     }
 
-    std::shared_ptr<Operator> createCumSum(DataType dt, CumSumParamSpec p) override
+    std::shared_ptr<Operator> createCum(DataType dt, CumParamSpec p) override
     {
         OP_UNSUP(2, dt, p);
         return std::shared_ptr<Operator>(cep);
@@ -492,6 +502,48 @@ public:
     std::shared_ptr<Operator> createRange(DataType dt, RangeParamSpec p) override
     {
         OP_UNSUP(2, dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createEinsum(DataType dt, EinsumParamSpec p) override
+    {
+        OP_UNSUP(2, dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createUnPooling(PoolingParamSpec p) override
+    {
+        OP_UNSUP(1, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createRandom(RandomParamSpec p) override
+    {
+        OP_UNSUP(1, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createFlatten(FlattenParamSpec p) override
+    {
+        auto cep = new FlattenOCL(p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createConvertColor(DataType dt, ConvertColorParamSpec p) override
+    {
+        auto cep = new ConvertColorOCL(dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createLutPreprocess(DataType dt) override
+    {
+        auto cep = new LutPreprocessOCL(dt);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createLut(DataType dt, LutParamSpec p) override
+    {
+        auto cep = new LutOCL(dt, p);
         return std::shared_ptr<Operator>(cep);
     }
 };

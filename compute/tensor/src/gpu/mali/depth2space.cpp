@@ -66,17 +66,7 @@ EE depth2space_padding_input_mali(TensorDesc inputDesc,
 EE depth2space_infer_tmpBuf_size_mali(
     TensorDesc inputDesc, Depth2SpaceParamSpec p, TensorDesc outputDesc, U32 *bytes)
 {
-    EE ret = SUCCESS;
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = depth2space_infer_tmpBuf_size_mali_fp16(inputDesc, p, outputDesc, bytes);
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return depth2space_infer_tmpBuf_size_mali_fp16(inputDesc, p, outputDesc, bytes);
 }
 
 EE depth2space_mali(GCLHandle_t handle,
@@ -87,16 +77,6 @@ EE depth2space_mali(GCLHandle_t handle,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
-    EE ret = SUCCESS;
     CHECK_STATUS(depth2space_checkpara_mali(handle, inputDesc, input, p, outputDesc, output));
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = depth2space_mali_fp16(handle, inputDesc, input, p, tmpBuf, outputDesc, output);
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return depth2space_mali_fp16(handle, inputDesc, input, p, tmpBuf, outputDesc, output);
 }

@@ -40,6 +40,9 @@ EE reduction(Tensor inputTensor,
 #ifdef _USE_CPU
         ret = reduction_cpu(
             inputDesc, input, maskDesc, mask, p, tmpBytes, tmp, outputDesc, output, arch);
+        if (tensorIsShape(inputDesc) && tensorIsShape(outputDesc)) {
+            update_desc_from_tensor(&outputTensor);
+        }
 #endif
     } else if (IS_GPU(arch)) {
 #ifdef _USE_GPU
@@ -161,7 +164,11 @@ EE reduction_infer_output_size(Tensor *inputTensor,
                 outputDesc.dims[0] = 1;
             }
         }
-        outputDesc.df = getTensorDefaultDataFormat(outputDesc.nDims);
+        if (inputDesc.nDims == 1 && !p.keep_dim) {
+            outputDesc.df = DF_SCALAR;
+        } else {
+            outputDesc.df = getTensorDefaultDataFormat(outputDesc.nDims);
+        }
         if (inputDesc.df == DF_NCHWC8 || inputDesc.df == DF_NCHWC16) {
             if (start == 0) {
                 outputDesc.df = inputDesc.df;
@@ -179,13 +186,15 @@ EE reduction_infer_output_size(Tensor *inputTensor,
             }
         }
         ret = SUCCESS;
-    }
 #ifdef _USE_CPU
-    if (tensorIsShape(inputDesc)) {
-        ret = reduction_cpu(inputDesc, inputDesc.dims + inputDesc.nDims, tensor0d(), nullptr, p, 0,
-            nullptr, outputDesc, outputDesc.dims + outputDesc.nDims, arch);
-    }
+        if (tensorIsShape(inputDesc) && tensorIsShape(outputDesc)) {
+            U32 tmpBytes = tensorNumBytes(inputDesc) * 2;
+            std::vector<INT8> tmp(tmpBytes);
+            ret = reduction_cpu(inputDesc, inputDesc.dims + inputDesc.nDims, tensor0d(), nullptr, p,
+                tmpBytes, tmp.data(), outputDesc, outputDesc.dims + outputDesc.nDims, arch);
+        }
 #endif
+    }
     outputTensor->resize(outputDesc);
     return ret;
 }

@@ -26,6 +26,8 @@
 
 typedef void (*ArrayScaleFunction)(
     DataType dt, const void *input, void *output, I32 len, F32 alpha, F32 beta);
+typedef EE (*ArrayScaleRoundFunction)(
+    DataType dt, const void *input, INT8 *output, I32 len, F32 scale, bool clamp);
 typedef void (*ArrayMulFunction)(
     DataType dt, const void *inputA, const void *inputB, void *output, I32 len);
 typedef void (*ArrayAddFunction)(
@@ -37,7 +39,7 @@ typedef void (*ArrayPowerFunction)(DataType dt, void *input, void *output, I32 l
 typedef void (*ArrayMulAndAddFunction)(
     DataType dt, const void *inputA, const void *inputB, const void *inputC, void *output, I32 len);
 typedef EE (*ArrayActivationFunction)(
-    DataType dt, void *input, U32 len, ActivationParamSpec activationDesc, void *output);
+    DataType dt, void *input, U32 len, ActivationParamSpec activationDesc, void *output, F32 *scale);
 // mode = 1 for min, mode = 2 for max, mode = 3 for min + max
 typedef EE (*ArrayMinMaxValueFunction)(
     DataType dt, const void *data, I32 len, int mode, F32 *result);
@@ -60,6 +62,22 @@ inline ArrayScaleFunction get_array_scale_function(Arch arch)
 #ifdef _USE_X86
     } else if (IS_X86(arch)) {
         func = array_scale_x86;
+#endif
+    }
+    CHECK_REQUIREMENT(func != nullptr);
+    return func;
+}
+
+inline ArrayScaleRoundFunction get_array_scale_round_function(Arch arch)
+{
+    ArrayScaleRoundFunction func = nullptr;
+    if (IS_GENERAL(arch)) {
+#ifdef _USE_GENERAL
+        func = array_scale_round_general;
+#endif
+#ifdef _USE_NEON
+    } else if (IS_ARM(arch)) {
+        func = array_scale_round_arm;
 #endif
     }
     CHECK_REQUIREMENT(func != nullptr);

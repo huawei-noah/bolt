@@ -17,6 +17,16 @@
 #include "OPOptimizer.hpp"
 
 class WeightScaleOptimizer : public OPOptimizer {
+public:
+    WeightScaleOptimizer(bool PTQ = false)
+    {
+        this->ops = {OT_Scale};
+        if (!PTQ) {
+            this->ops.insert(OT_Conv);
+            this->ops.insert(OT_FC);
+        }
+    }
+
     bool optimize(ModelSpec *spec) override
     {
         bool hasOptimized = false;
@@ -127,8 +137,7 @@ class WeightScaleOptimizer : public OPOptimizer {
     {
         bool hasOptimized = false;
         for (int i = 0; i < spec->num_operator_specs - 1; i++) {
-            if (OT_Conv == spec->ops[i].type || OT_FC == spec->ops[i].type ||
-                OT_Scale == spec->ops[i].type) {
+            if (this->ops.find(spec->ops[i].type) != this->ops.end()) {
                 int prevOpIndex = i;
                 if (OT_Conv == spec->ops[prevOpIndex].type) {
                     if (ACTIVATION_NULL != spec->ops[prevOpIndex].ps.conv_spec.dw_activation_type ||
@@ -247,7 +256,29 @@ class WeightScaleOptimizer : public OPOptimizer {
                 spec->ws[convWeightIndex].weight = (U8 *)weightTemp;
                 spec->ws[convWeightIndex].vec = (U8 *)vecTemp;
 
+                // if this op is output op, we shoule keep the origin output name
+                std::vector<int> outputIdxes = searchString(spec->output_names, spec->num_outputs,
+                        spec->ops[scaleOpIndex].output_tensors_name[0]);
+
                 setOperatorInvalid(spec, scaleOpIndex, true);
+
+                if (!outputIdxes.empty()) {
+                    std::string originOutput =
+                        spec->ops[scaleOpIndex].output_tensors_name[0];
+                    str_copy(spec->output_names[outputIdxes[0]],
+                            originOutput.c_str(), NAME_LEN);
+                    std::vector<std::pair<int, int>> operatorIndexes0 = searchOperatorIndexByInput(
+                        spec, spec->ops[prevOpIndex].output_tensors_name[0], prevOpIndex + 1,
+                        spec->num_operator_specs);
+                    for (U32 j = 0; j < operatorIndexes0.size(); j++) {
+                        str_copy(spec->ops[operatorIndexes0[j].first]
+                                     .input_tensors_name[operatorIndexes0[j].second],
+                            originOutput.c_str(), NAME_LEN);
+                    }
+                    str_copy(spec->ops[prevOpIndex].output_tensors_name[0],
+                             originOutput.c_str(), NAME_LEN);
+
+                }
                 hasOptimized = true;
                 i--;
             }
@@ -315,5 +346,8 @@ class WeightScaleOptimizer : public OPOptimizer {
         }
         return hasOptimized;
     }
+
+private:
+    std::set<OperatorType> ops;
 };
 #endif

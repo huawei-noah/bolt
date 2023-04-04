@@ -13,7 +13,6 @@
 
 #include "mvm_common.h"
 #include "mvm.h"
-#include "thread_affinity.h"
 
 inline void mvm_row_kernel_A76(U32 N, U32 K, F16 *matrix, F16 *vector, F16 *result)
 {

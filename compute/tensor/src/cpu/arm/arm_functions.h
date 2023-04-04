@@ -16,10 +16,11 @@
 
 #include "cpu/cpu_functions_template.h"
 #include "cpu/general/general_functions.h"
+#include "cpu/arm/int32/arm_functions_int32.h"
+#include "cpu/arm/fp32/arm_functions_fp32.h"
 #ifdef _USE_FP16
 #include "cpu/arm/fp16/arm_functions_fp16.h"
 #endif
-#include "cpu/arm/fp32/arm_functions_fp32.h"
 #ifdef _USE_INT8
 #include "cpu/arm/int8/arm_functions_int8.h"
 #endif
@@ -39,8 +40,17 @@ inline F32 array_sum_arm(DataType dt, const void *data, I32 len)
             result = array_sum_f32((const F32 *)data, len);
             break;
 #endif
+#ifdef _USE_INT8
+        case DT_I8:
+            result = array_sum_int8((const INT8 *)data, len);
+            break;
+#endif
+        case DT_U32:
+        case DT_I32:
+            result = array_sum_i32((const I32 *)data, len);
+            break;
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
             break;
     }
     return result;
@@ -62,7 +72,7 @@ inline F32 array_mean_arm(DataType dt, const void *data, I32 len)
             break;
 #endif
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
             break;
     }
     return result;
@@ -84,7 +94,7 @@ inline F32 array_var_arm(DataType dt, const void *data, I32 len, F32 mean)
             break;
 #endif
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
             break;
     }
     return result;
@@ -111,6 +121,7 @@ inline EE array_minmax_value_arm(DataType dt, const void *data, I32 len, int mod
             ret = array_minmax_value_template<U32>((const U32 *)data, len, mode, result);
             break;
         default:
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
             ret = NOT_SUPPORTED;
             break;
     }
@@ -127,7 +138,7 @@ inline F32 array_maxabs_arm(DataType dt, const void *data, I32 len)
             break;
 #endif
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
             break;
     }
     return result;
@@ -154,9 +165,35 @@ inline void array_scale_arm(
             array_scale_template<U32>((const U32 *)input, (U32 *)output, len, alpha, beta);
             break;
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
             break;
     }
+}
+
+inline EE array_scale_round_arm(
+    DataType dt, const void *input, INT8 *output, I32 len, F32 scale, bool clamp)
+{
+    EE ret = SUCCESS;
+    switch (dt) {
+#ifdef _USE_FP16
+        case DT_F16:
+            array_scale_round_f16((const F16 *)input, output, len, scale, clamp);
+            break;
+#endif
+#ifdef _USE_FP32
+        case DT_F32:
+            array_scale_round_f32((const F32 *)input, output, len, scale, clamp);
+            break;
+#endif
+        case DT_I32:
+            array_scale_round_i32((const I32 *)input, output, len, scale, clamp);
+            break;
+        default:
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
+            ret = NOT_SUPPORTED;
+            break;
+    }
+    return ret;
 }
 
 inline void array_power_arm(DataType dt, void *input, void *output, I32 len, F32 power)
@@ -179,13 +216,13 @@ inline void array_power_arm(DataType dt, void *input, void *output, I32 len, F32
             array_power_template<U32>((U32 *)input, (U32 *)output, len, power);
             break;
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
             break;
     }
 }
 
 inline EE array_activation_arm(
-    DataType dt, void *input, U32 len, ActivationParamSpec activationDesc, void *output)
+    DataType dt, void *input, U32 len, ActivationParamSpec activationDesc, void *output, F32 *scale)
 {
     EE ret = SUCCESS;
     switch (dt) {
@@ -206,7 +243,7 @@ inline EE array_activation_arm(
         }
 #endif
         default:
-            ret = array_activation_general(dt, input, len, activationDesc, output);
+            ret = array_activation_general(dt, input, len, activationDesc, output, scale);
             break;
     }
     return ret;
@@ -226,7 +263,7 @@ inline void array_mul_arm(DataType dt, const void *inputA, const void *inputB, v
             break;
 #endif
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
             break;
     }
 }
@@ -244,8 +281,13 @@ inline void array_add_arm(DataType dt, const void *inputA, const void *inputB, v
             array_add_f32((const F32 *)inputA, (const F32 *)inputB, (F32 *)output, len);
             break;
 #endif
+#ifdef _USE_INT8
+        case DT_I8:
+            array_add_int8((const INT8 *)inputA, (const INT8 *)inputB, (INT8 *)output, len);
+            break;
+#endif
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
             break;
     }
 }
@@ -267,7 +309,7 @@ inline void array_mul_and_add_arm(
             break;
 #endif
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
             break;
     }
 }
@@ -286,7 +328,7 @@ inline void array_max_arm(DataType dt, const void *inputA, const void *inputB, v
             break;
 #endif
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
             break;
     }
 }
@@ -308,7 +350,7 @@ inline void array_norm_scalar_scale_arm(
             break;
 #endif
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("%s not support %s data.\n", __func__, DataTypeName()[dt]);
             break;
     }
 }

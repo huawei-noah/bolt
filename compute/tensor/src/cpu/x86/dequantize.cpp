@@ -32,6 +32,10 @@ EE dequantize_x86(TensorDesc qDesc,
                 ret = dequantizeI32ToF32(qDesc, (I32 *)qData, scale, dDesc, (F32 *)dData);
                 break;
             }
+            case DT_U8_Q: {
+                ret = dequantizeU8ToF32(qDesc, (UINT8 *)qData, scale, dDesc, (F32 *)dData);
+                break;
+            }
 #endif
             default:
                 ret = NOT_SUPPORTED;

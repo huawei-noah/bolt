@@ -29,7 +29,7 @@ inline EE invgemm_core_mali_fp16(GCLHandle_t handle,
     GCLMem_t tmpBuf,
     TensorDesc outputDesc,
     GCLMem_t output,
-    ActivationMode activationMode)
+    ActivationParamSpec activationMode)
 {
     cl_mem inbuf, biasmem, outbuf, fltbuf, tmp;
     inbuf = input->mem;
@@ -37,6 +37,7 @@ inline EE invgemm_core_mali_fp16(GCLHandle_t handle,
     biasmem = bias->mem;
     outbuf = output->mem;
     tmp = tmpBuf->mem;
+    DataType dt;
     U32 iw, ih, ic, in;
     U32 fw, fh, sw, sh, pl, pt;
     U32 ow, oh, oc, on;
@@ -46,7 +47,7 @@ inline EE invgemm_core_mali_fp16(GCLHandle_t handle,
     sh = convParamSpec.stride_h;
     pl = convParamSpec.pad_left;
     pt = convParamSpec.pad_top;
-    tensorSelectGet(inputDesc, NULL, NULL, &in, &ic, &ih, &iw);
+    tensorSelectGet(inputDesc, &dt, NULL, &in, &ic, &ih, &iw);
     tensorSelectGet(outputDesc, NULL, NULL, &on, &oc, &oh, &ow);
     U32 item_h = forwardRunInfo->best_h[0];
     U32 item_c = forwardRunInfo->best_c[0];
@@ -82,8 +83,8 @@ inline EE invgemm_core_mali_fp16(GCLHandle_t handle,
         gs[1] = (th + item_h - 1) / item_h;
         gs[2] = tc / 4 / item_k * on;
         dim = 3;
-        CHECK_STATUS(set_conv_direct_opt_mali(1, 1, 1, 1, item_h, item_k, true, ACTIVATION_NULL,
-            DT_F16, input->desc.memType, GCL_MEM_BUF, kernelName, &kernelOpt));
+        CHECK_STATUS(set_conv_direct_opt_mali(1, 1, 1, 1, item_h, item_k, true, {}, dt,
+            input->desc.memType, GCL_MEM_BUF, kernelName, &kernelOpt));
         CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
         CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ihw_str, ic_str, iw_off, ih_off, tw_str,
             thw_str, t_off, th, tc, sw, in_str, tn_str, gs[0], gs[1], inbuf, fltbuf, biasmem, tmp));
@@ -98,7 +99,7 @@ inline EE invgemm_core_mali_fp16(GCLHandle_t handle,
         I32 pw = fw - 1 - pl;
         I32 ph = fh - 1 - pt;
         CHECK_STATUS(set_conv_invgemm_col2img_opt(
-            activationMode, DT_F16, GCL_MEM_BUF, output->desc.memType, kernelName, &kernelOpt));
+            activationMode, dt, GCL_MEM_BUF, output->desc.memType, kernelName, &kernelOpt));
         CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
         CHECK_STATUS(gcl_set_kernelArgs(kernel, iw, ih, fw, fh, pw, ph, ow_str, oh_str, o_off, oc,
             gs[0], gs[1], tmp, biasmem, outbuf));
@@ -115,11 +116,12 @@ inline EE invgemm_core_mali_fp16(GCLHandle_t handle,
 
 inline TensorDesc transform_filter_desc(TensorDesc filterDesc, U32 item_c, U32 item_k)
 {
+    DataType fdt;
     U32 fw, fh, fc, fn;
-    tensorSelectGet(filterDesc, NULL, NULL, &fn, &fc, &fh, &fw);
+    tensorSelectGet(filterDesc, &fdt, NULL, &fn, &fc, &fh, &fw);
     TensorDesc desc;
     desc.df = DF_NCHW;
-    desc.dt = DT_F16;
+    desc.dt = fdt;
     desc.nDims = 4;
     desc.dims[0] = item_k * item_c;
     desc.dims[1] = (fc + item_c - 1) / item_c;
@@ -157,7 +159,7 @@ EE convolution_invgemm_transform_filter_mali_fp16(GCLHandle_t handle,
     U32 gs[3] = {0, 0, 0};
     U32 ls[3] = {0, 0, 0};
     U32 dim = 3;
-    CHECK_STATUS(set_conv_invgemm_trans_flt_opt(item_k, DT_F16, kernelName, &kernelOpt));
+    CHECK_STATUS(set_conv_invgemm_trans_flt_opt(item_k, fdt, kernelName, &kernelOpt));
     gs[0] = fwh;
     gs[1] = (fc + item_c - 1) / item_c;
     gs[2] = (fn + item_k - 1) / item_k * item_k;
@@ -208,7 +210,7 @@ EE convolution_invgemm_mali_fp16(GCLHandle_t handle,
     GCLMem_t tmpBuf,
     TensorDesc outputDesc,
     GCLMem_t output,
-    ActivationMode activationMode)
+    ActivationParamSpec activationMode)
 {
     CHECK_STATUS(fill_output_zero(handle, output, outputDesc));
     CHECK_STATUS(invgemm_core_mali_fp16(handle, inputDesc, input, filterDesc, filter, convParamSpec,

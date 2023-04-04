@@ -27,8 +27,10 @@ int main()
     const char *modelPath = "./resnet18_v2_sim_train.bolt";
     int batch_size = 2;
     const int target_size = 1000;
-    create_general_training_model_from_bolt(
-        &graph, modelPath, batch_size, target_size, loss_type, false, nullptr, 0, nullptr);
+    std::cout << "LEARNING_RATE: " << LEARNING_RATE << std::endl;
+    std::cout << "batch_size: " << batch_size << std::endl;
+    fflush(stdout);
+    create_graph_from_bolt(modelPath, &graph, loss_type, batch_size, nullptr, 0, nullptr, target_size);
 
     // Second step: create optimizer
     Optimizer_t *sgd_optimizer = NULL;
@@ -60,7 +62,8 @@ int main()
     }
 
     // Fourth step: serialize the updated model
-    save_training_model(graph, modelPath, false);
-
+    save_graph(graph, modelPath, "./resnet18_v2_sim_finetune.bolt");
+    delete_optimizer(sgd_optimizer);
+    delete_graph(graph);
     return 0;
 }

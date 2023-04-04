@@ -51,7 +51,7 @@ int main(int argc, char *argv[])
     char *modelPath = (char *)"";
     char *affinityPolicyName = (char *)"";
     if (!parse_res.model.second) {
-        exit(-1);
+        return 1;
     }
     if (parse_res.model.second) {
         modelPath = parse_res.model.first;

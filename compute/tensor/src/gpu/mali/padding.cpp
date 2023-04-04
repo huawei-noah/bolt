@@ -25,19 +25,5 @@ EE padding_mali(GCLHandle_t handle,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
-    EE ret = SUCCESS;
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = padding_mali_fp16(handle, inputDesc, input, padParamSpec, outputDesc, output);
-            break;
-        }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return padding_mali_fp16(handle, inputDesc, input, padParamSpec, outputDesc, output);
 }

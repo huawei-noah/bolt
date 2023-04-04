@@ -21,9 +21,6 @@ inline EE generate_proposals_checkpara_mali_fp16(TensorDesc deltaDesc,
     TensorDesc anchorDesc,
     TensorDesc outputDesc)
 {
-    if (deltaDesc.dt != DT_F16) {
-        return NOT_SUPPORTED;
-    }
     if (deltaDesc.dt != logitDesc.dt || deltaDesc.dt != imgInfoDesc.dt ||
         deltaDesc.dt != anchorDesc.dt || deltaDesc.dt != outputDesc.dt) {
         return NOT_MATCH;
@@ -422,15 +419,15 @@ EE generate_proposals_infer_forward_tmp_bytes_mali_fp16(TensorDesc deltaDesc,
     U32 dw, dh, dc, dn;
     tensorSelectGet(deltaDesc, &dt, NULL, &dn, &dc, &dh, &dw);
     U32 size = dw * dh * ((dc + 3) / 4 * 4) * dn * bytesOf(dt);
-    gpuSize += ALIGN(size, BUFFER_ALIGN_BASE);
+    gpuSize += UNI_ALIGN(size, BUFFER_ALIGN_BASE);
     if (deltaDesc.df != DF_NCHWC4) {
         gpuSize *= 2;
     }
     U32 proposalLen = tensorNumElements(logitDesc);
     if (logitDesc.df == DF_NCHWC4 || gclMemLogitDesc.num != proposalLen) {
-        gpuSize += ALIGN(tensorNumBytes(logitDesc), BUFFER_ALIGN_BASE);
+        gpuSize += UNI_ALIGN(tensorNumBytes(logitDesc), BUFFER_ALIGN_BASE);
     }
-    //gpuSize += ALIGN(postNmsTop * bytesOf(DT_I32), BUFFER_ALIGN_BASE);
+    //gpuSize += UNI_ALIGN(postNmsTop * bytesOf(DT_I32), BUFFER_ALIGN_BASE);
 
     cpuSize += size;
     cpuSize += tensorNumBytes(logitDesc);

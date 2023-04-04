@@ -33,10 +33,12 @@ EE matrix_matrix_multiply_tmp_bytes(
         tensor2dGet(matrixADesc, &matrixADataType, &matrixADataFormat, &matrixA_M, &matrixA_K));
     CHECK_STATUS(
         tensor2dGet(matrixBDesc, &matrixBDataType, &matrixBDataFormat, &matrixB_K, &matrixB_N));
+    if (matrixADesc.df == DF_TRANSPOSE) {
+        std::swap(matrixA_K, matrixA_M);
+    }
     if (matrixBDesc.df == DF_TRANSPOSE) {
         std::swap(matrixB_K, matrixB_N);
     }
-
     EE ret = NOT_SUPPORTED;
     if (IS_GENERAL(arch)) {
 #ifdef _USE_GENERAL
@@ -44,13 +46,80 @@ EE matrix_matrix_multiply_tmp_bytes(
 #endif
 #ifdef _USE_X86
     } else if (IS_X86(arch)) {
-        ret = matrix_matrix_multiply_tmp_bytes_x86(
-            matrixA_M, matrixA_K, matrixB_K, matrixB_N, matrixADataFormat, matrixADataType, bytes);
+        ret = matrix_matrix_multiply_tmp_bytes_x86(matrixB_N, matrixA_M, matrixB_K, matrixADataType,
+            matrixADataFormat, matrixBDataType, matrixBDataFormat, bytes);
 #endif
 #ifdef _USE_NEON
     } else if (IS_ARM(arch)) {
-        ret = matrix_matrix_multiply_tmp_bytes_arm(
-            matrixA_M, matrixA_K, matrixB_K, matrixB_N, matrixADataType, bytes);
+        ret = matrix_matrix_multiply_tmp_bytes_arm(matrixB_N, matrixA_M, matrixB_K, matrixADataType,
+            matrixADataFormat, matrixBDataType, matrixBDataFormat, bytes);
+#endif
+    }
+    return ret;
+}
+
+DataFormat matrix_matrix_multiply_rhs_format(DataType dt)
+{
+    DataFormat ret;
+    switch (dt) {
+        case DT_F16: {
+#ifdef _USE_MATRIX
+            ret = DF_NKNxKx;
+#else
+            ret = DF_NKN24;
+#endif
+            break;
+        }
+        case DT_BF16: {
+            ret = DF_NKNxKx;
+            break;
+        }
+        case DT_F32: {
+#ifdef __aarch64__
+            ret = DF_NKN12;
+#else
+            ret = DF_NKN8;
+#endif
+            break;
+        }
+        case DT_I8: {
+            ret = DF_NKNxKx;
+            break;
+        }
+        default: {
+            CHECK_STATUS(NOT_SUPPORTED);
+            break;
+        }
+    }
+    return ret;
+}
+
+EE matrix_matrix_multiply_transform_rhs_bytes(
+    TensorDesc matrixBDesc, U32 *bytes, U32 *rhsBytes, Arch arch)
+{
+    DataType matrixBDataType;
+    DataFormat matrixBDataFormat;
+    U32 matrixB_K, matrixB_N;
+    CHECK_STATUS(
+        tensor2dGet(matrixBDesc, &matrixBDataType, &matrixBDataFormat, &matrixB_K, &matrixB_N));
+    if (matrixBDesc.df == DF_TRANSPOSE) {
+        std::swap(matrixB_K, matrixB_N);
+    }
+    EE ret = NOT_SUPPORTED;
+    if (IS_GENERAL(arch)) {
+#ifdef _USE_GENERAL
+        *bytes = tensorNumBytes(matrixBDesc);
+        ret = SUCCESS;
+#endif
+#ifdef _USE_X86
+    } else if (IS_X86(arch)) {
+        ret = matrix_matrix_multiply_transform_rhs_bytes_x86(
+            matrixB_N, matrixB_K, matrixBDataType, matrixBDataFormat, bytes, rhsBytes);
+#endif
+#ifdef _USE_NEON
+    } else if (IS_ARM(arch)) {
+        ret = matrix_matrix_multiply_transform_rhs_bytes_arm(
+            matrixB_N, matrixB_K, matrixBDataType, matrixBDataFormat, bytes, rhsBytes);
 #endif
     }
     return ret;
@@ -91,11 +160,9 @@ EE matrix_matrix_multiply(TensorDesc matrixADesc,
 {
     if (bytes != 0 && tmp == nullptr) {
         CHECK_STATUS(NULL_POINTER);
-        return NULL_POINTER;
     }
     if (nullptr == matrixAData || nullptr == matrixBData || nullptr == matrixCData) {
         CHECK_STATUS(NULL_POINTER);
-        return NULL_POINTER;
     }
     if (tensorNumElements(matrixCDesc) == 0) {
         return SUCCESS;
@@ -112,13 +179,12 @@ EE matrix_matrix_multiply(TensorDesc matrixADesc,
         tensor2dGet(matrixCDesc, &matrixCDataType, &matrixCDataFormat, &matrixC_M, &matrixC_N));
 
     if (matrixADataType != matrixBDataType) {
-        if (matrixADataType != DT_U8_Q || matrixBDataType != DT_I8) {
+        if (!(matrixADataType == DT_U8_Q && matrixBDataType == DT_I8)) {
             CHECK_STATUS(NOT_MATCH);
         }
     }
-
     bool transposeA = false, transposeB = false;
-    if (matrixADataFormat == DF_TRANSPOSE || matrixADataFormat == DF_NKN8) {
+    if (matrixADataFormat == DF_TRANSPOSE) {
         std::swap(matrixA_M, matrixA_K);
         transposeA = true;
     }
@@ -131,47 +197,42 @@ EE matrix_matrix_multiply(TensorDesc matrixADesc,
     }
 
     EE ret = NOT_SUPPORTED;
-    if (IS_GENERAL(arch)) {
+    if (IS_CPU(arch)) {
+        if (IS_GENERAL(arch)) {
 #ifdef _USE_GENERAL
-        ret = mmm_general(matrixC_N, matrixC_M, matrixA_K, transposeA, transposeB, matrixADataType,
-            matrixAData, matrixBData, matrixCData);
+            ret = mmm_general(matrixC_N, matrixC_M, matrixA_K, transposeA, transposeB,
+                matrixADataType, matrixAData, matrixBData, matrixCData);
 #endif
-#ifdef _USE_X86
-    } else if (IS_X86(arch)) {
-        TensorDesc tranDescB;
-        U8 *dataB = (U8 *)matrixBData;
-        if (matrixBDataFormat != targetFormat4MatrixB(matrixBDataType)) {
-            dataB = ((U8 *)tmp);
-            if (matrixADataType == DT_U8_Q && matrixBDataType == DT_I8) {
-                U32 alignedK = (matrixB_K + 7) / 8 * 8;
-                U32 alignedN = (matrixB_N + 15) / 16 * 16;
-                tmp = (U8 *)tmp + alignedK * alignedN;
-            } else {
-                U32 alignedN = (matrixB_N + 7) / 8 * 8;
-                tmp = (U8 *)tmp + matrixB_K * alignedN;
+        } else {
+            auto transB = matrixBData;
+            if (matrixBDataFormat != matrix_matrix_multiply_rhs_format(matrixBDataType)) {
+                U32 transBBytes = 0;
+                CHECK_STATUS(matrix_matrix_multiply_transform_rhs_bytes(
+                    matrixBDesc, nullptr, &transBBytes, arch));
+                CHECK_REQUIREMENT(
+                    transBBytes >= tensorNumBytes(matrixBDesc) && bytes >= transBBytes);
+                TensorDesc transBDesc;
+                CHECK_STATUS(matrix_matrix_multiply_transform_rhs(
+                    matrixBDesc, matrixBData, &transBDesc, tmp, arch));
+                transB = tmp;
+                tmp = (U8 *)tmp + transBBytes;
             }
-            ret = matrix_matrix_multiply_transform_rhs_x86(
-                matrixBDesc, matrixBData, &tranDescB, dataB);
-        }
-        ret = mmm_x86(matrixC_N, matrixC_M, matrixA_K, matrixBDataType, matrixADataFormat,
-            matrixAData, dataB, tmp, matrixCData, scale);
+#ifdef _USE_X86
+            if (IS_X86(arch)) {
+                if (matrixCDataType == DT_I32) {
+                    scale = nullptr;
+                }
+                ret = mmm_x86(matrixC_N, matrixC_M, matrixA_K, matrixBDataType, matrixADataFormat,
+                    matrixAData, transB, tmp, matrixCData, scale);
+            }
 #endif
 #ifdef _USE_NEON
-    } else if (IS_ARM(arch)) {
-        TensorDesc tranDescB;
-        U8 *dataB = (U8 *)matrixBData;
-        if (matrixBDataFormat != targetFormat4MatrixB(matrixBDataType)) {
-            U32 K = matrixA_K;
-            if (DT_I8 == matrixADataType) {
-                K = pad_to_4_multiple(K);
+            if (IS_ARM(arch)) {
+                ret = mmm_arm(matrixC_N, matrixC_M, matrixA_K, matrixADataType, transposeA,
+                    matrixAData, transB, tmp, matrixCData, arch);
             }
-            dataB = ((U8 *)tmp) + matrixA_M * K * bytesOf(matrixADataType);
-            ret = matrix_matrix_multiply_transform_rhs_arm(
-                matrixBDesc, matrixBData, &tranDescB, dataB);
-        }
-        ret = mmm_arm(matrixC_N, matrixC_M, matrixA_K, matrixADataType, transposeA, matrixAData,
-            dataB, tmp, matrixCData, arch);
 #endif
+        }
     }
     return ret;
 }

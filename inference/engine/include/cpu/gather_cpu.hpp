@@ -31,52 +31,22 @@ public:
 
     void run() override
     {
-        CHECK_STATUS(gather(get_data_tensor(), get_index_tensor(), this->p, this->temp,
+        CHECK_STATUS(gather(this->inputTensors[0], this->inputTensors[1], this->p, this->temp,
             this->outputTensors[0], &this->archInfo));
     }
 
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
-        Tensor tensor0, tensor1;
-        if (is_shape(inTensors)) {
-            if ((this->p.data_desc.nDims > 0 && this->weightTensors.size() == 0) ||
-                (this->p.index_desc.nDims > 0 && this->biasTensors.size() == 0)) {
-                CHECK_STATUS(this->init_weight_bias_from_model());
-            }
-            if (this->p.data_desc.nDims > 0) {
-                this->p.data_desc = tensor_shape(this->weightTensors[0]);
-            }
-            if (this->p.index_desc.nDims > 0) {
-                this->p.index_desc = tensor_shape(this->biasTensors[0]);
-            }
-        }
-        Tensor *dataTensor = get_data_tensor_ptr(inTensors, &tensor0);
-        Tensor *indexTensor = get_index_tensor_ptr(inTensors, &tensor1);
-        CHECK_STATUS(gather_infer_output_size(
-            dataTensor, indexTensor, this->p, outTensors[0], &this->archInfo));
-        return SUCCESS;
-    }
-
-    EE infer_weight_desc() override
-    {
-        Tensor dataTensor, indexTensor;
-        if (this->p.data_desc.nDims > 0 && this->weightTensors.size() == 0) {
-            dataTensor.resize(this->p.data_desc);
-            this->weightTensors.push_back(dataTensor);
-        }
-        if (this->p.index_desc.nDims > 0 && this->biasTensors.size() == 0) {
-            indexTensor.resize(this->p.index_desc);
-            this->biasTensors.push_back(indexTensor);
-        }
-        return SUCCESS;
+        return gather_infer_output_size(
+            inTensors[0], inTensors[1], this->p, outTensors[0], &this->archInfo);
     }
 
     U32 infer_tmp_memory_size() override
     {
         U32 bytes = 0;
-        CHECK_STATUS(gather_infer_forward_tmp_bytes(get_data_tensor(), get_index_tensor(), this->p,
-            this->outputTensors[0], &bytes, &this->archInfo));
+        CHECK_STATUS(gather_infer_forward_tmp_bytes(this->inputTensors[0], this->inputTensors[1],
+            this->p, this->outputTensors[0], &bytes, &this->archInfo));
         return bytes;
     }
 };

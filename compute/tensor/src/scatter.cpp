@@ -45,20 +45,34 @@ EE scatter(Tensor dataTensor,
     return ret;
 }
 
-EE scatter_infer_output_size(Tensor *dataTensor, Tensor *outputTensor, ArchInfo_t archInfo)
+EE scatter_infer_output_size(Tensor *dataTensor,
+    Tensor *indexTensor,
+    Tensor *updateTensor,
+    ScatterParamSpec p,
+    Tensor *outputTensor,
+    ArchInfo_t archInfo)
 {
-    if (dataTensor == nullptr) {
+    if (dataTensor == nullptr || indexTensor == nullptr || updateTensor == nullptr ||
+        outputTensor == nullptr) {
         CHECK_STATUS(NULL_POINTER);
     }
-    if (outputTensor == nullptr) {
-        CHECK_STATUS(NULL_POINTER);
-    }
-    TensorDesc outputDesc = dataTensor->get_desc();
+    EE ret = SUCCESS;
+    TensorDesc dataDesc = dataTensor->get_desc();
+    TensorDesc indexDesc = indexTensor->get_desc();
+    TensorDesc updateDesc = updateTensor->get_desc();
+    TensorDesc outputDesc = dataDesc;
     if (outputDesc.df == DF_NCHWC8) {
         outputDesc.df = DF_NCHW;
     }
+#ifdef _USE_CPU
+    if (IS_CPU(archInfo->arch) && tensorIsShape(dataDesc) && tensorIsShape(indexDesc) && tensorIsShape(updateDesc)) {
+        ret = scatter_cpu(dataDesc, dataDesc.dims + dataDesc.nDims, indexDesc,
+            indexDesc.dims + indexDesc.nDims, updateDesc, updateDesc.dims + updateDesc.nDims, p,
+            nullptr, outputDesc, outputDesc.dims + outputDesc.nDims);
+    }
+#endif
     outputTensor->resize(outputDesc);
-    return SUCCESS;
+    return ret;
 }
 
 EE scatter_infer_forward_tmp_bytes(

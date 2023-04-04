@@ -33,7 +33,6 @@ void preprocess(TensorDesc node_feature_desc,
     p.axis = 0;
     p.element_level = false;
     p.batch_dims = 0;
-    p.index_scalar = false;
 
     void *out0 = tmp;
     CHECK_STATUS(gather_cpu(
@@ -50,7 +49,8 @@ void preprocess(TensorDesc node_feature_desc,
     eltwiseDesc.activation_type = ACTIVATION_NULL;
     CHECK_STATUS(eltwise_cpu(inputDescs, inputs, eltwiseDesc, 0, nullptr, outputDesc, output, arch));
 
-    CHECK_STATUS(activation_cpu(outputDesc, output, activationDesc, outputDesc, output, arch));
+    CHECK_STATUS(
+        activation_cpu(outputDesc, output, activationDesc, outputDesc, output, nullptr, arch));
 }
 
 template <typename T>
@@ -68,7 +68,7 @@ void neighborhood_aware_softmax_yun(TensorDesc inputDesc,
     T *out0 = input;
     ActivationParamSpec activationDesc;
     activationDesc.mode = ACTIVATION_EXP;
-    CHECK_STATUS(activation_cpu(inputDesc, input, activationDesc, inputDesc, out0, arch));
+    CHECK_STATUS(activation_cpu(inputDesc, input, activationDesc, inputDesc, out0, nullptr, arch));
 
 #ifdef _DEBUG
     std::set<int> edge_set;

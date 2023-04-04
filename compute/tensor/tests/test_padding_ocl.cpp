@@ -111,27 +111,37 @@ int paddingTest(int argc, char **argv, DataType dt)
 
     CHECK_STATUS(ocl_set_input(handle, input, inputDescGPU, inputCPU, tmpbuf, true));
     CHECK_STATUS(padding(inputTensor, padParamSpec, outputTensor, &archInfo));
-    /*warp up*/
-    UNI_INFO_LOG("warm up gpu:\n")
-    for (U32 i = 0; i < 2; i++) {
+
+    for (U32 i = 0; i < UT_WARMUP; i++) {
         CHECK_STATUS(gcl_run_kernelVec(handle));
     }
+    CHECK_STATUS(gcl_finish(handle));
+
+    double time = 0;
 #ifdef _DEBUG
-    CHECK_STATUS(gcl_run_kernelVec_timing(handle, 0, handle->kernelVec->size()));
-    double time = handle->t_execute * 0.001;
+    for (I32 i = 0; i < UT_LOOPS; i++) {
+        CHECK_STATUS(gcl_run_kernelVec_timing(handle, 0, handle->kernelVec->size()));
+        time += handle->t_execute * 0.001;
+    }
 #else
-    CHECK_STATUS(gcl_run_kernelVec(handle));
+    double start = ut_time_ms();
+    for (I32 i = 0; i < UT_LOOPS; i++) {
+        CHECK_STATUS(gcl_run_kernelVec(handle));
+        CHECK_STATUS(gcl_finish(handle));
+    }
+    double end = ut_time_ms();
+    time = (end - start);
 #endif
+    time /= UT_LOOPS;
+
     CHECK_STATUS(ocl_get_output(handle, output, outputDescGPU, outputGPU, tmpbuf, true));
 
     char buffer[150];
     char params[120];
     sprintf(params, "(%u %u %u %u)->(%u %u %u %u)", in, ic, ih, iw, on, oc, oh, ow);
     sprintf(buffer, "%20s, %80s", "padding", params);
-#ifdef _DEBUG
-    double ops = on * oc * oh * ow * 4;  // TO DO
+    double ops = on * oc * oh * ow * 4;
     ut_log(dt, buffer, ops, time);
-#endif
     Tensor inputTensorCpu;
     inputTensorCpu.resize(inputDescCPU);
     inputTensorCpu.alloc();
@@ -147,8 +157,8 @@ int paddingTest(int argc, char **argv, DataType dt)
         CHECK_STATUS(padding(inputTensorCpu, padParamSpec, outputTensorCpu, &UT_SERIAL_ARCHINFO));
     }
     TensorDesc desc = outputTensorCpu.get_desc();
-    ut_check_a(
-        outputGPU, get_ptr_from_tensor(outputTensorCpu, CPU_GENERAL), tensorNumElements(desc), dt);
+    ut_check_v(
+        outputGPU, get_ptr_from_tensor(outputTensorCpu, CPU_GENERAL), tensorNumElements(desc), dt, 0.3);
 
     CHECK_STATUS(gcl_finish(handle));
     CHECK_STATUS(gcl_clean_kernelVec(handle));
@@ -159,8 +169,6 @@ int paddingTest(int argc, char **argv, DataType dt)
 
 int main(int argc, char **argv)
 {
-#ifdef _USE_FP16
     paddingTest(argc, argv, DT_F16);
-#endif
     return 0;
 }

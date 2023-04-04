@@ -40,7 +40,7 @@ public:
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
-        return activation_infer_output_size(inTensors[0], outTensors[0], &this->archInfo);
+        return activation_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo);
     }
 };
 

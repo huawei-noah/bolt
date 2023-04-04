@@ -14,8 +14,10 @@
 #ifndef _H_OPERATOR_TYPE
 #define _H_OPERATOR_TYPE
 
+#include <stdint.h>
+
 // please add OperatorType and OperatorTypeName at the same time
-typedef enum {
+typedef enum OperatorType : uint32_t {
     OT_None = 0,
     OT_Input = 1,
     OT_Conv = 2,
@@ -30,7 +32,7 @@ typedef enum {
     OT_PRelu = 11,
     OT_BatchNorm = 12,
     OT_LayerNorm = 13,
-    OT_L2Normalization = 14,
+    OT_L2Norm = 14,
     OT_Reduction = 15,
     OT_ArgMax = 16,
     OT_Softmax = 17,
@@ -89,7 +91,7 @@ typedef enum {
     OT_Neg = 66,
     OT_Greater = 67,
     OT_Where = 68,
-    OT_SoftPlus = 69,
+    OT_Softplus = 69,
 
     OT_Exp = 70,
     OT_OneHot = 71,
@@ -118,13 +120,22 @@ typedef enum {
     OT_Round = 92,
     OT_Floor = 93,
     OT_Ceil = 94,
-    OT_RandomUniform = 95,
-    OT_CumSum = 96,
+    OT_Random = 95,
+    OT_Cum = 96,
     OT_GridSample = 97,
     OT_NonMaxSuppression = 98,
     OT_Range = 99,
 
-    OT_Swish = 100
+    OT_Swish = 100,
+    OT_Sin = 101,
+    OT_Cos = 102,
+    OT_Elu = 103,
+    OT_Einsum = 104,
+    OT_UnPooling = 105,
+    OT_Flatten = 106,
+    OT_ConvertColor = 107,
+    OT_Lut = 108,
+    OT_LutPreprocess = 109,
 } OperatorType;
 
 inline const char *const *OperatorTypeName()
@@ -132,7 +143,7 @@ inline const char *const *OperatorTypeName()
     static const char *const names[] = {"OT_None", "OT_Input", "OT_Conv", "OT_Deconvolution",
         "OT_FC", "OT_RNN", "OT_MatMul", "OT_Resize", "OT_BilateralSliceApply", "OT_Pooling",
 
-        "OT_Scale", "OT_PRelu", "OT_BatchNorm", "OT_LayerNorm", "OT_L2Normalization",
+        "OT_Scale", "OT_PRelu", "OT_BatchNorm", "OT_LayerNorm", "OT_L2Norm",
         "OT_Reduction", "OT_ArgMax", "OT_Softmax", "OT_SoftmaxWithLoss", "OT_LogSoftmax",
 
         "OT_Clip", "OT_Power", "OT_Sigmoid", "OT_Relu", "OT_Relu6", "OT_HSwish", "OT_HSigmoid",
@@ -149,7 +160,7 @@ inline const char *const *OperatorTypeName()
         "OT_AttentionMask", "OT_RelativePositionEmbedding", "OT_RelativeShift", "OT_PriorBox",
 
         "OT_DetectionOutput", "OT_Yolov3DetectionOutput", "OT_MultiHeadAttention", "OT_SqDiff",
-        "OT_Tile", "OT_Splice", "OT_Neg", "OT_Greater", "OT_Where", "OT_SoftPlus", "OT_Exp",
+        "OT_Tile", "OT_Splice", "OT_Neg", "OT_Greater", "OT_Where", "OT_Softplus", "OT_Exp",
 
         "OT_OneHot", "OT_Tdnn", "OT_Dropout", "OT_TopK", "OT_SpaceToBatchNd", "OT_BatchToSpaceNd",
         "OT_Abs", "OT_NonZero", "OT_Sign", "OT_HSwishNoDiv",
@@ -157,10 +168,11 @@ inline const char *const *OperatorTypeName()
         "OT_InstanceNorm", "OT_Expand", "OT_Scatter", "OT_Select", "OT_Not", "OT_Reciprocal",
         "OT_Log", "OT_GenerateProposals", "OT_RoIAlign",
 
-        "OT_GAT", "OT_QuantizeLinear", "OT_Round", "OT_Floor", "OT_Ceil", "OT_RandomUniform",
-        "OT_CumSum", "OT_GridSample", "OT_NonMaxSuppression", "OT_Range",
+        "OT_GAT", "OT_QuantizeLinear", "OT_Round", "OT_Floor", "OT_Ceil", "OT_Random", "OT_Cum",
+        "OT_GridSample", "OT_NonMaxSuppression", "OT_Range",
 
-        "OT_Swish"};
+        "OT_Swish", "OT_Sin", "OT_Cos", "OT_Elu", "OT_Einsum", "OT_UnPooling", "OT_Flatten",
+        "OT_ConvertColor", "OT_Lut", "OT_LutPreprocess"};
     return names;
 }
 #endif

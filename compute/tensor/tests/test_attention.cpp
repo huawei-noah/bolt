@@ -66,8 +66,7 @@ int attentionTest(int argc, char **argv, DataType dt)
 
         // check
         ut_check_v(get_ptr_from_tensor(outputTensor, CPU_GENERAL),
-            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), outputLength, dt, 0, __FILE__,
-            __LINE__);
+            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), outputLength, dt, 0);
     }
 
     // benchmark

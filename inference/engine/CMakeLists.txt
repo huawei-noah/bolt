@@ -21,4 +21,5 @@ add_subdirectory(tools)
 
 install(DIRECTORY api/java
                   api/c
+                  api/cpp
         DESTINATION include)

@@ -156,8 +156,8 @@ class ConvolutionStrideOptimizer : public OPOptimizer {
                         spec->ops[strideIdx].ps.conv_spec.stride_w = 1;
                     }
                     if (inputNullBranch) {
-                        std::string poolingName = "Pooling_" + std::to_string(branchStartIdx) +
-                            std::to_string(eltwiseInputIdx);
+                        std::string poolingName = allocName("Pooling_" + std::to_string(branchStartIdx) +
+                            std::to_string(eltwiseInputIdx));
                         OperatorSpec poolOperator =
                             mt_create_operator(poolingName.c_str(), OT_Pooling, 1, 1);
                         poolOperator.ps.pooling_spec.kernel_h = 1;

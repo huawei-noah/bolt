@@ -136,11 +136,11 @@ __kernel void MANGLE_NAME(deconv_gemm_f2s2_w_, AM, ON, KN)(const int iw_str,
     T4 bias_val;
 
 #if (KN == 2)
-    bias_val = read_imageh(bias, sampler, (idz >> 1));
+    bias_val = READ_IMAGE(bias, sampler, (idz >> 1));
     SET_BIAS_VAL(bias_val, out_val[0]);
     SET_BIAS_VAL(bias_val, out_val[1]);
 #elif (KN == 4)
-    bias_val = read_imageh(bias, sampler, idz);
+    bias_val = READ_IMAGE(bias, sampler, idz);
     SET_BIAS_VAL(bias_val, out_val[0]);
     SET_BIAS_VAL(bias_val, out_val[1]);
     SET_BIAS_VAL(bias_val, out_val[2]);
@@ -233,11 +233,11 @@ __kernel void MANGLE_NAME(deconv_gemm_f2s2_, AM, ON, KN)(const int iw_str,
     T4 bias_val;
 
 #if (KN == 2)
-    bias_val = read_imageh(bias, sampler, (idz >> 1));
+    bias_val = READ_IMAGE(bias, sampler, (idz >> 1));
     SET_REG_ARRAY(bias_val, out_val[0]);
     SET_REG_ARRAY(bias_val, out_val[1]);
 #elif (KN == 4)
-    bias_val = read_imageh(bias, sampler, idz);
+    bias_val = READ_IMAGE(bias, sampler, idz);
     SET_REG_ARRAY(bias_val, out_val[0]);
     SET_REG_ARRAY(bias_val, out_val[1]);
     SET_REG_ARRAY(bias_val, out_val[2]);

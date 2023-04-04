@@ -23,7 +23,7 @@ public:
         this->dt = dt;
         this->p = p;
     }
-
+    ~QuantizeLinear(){}
     OperatorType get_type() override
     {
         return OT_QuantizeLinear;

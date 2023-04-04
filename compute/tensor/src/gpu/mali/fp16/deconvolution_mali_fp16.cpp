@@ -27,7 +27,7 @@ inline EE deconvolution_checkpara_mali_fp16(GCLHandle_t handle,
         nullptr == bias) {
         CHECK_STATUS(NULL_POINTER);
     }
-    if (inputDesc.dt != outputDesc.dt || inputDesc.dt != filterDesc.dt || inputDesc.dt != DT_F16) {
+    if (inputDesc.dt != outputDesc.dt || inputDesc.dt != filterDesc.dt) {
         CHECK_STATUS(NOT_MATCH);
     }
 
@@ -113,7 +113,7 @@ EE deconvolution_mali_fp16(GCLHandle_t handle,
     GCLMem_t tmpBuf,
     TensorDesc outputDesc,
     GCLMem_t output,
-    ActivationMode activationMode)
+    ActivationParamSpec activationMode)
 {
     CHECK_STATUS(deconvolution_checkpara_mali_fp16(
         handle, inputDesc, input, filterDesc, filter, bias, outputDesc, output));

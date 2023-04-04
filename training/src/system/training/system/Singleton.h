@@ -160,10 +160,11 @@ class SingletonHolder
 
     // Protection
     SingletonHolder();
-
+    ~SingletonHolder(){}
     // Data
     static T* pInstance_;
     static bool destroyed_;
+
 };
 
 template<class T, template<class> class C, template<class> class L>
@@ -201,7 +202,9 @@ void SingletonHolder<T, CreationPolicy, LifetimePolicy>::MakeInstance()
 template<class T, template<class> class CreationPolicy, template<class> class L>
 void LOKI_C_CALLING_CONVENTION_QUALIFIER SingletonHolder<T, CreationPolicy, L>::DestroySingleton()
 {
-    assert(!destroyed_);
+    
+    if(destroyed_) {exit(0);};
+
     CreationPolicy<T>::Destroy(pInstance_);
     pInstance_ = 0;
     destroyed_ = true;

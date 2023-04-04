@@ -29,19 +29,57 @@ public:
         return mem;
     }
 
+    TfSliceParamSpec get_param(std::vector<TensorDesc> descs)
+    {
+        TfSliceParamSpec ps = this->p;
+        int j = 0, jj = 0;
+        for (U32 i = 0; i < ps.num_dims; i++) {
+            if (ps.begin[i] == UNI_RESERVE) {
+                ps.begin[i] = descs[j].dims[descs[j].nDims + jj];
+                jj++;
+            }
+        }
+        if (jj != 0) {
+            j++;
+            jj = 0;
+        }
+        for (U32 i = 0; i < ps.num_dims; i++) {
+            if (ps.end[i] == UNI_RESERVE) {
+                ps.end[i] = descs[j].dims[descs[j].nDims + jj];
+                jj++;
+            }
+        }
+        return ps;
+    }
+
     void run() override
     {
+        TfSliceParamSpec ps = p;
+        if (inputTensors.size() > 1) {
+            std::vector<TensorDesc> descs;
+            for (U32 i = 1; i < inputTensors.size(); i++) {
+                descs.push_back(inputTensors[i].get_desc());
+            }
+            ps = get_param(descs);
+        }
         Tensor inputTensor = this->inputTensors[0];
         Tensor outputTensor = this->outputTensors[0];
-        CHECK_STATUS(tfslice(inputTensor, this->p, this->temp, outputTensor, &this->archInfo));
+        CHECK_STATUS(tfslice(inputTensor, ps, this->temp, outputTensor, &this->archInfo));
+        this->outputTensors[0].set_scale(this->inputTensors[0].get_scale());
     }
 
     EE infer_output_tensors_size(
-        std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
+        std::vector<Tensor *> inputTensors, std::vector<Tensor *> outputTensors) override
     {
-        CHECK_STATUS(
-            tfslice_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo));
-        return SUCCESS;
+        TfSliceParamSpec ps = p;
+        if (inputTensors.size() > 1) {
+            std::vector<TensorDesc> descs;
+            for (U32 i = 1; i < inputTensors.size(); i++) {
+                descs.push_back(inputTensors[i]->get_desc());
+            }
+            ps = get_param(descs);
+        }
+        return tfslice_infer_output_size(inputTensors[0], ps, outputTensors[0], &this->archInfo);
     }
 };
 

@@ -1,42 +1,124 @@
 #ifndef COMMON_OPT
 #define COMMON_OPT
+
 #include "gcl_kernel_type.h"
 #include "error.h"
 #include "ocl_context.h"
+#include "gcl_func.h"
+
+inline std::string get_kernel_name(std::string prefix, char *opt) {
+    std::string ret = prefix;
+    if (opt != NULL) {
+        std::hash<std::string> h;
+        size_t r = h(opt);
+        ret += std::string("_") + std::to_string(r);
+    }
+    return ret;
+}
+
+inline EE add_macro(char *&opt, const std::string &name, std::string value = "")
+{
+    if (opt == NULL) {
+        return NULL_POINTER;
+    }
+    if (name == "" || name == " ") {
+        return SUCCESS;
+    }
+    std::string macro = " ";
+    if (value == "") {
+        macro += "-D" + name;
+    } else {
+        macro += "-D" + name + "=" + value;
+    }
+    macro += " ";
+    UNI_STRCPY(opt, macro.c_str());
+    opt += macro.length();
+    return SUCCESS;
+}
+
+inline EE add_macro(char *&opt, const std::string &name, const I32 &value)
+{
+    return add_macro(opt, name, std::to_string(value));
+}
+
+inline EE add_macro(char *&opt, const std::string &name, const U32 &value)
+{
+    return add_macro(opt, name, std::to_string(value));
+}
+
+inline EE add_macro(char *&opt, const std::string &name, const F32 &value)
+{
+    return add_macro(opt, name, std::to_string(value));
+}
+
+inline EE add_macro_type(char *&opt, DataType dt)
+{
+    std::string type = gcl_get_type(dt);
+    const char *p = type.c_str();
+    char buffer[256] = {0};
+    UNI_SNPRINTF(buffer, 256,
+        "-cl-std=CL2.0 -DT=%s -DT2=%s2 -DT3=%s3 -DT4=%s4 -DT8=%s8 -DT16=%s16", p, p, p,
+        p, p, p);
+    std::string macro = std::string(buffer);
+    if (dt == DT_F16) {
+        macro += std::string(" -DUSE_HALF");
+    }
+    macro += " ";
+    UNI_STRCPY(opt, macro.c_str());
+    opt += macro.length();
+    return SUCCESS;
+}
+
+inline EE add_macro_format(char *&opt, bool nchw)
+{
+    EE ret = SUCCESS;
+    if (nchw) {
+        ret = add_macro(opt, "USE_NCHW");
+    }
+    return ret;
+}
+
+inline EE add_macro_io(
+    char *&opt, GCLMemType inputType, GCLMemType outputType)
+{
+    bool useInputImg = (inputType == GCL_MEM_BUF) ? false : true;
+    bool useOutputImg = (outputType == GCL_MEM_BUF) ? false : true;
+    if (useInputImg) {
+        CHECK_STATUS(add_macro(opt, "USE_INPUT_IMG"));
+    }
+    if (useOutputImg) {
+        CHECK_STATUS(add_macro(opt, "USE_OUTPUT_IMG"));
+    }
+    return SUCCESS;
+}
 
 inline EE set_chars_define_opt(const char *optName, char *&opt)
 {
-    std::string sopt = "-D";
-    sopt += optName;
-    sopt += " ";
-    UNI_STRCPY(opt, sopt.c_str());
-    opt += sopt.length();
-    return SUCCESS;
+    return add_macro(opt, optName);
 }
 
 inline EE set_value_define_opt(U32 val, const char *valName, char *&opt)
 {
-    std::string sopt = "-D ";
-    std::string sval = std::to_string(val);
-    sopt += valName;
-    sopt += "=";
-    sopt += sval;
-    sopt += " ";
-    UNI_STRCPY(opt, sopt.c_str());
-    opt += sopt.length();
-    return SUCCESS;
+    return add_macro(opt, valName, val);
 }
 
-inline EE set_activation_define_opt(ActivationMode activeMode, char *&opt)
+inline EE set_activation_define_opt(const ActivationParamSpec &p, char *&opt)
 {
+    std::hash<std::string> h;
     std::string sopt = " ";
-    switch (activeMode) {
+    switch (p.mode) {
         case ACTIVATION_NULL:
             sopt = "-D AM= ";
             break;
-        case ACTIVATION_RELU:
-            sopt = "-DUSE_RELU -D AM=relu_ ";
+        case ACTIVATION_RELU: {
+            if (p.value[0] == 0) {
+                sopt = "-DUSE_RELU -D AM=relu_ ";
+            } else {
+                sopt = "-DUSE_LEAKY_RELU -D AM=leakyrelu" + std::to_string(h(std::to_string(p.value[0])))+ "_ ";
+                CHECK_STATUS(add_macro(opt, "alpha", p.value[0]))
+            }
             break;
+        }
         case ACTIVATION_RELU6:
             sopt = "-DUSE_RELU6 -D AM=relu6_ ";
             break;
@@ -70,8 +152,17 @@ inline EE set_activation_define_opt(ActivationMode activeMode, char *&opt)
         case ACTIVATION_SWISH:
             sopt = "-DUSE_SWISH -D AM=swish_ ";
             break;
+        case ACTIVATION_FLOOR:
+            sopt = "-DUSE_FLOOR -D AM=floor_ ";
+            break;
+        case ACTIVATION_CEIL:
+            sopt = "-DUSE_CEIL -D AM=ceil_ ";
+            break;
+        case ACTIVATION_ROUND:
+            sopt = "-DUSE_ROUND -D AM=round_ ";
+            break;
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("please add new activation function support in %s.\n", __FUNCTION__);
             break;
     }
     UNI_STRCPY(opt, sopt.c_str());
@@ -79,15 +170,21 @@ inline EE set_activation_define_opt(ActivationMode activeMode, char *&opt)
     return SUCCESS;
 }
 
-inline EE set_activation_mode_name(ActivationMode activeMode, char *name)
+inline EE set_activation_mode_name(const ActivationParamSpec &p, char *name)
 {
+    std::hash<std::string> h;
     std::string sname = "";
-    switch (activeMode) {
+    switch (p.mode) {
         case ACTIVATION_NULL:
             break;
-        case ACTIVATION_RELU:
-            sname = "relu_";
+        case ACTIVATION_RELU: {
+            if (p.value[0] == 0) {
+                sname = "relu_";
+            } else {
+                sname = "leakyrelu" + std::to_string(h(std::to_string(p.value[0])))+ "_";
+            }
             break;
+        }
         case ACTIVATION_RELU6:
             sname = "relu6_";
             break;
@@ -121,8 +218,17 @@ inline EE set_activation_mode_name(ActivationMode activeMode, char *name)
         case ACTIVATION_SWISH:
             sname = "swish_";
             break;
+        case ACTIVATION_FLOOR:
+            sname = "floor_";
+            break;
+        case ACTIVATION_CEIL:
+            sname = "ceil_";
+            break;
+        case ACTIVATION_ROUND:
+            sname = "round_";
+            break;
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("please add new activation function support in %s.\n", __FUNCTION__);
             break;
     }
     UNI_STRCPY(name, sname.c_str());
@@ -152,7 +258,7 @@ inline EE set_eltwise_define_opt(EltwiseMode eltwiseMode, char *&opt)
             sopt = "-DUSE_DIV -D EM=div_ ";
             break;
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("please add new eltwise function support in %s.\n", __FUNCTION__);
             break;
     }
     UNI_STRCPY(opt, sopt.c_str());
@@ -183,7 +289,7 @@ inline EE set_eltwise_mode_name(EltwiseMode eltwiseMode, char *name)
             sname = "div_";
             break;
         default:
-            CHECK_STATUS(NOT_SUPPORTED);
+            UNI_ERROR_LOG("please add new eltwise function support in %s.\n", __FUNCTION__);
             break;
     }
     UNI_STRCPY(name, sname.c_str());
@@ -286,43 +392,6 @@ inline EE set_io_mems_name_and_define_opts(GCLMemType *inputMemType,
     CHECK_STATUS(set_chars_define_opt(iomDef.c_str(), opt));
 
     UNI_STRCPY(name, iom.c_str());
-    return SUCCESS;
-}
-
-inline EE set_data_type_name(DataType dt, char *name)
-{
-    std::string sname = "";
-    if (dt == DT_F16) {
-        sname = "_f16";
-    } else if (dt == DT_F32) {
-        sname = "_f32";
-    } else if (dt == DT_I32) {
-        sname = "_i32";
-    } else if (dt == DT_U32) {
-        sname = "_u32";
-    } else {
-        return NOT_SUPPORTED;
-    }
-    UNI_STRCPY(name, sname.c_str());
-    return SUCCESS;
-}
-
-inline EE set_data_type_define_opt(DataType dt, char *&opt)
-{
-    std::string sopt = "";
-    if (dt == DT_F16) {
-        sopt = "-D DT=_f16 ";
-    } else if (dt == DT_F32) {
-        sopt = "-D DT=_f32 ";
-    } else if (dt == DT_I32) {
-        sopt = "-D DT=_i32 ";
-    } else if (dt == DT_U32) {
-        sopt = "-D DT=_u32 ";
-    } else {
-        return NOT_SUPPORTED;
-    }
-    UNI_STRCPY(opt, sopt.c_str());
-    opt += sopt.length();
     return SUCCESS;
 }
 

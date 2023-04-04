@@ -1751,8 +1751,43 @@ EE convolution_1x1_direct(TensorDesc inputDesc,
     CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
     CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
     CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
+    U32 ihiw = ih * iw;
 
-    if (idf == DF_NCHWC16 && ih == 1 && iw == 1) {
+    if (idf == DF_NCHW || idf == DF_MTK || idf == DF_NORMAL) {
+        TensorDesc inDescCPU = inputDesc;
+        inDescCPU.df = DF_NCHWC8;
+        F32 *inputCPU = (F32 *)tmp;
+        tmp = (U8 *)tmp + tensorNumBytes(inDescCPU);
+        __m256i vindex = _mm256_set_epi32(
+            ihiw * 7, ihiw * 6, ihiw * 5, ihiw * 4, ihiw * 3, ihiw * 2, ihiw, 0);
+        U32 ic8 = ic / 8 * 8;
+        U32 icp = (ic + 7) / 8 * 8;
+        for (U32 n = 0; n < in; ++n) {
+            for (U32 c = 0; c < ic8; c += 8) {
+                for (U32 hw = 0; hw < ihiw; ++hw) {
+                    _mm256_storeu_ps(inputCPU + (n * icp + c) * ihiw + hw * 8,
+                         _mm256_i32gather_ps(inArray + (n * ic + c) * ihiw + hw, vindex, 4));
+                }
+            }
+            if (ic < icp) {
+               U32 off[8] = {0};
+               for (U32 i = ic8; i < ic; ++i) {
+                    off[i - ic8] = ihiw * (i - ic8);
+               }
+               vindex = _mm256_set_epi32(
+                    off[7], off[6], off[5], off[4], off[3], off[2], off[1], off[0]);
+               for (U32 hw = 0; hw < ihiw; ++hw) {
+                    _mm256_storeu_ps(inputCPU + (n * icp + ic8) * ihiw + hw * 8,
+                         _mm256_i32gather_ps(inArray + (n * ic + ic8) * ihiw + hw, vindex, 4));
+                }
+            }
+        }
+        inArray = (F32 *)inputCPU;
+        idf = DF_NCHWC8;
+        ic = icp;
+    }
+
+    if ((idf == DF_NCHWC16 || idf == DF_NCHW) && ih == 1 && iw == 1) {
         idf = DF_NCHWC8;
     }
 
@@ -1779,7 +1814,6 @@ EE convolution_1x1_direct(TensorDesc inputDesc,
     U32 phB = (paddingB + strideH - 1) / strideH;
     U32 ohow = oh * ow;
     U32 ohowMain = (oh - phT - phB) * ow;
-    U32 ihiw = ih * iw;
     U32 newIh = (ih + strideH - 1) / strideH;
     U32 newIw = (iw + strideW - 1) / strideW;
 
@@ -1797,9 +1831,12 @@ EE convolution_1x1_direct(TensorDesc inputDesc,
         hwBlockNums = oh;
     }
 
+
 #ifdef _USE_OPENMP
+    ocBBlockNums = ocBlockNums;
     OpenMPController ompCtr;
-    ompCtr.checkAndSetOpenMP(ohowMain, BLOCK_HW_DIM, ocBlockNums);
+    U32 computeBlock = oc * ic;
+    ompCtr.checkAndSetOpenMP(ohowMain, BLOCK_HW_DIM, ocBlockNums, computeBlock, 4096);
 #endif
 
     // infer kernel params
@@ -1839,8 +1876,8 @@ EE convolution_1x1_direct(TensorDesc inputDesc,
 
 #ifdef _USE_OPENMP
 #pragma omp parallel num_threads(OMP_NUM_THREADS) if (ompCtr.useOmp)
-    {
 #endif
+    {
         F32 *tmpI = inArray;
         for (U32 n = 0; n < in; ++n) {
             F32 *bInArray = inArray + n * ic * ih * iw;
@@ -1849,7 +1886,7 @@ EE convolution_1x1_direct(TensorDesc inputDesc,
                 U32 ic8 = ic / 8;
                 tmpI = (F32 *)tmp;
 #ifdef _USE_OPENMP
-#pragma omp for schedule(static)
+#pragma omp for schedule(static) nowait
 #endif
                 for (U32 hc = 0; hc < oh * ic8; ++hc) {
                     U32 c = hc / oh;
@@ -1970,8 +2007,6 @@ EE convolution_1x1_direct(TensorDesc inputDesc,
                 }
             }
         }
-#ifdef _USE_OPENMP
     }
-#endif
     return SUCCESS;
 }

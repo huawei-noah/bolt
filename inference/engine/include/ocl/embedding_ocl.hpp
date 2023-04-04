@@ -64,15 +64,13 @@ public:
                 this->p.num_outputs = desc.dims[0];
             }
         }
-        CHECK_STATUS(embedding_infer_output_size(
-            inTensors[0], this->p, this->dt, outTensors[0], &this->archInfo));
-        return SUCCESS;
+        return embedding_infer_output_size(
+            inTensors[0], this->p, this->dt, outTensors[0], &this->archInfo);
     }
 
     EE init_weight_bias_from_model(std::shared_ptr<U8> *modelPtr) override
     {
-        auto curOpWs = this->get_weightspec();
-        if (modelPtr == nullptr && curOpWs.weight == nullptr) {
+        if (modelPtr == nullptr && this->ws.weight == nullptr) {
             return SUCCESS;
         }
         TensorDesc weightDesc;
@@ -89,7 +87,7 @@ public:
         if (modelPtr) {
             weight_ptr = *modelPtr;
         } else {
-            weight_ptr = std::shared_ptr<U8>(curOpWs.weight, [](U8 *) {});
+            weight_ptr = std::shared_ptr<U8>(this->ws.weight, [](U8 *) {});
         }
         weight_mem_src.resize(weightDesc);
         weight_mem_src.set_shared_ptr(std::shared_ptr<U8>(weight_ptr));

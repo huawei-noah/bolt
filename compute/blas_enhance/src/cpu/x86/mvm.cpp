@@ -11,8 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "error.h"
-
 #include "blas_enhance.h"
 #include "cpu/x86/blas_x86.h"
 #ifdef _USE_FP32
@@ -22,13 +20,34 @@
 #include "cpu/x86/int8/blas_int8.h"
 #endif
 
+EE matrix_vector_multiply_transform_weight_bytes_x86(
+    U32 row, U32 col, DataType dt, DataFormat df, U32 *bytes)
+{
+    *bytes = 0;
+    if (dt == DT_I8) {
+        *bytes += row * bytesOf(DT_I32);
+    }
+    if (dt == DT_U8_Q) {
+        if (col % 32 != 0) {
+            *bytes += 32 * (row + 1);
+        }
+    }
+    if (df != matrix_vector_multiply_weight_format(dt)) {
+        row = UNI_ALIGN(row, 16);
+        col = UNI_ALIGN(col, 8);
+        *bytes += row * col * bytesOf(dt);
+        *bytes += 32;
+    }
+    return SUCCESS;
+}
+
 EE matrix_vector_multiply_transform_weight_x86(
     TensorDesc desc, const void *src, TensorDesc *descTran, void *dst, void *offsetCBias)
 {
-    if (desc.df == targetFormat4mvmMatrix(desc.dt)) {
+    if (desc.df == matrix_vector_multiply_weight_format(desc.dt)) {
         return SUCCESS;
     }
-    EE ret = SUCCESS;
+    EE ret = NOT_SUPPORTED;
     switch (desc.dt) {
 #ifdef _USE_FP32
         case DT_F32: {
@@ -36,7 +55,8 @@ EE matrix_vector_multiply_transform_weight_x86(
             break;
         }
 #endif
-#ifdef _USE_INT8
+#if defined(_USE_INT8)
+        case DT_U8_Q:
         case DT_I8: {
             ret = matrix_vector_multiply_transform_weight_int8(
                 desc, (INT8 *)src, (INT8 *)dst, (I32 *)offsetCBias);
@@ -44,40 +64,39 @@ EE matrix_vector_multiply_transform_weight_x86(
         }
 #endif
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
     *descTran = desc;
     if (DF_TRANSPOSE == desc.df) {
         std::swap((*descTran).dims[0], (*descTran).dims[1]);
     }
-    descTran->df = targetFormat4mvmMatrix(desc.dt);
+    descTran->df = matrix_vector_multiply_weight_format(desc.dt);
     return ret;
 }
 
-EE matrix_vector_multiply_tmp_bytes_x86(bool transpose, TensorDesc matrixDesc, U32 *bytes)
+EE matrix_vector_multiply_tmp_bytes_x86(U32 row, U32 col, DataType dt, DataFormat df, U32 *bytes)
 {
     if (nullptr == bytes) {
         CHECK_STATUS(NULL_POINTER);
     }
-
-    switch (matrixDesc.dt) {
+    EE ret = SUCCESS;
+    switch (dt) {
 #ifdef _USE_FP32
         case DT_F32:
             *bytes = 0;
             break;
 #endif
-#ifdef _USE_INT8
+#if defined(_USE_INT8)
         case DT_I8:
         case DT_U8_Q:
-            *bytes = (matrixDesc.dims[0] + matrixDesc.dims[1]) * bytesOf(DT_I32) +
-                tensorNumBytes(matrixDesc);
+            ret = matrix_vector_multiply_transform_weight_bytes_x86(row, col, dt, df, bytes);
             break;
 #endif
         default:
-            return NOT_SUPPORTED;
+            ret = NOT_SUPPORTED;
+            break;
     }
-    return SUCCESS;
+    return ret;
 }
 
 EE mvm_x86(U32 row,
@@ -90,7 +109,7 @@ EE mvm_x86(U32 row,
     void *offsetCBias,
     const F32 *scale)
 {
-    EE ret = SUCCESS;
+    EE ret = NOT_SUPPORTED;
     switch (dt) {
 #ifdef _USE_FP32
         case DT_F32: {
@@ -98,7 +117,7 @@ EE mvm_x86(U32 row,
             break;
         }
 #endif
-#ifdef _USE_INT8
+#if defined(_USE_INT8)
         case DT_I8: {
             CHECK_REQUIREMENT(offsetCBias != nullptr);
             ret = mvm_avx512_int8(row, col, (INT8 *)matrix, (UINT8 *)vector, (UINT8 *)result,
@@ -113,7 +132,6 @@ EE mvm_x86(U32 row,
         }
 #endif
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
     return ret;

@@ -40,7 +40,7 @@ inline EE get_gemv_cal_scheme(std::vector<U32> *vh, std::vector<U32> *vc, std::v
 }
 
 inline EE set_gemv_opt(U32 workMatChannelsPerThread,
-    ActivationMode activeMode,
+    ActivationParamSpec activeMode,
     bool useBias,
     bool useReduceMode,
     bool useOutputNchwc4,

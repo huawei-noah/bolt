@@ -60,11 +60,10 @@ public:
         auto dstMem = (OclMemory *)(dstTensor->get_memory());
         GCLMemDesc dstMemDesc = dstMem->get_desc();
         std::shared_ptr<U8> weight_ptr;
-        auto curOpWs = this->get_weightspec();
         if (modelPtr) {
             weight_ptr = *modelPtr;
         } else {
-            weight_ptr = std::shared_ptr<U8>(curOpWs.weight, [](U8 *) {});
+            weight_ptr = std::shared_ptr<U8>(this->ws.weight, [](U8 *) {});
         }
         U32 n, c, h, w;
         U32 s0, s1, s2;
@@ -92,6 +91,7 @@ public:
 
     EE transform_filter() override
     {
+        EE ret = SUCCESS;
         if (needTrans) {
             auto dstTensor = (*this->tensorMapPtr)[this->outputTensorName];
             auto dstMem = (OclMemory *)(dstTensor->get_memory());
@@ -99,11 +99,11 @@ public:
             GCLMem_t dst = (GCLMem_t)dstMem->get_ptr();
             auto tempMem = (OclMemory *)(this->temp.get_memory());
             GCLMem_t temp = (GCLMem_t)tempMem->get_ptr();
-            CHECK_STATUS(ocl_set_input(OCLContext::getInstance().handle.get(), dst, this->desc,
-                host_ptr.get(), temp, true));
+            ret = ocl_set_input(OCLContext::getInstance().handle.get(), dst, this->desc,
+                host_ptr.get(), temp, true);
             this->weightTensors[0] = *dstTensor.get();
         }
-        return SUCCESS;
+        return ret;
     }
 
     U32 infer_tmp_memory_size() override

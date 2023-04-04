@@ -11,10 +11,9 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "error.h"
 #include "cpu/arm/fp16/blas_fp16.h"
 #include "cpu/arm/fp16/mvm.h"
-#include "cpu/arm/fp16/mmm_common.h"
+#include "cpu/arm/fp16/v8.2/mmm_common.h"
 #include "cpu/arm/fp16/mvm_common.h"
 
 EE matrix_vector_multiply_transform_weight_fp16(TensorDesc desc, F16 *src, F16 *dst)

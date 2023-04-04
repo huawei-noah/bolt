@@ -12,14 +12,16 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "cpu/x86/tensor_computing_x86.h"
+#include "cpu/x86/int32/tensor_computing_int32.h"
 #ifdef _USE_FP32
 #include "cpu/x86/fp32/tensor_computing_fp32.h"
 #endif
+#include <float.h>
 
 EE clip_x86(TensorDesc inputDesc, void *input, ClipParamSpec p, TensorDesc outputDesc, void *output)
 {
     UNUSED(outputDesc);
-    EE ret = SUCCESS;
+    EE ret = NOT_SUPPORTED;
     switch (inputDesc.dt) {
 #ifdef _USE_FP32
         case DT_F32: {
@@ -27,8 +29,20 @@ EE clip_x86(TensorDesc inputDesc, void *input, ClipParamSpec p, TensorDesc outpu
             break;
         }
 #endif
+        case DT_I32: {
+	        I32 max_i = INT_MAX;
+	        I32 min_i = INT_MIN;
+	        if (p.max < max_i) {
+	            max_i = (I32)p.max;
+	        } 
+	        if (p.min > min_i) {
+	            min_i = (I32)p.min;
+	        }
+            ret =
+                clip_int32((I32 *)input, (I32 *)output, tensorNumElements(inputDesc), min_i, max_i);
+            break;
+        }
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
     return ret;

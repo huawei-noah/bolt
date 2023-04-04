@@ -11,77 +11,42 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "error.h"
 #include "cpu/arm/fp16/blas_fp16.h"
-#include "mmm.h"
-#include "mmm_common.h"
+#include "blas_enhance.h"
+
+const int prefetch = 64;
+#ifdef _USE_MATRIX
+// armv9
+const int align = 4;
+#elif defined(_USE_FP16)
+// armv8.2
+const int align = 1;
+#endif
 
 void matrix_matrix_multiply_tmp_bytes_fp16(
-    U32 row1, U32 col1, U32 row2, U32 col2, DataType dt, U32 *bytes)
+    U32 matrixC_N, U32 matrixC_M, U32 matrixA_K, DataFormat bdf, U32 *bytes)
 {
-    *bytes = row1 * col1 + row2 * col2;
-    *bytes *= bytesOf(dt);
-    *bytes += 32;
+    matrix_matrix_multiply_transform_rhs_bytes_fp16(matrixC_N, matrixA_K, bdf, bytes, nullptr);
+
+    matrixA_K = UNI_ALIGN(matrixA_K, align);
+    *bytes += matrixC_M * matrixA_K * bytesOf(DT_F16);
+    *bytes += prefetch;
 }
 
-EE matrix_matrix_multiply_transform_rhsN_fp16(TensorDesc desc, F16 *src, F16 *dst)
+void matrix_matrix_multiply_transform_rhs_bytes_fp16(
+    U32 matrixC_N, U32 matrixA_K, DataFormat bdf, U32 *bytes, U32 *rhsBytes)
 {
-    DataType dt;
-    DataFormat df;
-    U32 N, K;
-    CHECK_STATUS(tensor2dGet(desc, &dt, &df, &K, &N));
-    int i = 0;
-    for (; i < (int)N - 23; i += 24) {
-        matrix2_trans(24, K, N, src + i, dst + i * K);
+    U32 matrix = 0;
+    U32 pad = 0;
+    if (matrix_matrix_multiply_rhs_format(DT_F16) != bdf) {
+        matrixA_K = UNI_ALIGN(matrixA_K, align);
+        matrix = matrixC_N * matrixA_K * bytesOf(DT_F16);
+        pad = matrix + prefetch;
     }
-    for (; i < (int)N - 7; i += 8) {
-        matrix2_trans(8, K, N, src + i, dst + i * K);
+    if (rhsBytes != nullptr) {
+        *rhsBytes = matrix;
     }
-    for (; i < (int)N - 3; i += 4) {
-        matrix2_trans(4, K, N, src + i, dst + i * K);
+    if (bytes != nullptr) {
+        *bytes = pad;
     }
-    if ((int)N > i) {
-        matrix2_trans(N - i, K, N, src + i, dst + i * K);
-    }
-    return SUCCESS;
-}
-
-EE matrix_matrix_multiply_transform_rhsT_fp16(TensorDesc desc, F16 *src, F16 *dst)
-{
-    DataType dt;
-    DataFormat df;
-    U32 N, K;
-    CHECK_STATUS(tensor2dGet(desc, &dt, &df, &N, &K));
-    int i = 0;
-    for (; i < (int)N - 23; i += 24) {
-        matrix1_trans(24, K, K, src + i * K, dst + i * K);
-    }
-    for (; i < (int)N - 7; i += 8) {
-        matrix1_trans(8, K, K, src + i * K, dst + i * K);
-    }
-    for (; i < (int)N - 3; i += 4) {
-        matrix1_trans(4, K, K, src + i * K, dst + i * K);
-    }
-    if ((int)N > i) {
-        matrix1_trans(N - i, K, K, src + i * K, dst + i * K);
-    }
-    return SUCCESS;
-}
-
-EE mmm_fp16(
-    int M, int N, int K, bool transposeA, F16 *matrix1, F16 *matrix2, F16 *tmp, F16 *result, Arch arch)
-{
-    EE ret = SUCCESS;
-    switch (arch) {
-        case ARM_A55:
-            mmm_A55(M, N, K, transposeA, matrix1, matrix2, tmp, result);
-            break;
-        case ARM_A76:
-            mmm_A76(M, N, K, transposeA, matrix1, matrix2, tmp, result);
-            break;
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
 }

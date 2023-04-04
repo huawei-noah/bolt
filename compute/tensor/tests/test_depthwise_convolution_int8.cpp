@@ -16,7 +16,7 @@
 
 int main(int argc, char *argv[])
 {
-#ifdef _USE_INT8
+#if defined(_USE_INT8) && defined(_USE_FP16)
     CHECK_REQUIREMENT(argc == 16);
     // in data
     U32 in = atoi(argv[1]);
@@ -159,8 +159,7 @@ int main(int argc, char *argv[])
 
         // check
         ut_check_v(get_ptr_from_tensor(outputTensor, CPU_GENERAL),
-            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), outputTensor.length(), DT_I32, 1,
-            __FILE__, __LINE__);
+            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), outputTensor.length(), DT_I32, 1);
     }
 
     // benchmark

@@ -16,7 +16,7 @@ inline EE set_space2depth_opt(bool useFormatNchw,
     }
     char ioMemName[128] = "";
     CHECK_STATUS(set_io_mem_name(inputMemType, outputMemType, ioMemName));
-    kernelOpt->kernelDataType = DT_F16;
+    kernelOpt->kernelDataType = dt;
     UNI_STRCPY(kernelName, name.c_str());
     UNI_STRCPY(kernelOpt->sourceName, "space2depth");
     if (useFormatNchw) {

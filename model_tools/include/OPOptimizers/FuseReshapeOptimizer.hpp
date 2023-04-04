@@ -32,15 +32,20 @@ class FuseReshapeOptimizer : public OPOptimizer {
         bool hasOptimized = false;
         for (int i = 0; i < spec->num_operator_specs - 1; i++) {
             if (spec->ops[i].type == OT_Reshape) {  // bottom-up
-                std::vector<std::pair<int, int>> prevOpIndexes =
-                    searchOperatorIndexByOutput(spec, spec->ops[i].input_tensors_name[0], 0, i);
-                // prevOpIndexes.size() == 1
-                if (prevOpIndexes.size() != 1 ||
-                    spec->ops[prevOpIndexes[0].first].type != OT_Reshape) {
-                    continue;
-                } else {
-                    // set preIndex op invalid
-                    setOperatorInvalid(spec, prevOpIndexes[0].first, true);
+                std::vector<std::pair<int, int>> nextOpIndexes = searchOperatorIndexByInput(
+                    spec, spec->ops[i].output_tensors_name[0], i + 1, spec->num_operator_specs);
+                bool tag = true;
+                if (nextOpIndexes.size() == 0) {
+                    tag = false;
+                }
+                for (unsigned int k = 0; k < nextOpIndexes.size(); k++) {
+                    if (spec->ops[nextOpIndexes[k].first].type != OT_Reshape) {
+                        tag = false;
+                        break;
+                    }
+                }
+                if (tag) {
+                    setOperatorInvalid(spec, i, true);
                     hasOptimized = true;
                 }
             }

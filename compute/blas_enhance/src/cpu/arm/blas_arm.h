@@ -14,14 +14,8 @@
 #ifndef _H_BLAS_ARM
 #define _H_BLAS_ARM
 
-#include "error.h"
 #include "sys.h"
 #include "tensor_desc.h"
-
-EE matrix_vector_multiply_tmp_bytes_arm(bool transpose, DataType dt, U32 *bytes);
-
-EE matrix_vector_multiply_transform_weight_arm(
-    TensorDesc desc, const void *src, TensorDesc *descTran, void *dst);
 
 EE mvm_arm(U32 row,
     U32 col,
@@ -33,11 +27,14 @@ EE mvm_arm(U32 row,
     void *result,
     Arch arch);
 
-EE matrix_matrix_multiply_tmp_bytes_arm(
-    U32 matrixA_M, U32 matrixA_K, U32 matrixB_K, U32 matrixB_N, DataType dt, U32 *bytes);
-
-EE matrix_matrix_multiply_transform_rhs_arm(
-    TensorDesc desc, const void *src, TensorDesc *descTran, void *dst);
+EE matrix_matrix_multiply_tmp_bytes_arm(U32 matrixC_N,
+    U32 matrixC_M,
+    U32 matrixA_K,
+    DataType adt,
+    DataFormat adf,
+    DataType bdt,
+    DataFormat bdf,
+    U32 *bytes);
 
 EE mmm_arm(U32 matrixC_N,
     U32 matrixC_M,
@@ -50,15 +47,17 @@ EE mmm_arm(U32 matrixC_N,
     void *matrixCData,
     Arch arch);
 
-inline U32 pad_to_4_multiple(U32 k)
-{
-    if (k % 4 == 0) {
-        return k;
-    } else {
-        return (k / 4) * 4 + 4;
-    }
-}
+EE axpby_arm(I32 len, DataType dt, F32 a, const void *x, F32 b, void *y, Arch arch);
 
-EE axpby_arm(U32 len, DataType dt, F32 a, const void *x, F32 b, void *y, Arch arch);
+EE matrix_vector_multiply_transform_weight_bytes_arm(
+    U32 row, U32 col, DataType dt, DataFormat df, U32 *bytes);
 
+EE matrix_vector_multiply_transform_weight_arm(
+    TensorDesc desc, const void *src, TensorDesc *descTran, void *dst);
+
+EE matrix_matrix_multiply_transform_rhs_bytes_arm(
+    U32 matrixC_N, U32 matrixA_K, DataType bdt, DataFormat bdf, U32 *bytes, U32 *rhsBytes);
+
+EE matrix_matrix_multiply_transform_rhs_arm(
+    TensorDesc desc, const void *src, TensorDesc *descTran, void *dst);
 #endif

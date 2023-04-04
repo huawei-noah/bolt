@@ -23,28 +23,10 @@ public:
         this->dt = dt;
         this->p = p;
     }
-
-    std::shared_ptr<Operator> clone() override
-    {
-        std::shared_ptr<PriorBox> mem = std::shared_ptr<PriorBox>(new PriorBox(this->dt, this->p));
-        *mem = *this;
-        return mem;
-    }
-
+    ~PriorBox(){}
     OperatorType get_type() override
     {
         return OT_PriorBox;
-    }
-
-    void run() override
-    {
-        CHECK_STATUS(priorbox(this->inputTensors, this->p, this->outputTensors[0], &this->archInfo));
-    }
-
-    EE infer_output_tensors_size(
-        std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
-    {
-        return priorbox_infer_output_size(inTensors, this->p, outTensors[0], &this->archInfo);
     }
 
 protected:

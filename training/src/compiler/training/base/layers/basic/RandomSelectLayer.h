@@ -28,8 +28,6 @@ namespace raul
  * First input values selected at indices where condition is True, second input values - where condition is False.
  * All input tensors must be broadcastable.
  *
- * @see
- * https://pytorch.org/docs/master/generated/torch.where.html?highlight=where#torch.where
  */
 class RandomSelectLayer : public BroadcastingLayer
 {

@@ -73,18 +73,8 @@ EE generate_proposals_infer_forward_tmp_bytes_mali(TensorDesc deltaDesc,
     GenerateProposalsParamSpec generateProposalsParam,
     U32 *bytes)
 {
-    EE ret = SUCCESS;
-    switch (deltaDesc.dt) {
-        case DT_F16: {
-            ret = generate_proposals_infer_forward_tmp_bytes_mali_fp16(
-                deltaDesc, logitDesc, gclMemLogitDesc, generateProposalsParam, bytes);
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return generate_proposals_infer_forward_tmp_bytes_mali_fp16(
+        deltaDesc, logitDesc, gclMemLogitDesc, generateProposalsParam, bytes);
 }
 
 EE generate_proposals_mali(GCLHandle_t handle,
@@ -102,24 +92,9 @@ EE generate_proposals_mali(GCLHandle_t handle,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
-    EE ret = SUCCESS;
     CHECK_STATUS(generate_proposals_checkpara_mali(handle, deltaDesc, delta, logitDesc, logit,
         imgInfoDesc, imgInfo, anchorDesc, anchor, generateProposalsParam, tmpBuf, tmpCpu,
         outputDesc, output));
-    switch (deltaDesc.dt) {
-        case DT_F16: {
-            ret = generate_proposals_mali_fp16(handle, deltaDesc, delta, logitDesc, logit,
-                imgInfoDesc, imgInfo, anchorDesc, anchor, generateProposalsParam, tmpBuf, tmpCpu,
-                outputDesc, output);
-            break;
-        }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return generate_proposals_mali_fp16(handle, deltaDesc, delta, logitDesc, logit, imgInfoDesc,
+        imgInfo, anchorDesc, anchor, generateProposalsParam, tmpBuf, tmpCpu, outputDesc, output);
 }

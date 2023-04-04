@@ -20,12 +20,24 @@
 #endif
 
 inline EE power_infer_output_size_cpu(
-    TensorDesc inputDesc, PowerParamSpec p, TensorDesc *outputDesc, Arch arch)
+    TensorDesc inputDesc, PowerParamSpec p, DataType tdt, TensorDesc *outputDesc, Arch arch)
 {
     *outputDesc = inputDesc;
+    if (outputDesc->dt == DT_U8) {
+        if ((int)p.scale != p.scale || (int)p.shift != p.shift) {
+            outputDesc->dt = tdt;
+        }
+    }
     EE ret = SUCCESS;
 #ifdef _USE_CPU
-    if (tensorIsShape(inputDesc)) {
+    if (IS_CPU(arch) && tensorIsShape(inputDesc)) {
+        float int_max = (float)INT_MAX;
+        if (int_max - p.scale <= 1000) {
+            p.scale = int_max - 100000;
+        }
+        if (int_max - p.shift <= 1000) {
+            p.shift = int_max - 100000;
+        }
         ret = power_cpu(inputDesc, inputDesc.dims + inputDesc.nDims, p, *outputDesc,
             outputDesc->dims + outputDesc->nDims, arch);
     }
@@ -34,14 +46,14 @@ inline EE power_infer_output_size_cpu(
 }
 
 EE power_infer_output_size(
-    Tensor *inputTensor, PowerParamSpec p, Tensor *outputTensor, ArchInfo_t archInfo)
+    Tensor *inputTensor, PowerParamSpec p, DataType tdt, Tensor *outputTensor, ArchInfo_t archInfo)
 {
     if (inputTensor == nullptr || outputTensor == nullptr) {
         return NULL_POINTER;
     }
     TensorDesc inputDesc = inputTensor->get_desc();
     TensorDesc outputDesc = outputTensor->get_desc();
-    EE ret = power_infer_output_size_cpu(inputDesc, p, &outputDesc, archInfo->arch);
+    EE ret = power_infer_output_size_cpu(inputDesc, p, tdt, &outputDesc, archInfo->arch);
     outputTensor->resize(outputDesc);
     return ret;
 }

@@ -43,9 +43,7 @@
  *
  * @see
  * - B. Jacob et al., “Quantization and Training of Neural Networks for Efficient Integer-Arithmetic-Only Inference” arXiv:1712.05877 [cs, stat], Dec. 2017, Accessed: Apr. 24, 2020. [Online].
- * Available: http://arxiv.org/abs/1712.05877.
  * - R. Krishnamoorthi, “Quantizing deep convolutional networks for efficient inference: A whitepaper” arXiv:1806.08342 [cs, stat], Jun. 2018, Accessed: May 05, 2020. [Online]. Available:
- * http://arxiv.org/abs/1806.08342.
  *
  */
 namespace raul::quantization

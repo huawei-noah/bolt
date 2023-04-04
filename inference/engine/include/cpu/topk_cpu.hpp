@@ -48,9 +48,8 @@ public:
         if (lp.k == 0 && inTensors.size() > 1) {
             lp = get_param(inTensors[1]->get_desc());
         }
-        CHECK_STATUS(
-            topk_infer_output_size(inTensors[0], lp, outTensors[0], outTensors[1], &this->archInfo));
-        return SUCCESS;
+        return topk_infer_output_size(
+            inTensors[0], lp, outTensors[0], outTensors[1], &this->archInfo);
     }
 
     U32 infer_tmp_memory_size() override

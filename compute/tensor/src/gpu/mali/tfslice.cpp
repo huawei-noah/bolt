@@ -32,18 +32,8 @@ EE tfslice_infer_forward_tmp_bytes_mali(TensorDesc inputDesc,
     GCLMemDesc gclmemOutputDesc,
     U32 *bytes)
 {
-    EE ret = SUCCESS;
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = tfslice_infer_forward_tmp_bytes_mali_fp16(
-                inputDesc, outputDesc, gclmemInputDesc, gclmemOutputDesc, bytes);
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return tfslice_infer_forward_tmp_bytes_mali_fp16(
+        inputDesc, outputDesc, gclmemInputDesc, gclmemOutputDesc, bytes);
 }
 
 EE tfslice_mali(GCLHandle_t handle,
@@ -54,16 +44,6 @@ EE tfslice_mali(GCLHandle_t handle,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
-    EE ret = SUCCESS;
     CHECK_STATUS(tfslice_checkpara_mali(handle, input, output));
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = tfslice_mali_fp16(handle, inputDesc, input, p, tmpbuf, outputDesc, output);
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return tfslice_mali_fp16(handle, inputDesc, input, p, tmpbuf, outputDesc, output);
 }

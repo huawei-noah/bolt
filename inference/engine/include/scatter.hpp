@@ -14,21 +14,21 @@
 #ifndef _SCATTER_H
 #define _SCATTER_H
 
-#include "weight_operator.hpp"
+#include "operator.hpp"
 
-class Scatter : public WeightOperator {
+class Scatter : public Operator {
 public:
     Scatter(DataType dt, ScatterParamSpec p)
     {
         this->dt = dt;
         this->p = p;
     }
-
+    ~Scatter(){}
     OperatorType get_type() override
     {
         return OT_Scatter;
     }
-
+   
 protected:
     ScatterParamSpec p;
 };

@@ -29,7 +29,6 @@ namespace raul
  *
  * @see
  * - D. Krueger et al., “Zoneout: Regularizing RNNs by Randomly Preserving Hidden Activations,” arXiv:1606.01305 [cs], Sep. 2017, Accessed: Jul. 15, 2020. [Online]. Available:
- * http://arxiv.org/abs/1606.01305.
  */
 class ZoneoutLayer : public RandomSelectLayer
 {

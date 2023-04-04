@@ -15,28 +15,16 @@
 #define MANGLE_NAME_IMPL(base, IOM) base##IOM
 #define MANGLE_NAME(base, IOM) MANGLE_NAME_IMPL(base, IOM)
 #if defined(USE_INPUT_IMG)
-#define loadH(val, y_off, pic)    \
-    {                           \
-        T4 tmp0 = READ_IMAGE(pic, sampler, (int4)(idx, iy + y_off, idz, 0));\
-        T4 tmp1 = READ_IMAGE(pic, sampler, (int4)(idx + 1, iy + y_off, idz, 0));\
-        val[0] = tmp0.x;\
-        val[1] = tmp0.y;\
-        val[2] = tmp0.z;\
-        val[3] = tmp0.w;\
-        val[4] = tmp1.x;\
-        val[5] = tmp1.y;\
+#define loadH(val, y_off, pic)                                                   \
+    {                                                                            \
+        val.s0123 = READ_IMAGE(pic, sampler, (int4)(idx, iy + y_off, idz, 0));     \
+        val.s4567 = READ_IMAGE(pic, sampler, (int4)(idx + 1, iy + y_off, idz, 0)); \
     }
 #else
-#define loadH(val, y_off, pic)    \
-    {                           \
-        T4 tmp4 = vload4(0, pic + in_off + y_off * iw_str);\
-        T2 tmp2 = vload2(0, pic + in_off + y_off * iw_str + 4);\
-        val[0] = tmp4.x;\
-        val[1] = tmp4.y;\
-        val[2] = tmp4.z;\
-        val[3] = tmp4.w;\
-        val[4] = tmp2.x;\
-        val[5] = tmp2.y;\
+#define loadH(val, y_off, pic)                                  \
+    {                                                           \
+        val.s0123 = vload4(0, pic + in_off + y_off * iw_str);     \
+        val.s45   = vload2(0, pic + in_off + y_off * iw_str + 4); \
     }
 #endif
 
@@ -57,13 +45,13 @@ __kernel void MANGLE_NAME(conv_wino_trans_picbuf_nchw_, IOM)(const int iw_str,
         return;
     }
 
-    int iy = idy << 2; 
+    int iy = idy << 2;
 #if !defined(USE_INPUT_IMG)
     const int in_off = (idz * ih_str + iy) * iw_str + (idx << 2) + i_off;
 #endif
     const int pictran_off = idz * pw_str + idy * bx + idx;
-    T tmp[16];
-    T h0[6], h1[6], h2[6], h3[6], h4[6], h5[6];
+    T16 tmp;
+    T8 h0, h1, h2, h3, h4, h5;
 
     loadH(h0, 0, in);
     loadH(h1, 1, in);
@@ -72,87 +60,82 @@ __kernel void MANGLE_NAME(conv_wino_trans_picbuf_nchw_, IOM)(const int iw_str,
     loadH(h4, 4, in);
     loadH(h5, 5, in);
 
-    h0[1] = (T)(4.0) * h0[1] - (T)(5.0) * h2[1] + h4[1];
-    h0[2] = (T)(4.0) * h0[2] - (T)(5.0) * h2[2] + h4[2];
-    h0[3] = (T)(4.0) * h0[3] - (T)(5.0) * h2[3] + h4[3];
-    h0[4] = (T)(4.0) * h0[4] - (T)(5.0) * h2[4] + h4[4];
-
-    tmp[0] = (T)(-4.0) * (h1[1] + h2[1]) + h3[1] + h4[1];
-    tmp[1] = (T)(-4.0) * (h1[2] + h2[2]) + h3[2] + h4[2];
-    tmp[2] = (T)(-4.0) * (h1[3] + h2[3]) + h3[3] + h4[3];
-    tmp[3] = (T)(-4.0) * (h1[4] + h2[4]) + h3[4] + h4[4];
-
-    tmp[4] = (T)(4.0) * (h1[1] - h2[1]) - h3[1] + h4[1];
-    tmp[5] = (T)(4.0) * (h1[2] - h2[2]) - h3[2] + h4[2];
-    tmp[6] = (T)(4.0) * (h1[3] - h2[3]) - h3[3] + h4[3];
-    tmp[7] = (T)(4.0) * (h1[4] - h2[4]) - h3[4] + h4[4];
-
-    tmp[8] = (T)(2.0) *  (h3[1] - h1[1]) - h2[1] + h4[1];
-    tmp[9] = (T)(2.0) *  (h3[2] - h1[2]) - h2[2] + h4[2];
-    tmp[10] = (T)(2.0) * (h3[3] - h1[3]) - h2[3] + h4[3];
-    tmp[11] = (T)(2.0) * (h3[4] - h1[4]) - h2[4] + h4[4];
-
-    tmp[12] = (T)(2.0) * (h1[1] - h3[1]) - h2[1] + h4[1];
-    tmp[13] = (T)(2.0) * (h1[2] - h3[2]) - h2[2] + h4[2];
-    tmp[14] = (T)(2.0) * (h1[3] - h3[3]) - h2[3] + h4[3];
-    tmp[15] = (T)(2.0) * (h1[4] - h3[4]) - h2[4] + h4[4];
-
-    h5[1] = (T)(4.0) * h1[1] - (T)(5.0) * h3[1] + h5[1];
-    h5[2] = (T)(4.0) * h1[2] - (T)(5.0) * h3[2] + h5[2];
-    h5[3] = (T)(4.0) * h1[3] - (T)(5.0) * h3[3] + h5[3];
-    h5[4] = (T)(4.0) * h1[4] - (T)(5.0) * h3[4] + h5[4];
-
-    pictran[pictran_off] =
-        (T)(16.0) * h0[0] - (T)(20.0) * h2[0] + (T)(4.0) * h4[0] - (T)(5.0) * h0[2] + h0[4];
-    pictran[pictran_off + pwh_str] = (T)(-4.0) *    (h0[1] + h0[2]) + h0[3] + h0[4];
-    pictran[pictran_off + pwh_str * 2] = (T)(4.0) * (h0[1] - h0[2]) - h0[3] + h0[4];
-    pictran[pictran_off + pwh_str * 3] = (T)(2.0) * (h0[3] - h0[1]) - h0[2] + h0[4];
-    pictran[pictran_off + pwh_str * 4] = (T)(2.0) * (h0[1] - h0[3]) - h0[2] + h0[4];
-    pictran[pictran_off + pwh_str * 5] =
-        (T)(4.0) * (h0[1] + h0[5]) - (T)(5.0) * (h0[3] + h2[5]) + h4[5];
-
-    pictran[pictran_off + pwh_str * 6] =
-        (T)(-16.0) * (h1[0] + h2[0]) + (T)(4.0) * (h3[0] + h4[0]) - (T)(5.0) * tmp[1] + tmp[3];
-    pictran[pictran_off + pwh_str * 7] = (T)(-4.0) * (tmp[0] + tmp[1]) + tmp[2] + tmp[3];
-    pictran[pictran_off + pwh_str * 8] = (T)(4.0) * (tmp[0] - tmp[1]) - tmp[2] + tmp[3];
-    pictran[pictran_off + pwh_str * 9] = (T)(2.0) * (tmp[2] - tmp[0]) - tmp[1] + tmp[3];
-    pictran[pictran_off + pwh_str * 10] = (T)(2.0) * (tmp[0] - tmp[2]) - tmp[1] + tmp[3];
-    pictran[pictran_off + pwh_str * 11] =
-        (T)(4.0) * (tmp[0] - h1[5] - h2[5]) - (T)(5.0) * tmp[2] + h3[5] + h4[5];
-
-    pictran[pictran_off + pwh_str * 12] =
-        (T)(16.0) * (h1[0] - h2[0]) + (T)(4.0) * (h4[0] - h3[0]) - (T)(5.0) * tmp[5] + tmp[7];
-    pictran[pictran_off + pwh_str * 13] = (T)(-4.0) * (tmp[4] + tmp[5]) + tmp[6] + tmp[7];
-    pictran[pictran_off + pwh_str * 14] = (T)(4.0) * (tmp[4] - tmp[5]) - tmp[6] + tmp[7];
-    pictran[pictran_off + pwh_str * 15] = (T)(2.0) * (tmp[6] - tmp[4]) - tmp[5] + tmp[7];
-    pictran[pictran_off + pwh_str * 16] = (T)(2.0) * (tmp[4] - tmp[6]) - tmp[5] + tmp[7];
-    pictran[pictran_off + pwh_str * 17] =
-        (T)(4.0) * (tmp[4] + h1[5] - h2[5]) - (T)(5.0) * tmp[6] - h3[5] + h4[5];
-
-    pictran[pictran_off + pwh_str * 18] =
-        (T)(8.0) * (h3[0] - h1[0]) + (T)(4.0) * (h4[0] - h2[0]) - (T)(5.0) * tmp[9] + tmp[11];
-    pictran[pictran_off + pwh_str * 19] = (T)(-4.0) * (tmp[8] + tmp[9]) + tmp[10] + tmp[11];
-    pictran[pictran_off + pwh_str * 20] = (T)(4.0) * (tmp[8] - tmp[9]) - tmp[10] + tmp[11];
-    pictran[pictran_off + pwh_str * 21] = (T)(2.0) * (tmp[10] - tmp[8]) - tmp[9] + tmp[11];
-    pictran[pictran_off + pwh_str * 22] = (T)(2.0) * (tmp[8] - tmp[10]) - tmp[9] + tmp[11];
-    pictran[pictran_off + pwh_str * 23] =
-        (T)(4.0) * tmp[8] + (T)(2.0) * (h3[5] - h1[5]) - h2[5] - (T)(5.0) * tmp[10] + h4[5];
-
-    pictran[pictran_off + pwh_str * 24] =
-        (T)(8.0) * (h1[0] - h3[0]) + (T)(4.0) * (h4[0] - h2[0]) - (T)(5.0) * tmp[13] + tmp[15];
-    pictran[pictran_off + pwh_str * 25] = (T)(-4.0) * (tmp[12] + tmp[13]) + tmp[14] + tmp[15];
-    pictran[pictran_off + pwh_str * 26] = (T)(4.0) * (tmp[12] - tmp[13]) - tmp[14] + tmp[15];
-    pictran[pictran_off + pwh_str * 27] = (T)(2.0) * (tmp[14] - tmp[12]) - tmp[13] + tmp[15];
-    pictran[pictran_off + pwh_str * 28] = (T)(2.0) * (tmp[12] - tmp[14]) - tmp[13] + tmp[15];
-    pictran[pictran_off + pwh_str * 29] =
-        (T)(4.0) * tmp[12] + (T)(2.0) * (h1[5] - h3[5]) - h2[5] - (T)(5.0) * tmp[14] + h4[5];
-
-    pictran[pictran_off + pwh_str * 30] =
-        (T)(16.0) * h1[0] - (T)(20.0) * h3[0] + (T)(4.0) * h5[0] - (T)(5.0) * h5[2] + h5[4];
-    pictran[pictran_off + pwh_str * 31] = (T)(-4.0) * (h5[1] + h5[2]) + h5[3] + h5[4];
-    pictran[pictran_off + pwh_str * 32] = (T)(4.0) *  (h5[1] - h5[2]) - h5[3] + h5[4];
-    pictran[pictran_off + pwh_str * 33] = (T)(2.0) *  (h5[3] - h5[1]) - h5[2] + h5[4];
-    pictran[pictran_off + pwh_str * 34] = (T)(2.0) *  (h5[1] - h5[3]) - h5[2] + h5[4];
-    pictran[pictran_off + pwh_str * 35] =
-        (T)(4.0) * (h5[1] + h1[5]) - (T)(5.0) * (h5[3] + h3[5]) + h5[5];
+    h0.s1234 = FMA(4, h0.s1234, FMA(-5, h2.s1234, h4.s1234));
+    h5.s1234 = FMA(4, h1.s1234, FMA(-5, h3.s1234, h5.s1234));
+    tmp.s0123 = FMA(-4, h1.s1234 + h2.s1234, h4.s1234) + h3.s1234;
+    tmp.s4567 = FMA( 4, h1.s1234 - h2.s1234, h4.s1234) - h3.s1234;
+    tmp.s89ab = FMA( 2, h3.s1234 - h1.s1234, h4.s1234) - h2.s1234;
+    tmp.scdef = FMA( 2, h1.s1234 - h3.s1234, h4.s1234) - h2.s1234;
+    pictran += pictran_off;
+    *pictran = FMA(16, h0.s0, FMA(-20, h2.s0, FMA(4, h4.s0, FMA(-5, h0.s2, h0.s4))));
+    pictran += pwh_str;
+    *pictran = FMA(-4, (h0.s1 + h0.s2), h0.s4) + h0.s3;
+    pictran += pwh_str;
+    *pictran = FMA( 4, (h0.s1 - h0.s2), h0.s4) - h0.s3;
+    pictran += pwh_str;
+    *pictran = FMA( 2, (h0.s3 - h0.s1), h0.s4) - h0.s2;
+    pictran += pwh_str;
+    *pictran = FMA( 2, (h0.s1 - h0.s3), h0.s4) - h0.s2;
+    pictran += pwh_str;
+    *pictran = FMA( 4, (h0.s1 + h0.s5), FMA(-5, (h0.s3 + h2.s5), h4.s5));
+    pictran += pwh_str;
+    *pictran = FMA(-16, (h1.s0 + h2.s0), FMA(4, (h3.s0 + h4.s0), FMA(-5, tmp.s1, tmp.s3)));
+    pictran += pwh_str;
+    *pictran = FMA(-4, (tmp.s0 + tmp.s1), tmp.s3) + tmp.s2;
+    pictran += pwh_str;
+    *pictran = FMA( 4, (tmp.s0 - tmp.s1), tmp.s3) - tmp.s2;
+    pictran += pwh_str;
+    *pictran = FMA( 2, (tmp.s2 - tmp.s0), tmp.s3) - tmp.s1;
+    pictran += pwh_str;
+    *pictran = FMA( 2, (tmp.s0 - tmp.s2), tmp.s3) - tmp.s1;
+    pictran += pwh_str;
+    *pictran = FMA( 4, (tmp.s0 - h1.s5 - h2.s5), FMA(-5, tmp.s2, h3.s5)) + h4.s5;
+    pictran += pwh_str;
+    *pictran = FMA(16, (h1.s0 - h2.s0), FMA(4, (h4.s0 - h3.s0), FMA(-5, tmp.s5, tmp.s7)));
+    pictran += pwh_str;
+    *pictran = FMA(-4, (tmp.s4 + tmp.s5), tmp.s7) + tmp.s6;
+    pictran += pwh_str;
+    *pictran = FMA( 4, (tmp.s4 - tmp.s5), tmp.s7) - tmp.s6;
+    pictran += pwh_str;
+    *pictran = FMA( 2, (tmp.s6 - tmp.s4), tmp.s7) - tmp.s5;
+    pictran += pwh_str;
+    *pictran = FMA( 2, (tmp.s4 - tmp.s6), tmp.s7) - tmp.s5;
+    pictran += pwh_str;
+    *pictran = FMA( 4, (tmp.s4 + h1.s5 - h2.s5), FMA(-5, tmp.s6, - h3.s5)) + h4.s5;
+    pictran += pwh_str;
+    *pictran = FMA( 8, (h3.s0 - h1.s0), FMA(4, (h4.s0 - h2.s0), FMA(-5, tmp.s9, tmp.sb)));
+    pictran += pwh_str;
+    *pictran = FMA(-4, (tmp.s8 + tmp.s9), tmp.sb) + tmp.sa;
+    pictran += pwh_str;
+    *pictran = FMA( 4, (tmp.s8 - tmp.s9), tmp.sb) - tmp.sa;
+    pictran += pwh_str;
+    *pictran = FMA( 2, (tmp.sa - tmp.s8), tmp.sb) - tmp.s9;
+    pictran += pwh_str;
+    *pictran = FMA( 2, (tmp.s8 - tmp.sa), tmp.sb) - tmp.s9;
+    pictran += pwh_str;
+    *pictran = FMA( 4, tmp.s8, FMA(2, (h3.s5 - h1.s5), - h2.s5)) + FMA(-5, tmp.sa, h4.s5);
+    pictran += pwh_str;
+    *pictran = FMA( 8, (h1.s0 - h3.s0),  FMA(4, (h4.s0 - h2.s0), FMA(-5, tmp.sd, tmp.sf)));
+    pictran += pwh_str;
+    *pictran = FMA(-4, (tmp.sc + tmp.sd), tmp.sf) + tmp.se;
+    pictran += pwh_str;
+    *pictran = FMA( 4, (tmp.sc - tmp.sd), tmp.sf) - tmp.se;
+    pictran += pwh_str;
+    *pictran = FMA( 2, (tmp.se - tmp.sc), tmp.sf) - tmp.sd;
+    pictran += pwh_str;
+    *pictran = FMA( 2, (tmp.sc - tmp.se), tmp.sf) - tmp.sd;
+    pictran += pwh_str;
+    *pictran = FMA( 4, tmp.sc, FMA(2, (h1.s5 - h3.s5), - h2.s5)) + FMA(-5, tmp.se, h4.s5);
+    pictran += pwh_str;
+    *pictran = FMA(16, h1.s0, FMA(-20, h3.s0, FMA(4, h5.s0, FMA(-5, h5.s2, h5.s4))));
+    pictran += pwh_str;
+    *pictran = FMA(-4, (h5.s1 + h5.s2), h5.s4) + h5.s3;
+    pictran += pwh_str;
+    *pictran = FMA( 4, (h5.s1 - h5.s2), h5.s4) - h5.s3;
+    pictran += pwh_str;
+    *pictran = FMA( 2, (h5.s3 - h5.s1), h5.s4) - h5.s2;
+    pictran += pwh_str;
+    *pictran = FMA( 2, (h5.s1 - h5.s3), h5.s4) - h5.s2;
+    pictran += pwh_str;
+    *pictran = FMA( 4, (h5.s1 + h1.s5), FMA(-5, (h5.s3 + h3.s5), h5.s5));
 }

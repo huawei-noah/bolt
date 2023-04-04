@@ -12,11 +12,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "cpu/tensor_computing_cpu.h"
-#if defined(_USE_NEON) && defined(_USE_INT8)
-#include "cpu/arm/int8/tensor_computing_int8.h"
-#endif
 #include "tensor_transpose.h"
-#include "thread_affinity.h"
+#include "affinity_policy.h"
+#include "cpu/cpu_functions.h"
 
 inline static void concat_v1(const std::vector<TensorDesc> &inputDesc,
     const std::vector<void *> &input,
@@ -122,6 +120,7 @@ static EE concat(std::vector<TensorDesc> inputDesc,
     for (I32 i = 0; i < axis; i++) {
         tileSize *= outputDesc.dims[i];
     }
+
     I32 loops = 1;
     for (I32 i = axis + 1; i < dim; i++) {
         loops *= outputDesc.dims[i];
@@ -142,22 +141,12 @@ static EE concat(std::vector<TensorDesc> inputDesc,
     for (U32 j = 0; j < num; j++) {
         if (((4 == inputDesc[j].nDims) &&
                 ((1 != inputDesc[j].dims[1]) || (1 != inputDesc[j].dims[0]))) ||
-            ((3 == inputDesc[j].nDims) && (1 != inputDesc[j].dims[0]))) {
-            if (isC8 && (DF_NCHWC8 != inputDesc[j].df)) {
-                TensorDesc tmpDesc = inputDesc[j];
-                tmpDesc.df = DF_NCHWC8;
-                transformNCHWToNCHWC8(inputDesc[j], input[j], tmpDesc, tmpPtr);
-                input[j] = tmpPtr;
-                tmpPtr += tensorNumBytes(inputDesc[j]);
-            } else if (!isC8 && (DF_NCHWC8 == inputDesc[j].df)) {
-                TensorDesc tmpDesc = inputDesc[j];
-                tmpDesc.df = DF_NCHW;
-                U8 *usePtr = tmpPtr;
-                if (loops == 1) {
-                    jumpMemcpy[j] = true;
-                    usePtr = (U8 *)output + outputOff * tileSize;
-                }
-                transformToNCHW(inputDesc[j], input[j], tmpDesc, usePtr);
+            ((3 == inputDesc[j].nDims) && (1 != inputDesc[j].dims[0])))
+        {
+            if ((inputDesc[j].df != outputDesc.df)) {
+                TensorDesc desc = inputDesc[j];
+                desc.df = outputDesc.df;
+                transformFormat(inputDesc[j], input[j], desc, tmpPtr);
                 input[j] = tmpPtr;
                 tmpPtr += tensorNumBytes(inputDesc[j]);
             }
@@ -180,16 +169,21 @@ EE concat_cpu(std::vector<TensorDesc> inputDesc,
     void *tmp,
     TensorDesc outputDesc,
     void *output,
-    void *outputScale)
+    void *outputScale,
+    Arch arch)
 {
-    EE ret = NOT_SUPPORTED;
-    if (outputDesc.dt == DT_I8) {
-#if defined(_USE_NEON) && defined(_USE_INT8)
-        ret = concat_int8(
-            inputDesc, input, (F32 *)inputScale, p.axis, outputDesc, output, (F32 *)outputScale);
+    if (outputDesc.dt == DT_I8 && inputScale != NULL && outputScale != NULL) {
+#ifdef _USE_INT8
+        F32 *scales = (F32 *)inputScale;
+        F32 *oscale = (F32 *)outputScale;
+        CHECK_STATUS(array_minmax_value_template<F32>(scales, inputDesc.size(), 1, oscale));
+        for (U32 i = 0; i < inputDesc.size(); i++) {
+            CHECK_STATUS(requantize_cpu(inputDesc[i], (INT8 *)input[i], scales[i], inputDesc[i],
+                (INT8 *)input[i], *oscale, arch));
+        }
+#else
+        return NOT_SUPPORTED;
 #endif
-    } else {
-        ret = concat(inputDesc, input, p.axis, outputDesc, output, tmp);
     }
-    return ret;
+    return concat(inputDesc, input, p.axis, outputDesc, output, tmp);
 }

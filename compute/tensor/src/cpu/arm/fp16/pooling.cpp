@@ -72,14 +72,12 @@ EE pooling_c8_fp16(const I32 &tstart,
         vst1q_f16(output, out2);
     } else {
 #ifdef _USE_F16_MIX_PRECISION_POOLING
-        float32x4_t poolSize_v = vdupq_n_f32(poolSize);
-        out0 = vdivq_f32(out0, poolSize_v);
-        out1 = vdivq_f32(out1, poolSize_v);
+        out0 = vmulq_n_f32(out0, 1. / poolSize);
+        out1 = vmulq_n_f32(out1, 1. / poolSize);
         vst1_f16(output, vcvt_f16_f32(out0));
         vst1_f16(output + 4, vcvt_f16_f32(out1));
 #else
-        float16x8_t poolSize_v = vdupq_n_f16(poolSize);
-        vst1q_f16(output, vdivq_f16(out2, poolSize_v));
+        vst1q_f16(output, vmulq_n_f16(out2, 1. / poolSize));
 #endif
     }
     return SUCCESS;

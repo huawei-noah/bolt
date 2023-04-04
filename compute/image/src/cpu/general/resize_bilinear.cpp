@@ -12,11 +12,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "cpu/general/image_general.h"
-#include "uni.h"
+#include "cpu/cpu_functions.h"
 
-template <typename IT, typename OT>
-EE resize_bilinear(
-    TensorDesc inputDesc, IT *inArray, ResizeParamSpec p, TensorDesc outputDesc, OT *outArray)
+template <typename IT, typename OT, CoordinateTransMode coordinate_transformation_mode>
+static EE resize_bilinear_kernel(
+    TensorDesc inputDesc, IT *inArray, const ResizeParamSpec &p, TensorDesc outputDesc, OT *outArray)
 {
     DataType idt, odt;
     DataFormat idf, odf;
@@ -24,6 +24,10 @@ EE resize_bilinear(
     U32 on, oc, oh, ow;
     CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
     CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
+    float r0_w = iw / (float)ow;
+    float r0_h = ih / (float)oh;
+    float r1_w = (iw - 1.0f) / (ow - 1.0f);
+    float r1_h = (ih - 1.0f) / (oh - 1.0f);
 
     U32 ic_align = 1, oc_align = 1;
     if (idf == DF_NCHWC8) {
@@ -32,41 +36,25 @@ EE resize_bilinear(
     if (odf == DF_NCHWC8) {
         oc_align = 8;
     }
-
-    F32 strideH, strideW;
-    if (p.trans_mode == COORDINATE_TRANS_ALIGN_CORNERS) {
-        strideH = ((F32)ih - 1) / (oh - 1);
-        strideW = ((F32)iw - 1) / (ow - 1);
-    } else {
-        strideH = ((F32)ih) / oh;
-        strideW = ((F32)iw) / ow;
-    }
     ic /= ic_align;
     oc /= oc_align;
     U32 srcTL, srcTR, srcBL, srcBR;
     for (U32 n = 0, dst = 0; n < on; n++) {
         for (U32 c = 0; c < oc; c++) {
             for (U32 h = 0; h < oh; h++) {
-                F32 hC = strideH * h;
-                U32 hT = floor(hC);
-                U32 hB = ceil(hC);
-                if (hB == hT) {
-                    hB = hT + 1;
-                }
+                F32 hC = coordinate_trans<coordinate_transformation_mode>(h, ih, oh, r0_h, r1_h);
+                U32 hT = (U32)floor(hC);
+                U32 hB = hT + 1;
                 U32 hBB = UNI_MIN(hB, ih - 1);
                 for (U32 w = 0; w < ow; w++) {
-                    F32 wC = strideW * w;
-                    U32 wL = floor(wC);
-                    U32 wR = ceil(wC);
-                    if (wL == wR) {
-                        wR = wL + 1;
-                    }
+                    F32 wC = coordinate_trans<coordinate_transformation_mode>(w, iw, ow, r0_w, r1_w);
+                    U32 wL = (U32)floor(wC);
+                    U32 wR = wL + 1;
                     U32 wRR = UNI_MIN(wR, iw - 1);
                     F32 factorTL = (hB - hC) * (wR - wC);
                     F32 factorTR = (hB - hC) * (wC - wL);
                     F32 factorBL = (hC - hT) * (wR - wC);
                     F32 factorBR = (hC - hT) * (wC - wL);
-
                     for (U32 i = 0; i < oc_align; i++, dst++) {
                         U32 cc = c * oc_align + i;
                         if (idf == DF_NCHWC8) {
@@ -82,7 +70,6 @@ EE resize_bilinear(
                             srcBL = ((n * ic + cc) * ih + hBB) * iw + wL;
                             srcBR = ((n * ic + cc) * ih + hBB) * iw + wRR;
                         }
-
                         outArray[dst] = inArray[srcTL] * factorTL + inArray[srcTR] * factorTR +
                             inArray[srcBL] * factorBL + inArray[srcBR] * factorBR;
                     }
@@ -91,6 +78,43 @@ EE resize_bilinear(
         }
     }
     return SUCCESS;
+}
+
+template <typename IT, typename OT>
+inline static EE resize_bilinear(const TensorDesc &inputDesc,
+    IT *inArray,
+    const ResizeParamSpec &p,
+    const TensorDesc &outputDesc,
+    OT *outArray)
+{
+    EE ret = SUCCESS;
+    switch (p.trans_mode) {
+        case COORDINATE_TRANS_HALF_PIXEL: {
+            resize_bilinear_kernel<IT, OT, COORDINATE_TRANS_HALF_PIXEL>(
+                inputDesc, inArray, p, outputDesc, outArray);
+            break;
+        }
+        case COORDINATE_TRANS_PYTORCH_HALF_PIXEL: {
+            resize_bilinear_kernel<IT, OT, COORDINATE_TRANS_PYTORCH_HALF_PIXEL>(
+                inputDesc, inArray, p, outputDesc, outArray);
+            break;
+        }
+        case COORDINATE_TRANS_ALIGN_CORNERS: {
+            resize_bilinear_kernel<IT, OT, COORDINATE_TRANS_ALIGN_CORNERS>(
+                inputDesc, inArray, p, outputDesc, outArray);
+            break;
+        }
+        case COORDINATE_TRANS_ASYMMETRIC: {
+            resize_bilinear_kernel<IT, OT, COORDINATE_TRANS_ASYMMETRIC>(
+                inputDesc, inArray, p, outputDesc, outArray);
+            break;
+        }
+        default:
+            UNI_ERROR_LOG("Resize currently not support this coordinate transformation mode.\n");
+            ret = NOT_SUPPORTED;
+            break;
+    }
+    return ret;
 }
 
 EE resize_bilinear_general(

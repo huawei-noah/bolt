@@ -15,6 +15,7 @@
 #define _H_RESHAPEOPTIMIZER
 
 #include "OPOptimizer.hpp"
+#include "shape_infer.h"
 
 class ReshapeOptimizer : public OPOptimizer {
     bool optimize(ModelSpec *spec) override
@@ -32,7 +33,7 @@ class ReshapeOptimizer : public OPOptimizer {
                 hasOptimized = true;
             }
             if (spec->ops[i].type == OT_Reshape && spec->ops[i].ps.reshape_spec.axis == 0 &&
-                spec->ops[i].ps.reshape_spec.num_axes == -1) {
+                spec->ops[i].ps.reshape_spec.num_axes == -1 && spec->ops[i].num_inputs == 1) {
                 std::vector<std::pair<int, int>> nextOpIndexes = searchOperatorIndexByInput(
                     spec, spec->ops[i].output_tensors_name[0], i + 1, spec->num_operator_specs);
                 if (nextOpIndexes.size() != 1) {
@@ -62,28 +63,23 @@ class ReshapeOptimizer : public OPOptimizer {
                     setOperatorInvalid(spec, nextOpIndex, true);
                     hasOptimized = true;
                 }
-                if (spec->ops[nextOpIndex].type == OT_Unsqueeze) {
-                    const int dim_max = 8;
-                    int shapes[dim_max];
-                    UNI_MEMSET(shapes, 0, sizeof(int) * dim_max);
-                    for (int k = 0; k < spec->ops[nextOpIndex].ps.unsqueeze_spec.num_axes; k++) {
-                        shapes[spec->ops[nextOpIndex].ps.unsqueeze_spec.axes[k]] = 1;
+                if (spec->ops[nextOpIndex].type == OT_Unsqueeze ||
+                    spec->ops[nextOpIndex].type == OT_Squeeze) {
+                    TensorDesc desc0, desc1;
+                    desc0.nDims = spec->ops[i].ps.reshape_spec.num_shape;
+                    for (U32 n = 0; n < desc0.nDims; n++) {
+                        desc0.dims[desc0.nDims - 1 - n] = spec->ops[i].ps.reshape_spec.shape[n];
                     }
-                    int index = 0;
-                    int j;
-                    for (j = 0; j < dim_max; j++) {
-                        if (shapes[j] == 0) {
-                            if (index < spec->ops[i].ps.reshape_spec.num_shape) {
-                                shapes[j] = spec->ops[i].ps.reshape_spec.shape[index];
-                                index++;
-                            } else {
-                                break;
-                            }
-                        }
+                    if (spec->ops[nextOpIndex].type == OT_Unsqueeze) {
+                        CHECK_STATUS(unsqueeze_infer_output_size_cpu(
+                            desc0, spec->ops[nextOpIndex].ps.unsqueeze_spec, &desc1));
+                    } else {
+                        CHECK_STATUS(squeeze_infer_output_size_cpu(
+                            desc0, spec->ops[nextOpIndex].ps.squeeze_spec, &desc1));
                     }
-                    spec->ops[i].ps.reshape_spec.num_shape = j;
-                    for (int j = 0; j < spec->ops[i].ps.reshape_spec.num_shape; j++) {
-                        spec->ops[i].ps.reshape_spec.shape[j] = shapes[j];
+                    spec->ops[i].ps.reshape_spec.num_shape = desc1.nDims;
+                    for (U32 n = 0; n < desc1.nDims; n++) {
+                        spec->ops[i].ps.reshape_spec.shape[n] = desc1.dims[desc1.nDims - 1 - n];
                     }
                     setOperatorInvalid(spec, nextOpIndex, true);
                     hasOptimized = true;

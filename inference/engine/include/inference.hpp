@@ -30,9 +30,8 @@ inline std::map<std::string, TensorDesc> extractInputDims(const ModelSpec *ms)
 }
 
 inline std::shared_ptr<CNN> createPipelinefromMs(
-    const char *affinityPolicyName, ModelSpec *ms, const char *algorithmMapPath)
+    AffinityPolicy affinityPolicy, ModelSpec *ms, const char *algorithmMapPath)
 {
-    AffinityPolicy affinityPolicy = thread_affinity_get_policy_by_name(affinityPolicyName);
     CNN *cnn = new CNN(affinityPolicy, ms->dt, ms->model_name);
 
     cnn->sort_operators_sequential(ms);
@@ -56,9 +55,11 @@ inline std::shared_ptr<CNN> createPipeline(
 {
     std::shared_ptr<CNN> pipeline;
     ModelSpec ms;
-    EE ret = deserialize_model_from_file(modelPath, &ms);
+    AffinityPolicy affinityPolicy = thread_affinity_get_policy_by_name(affinityPolicyName);
+    DataType targetDt = getTargetDtFromAffinity(affinityPolicy);
+    EE ret = deserialize_model_from_file(modelPath, &ms, targetDt);
     if (ret == SUCCESS) {
-        pipeline = createPipelinefromMs(affinityPolicyName, &ms, algorithmMapPath);
+        pipeline = createPipelinefromMs(affinityPolicy, &ms, algorithmMapPath);
         CHECK_STATUS(mt_destroy_model(&ms));
     }
     return pipeline;

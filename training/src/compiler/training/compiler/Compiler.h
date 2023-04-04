@@ -54,7 +54,7 @@ class Constraint
      * @brief Define execution target for sequence of layers [layerFrom - layerTo]
      */
     Constraint(const Name& layerFrom, const Name& layerTo, ConstraintImpl cImpl);
-
+    ~Constraint(){}
     [[nodiscard]] const Name& getLayerFrom() const { return mLayerFrom; }
     [[nodiscard]] const Name& getLayerTo() const { return mLayerTo; }
 
@@ -76,7 +76,7 @@ class Compiler
 {
   public:
     explicit Compiler(ExecutionTarget executionTarget);
-
+             ~Compiler(){}
     typedef std::vector<BasicLayerBuilder> Builders;
 
     std::vector<std::unique_ptr<BasicLayer>> resolveImplementation(Builders& builders, NetworkParameters& networkParams);

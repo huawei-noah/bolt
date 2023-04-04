@@ -38,7 +38,7 @@ inline EE reshape_input(
     U32 off[3] = {0, 0, 0};
     MemFlags flag = CL_MEM_READ_WRITE;
     CHECK_STATUS(
-        gclmem_set_desc_padding(&(tMem.desc), str, off, DT_F16, DF_NCHW, GCL_MEM_BUF, flag));
+        gclmem_set_desc_padding(&(tMem.desc), str, off, dt, DF_NCHW, GCL_MEM_BUF, flag));
     CHECK_STATUS(gcl_create_sub_buffer(tMem.desc.byteSize, subMemOff, tmpBuf, &(tMem.mem)));
     CHECK_STATUS(ocl_data_trans_form(handle, input, &tMem, 0, 0, type));
     *sMem = tMem;
@@ -66,7 +66,7 @@ inline EE gemm_trans_input(
     U32 h = desc.dims[1];
     desc.dims[0] = h;
     desc.dims[1] = w;
-    U32 pr = ALIGN(h, item) - h;
+    U32 pr = UNI_ALIGN(h, item) - h;
     if (dMem->desc.memType != GCL_MEM_BUF) {
         memPtr = (OclMemory *)&(tmpImg);
     }
@@ -78,6 +78,7 @@ inline EE gemm_trans_input(
 }
 
 inline EE rnn_core_matmul(GCLHandle_t handle,
+    DataType dt,
     U32 M,
     U32 N,
     U32 K,
@@ -90,7 +91,7 @@ inline EE rnn_core_matmul(GCLHandle_t handle,
     Mem gemmBias,
     Mem gemmMatC)
 {
-    U32 N64 = ALIGN(N, 64);
+    U32 N64 = UNI_ALIGN(N, 64);
     U32 A_str = M * K;
     U32 B_str = N * K;
     U32 C_str = M * N64;
@@ -101,8 +102,8 @@ inline EE rnn_core_matmul(GCLHandle_t handle,
     char kernelName[128];
     Kernel kernel;
     KernelOpt kernelOpt;
-    CHECK_STATUS(set_gemm_tn_opt_mali(item_m, item_n, USE_BIAS_MATCH_B, false, ACTIVATION_NULL,
-        DT_F16, at, bt, GCL_MEM_BUF, kernelName, &kernelOpt));
+    CHECK_STATUS(set_gemm_tn_opt_mali(item_m, item_n, USE_BIAS_MATCH_B, false, {},
+        dt, at, bt, GCL_MEM_BUF, kernelName, &kernelOpt));
     CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
     CHECK_STATUS(gcl_set_kernelArgs(kernel, M, N, K, A_str, B_str, C_str, 0, 0, 0, N64, N, M, 1,
         gs[0], gs[1], gemmMatA, gemmMatB, gemmBias, gemmMatC));
@@ -114,6 +115,7 @@ inline EE rnn_core_matmul(GCLHandle_t handle,
 }
 
 inline EE rnn_core_init_state(GCLHandle_t handle,
+    DataType dt,
     U32 inputNum,
     U32 col,
     U32 hDim,
@@ -129,18 +131,18 @@ inline EE rnn_core_init_state(GCLHandle_t handle,
     stateHMem.mem = stateH;
     GCLMemDesc desc;
     U32 str[3] = {
-        ALIGN(col, 4),
+        UNI_ALIGN(col, 4),
         1,
         1,
     };
     U32 off[3] = {0, 0, 0};
     MemFlags flag = CL_MEM_READ_WRITE;
-    CHECK_STATUS(gclmem_set_desc_padding(&desc, str, off, DT_F16, DF_NCHW, GCL_MEM_BUF, flag));
+    CHECK_STATUS(gclmem_set_desc_padding(&desc, str, off, dt, DF_NCHW, GCL_MEM_BUF, flag));
     stateCMem.desc = desc;
     CHECK_STATUS(ocl_fill_memory_zero(handle, &stateCMem, 0));
 
-    str[0] = ALIGN(hDim, item_c);
-    CHECK_STATUS(gclmem_set_desc_padding(&desc, str, off, DT_F16, DF_NCHW, GCL_MEM_BUF, flag));
+    str[0] = UNI_ALIGN(hDim, item_c);
+    CHECK_STATUS(gclmem_set_desc_padding(&desc, str, off, dt, DF_NCHW, GCL_MEM_BUF, flag));
     stateHMem.desc = desc;
     CHECK_STATUS(ocl_fill_memory_zero(handle, &stateHMem, 0));
 
@@ -151,7 +153,7 @@ inline EE rnn_core_init_state(GCLHandle_t handle,
         if (input[1].desc.memType != GCL_MEM_BUF) {
             CHECK_STATUS(NOT_SUPPORTED)
         }
-        CHECK_STATUS(set_copy_opt_mali(false, DT_F16, kernelName, &kernelOpt));
+        CHECK_STATUS(set_copy_opt_mali(false, dt, kernelName, &kernelOpt));
         CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
         U32 gs = (col + 3) / 4;
         U32 ls = 0;
@@ -186,6 +188,7 @@ inline EE rnn_core_init_state(GCLHandle_t handle,
 }
 
 inline EE rnn_core_build_gemv_kernel_info(GCLHandle_t handle,
+    DataType dt,
     U32 item_c,
     U32 row,
     U32 *tmpOff,
@@ -194,7 +197,7 @@ inline EE rnn_core_build_gemv_kernel_info(GCLHandle_t handle,
     char *kernelName,
     KernelOpt *kernelOpt)
 {
-    return gemv_build_run_info(handle, item_c, row, 1, ACTIVATION_NULL, true, false, DT_F16, tmpOff,
+    return gemv_build_run_info(handle, item_c, row, 1, {}, true, false, dt, tmpOff,
         tmpBuf, reduceMem, kernelName, kernelOpt);
 }
 
@@ -214,10 +217,10 @@ inline EE rnn_core_gemv(GCLHandle_t handle,
         kernelName, kernelOpt);
 }
 
-inline EE rnn_core_build_update_kernel_info(bool useProject, char *kernelName, KernelOpt *kernelOpt)
+inline EE rnn_core_build_update_kernel_info(DataType dt, bool useProject, char *kernelName, KernelOpt *kernelOpt)
 {
     CHECK_STATUS(set_rnncell_update_res_opt_mali(
-        useProject, true, DT_F16, GCL_MEM_BUF, GCL_MEM_BUF, kernelName, kernelOpt));
+        useProject, true, dt, GCL_MEM_BUF, GCL_MEM_BUF, kernelName, kernelOpt));
     return SUCCESS;
 }
 
@@ -250,12 +253,12 @@ inline EE rnn_core_update(GCLHandle_t handle,
     return SUCCESS;
 }
 
-inline EE rnn_core_copy_stateC(GCLHandle_t handle, U32 col, Mem stateC, GCLMem_t output)
+inline EE rnn_core_copy_stateC(GCLHandle_t handle, DataType dt, U32 col, Mem stateC, GCLMem_t output)
 {
     char kernelName[128];
     Kernel kernel;
     KernelOpt kernelOpt;
-    CHECK_STATUS(set_copy_opt_mali(false, DT_F16, kernelName, &kernelOpt));
+    CHECK_STATUS(set_copy_opt_mali(false, dt, kernelName, &kernelOpt));
     CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
     U32 gs = (col + 3) / 4;
     U32 ls = 0;
@@ -269,12 +272,12 @@ inline EE rnn_core_copy_stateC(GCLHandle_t handle, U32 col, Mem stateC, GCLMem_t
 }
 
 inline EE rnn_core_copy_stateH(
-    GCLHandle_t handle, U32 col, U32 hDim, U32 outputNum, bool backDir, Mem stateH, GCLMem_t output)
+    GCLHandle_t handle, DataType dt, U32 col, U32 hDim, U32 outputNum, bool backDir, Mem stateH, GCLMem_t output)
 {
     char kernelName[128];
     Kernel kernel;
     KernelOpt kernelOpt;
-    CHECK_STATUS(set_copy_opt_mali(false, DT_F16, kernelName, &kernelOpt));
+    CHECK_STATUS(set_copy_opt_mali(false, dt, kernelName, &kernelOpt));
     U32 hMemOff = col;
     cl_mem hDstMem = output[1].mem;
     if (outputNum > 2) {
@@ -334,6 +337,7 @@ inline EE rnn_core_mali_fp16(GCLHandle_t handle,
     }
 
     TensorDesc desc = inputDescs[0];
+    DataType dt = desc.dt;
     U32 batch = desc.dims[desc.nDims - 1];
     U32 step = desc.dims[desc.nDims - 2];
     U32 xDim = desc.dims[desc.nDims - 3];
@@ -348,33 +352,33 @@ inline EE rnn_core_mali_fp16(GCLHandle_t handle,
         gemmMatA = tmpImg->mem;
         gemmMatAType = GCL_MEM_IMG_3D;
     } else {
-        U32 gemmMatASize = ALIGN(batch * step, item_m) * xDim * bytesOf(desc.dt);
+        U32 gemmMatASize = UNI_ALIGN(batch * step, item_m) * xDim * bytesOf(desc.dt);
         CHECK_STATUS(gcl_create_sub_buffer(gemmMatASize, &subMemOff, tmpBuf, &gemmMatA));
     }
     dMem.mem = gemmMatA;
     dMem.desc.memType = gemmMatAType;
     CHECK_STATUS(gemm_trans_input(handle, item_m, desc, &sMem, &dMem));
 
-    U32 M = ALIGN(step * batch, item_m);
+    U32 M = UNI_ALIGN(step * batch, item_m);
     U32 K = xDim;
-    U32 N = ALIGN(4 * col, item_n);
-    U32 N64 = ALIGN(N, 64);
+    U32 N = UNI_ALIGN(4 * col, item_n);
+    U32 N64 = UNI_ALIGN(N, 64);
     U32 gemmMatCSize = M * N64 * bytesOf(desc.dt);
     U32 gemvBiasBase = subMemOff;
     CHECK_STATUS(gcl_create_sub_buffer(gemmMatCSize, &subMemOff, tmpBuf, &gemmMatC));
-    CHECK_STATUS(rnn_core_matmul(handle, M, N, K, item_n, item_m, gemmMatAType, gemmMatBType,
+    CHECK_STATUS(rnn_core_matmul(handle, dt, M, N, K, item_n, item_m, gemmMatAType, gemmMatBType,
         gemmMatA, gemmMatB, gemmBias, gemmMatC));
 
     cl_mem stateC, stateH;
     U32 item_c = forwardRunInfo->best_c[1];
     U32 item_k = forwardRunInfo->best_k[1];
     U32 c_align = (item_c > 16) ? (item_c >> 4) : item_c;
-    U32 stateCSize = ALIGN(col, 4) * bytesOf(desc.dt);
-    U32 stateHSize = ALIGN(hDim, c_align) * bytesOf(desc.dt);
+    U32 stateCSize = UNI_ALIGN(col, 4) * bytesOf(desc.dt);
+    U32 stateHSize = UNI_ALIGN(hDim, c_align) * bytesOf(desc.dt);
     CHECK_STATUS(gcl_create_sub_buffer(stateCSize, &subMemOff, tmpBuf, &stateC));
     CHECK_STATUS(gcl_create_sub_buffer(stateHSize, &subMemOff, tmpBuf, &stateH));
     CHECK_STATUS(rnn_core_init_state(
-        handle, inputDescs.size(), col, hDim, c_align, false, input, stateC, stateH));
+        handle, dt, inputDescs.size(), col, hDim, c_align, false, input, stateC, stateH));
 
     std::vector<Mem> gemvBiasVec;
     for (U32 i = 0; i < step; i++) {
@@ -396,11 +400,11 @@ inline EE rnn_core_mali_fp16(GCLHandle_t handle,
     U32 tmpOff = subMemOff;
     Mem reduceMem = tmpBuf->mem;
     CHECK_STATUS(rnn_core_build_gemv_kernel_info(
-        handle, item_c, filterRow, &tmpOff, tmpBuf, &reduceMem, kernelNameGemv, &kernelOptGemv));
+        handle, dt, item_c, filterRow, &tmpOff, tmpBuf, &reduceMem, kernelNameGemv, &kernelOptGemv));
 
     char kernelNameUpdate[128];
     KernelOpt kernelOptUpdate;
-    CHECK_STATUS(rnn_core_build_update_kernel_info(project, kernelNameUpdate, &kernelOptUpdate));
+    CHECK_STATUS(rnn_core_build_update_kernel_info(dt, project, kernelNameUpdate, &kernelOptUpdate));
 
     U32 ow_str, oh_str, ow_off, oh_off;
     CHECK_STATUS(gclmem_get_desc_padding(output->desc, &ow_str, &oh_str, NULL, &ow_off, &oh_off));
@@ -416,9 +420,9 @@ inline EE rnn_core_mali_fp16(GCLHandle_t handle,
     }
 
     if (outputDescs.size() > 1) {
-        CHECK_STATUS(rnn_core_copy_stateC(handle, col, stateC, output));
+        CHECK_STATUS(rnn_core_copy_stateC(handle, dt, col, stateC, output));
         CHECK_STATUS(
-            rnn_core_copy_stateH(handle, col, hDim, outputDescs.size(), false, stateH, output));
+            rnn_core_copy_stateH(handle, dt, col, hDim, outputDescs.size(), false, stateH, output));
     }
 
     if (rnnPara.bi_direction) {
@@ -427,10 +431,10 @@ inline EE rnn_core_mali_fp16(GCLHandle_t handle,
         gemmBias = bias[biasCount].mem;
         filterCount++;
         biasCount++;
-        CHECK_STATUS(rnn_core_matmul(handle, M, N, K, item_n, item_m, gemmMatAType, gemmMatBType,
+        CHECK_STATUS(rnn_core_matmul(handle, dt, M, N, K, item_n, item_m, gemmMatAType, gemmMatBType,
             gemmMatA, gemmMatB, gemmBias, gemmMatC));
         CHECK_STATUS(rnn_core_init_state(
-            handle, inputDescs.size(), col, hDim, c_align, true, input, stateC, stateH));
+            handle, dt, inputDescs.size(), col, hDim, c_align, true, input, stateC, stateH));
         gemvFilterMem = filter[filterCount].mem;
         filterCount++;
         out_off -= hDim;
@@ -443,7 +447,7 @@ inline EE rnn_core_mali_fp16(GCLHandle_t handle,
         }
         if (outputDescs.size() > 1) {
             CHECK_STATUS(
-                rnn_core_copy_stateH(handle, col, hDim, outputDescs.size(), true, stateH, output));
+                rnn_core_copy_stateH(handle, dt, col, hDim, outputDescs.size(), true, stateH, output));
         }
     }
     return SUCCESS;
@@ -456,19 +460,20 @@ inline void transform_filter_desc(TensorDesc filterDesc,
     U32 item_k,
     TensorDesc *ftmDesc)
 {
+    DataType fdt;
     U32 filterRow, filterCol;
-    tensorSelectGet(filterDesc, NULL, NULL, NULL, NULL, &filterRow, &filterCol);
+    tensorSelectGet(filterDesc, &fdt, NULL, NULL, NULL, &filterRow, &filterCol);
     U32 hDim = rnnPara.num_outputs;
     U32 xDim = filterCol - hDim;
 
     TensorDesc desc;
     desc.df = DF_NCHW;
-    desc.dt = DT_F16;
+    desc.dt = fdt;
     desc.nDims = 4;
     desc.dims[3] = 1;
     desc.dims[2] = 1;
     desc.dims[1] = xDim;
-    desc.dims[0] = ALIGN(filterRow, item_n);
+    desc.dims[0] = UNI_ALIGN(filterRow, item_n);
     ftmDesc[0] = desc;
 
     filterDesc.dims[0] = hDim;
@@ -538,7 +543,7 @@ EE rnn_transform_filter_mali_fp16(GCLHandle_t handle,
         filterCount++;
 
         CHECK_STATUS(set_common_opt(
-            DT_F16, GCL_MEM_BUF, GCL_MEM_BUF, "rnn_split_weight", kernelName, &kernelOpt));
+            fdt, GCL_MEM_BUF, GCL_MEM_BUF, "rnn_split_weight", kernelName, &kernelOpt));
         CHECK_STATUS(gcl_get_kernel_from_map(handle, kernelName, &kernel, &kernelOpt));
         CHECK_STATUS(
             gcl_set_kernelArgs(kernel, xDim, hDim, gs[0], gs[1], filterMem, weightGemm, weightGemv));
@@ -571,7 +576,7 @@ EE rnn_infer_forward_tmp_bytes_mali_fp16(TensorDesc inputDesc,
 
     if (needReshapeInput(gclmemInputDesc)) {
         size = tensorNumBytes(inputDesc);
-        size = ALIGN(size, BUFFER_ALIGN_BASE);
+        size = UNI_ALIGN(size, BUFFER_ALIGN_BASE);
     }
     U32 batch = inputDesc.dims[inputDesc.nDims - 1];
     U32 step = inputDesc.dims[inputDesc.nDims - 2];
@@ -592,38 +597,38 @@ EE rnn_infer_forward_tmp_bytes_mali_fp16(TensorDesc inputDesc,
         }
     }
     if (!useImg) {
-        U32 gemmMatASize = ALIGN(batch * step, item_m) * xDim * bytesOf(inputDesc.dt);
-        size += ALIGN(gemmMatASize, BUFFER_ALIGN_BASE);
+        U32 gemmMatASize = UNI_ALIGN(batch * step, item_m) * xDim * bytesOf(inputDesc.dt);
+        size += UNI_ALIGN(gemmMatASize, BUFFER_ALIGN_BASE);
     }
 
     U32 hDim = rnnPara.num_outputs;
     U32 col = (rnnPara.num_projection > 0) ? rnnPara.num_projection : hDim;
     U32 filterRow = col * 4;
-    U32 M = ALIGN(step * batch, item_m);
-    U32 N = ALIGN(filterRow, item_n);
-    U32 N64 = ALIGN(N, 64);
+    U32 M = UNI_ALIGN(step * batch, item_m);
+    U32 N = UNI_ALIGN(filterRow, item_n);
+    U32 N64 = UNI_ALIGN(N, 64);
     U32 gemmMatCSize = M * N64 * bytesOf(inputDesc.dt);
-    size += ALIGN(gemmMatCSize, BUFFER_ALIGN_BASE);
+    size += UNI_ALIGN(gemmMatCSize, BUFFER_ALIGN_BASE);
 
     U32 item_c = forwardRunInfo->best_c[1];
     U32 item_k = forwardRunInfo->best_k[1];
     U32 c_align = (item_c > 16) ? (item_c >> 4) : item_c;
-    U32 stateCSize = ALIGN(col, 4) * bytesOf(inputDesc.dt);
-    U32 stateHSize = ALIGN(hDim, c_align) * bytesOf(inputDesc.dt);
-    size += ALIGN(stateCSize, BUFFER_ALIGN_BASE);
-    size += ALIGN(stateHSize, BUFFER_ALIGN_BASE);
+    U32 stateCSize = UNI_ALIGN(col, 4) * bytesOf(inputDesc.dt);
+    U32 stateHSize = UNI_ALIGN(hDim, c_align) * bytesOf(inputDesc.dt);
+    size += UNI_ALIGN(stateCSize, BUFFER_ALIGN_BASE);
+    size += UNI_ALIGN(stateHSize, BUFFER_ALIGN_BASE);
 
     U32 interMemSize = filterRow * bytesOf(inputDesc.dt);
-    size += ALIGN(interMemSize, BUFFER_ALIGN_BASE);
+    size += UNI_ALIGN(interMemSize, BUFFER_ALIGN_BASE);
 
     if (item_c > 16) {
         U32 reduceMemSize = filterRow * 32 * bytesOf(inputDesc.dt);
-        size += ALIGN(reduceMemSize, BUFFER_ALIGN_BASE);
+        size += UNI_ALIGN(reduceMemSize, BUFFER_ALIGN_BASE);
     }
 
     U32 fltTranTmpSize = xDim * filterRow * bytesOf(inputDesc.dt);
     fltTranTmpSize =
-        ALIGN(fltTranTmpSize, BUFFER_ALIGN_BASE) + hDim * filterRow * bytesOf(inputDesc.dt);
+        UNI_ALIGN(fltTranTmpSize, BUFFER_ALIGN_BASE) + hDim * filterRow * bytesOf(inputDesc.dt);
     bytes[0] = (fltTranTmpSize > size) ? fltTranTmpSize : size;
     return SUCCESS;
 }

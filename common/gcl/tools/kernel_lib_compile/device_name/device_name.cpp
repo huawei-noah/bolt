@@ -18,7 +18,7 @@ int main()
 {
     GCLHandle_t handle;
     CHECK_STATUS(gcl_create_handle(&handle));
-    FILE *fp = fopen("deviceNameFile", "w");
+    FILE *fp = fopen("deviceNameFile", "wb");
     fwrite(handle->deviceName.c_str(), handle->deviceName.length(), 1, fp);
     fclose(fp);
     gcl_destroy_handle(handle);

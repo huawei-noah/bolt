@@ -53,7 +53,7 @@ typedef struct DeviceInfo {
 inline const char *const *AffinityPolicyNames()
 {
     static const char *const names[] = {
-        "CPU_AFFINITY", "CPU_AFFINITY_LOW_POWER", "CPU_AFFINITY_HIGH_PERFORMANCE", "GPU"};
+        "CPU", "CPU_AFFINITY_LOW_POWER", "CPU_AFFINITY_HIGH_PERFORMANCE", "GPU"};
     return names;
 }
 
@@ -72,6 +72,9 @@ inline AffinityPolicy thread_affinity_get_policy_by_name(const char *name)
             return AffinityPolicies()[i];
         }
     }
+    UNI_WARNING_LOG("can not recognize affinity policy:%s, use default "
+                    "value:CPU_AFFINITY_HIGH_PERFORMANCE.\n",
+        name);
     return AFFINITY_CPU_HIGH_PERFORMANCE;
 }
 

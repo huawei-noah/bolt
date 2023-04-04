@@ -52,5 +52,4 @@ TrainableLayer::TrainableLayer(const raul::Name& name, const std::string& typeNa
         }
     }
 }
-
 } // raul namespace

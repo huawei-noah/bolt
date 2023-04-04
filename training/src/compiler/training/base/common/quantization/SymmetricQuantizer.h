@@ -50,7 +50,6 @@ namespace raul::quantization
  *
  *  @see
  *  - @ref page_rounding "Rounding algorithms"
- *  - https://nervanasystems.github.io/distiller/algo_quantization.html
  *
  */
 struct SymmetricQuantizer final : AffineQuantizer

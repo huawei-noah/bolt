@@ -28,16 +28,9 @@ EE tfslice_infer_output_size(
     TensorDesc inputDesc = inputTensor->get_desc();
     TensorDesc outputDesc = outputTensor->get_desc();
     CHECK_STATUS(tfslice_infer_output_size_cpu(inputDesc, p, &outputDesc));
-    if (IS_GPU(archInfo->arch)) {
-#ifdef _USE_GPU
-        if (outputDesc.df == DF_NCHWC4) {
-            outputDesc.df = DF_NCHW;
-        }
-#endif
-    }
     EE ret = SUCCESS;
 #ifdef _USE_CPU
-    if (tensorIsShape(inputDesc)) {
+    if (IS_CPU(archInfo->arch) && tensorIsShape(inputDesc)) {
         ret = tfslice_cpu(inputDesc, inputDesc.dims + inputDesc.nDims, p, outputDesc,
             outputDesc.dims + outputDesc.nDims);
     }

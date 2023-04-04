@@ -19,8 +19,7 @@
 inline EE rnncell_checkpara_mali_fp16(
     TensorDesc xDesc, TensorDesc filterDesc, TensorDesc biasDesc, TensorDesc hDesc)
 {
-    if (xDesc.dt != filterDesc.dt || xDesc.dt != biasDesc.dt || xDesc.dt != hDesc.dt ||
-        xDesc.dt != DT_F16) {
+    if (xDesc.dt != filterDesc.dt || xDesc.dt != biasDesc.dt || xDesc.dt != hDesc.dt) {
         return NOT_MATCH;
     }
     return SUCCESS;
@@ -65,7 +64,7 @@ inline EE rnncell_core_mali_fp16(GCLHandle_t handle,
     U32 offset = 0;
     U32 xhNum, xhSize;
     U32 c_align = (item_c > 16) ? (item_c >> 4) : item_c;
-    xhNum = ALIGN(xDim + hDim, c_align);
+    xhNum = UNI_ALIGN(xDim + hDim, c_align);
     xhSize = xhNum * bytesOf(dt);
     CHECK_STATUS(gcl_create_sub_buffer(xhSize, &offset, tmpBuf, &xhMem));
 
@@ -83,7 +82,7 @@ inline EE rnncell_core_mali_fp16(GCLHandle_t handle,
     if (project) {
         U32 item_cp = forwardRunInfo->best_c[1];
         U32 cp_align = (item_cp > 16) ? (item_cp >> 4) : item_cp;
-        U32 tmpOutNum = ALIGN(col, cp_align);
+        U32 tmpOutNum = UNI_ALIGN(col, cp_align);
         U32 tmpOutSize = tmpOutNum * bytesOf(dt);
         CHECK_STATUS(gcl_create_sub_buffer(tmpOutSize, &offset, tmpBuf, &tmpOut));
         outbuf = tmpOut;
@@ -104,7 +103,7 @@ inline EE rnncell_core_mali_fp16(GCLHandle_t handle,
     Mem reduceMem = tmpBuf->mem;
     char kernelName[128];
     KernelOpt kernelOpt;
-    CHECK_STATUS(gemv_build_run_info(handle, item_c, filterRow, 1, ACTIVATION_NULL, true, false, dt,
+    CHECK_STATUS(gemv_build_run_info(handle, item_c, filterRow, 1, {}, true, false, dt,
         &tmpOff, tmpBuf, &reduceMem, kernelName, &kernelOpt));
 
     Mem fltbuf = filter[0].mem;
@@ -113,7 +112,7 @@ inline EE rnncell_core_mali_fp16(GCLHandle_t handle,
         reduceMem, interMem, kernelName, &kernelOpt));
 
     CHECK_STATUS(set_rnncell_update_res_opt_mali(
-        project, false, DT_F16, GCL_MEM_BUF, GCL_MEM_BUF, kernelName, &kernelOpt));
+        project, false, dt, GCL_MEM_BUF, GCL_MEM_BUF, kernelName, &kernelOpt));
     CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
 
     gs[0] = (col + 3) / 4;
@@ -127,7 +126,7 @@ inline EE rnncell_core_mali_fp16(GCLHandle_t handle,
         fltbuf = filter[1].mem;
         tmpOff = offset;
         //biasMem = bias[1].mem;
-        CHECK_STATUS(gemv_build_run_info(handle, item_c, filterRow, 1, ACTIVATION_NULL, false,
+        CHECK_STATUS(gemv_build_run_info(handle, item_c, filterRow, 1, {}, false,
             false, dt, &tmpOff, tmpBuf, &reduceMem, kernelName, &kernelOpt));
         CHECK_STATUS(gemv_run(handle, item_c, filterRow, col, 1, 0, 0, 0, 0, outbuf, fltbuf,
             biasMem, reduceMem, output->mem, kernelName, &kernelOpt));
@@ -206,13 +205,13 @@ EE rnncell_infer_forward_tmp_bytes_mali_fp16(TensorDesc inputDesc,
     U32 xDim = inputDesc.dims[0];
     U32 hDim = rnncellDesc.num_outputs;
     U32 c_align = (item_c > 16) ? (item_c >> 4) : item_c;
-    U32 xhNum = ALIGN(xDim + hDim, c_align);
-    U32 xhSize = ALIGN(xhNum * bytesOf(dt), BUFFER_ALIGN_BASE);
+    U32 xhNum = UNI_ALIGN(xDim + hDim, c_align);
+    U32 xhSize = UNI_ALIGN(xhNum * bytesOf(dt), BUFFER_ALIGN_BASE);
 
     U32 col = (rnncellDesc.num_projection > 0) ? rnncellDesc.num_projection : hDim;
     U32 filterRow = col * 4;
     U32 interNum = filterRow + 4;
-    U32 interSize = ALIGN(interNum * bytesOf(dt), BUFFER_ALIGN_BASE);
+    U32 interSize = UNI_ALIGN(interNum * bytesOf(dt), BUFFER_ALIGN_BASE);
 
     U32 tmpOutSize = 0;
     U32 filterRowPro = 0;
@@ -220,15 +219,15 @@ EE rnncell_infer_forward_tmp_bytes_mali_fp16(TensorDesc inputDesc,
     if (rnncellDesc.num_projection > 0) {
         item_cp = forwardRunInfo->best_c[1];
         U32 cp_align = (item_cp > 16) ? (item_cp >> 4) : item_cp;
-        U32 tmpOutNum = ALIGN(col, cp_align);
-        tmpOutSize = ALIGN(tmpOutNum * bytesOf(dt), BUFFER_ALIGN_BASE);
+        U32 tmpOutNum = UNI_ALIGN(col, cp_align);
+        tmpOutSize = UNI_ALIGN(tmpOutNum * bytesOf(dt), BUFFER_ALIGN_BASE);
         filterRowPro = rnncellDesc.num_outputs;
     }
 
     U32 reduceSize = 0;
     if (item_c > 16 || item_cp > 16) {
         U32 row = (filterRow > filterRowPro) ? filterRow : filterRowPro;
-        reduceSize = ALIGN(row * 32 * bytesOf(dt), BUFFER_ALIGN_BASE);
+        reduceSize = UNI_ALIGN(row * 32 * bytesOf(dt), BUFFER_ALIGN_BASE);
     }
     *bytes = xhSize + interSize + tmpOutSize + reduceSize;
     return SUCCESS;

@@ -24,6 +24,8 @@ public:
         this->p = p;
     }
 
+    ~ArgMax() {}
+
     OperatorType get_type() override
     {
         return OT_ArgMax;

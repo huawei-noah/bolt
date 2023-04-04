@@ -29,8 +29,6 @@ namespace raul
  * This module can be seen as the gradient of Conv1d with respect to its input. It is also known as
  * a fractionally-strided convolution or a deconvolution (although it is not an actual deconvolution operation).
  *
- * @see
- * https://pytorch.org/docs/master/generated/torch.nn.ConvTranspose1d.html
  */
 class TransposedConvolution1DLayer : public TrainableLayer
 {

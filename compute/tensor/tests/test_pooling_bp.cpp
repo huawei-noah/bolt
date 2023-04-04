@@ -27,6 +27,7 @@ int poolingbpTest(int argc, char **argv, DataType dt)
     PoolingParamSpec p;
     p.mode = POOLING_MEAN;
     p.round_mode = ROUND_CEIL;
+    p.count_include_pad = true;
     p.kernel_t = atoi(argv[6]);
     p.kernel_h = atoi(argv[7]);
     p.kernel_w = atoi(argv[8]);
@@ -66,8 +67,7 @@ int poolingbpTest(int argc, char **argv, DataType dt)
 
         // check
         ut_check_v(get_ptr_from_tensor(outputTensor, CPU_GENERAL),
-            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), output_len, dt, 0.05, __FILE__,
-            __LINE__);
+            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), output_len, dt, 0.05);
     }
     // benchmark
     double time_start = ut_time_ms();

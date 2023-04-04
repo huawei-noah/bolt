@@ -24,8 +24,6 @@ namespace raul
  * @brief LogLayer
  * Computes element-wise natural logarithm of elements in input
  *
- * @see
- * https://pytorch.org/docs/master/generated/torch.log.html?highlight=log#torch.log
  */
 class LogLayer : public BasicLayer
 {

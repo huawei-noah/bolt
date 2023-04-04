@@ -13,24 +13,28 @@
 
 #include "cpu/x86/fp32/tensor_computing_fp32.h"
 
-#ifdef _USE_INT8
+#ifdef _USE_AVX512_VNNI
 EE scale_nchwc16_fp32(
     F32 *input, F32 *alpha, F32 *beta, I32 in, I32 ic, I32 elements_per_channel, F32 *output)
 {
-    __m512 in_vec, out_vec;
     __m512 one = _mm512_set1_ps(1.);
     __m512 zero = _mm512_set1_ps(0.);
-    U32 index = 0;
-    for (I32 n = 0; n < in; n++) {
-        for (I32 c = 0; c < ic; c += 16) {
-            __m512 alpha_vec = (alpha == nullptr) ? one : _mm512_loadu_ps(alpha + c);
-            __m512 beta_vec = (beta == nullptr) ? zero : _mm512_loadu_ps(beta + c);
-            for (I32 i = 0; i < elements_per_channel; i++) {
-                in_vec = _mm512_loadu_ps(input + index);
-                out_vec = _mm512_fmadd_ps(alpha_vec, in_vec, beta_vec);
-                _mm512_storeu_ps(output + index, out_vec);
-                index += 16;
-            }
+    ic /= 16;
+#ifdef _USE_OPENMP
+#pragma omp parallel for schedule(static) num_threads(OMP_NUM_THREADS)
+#endif
+    for (int j = 0; j < in * ic; j++) {
+        int n = j / ic;
+        int c = j % ic;
+        int c8 = c * 16;
+        int index = j * elements_per_channel * 16;
+        __m512 alpha_vec = (alpha == nullptr) ? one : _mm512_loadu_ps(alpha + c8);
+        __m512 beta_vec = (beta == nullptr) ? zero : _mm512_loadu_ps(beta + c8);
+        for (I32 i = 0; i < elements_per_channel; i++) {
+            __m512 in_vec = _mm512_loadu_ps(input + index);
+            __m512 out_vec = _mm512_fmadd_ps(alpha_vec, in_vec, beta_vec);
+            _mm512_storeu_ps(output + index, out_vec);
+            index += 16;
         }
     }
     return SUCCESS;
@@ -40,20 +44,24 @@ EE scale_nchwc16_fp32(
 EE scale_nchwc8_fp32(
     F32 *input, F32 *alpha, F32 *beta, I32 in, I32 ic, I32 elements_per_channel, F32 *output)
 {
-    __m256 in_vec, out_vec;
     __m256 one = _mm256_set1_ps(1.);
     __m256 zero = _mm256_set1_ps(0.);
-    U32 index = 0;
-    for (I32 n = 0; n < in; n++) {
-        for (I32 c = 0; c < ic; c += 8) {
-            __m256 alpha_vec = (alpha == nullptr) ? one : _mm256_loadu_ps(alpha + c);
-            __m256 beta_vec = (beta == nullptr) ? zero : _mm256_loadu_ps(beta + c);
-            for (I32 i = 0; i < elements_per_channel; i++) {
-                in_vec = _mm256_loadu_ps(input + index);
-                out_vec = _mm256_fmadd_ps(alpha_vec, in_vec, beta_vec);
-                _mm256_storeu_ps(output + index, out_vec);
-                index += 8;
-            }
+    ic /= 8;
+#ifdef _USE_OPENMP
+#pragma omp parallel for schedule(static) num_threads(OMP_NUM_THREADS)
+#endif
+    for (int j = 0; j < in * ic; j++) {
+        int n = j / ic;
+        int c = j % ic;
+        int c8 = c * 8;
+        int index = j * elements_per_channel * 8;
+        __m256 alpha_vec = (alpha == nullptr) ? one : _mm256_loadu_ps(alpha + c8);
+        __m256 beta_vec = (beta == nullptr) ? zero : _mm256_loadu_ps(beta + c8);
+        for (I32 i = 0; i < elements_per_channel; i++) {
+            __m256 in_vec = _mm256_loadu_ps(input + index);
+            __m256 out_vec = _mm256_fmadd_ps(alpha_vec, in_vec, beta_vec);
+            _mm256_storeu_ps(output + index, out_vec);
+            index += 8;
         }
     }
     return SUCCESS;
@@ -66,20 +74,18 @@ EE scale_nchw_fp32(
     __m256 one = _mm256_set1_ps(1.);
     __m256 zero = _mm256_set1_ps(0.);
 #ifdef _USE_OPENMP
-#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#pragma omp parallel for schedule(static) num_threads(OMP_NUM_THREADS)
 #endif
     for (int j = 0; j < in * ic; j++) {
         int n = j / ic;
         int c = j % ic;
-        //for (I32 n = 0; n < in; n++) {
-        //    for (I32 c = 0; c < ic; c++) {
         U32 dst = j * elements_per_channel, src = 0;
         __m256 alpha_vec = (alpha == nullptr) ? one : _mm256_set1_ps(alpha[c]);
         __m256 beta_vec = (beta == nullptr) ? zero : _mm256_set1_ps(beta[c]);
         I32 i = 0;
         for (; i < elements_per_channel - 7; i += 8) {
             if (icoc_equal) {
-                src = (n * ic + c) * elements_per_channel + i;
+                src = dst;
             } else {
                 src = n * elements_per_channel + i;
             }
@@ -90,7 +96,7 @@ EE scale_nchw_fp32(
         }
         for (; i < elements_per_channel; i++) {
             if (icoc_equal) {
-                src = (n * ic + c) * elements_per_channel + i;
+                src = dst;
             } else {
                 src = n * elements_per_channel + i;
             }
@@ -166,7 +172,7 @@ EE scale_fp32(F32 *input,
         } else {
             ret = scale_nhwc_fp32<false>(input, alpha, beta, on, oc, elements_per_channel, output);
         }
-    } else if (axis == 1 || axis == 0 || oc == 1) {
+    } else if (axis < (nDims - 1) || oc == 1) {
         if (ic == oc) {
             ret = scale_nchw_fp32<true>(input, alpha, beta, on, oc, elements_per_channel, output);
         } else {
@@ -174,7 +180,7 @@ EE scale_fp32(F32 *input,
         }
     } else if (axis == nDims) {
         ret = scale_nchwc8_fp32(input, alpha, beta, on, oc, elements_per_channel, output);
-#ifdef _USE_INT8
+#ifdef _USE_AVX512_VNNI
     } else if (axis == nDims + 1) {
         ret = scale_nchwc16_fp32(input, alpha, beta, on, oc, elements_per_channel, output);
 #endif

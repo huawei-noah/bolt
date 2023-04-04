@@ -22,10 +22,26 @@ class DeprecatedOPOptimizer : public OPOptimizer {
     {
         bool hasOptimized = false;
 
-        std::map<std::string, int> operatorMap, weightMap;
         for (int i = 0; i < spec->num_weight_specs; i++) {
             weightMap[spec->ws[i].op_name] = i;
         }
+
+        std::map<std::string, int> operatorMap;
+        std::set<int> memOutputOP;
+        std::set<std::string> outputNames;
+        for (int j = 0; j < spec->num_outputs; j++) {
+            outputNames.insert(spec->output_names[j]);
+        }
+        for (int i = 0; i < spec->num_operator_specs; i++) {
+            std::string curOut = spec->ops[i].output_tensors_name[0];
+            if (outputNames.count(curOut) && spec->ops[i].type != OT_Input &&
+                spec->ops[i].type != OT_None && spec->ops[i].type != OT_PreAllocatedMemory) {
+                std::string key = this->hash(spec, i);
+                memOutputOP.insert(i);  // remember to keep all output ops
+                operatorMap[key] = i;   // mark output op key to delete the other redundant ops
+            }
+        }
+
         for (int i = 0; i < spec->num_operator_specs; i++) {
             if (spec->ops[i].type == OT_Pad) {
                 if (spec->ops[i].ps.pad_spec.before == 0 && spec->ops[i].ps.pad_spec.after == 0 &&
@@ -42,27 +58,113 @@ class DeprecatedOPOptimizer : public OPOptimizer {
                 hasOptimized = true;
                 continue;
             }
-            if (spec->ops[i].type == OT_Pooling) {
-                if (spec->ops[i].ps.pooling_spec.kernel_t == 1 &&
-                    spec->ops[i].ps.pooling_spec.kernel_h == 1 &&
-                    spec->ops[i].ps.pooling_spec.kernel_w == 1 &&
-                    spec->ops[i].ps.pooling_spec.stride_t == 1 &&
-                    spec->ops[i].ps.pooling_spec.stride_h == 1 &&
-                    spec->ops[i].ps.pooling_spec.stride_w == 1 &&
-                    spec->ops[i].ps.pooling_spec.pad_before == 0 &&
-                    spec->ops[i].ps.pooling_spec.pad_after == 0 &&
-                    spec->ops[i].ps.pooling_spec.pad_top == 0 &&
-                    spec->ops[i].ps.pooling_spec.pad_bottom == 0 &&
-                    spec->ops[i].ps.pooling_spec.pad_left == 0 &&
-                    spec->ops[i].ps.pooling_spec.pad_right == 0) {
+            if (spec->ops[i].type == OT_Pooling && spec->ops[i].ps.pooling_spec.kernel_t == 1 &&
+                spec->ops[i].ps.pooling_spec.kernel_h == 1 &&
+                spec->ops[i].ps.pooling_spec.kernel_w == 1 &&
+                spec->ops[i].ps.pooling_spec.stride_t == 1 &&
+                spec->ops[i].ps.pooling_spec.stride_h == 1 &&
+                spec->ops[i].ps.pooling_spec.stride_w == 1 &&
+                spec->ops[i].ps.pooling_spec.pad_before == 0 &&
+                spec->ops[i].ps.pooling_spec.pad_after == 0 &&
+                spec->ops[i].ps.pooling_spec.pad_top == 0 &&
+                spec->ops[i].ps.pooling_spec.pad_bottom == 0 &&
+                spec->ops[i].ps.pooling_spec.pad_left == 0 &&
+                spec->ops[i].ps.pooling_spec.pad_right == 0) {
+                if (spec->ops[i].ps.pooling_spec.mode != POOLING_MAX ||
+                    (spec->ops[i].ps.pooling_spec.mode == POOLING_MAX &&
+                        spec->ops[i].num_outputs == 1)) {
                     setOperatorInvalid(spec, i, true);
                     hasOptimized = true;
                     continue;
+                }
+                if (spec->ops[i].ps.pooling_spec.mode == POOLING_MAX) {
+                    std::vector<std::pair<int, int>> nextOpIndexes = searchOperatorIndexByInput(
+                        spec, spec->ops[i].output_tensors_name[0], i + 1, spec->num_operator_specs);
+                    if (nextOpIndexes.size() != 0) {
+                        continue;
+                    }
+                    nextOpIndexes = searchOperatorIndexByInput(
+                        spec, spec->ops[i].output_tensors_name[1], i + 1, spec->num_operator_specs);
+                    if (nextOpIndexes.size() != 1) {
+                        continue;
+                    }
+                    int tfslice = nextOpIndexes[0].first;
+                    if (spec->ops[tfslice].type == OT_TfSlice &&
+                        spec->ops[tfslice].ps.tfslice_spec.num_dims >= 4 &&
+                        spec->ops[tfslice].ps.tfslice_spec.begin[0] == 0 &&
+                        spec->ops[tfslice].ps.tfslice_spec.begin[1] == 0 &&
+                        spec->ops[tfslice].ps.tfslice_spec.begin[2] == 0 &&
+                        spec->ops[tfslice].ps.tfslice_spec.begin[3] == 0 &&
+                        spec->ops[tfslice].ps.tfslice_spec.end[0] == -1 &&
+                        spec->ops[tfslice].ps.tfslice_spec.end[1] == -1 &&
+                        spec->ops[tfslice].ps.tfslice_spec.end[2] == 1 &&
+                        spec->ops[tfslice].ps.tfslice_spec.end[3] == 1) {
+                        nextOpIndexes = searchOperatorIndexByInput(spec,
+                            spec->ops[tfslice].output_tensors_name[0], tfslice + 1,
+                            spec->num_operator_specs);
+                        if (nextOpIndexes.size() != 1) {
+                            continue;
+                        }
+                        int sub = nextOpIndexes[0].first;
+                        if (spec->ops[sub].type == OT_Eltwise &&
+                            spec->ops[sub].ps.eltwise_spec.mode == ELTWISE_SUB) {
+                            nextOpIndexes = searchOperatorIndexByInput(spec,
+                                spec->ops[sub].output_tensors_name[0], sub + 1,
+                                spec->num_operator_specs);
+                            if (nextOpIndexes.size() != 1) {
+                                continue;
+                            }
+                            int add = nextOpIndexes[0].first;
+                            if (spec->ops[add].type == OT_Scale) {
+                                int addWeightIndex = searchWeightIndex(spec, spec->ops[add].name);
+                                if (addWeightIndex < 0 || spec->ws[addWeightIndex].mdt != DT_I32) {
+                                    continue;
+                                }
+                                int num = spec->ws[addWeightIndex].bytes_of_vec /
+                                    bytesOf(spec->ws[addWeightIndex].mdt);
+                                int *ptr = (int *)spec->ws[addWeightIndex].vec;
+                                if (num < 2) {
+                                    continue;
+                                }
+                                bool merge = true;
+                                for (int j = 0; j < num; j++) {
+                                    if (ptr[j] / ptr[1] != j) {
+                                        merge = false;
+                                        break;
+                                    }
+                                }
+                                if (!merge) {
+                                    continue;
+                                }
+                                setOperatorInvalid(spec, i, true);
+                                setOperatorInvalid(spec, tfslice, true);
+                                setOperatorInvalid(spec, sub, true);
+                                setOperatorInvalid(spec, add, true);
+                                hasOptimized = true;
+                                continue;
+                            }
+                        }
+                    }
                 }
             }
             if (spec->ops[i].type == OT_Dropout) {
                 setOperatorInvalid(spec, i, true);
                 hasOptimized = true;
+                continue;
+            }
+            if (spec->ops[i].type == OT_Expand) {
+                bool opt = false;
+                for (int j = 0; j < spec->ops[i].ps.expand_spec.num_shape; j++) {
+                    opt = true;
+                    if (spec->ops[i].ps.expand_spec.shape[j] != 1) {
+                        opt = false;
+                        break;
+                    }
+                }
+                if (opt) {
+                    setOperatorInvalid(spec, i, true);
+                    hasOptimized = true;
+                }
                 continue;
             }
             if (spec->ops[i].type == OT_Slice && spec->ops[i].num_inputs == 1 &&
@@ -76,43 +178,37 @@ class DeprecatedOPOptimizer : public OPOptimizer {
                 hasOptimized = true;
                 continue;
             }
+            if (memOutputOP.count(i)) {
+                continue;
+            }
             if (spec->ops[i].type != OT_Input && spec->ops[i].type != OT_None &&
                 spec->ops[i].type != OT_PreAllocatedMemory) {
-                std::string key = std::string(OperatorTypeName()[spec->ops[i].type]);
-                for (U32 j = 0; j < spec->ops[i].num_inputs; j++) {
-                    key += spec->ops[i].input_tensors_name[j] + std::string(",");
-                }
-                key += copyBuffer<1024>(&(spec->ops[i].ps),
-                    get_operator_parameter_size(sg_boltVersion, spec->ops[i].type));
-                if (weightMap.find(spec->ops[i].name) != weightMap.end()) {
-                    int weightId = weightMap[spec->ops[i].name];
-                    if (spec->ws[weightId].bytes_of_weight > 0) {
-                        key += copyBuffer<1024>(
-                            spec->ws[weightId].weight, spec->ws[weightId].bytes_of_weight);
-                    }
-                    if (spec->ws[weightId].bytes_of_vec > 0) {
-                        key += copyBuffer<1024>(
-                            spec->ws[weightId].vec, spec->ws[weightId].bytes_of_vec);
-                    }
-                }
-
+                std::string key = this->hash(spec, i);
                 if (operatorMap.find(key) == operatorMap.end()) {
                     operatorMap[key] = i;
                 } else if (spec->ops[i].num_outputs == 1) {
-                    char *lastOut = spec->ops[operatorMap[key]].output_tensors_name[0];
-                    std::string curOut = spec->ops[i].output_tensors_name[0];
+                    std::string lastOut = spec->ops[operatorMap[key]].output_tensors_name[0];
                     auto nextOpIndexes = searchOperatorIndexByInput(
-                        spec, curOut, i + 1, spec->num_operator_specs, false);
-
-                    setOperatorInvalid(spec, i, false);
-                    for (U32 j = 0; j < nextOpIndexes.size(); j++) {
-                        str_copy(spec->ops[nextOpIndexes[j].first]
-                                     .input_tensors_name[nextOpIndexes[j].second],
-                            lastOut, NAME_LEN);
+                        spec, lastOut, operatorMap[key] + 1, spec->num_operator_specs, false);
+                    bool opt = true;
+                    for (auto nextIdx : nextOpIndexes) {
+                        if ((spec->ops[nextOpIndexes[0].first].num_inputs == 1) &&
+                            (strcmp(spec->ops[nextOpIndexes[0].first].input_tensors_name[0],
+                                 spec->ops[nextOpIndexes[0].first].output_tensors_name[0]) == 0)) {
+                            opt = false;
+                        }
                     }
-                    for (int j = 0; j < spec->num_outputs; j++) {
-                        if (spec->output_names[j] == curOut) {
-                            str_copy(spec->output_names[j], lastOut, NAME_LEN);
+
+                    if (opt) {
+                        std::string curOut = spec->ops[i].output_tensors_name[0];
+                        nextOpIndexes = searchOperatorIndexByInput(
+                            spec, curOut, i + 1, spec->num_operator_specs);
+
+                        setOperatorInvalid(spec, i, false);
+                        for (U32 j = 0; j < nextOpIndexes.size(); j++) {
+                            str_copy(spec->ops[nextOpIndexes[j].first]
+                                         .input_tensors_name[nextOpIndexes[j].second],
+                                lastOut.c_str(), NAME_LEN);
                         }
                     }
                 }
@@ -151,5 +247,33 @@ class DeprecatedOPOptimizer : public OPOptimizer {
         }
         return hasOptimized;
     }
+
+    std::string hash(ModelSpec *spec, int i)
+    {
+        std::string key = std::string(OperatorTypeName()[spec->ops[i].type]);
+        for (U32 j = 0; j < spec->ops[i].num_inputs; j++) {
+            key += spec->ops[i].input_tensors_name[j] + std::string(",");
+        }
+        key += " | " +
+            copyBuffer<1024>(
+                &(spec->ops[i].ps), get_operator_parameter_size(sg_boltVersion, spec->ops[i].type));
+        if (weightMap.find(spec->ops[i].name) != weightMap.end()) {
+            int weightId = weightMap[spec->ops[i].name];
+            if (spec->ws[weightId].bytes_of_weight > 0) {
+                int *p = (int *)spec->ws[weightId].weight;
+                key += " | " +
+                    copyBuffer<1024>(
+                        spec->ws[weightId].weight, spec->ws[weightId].bytes_of_weight);
+            }
+            if (spec->ws[weightId].bytes_of_vec > 0) {
+                key += " | " +
+                    copyBuffer<1024>(spec->ws[weightId].vec, spec->ws[weightId].bytes_of_vec);
+            }
+        }
+        return key;
+    }
+
+private:
+    std::map<std::string, int> weightMap;
 };
 #endif

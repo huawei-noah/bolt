@@ -11,13 +11,9 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "sys.h"
-#include "error.h"
-
-#include "tensor_computing.h"
-
 #include "cpu/x86/fp32/tensor_computing_fp32.h"
 #include "cpu/x86/fp32/convolution_functions.h"
+#include "tensor_transpose.h"
 
 #define UNROLL_W 4
 #define UNROLL_OC_BLOCK_DIM 16
@@ -1523,6 +1519,19 @@ EE depthwise_convolution_direct(TensorDesc inputDesc,
         CHECK_STATUS(NOT_MATCH);
     }
 
+    if ((idf == DF_NCHWC16) && (ic % 16 != 0)) {
+        if (ic % 8 != 0) {
+            CHECK_STATUS(NOT_MATCH);
+        }
+        TensorDesc desc = inputDesc;
+        desc.df = DF_NCHWC8;
+        transformFormat(inputDesc, inArray, desc, tmp);
+        inArray = (F32 *)tmp;
+        inputDesc.df = desc.df;
+        idf = DF_NCHWC8;
+        tmp = (U8 *)tmp + tensorNumBytes(inputDesc);
+    }
+
     // get kernels
     kernelFunc kernel[3][2] = {{Avx2DwKernel1x8, Avx2DwKernel4x8},
                                {Avx2DwKernel1x16, Avx2DwKernel4x16},
@@ -1549,35 +1558,35 @@ EE depthwise_convolution_direct(TensorDesc inputDesc,
 
     // infer block params
     I32 unrollOc = UNROLL_OC_BLOCK_DIM;
-    I32 unrollHw = UNROLL_W;
     I32 cLen = (idf == DF_NCHWC16)? 16: 8;
 
     // infer kernel params
     I32 oStep = oh * ow * cLen * BYTES;
     I32 iStep = ih * iw * cLen * BYTES;
-    I32 hStep = (iw - fw * dilateW + (dilateH - 1) * iw) * cLen * BYTES;
     I32 hStep33 = iw * cLen * BYTES;
     I32 sw = strideW * cLen * BYTES;
     I32 dw = dilateW * cLen * BYTES;
-
-    // fuse dw+pw
-    F32 *useOutArray = (F32 *)tmp;
-
-    if (pwFilterArray == nullptr) {
-        useOutArray = outArray;
-    }
 
     // activation flags
     I32 flags = I32(depthwiseActivationParamSpec.mode) << 1;
 
     bool use3x3 = (fw == 3 && strideW == 1 && dilateW == 1 && dilateH == 1);
+
     for (I32 n = 0; n < in; ++n) {
+        F32 *useOutArray = (F32 *)tmp;
+        if (pwFilterArray == nullptr) {
+            useOutArray = outArray + n * oc * oh * ow;
+        }
+#ifdef _USE_OPENMP
+#pragma omp parallel num_threads(OMP_NUM_THREADS)
+#endif
+    {
         I32 ocSize = 0;
         for (I32 ocb = 0; ocb < ic; ocb += ocSize) {
             const F32 *curW = dwFilterArray + ocb * fh * fw;
             const F32 *curB = dwBiasArray + ocb;
             F32 *curI = inArray + (n * ic + ocb) * ih * iw;
-            F32 *curO = useOutArray + (n * ic + ocb) * oh * ow;
+            F32 *curO = useOutArray + ocb * oh * ow;
             ocSize = UNI_MIN(unrollOc, ic - ocb);
             I32 ocIdx = (ocSize >> 3) - 1;
             ocSize = unrollOcArray[ocIdx];
@@ -1589,10 +1598,14 @@ EE depthwise_convolution_direct(TensorDesc inputDesc,
                 wkernel33 = kernel51233[0];
             }
             if (paddingT == 0 && paddingB == 0 && paddingL == 0 && paddingR == 0) {
-                I32 wSize = 0;
+                I32 hStep = (iw - fw * dilateW + (dilateH - 1) * iw) * cLen * BYTES;
                 if (use3x3) {
-                    unrollHw = unrollHw33s1Array[ocIdx];
+                    I32 unrollHw = unrollHw33s1Array[ocIdx];
+#ifdef _USE_OPENMP
+#pragma omp for nowait
+#endif
                     for (I32 h = 0; h < oh; ++h) {
+                        I32 wSize = 0;
                         for (I32 w = 0; w < ow; w += wSize) {
                             wSize = UNI_MIN(ow - w, unrollHw);
                             I32 in_h_0 = h * strideH;
@@ -1611,9 +1624,20 @@ EE depthwise_convolution_direct(TensorDesc inputDesc,
                         }
                     }
                 } else {
-                    for (I32 hw = 0; hw < ohow; hw += wSize) {
-                        wSize = UNI_MIN(ohow - hw, UNROLL_W);
-                        if (wSize < 4) {
+                    I32 mainNum = ohow / UNROLL_W;
+                    I32 ohowNum = mainNum + ohow % UNROLL_W;
+#ifdef _USE_OPENMP
+#pragma omp for nowait
+#endif
+                    for (I32 hwN = 0; hwN < ohowNum; ++hwN) {
+                        I32 hw = 0;
+                        if (hwN > mainNum) {
+                            hw = mainNum * UNROLL_W + hwN - mainNum;
+                        } else {
+                            hw = hwN * UNROLL_W;
+                        }
+                        I32 wSize = UNI_MIN(ohow - hw, UNROLL_W);
+                        if (wSize < UNROLL_W) {
                             wSize = 1;
                         }
                         I32 in_h_0 = hw / ow * strideH;
@@ -1639,7 +1663,11 @@ EE depthwise_convolution_direct(TensorDesc inputDesc,
                 if (((iw + paddingL - fwDilated) / strideW + 1) >= ow) {
                     owPaddingR = 0;
                 }
+#ifdef _USE_OPENMP
+#pragma omp for nowait
+#endif
                 for (I32 h = 0; h < oh; ++h) {
+                    I32 hStep = 0;
                     I32 inH = h * strideH - paddingT;
                     I32 tfh = GetNewKernelDilatedPad(ih, inH, fhDilated, dilateH);
                     I32 whJump = JumpToWeightPos(inH, dilateH);
@@ -1667,7 +1695,7 @@ EE depthwise_convolution_direct(TensorDesc inputDesc,
                     I32 wSize = 0;
                     hStep = (iw - fw * dilateW + (dilateH - 1) * iw) * cLen * BYTES;
                     if (use3x3) {
-                        unrollHw = unrollHw33s1Array[ocIdx];
+                        I32 unrollHw = unrollHw33s1Array[ocIdx];
                         for (; w < ow - owPaddingR; w += wSize) {
                             wSize = UNI_MIN(ow - owPaddingR - w, unrollHw);
                             I32 in_w_0 = w * strideW - paddingL;
@@ -1705,16 +1733,19 @@ EE depthwise_convolution_direct(TensorDesc inputDesc,
                 }
             }
         }
+        }
+
+        if (pwFilterArray != nullptr) {
+            TensorDesc pwInputDesc = tensor4df(odt, DF_NCHWC8, 1, ic, oh, ow);
+            U32 pwTmpBytes = tmpBytes - oh * ic * oh * ow + 32;
+            F32 *pwTmpInput = (F32 *)tmp + oh * ic * oh * ow + 32;
+            ConvolutionParamSpec p = createConvolutionParamSpec(
+                1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, fn, CONVOLUTION_POINTWISE);
+            convolution_1x1_direct(pwInputDesc, useOutArray, eltwiseInput, pwFilterDesc, pwFilterArray,
+                p, pwBiasArray, tmpBytes, pwTmpInput, outputDesc, outArray + n * oc * oh * ow,
+                pointwiseActivationParamSpec);
+        }
     }
 
-    if (pwFilterArray != nullptr) {
-        TensorDesc pwInputDesc = tensor4df(odt, DF_NCHWC8, 1, ic, oh, ow);
-        tmpBytes -= oh * ic * oh * ow + 32;
-        tmp = (void *)((F32 *)tmp + oh * ic * oh * ow + 32);
-        ConvolutionParamSpec p = createConvolutionParamSpec(
-            1, 1, 1, 1, 1, 1, 1, 0, 0, 0, 0, 0, 0, 1, 1, 1, fn, CONVOLUTION_POINTWISE);
-        convolution_1x1_direct(pwInputDesc, useOutArray, eltwiseInput, pwFilterDesc, pwFilterArray,
-            p, pwBiasArray, tmpBytes, tmp, outputDesc, outArray, pointwiseActivationParamSpec);
-    }
     return SUCCESS;
 }

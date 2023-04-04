@@ -25,6 +25,8 @@ class WorkflowBasicPool
   public:
     WorkflowBasicPool();
 
+    ~WorkflowBasicPool(){}
+
     // Tensor name vs pair - Layer first, last names in sequence
     typedef std::map<Name, std::pair<Name, Name>> Timeline;
 
@@ -68,6 +70,7 @@ class WorkflowPool : public WorkflowBasicPool
 {
   public:
     WorkflowPool() {}
+    ~WorkflowPool(){}
 
     void createPool(const MM& manager);
 
@@ -87,7 +90,6 @@ class WorkflowPool : public WorkflowBasicPool
 
     void setTensorNameMapper(const Name& from, const Name& to);
     void clearTensorNameMapper() { mTensorNameMapper.clear(); }
-
   private:
     std::unordered_map<Name, Name> mTensorNameMapper;
 

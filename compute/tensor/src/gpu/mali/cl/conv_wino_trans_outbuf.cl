@@ -28,68 +28,64 @@
         val[5] = in[off + str * 5]; \
     }
 
-#define calCore(s, t, tmp)                    \
-    {                                         \
-        t.x = s[1] + s[2];                    \
-        t.y = s[3] + s[4];                    \
-        t.z = s[1] - s[2];                    \
-        t.w = s[3] - s[4];                    \
-        tmp[0] = s[0] + t.x + t.y;            \
-        tmp[1] = t.z + (T)(2.0) * t.w;        \
-        tmp[2] = t.x + (T)(4.0) * t.y;        \
-        tmp[3] = t.z + (T)(8.0) * t.w + s[5]; \
+#define calCore(t, s_f2, s_f3, s_f4, s) \
+    {                                   \
+        t = FMA(s_f2, s[2], s[1]);      \
+        t = FMA(s_f3, s[3], t);      \
+        t = FMA(s_f4, s[4], t);      \
+        t.x += s[0];                    \
+        t.w += s[5];                    \
     }
 
 #if defined(USE_OUTPUT_IMG)
 #if defined(USE_ALIGN)
-#define STORE_OUT(v0, v1, v2, v3, out)                                                   \
-    {                                                                                    \
-        WRITE_IMAGE(out, (int4)(x_off, y_off, idz, 0), (T4)(v0.x, v1.x, v2.x, v3.x));    \
-        WRITE_IMAGE(out, (int4)(x_off + 1, y_off, idz, 0), (T4)(v0.y, v1.y, v2.y, v3.y));\
-        WRITE_IMAGE(out, (int4)(x_off + 2, y_off, idz, 0), (T4)(v0.z, v1.z, v2.z, v3.z));\
-        WRITE_IMAGE(out, (int4)(x_off + 3, y_off, idz, 0), (T4)(v0.w, v1.w, v2.w, v3.w));\
-        y_off += 1;                                                                      \
+#define STORE_OUT(v0, v1, v2, v3, out)                                                    \
+    {                                                                                     \
+        WRITE_IMAGE(out, (int4)(x_off, y_off, idz, 0), (T4)(v0.x, v1.x, v2.x, v3.x));     \
+        WRITE_IMAGE(out, (int4)(x_off + 1, y_off, idz, 0), (T4)(v0.y, v1.y, v2.y, v3.y)); \
+        WRITE_IMAGE(out, (int4)(x_off + 2, y_off, idz, 0), (T4)(v0.z, v1.z, v2.z, v3.z)); \
+        WRITE_IMAGE(out, (int4)(x_off + 3, y_off, idz, 0), (T4)(v0.w, v1.w, v2.w, v3.w)); \
+        y_off += 1;                                                                       \
     }
 #else
-#define STORE_OUT(v0, v1, v2, v3, x_off, y_off, ow, out)                                     \
-    {                                                                                        \
-        WRITE_IMAGE(out, (int4)(x_off, y_off, idz, 0), (T4)(v0.x, v1.x, v2.x, v3.x));        \
-        if (x_off + 1 < ow) {                                                                \
-            WRITE_IMAGE(out, (int4)(x_off + 1, y_off, idz, 0), (T4)(v0.y, v1.y, v2.y, v3.y));\
-        }                                                                                    \
-        if (x_off + 2 < ow) {                                                                \
-            WRITE_IMAGE(out, (int4)(x_off + 2, y_off, idz, 0), (T4)(v0.z, v1.z, v2.z, v3.z));\
-        }                                                                                    \
-        if (x_off + 3 < ow) {                                                                \
-            WRITE_IMAGE(out, (int4)(x_off + 3, y_off, idz, 0), (T4)(v0.w, v1.w, v2.w, v3.w));\
-        }                                                                                    \
+#define STORE_OUT(v0, v1, v2, v3, x_off, y_off, ow, out)                                      \
+    {                                                                                         \
+        WRITE_IMAGE(out, (int4)(x_off, y_off, idz, 0), (T4)(v0.x, v1.x, v2.x, v3.x));         \
+        if (x_off + 1 < ow) {                                                                 \
+            WRITE_IMAGE(out, (int4)(x_off + 1, y_off, idz, 0), (T4)(v0.y, v1.y, v2.y, v3.y)); \
+        }                                                                                     \
+        if (x_off + 2 < ow) {                                                                 \
+            WRITE_IMAGE(out, (int4)(x_off + 2, y_off, idz, 0), (T4)(v0.z, v1.z, v2.z, v3.z)); \
+        }                                                                                     \
+        if (x_off + 3 < ow) {                                                                 \
+            WRITE_IMAGE(out, (int4)(x_off + 3, y_off, idz, 0), (T4)(v0.w, v1.w, v2.w, v3.w)); \
+        }                                                                                     \
     }
 #endif
 #else
 #if defined(USE_ALIGN)
-#define STORE_OUT(v0, v1, v2, v3, out)                 \
-    {                                                  \
-        vstore16((T16)(                                \
-            v0.x, v1.x, v2.x, v3.x,                    \ 
-            v0.y, v1.y, v2.y, v3.y,                    \
-            v0.z, v1.z, v2.z, v3.z,                    \
-            v0.w, v1.w, v2.w, v3.w), 0, out + out_off);\
-        out_off += (ow_str << 2);                      \
+#define STORE_OUT(v0, v1, v2, v3, out)                                                  \
+    {                                                                                   \
+        vstore16((T16)(v0.x, v1.x, v2.x, v3.x,                    \ 
+            v0.y,                                                                       \
+                     v1.y, v2.y, v3.y, v0.z, v1.z, v2.z, v3.z, v0.w, v1.w, v2.w, v3.w), \
+            0, out + out_off);                                                          \
+        out_off += (ow_str << 2);                                                       \
     }
 #else
-#define STORE_OUT(v0, v1, v2, v3, x_off, y_off, ow, out)                 \
-    {                                                                    \
-        vstore4((T4)(v0.x, v1.x, v2.x, v3.x), 0, out + out_off);         \
-        if (x_off + 1 < ow) {                                            \
-            vstore4((T4)(v0.y, v1.y, v2.y, v3.y), 0, out + out_off + 4); \
-        }                                                                \
-        if (x_off + 2 < ow) {                                            \
-            vstore4((T4)(v0.z, v1.z, v2.z, v3.z), 0, out + out_off + 8); \
-        }                                                                \
-        if (x_off + 3 < ow) {                                            \
-            vstore4((T4)(v0.w, v1.w, v2.w, v3.w), 0, out + out_off + 12);\
-        }                                                                \
-        out_off += (ow_str << 2);                                        \
+#define STORE_OUT(v0, v1, v2, v3, x_off, y_off, ow, out)                  \
+    {                                                                     \
+        vstore4((T4)(v0.x, v1.x, v2.x, v3.x), 0, out + out_off);          \
+        if (x_off + 1 < ow) {                                             \
+            vstore4((T4)(v0.y, v1.y, v2.y, v3.y), 0, out + out_off + 4);  \
+        }                                                                 \
+        if (x_off + 2 < ow) {                                             \
+            vstore4((T4)(v0.z, v1.z, v2.z, v3.z), 0, out + out_off + 8);  \
+        }                                                                 \
+        if (x_off + 3 < ow) {                                             \
+            vstore4((T4)(v0.w, v1.w, v2.w, v3.w), 0, out + out_off + 12); \
+        }                                                                 \
+        out_off += (ow_str << 2);                                         \
     }
 #endif
 #endif
@@ -123,6 +119,12 @@ __kernel void MANGLE_NAME(conv_wino_trans_outbuf_, IOM, AM, AN)(const int wino_w
 
     int iz = idz << 2;
     int in_off = iz * pw_str + idy * wino_w + idx;
+    T s[6];
+    T4 t;
+    T bias_val;
+    T4 s_f2 = {1, -1, 1, -1};
+    T4 s_f3 = {1, 2, 4, 8};
+    T4 s_f4 = {1, -2, 4, -8};
     for (uchar ii = 0; ii < 4; ii++) {
         r0 = r4;
         r1 = r5;
@@ -146,9 +148,6 @@ __kernel void MANGLE_NAME(conv_wino_trans_outbuf_, IOM, AM, AN)(const int wino_w
             continue;
         }
 
-        T s[6];
-        T4 t;
-        T bias_val;
         if (ii == 0) {
             bias_val = bias_v4.x;
         }
@@ -164,76 +163,43 @@ __kernel void MANGLE_NAME(conv_wino_trans_outbuf_, IOM, AM, AN)(const int wino_w
 
         rd = (T4)bias_val;
         re = (T4)bias_val;
-        for (uchar i = 0; i < 2; ++i) {
-            rc.x = rf.x;
-            rc.y = rf.y;
-            rc.z = rf.z;
-            rc.w = rf.w;
-            loadR(s, pwh_str, in_off + i * 30 * pwh_str, in);
-            for (uchar j = 0; j < 4; ++j) {
-                rf.x = rf.y;
-                rf.y = rf.z;
-                rf.z = rf.w;
-                rf.w = bias_val;
-                if (j == 0) {
-                    rf.w += (0.111111) * (s[0] + s[1] + s[2] + s[3] + s[4]);
-                }
-                if (j == 1) {
-                    rf.w += (0.111111) * (s[1] - s[2] + (T)2 * (s[3] - s[4]));
-                }
-                if (j == 2) {
-                    rf.w += (0.111111) * (s[1] + s[2] + (T)4 * (s[3] + s[4]));
-                }
-                if (j == 3) {
-                    rf.w += (0.111111) * (s[1] - s[2] + (T)8 * (s[3] - s[4]) + s[5]);
-                }
-            }
-        }
 
-        for (uchar i = 0; i < 4; ++i) {
-            loadR(s, pwh_str, in_off + (i + 1) * 6 * pwh_str, in);
-            for (uchar j = 0; j < 4; ++j) {
-                t.x = t.y;
-                t.y = t.z;
-                t.z = t.w;
-                if (j == 0) {
-                    t.w = (0.111111) * (s[0] + s[1] + s[2] + s[3] + s[4]);
-                }
-                if (j == 1) {
-                    t.w = (0.111111) * (s[1] - s[2] + (T)2 * (s[3] - s[4]));
-                }
-                if (j == 2) {
-                    t.w = (0.111111) * (s[1] + s[2] + (T)4 * (s[3] + s[4]));
-                }
-                if (j == 3) {
-                    t.w = (0.111111) * (s[1] - s[2] + (T)8 * (s[3] - s[4]) + s[5]);
-                }
-            }
-            if (i == 0) {
-                rc += t;
-                rd += t;
-                re += t;
-                rf += t;
-            }
-            if (i == 1) {
-                rc += t;
-                rd -= t;
-                re += t;
-                rf -= t;
-            }
-            if (i == 2) {
-                rc += t;
-                rd += (T)2 * t;
-                re += (T)4 * t;
-                rf += (T)8 * t;
-            }
-            if (i == 3) {
-                rc += t;
-                rd -= (T)2 * t;
-                re += (T)4 * t;
-                rf -= (T)8 * t;
-            }
-        }
+        loadR(s, pwh_str, in_off, in);
+        calCore(t, s_f2, s_f3, s_f4, s);
+        rc = FMA((T)0.11111, t, bias_val);
+        loadR(s, pwh_str, in_off + 30 * pwh_str, in);
+        calCore(t, s_f2, s_f3, s_f4, s);
+        rf = FMA((T)0.11111, t, bias_val);
+
+        loadR(s, pwh_str, in_off + 6 * pwh_str, in);
+        calCore(t, s_f2, s_f3, s_f4, s);
+        t = (T)0.11111 * t;
+        rc += t;
+        rd += t;
+        re += t;
+        rf += t;
+        loadR(s, pwh_str, in_off + 12 * pwh_str, in);
+        calCore(t, s_f2, s_f3, s_f4, s);
+        t = (T)0.11111 * t;
+        rc += t;
+        rd -= t;
+        re += t;
+        rf -= t;
+        loadR(s, pwh_str, in_off + 18 * pwh_str, in);
+        calCore(t, s_f2, s_f3, s_f4, s);
+        t = (T)0.11111 * t;
+        rc += t;
+        rd += 2 * t;
+        re += 4 * t;
+        rf += 8 * t;
+        loadR(s, pwh_str, in_off + 24 * pwh_str, in);
+        calCore(t, s_f2, s_f3, s_f4, s);
+        t = (T)0.11111 * t;
+        rc += t;
+        rd -= 2 * t;
+        re += 4 * t;
+        rf -= 8 * t;
+
         ACTIVATION_V4(rc);
         ACTIVATION_V4(rd);
         ACTIVATION_V4(re);

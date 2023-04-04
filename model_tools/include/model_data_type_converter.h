@@ -18,6 +18,6 @@
 
 EE ms_datatype_converter(ModelSpec *original_ms,
     ModelSpec *target_ms,
-    DataConvertType convert_mode,
-    std::string storageMode);
+    std::string inferPrecision,
+    std::string storagePrecision);
 #endif

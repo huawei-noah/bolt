@@ -95,6 +95,7 @@ class Exception : public std::exception
     }
 
     [[nodiscard]] const char* what() const noexcept override;
+    ~Exception(){}
 };
 
 #define BASE_TYPE_NAME(TYPE) (std::is_same_v<TYPE, dtype> ? "dtype" : std::is_same_v<TYPE, half> ? "half" : "T")

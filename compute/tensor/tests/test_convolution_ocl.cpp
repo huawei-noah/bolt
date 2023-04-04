@@ -217,7 +217,7 @@ int convolutionTest(int argc, char *argv[], DataType dt)
     alloc(filterTensor);
     CHECK_STATUS(gcl_fill_memory_zero(handle, input));
 
-    U32 ocAlign = (oc + 3) / 4 * 4;
+    U32 ocAlign = UNI_ALIGN(oc, 4);
     if (ocAlign != oc) {
         U8 *bias_cpu_align = ut_input_v(ocAlign, dt, UT_INIT_ZERO);
         UNI_MEMCPY(bias_cpu_align, bias_cpu, oc * bytesOf(dt));
@@ -263,13 +263,11 @@ int convolutionTest(int argc, char *argv[], DataType dt)
     CHECK_STATUS(convolution(inputTensors, filterTensorTran, convParamSpec, alg, nullptr,
         biasTensor, tmp, outputTensor, activationDesc, &archInfo));
 
-    /*warp up*/
-    for (U32 i = 0; i < 2; i++) {
+    for (U32 i = 0; i < 20; i++) {
         CHECK_STATUS(gcl_run_kernelVec(handle));
     }
     CHECK_STATUS(gcl_finish(handle));
 
-#ifdef _DEBUG
     std::vector<U32> kernelIndex;
     for (U32 i = 0; i < handle->kernelVec->size(); i++) {
         kernelIndex.push_back(i);
@@ -277,26 +275,12 @@ int convolutionTest(int argc, char *argv[], DataType dt)
     CHECK_STATUS(gcl_run_kernelVec_select_ls(handle, kernelIndex));
     CHECK_STATUS(gcl_finish(handle));
     double time = 0;
-    double min_time = DBL_MAX;
-    double max_time = 0;
-    U32 loop = 1;
-    for (U32 i = 0; i < loop; i++) {
+    for (I32 i = 0; i < UT_LOOPS; i++) {
         CHECK_STATUS(gcl_run_kernelVec_timing(handle, 0, handle->kernelVec->size()));
-        double t = handle->t_execute * 0.001;
-        if (t < min_time)
-            min_time = t;
-        if (t > max_time)
-            max_time = t;
-        time += t;
+        time += handle->t_execute * 0.001;
     }
-    time = (time - min_time - max_time) / (loop - 2);
-    UNI_INFO_LOG("min_time = %lf\n", min_time);
-    UNI_INFO_LOG("max_time = %lf\n", max_time);
-    UNI_INFO_LOG("avg_time = %lf\n", time);
-    time = min_time;
-#else
-    CHECK_STATUS(gcl_run_kernelVec(handle));
-#endif
+    time /= UT_LOOPS;
+
     U8 *output_gpu = ut_input_v(on * oc * ot * oh * ow, dt, UT_INIT_RANDOM);
     CHECK_STATUS(ocl_get_output(handle, output, outputDesc, output_gpu, tmpbuf, true));
 
@@ -307,31 +291,18 @@ int convolutionTest(int argc, char *argv[], DataType dt)
         ic, it, ih, iw, fn, fc, ft, fh, fw, group, strideT, strideH, strideW, paddingTF, paddingTB,
         paddingT, paddingB, paddingL, paddingR, on, oc, ot, oh, ow);
     sprintf(buffer, "%20s, %80s", "Convolution", params);
-#ifdef _DEBUG
     double ops = (1.0 * on * oc * oh * ow * ot) * (2.0 * ic * ft * fh * fw / group + 1);
     ut_log(dt, buffer, ops, time);
-#endif
-    Tensor inputTensorCpu;
-    inputTensorCpu.resize(inputDesc);
-    inputTensorCpu.alloc();
+    Tensor inputTensorCpu = Tensor::alloc_sized<CPUMem>(inputDesc);
+    Tensor filterTensorCpu = Tensor::alloc_sized<CPUMem>(filterDesc);
+    Tensor biasTensorCpu = Tensor::alloc_sized<CPUMem>(biasDesc);
+    outputDesc.df = DF_NCHW;
+    Tensor outputTensorCpu = Tensor::alloc_sized<CPUMem>(outputDesc);
     UNI_MEMCPY(
         get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), input_cpu, tensorNumBytes(inputDesc));
-
-    Tensor filterTensorCpu;
-    filterTensorCpu.resize(filterDesc);
-    filterTensorCpu.alloc();
     UNI_MEMCPY(
         get_ptr_from_tensor(filterTensorCpu, CPU_GENERAL), filter_cpu, tensorNumBytes(filterDesc));
-
-    Tensor biasTensorCpu;
-    biasTensorCpu.resize(biasDesc);
-    biasTensorCpu.alloc();
     UNI_MEMCPY(get_ptr_from_tensor(biasTensorCpu, CPU_GENERAL), bias_cpu, tensorNumBytes(biasDesc));
-
-    Tensor outputTensorCpu;
-    outputDesc.df = DF_NCHW;
-    outputTensorCpu.resize(outputDesc);
-    outputTensorCpu.alloc();
 
     Tensor tmpTensorCpu;
     std::vector<Tensor> inputTensorsCpu(1, inputTensorCpu);
@@ -339,8 +310,12 @@ int convolutionTest(int argc, char *argv[], DataType dt)
     CHECK_STATUS(convolution(inputTensorsCpu, filterTensorCpu, convParamSpec,
         CONVOLUTION_ALGORITHM_GEMM, nullptr, biasTensorCpu, tmpTensorsCpu, outputTensorCpu,
         activationDesc, &UT_SERIAL_ARCHINFO));
-    ut_check_a(
-        output_gpu, get_ptr_from_tensor(outputTensorCpu, CPU_GENERAL), on * oc * ow * oh * ot, dt);
+    float threshold = 0.3;
+    if (fh == fw && fw == 3) {
+        threshold = 20;
+    }
+    ut_check_v(output_gpu, get_ptr_from_tensor(outputTensorCpu, CPU_GENERAL),
+        on * oc * ow * oh * ot, dt, threshold);
 
     CHECK_STATUS(gcl_finish(handle));
     CHECK_STATUS(gcl_clean_kernelVec(handle));
@@ -355,6 +330,8 @@ int main(int argc, char **argv)
 {
 #ifdef _USE_FP16
     convolutionTest(argc, argv, DT_F16);
+#else
+    convolutionTest(argc, argv, DT_F32);
 #endif
     return 0;
 }

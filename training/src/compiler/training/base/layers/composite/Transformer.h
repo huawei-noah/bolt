@@ -25,7 +25,6 @@ namespace raul
  * @brief Transformer Model
  *
  *
- * @see https://nlp.seas.harvard.edu/2018/04/03/attention.html
  */
 class TransformerModel
 {

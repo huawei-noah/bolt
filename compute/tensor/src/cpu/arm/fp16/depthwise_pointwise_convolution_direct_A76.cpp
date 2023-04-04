@@ -57,6 +57,7 @@ EE depthwise_pointwise_convolution_direct_A76(TensorDesc inputDesc,
         CHECK_STATUS(NOT_MATCH);
     }
 
+    EE ret = SUCCESS;
     oc /= 8;
     ic /= 8;
 
@@ -67,9 +68,12 @@ EE depthwise_pointwise_convolution_direct_A76(TensorDesc inputDesc,
     F16 *pwArray = (F16 *)tmp + ic * ih_pad * iw_pad * 8;
     for (U32 n = 0; n < in; n++) {
         F16 *inArray_pad = (F16 *)tmp;
-        F16 *inArray_pad_mov = inArray_pad;
-        F16 *inArray_mov = inArray + n * ic * ihiw * 8;
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
         for (U32 c = 0; c < ic; c++) {
+            F16 *inArray_mov = inArray + (n * ic + c) * ihiw * 8;
+            F16 *inArray_pad_mov = inArray_pad + c * ih_pad * iw_pad * 8;
             if (paddingT > 0) {
                 UNI_MEMSET(inArray_pad_mov, 0, paddingT * iw_pad * 8 * bytesOf(fdt));
                 inArray_pad_mov += paddingT * iw_pad * 8;
@@ -260,7 +264,8 @@ EE depthwise_pointwise_convolution_direct_A76(TensorDesc inputDesc,
                         break;
                     }
                     default:
-                        return NOT_SUPPORTED;
+                        ret = NOT_SUPPORTED;
+                        break;
                 }
 
                 if (pwFilterArray != nullptr) {
@@ -428,7 +433,8 @@ EE depthwise_pointwise_convolution_direct_A76(TensorDesc inputDesc,
                         break;
                     }
                     default:
-                        return NOT_SUPPORTED;
+                        ret = NOT_SUPPORTED;
+                        break;
                 }
 
                 if (pwFilterArray != nullptr) {
@@ -509,7 +515,8 @@ EE depthwise_pointwise_convolution_direct_A76(TensorDesc inputDesc,
                         break;
                     }
                     default:
-                        return NOT_SUPPORTED;
+                        ret = NOT_SUPPORTED;
+                        break;
                 }
 
                 F16 *out_ptr;
@@ -530,6 +537,10 @@ EE depthwise_pointwise_convolution_direct_A76(TensorDesc inputDesc,
         }
         // pw_conv
         // ohow / 8
+
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
         for (I32 hw = 0; hw < ohow - 7; hw += 8) {
             const F16 *b0 = pwBiasArray;
             const F16 *b1 = b0 + 8;
@@ -1329,5 +1340,5 @@ EE depthwise_pointwise_convolution_direct_A76(TensorDesc inputDesc,
             }
         }
     }
-    return SUCCESS;
+    return ret;
 }

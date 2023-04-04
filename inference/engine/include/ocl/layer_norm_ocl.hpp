@@ -35,11 +35,10 @@ public:
 
     EE infer_weight_desc() override
     {
-        auto curOpWs = this->get_weightspec();
-        if (0 != curOpWs.bytes_of_weight) {
-            this->weightNum = curOpWs.bytes_of_weight / bytesOf(curOpWs.mdt);
+        if (0 != this->ws.bytes_of_weight) {
+            this->weightNum = this->ws.bytes_of_weight / bytesOf(this->ws.mdt);
         }
-        DataType dtNoQ = (DT_F16_8Q == this->dt) ? DT_F16 : this->dt;
+        DataType dtNoQ = noQuantDataType(this->dt);
         TensorDesc weightDesc = tensor1d(dtNoQ, this->weightNum);
         TensorDesc biasDesc = tensor1d(dtNoQ, this->weightNum);
         Tensor modelWeightTensor = Tensor(OCLMem);
@@ -55,7 +54,7 @@ public:
     {
         Tensor inputTensor = this->inputTensors[0];
         U32 bytes = 0;
-        CHECK_STATUS(normalization_infer_forward_tmp_bytes(inputTensor, &bytes, &this->archInfo));
+        CHECK_STATUS(layer_norm_infer_forward_tmp_bytes(inputTensor, &bytes, &this->archInfo));
         return bytes;
     }
 
@@ -66,7 +65,7 @@ public:
         Tensor weightTensor = this->weightTensors[0];
         Tensor biasTensor = this->biasTensors[0];
         Tensor outputTensor = this->outputTensors[0];
-        CHECK_STATUS(layer_normalization(inputTensor, this->p, weightTensor, biasTensor, this->temp,
+        CHECK_STATUS(layer_norm(inputTensor, this->p, weightTensor, biasTensor, this->temp,
             outputTensor, &this->archInfo));
     }
 
@@ -74,8 +73,7 @@ public:
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
         this->needSetKernelVec = true;
-        CHECK_STATUS(normalization_infer_output_size(inTensors[0], outTensors[0], &this->archInfo));
-        return SUCCESS;
+        return layer_norm_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo);
     }
 
     REGISTER_OCL_OPERATOR_RUN

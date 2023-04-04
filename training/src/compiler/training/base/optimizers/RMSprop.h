@@ -29,9 +29,6 @@ namespace raul::optimizers
  * of the squared gradient.
  * Behaviour can be changed to TF by setting tfStyle = true.
  *
- *  @see
- *  - Proposed by G. Hinton in his course: https://www.cs.toronto.edu/~tijmen/csc321/slides/lecture_slides_lec6.pdf
- *  - Centered version: A. Graves - Generating Sequences With Recurrent Neural Networks. https://arxiv.org/pdf/1308.0850v5.pdf
  */
 struct RMSprop : public Optimizer
 {

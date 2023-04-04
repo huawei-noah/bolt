@@ -11,15 +11,48 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "cpu/arm/blas_arm.h"
 #include "cpu/arm/int8/blas_int8.h"
+#include "blas_enhance.h"
+
+const int prefetch = 64;
+#ifdef _USE_MATRIX
+// armv9
+const int align = 8;
+#elif defined(_USE_FP16)
+// armv8.2
+const int align = 4;
+#elif defined(__aarch64__)
+// armv8
+const int align = 16;
+#else
+// armv7
+const int align = 4;
+#endif
 
 void matrix_matrix_multiply_tmp_bytes_int8(
-    U32 row1, U32 col1, U32 row2, U32 col2, DataType dt, U32 *bytes)
+    U32 matrixC_N, U32 matrixC_M, U32 matrixA_K, DataFormat bdf, U32 *bytes)
 {
-    col1 = pad_to_4_multiple(col1);
-    row2 = pad_to_4_multiple(row2);
-    *bytes = row1 * col1 + row2 * col2;
-    *bytes *= bytesOf(dt);
-    *bytes += 32;
+    matrix_matrix_multiply_transform_rhs_bytes_int8(matrixC_N, matrixA_K, bdf, bytes, nullptr);
+
+    matrixA_K = UNI_ALIGN(matrixA_K, align);
+    *bytes += matrixC_M * matrixA_K * bytesOf(DT_I8);
+    *bytes += prefetch;
+}
+
+void matrix_matrix_multiply_transform_rhs_bytes_int8(
+    U32 matrixC_N, U32 matrixA_K, DataFormat bdf, U32 *bytes, U32 *rhsBytes)
+{
+    U32 matrix = 0;
+    U32 pad = 0;
+    if (matrix_matrix_multiply_rhs_format(DT_I8) != bdf) {
+        matrixA_K = UNI_ALIGN(matrixA_K, align);
+        matrix = matrixC_N * matrixA_K * bytesOf(DT_I8);
+        pad = matrix + prefetch;
+    }
+    if (rhsBytes != nullptr) {
+        *rhsBytes = matrix;
+    }
+    if (bytes != nullptr) {
+        *bytes = pad;
+    }
 }

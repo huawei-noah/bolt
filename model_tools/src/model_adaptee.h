@@ -20,6 +20,7 @@
 #include <vector>
 
 #include "uni.h"
+#include "string_functions.h"
 #include "model_common.h"
 
 #define REGISTER_EMPTY_ADAPT_OPERATOR(name)                                                \
@@ -33,6 +34,12 @@
 
 class ModelAdaptee {
 public:
+    ModelAdaptee()
+    {}
+
+    virtual ~ModelAdaptee()
+    {}
+
     virtual EE adapt(std::string dir, std::string mfn, ModelSpec *ms)
     {
         CHECK_STATUS(parse_file(dir, mfn));
@@ -40,12 +47,6 @@ public:
         CHECK_STATUS(adapt_weights(ms));
         return SUCCESS;
     }
-
-    ModelAdaptee()
-    {}
-
-    virtual ~ModelAdaptee()
-    {}
 
 protected:
     virtual EE parse_file(std::string dir, std::string mfn) = 0;
@@ -57,7 +58,7 @@ protected:
     virtual EE adapt_operator(OperatorType type, ParameterSpec *ps)
     {
         typedef ParameterSpec (ModelAdaptee::*AdaptOperatorFunction)();
-        std::map<OperatorType, AdaptOperatorFunction> functions = {
+        static std::map<OperatorType, AdaptOperatorFunction> functions = {
             {OT_Conv, &ModelAdaptee::adapt_Conv},
             {OT_Deconvolution, &ModelAdaptee::adapt_Deconvolution},
             {OT_FC, &ModelAdaptee::adapt_Fc},
@@ -105,7 +106,6 @@ protected:
             {OT_Yolov3DetectionOutput, &ModelAdaptee::adapt_Yolov3DetectionOutput},
             {OT_Tile, &ModelAdaptee::adapt_Tile},
             {OT_Splice, &ModelAdaptee::adapt_Splice},
-            {OT_SoftPlus, &ModelAdaptee::adapt_SoftPlus},
             {OT_Exp, &ModelAdaptee::adapt_Exp},
             {OT_Tdnn, &ModelAdaptee::adapt_Tdnn},
             {OT_TopK, &ModelAdaptee::adapt_TopK},
@@ -119,10 +119,18 @@ protected:
             {OT_GridSample, &ModelAdaptee::adapt_GridSample},
             {OT_GenerateProposals, &ModelAdaptee::adapt_GenerateProposals},
             {OT_OneHot, &ModelAdaptee::adapt_OneHot},
-            {OT_CumSum, &ModelAdaptee::adapt_CumSum},
+            {OT_Cum, &ModelAdaptee::adapt_Cum},
             {OT_NonMaxSuppression, &ModelAdaptee::adapt_NonMaxSuppression},
             {OT_ConstantOfShape, &ModelAdaptee::adapt_ConstantOfShape},
             {OT_Range, &ModelAdaptee::adapt_Range},
+            {OT_Elu, &ModelAdaptee::adapt_Relu},
+            {OT_Einsum, &ModelAdaptee::adapt_Einsum},
+            {OT_UnPooling, &ModelAdaptee::adapt_UnPooling},
+            {OT_Random, &ModelAdaptee::adapt_Random},
+            {OT_Flatten, &ModelAdaptee::adapt_Flatten},
+            {OT_BilateralSliceApply, &ModelAdaptee::adapt_BilateralSliceApply},
+            {OT_ConvertColor, &ModelAdaptee::adapt_ConvertColor},
+            {OT_Lut, &ModelAdaptee::adapt_Lut},
         };
         if (functions.find(type) == functions.end()) {
             UNI_MEMSET(ps, 0, sizeof(*ps));
@@ -146,39 +154,12 @@ protected:
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_LayerNorm)
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Reduction)
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_ArgMax)
-
-    virtual ParameterSpec adapt_Softmax()
-    {
-        ParameterSpec ps;
-        UNI_MEMSET(&ps, 0, sizeof(ps));
-        ps.softmax_spec.axis = -1;
-        return ps;
-    }
-
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Clip)
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Power)
-
-    virtual ParameterSpec adapt_Relu()
-    {
-        ParameterSpec ps;
-        UNI_MEMSET(&ps, 0, sizeof(ps));
-        ps.relu_spec.neg_slope = 0;
-        return ps;
-    }
-
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Gather)
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Embedding)
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Pad)
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Eltwise)
-
-    virtual ParameterSpec adapt_Concat()
-    {
-        ParameterSpec ps;
-        UNI_MEMSET(&ps, 0, sizeof(ps));
-        ps.concat_spec.axis = 1;
-        return ps;
-    }
-
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Slice)
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_TfSlice)
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Cast)
@@ -202,7 +183,6 @@ protected:
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Yolov3DetectionOutput)
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Tile)
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Splice)
-    REGISTER_EMPTY_ADAPT_OPERATOR(adapt_SoftPlus)
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Exp)
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Tdnn)
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_TopK)
@@ -216,9 +196,86 @@ protected:
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_GenerateProposals)
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_GridSample)
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_OneHot)
-    REGISTER_EMPTY_ADAPT_OPERATOR(adapt_CumSum)
+    REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Cum)
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_NonMaxSuppression)
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_ConstantOfShape)
     REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Range)
+    REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Einsum)
+    REGISTER_EMPTY_ADAPT_OPERATOR(adapt_UnPooling)
+    REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Random)
+    REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Flatten)
+    REGISTER_EMPTY_ADAPT_OPERATOR(adapt_BilateralSliceApply)
+    REGISTER_EMPTY_ADAPT_OPERATOR(adapt_ConvertColor)
+    REGISTER_EMPTY_ADAPT_OPERATOR(adapt_Lut)
+
+    virtual ParameterSpec adapt_Softmax()
+    {
+        ParameterSpec ps;
+        UNI_MEMSET(&ps, 0, sizeof(ps));
+        ps.softmax_spec.axis = -1;
+        return ps;
+    }
+
+    virtual ParameterSpec adapt_Relu()
+    {
+        ParameterSpec ps;
+        UNI_MEMSET(&ps, 0, sizeof(ps));
+        ps.relu_spec.neg_slope = 0;
+        return ps;
+    }
+
+    virtual ParameterSpec adapt_Concat()
+    {
+        ParameterSpec ps;
+        UNI_MEMSET(&ps, 0, sizeof(ps));
+        ps.concat_spec.axis = 1;
+        return ps;
+    }
+
+protected:
+    ColorSpace get_color(std::string _type)
+    {
+        std::string type = upper(_type);
+        static std::map<std::string, ColorSpace> colors = {
+            {"RGB_0_1", RGB_0_1},
+            {"RGB_0_255", RGB_0_255},
+            {"BGR_0_1", BGR_0_1},
+            {"BGR_0_255", BGR_0_255},
+            {"RGBA_0_1", RGBA_0_1},
+            {"RGBA_0_255", RGBA_0_255},
+            {"BGRA_0_1", BGRA_0_1},
+            {"BGRA_0_255", BGRA_0_255},
+            {"YUV_NV21", YUV_NV21},
+            {"YUV_NV12", YUV_NV12},
+        };
+        ColorSpace ret;
+        if (colors.find(type) == colors.end()) {
+            std::string line = "";
+            for (auto iter : colors) {
+                line += iter.first + ", ";
+            }
+            UNI_ERROR_LOG("ConvertColor currently only support (%s), not support %s.\n",
+                line.c_str(), _type.c_str());
+        } else {
+            ret = colors[type];
+        }
+        return ret;
+    }
+
+    std::map<std::string, std::string> names;
+    std::string crop_name(const std::string &name)
+    {
+        std::string ret;
+        if (name.length() < NAME_LEN) {
+            ret = name;
+        } else if (this->names.find(name) != this->names.end()) {
+            ret = this->names[name];
+        } else {
+            ret = int2Any(this->names.size(), 60);
+            this->names[name] = ret;
+        }
+        return ret;
+    }
+
 };
 #endif

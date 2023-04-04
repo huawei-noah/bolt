@@ -37,8 +37,7 @@ public:
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
-        CHECK_STATUS(select_infer_output_size(inTensors[1], outTensors[0], &this->archInfo));
-        return SUCCESS;
+        return select_infer_output_size(inTensors[1], outTensors[0], &this->archInfo);
     }
 };
 #endif  // _SELECTCPU_H

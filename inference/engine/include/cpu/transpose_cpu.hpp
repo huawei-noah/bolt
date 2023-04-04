@@ -37,12 +37,22 @@ public:
         outputTensor.set_scale(inputTensor.get_scale());
     }
 
+    void update_param(TensorDesc desc)
+    {
+        if (this->p.num_axes == 0 && desc.nDims == 2) {
+            p.num_axes = 2;
+            p.axes[0] = 1;
+            p.axes[1] = 0;
+        }
+    }
+
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
-        CHECK_STATUS(
-            transpose_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo));
-        return SUCCESS;
+        if (inTensors.size() == 1) {
+            this->update_param(inTensors[0]->get_desc());
+        }
+        return transpose_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo);
     }
 };
 

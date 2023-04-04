@@ -32,8 +32,8 @@ class Tensorflow2CaffeTransformerTSC(Tensorflow2Caffe):
             "ffn.num_units": 2048,
             "ffn.activation": "relu", # relu or swish
             "attention.num_heads": 8,
-            "attention.branch": False, # weighted transformer in https://arxiv.org/pdf/1711.02132.pdf
-            "attention.relpos": 0, # relative position representation in https://arxiv.org/pdf/1803.02155.pdf
+            "attention.branch": False, 
+            "attention.relpos": 0, 
             "dropout_rate": 0.1,
             "position.enable": True,
             "position.combiner_fn": "tensorflow.add",

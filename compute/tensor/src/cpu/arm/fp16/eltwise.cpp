@@ -21,68 +21,82 @@ EE eltwise_fp16(std::vector<void *> input,
     void *output,
     EltwiseMode eltwiseMode)
 {
-    F16 buffer[8];
+    EE ret = SUCCESS;
     U32 len_tail = len % 8;
     U32 len_main = len - len_tail;
     F16 *output_ptr = (F16 *)output;
-    F16 *tmp = buffer;
-    for (U32 i = 0; i < len_main; i += 8) {
-        get_vector<F16>((F16 *)input[0], inputSize[0], &tmp, 8, i, 8, buffer);
-        float16x8_t tmp_v = vld1q_f16(tmp);
-        for (U32 j = 1; j < num; j++) {
-            get_vector<F16>((F16 *)input[j], inputSize[j], &tmp, 8, i, 8, buffer);
-            float16x8_t value_v = vld1q_f16(tmp);
-            switch (eltwiseMode) {
-                case ELTWISE_SUM:
-                    tmp_v = vaddq_f16(tmp_v, value_v);
-                    break;
-                case ELTWISE_MAX:
-                    tmp_v = vmaxq_f16(tmp_v, value_v);
-                    break;
-                case ELTWISE_AND:
-                case ELTWISE_PROD:
-                    tmp_v = vmulq_f16(tmp_v, value_v);
-                    break;
-                case ELTWISE_SUB:
-                    tmp_v = vsubq_f16(tmp_v, value_v);
-                    break;
-                case ELTWISE_DIV:
-                    tmp_v = vdivq_f16(tmp_v, value_v);
-                    break;
-                default:
-                    return NOT_SUPPORTED;
+#ifdef _USE_OPENMP
+#pragma omp parallel num_threads(OMP_NUM_THREADS)
+#endif
+    {
+        F16 buffer[8];
+        F16 *tmp = buffer;
+#ifdef _USE_OPENMP
+#pragma omp for schedule(static)
+#endif
+        for (U32 i = 0; i < len_main; i += 8) {
+            get_vector<F16>((F16 *)input[0], inputSize[0], &tmp, 8, i, 8, buffer);
+            float16x8_t tmp_v = vld1q_f16(tmp);
+            for (U32 j = 1; j < num; j++) {
+                get_vector<F16>((F16 *)input[j], inputSize[j], &tmp, 8, i, 8, buffer);
+                float16x8_t value_v = vld1q_f16(tmp);
+                switch (eltwiseMode) {
+                    case ELTWISE_SUM:
+                        tmp_v = vaddq_f16(tmp_v, value_v);
+                        break;
+                    case ELTWISE_MAX:
+                        tmp_v = vmaxq_f16(tmp_v, value_v);
+                        break;
+                    case ELTWISE_AND:
+                    case ELTWISE_PROD:
+                        tmp_v = vmulq_f16(tmp_v, value_v);
+                        break;
+                    case ELTWISE_SUB:
+                        tmp_v = vsubq_f16(tmp_v, value_v);
+                        break;
+                    case ELTWISE_DIV:
+                        tmp_v = vdivq_f16(tmp_v, value_v);
+                        break;
+                    default:
+                        ret = NOT_SUPPORTED;
+                        break;
+                }
             }
+            vst1q_f16(output_ptr + i, tmp_v);
         }
-        vst1q_f16(output_ptr + i, tmp_v);
-    }
-    for (U32 i = len_main; i < len; i++) {
-        get_vector<F16>((F16 *)input[0], inputSize[0], &tmp, 8, i, 1, buffer);
-        F32 tmp_s = tmp[0];
-        for (U32 j = 1; j < num; j++) {
-            get_vector<F16>((F16 *)input[j], inputSize[j], &tmp, 8, i, 1, buffer);
-            F32 value_s = tmp[0];
-            switch (eltwiseMode) {
-                case ELTWISE_SUM:
-                    tmp_s = value_s + tmp_s;
-                    break;
-                case ELTWISE_MAX:
-                    tmp_s = (value_s > tmp_s) ? value_s : tmp_s;
-                    break;
-                case ELTWISE_AND:
-                case ELTWISE_PROD:
-                    tmp_s *= value_s;
-                    break;
-                case ELTWISE_SUB:
-                    tmp_s -= value_s;
-                    break;
-                case ELTWISE_DIV:
-                    tmp_s /= value_s;
-                    break;
-                default:
-                    return NOT_SUPPORTED;
+#ifdef _USE_OPENMP
+#pragma omp for schedule(static)
+#endif
+        for (U32 i = len_main; i < len; i++) {
+            get_vector<F16>((F16 *)input[0], inputSize[0], &tmp, 8, i, 1, buffer);
+            F32 tmp_s = tmp[0];
+            for (U32 j = 1; j < num; j++) {
+                get_vector<F16>((F16 *)input[j], inputSize[j], &tmp, 8, i, 1, buffer);
+                F32 value_s = tmp[0];
+                switch (eltwiseMode) {
+                    case ELTWISE_SUM:
+                        tmp_s = value_s + tmp_s;
+                        break;
+                    case ELTWISE_MAX:
+                        tmp_s = (value_s > tmp_s) ? value_s : tmp_s;
+                        break;
+                    case ELTWISE_AND:
+                    case ELTWISE_PROD:
+                        tmp_s *= value_s;
+                        break;
+                    case ELTWISE_SUB:
+                        tmp_s -= value_s;
+                        break;
+                    case ELTWISE_DIV:
+                        tmp_s /= value_s;
+                        break;
+                    default:
+                        ret = NOT_SUPPORTED;
+                        break;
+                }
             }
+            output_ptr[i] = tmp_s;
         }
-        output_ptr[i] = tmp_s;
     }
-    return SUCCESS;
+    return ret;
 }

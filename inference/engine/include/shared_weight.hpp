@@ -28,7 +28,7 @@ public:
         this->outputTensorName = outputTensorName;
         this->tensorMapPtr = tensorMapPtr;
     }
-
+    ~SharedWeight(){}
     OperatorType get_type() override
     {
         return OT_SharedWeight;

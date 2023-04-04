@@ -48,8 +48,7 @@ int splitTest(int argc, char **argv, DataType dt)
         CHECK_STATUS(split(inputTensor, outputTensors, &UT_CPU_ARCHINFO));
 
         for (I32 i = 0; i < num; i++) {
-            ut_check_v(get_ptr_from_tensor(outputTensors[i], CPU_GENERAL), input, len, dt, 0,
-                __FILE__, __LINE__);
+            ut_check_v(get_ptr_from_tensor(outputTensors[i], CPU_GENERAL), input, len, dt, 0);
         }
     }
 

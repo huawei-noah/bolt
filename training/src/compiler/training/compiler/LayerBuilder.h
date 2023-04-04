@@ -44,14 +44,14 @@ class BasicLayerBuilder
 {
   public:
     BasicLayerBuilder(const Name& name, const BasicParams& params);
-
+    ~BasicLayerBuilder(){}
     const Name& getName() const { return mName; }
 
     BasicLayerInfo& getParams() { return mParams; }
     const BasicLayerInfo& getParams() const { return mParams; }
 
     LayerMem build(NetworkParameters& networkParameters) const;
-
+ 
   protected:
     static void alterBasicParam(const BasicLayerInfo& param, BasicParams& bParams);
 
@@ -77,7 +77,7 @@ class LayerBuilder : public BasicLayerBuilder
             return std::make_unique<T>(name, std::forward<Args>(args)..., networkParameters);
         };
     }
-
+    ~LayerBuilder(){}
   private:
     template<typename T0, typename... TT>
     static T0& getParamFromArgs(T0& t, [[maybe_unused]] TT&&... args)

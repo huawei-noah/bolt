@@ -21,7 +21,6 @@ import numpy as np
 from torch.autograd import Variable
 
 #####################################################################################
-# based on https://pytorch.org/tutorials/beginner/nlp/word_embeddings_tutorial.html
 #####################################################################################
 
 

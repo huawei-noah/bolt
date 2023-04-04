@@ -16,18 +16,18 @@
 #include "cpu/x86/int8/tensor_computing_int8.h"
 #endif
 
-EE quantize_x86(TensorDesc dDesc, const void *data, TensorDesc *qDesc, void *qData, F32 *scale)
+EE quantize_x86(TensorDesc dDesc, const void *data, TensorDesc *qDesc, void *qData, F32 *scale, int mode)
 {
     EE ret = SUCCESS;
     if (dDesc.dt == DT_F32 || dDesc.dt == DT_F32_8Q) {
         switch (qDesc->dt) {
 #ifdef _USE_INT8
             case DT_I8: {
-                ret = quantizeF32ToI8(dDesc, (const F32 *)data, qDesc, (INT8 *)qData, scale);
+                ret = quantizeF32ToI8(dDesc, (const F32 *)data, qDesc, (INT8 *)qData, scale, mode);
                 break;
             }
             case DT_U8_Q: {
-                ret = quantizeF32ToU8(dDesc, (const F32 *)data, qDesc, (UINT8 *)qData, scale);
+                ret = quantizeF32ToU8(dDesc, (const F32 *)data, qDesc, (UINT8 *)qData, scale, mode);
                 break;
             }
 #endif

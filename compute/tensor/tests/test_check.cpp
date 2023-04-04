@@ -37,7 +37,7 @@ int checkTest(int argc, char **argv, DataType dt)
 
     Tensor outputTensor;
     CHECK_STATUS(
-        check_infer_output_size({&inputTensorA, &inputTensorB}, &outputTensor, &UT_CPU_ARCHINFO));
+        check_infer_output_size(&inputTensorA, &inputTensorB, p, &outputTensor, &UT_CPU_ARCHINFO));
     outputTensor.alloc();
     TensorDesc outDesc = outputTensor.get_desc();
     Tensor outputTensorRef = Tensor::alloc_sized<CPUMem>(outDesc);
@@ -50,8 +50,7 @@ int checkTest(int argc, char **argv, DataType dt)
 
         // check
         ut_check_v(get_ptr_from_tensor(outputTensor, CPU_GENERAL),
-            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), outputTensor.length(), outDesc.dt, 0,
-            __FILE__, __LINE__);
+            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), outputTensor.length(), outDesc.dt, 0);
     }
 
     // benchmark

@@ -18,6 +18,7 @@
 #include "model.hpp"
 #include "memory_tracker.hpp"
 #include "model_spec.h"
+#include "thread_affinity.h"
 #ifdef _USE_GPU
 #include "image_container.hpp"
 #endif
@@ -47,15 +48,19 @@ public:
 
     std::map<std::string, std::shared_ptr<Tensor>> get_input();
 
-    void set_input_by_assign(std::map<std::string, std::shared_ptr<U8>> modelTensorsInput);
+    void set_input_by_assign(std::map<std::string, std::shared_ptr<U8>> modelTensorsInput,
+        std::map<std::string, F32 *> scaleInput = std::map<std::string, F32 *>());
 
-    void set_input_by_copy(std::map<std::string, U8 *> modelTensorsInput);
+    void set_input_by_copy(std::map<std::string, U8 *> modelTensorsInput,
+        std::map<std::string, F32 *> scaleInput = std::map<std::string, F32 *>());
 
     void run() override;
 
     std::map<std::string, TensorDesc> get_output_desc();
 
     std::map<std::string, std::shared_ptr<Tensor>> get_output();
+
+    EE set_input_output(int num, const char **name, void **data);
 
     void reready(std::map<std::string, TensorDesc> inputDescMap);
 
@@ -98,9 +103,9 @@ private:
 
     void assign_output_tensor() override;
 
-    void clean_tensorMap_desc();
+    void check_dynamic_output_size(std::string name, OperatorType type);
 
-    void check_dynamic_output_size(OperatorType type);
+    void check_dynamic_output_size(std::string name, TensorDesc desc);
 
 private:
     std::map<std::string, std::shared_ptr<Tensor>> tensorMap;
@@ -120,6 +125,7 @@ private:
 #ifdef _USE_GPU
     ImageContainer tmpImages;
 #endif
+    std::set<std::string> inOutOps;
     bool dynamicOutputSize = false;
 };
 #endif

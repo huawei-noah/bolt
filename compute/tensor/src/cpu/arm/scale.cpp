@@ -12,7 +12,9 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "cpu/arm/tensor_computing_arm.h"
+#ifdef _USE_INT32
 #include "cpu/arm/int32/tensor_computing_int32.h"
+#endif
 #ifdef _USE_FP32
 #include "cpu/arm/fp32/tensor_computing_fp32.h"
 #endif
@@ -53,11 +55,13 @@ EE scale_arm(TensorDesc inputDesc,
             break;
         }
 #endif
+#ifdef _USE_INT32
         case DT_I32: {
             ret = scale_int32((I32 *)input, axis, outputDesc.nDims, (I32 *)alpha, (I32 *)beta, on,
                 oc, elements_per_channel, ic, (I32 *)output);
             break;
         }
+#endif
         default:
             break;
     }

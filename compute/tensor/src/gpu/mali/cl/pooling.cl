@@ -10,35 +10,39 @@
 // WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 #include "kernel_def.h"
-#define MANGLE_NAME_IMPL(base, IOM, PM) base##IOM##PM
-#define MANGLE_NAME(base, IOM, PM) MANGLE_NAME_IMPL(base, IOM, PM)
 
 #if defined(USE_POOLING_MAX)
-#define PM max
-#define CALCORE(x, y)                       \
+#define CALC_0 res = UNI_F16_MIN;
+#define CALC_1(x, y)                        \
     {                                       \
         x.s0 = (x.s0 > y.s0) ? x.s0 : y.s0; \
         x.s1 = (x.s1 > y.s1) ? x.s1 : y.s1; \
         x.s2 = (x.s2 > y.s2) ? x.s2 : y.s2; \
         x.s3 = (x.s3 > y.s3) ? x.s3 : y.s3; \
     }
+#define CALC_2
 #elif defined(USE_POOLING_MEAN)
-#define PM mean
-#define CALCORE(x, y)        \
-    {                        \
-        x.s0 += (float)y.s0; \
-        x.s1 += (float)y.s1; \
-        x.s2 += (float)y.s2; \
-        x.s3 += (float)y.s3; \
+#define CALC_0 res = 0;
+#define CALC_1(x, y) \
+    {                \
+        x += y;      \
     }
+#define CALC_2                                                             \
+    {                                                                      \
+        T psize = count_include_pad ? (kh * kw) : ((eh - bh) * (ew - bw)); \
+        res = res / psize;                                                 \
+    }
+#else
+error not support this pooling mode.
 #endif
 
 #if defined(USE_INPUT_IMG)
 #define LOAD_INPUT LOAD_MEM_V4(val, (int4)(j, i, in_off_z, 0), in);
 #define ADD_IN_OFF
 #else
-#define LOAD_INPUT LOAD_MEM_V4(val, in_off + j, in);
+#define LOAD_INPUT LOAD_VECTOR(val, in_off + j, in);
 #define ADD_IN_OFF in_off += iw_str;
 #endif
 
@@ -48,14 +52,14 @@
         STORE_MEM_V4((T4)(res.x, res.y, res.z, res.w), (int4)(idx, idy, idz, 0), out); \
     }
 #else
-#define STORE_OUT                                                     \
-    {                                                                 \
-        int out_off = (idz * oh_str + idy) * ow_str + o_off + idx;    \
-        STORE_MEM_V4((T4)(res.x, res.y, res.z, res.w), out_off, out); \
+#define STORE_OUT                                                  \
+    {                                                              \
+        int out_off = (idz * oh_str + idy) * ow_str + o_off + idx; \
+        STORE_VECTOR(res, out_off, out);                           \
     }
 #endif
 
-__kernel void MANGLE_NAME(pooling_, IOM, PM)(const int iw_str,
+__kernel void KERNEL_NAME(const int iw_str,
     const int ih_str,
     const int iw_off,
     const int ih_off,
@@ -102,23 +106,17 @@ __kernel void MANGLE_NAME(pooling_, IOM, PM)(const int iw_str,
     int in_off = (idz * ih_str + bh) * iw_str;
 #endif
 
-    T4 val;
-#if defined(USE_POOLING_MEAN)
-    float4 res = 0;
-#elif defined(USE_POOLING_MAX)
-    T4 res = -FLT_MAX;
-#endif
+    VECTOR res, val;
 
+    CALC_0
     for (int i = bh; i < eh; ++i) {
         for (int j = bw; j < ew; ++j) {
             LOAD_INPUT;
-            CALCORE(res, val);
+            CALC_1(res, val);
         }
         ADD_IN_OFF
     }
-#if defined(USE_POOLING_MEAN)
-    float psize = count_include_pad ? (kh * kw) : ((eh - bh) * (ew - bw));
-    res = res / psize;
-#endif
+    CALC_2
+
     STORE_OUT;
 }

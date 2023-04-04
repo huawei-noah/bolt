@@ -25,7 +25,7 @@ public:
         this->inputFrameSize = 0;
         this->outputFrameSize = 0;
     }
-
+    ~Splice(){}
     OperatorType get_type() override
     {
         return OT_Splice;

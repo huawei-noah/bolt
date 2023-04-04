@@ -19,7 +19,7 @@
 #include <unistd.h>
 
 #ifdef _WIN32
-#ifdef _USE_JNI
+#ifdef _USE_API_JAVA
 #define UNI_THREADID int tid = 0;
 #else
 #include <windows.h>
@@ -35,7 +35,7 @@
     pthread_threadid_np(NULL, &tid64); \
     pid_t tid = (pid_t)tid64;
 #else
-#define UNI_THREADID pid_t tid = gettid();
+#define UNI_THREADID int tid = 0;
 #endif
 
 #ifdef _THREAD_SAFE
@@ -59,8 +59,6 @@ extern pthread_mutex_t uniThreadMutex;
     }
 #endif
 
-#define UNI_EXIT exit(1);
-
 #ifdef __cplusplus
 extern "C" {
 #endif
@@ -74,17 +72,31 @@ extern "C" {
 #define UNI_THREAD_SAFE(func) func;
 #endif
 
-#define UNI_CI_LOG(...) printf(__VA_ARGS__);
-
-#define UNI_INFO_LOG(...)                       \
-    {                                           \
-        UNI_THREADID                            \
-        UNI_THREAD_SAFE({                       \
-            UNI_LOGD("[INFO] thread %d ", tid); \
-            UNI_LOGD(__VA_ARGS__);              \
-        })                                      \
+#define UNI_CI_LOG(...)      \
+    {                        \
+        printf(__VA_ARGS__); \
+        fflush(stdout);      \
     }
 
+#define UNI_EXIT exit(1);
+
+#ifdef _DEBUG
+#define UNI_DEBUG_LOG(...)                                                            \
+    {                                                                                 \
+        UNI_THREADID                                                                  \
+        UNI_THREAD_SAFE({                                                             \
+            UNI_LOGD("[DEBUG] thread %d file %s line %d: ", tid, __FILE__, __LINE__); \
+            UNI_LOGD(__VA_ARGS__);                                                    \
+        })                                                                            \
+    }
+#define UNI_INFO_LOG(...)                                                            \
+    {                                                                                \
+        UNI_THREADID                                                                 \
+        UNI_THREAD_SAFE({                                                            \
+            UNI_LOGD("[INFO] thread %d file %s line %d: ", tid, __FILE__, __LINE__); \
+            UNI_LOGD(__VA_ARGS__);                                                   \
+        })                                                                           \
+    }
 #define UNI_WARNING_LOG(...)                                                            \
     {                                                                                   \
         UNI_THREADID                                                                    \
@@ -93,7 +105,6 @@ extern "C" {
             UNI_LOGD(__VA_ARGS__);                                                      \
         })                                                                              \
     }
-
 #define UNI_ERROR_LOG(...)                                                            \
     {                                                                                 \
         UNI_THREADID                                                                  \
@@ -103,18 +114,33 @@ extern "C" {
         })                                                                            \
         UNI_EXIT;                                                                     \
     }
-
-#ifdef _DEBUG
-#define UNI_DEBUG_LOG(...)                       \
+#else
+#define UNI_DEBUG_LOG(...)
+#define UNI_INFO_LOG(...)                        \
     {                                            \
         UNI_THREADID                             \
         UNI_THREAD_SAFE({                        \
-            UNI_LOGD("[DEBUG] thread %d ", tid); \
+            UNI_LOGD("[INFO] thread %d: ", tid); \
             UNI_LOGD(__VA_ARGS__);               \
         })                                       \
     }
+#define UNI_WARNING_LOG(...)
+#define UNI_ERROR_LOG(...)                        \
+    {                                             \
+        UNI_THREADID                              \
+        UNI_THREAD_SAFE({                         \
+            UNI_LOGD("[ERROR] thread %d: ", tid); \
+            UNI_LOGD(__VA_ARGS__);                \
+        })                                        \
+        UNI_EXIT;                                 \
+    }
+
+#endif
+
+#ifdef _DETAIL
+#define UNI_DETAIL_LOG UNI_DEBUG_LOG
 #else
-#define UNI_DEBUG_LOG(...)
+#define UNI_DETAIL_LOG(...)
 #endif
 
 #define CHECK_REQUIREMENT(status)                 \

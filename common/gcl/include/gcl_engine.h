@@ -23,7 +23,7 @@
         GCLHandle_t handle = OCLContext::getInstance().handle.get();                            \
         handle->kernelVec = &this->opKernelVec;                                                 \
         if (this->needSetKernelVec) {                                                           \
-            CHECK_STATUS(gcl_clean_kernelVec(handle));                                          \
+            CHECK_STATUS(gcl_clean_kernels(&(this->opKernelVec)));                              \
             run_prepare();                                                                      \
             this->needSetKernelVec = false;                                                     \
             if (this->needSelectKernelLS) {                                                     \
@@ -34,16 +34,18 @@
         CHECK_STATUS(gcl_run_kernelVec(handle));                                                \
     }                                                                                           \
                                                                                                 \
+    virtual void update_kernel() override                                                       \
+    {                                                                                           \
+        this->needSetKernelVec = true;                                                          \
+    }                                                                                           \
+                                                                                                \
 protected:                                                                                      \
     bool needSetKernelVec;                                                                      \
     bool needSelectKernelLS;                                                                    \
     std::vector<GCLKernelInfo> opKernelVec;                                                     \
     MaliPara maliPara;
 
-#define DESTROY_OCL_KERNEL                                       \
-    GCLHandle_t handle = OCLContext::getInstance().handle.get(); \
-    handle->kernelVec = &this->opKernelVec;                      \
-    CHECK_STATUS(gcl_clean_kernelVec(handle));
+#define DESTROY_OCL_KERNEL CHECK_STATUS(gcl_clean_kernels(&(this->opKernelVec)));
 
 #define INIT_GPU_INFO(runInfoPtr)                                 \
     {                                                             \

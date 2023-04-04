@@ -16,10 +16,7 @@
 
 inline EE depth2space_checkpara_mali_fp16(TensorDesc inputDesc, TensorDesc outputDesc)
 {
-    if (inputDesc.dt != DT_F16) {
-        return NOT_SUPPORTED;
-    }
-    if (outputDesc.dt != DT_F16) {
+    if (inputDesc.dt != outputDesc.dt) {
         return NOT_SUPPORTED;
     }
     return SUCCESS;
@@ -33,10 +30,10 @@ inline EE depth2space_core_mali_fp16(GCLHandle_t handle,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
-    UNUSED(outputDesc);
+    DataType dt;
     U32 iw, ih, ic, in;
     U32 oc;
-    tensorSelectGet(inputDesc, NULL, NULL, &in, &ic, &ih, &iw);
+    tensorSelectGet(inputDesc, &dt, NULL, &in, &ic, &ih, &iw);
     tensorSelectGet(outputDesc, NULL, NULL, NULL, &oc, NULL, NULL);
     U32 iw_str, ih_str, iw_off, ih_off, ihw_str, ic_str, i_off;
     U32 ow_str, oh_str, ow_off, oh_off, ohw_str, o_off;
@@ -62,7 +59,7 @@ inline EE depth2space_core_mali_fp16(GCLHandle_t handle,
         U32 dim = 3;
         bool useOutputNchw = (omf == DF_NCHW) ? true : false;
         CHECK_STATUS(set_depth2space_nchwc4_2x2_opt(
-            useOutputNchw, DT_F16, input->desc.memType, GCL_MEM_BUF, kernelName, &kernelOpt));
+            useOutputNchw, dt, input->desc.memType, GCL_MEM_BUF, kernelName, &kernelOpt));
         CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
         CHECK_STATUS(gcl_set_kernelArgs(kernel, p.block_size, iw_str, ihw_str, ic_str, i_off,
             ow_str, oh_str, ohw_str, o_off, iw, ih, oc, inbuf, outbuf));
@@ -78,7 +75,7 @@ inline EE depth2space_core_mali_fp16(GCLHandle_t handle,
             U32 off[3] = {0, 0, 0};
             MemFlags flag = CL_MEM_READ_WRITE;
             CHECK_STATUS(
-                gclmem_set_desc_padding(&desc, str, off, DT_F16, DF_NCHW, GCL_MEM_BUF, flag));
+                gclmem_set_desc_padding(&desc, str, off, dt, DF_NCHW, GCL_MEM_BUF, flag));
             tMem.desc = desc;
             tMem.mem = tmp;
             CHECK_STATUS(ocl_data_trans_form(handle, input, &tMem, 0, 0, NCHWC4_TO_NCHW));
@@ -89,7 +86,7 @@ inline EE depth2space_core_mali_fp16(GCLHandle_t handle,
         U32 ls[3] = {0, 0, 0};
         U32 dim = 3;
         CHECK_STATUS(set_common_opt(
-            DT_F16, GCL_MEM_BUF, GCL_MEM_BUF, "depth2space_nchw", kernelName, &kernelOpt));
+            dt, GCL_MEM_BUF, GCL_MEM_BUF, "depth2space_nchw", kernelName, &kernelOpt));
         CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
         CHECK_STATUS(gcl_set_kernelArgs(kernel, p.block_size, iw_str, ihw_str, ow_str, ohw_str,
             i_off, o_off, iw, ih, ic, inbuf, outbuf));

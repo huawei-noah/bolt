@@ -8,8 +8,8 @@ kit_flow=$2
 project_dir=""
 
 # inference demos
-demos=("ImageClassification" "Semantics" "ReadingComprehension")
-xdemos=("SimpleImageClassification" "Semantics" "ReadingComprehension")
+demos=("ImageClassification" "Semantics" "ReadingComprehension" "PoseDetect")
+xdemos=("SimpleImageClassification" "Semantics" "ReadingComprehension" "PoseDetect")
 if [[ ${CXX} =~ android ]]; then
     for((i=0; i<${#demos[@]}; i++)) do
         demo=${demos[$i]};
@@ -30,7 +30,8 @@ if [[ ${CXX} =~ android ]]; then
             cxx_shared_path=${clang_dir}/../sysroot/usr/lib/arm-linux-androideabi/libc++_shared.so
         fi
         mkdir -p ${lib_dir}
-        cp ${BOLT_ROOT}/install_${platform}/lib/libBoltModel.so ${lib_dir}/ || exit 1
+        cp ${BOLT_ROOT}/install_${platform}/lib/libbolt.so ${lib_dir}/ || exit 1
+        cp ${BOLT_ROOT}/install_${platform}/lib/libbolt_jni.so ${lib_dir}/ || exit 1
         if [[ -f ${cxx_shared_path} ]]; then
             cp ${cxx_shared_path} ${lib_dir}/ || exit 1
         fi
@@ -111,6 +112,9 @@ for((i=0; i<${#demos[@]}; i++)) do
         fi
         cp ${BOLT_ROOT}/inference/examples/automatic_speech_recognition/audio_feature.* ${project_dir}/headers/ || exit 1
         cp ${BOLT_ROOT}/inference/examples/automatic_speech_recognition/flow_asr.h ${project_dir}/headers/ || exit 1
+        cp ${BOLT_ROOT}/inference/examples/automatic_speech_recognition/*.prototxt ${BOLT_ROOT}/kit/Android/${demo}/app/src/main/assets/ || exit 1
+        cp ${BOLT_ROOT}/inference/examples/automatic_speech_recognition/pinyin_lm_embedding.bin ${BOLT_ROOT}/kit/Android/${demo}/app/src/main/assets/ || exit 1
+        cp ${BOLT_ROOT}/inference/examples/automatic_speech_recognition/asr_labels.txt ${BOLT_ROOT}/kit/Android/${demo}/app/src/main/assets/ || exit 1
     fi
 done
 echo "[INFO] setup kit end."

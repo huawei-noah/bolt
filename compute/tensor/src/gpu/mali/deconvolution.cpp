@@ -72,7 +72,7 @@ EE deconvolution_padding_input_mali(TensorDesc inputDesc,
     for (U32 i = 0; i < algoNumIndex[0]; i++) {
         U32 item_h = vecH[i];
         item_h = ((item_h >> 8) > 0) ? 1 : item_h;
-        U32 j = ALIGN(ow, item_h);
+        U32 j = UNI_ALIGN(ow, item_h);
         iw_align = (iw_align < j) ? j : iw_align;
     }
     U32 pr = iw_align - iw;
@@ -86,7 +86,7 @@ EE deconvolution_infer_forward_algorithm_mali(GCLHandle_t handle,
     ConvolutionParamSpec convParamSpec,
     TensorDesc outputDesc,
     ConvolutionPolicy policy,
-    ActivationMode activationMode,
+    ActivationParamSpec activationMode,
     GCLMemDesc inputMemDesc,
     GCLMemDesc outputMemDesc,
     ForwardRunInfoMali_t forwardRunInfo)
@@ -196,8 +196,8 @@ EE deconvolution_infer_forward_algorithm_mali(GCLHandle_t handle,
 
         double minTimeGemm = DBL_MAX;
         double minTime = DBL_MAX;
-        ForwardRunInfoMali bestRunInfo;
-        ForwardRunInfoMali bestRunInfoGemm;
+        ForwardRunInfoMali bestRunInfo, bestRunInfoGemm;
+        UNI_MEMSET(&bestRunInfo, 0, sizeof(bestRunInfo));
         for (U32 i = 0; i < algosNum; i++) {
             U32 runKernelBe = handle->kernelVec->size();
             if (deconvolution_mali(handle, inputDesc, input, filterDesc, filter, convParamSpec,
@@ -238,19 +238,15 @@ EE deconvolution_infer_forward_algorithm_mali(GCLHandle_t handle,
 EE deconvolution_transform_filter_bytes_mali(
     TensorDesc filterDesc, ForwardRunInfoMali_t forwardRunInfo, TensorDesc *ftmDesc)
 {
-    EE ret = SUCCESS;
+    EE ret = NOT_SUPPORTED;
     switch (filterDesc.dt) {
-        case DT_F16: {
+        case DT_F16:
+        case DT_F32: {
             ret =
                 deconvolution_transform_filter_bytes_mali_fp16(filterDesc, forwardRunInfo, ftmDesc);
             break;
         }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
     return ret;
@@ -264,19 +260,15 @@ EE deconvolution_transform_filter_mali(GCLHandle_t handle,
     TensorDesc *fltmemDesc,
     GCLMem_t fltmem)
 {
-    EE ret = SUCCESS;
+    EE ret = NOT_SUPPORTED;
     switch (filterDesc.dt) {
-        case DT_F16: {
+        case DT_F16:
+        case DT_F32: {
             ret = deconvolution_transform_filter_mali_fp16(
                 handle, filterDesc, filter, forwardRunInfo, fltmemDesc, fltmem, tmp);
             break;
         }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
     return ret;
@@ -289,19 +281,15 @@ EE deconvolution_infer_forward_tmp_bytes_mali(TensorDesc inputDesc,
     ForwardRunInfoMali_t forwardRunInfo,
     U32 *bytes)
 {
-    EE ret = SUCCESS;
+    EE ret = NOT_SUPPORTED;
     switch (inputDesc.dt) {
-        case DT_F16: {
+        case DT_F16:
+        case DT_F32: {
             ret = deconvolution_infer_forward_tmp_bytes_mali_fp16(
                 inputDesc, filterDesc, outputDesc, convParamSpec, forwardRunInfo, bytes);
             break;
         }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
     return ret;
@@ -321,25 +309,10 @@ EE deconvolution_mali(GCLHandle_t handle,
     GCLMem_t tmpBuf,
     TensorDesc outputDesc,
     GCLMem_t output,
-    ActivationMode activationMode)
+    ActivationParamSpec activationMode)
 {
     UNUSED(scaleDesc);
     UNUSED(scale);
-    EE ret = SUCCESS;
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = deconvolution_mali_fp16(handle, inputDesc, input, filterDesc, filter,
-                convParamSpec, forwardRunInfo, biasDesc, bias, tmpBytes, tmpBuf, outputDesc, output,
-                activationMode);
-            break;
-        }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return deconvolution_mali_fp16(handle, inputDesc, input, filterDesc, filter, convParamSpec,
+        forwardRunInfo, biasDesc, bias, tmpBytes, tmpBuf, outputDesc, output, activationMode);
 }

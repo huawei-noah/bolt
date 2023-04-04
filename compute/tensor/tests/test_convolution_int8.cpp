@@ -48,7 +48,7 @@ int int8ConvolutionTest(int argc, char *argv[], DataType dt, DataType filterData
         padding, padding, padding, padding, 1, 1, 1, fn, CONVOLUTION_DEPTHWISE_POINTWISE);
 
     if (ic % 8 != 0) {
-        printf("[WARN] can not quantize the first layer\n");
+        UNI_WARNING_LOG("can not quantize the first layer\n");
         return 0;
     } else {
 #ifdef _USE_X86
@@ -91,7 +91,8 @@ int int8ConvolutionTest(int argc, char *argv[], DataType dt, DataType filterData
         outputDesc = outputTensor.get_desc();
         TensorDesc outputDesc_ref = outputTensor.get_desc();
         outputDesc_ref.dt = dt;
-#ifdef _USE_X86
+        outputDesc_ref.df = DF_NCHWC8;
+#ifdef _USE_AVX512_VNNI
         outputDesc_ref.df = DF_NCHW;
 #endif
         outputTensorRef.resize(outputDesc_ref);
@@ -152,16 +153,6 @@ int int8ConvolutionTest(int argc, char *argv[], DataType dt, DataType filterData
             inputTensor, ftmTensor, outputTensor, p, alg, &tmpBytes, &UT_CPU_ARCHINFO));
         tmpTensor = Tensor::alloc_sized<CPUMem>(tensor1d(DT_U8, tmpBytes));
 
-        // #ifdef _USE_X86
-        //         UINT8 *inputC16 = (UINT8 *)ut_input_v(in * ic * ih * iw, DT_I8, UT_INIT_ZERO);
-        //         TensorDesc inputC16Desc = inputDesc;
-        //         inputC16Desc.df = DF_NCHWC16;
-        //         transformToNCHWC16(inputDesc, (void *)get_ptr_from_tensor(inputTensor, CPU_GENERAL), inputC16Desc, inputC16);
-        //         UNI_MEMCPY(get_ptr_from_tensor(inputTensor, CPU_GENERAL), inputC16, tensorNumBytes(inputDesc));
-        //         inputTensor.resize(inputC16Desc);
-        //         free(inputC16);
-        // #endif
-
         std::vector<Tensor> inputTensors(1, inputTensor);
         std::vector<Tensor> inputTensorsRef(1, inputTensorRef);
         std::vector<Tensor> tmpTensors(1, tmpTensor);
@@ -176,7 +167,7 @@ int int8ConvolutionTest(int argc, char *argv[], DataType dt, DataType filterData
             U32 output_size = outputTensor.length();
             U8 *out_d = ut_input_v(output_size, dt, UT_INIT_ZERO);
             INT8 *output = (INT8 *)get_ptr_from_tensor(outputTensor, CPU_GENERAL);
-#ifdef _USE_X86
+#ifdef _USE_AVX512_VNNI
             TensorDesc destDesc = outputDesc;
             destDesc.df = DF_NCHW;
             U8 *out_c = ut_input_v(output_size, dt, UT_INIT_ZERO);
@@ -207,10 +198,9 @@ int int8ConvolutionTest(int argc, char *argv[], DataType dt, DataType filterData
                         break;
                 }
             }
-            ut_check_v(out_d, get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), output_size, dt, 8,
-                __FILE__, __LINE__);
+            ut_check_v(out_d, get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), output_size, dt, 8);
             free(out_d);
-#ifdef _USE_X86
+#ifdef _USE_AVX512_VNNI
             free(out_c);
 #endif
         }
@@ -244,7 +234,7 @@ int main(int argc, char **argv)
 #ifdef _USE_INT8
 #ifdef _USE_FP16
     int8ConvolutionTest(argc, argv, DT_F16, DT_F16_8Q);
-#else
+#elif defined(_USE_X86) || not defined(__aarch64__)
     int8ConvolutionTest(argc, argv, DT_F32, DT_F32_8Q);
 #endif
 #endif

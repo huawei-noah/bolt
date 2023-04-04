@@ -27,8 +27,6 @@ namespace raul
  * chosen dimension. The number of repetitions is broadcasted (can be 1 or
  * number of elements in chosen dimension) to fit the shape of the given axis.
  *
- * @see
- * https://pytorch.org/docs/stable/torch.html#torch.repeat_interleave
  *
  */
 class RepeatInterleaveLayer : public BasicLayer

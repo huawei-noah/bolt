@@ -14,8 +14,9 @@
 #ifndef _H_MVM_COMMON
 #define _H_MVM_COMMON
 
-#include "arm_neon_expand.h"
 #include "data_type.h"
+#include "arm_neon_expand.h"
+#include "affinity_policy.h"
 
 inline void mvm_row_tail(U32 N, U32 K, F16 *matrix, F16 *vector, F16 *result)
 {

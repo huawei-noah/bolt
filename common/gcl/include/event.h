@@ -23,6 +23,9 @@ extern "C" {
  **/
 inline EE wait_events(U32 num_events, const Event *event_list)
 {
+    if (num_events == 0) {
+        return SUCCESS;
+    }
     I32 ret = clWaitForEvents(num_events, event_list);
     map_cl_error_2_ee(ret);
 }
@@ -51,7 +54,6 @@ inline EE get_event_info(cl_event event, cl_event_info info, void **value, size_
             free(data);
         }
     }
-
     map_cl_error_2_ee(ret);
 }
 
@@ -60,12 +62,18 @@ inline EE get_event_info(cl_event event, cl_event_info info, void **value, size_
  **/
 inline EE retain_event(Event event)
 {
+    if (event == NULL) {
+        return SUCCESS;
+    }
     I32 ret = clRetainEvent(event);
     map_cl_error_2_ee(ret);
 }
 
 inline EE release_event(Event event)
 {
+    if (event == NULL) {
+        return SUCCESS;
+    }
     I32 ret = clReleaseEvent(event);
     map_cl_error_2_ee(ret);
 }
@@ -80,36 +88,37 @@ inline EE enqueue_barrier_wait_lists(
 inline EE event_counting_time(
     Event *event, double *t_queue, double *t_submit, double *t_start, double *t_end, double *t_execute)
 {
-    cl_ulong queued, submit, start, end;
-    CHECK_STATUS(wait_events(1, event));
-    I32 ret;
-    ret = clGetEventProfilingInfo(
-        *event, CL_PROFILING_COMMAND_QUEUED, sizeof(cl_ulong), &queued, NULL);
-    if (ret) {
-        map_cl_error_2_ee(ret);
-    }
-    ret = clGetEventProfilingInfo(
-        *event, CL_PROFILING_COMMAND_SUBMIT, sizeof(cl_ulong), &submit, NULL);
-    if (ret) {
-        map_cl_error_2_ee(ret);
-    }
-    ret =
-        clGetEventProfilingInfo(*event, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &start, NULL);
-    if (ret) {
-        map_cl_error_2_ee(ret);
-    }
-    ret = clGetEventProfilingInfo(*event, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &end, NULL);
-    if (ret) {
-        map_cl_error_2_ee(ret);
-    }
+    double t0 = 0, t1 = 0, t2 = 0, t3 = 0, t4 = 0;
+    if (!(event == NULL || *event == NULL)) {
+        cl_ulong queued, submit, start, end;
+        CHECK_STATUS(wait_events(1, event));
+        I32 ret;
+        ret = clGetEventProfilingInfo(
+            *event, CL_PROFILING_COMMAND_QUEUED, sizeof(cl_ulong), &queued, NULL);
+        if (ret) {
+            map_cl_error_2_ee(ret);
+        }
+        ret = clGetEventProfilingInfo(
+            *event, CL_PROFILING_COMMAND_SUBMIT, sizeof(cl_ulong), &submit, NULL);
+        if (ret) {
+            map_cl_error_2_ee(ret);
+        }
+        ret =
+            clGetEventProfilingInfo(*event, CL_PROFILING_COMMAND_START, sizeof(cl_ulong), &start, NULL);
+        if (ret) {
+            map_cl_error_2_ee(ret);
+        }
+        ret = clGetEventProfilingInfo(*event, CL_PROFILING_COMMAND_END, sizeof(cl_ulong), &end, NULL);
+        if (ret) {
+            map_cl_error_2_ee(ret);
+        }
 
-    double t0, t1, t2, t3, t4;
-    t0 = (double)(queued)*1e-03;
-    t1 = (double)(submit)*1e-03;
-    t2 = (double)(start)*1e-03;
-    t3 = (double)(end)*1e-03;
-    t4 = ((double)(end) - (double)(start)) * 1e-03;
-
+        t0 = (double)(queued)*1e-03;
+        t1 = (double)(submit)*1e-03;
+        t2 = (double)(start)*1e-03;
+        t3 = (double)(end)*1e-03;
+        t4 = ((double)(end) - (double)(start)) * 1e-03;
+    }
     if (t_queue) {
         *t_queue = t0;
     }

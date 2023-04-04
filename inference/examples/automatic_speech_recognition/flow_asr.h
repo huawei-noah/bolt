@@ -17,6 +17,7 @@
 #include <fstream>
 #include <iostream>
 #include <atomic>
+#include "string_functions.h"
 #include "task.h"
 #include "flow.h"
 #include "audio_feature.h"
@@ -628,30 +629,6 @@ std::map<std::string, std::shared_ptr<Tensor>> getPinYin2HanZiInputOutput(int fr
     pinyin2hanziInferOutputSize(tensors, tmp, tensors);
     tensors["hanzi_squeeze/Squeeze"]->alloc();
     return tensors;
-}
-
-std::vector<std::string> split(const std::string &str, const std::string &sep)
-{
-    std::vector<std::string> vec;
-    if (str.empty()) {
-        return vec;
-    }
-
-    size_t pos1;
-    size_t pos2;
-    pos2 = str.find(sep);
-    pos1 = 0;
-    while (std::string::npos != pos2) {
-        vec.push_back(str.substr(pos1, pos2 - pos1));
-
-        pos1 = pos2 + sep.size();
-        pos2 = str.find(sep, pos1);
-    }
-    if (pos1 != str.length() * sizeof(typename std::string::value_type)) {
-        vec.push_back(str.substr(pos1));
-    }
-
-    return vec;
 }
 
 std::map<std::string, std::vector<std::string>> loadLabels(std::string labelFilePath)

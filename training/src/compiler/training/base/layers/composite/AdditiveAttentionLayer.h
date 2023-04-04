@@ -25,7 +25,6 @@ namespace raul
  *
  * This layer is a additive attention layer, a.k.a. Bahdanau-style attention.
  *
- * Implementation follows https://www.tensorflow.org/api_docs/python/tf/keras/layers/AdditiveAttention
  *
  * Inputs: Query, Value, Key[, Mask] or Query[, Mask]. In latter case Value=Key=Query
  * Outputs: Attention[, Probabilities]

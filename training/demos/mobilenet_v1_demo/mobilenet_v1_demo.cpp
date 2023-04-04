@@ -74,10 +74,10 @@ int main()
     const char *modelPath = "./mobilenet_v1_train.bolt";
     int batch_size = 20;
     const int target_size = 20;
-    std::vector<int> input_size = {1, 3, 84, 84};
+    std::vector<size_t> input_size = {1, 3, 84, 84};
     char *modified_output = (char *)"fc7";
-    create_general_training_model_from_bolt(&graph, modelPath, batch_size, target_size, loss_type,
-        false, &input_size[0], input_size.size(), modified_output);
+    create_graph_from_bolt(modelPath, &graph, loss_type, batch_size,
+        input_size.data(), input_size.size(), modified_output, target_size);
 
     // Second step: create optimizer
     Optimizer_t *optimizer = NULL;
@@ -100,7 +100,7 @@ int main()
     // Third step: training single step + metric
     const char *loss_name = "loss_layer_output_tensor_name";
     float testLoss = 0;
-    for (int i = 0; i < iter_times; i++) {
+    for (int i = 0; i < iter_times; i++) {    // iter_times --> 1
         std::vector<float> images_ptr;
         std::vector<float> labels_ptr;
         gen_batch_data_and_labels(images_ptr, labels_ptr, file_indexes[i]);
@@ -114,7 +114,8 @@ int main()
     }
 
     // Fourth step: serialize the updated model
-    save_training_model(graph, modelPath, false);
-
+    save_graph(graph, modelPath, "./mobilenet_v1_finetune.bolt");
+    delete_optimizer(optimizer);
+    delete_graph(graph);
     return 0;
 }

@@ -19,16 +19,25 @@
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
 
-inline EE clip_infer_output_size_cpu(TensorDesc inputDesc, TensorDesc *outputDesc)
+inline EE clip_infer_output_size_cpu(
+    TensorDesc inputDesc, ClipParamSpec p, TensorDesc *outputDesc, Arch arch)
 {
     if (nullptr == outputDesc) {
         CHECK_STATUS(NULL_POINTER);
     }
     *outputDesc = inputDesc;
-    return SUCCESS;
+    EE ret = SUCCESS;
+#ifdef _USE_CPU
+    if (IS_CPU(arch) && tensorIsShape(inputDesc) && tensorIsShape(*outputDesc)) {
+        ret = clip_cpu(inputDesc, inputDesc.dims + inputDesc.nDims, p, *outputDesc,
+            outputDesc->dims + outputDesc->nDims, arch);
+    }
+#endif
+    return ret;
 }
 
-EE clip_infer_output_size(Tensor *inputTensor, Tensor *outputTensor, ArchInfo_t archInfo)
+EE clip_infer_output_size(
+    Tensor *inputTensor, ClipParamSpec p, Tensor *outputTensor, ArchInfo_t archInfo)
 {
     if (inputTensor == nullptr) {
         CHECK_STATUS(NULL_POINTER);
@@ -36,9 +45,10 @@ EE clip_infer_output_size(Tensor *inputTensor, Tensor *outputTensor, ArchInfo_t 
     if (outputTensor == nullptr) {
         CHECK_STATUS(NULL_POINTER);
     }
+    auto arch = archInfo->arch;
     TensorDesc inputDesc = inputTensor->get_desc();
     TensorDesc outputDesc = outputTensor->get_desc();
-    EE ret = clip_infer_output_size_cpu(inputDesc, &outputDesc);
+    EE ret = clip_infer_output_size_cpu(inputDesc, p, &outputDesc, arch);
     outputTensor->resize(outputDesc);
     return ret;
 }

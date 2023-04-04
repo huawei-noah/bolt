@@ -21,29 +21,31 @@ std::vector<int> topK_index(U8 *res, TensorDesc desc, U32 topK)
     for (U32 i = 0; i < index.size(); i++) {
         index[i] = i;
     }
-
     switch (desc.dt) {
-#ifdef _USE_FP16
         case DT_F16: {
-            F16 *dataPtr = (F16 *)res;
+#ifdef _USE_FP16_TYPE
+            F16 *p = (F16 *)res;
             sort(index.begin(), index.end(),
-                [&](const int &a, const int &b) { return (dataPtr[a] > dataPtr[b]); });
+                [&](const int &a, const int &b) { return (p[a] > p[b]); });
+#else
+            unsigned short *p = (unsigned short *)res;
+            sort(index.begin(), index.end(), [&](const int &a, const int &b) {
+                return (float16ToFloat32(p[a]) > float16ToFloat32(p[b]));
+            });
+#endif
             break;
         }
-#endif
         case DT_F32: {
-            F32 *dataPtr = (F32 *)res;
+            F32 *p = (F32 *)res;
             sort(index.begin(), index.end(),
-                [&](const int &a, const int &b) { return (dataPtr[a] > dataPtr[b]); });
+                [&](const int &a, const int &b) { return (p[a] > p[b]); });
             break;
         }
         default:
             break;
     }
-
     std::vector<int>::const_iterator first = index.begin() + 0;
     std::vector<int>::const_iterator last = index.begin() + topK;
     std::vector<int> indexesTopK(first, last);
-
     return indexesTopK;
 }

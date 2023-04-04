@@ -107,17 +107,13 @@ int main(int argc, char *argv[])
     for (auto iter : inputDescs) {
         imageDescs.push_back(iter.second);
     }
-#ifdef _USE_FP16
     if (parse_res.readInputBinName.second) {
         U32 size = getBinFileSize(imageDir, inputBinName);
         inputBinPtr = new U8[size];
-        readF32BinToF16((F16 *)inputBinPtr, size / bytesOf(DT_F32), imageDir, inputBinName);
+        readF32BinToF16(inputBinPtr, size / bytesOf(DT_F32), imageDir, inputBinName);
     } else {
-#endif
         imagePaths = load_image_with_scale(imageDir, imageDescs, &images, imageFormat, scaleValue);
-#ifdef _USE_FP16
     }
-#endif
 
     std::map<int, int> categoryNum;
     double totalTime = 0;
@@ -187,13 +183,11 @@ int main(int argc, char *argv[])
             UNI_CI_LOG("min_time:%fms/loop\n", loop_min_time);
         }
 
-#ifdef _USE_FP16
         if (parse_res.writeOutputBinName.second) {
             U32 num = tensorNumElements(resDesc);
-            CI8 *dataName = outputBinName;
-            writeF16ToF32Bin((F16 *)res, num, imageDir, dataName);
+            const char *dataName = outputBinName;
+            writeF16ToF32Bin(res, num, imageDir, dataName);
         }
-#endif
 
         std::vector<int> topKResult = topK_index(res, resDesc, topK);
         top1Index = topKResult[0];

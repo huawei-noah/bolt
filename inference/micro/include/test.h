@@ -3,7 +3,7 @@
 class Test {
 public:
     Test(std::string testFilePath);
-
+    ~Test(){}
     void generate()
     {
         std::string code = "";
@@ -14,7 +14,7 @@ public:
 
 private:
     std::string generateTestHeader();
-
+ 
     std::string generateTest();
 
     std::string testFilePath;

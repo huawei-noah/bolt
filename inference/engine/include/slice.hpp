@@ -23,12 +23,12 @@ public:
         this->dt = dt;
         this->p = p;
     }
-
+    ~Slice(){}
     OperatorType get_type() override
     {
         return OT_Slice;
     }
-
+    
 protected:
     SliceParamSpec p;
 };

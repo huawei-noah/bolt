@@ -17,32 +17,29 @@
 #include "model_common.h"
 #include <iostream>
 #include <algorithm>
+#include "file.h"
 
 void print_X2bolt_usage()
 {
     std::cout << "X2bolt(version:" << sg_boltVersion
-              << ") converter usage: (<> must be filled in with exact value; [] is optional.)\n"
-                 "./X2bolt -d <modelDirectory> -m <modelFileName> -i <inferencePrecision> -v -V -h "
-                 "-r [removeOperatorNum]\n"
+              << ") usage: (<> must be filled in with exact value; [] is optional.)\n"
                  "Parameter description:\n"
                  "1. -d <modelDirectory>: The directory where your model is stored.\n"
-                 "2. -m <modelFileName>: The name of your model file without file suffix.\n"
-                 "Tips: If your model trained from caffe, please ensure the model file prefix of "
+                 "2. -m <modelFileName>: The name of your model file without file suffix. "
+                 "Tips: If your model is trained from caffe, please ensure the model file name of "
                  "prototxt and caffemodel are the same, otherwise error occurs.\n"
                  "3. -i [inferencePrecision]: The inference precision. Currently, you can only "
-                 "choose one of {FP32, FP16, PTQ, BNN_FP16}. PTQ produces the input for "
-                 "post_training_quantization tool. INT8_FP16 is for machine(ARMv8.2+) that "
-                 "supports fp16 to compute non BNN(1-bit) operators.\n"
-                 "4. -r [removeOperatorNum]: The number of preprocession operator in onnx model."
-                 "The default value is 0.\n"
-                 "5. -v : X2bolt version information.\n"
-                 "6. -V : Bolt Model detail information.\n"
-                 "7. -t : training format for on-device finetuning.\n"
-                 "8. -h : X2bolt help information.\n"
-                 "9. -I : To modify input names of the model. Please use ',' as the connection "
-                 "symbol.\n"
-                 "10. -O : To modify output names of the model. Please use ',' as the connection "
-                 "symbol.\n"
+                 "choose one of {FP32, FP16, PTQ, BNN}. PTQ produces the input for "
+                 "int8 post_training_quantization tool. BNN supports 1-bit computation of convolution and "
+                 "FP16 computation of other operators on ARMv8.2 machines. \n"
+                 "4. -r [removeOperatorNum]: The number of preprocession operator in onnx model. default: 0.\n"
+                 "5. -t : Generate training model for on-device finetuning.\n"
+                 "6. -I : To modify input names of the model. You need to list all input names seperated with ','.\n"
+                 "7. -O : To modify output names of the model. You need to list all output names seperated with ','.\n"
+                 "8. -v : X2bolt version information.\n"
+                 "9. -V : Bolt Model detail information.\n"
+                 "10. -B : Bolt Model binary information.\n"
+                 "11. -h : help information.\n"
                  "Example: ./X2bolt -d /local/models/ -m resnet50 -i FP16\n"
                  "If model conversion is successful, you can find the resnet50_f16.bolt file in "
                  "/local/models. Otherwise, you should check the usage Intro above.\n"
@@ -73,12 +70,13 @@ int main(int argc, char *argv[])
     std::string inferPrecision = "FP32";
     I32 removeProcessOpsNum = 0;
     bool printModel = false;
+    bool printBinaryModel = false;
     bool trainMode = false;
     std::string modifiedInputs = "";
     std::string modifiedOutputs = "";
 
     int option;
-    const char *optionstring = "d:m:i:r:VtI:O:";
+    const char *optionstring = "d:m:i:r:VBvtI:O:";
     while ((option = getopt(argc, argv, optionstring)) != -1) {
         switch (option) {
             case 'd':
@@ -103,6 +101,9 @@ int main(int argc, char *argv[])
             case 'V':
                 printModel = true;
                 break;
+            case 'b':
+                printBinaryModel = true;
+                break;
             case 't':
                 trainMode = true;
                 break;
@@ -116,12 +117,14 @@ int main(int argc, char *argv[])
                 std::cerr << "Input option gets error. Please check the params meticulously.\n"
                           << std::endl;
                 print_X2bolt_usage();
-                exit(1);
+                return 1;
         }
     }
     if (modelFileName == "") {
-        UNI_ERROR_LOG("Please use -m <modelFileName> option to give an valid model file name "
-                      "without file suffix.\n");
+        std::cerr << "Please use -m <modelFileName> option to give an valid model file name "
+                     "without file suffix."
+                  << std::endl;
+        return 1;
     }
     transform(inferPrecision.begin(), inferPrecision.end(), inferPrecision.begin(), toupper);
 
@@ -134,14 +137,15 @@ int main(int argc, char *argv[])
         modelStorePath += std::string("_train.bolt");
     } else if (inferPrecision.compare(std::string("PTQ")) == 0) {
         modelStorePath += std::string("_ptq_input.bolt");
-    } else if (inferPrecision.compare(std::string("FP16")) == 0 ||
-        inferPrecision.compare(std::string("BNN_FP16")) == 0) {
+    } else if (inferPrecision.compare(std::string("BNN")) == 0) {
+        modelStorePath += std::string("_f16_b.bolt");
+    } else if (inferPrecision.compare(std::string("FP16")) == 0) {
         modelStorePath += std::string("_f16.bolt");
     } else if (inferPrecision.compare(std::string("FP32")) == 0) {
         modelStorePath += std::string("_f32.bolt");
     } else {
-        UNI_ERROR_LOG("Unknown converter data precision: %s.\n", inferPrecision.c_str());
-        exit(1);
+        std::cerr << "Unknown converter data precision: " << inferPrecision << std::endl;
+        return 1;
     }
 
     // modified input names and output names
@@ -152,12 +156,24 @@ int main(int argc, char *argv[])
     OnlineModelReclaim(onlineModel);
     if (printModel) {
         ModelSpec resultMs;
-        CHECK_STATUS(deserialize_model_from_file(modelStorePath.c_str(), &resultMs));
+        CHECK_STATUS(deserialize_model_from_file(modelStorePath.c_str(), &resultMs, ms->dt));
         print_header(resultMs);
         print_operator_tensor_relationship(resultMs);
         print_weights(resultMs);
         CHECK_STATUS(mt_destroy_model(&resultMs));
     }
+    if (printBinaryModel) {
+        U8 *binary = NULL;
+        size_t binary_len = 0;
+        CHECK_STATUS(load_binary(modelStorePath.c_str(), (void **)&binary, &binary_len));
+        std::string line = "const unsigned int model_len = " + std::to_string(binary_len) + ";\n";
+        line += "const char model[] = " + hex_array(binary, binary_len) + ";\n";
+        if (binary != NULL) {
+            free(binary);
+        }
+        std::cout << line << std::endl;
+    }
+
     std::cout << "Model Conversion Succeeded!" << std::endl;
     // UNI_MEM_STATISTICS();
     return 0;

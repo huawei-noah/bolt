@@ -26,10 +26,6 @@
 inline EE fully_connected_infer_output_size_cpu(
     TensorDesc inputDesc, TensorDesc filterDesc, TensorDesc *outputDesc)
 {
-    if (outputDesc == nullptr) {
-        CHECK_STATUS(NULL_POINTER);
-    }
-
     DataType fdt;
     DataFormat fdf;
     U32 fh, fw;
@@ -103,23 +99,26 @@ EE fully_connected_infer_forward_algorithm(
         UNUSED(inputTensor);
         UNUSED(filterTensor);
         UNUSED(outputTensor);
+        ret = SUCCESS;
     }
     return ret;
 }
+
 EE fully_connected_infer_forward_tmp_bytes(
     Tensor inputTensor, Tensor filterTensor, Tensor outputTensor, U32 *bytes, ArchInfo_t archInfo)
 {
+    // Match dt in int8 inference
+    // inputDesc.dt = filterDesc.dt;
     if (bytes == nullptr) {
         CHECK_STATUS(NULL_POINTER);
     }
     TensorDesc inputDesc = inputTensor.get_desc();
     TensorDesc filterDesc = filterTensor.get_desc();
     TensorDesc outputDesc = outputTensor.get_desc();
-    // Match dt in int8 inference
-    // inputDesc.dt = filterDesc.dt;
 
     EE ret = NOT_SUPPORTED;
-    if (IS_GPU(archInfo->arch)) {
+    Arch arch = archInfo->arch;
+    if (IS_GPU(arch)) {
 #ifdef _USE_GPU
         GCLMemDesc gclmemInputDesc = ocl_get_desc(inputTensor);
         ret = fully_connected_infer_forward_tmp_bytes_mali(inputDesc, filterDesc, outputDesc,
@@ -127,18 +126,17 @@ EE fully_connected_infer_forward_tmp_bytes(
 #endif
     } else {
         U32 fw = outputDesc.dims[0];
-
         CHECK_REQUIREMENT(tensorIs2d(filterDesc));
         U32 fh = tensorNumElements(filterDesc) / fw;
         U32 M = tensorNumElements(inputDesc) / fh;
         if (M != 1) {
             // call gemm
             TensorDesc in_desc = tensor2df(inputDesc.dt, DF_NORMAL, M, fh);
-            ret = matrix_matrix_multiply_tmp_bytes(in_desc, filterDesc, bytes, archInfo->arch);
+            ret = matrix_matrix_multiply_tmp_bytes(in_desc, filterDesc, bytes, arch);
         } else {
             // call gemv
             TensorDesc in_desc = tensor1d(inputDesc.dt, fh);
-            ret = matrix_vector_multiply_tmp_bytes(filterDesc, in_desc, bytes, archInfo->arch);
+            ret = matrix_vector_multiply_tmp_bytes(filterDesc, in_desc, bytes, arch);
         }
         if (inputDesc.df == DF_NCHWC8) {
             U32 ihiw = 1;
@@ -159,51 +157,54 @@ EE fully_connected_infer_forward_tmp_bytes(
     }
     return ret;
 }
-
 EE fully_connected_transform_filter_bytes(Tensor filterTensor, void *bytes, ArchInfo_t archInfo)
 {
-    TensorDesc filterDesc = filterTensor.get_desc();
-
     if (bytes == nullptr) {
         CHECK_STATUS(NULL_POINTER);
     }
 
+    TensorDesc filterDesc = filterTensor.get_desc();
+    EE ret = NOT_SUPPORTED;
     if (IS_GPU(archInfo->arch)) {
 #ifdef _USE_GPU
-        CHECK_STATUS(fully_connected_transform_filter_bytes_mali(
-            filterDesc, ((MaliPara_t)(archInfo->archPara))->forwardRunInfo, (TensorDesc *)bytes))
+        ret = fully_connected_transform_filter_bytes_mali(
+            filterDesc, ((MaliPara_t)(archInfo->archPara))->forwardRunInfo, (TensorDesc *)bytes);
 #endif
     } else {
-        U32 fh, fw;
-        DataType fdt;
-        DataFormat fdf;
-        CHECK_REQUIREMENT(tensorIs2d(filterDesc));
-        if (filterDesc.df == DF_TRANSPOSE) {
-            CHECK_STATUS(tensor2dGet(filterDesc, &fdt, &fdf, &fw, &fh));
-        } else if (filterDesc.df == DF_NORMAL) {
-            CHECK_STATUS(tensor2dGet(filterDesc, &fdt, &fdf, &fh, &fw));
-        } else {
-            return NOT_SUPPORTED;
-        }
-
-        U32 *size = (U32 *)bytes;
-        *size = 0;
-        U32 alignments = 1;
-        if (IS_ARM(archInfo->arch)) {
-            alignments = 4;
-        } else if (IS_X86(archInfo->arch)) {
-            alignments = 8;
-#ifdef _USE_INT8
-            alignments = 16;
-            fh = (fh + 8 - 1) / 8 * 8;
-            *size += UNI_MAX(fw, fh) * 4;
-#endif
-        }
-        fw = (fw + alignments - 1) / alignments * alignments;
-        *size += fw * fh + 32;
-        *size *= bytesOf(fdt);
+        U32 *p = (U32 *)bytes;
+        *p = tensorNumBytes(filterDesc);
+        //        U32 fh, fw;
+        //        DataType fdt;
+        //        DataFormat fdf;
+        //        CHECK_REQUIREMENT(tensorIs2d(filterDesc));
+        //        if (filterDesc.df == DF_TRANSPOSE) {
+        //            CHECK_STATUS(tensor2dGet(filterDesc, &fdt, &fdf, &fw, &fh));
+        //        } else if (filterDesc.df == DF_NORMAL) {
+        //            CHECK_STATUS(tensor2dGet(filterDesc, &fdt, &fdf, &fh, &fw));
+        //        } else {
+        //            return NOT_SUPPORTED;
+        //        }
+        //
+        //        U32 *size = (U32 *)bytes;
+        //        *size = 0;
+        //        U32 alignments = 1;
+        //        if (IS_ARM(archInfo->arch)) {
+        //            alignments = 4;
+        //        } else if (IS_X86(archInfo->arch)) {
+        //            alignments = 8;
+        //#ifdef _USE_INT8
+        //            alignments = 16;
+        //            fh = UNI_ALIGN(fh, 8);
+        //            // for x86 int8 offset
+        //            *size += UNI_MAX(fw, fh) * bytesOf(DT_I32);
+        //#endif
+        //        }
+        //        fw = UNI_ALIGN(fw, alignments);
+        //        *size += fw * fh + UNI_SOFTPIPELINE_PREFETECH;
+        //        *size *= bytesOf(fdt);
+        ret = SUCCESS;
     }
-    return SUCCESS;
+    return ret;
 }
 
 template <typename T>
@@ -379,7 +380,7 @@ EE fully_connected(Tensor inputTensor,
                 qIDesc.dt = DT_U8_Q;
                 if (outputDesc.dt == DT_F32) {
                     scale = &scaleO;
-                } else if (outputDesc.dt == DT_U8_Q) {
+                } else if ((outputDesc.dt == DT_U8_Q) || (outputDesc.dt == DT_I8)) {
                     if (scaleO > 0) {
                         scale = scaleArray;
                         scale[1] = scaleO;
@@ -400,8 +401,7 @@ EE fully_connected(Tensor inputTensor,
                 if (outputDesc.dt != qODesc.dt) {
                     offsetC += tensorNumBytes(qODesc);
                 }
-                void *transOffsetC = (void *)((U8 *)filter +
-                    UNI_ALIGN(filterDesc.dims[0], 16) * UNI_ALIGN(filterDesc.dims[1], 8));
+		void *transOffsetC = (void *)((U8 *)filter + UNI_ALIGN(fw, 16) * UNI_ALIGN(fh, 8));
                 CHECK_STATUS(quantize_bias_offsetC(
                     bias, biasDesc, DT_I32, transOffsetC, filterDesc, &scaleO, offsetC));
                 bias = nullptr;
@@ -447,6 +447,9 @@ EE fully_connected(Tensor inputTensor,
             } else {
                 U8 *outArray = (U8 *)output;
                 U32 size = tensorNumBytes(biasDesc);
+#if defined(_USE_OPENMP)
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
                 for (U32 i = 0; i < M; i++) {
                     UNI_MEMCPY(outArray + i * size, bias, size);
                 }
@@ -456,7 +459,7 @@ EE fully_connected(Tensor inputTensor,
         }
 
         // If weight is transformed for mmm, don't run as mvm
-        if (M == 1 && filterDesc.df != targetFormat4MatrixB(fdt)) {
+        if (M == 1 && filterDesc.df != matrix_matrix_multiply_rhs_format(fdt)) {
             TensorDesc vectorDesc = tensor1d(idt, fh);
             TensorDesc resultDesc = tensor1d(odt, fw);
             if (IS_GENERAL(archInfo->arch)) {

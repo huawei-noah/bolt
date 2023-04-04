@@ -37,7 +37,6 @@ class TrainableLayer : public BasicLayer
 {
   public:
     TrainableLayer(const raul::Name& name, const std::string& typeName, const TrainableParams& params, NetworkParameters& networkParams, std::pair<bool, bool> doChecks = { true, true });
-
     [[nodiscard]] bool isTrainable() const override { return true; }
     [[nodiscard]] virtual bool isFrozen() const { return mFrozen; }
 

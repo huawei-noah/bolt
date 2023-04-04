@@ -19,7 +19,7 @@
 #include "cpu/arm/fp32/blas_fp32.h"
 #endif
 
-EE axpby_arm(U32 len, DataType dt, F32 a, const void *x, F32 b, void *y, Arch arch)
+EE axpby_arm(I32 len, DataType dt, F32 a, const void *x, F32 b, void *y, Arch arch)
 {
     EE ret = NOT_SUPPORTED;
     switch (dt) {

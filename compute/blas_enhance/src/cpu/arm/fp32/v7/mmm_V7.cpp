@@ -12,15 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "cpu/arm/fp32/blas_fp32.h"
-#include "thread_affinity.h"
-
-void matrix_matrix_multiply_tmp_bytes_fp32(
-    U32 row1, U32 col1, U32 row2, U32 col2, DataType dt, U32 *bytes)
-{
-    *bytes = row1 * col1 + row2 * col2;
-    *bytes *= bytesOf(dt);
-    *bytes += 32;
-}
+#include "cpu/arm/fp32/kernels_fp32.h"
 
 EE matrix_matrix_multiply_transform_rhsN_fp32(TensorDesc desc, F32 *src, F32 *dst)
 {
@@ -387,8 +379,7 @@ void mmm_6x8(U32 offset, U32 K, F32 *in, F32 *w, F32 *out)
                  "q10", "q11", "q12", "q13", "q14", "q15", "r1", "r2");
 }
 
-EE mmm_fp32_V7(
-    int M, int N, int K, bool transposeA, F32 *matrix1, F32 *matrix2, F32 *tmp, F32 *result)
+EE mmm_fp32(int M, int N, int K, bool transposeA, F32 *matrix1, F32 *matrix2, F32 *tmp, F32 *result)
 {
     int blockK = K;
     int blockM = 96;

@@ -17,7 +17,6 @@
 #include "error.h"
 #include "gpu/mali/tensor_computing_mali.h"
 #include "gpu/mali/fp16/bilateral_slice_apply_mali_fp16.h"
-#include "gpu/mali/uchar/bilateral_slice_apply_mali_uchar.h"
 
 inline EE bilateral_slice_apply_checkpara_mali_common(GCLHandle_t handle,
     TensorDesc inputDesc,
@@ -26,14 +25,14 @@ inline EE bilateral_slice_apply_checkpara_mali_common(GCLHandle_t handle,
     const GCLMem_t guide,
     TensorDesc gridDesc,
     const GCLMem_t grid,
-    BilateralSliceApplyParamSpec bilateralSliceApplyParamSpec,
+    BilateralSliceApplyParamSpec p,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
     if (nullptr == handle || nullptr == input || nullptr == grid || nullptr == output) {
         return NULL_POINTER;
     }
-    if (bilateralSliceApplyParamSpec.mode == BSLICE_APPLY_NULL && nullptr == guide) {
+    if (p.mode == BILATERAL_SLICE_APPLY_NULL && nullptr == guide) {
         return NULL_POINTER;
     }
     if (inputDesc.df != guideDesc.df || inputDesc.df != gridDesc.df) {
@@ -51,20 +50,12 @@ inline EE bilateral_slice_apply_checkpara_mali_common(GCLHandle_t handle,
     if (inputDesc.dims[2] != outputDesc.dims[2]) {
         return NOT_MATCH;
     }
-    if ((gridDesc.dims[2] % bilateralSliceApplyParamSpec.coefficient) != 0) {
+    U32 coefficient = inputDesc.dims[2] * (inputDesc.dims[2] + 1);
+    if (gridDesc.dims[2] % coefficient != 0) {
         return NOT_MATCH;
     }
-    if (bilateralSliceApplyParamSpec.has_offset == true) {
-        if (bilateralSliceApplyParamSpec.coefficient != inputDesc.dims[2] * (inputDesc.dims[2] + 1)) {
-            return NOT_MATCH;
-        }
-        if (bilateralSliceApplyParamSpec.coefficient != 12) {
-            return NOT_SUPPORTED;
-        }
-    } else {
+    if (coefficient != 12) {
         return NOT_SUPPORTED;
-        // if(bilateralSliceApplyParamSpec.coefficient_len != inputDesc.dims[2] *  inputDesc.dims[2])      return NOT_MATCH;
-        // if(bilateralSliceApplyParamSpec.coefficient_len != 9) return NOT_SUPPORTED;
     }
     return SUCCESS;
 }
@@ -72,7 +63,7 @@ inline EE bilateral_slice_apply_checkpara_mali_common(GCLHandle_t handle,
 EE bilateral_slice_padding_input_mali(TensorDesc inputDesc,
     TensorDesc guideDesc,
     TensorDesc gridDesc,
-    BilateralSliceApplyParamSpec bilateralSliceApplyParamSpec,
+    BilateralSliceApplyParamSpec p,
     TensorDesc *outputDesc,
     OclMemory *inputMem,
     OclMemory *guideMem,
@@ -83,20 +74,20 @@ EE bilateral_slice_padding_input_mali(TensorDesc inputDesc,
         outputMem == nullptr) {
         CHECK_STATUS(NULL_POINTER);
     }
-    DataType idt, guide_dt;
-    DataFormat idf, guide_df;
-    U32 guide_w, guide_h, guide_c, guide_n;
+    DataType idt, gdt;
+    DataFormat idf, gdf;
+    U32 gw, gh, gc, gn;
     U32 iw, ih, ic, in;
     U32 ow, oh, oc, on;
     if (inputDesc.df != DF_NHWC || guideDesc.df != DF_NHWC) {
         return NOT_MATCH;
     }
     tensorSelectGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw);
-    tensorSelectGet(guideDesc, &guide_dt, &guide_df, &guide_n, &guide_c, &guide_h, &guide_w);
-    ow = guide_w;
-    oh = guide_h;
+    tensorSelectGet(guideDesc, &gdt, &gdf, &gn, &gc, &gh, &gw);
+    ow = gw;
+    oh = gh;
     oc = ic;
-    on = guide_n;
+    on = gn;
     *outputDesc = tensor4df(idt, idf, on, oc, oh, ow);
     return SUCCESS;
 }
@@ -104,14 +95,14 @@ EE bilateral_slice_padding_input_mali(TensorDesc inputDesc,
 EE bilateral_slice_apply_infer_forward_tmp_bytes_mali(TensorDesc inputDesc,
     TensorDesc guideDesc,
     TensorDesc gridDesc,
-    BilateralSliceApplyParamSpec bilateralSliceApplyParamSpec,
+    BilateralSliceApplyParamSpec p,
     ForwardRunInfoMali_t forwardRunInfo,
     U32 *bytes)
 {
     UNUSED(inputDesc);
     UNUSED(guideDesc);
     UNUSED(gridDesc);
-    UNUSED(bilateralSliceApplyParamSpec);
+    UNUSED(p);
     UNUSED(forwardRunInfo);
 
     DataType dt;
@@ -130,36 +121,15 @@ EE bilateral_slice_apply_mali(GCLHandle_t handle,
     const GCLMem_t guide,
     TensorDesc gridDesc,
     const GCLMem_t grid,
-    BilateralSliceApplyParamSpec bilateralSliceApplyParamSpec,
+    BilateralSliceApplyParamSpec p,
     ForwardRunInfoMali_t forwardRunInfo,
     U32 tmpBytes,
     GCLMem_t tmpBuf,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
-    EE ret = SUCCESS;
-    CHECK_STATUS(bilateral_slice_apply_checkpara_mali_common(handle, inputDesc, input, guideDesc,
-        guide, gridDesc, grid, bilateralSliceApplyParamSpec, outputDesc, output));
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = bilateral_slice_apply_mali_fp16(handle, inputDesc, input, guideDesc, guide,
-                gridDesc, grid, bilateralSliceApplyParamSpec, forwardRunInfo, tmpBytes, tmpBuf,
-                outputDesc, output);
-            break;
-        }
-        case DT_U8: {
-            ret = bilateral_slice_apply_mali_uchar(handle, inputDesc, input, guideDesc, guide,
-                gridDesc, grid, bilateralSliceApplyParamSpec, forwardRunInfo, tmpBytes, tmpBuf,
-                outputDesc, output);
-            break;
-        }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    CHECK_STATUS(bilateral_slice_apply_checkpara_mali_common(
+        handle, inputDesc, input, guideDesc, guide, gridDesc, grid, p, outputDesc, output));
+    return bilateral_slice_apply_mali_fp16(handle, inputDesc, input, guideDesc, guide,
+                gridDesc, grid, p, forwardRunInfo, tmpBytes, tmpBuf, outputDesc, output);
 }

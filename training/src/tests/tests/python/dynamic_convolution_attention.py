@@ -63,7 +63,6 @@ def _smoothing_normalization(e):
 
 
 def _dca_score(W_location, W_dynamic, prior, W_keys):
-    """https://arxiv.org/pdf/1910.10288.pdf"""
     # Get the number of hidden units from the trailing dimension of keys
     dtype = W_location.dtype
     print(dtype)
@@ -87,7 +86,6 @@ def _dca_score(W_location, W_dynamic, prior, W_keys):
 
 class DynamicConvolutionalAttention(BahdanauAttention):
     """Impelements Bahdanau-style (cumulative) scoring function
-    as in https://arxiv.org/pdf/1910.10288.pdf.
     The attention is location-based.
     """
 
@@ -214,7 +212,6 @@ class DynamicConvolutionalAttention(BahdanauAttention):
         """
         Dynamic conv implementation using depthwise_conv2d.
         See details here:
-        https://stackoverflow.com/questions/42068999/tensorflow-convolutions-with-different-filter-for-each-sample-in-the-mini-batch
         """
         sequence_length = tf.shape(dynamic_input)[1]
 

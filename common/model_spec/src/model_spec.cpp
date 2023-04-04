@@ -11,7 +11,7 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#ifndef _WIN32
+#if defined(__GLIBC__) || defined(__linux__)
 #include <sys/mman.h>
 #endif
 
@@ -36,7 +36,7 @@ EE mt_create_model(ModelSpec *ms)
     ms->ws = nullptr;
     ms->num_op_tensor_entries = 0;
     ms->op_relationship_entries = nullptr;
-    ms->mfd = nullptr;
+    ms->file = nullptr;
 
     return SUCCESS;
 }
@@ -141,18 +141,40 @@ EE mt_destroy_model(ModelSpec *ms)
         mt_free(ms->op_relationship_entries);
     }
 
-    if (ms->mfd != nullptr && !ms->mfd->useFileStream && ms->mfd->bytes != nullptr) {
-#ifdef _WIN32
-        // use fread to read model file
-        UNI_FREE(ms->mfd->bytes);
+    if (ms->file != nullptr) {
+        if (ms->file->stream_mode) {
+            ms->file->content = nullptr;
+            ms->file->length = 0;
+        } else {
+            if (ms->file->content != nullptr) {
+#if defined(__GLIBC__) || defined(__linux__)
+                munmap(ms->file->content, ms->file->length);
+#elif defined(_WIN32)
+                pthread_join(ms->file->thread, NULL);
+                UnmapViewOfFile(ms->file->content);
 #else
-        // use mmap to read model file
-        munmap(ms->mfd->bytes, ms->mfd->fileLength);
-        if (-1 != ms->mfd->fd) {
-            close(ms->mfd->fd);
-        }
+                UNI_FREE(ms->file->content);
 #endif
+            }
+            ms->file->content = nullptr;
+            ms->file->length = 0;
+#if defined(__GLIBC__) || defined(__linux__)
+            if (-1 != ms->file->file) {
+                close(ms->file->file);
+                ms->file->file = -1;
+            }
+#elif defined(_WIN32)
+            if (ms->file->map != NULL) {
+                CloseHandle(ms->file->map);
+                ms->file->map = NULL;
+            }
+            if (ms->file->file != NULL) {
+                CloseHandle(ms->file->file);
+                ms->file->file = NULL;
+            }
+#endif
+        }
+        mt_free(ms->file);
     }
-    mt_free(ms->mfd);
     return SUCCESS;
 }

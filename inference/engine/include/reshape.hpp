@@ -18,12 +18,15 @@
 
 class Reshape : public Operator {
 public:
+    Reshape()
+    {}
+
     Reshape(DataType dt, ReshapeParamSpec p)
     {
         this->dt = dt;
         this->p = p;
     }
-
+    ~Reshape(){}
     OperatorType get_type() override
     {
         return OT_Reshape;

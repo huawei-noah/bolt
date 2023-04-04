@@ -41,7 +41,7 @@ void print_image_matting_usage()
               << std::endl;
 }
 
-void parse_options(int argc, char *argv[])
+int parse_options(int argc, char *argv[])
 {
     std::cout << "\nPlease enter this command './benchmark --help' to get more usage "
                  "information.\n";
@@ -49,7 +49,7 @@ void parse_options(int argc, char *argv[])
     for (std::string arg : lineArgs) {
         if (arg == "--help" || arg == "-help" || arg == "--h" || arg == "-h") {
             print_image_matting_usage();
-            exit(-1);
+            return 1;
         }
     }
 
@@ -66,11 +66,12 @@ void parse_options(int argc, char *argv[])
                 inputData = std::string(optarg);
                 break;
             default:
-                std::cout << "Input option gets error, please check the params meticulously.\n";
+                std::cerr << "Input option gets error, please check the params meticulously.\n";
                 print_image_matting_usage();
-                exit(-1);
+                return 1;
         }
     }
+    return 0;
 }
 
 std::shared_ptr<U8> preprocess(cv::Mat image,
@@ -140,7 +141,9 @@ void generate_output_path(std::string input_path, std::string &output_path)
 int main(int argc, char *argv[])
 {
     UNI_TIME_INIT
-    parse_options(argc, argv);
+    if (0 != arse_options(argc, argv)) {
+        return 1;
+    }
 
     auto nn = createPipeline(affinityPolicyName, modelPath, algorithmMapPath);
     std::map<std::string, std::shared_ptr<Tensor>> inMap = nn->get_input();

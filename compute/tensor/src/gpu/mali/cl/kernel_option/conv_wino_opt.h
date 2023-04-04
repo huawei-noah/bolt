@@ -40,7 +40,7 @@ inline EE set_conv_wino_preprocess_input_opt(DataType dt,
 }
 
 inline EE set_conv_wino_trans_outbuf_opt(bool useAlign,
-    ActivationMode activeMode,
+    ActivationParamSpec activeMode,
     DataType dt,
     GCLMemType inputMemType,
     GCLMemType outputMemType,

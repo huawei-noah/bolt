@@ -127,27 +127,14 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc,
                         break;
                     }
                     case ACTIVATION_RELU: {
-                        __asm__ __volatile__("vmov.s32 q0, #0\n"
-                                             "vmax.s32 q4, q4, q0\n"
-                                             "vmax.s32 q5, q5, q0\n"
+                        __asm__ __volatile__("vmov.s32 q2, #0\n"
+                                             "vmax.s32 q0, q0, q2\n"
+                                             "vmax.s32 q1, q1, q2\n"
                                              :
                                              :
                                              : "memory", "cc", "q0", "q1", "q2", "q3", "q4");
                         break;
                     }
-                    //case ACTIVATION_RELU6: {
-                    //    __asm__ __volatile__("vmov.s32 q0, #0\n"
-                    //                         "vmov.s32 q1, %[relu6]\n"
-                    //                         "vmax.s32 q4, q4, q0\n"
-                    //                         "vmax.s32 q5, q5, q0\n"
-                    //                         "vmin.s32 q4, q4, q1\n"
-                    //                         "vmin.s32 q5, q5, q1\n"
-                    //                         "vst1.s32 {d0-d3}, [%[in0]]\n"
-                    //                         :
-                    //                         : [in0] "r"(pw_in0)
-                    //                         : "memory", "cc", "q0", "q1", "q2", "q3", "q4");
-                    //    break;
-                    //}
                     default:
                         return NOT_SUPPORTED;
                 }
@@ -226,15 +213,6 @@ EE depthwise_pointwise_convolution_direct(TensorDesc inputDesc,
                         res[1] = vmaxq_s32(res[1], z);
                         break;
                     }
-                    //case ACTIVATION_RELU6: {
-                    //    int32x4_t z = vdupq_n_s32(0);
-                    //    int32x4_t s = vdupq_n_s32(6);
-                    //    res[0] = vmaxq_s32(res[0], z);
-                    //    res[1] = vmaxq_s32(res[1], z);
-                    //    res[0] = vminq_s32(res[0], s);
-                    //    res[1] = vminq_s32(res[1], s);
-                    //    break;
-                    //}
                     default:
                         return NOT_SUPPORTED;
                 }

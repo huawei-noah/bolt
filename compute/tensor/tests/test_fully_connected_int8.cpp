@@ -77,7 +77,7 @@ int fullyConnectedTest(int argc, char **argv, DataType dt, DataType filterDataTy
     if (m == 1) {
         filterDesc.df = DF_NORMAL;
     }
-    if (DT_F16_8Q == filterDesc.dt || DT_F32_8Q == filterDesc.dt) {
+    if (isQuantMixDataType(filterDesc.dt)) {
         filterDesc.dt = DT_I8;
         qfTensor.resize(filterDesc);
         qfTensor.alloc();
@@ -97,7 +97,7 @@ int fullyConnectedTest(int argc, char **argv, DataType dt, DataType filterDataTy
 
         // check
         ut_check_v(get_ptr_from_tensor(outputTensor, CPU_GENERAL),
-            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), m * n, dt, 0.2, __FILE__, __LINE__);
+            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), m * n, dt, 0.2);
     }
     // benchmark
     double time_start = ut_time_ms();
@@ -126,7 +126,11 @@ int fullyConnectedTest(int argc, char **argv, DataType dt, DataType filterDataTy
 int main(int argc, char **argv)
 {
 #ifdef _USE_INT8
+#ifdef _USE_FP16
+    fullyConnectedTest(argc, argv, DT_F16, DT_F16_8Q);
+#else
     fullyConnectedTest(argc, argv, DT_F32, DT_F32_8Q);
+#endif
 #endif
     return 0;
 }

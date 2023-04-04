@@ -4,6 +4,7 @@ class Util {
 public:
     Util(std::string utilHeaderFilePath)
     {}
+    ~Util(){}
 
     void generate()
     {

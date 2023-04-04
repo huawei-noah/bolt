@@ -32,8 +32,8 @@ inline EE depthwise_pointwise_direct_core_mali_fp16(GCLHandle_t handle,
     GCLMem_t tmpBuf,
     TensorDesc outputDesc,
     GCLMem_t output,
-    ActivationMode depthwiseActivationMode,
-    ActivationMode pointwiseActivationMode)
+    ActivationParamSpec depthwiseActivationParamSpec,
+    ActivationParamSpec pointwiseActivationParamSpec)
 {
     cl_mem inbuf, dwBiasimg, pwBiasimg, outbuf, dwFltbuf, pwFltbuf, tmp;
     inbuf = input->mem;
@@ -43,6 +43,7 @@ inline EE depthwise_pointwise_direct_core_mali_fp16(GCLHandle_t handle,
     pwBiasimg = pwBias->mem;
     outbuf = output->mem;
     tmp = tmpBuf->mem;
+    DataType idt;
     U32 iw, ih, ic, in;
     U32 fw, fh, sw, sh, pw, ph, dw, dh, fc;
     U32 ow, oh, oc, on;
@@ -55,7 +56,7 @@ inline EE depthwise_pointwise_direct_core_mali_fp16(GCLHandle_t handle,
     fw = convParamSpec.kernel_w;
     fh = convParamSpec.kernel_h;
 
-    tensorSelectGet(inputDesc, NULL, NULL, &in, &ic, &ih, &iw);
+    tensorSelectGet(inputDesc, &idt, NULL, &in, &ic, &ih, &iw);
     tensorSelectGet(outputDesc, NULL, NULL, &on, &oc, &oh, &ow);
     fc = ic;
     U32 item_hd = forwardRunInfo->best_h[0];
@@ -71,7 +72,7 @@ inline EE depthwise_pointwise_direct_core_mali_fp16(GCLHandle_t handle,
     in_str = ic_str * ihw_str;
 
     U32 th_str, tw_str, tc_str, th_off, tw_off, thw_str, tn_str, t_off;
-    U32 h_align = ALIGN(oh, item_hp);
+    U32 h_align = UNI_ALIGN(oh, item_hp);
     if ((item_hp >> 8) > 0 || tmpBuf->desc.memType != GCL_MEM_BUF) {
         h_align = oh;
     }
@@ -99,15 +100,15 @@ inline EE depthwise_pointwise_direct_core_mali_fp16(GCLHandle_t handle,
     KernelOpt kernelOpt;
     if (dw > 1 || dh > 1) {
         CHECK_STATUS(
-            set_conv_depthwise_dila_opt_mali(fw, fh, sh, dh, item_hd, depthwiseActivationMode,
-                false, DT_F16, input->desc.memType, tmpBuf->desc.memType, kernelName, &kernelOpt));
+            set_conv_depthwise_dila_opt_mali(fw, fh, sh, dh, item_hd, depthwiseActivationParamSpec,
+                false, idt, input->desc.memType, tmpBuf->desc.memType, kernelName, &kernelOpt));
         CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
         CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ihw_str, ic_str, iw_off, ih_off, tw_str,
             thw_str, t_off, oh, ic, sw, dw, dh, in_str, tn_str, gs[0], gs[1], inbuf, dwFltbuf,
             dwBiasimg, tmp));
     } else {
-        CHECK_STATUS(set_conv_depthwise_opt_mali(fw, fh, sh, item_hd, depthwiseActivationMode,
-            false, DT_F16, input->desc.memType, tmpBuf->desc.memType, kernelName, &kernelOpt));
+        CHECK_STATUS(set_conv_depthwise_opt_mali(fw, fh, sh, item_hd, depthwiseActivationParamSpec,
+            false, idt, input->desc.memType, tmpBuf->desc.memType, kernelName, &kernelOpt));
         CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
         CHECK_STATUS(
             gcl_set_kernelArgs(kernel, iw_str, ihw_str, ic_str, iw_off, ih_off, tw_str, thw_str,
@@ -126,15 +127,14 @@ inline EE depthwise_pointwise_direct_core_mali_fp16(GCLHandle_t handle,
     if ((item_hp >> 8) > 0) {
         U32 item_w = item_hp >> 8;
         CHECK_STATUS(set_conv_direct_reuse_w_opt_mali(1, 1, 1, 1, item_w, item_kp, false,
-            pointwiseActivationMode, DT_F16, GCL_MEM_BUF, output->desc.memType, kernelName,
-            &kernelOpt));
+            pointwiseActivationParamSpec, idt, GCL_MEM_BUF, output->desc.memType, kernelName, &kernelOpt));
         gsp[0] = (ow + item_w - 1) / item_w;
         gsp[1] = oh;
         gsp[2] = (oc + 3) / 4 * on / item_kp;
     } else {
         CHECK_STATUS(
-            set_conv_direct_opt_mali(1, 1, 1, 1, item_hp, item_kp, false, pointwiseActivationMode,
-                DT_F16, tmpBuf->desc.memType, output->desc.memType, kernelName, &kernelOpt));
+            set_conv_direct_opt_mali(1, 1, 1, 1, item_hp, item_kp, false, pointwiseActivationParamSpec,
+                idt, tmpBuf->desc.memType, output->desc.memType, kernelName, &kernelOpt));
         gsp[0] = ow;
         gsp[1] = (oh + item_hp - 1) / item_hp;
         gsp[2] = (oc + 3) / 4 * on / item_kp;
@@ -160,12 +160,13 @@ inline void transform_filter_desc(TensorDesc dwFilterDesc,
     TensorDesc *dwFtmDesc,
     TensorDesc *pwFtmDesc)
 {
+    DataType fdt;
     U32 fw, fh, fc, fn;
-    tensorSelectGet(dwFilterDesc, NULL, NULL, NULL, &fc, &fh, &fw);
+    tensorSelectGet(dwFilterDesc, &fdt, NULL, NULL, &fc, &fh, &fw);
     tensorSelectGet(pwFilterDesc, NULL, NULL, &fn, NULL, NULL, NULL);
     TensorDesc desc;
     desc.df = DF_NCHW;
-    desc.dt = DT_F16;
+    desc.dt = fdt;
     desc.nDims = 4;
     desc.dims[3] = 1;
     desc.dims[0] = fw * fh * item_kd;
@@ -204,9 +205,10 @@ EE depthwise_pointwise_convolution_direct_transform_filter_mali_fp16(GCLHandle_t
     GCLMem_t dwFltmem,
     GCLMem_t pwFltmem)
 {
+    DataType fdt;
     U32 dfw, dfh, dfc;
     U32 pfc, pfn;
-    tensorSelectGet(dwFilterDesc, NULL, NULL, NULL, &dfc, &dfh, &dfw);
+    tensorSelectGet(dwFilterDesc, &fdt, NULL, NULL, &dfc, &dfh, &dfw);
     tensorSelectGet(pwFilterDesc, NULL, NULL, &pfn, &pfc, NULL, NULL);
     U32 dfwh = dfw * dfh;
     U32 item_kd = forwardRunInfo->best_k[0];
@@ -215,7 +217,7 @@ EE depthwise_pointwise_convolution_direct_transform_filter_mali_fp16(GCLHandle_t
     char kernelName[128];
     KernelOpt kernelOpt;
     Kernel kernel;
-    CHECK_STATUS(set_conv_depthwise_trans_flt(item_kd, DT_F16, GCL_MEM_BUF, kernelName, &kernelOpt));
+    CHECK_STATUS(set_conv_depthwise_trans_flt(item_kd, fdt, GCL_MEM_BUF, kernelName, &kernelOpt));
     CHECK_STATUS(gcl_get_kernel_from_map(handle, kernelName, &kernel, &kernelOpt));
     CHECK_STATUS(gcl_set_kernelArgs(kernel, dfw, dfh, dfwh, dfc, dwFilter->mem, dwFltmem->mem));
     U32 gs[2] = {dfwh, (dfc + item_kd - 1) / item_kd};
@@ -224,8 +226,8 @@ EE depthwise_pointwise_convolution_direct_transform_filter_mali_fp16(GCLHandle_t
     CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
     *dwFltmemDesc = dwFilterDesc;
 
-    CHECK_STATUS(set_conv_direct_trans_flt(
-        item_c, item_kp, false, DT_F16, GCL_MEM_BUF, kernelName, &kernelOpt));
+    CHECK_STATUS(
+        set_conv_direct_trans_flt(item_c, item_kp, false, fdt, GCL_MEM_BUF, kernelName, &kernelOpt));
     CHECK_STATUS(gcl_get_kernel_from_map(handle, kernelName, &kernel, &kernelOpt));
     CHECK_STATUS(gcl_set_kernelArgs(kernel, 1, 1, 1, pfc, pfn, pwFilter->mem, pwFltmem->mem));
     U32 gsc[3] = {1, (pfc + item_c - 1) / item_c, (pfn + item_kp - 1) / item_kp * item_kp};
@@ -264,8 +266,8 @@ EE depthwise_pointwise_convolution_direct_infer_forward_tmp_bytes_mali_fp16(Tens
     }
     if (!useImg) {
         U32 item_h = forwardRunInfo->best_h[1];
-        U32 h_align = ALIGN(oh, item_h);
-        U32 ic_align = ALIGN(ic, 4);
+        U32 h_align = UNI_ALIGN(oh, item_h);
+        U32 ic_align = UNI_ALIGN(ic, 4);
         bytes[0] = ow * h_align * ic_align * in * bytesOf(odt);
     }
     return SUCCESS;
@@ -288,13 +290,13 @@ EE depthwise_pointwise_convolution_direct_mali_fp16(GCLHandle_t handle,
     GCLMem_t tmpBuf,
     TensorDesc outputDesc,
     GCLMem_t output,
-    ActivationMode depthwiseActivationMode,
-    ActivationMode pointwiseActivationMode)
+    ActivationParamSpec depthwiseActivationParamSpec,
+    ActivationParamSpec pointwiseActivationParamSpec)
 {
     CHECK_STATUS(fill_output_zero(handle, output, outputDesc));
     CHECK_STATUS(depthwise_pointwise_direct_core_mali_fp16(handle, inputDesc, input, dwFilterDesc,
         pwFilterDesc, dwFilter, pwFilter, convParamSpec, forwardRunInfo, dwBiasDesc, pwBiasDesc,
-        dwBias, pwBias, tmpBytes, tmpBuf, outputDesc, output, depthwiseActivationMode,
-        pointwiseActivationMode));
+        dwBias, pwBias, tmpBytes, tmpBuf, outputDesc, output, depthwiseActivationParamSpec,
+        pointwiseActivationParamSpec));
     return SUCCESS;
 }

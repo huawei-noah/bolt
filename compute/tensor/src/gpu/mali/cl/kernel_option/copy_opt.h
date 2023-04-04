@@ -1,41 +1,21 @@
 #ifndef COPY_OPT
 #define COPY_OPT
+
 #include "common_opt.h"
+
 inline EE set_copy_opt_mali(bool useBlockIndex, DataType dt, char *kernelName, KernelOpt *kernelOpt)
 {
-    std::string BINDName = "";
-    std::string dtName = "";
-    char *opt = kernelOpt->option;
-    if (useBlockIndex) {
-        BINDName = "with_block_index_";
-    }
-    switch (dt) {
-        case DT_I32:
-            dtName = "i32";
-            CHECK_STATUS(set_chars_define_opt(" DT=i32 ", opt));
-            break;
-        case DT_U32:
-            dtName = "u32";
-            CHECK_STATUS(set_chars_define_opt(" DT=u32 ", opt));
-            break;
-            break;
-        case DT_F16:
-            dtName = "f16";
-            CHECK_STATUS(set_chars_define_opt(" DT=f16 ", opt));
-            break;
-            break;
-        default:
-            CHECK_STATUS(NOT_SUPPORTED);
-    }
-
-    std::string kernel = std::string("copy_") + BINDName + dtName;
-    UNI_STRCPY(kernelName, kernel.c_str());
-    UNI_STRCPY(kernelOpt->sourceName, "copy");
     kernelOpt->kernelDataType = dt;
+    std::string source = "copy";
+    UNI_STRCPY(kernelOpt->sourceName, source.c_str());
+    char *opt = kernelOpt->option;
+    CHECK_STATUS(add_macro_type(opt, dt));
     if (useBlockIndex) {
-        CHECK_STATUS(set_chars_define_opt("USE_BLOCK_INDEX", opt));
+        CHECK_STATUS(add_macro(opt, "USE_BLOCK_INDEX"));
     }
+    std::string name = get_kernel_name(source, kernelOpt->option);
+    CHECK_STATUS(add_macro(opt, "KERNEL_NAME", name.c_str()));
+    UNI_STRCPY(kernelName, name.c_str());
     return SUCCESS;
 }
-
 #endif

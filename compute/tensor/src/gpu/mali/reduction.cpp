@@ -100,7 +100,7 @@ EE reduction_padding_input_mali(TensorDesc inputDesc,
     }
     if (inputDesc.df != DF_NCHWC4) {
         U32 iw = inputDesc.dims[0];
-        U32 iw_align = ALIGN(iw, 4);
+        U32 iw_align = UNI_ALIGN(iw, 4);
         U32 pr = iw_align - iw;
         inputMem->padding(0, pr, 0, 0);
     }
@@ -114,18 +114,8 @@ EE reduction_infer_forward_tmp_bytes_mali(TensorDesc inputDesc,
     GCLMemDesc gclmemOutputDesc,
     U32 *bytes)
 {
-    EE ret = SUCCESS;
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = reduction_infer_forward_tmp_bytes_mali_fp16(
-                inputDesc, p, outputDesc, gclmemInputDesc, gclmemOutputDesc, bytes);
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return reduction_infer_forward_tmp_bytes_mali_fp16(
+        inputDesc, p, outputDesc, gclmemInputDesc, gclmemOutputDesc, bytes);
 }
 
 EE reduction_mali(GCLHandle_t handle,
@@ -138,18 +128,7 @@ EE reduction_mali(GCLHandle_t handle,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
-    EE ret = SUCCESS;
     CHECK_STATUS(reduction_checkpara_mali(
         handle, inputDesc, input, maskDesc, mask, p, tmp, outputDesc, output));
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = reduction_mali_fp16(
-                handle, inputDesc, input, maskDesc, mask, p, tmp, outputDesc, output);
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return reduction_mali_fp16(handle, inputDesc, input, maskDesc, mask, p, tmp, outputDesc, output);
 }

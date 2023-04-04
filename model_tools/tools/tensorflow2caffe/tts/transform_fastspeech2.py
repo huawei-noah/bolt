@@ -7,7 +7,7 @@ import numpy as np
 
 def text_to_speech(tensorflow_model_path, config_path):
     f = open(config_path, 'r', encoding='utf-8')
-    params = yaml.load(f.read())["fastspeech2_params"]
+    params = yaml.safe_load(f.read())["fastspeech2_params"]
     f.close()
     tts_caffe = Tensorflow2CaffeFastSpeech2(tensorflow_model_path, "tts_encoder", "tts_encoder",
                        params,

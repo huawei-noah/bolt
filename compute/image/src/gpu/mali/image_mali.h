@@ -16,18 +16,30 @@
 
 #include "image.h"
 
-EE resize_bilinear_mali(GCLHandle_t handle,
-    TensorDesc inputDesc,
-    GCLMem_t input,
-    TensorDesc outputDesc,
-    GCLMem_t tmpbuf,
-    GCLMem_t output);
-
-EE resize_nearest_mali(GCLHandle_t handle,
+EE resize_mali(GCLHandle_t handle,
     TensorDesc inputDesc,
     GCLMem_t input,
     ResizeParamSpec p,
     TensorDesc outputDesc,
     GCLMem_t tmpbuf,
     GCLMem_t output);
+
+EE convert_color_mali(GCLHandle_t handle,
+    TensorDesc inputDesc,
+    GCLMem_t input,
+    ConvertColorParamSpec p,
+    TensorDesc outputDesc,
+    GCLMem_t output);
+
+EE lut_mali(GCLHandle_t handle,
+    TensorDesc inputDesc,
+    GCLMem_t input,
+    TensorDesc lutDesc,
+    GCLMem_t lut,
+    LutParamSpec p,
+    TensorDesc outputDesc,
+    GCLMem_t output);
+
+EE lut_preprocess_mali(
+    GCLHandle_t handle, TensorDesc inputDesc, GCLMem_t input, TensorDesc outputDesc, GCLMem_t output);
 #endif

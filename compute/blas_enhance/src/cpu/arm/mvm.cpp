@@ -11,7 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "blas_enhance.h"
 #include "cpu/arm/blas_arm.h"
 #ifdef _USE_FP16
 #include "cpu/arm/fp16/blas_fp16.h"
@@ -22,33 +21,17 @@
 #ifdef _USE_INT8
 #include "cpu/arm/int8/blas_int8.h"
 #endif
+#include "blas_enhance.h"
 
-EE matrix_vector_multiply_tmp_bytes_arm(bool transpose, DataType dt, U32 *bytes)
+EE matrix_vector_multiply_transform_weight_bytes_arm(
+    U32 row, U32 col, DataType dt, DataFormat df, U32 *bytes)
 {
-    if (nullptr == bytes) {
-        CHECK_STATUS(NULL_POINTER);
+    *bytes = 32;
+    if (dt == DT_I8) {
+        col = UNI_ALIGN(col, 4);
     }
-    switch (dt) {
-#ifdef _USE_FP16
-        case DT_F16:
-            *bytes = 0;
-            break;
-#endif
-#ifdef _USE_FP32
-        case DT_F32:
-            *bytes = 0;
-            break;
-#endif
-#ifdef _USE_INT8
-        case DT_I8: {
-            if (transpose) {
-                *bytes = 64 * sizeof(I32);
-            }
-            break;
-        }
-#endif
-        default:
-            break;
+    if (df != matrix_vector_multiply_weight_format(dt)) {
+        *bytes += row * col * bytesOf(dt);
     }
     return SUCCESS;
 }
@@ -56,10 +39,10 @@ EE matrix_vector_multiply_tmp_bytes_arm(bool transpose, DataType dt, U32 *bytes)
 EE matrix_vector_multiply_transform_weight_arm(
     TensorDesc desc, const void *src, TensorDesc *descTran, void *dst)
 {
-    if (desc.df == targetFormat4mvmMatrix(desc.dt)) {
+    if (desc.df == matrix_vector_multiply_weight_format(desc.dt)) {
         return SUCCESS;
     }
-    EE ret = SUCCESS;
+    EE ret = NOT_SUPPORTED;
     switch (desc.dt) {
 #ifdef _USE_FP32
         case DT_F32: {
@@ -80,14 +63,13 @@ EE matrix_vector_multiply_transform_weight_arm(
         }
 #endif
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
     *descTran = desc;
     if (DF_TRANSPOSE == desc.df) {
-        std::swap((*descTran).dims[0], (*descTran).dims[1]);
+        std::swap(descTran->dims[0], descTran->dims[1]);
     }
-    descTran->df = targetFormat4mvmMatrix(desc.dt);
+    descTran->df = matrix_vector_multiply_weight_format(desc.dt);
     return ret;
 }
 
@@ -101,7 +83,7 @@ EE mvm_arm(U32 row,
     void *result,
     Arch arch)
 {
-    EE ret = SUCCESS;
+    EE ret = NOT_SUPPORTED;
     switch (dt) {
 #ifdef _USE_FP16
         case DT_F16:
@@ -119,7 +101,6 @@ EE mvm_arm(U32 row,
             break;
 #endif
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
     return ret;

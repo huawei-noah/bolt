@@ -59,7 +59,6 @@ TEST(TestLayerCumSum, IncorrectDimensionUnit)
 TEST(TestLayerCumSum, ForwardSimpleUnit)
 {
     PROFILE_TEST
-    // See https://pytorch.org/docs/master/generated/torch.cumsum.html
     // Test parameters
     const auto eps_rel = TODTYPE(1e-3);
 
@@ -94,7 +93,6 @@ TEST(TestLayerCumSum, ForwardSimpleUnit)
 TEST(TestLayerCumSum, BackwardSimpleUnit)
 {
     PROFILE_TEST
-    // See https://pytorch.org/docs/master/generated/torch.cumsum.html
     // Test parameters
     const auto eps_rel = TODTYPE(1e-3);
 

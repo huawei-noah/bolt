@@ -11,11 +11,8 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "cpu/arm/blas_arm.h"
 #include "cpu/arm/int8/v8.2/mmm_common.h"
 #include "cpu/arm/int8/v8.2/mmm_v8.h"
-#include "cpu/arm/int8/blas_matrix_transpose.h"
-#include "uni.h"
 
 inline void mmm_4x4_A76(U32 offset, U32 K, INT8 *in, INT8 *w, I32 *out)
 {
@@ -563,7 +560,7 @@ void mmm_A76(
     int M, int N, int K, bool transposeA, INT8 *matrix1, INT8 *matrix2, INT8 *tmp, I32 *result)
 {
     int blockK = K;
-    U32 K4 = pad_to_4_multiple(K);
+    U32 K4 = UNI_ALIGN(K, 4);
     int blockM = 96;
     INT8 *matrix1Trans = tmp;
     I32 *resultCurrent = result;

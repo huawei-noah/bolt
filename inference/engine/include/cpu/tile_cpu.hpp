@@ -28,17 +28,37 @@ public:
         return mem;
     }
 
+    TileParamSpec get_param(TensorDesc desc)
+    {
+        TileParamSpec ps = this->p;
+        if (ps.num_repeats == 0) {
+            ps.num_repeats = desc.dims[0];
+            for (int i = 0; i < ps.num_repeats; i++) {
+                ps.repeats[i] = desc.dims[desc.nDims + i];
+            }
+        }
+        return ps;
+    }
+
     void run() override
     {
+        TileParamSpec ps = p;
+        if (ps.num_repeats == 0 && this->inputTensors.size() > 1) {
+            ps = get_param(this->inputTensors[1].get_desc());
+        }
         CHECK_STATUS(tile(
-            this->inputTensors[0], this->p, this->temp, this->outputTensors[0], &this->archInfo));
+            this->inputTensors[0], ps, this->temp, this->outputTensors[0], &this->archInfo));
+        this->outputTensors[0].set_scale(this->inputTensors[0].get_scale());
     }
 
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
-        CHECK_STATUS(tile_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo));
-        return SUCCESS;
+        TileParamSpec ps = p;
+        if (ps.num_repeats == 0 && inTensors.size() > 1) {
+            ps = get_param(inTensors[1]->get_desc());
+        }
+        return tile_infer_output_size(inTensors[0], ps, outTensors[0], &this->archInfo);
     }
 };
 

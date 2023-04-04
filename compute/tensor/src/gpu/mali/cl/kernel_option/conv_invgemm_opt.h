@@ -10,11 +10,11 @@ inline EE set_conv_invgemm_trans_flt_opt(
     std::string kernel = std::string("conv_invgemm_trans_flt_") + std::to_string(item_k);
     UNI_STRCPY(kernelName, kernel.c_str());
     UNI_STRCPY(kernelOpt->sourceName, "conv_invgemm_trans_flt");
-    CHECK_STATUS(set_value_define_opt(item_k, "K", opt));
+    CHECK_STATUS(add_macro(opt, "K", item_k));
     return SUCCESS;
 }
 
-inline EE set_conv_invgemm_col2img_opt(ActivationMode activeMode,
+inline EE set_conv_invgemm_col2img_opt(ActivationParamSpec activeMode,
     DataType dt,
     GCLMemType inputMemType,
     GCLMemType outputMemType,

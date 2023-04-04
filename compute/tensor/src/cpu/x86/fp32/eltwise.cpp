@@ -125,7 +125,7 @@ EE eltwise_fp32(std::vector<void *> input,
             switch (eltwiseMode) {
                 case ELTWISE_SUM: {
 #ifdef _USE_OPENMP
-#pragma omp for
+#pragma omp for nowait
                     for (U32 ii = 0; ii < blockNum; ++ii) {
                         U32 off = ii * BLOCK;
                         U32 blockSize = UNI_MIN(len - off, BLOCK);
@@ -138,7 +138,7 @@ EE eltwise_fp32(std::vector<void *> input,
                 }
                 case ELTWISE_MAX: {
 #ifdef _USE_OPENMP
-#pragma omp for
+#pragma omp for nowait
                     for (U32 ii = 0; ii < blockNum; ++ii) {
                         U32 off = ii * BLOCK;
                         U32 blockSize = UNI_MIN(len - off, BLOCK);
@@ -152,7 +152,7 @@ EE eltwise_fp32(std::vector<void *> input,
                 case ELTWISE_AND:
                 case ELTWISE_PROD: {
 #ifdef _USE_OPENMP
-#pragma omp for
+#pragma omp for nowait
                     for (U32 ii = 0; ii < blockNum; ++ii) {
                         U32 off = ii * BLOCK;
                         U32 blockSize = UNI_MIN(len - off, BLOCK);
@@ -165,7 +165,7 @@ EE eltwise_fp32(std::vector<void *> input,
                 }
                 case ELTWISE_SUB: {
 #ifdef _USE_OPENMP
-#pragma omp for
+#pragma omp for nowait
                     for (U32 ii = 0; ii < blockNum; ++ii) {
                         U32 off = ii * BLOCK;
                         U32 blockSize = UNI_MIN(len - off, BLOCK);
@@ -178,7 +178,7 @@ EE eltwise_fp32(std::vector<void *> input,
                 }
                 case ELTWISE_DIV: {
 #ifdef _USE_OPENMP
-#pragma omp for
+#pragma omp for nowait
                     for (U32 ii = 0; ii < blockNum; ++ii) {
                         U32 off = ii * BLOCK;
                         U32 blockSize = UNI_MIN(len - off, BLOCK);
@@ -208,7 +208,7 @@ EE eltwise_fp32(std::vector<void *> input,
         F32 *tmp = buffer;
         F32 *output_ptr = (F32 *)output;
 #ifdef _USE_OPENMP
-#pragma omp for
+#pragma omp for nowait
 #endif
         for (U32 i = 0; i < len_main; i += 8) {
             get_vector<F32>((F32 *)input[0], inputSize[0], &tmp, 8, i, 8, buffer);
@@ -241,7 +241,7 @@ EE eltwise_fp32(std::vector<void *> input,
         }
 
 #ifdef _USE_OPENMP
-#pragma omp for
+#pragma omp for nowait
 #endif
         for (U32 i = len_main; i < len; i++) {
             get_vector<F32>((F32 *)input[0], inputSize[0], &tmp, 8, i, 1, buffer);
@@ -304,7 +304,7 @@ EE eltwise_i32(std::vector<void *> input,
             switch (eltwiseMode) {
                 case ELTWISE_SUM: {
 #ifdef _USE_OPENMP
-#pragma omp for
+#pragma omp for nowait
                     for (U32 ii = 0; ii < blockNum; ++ii) {
                         U32 off = ii * BLOCK;
                         U32 blockSize = UNI_MIN(len - off, BLOCK);
@@ -317,7 +317,7 @@ EE eltwise_i32(std::vector<void *> input,
                 }
                 case ELTWISE_MAX: {
 #ifdef _USE_OPENMP
-#pragma omp for
+#pragma omp for nowait
                     for (U32 ii = 0; ii < blockNum; ++ii) {
                         U32 off = ii * BLOCK;
                         U32 blockSize = UNI_MIN(len - off, BLOCK);
@@ -330,7 +330,7 @@ EE eltwise_i32(std::vector<void *> input,
                 }
                 case ELTWISE_PROD: {
 #ifdef _USE_OPENMP
-#pragma omp for
+#pragma omp for nowait
                     for (U32 ii = 0; ii < blockNum; ++ii) {
                         U32 off = ii * BLOCK;
                         U32 blockSize = UNI_MIN(len - off, BLOCK);
@@ -343,7 +343,7 @@ EE eltwise_i32(std::vector<void *> input,
                 }
                 case ELTWISE_SUB: {
 #ifdef _USE_OPENMP
-#pragma omp for
+#pragma omp for nowait
                     for (U32 ii = 0; ii < blockNum; ++ii) {
                         U32 off = ii * BLOCK;
                         U32 blockSize = UNI_MIN(len - off, BLOCK);
@@ -373,7 +373,7 @@ EE eltwise_i32(std::vector<void *> input,
         I32 *tmp = buffer;
         I32 *output_ptr = (I32 *)output;
 #ifdef _USE_OPENMP
-#pragma omp for
+#pragma omp for nowait
 #endif
         for (U32 i = 0; i < len_main; i += 8) {
             get_vector<I32>((I32 *)input[0], inputSize[0], &tmp, 8, i, 8, buffer);
@@ -402,7 +402,7 @@ EE eltwise_i32(std::vector<void *> input,
         }
 
 #ifdef _USE_OPENMP
-#pragma omp for
+#pragma omp for nowait
 #endif
         for (U32 i = len_main; i < len; i++) {
             get_vector<I32>((I32 *)input[0], inputSize[0], &tmp, 8, i, 1, buffer);
@@ -455,7 +455,7 @@ EE eltwise_u8(std::vector<void *> input,
         U8 *tmp = buffer;
         U8 *output_ptr = (U8 *)output;
 #ifdef _USE_OPENMP
-#pragma omp for
+#pragma omp for nowait
 #endif
         for (U32 i = 0; i < len_main; i += 32) {
             get_vector<U8>((U8 *)input[0], inputSize[0], &tmp, 32, i, 32, buffer);
@@ -482,7 +482,7 @@ EE eltwise_u8(std::vector<void *> input,
         }
 
 #ifdef _USE_OPENMP
-#pragma omp for
+#pragma omp for nowait
 #endif
         for (U32 i = len_main; i < len; i++) {
             get_vector<U8>((U8 *)input[0], inputSize[0], &tmp, 32, i, 1, buffer);

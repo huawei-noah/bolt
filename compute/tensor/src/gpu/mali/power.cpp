@@ -37,20 +37,6 @@ EE power_mali(GCLHandle_t handle,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
-    EE ret = SUCCESS;
     CHECK_STATUS(power_checkpara_mali(handle, inputDesc, input, outputDesc, output));
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = power_mali_fp16(handle, inputDesc, input, p, outputDesc, output);
-            break;
-        }
-        case DT_I32: {
-            ret = power_mali_fp16(handle, inputDesc, input, p, outputDesc, output);
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return power_mali_fp16(handle, inputDesc, input, p, outputDesc, output);
 }

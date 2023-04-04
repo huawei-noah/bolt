@@ -135,5 +135,5 @@ EE convolution_mali_fp16(GCLHandle_t handle,
     std::vector<GCLMem_t> tmpBuf,
     TensorDesc outputDesc,
     GCLMem_t output,
-    ActivationMode activationMode);
+    ActivationParamSpec activationMode);
 #endif

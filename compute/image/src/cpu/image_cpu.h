@@ -16,6 +16,7 @@
 
 #include "tensor_desc.h"
 #include "parameter_spec.h"
+#include "uni.h"
 
 EE resize_nearest_cpu(
     TensorDesc inputDesc, void *input, ResizeParamSpec p, TensorDesc outputDesc, void *output);
@@ -29,6 +30,12 @@ EE grid_sample_cpu(TensorDesc inputDesc,
     void *grid,
     GridSampleParamSpec p,
     void *tmp,
+    TensorDesc outputDesc,
+    void *output);
+
+EE convert_color_cpu(TensorDesc inputDesc,
+    const void *input,
+    ConvertColorParamSpec p,
     TensorDesc outputDesc,
     void *output);
 #endif

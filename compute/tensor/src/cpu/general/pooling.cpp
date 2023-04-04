@@ -11,9 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <float.h>
-#include "error.h"
-
 #include "cpu/general/tensor_computing_general.h"
 
 template <typename T1, typename T2>
@@ -159,11 +156,15 @@ EE pooling_general(TensorDesc inputDesc,
         return NOT_SUPPORTED;
     }
 
-    if (in != on || ic != oc || (idf != DF_NCHWC8 && idf != DF_NCHWC16) || odf != idf) {
+    if (in != on || ic != oc || odf != idf) {
         CHECK_STATUS(NOT_MATCH);
     }
-    I32 alignSize = 8;
-    if (idf == DF_NCHWC16) {
+    I32 alignSize = 1;
+    if (idf == DF_NCHWC4) {
+        alignSize = 4;
+    } else if (idf == DF_NCHWC8) {
+        alignSize = 8;
+    } else if (idf == DF_NCHWC16) {
         alignSize = 16;
     }
     EE ret = SUCCESS;

@@ -181,7 +181,6 @@ INSTANTIATE_TEST_SUITE_P(
                               0.931827_dt,
                               1.259009_dt })));
 
-// test based on based on https://pytorch.org/tutorials/beginner/nlp/word_embeddings_tutorial.html
 TEST(TestTransformer, NGramLanguageModelerUnit)
 {
     PROFILE_TEST
@@ -246,7 +245,6 @@ raul::NetDef SublayerConnection(const std::string name, const raul::Name& input,
     return res;
 }*/
 /*
-// architecture according to https://nlp.seas.harvard.edu/2018/04/03/attention.html
 TEST(TestTransformer, DISABLED_TransformerArchitectureUnit)
 {
     PROFILE_TEST

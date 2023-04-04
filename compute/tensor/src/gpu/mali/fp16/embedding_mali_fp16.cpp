@@ -15,7 +15,7 @@
 
 inline EE embedding_checkpara_mali_fp16(TensorDesc weightDesc, TensorDesc outputDesc)
 {
-    if (weightDesc.dt != outputDesc.dt || weightDesc.dt != DT_F16) {
+    if (weightDesc.dt != outputDesc.dt) {
         return NOT_SUPPORTED;
     }
     return SUCCESS;
@@ -30,13 +30,14 @@ inline EE embedding_core_mali_fp16(GCLHandle_t handle,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
+    DataType odt;
     U32 ow, oh, oc;
     U32 iw_str, iw_off, ih_off;
     U32 fw_str, fw_off, fh_off;
     U32 ow_str, oh_str, ow_off, oh_off;
     CHECK_STATUS(gclmem_get_desc_padding(input->desc, &iw_str, NULL, NULL, &iw_off, &ih_off));
     CHECK_STATUS(gclmem_get_desc_padding(weight->desc, &fw_str, NULL, NULL, &fw_off, &fh_off));
-    CHECK_STATUS(gclmem_get_desc_dim(output->desc, NULL, NULL, NULL, &oc, &oh, &ow));
+    CHECK_STATUS(gclmem_get_desc_dim(output->desc, &odt, NULL, NULL, &oc, &oh, &ow));
     CHECK_STATUS(gclmem_get_desc_padding(output->desc, &ow_str, &oh_str, NULL, &ow_off, &oh_off));
     cl_mem inbuf, weibuf, outbuf;
     inbuf = input->mem;
@@ -54,7 +55,7 @@ inline EE embedding_core_mali_fp16(GCLHandle_t handle,
         KernelOpt kernelOpt;
         char kernelName[128];
         CHECK_STATUS(
-            set_common_opt(DT_F16, GCL_MEM_BUF, GCL_MEM_BUF, "embedding", kernelName, &kernelOpt));
+            set_common_opt(odt, GCL_MEM_BUF, GCL_MEM_BUF, "embedding", kernelName, &kernelOpt));
         CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
         CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, fw_str, ow_str, oh_str, i_off, f_off, o_off,
             ow, gs[0], gs[1], inbuf, weibuf, outbuf));

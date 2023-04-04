@@ -108,7 +108,7 @@ void Node::initInference(AffinityPolicy affinityPolicy)
         this->nodeParameter.name().c_str(), this->precision, affinityPolicy, algorithmMapPath,
         modelPath.c_str());
     ModelSpec ms;
-    CHECK_STATUS(deserialize_model_from_file(modelPath.c_str(), &ms));
+    CHECK_STATUS(deserialize_model_from_file(modelPath.c_str(), &ms, precision));
     CNN cnn(affinityPolicy, precision, ms.model_name);
     cnn.sort_operators_sequential(&ms);
     cnn.initialize_ops(&ms);

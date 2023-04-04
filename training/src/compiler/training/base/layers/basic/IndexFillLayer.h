@@ -26,8 +26,6 @@ namespace raul
  * Fills the elements of the tensor with specified value
  * by selecting the indices in the order given in index.
  *
- * @see
- * https://pytorch.org/docs/master/tensors.html#torch.Tensor.index_fill_
  */
 class IndexFillLayer : public BasicLayer
 {

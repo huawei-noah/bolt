@@ -134,6 +134,16 @@ EE scatter_cpu(TensorDesc dataDesc,
                 updateDesc, (const F16 *)update, p, outputDesc, (F16 *)output);
             break;
 #endif
+        case DT_U32:
+        case DT_I32:
+            scatter_kernel<U32>(dataDesc, (const U32 *)data, indexDesc, (const int *)index,
+                updateDesc, (const U32 *)update, p, outputDesc, (U32 *)output);
+            break;
+        case DT_U8:
+        case DT_I8:
+            scatter_kernel<INT8>(dataDesc, (const INT8 *)data, indexDesc, (const int *)index,
+                updateDesc, (const INT8 *)update, p, outputDesc, (INT8 *)output);
+            break;
         default:
             ret = NOT_SUPPORTED;
             break;

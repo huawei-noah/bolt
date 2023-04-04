@@ -8,7 +8,7 @@ android {
 
     defaultConfig {
         applicationId "com.huawei.noah"
-        minSdkVersion 16
+        minSdkVersion 24
         targetSdkVersion 30
         versionCode 1
         versionName "1.0"
@@ -16,11 +16,12 @@ android {
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
 
         ndk{
-            abiFilters "armeabi-v7a","arm64-v8a"
+            abiFilters "arm64-v8a"
         }
     }
     buildTypes {
         release {
+            debuggable false
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }

@@ -68,7 +68,7 @@ EE depthwise_convolution_padding_input_mali(TensorDesc inputDesc,
         U32 oh = (*outputDesc).dims[1];
         U32 ih_align = oh;
         for (auto item_h : vecH) {
-            U32 i = ALIGN(oh, item_h);
+            U32 i = UNI_ALIGN(oh, item_h);
             ih_align = (ih_align < i) ? i : ih_align;
         }
         U32 pl, pr, pt, pb;
@@ -86,7 +86,7 @@ EE depthwise_convolution_infer_forward_algorithm_mali(GCLHandle_t handle,
     GCLMemDesc outputMemDesc,
     ConvolutionParamSpec convParamSpec,
     ConvolutionPolicy policy,
-    ActivationMode depthwiseActivationMode,
+    ActivationParamSpec depthwiseActivationParamSpec,
     ForwardRunInfoMali_t forwardRunInfo)
 {
     if (forwardRunInfo == nullptr) {
@@ -212,7 +212,7 @@ EE depthwise_convolution_infer_forward_algorithm_mali(GCLHandle_t handle,
         for (U32 i = 0; i < algosNum; i++) {
             if (depthwise_convolution_mali(handle, inputDesc, input, filterDesc, filter,
                     convParamSpec, &runInfos[i], biasDesc, bias, maxBytes[0], tmp, outputDesc,
-                    output, depthwiseActivationMode) == SUCCESS) {
+                    output, depthwiseActivationParamSpec) == SUCCESS) {
                 U32 kernelVecSize = handle->kernelVec->size();
                 gcl_run_kernelVec_timing(handle, kernelVecSize - 1, kernelVecSize);
                 if (minTime > handle->t_execute) {
@@ -245,19 +245,15 @@ EE depthwise_convolution_infer_forward_algorithm_mali(GCLHandle_t handle,
 EE depthwise_convolution_transform_filter_bytes_mali(
     TensorDesc filterDesc, ForwardRunInfoMali_t forwardRunInfo, TensorDesc *ftmDesc)
 {
-    EE ret = SUCCESS;
+    EE ret = NOT_SUPPORTED;
     switch (filterDesc.dt) {
-        case DT_F16: {
+        case DT_F16:
+        case DT_F32: {
             ret = depthwise_convolution_transform_filter_bytes_mali_fp16(
                 filterDesc, forwardRunInfo, ftmDesc);
             break;
         }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
     return ret;
@@ -270,19 +266,15 @@ EE depthwise_convolution_transform_filter_mali(GCLHandle_t handle,
     TensorDesc *fltmemDesc,
     GCLMem_t fltmem)
 {
-    EE ret = SUCCESS;
+    EE ret = NOT_SUPPORTED;
     switch (filterDesc.dt) {
-        case DT_F16: {
+        case DT_F16:
+        case DT_F32: {
             ret = depthwise_convolution_transform_filter_mali_fp16(
                 handle, filterDesc, filter, forwardRunInfo, fltmemDesc, fltmem);
             break;
         }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
     return ret;
@@ -295,19 +287,15 @@ EE depthwise_convolution_infer_forward_tmp_bytes_mali(TensorDesc inputDesc,
     ForwardRunInfoMali_t forwardRunInfo,
     U32 *bytes)
 {
-    EE ret = SUCCESS;
+    EE ret = NOT_SUPPORTED;
     switch (filterDesc.dt) {
-        case DT_F16: {
+        case DT_F16:
+        case DT_F32: {
             ret = depthwise_convolution_infer_forward_tmp_bytes_mali_fp16(
                 inputDesc, filterDesc, outputDesc, convParamSpec, forwardRunInfo, bytes);
             break;
         }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
     return ret;
@@ -326,22 +314,18 @@ EE depthwise_convolution_mali(GCLHandle_t handle,
     GCLMem_t tmpBuf,
     TensorDesc outputDesc,
     GCLMem_t output,
-    ActivationMode depthwiseActivationMode)
+    ActivationParamSpec depthwiseActivationParamSpec)
 {
-    EE ret = SUCCESS;
+    EE ret = NOT_SUPPORTED;
     switch (inputDesc.dt) {
-        case DT_F16: {
+        case DT_F16:
+        case DT_F32: {
             ret = depthwise_convolution_mali_fp16(handle, inputDesc, input, filterDesc, filter,
                 convParamSpec, forwardRunInfo, biasDesc, bias, tmpBytes, tmpBuf, outputDesc, output,
-                depthwiseActivationMode);
-            break;
-        }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
+                depthwiseActivationParamSpec);
             break;
         }
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
     return ret;

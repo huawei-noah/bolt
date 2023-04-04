@@ -26,7 +26,6 @@ namespace raul
  * Measures the probability error in discrete classification tasks in which each class is independent and not mutually exclusive.
  * For instance, one could perform multilabel classification where a picture can contain both an elephant and a dog at the same time.
  * @see
- * https://www.tensorflow.org/api_docs/python/tf/nn/sigmoid_cross_entropy_with_logits
  */
 class SigmoidCrossEntropyLoss : public BasicLayer
 {

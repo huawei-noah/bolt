@@ -15,19 +15,36 @@
 #define _H_TRANSPOSEOPTIMIZER
 
 #include "OPOptimizer.hpp"
+#include <map>
+
+/*
+* Transpose1 + Transpose2 = Transpose2 or null
+* Transpose1 + Relu + Transpose2 = Relu + Transpose2 or Relu
+* */
 
 class TransposeOptimizer : public OPOptimizer {
     bool optimize(ModelSpec *spec) override
     {
         bool hasOptimized = false;
+        std::map<OperatorType, int> activationMap = {{OT_Relu, 1}, {OT_Relu6, 1}, {OT_TanH, 1}};
         for (int i = 0; i < spec->num_operator_specs - 1; i++) {
             if (spec->ops[i].type == OT_Transpose && spec->ops[i].num_inputs == 1 &&
                 spec->ops[i].num_outputs == 1) {
-                auto tmpVec = searchOperatorIndexByInput(
+                std::vector<std::pair<int, int> > tmpVec = searchOperatorIndexByInput(
                     spec, spec->ops[i].output_tensors_name[0], i + 1, spec->num_operator_specs);
                 if (tmpVec.size() != 1) {
                     continue;
                 }
+
+                // check activation
+                int tmpOpIndex = tmpVec[0].first;
+                if (activationMap.find(spec->ops[tmpOpIndex].type) != activationMap.end()) {
+                    tmpVec = searchOperatorIndexByInput(spec, spec->ops[tmpOpIndex].output_tensors_name[0], i + 1,spec->num_operator_specs);
+                    if (tmpVec.size() != 1) {
+                        continue;
+                    }
+                }
+
                 int next = tmpVec[0].first;
                 if (spec->ops[next].type == OT_Transpose && spec->ops[next].num_inputs == 1) {
                     auto ps1 = spec->ops[i].ps.transpose_spec;

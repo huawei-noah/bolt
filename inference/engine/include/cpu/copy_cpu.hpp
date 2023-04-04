@@ -35,10 +35,6 @@ public:
         Tensor dstTensor = this->inputTensors[1];
         TensorDesc dstDesc = dstTensor.get_desc();
 
-        std::vector<void *> input;
-        input.push_back(((CpuMemory *)(srcTensor.get_memory()))->get_ptr());
-        input.push_back(((CpuMemory *)(dstTensor.get_memory()))->get_ptr());
-
         U32 batch = srcDesc.dims[srcDesc.nDims - 1];
         U32 copyLength = (this->p.length >= 0) ? this->p.length : tensorNumElements(srcDesc) / batch;
         U32 srcBatchStride = (this->p.src_dims[0] >= 0) ? this->p.src_dims[0]
@@ -49,6 +45,20 @@ public:
                                                         : tensorNumElements(dstDesc) / batch;
         U32 dstStride = (this->p.dst_dims[1] >= 0) ? this->p.dst_dims[1]
                                                    : tensorNumElements(dstDesc) / batch;
+        std::vector<Tensor> inTensors(this->inputTensors);
+        if ((inTensors[0].get_desc().dt == DT_U8_Q) && 
+            (inTensors[0].get_desc().dt != inTensors[1].get_desc().dt))
+        {
+            F32 scale = inTensors[0].get_scale();
+            Tensor bias;
+            Tensor wtm;
+            wtm.reuse(&(this->temp));
+            TensorDesc wDesc = inTensors[0].get_desc();
+            wDesc.dt = inTensors[1].get_desc().dt;
+            wtm.resize(wDesc);
+            dequantize(inTensors[0], &scale, bias, wtm, &this->archInfo);
+            inTensors[0] = wtm;
+        }
         for (U32 i = 0; i < batch; i++) {
             U32 srcBlockIndex = 0;
             if (this->inputTensors.size() > 2) {
@@ -63,7 +73,7 @@ public:
             U32 srcIndex = i * srcBatchStride + srcBlockIndex * srcStride + this->p.src_dims[2];
             U32 dstIndex = i * dstBatchStride + dstBlockIndex * dstStride + this->p.dst_dims[2];
             CHECK_STATUS(
-                copy(this->inputTensors, srcIndex, dstIndex, 0, 0, copyLength, &this->archInfo));
+                copy(inTensors, srcIndex, dstIndex, 0, 0, copyLength, &this->archInfo));
         }
     }
 
@@ -78,6 +88,17 @@ public:
         outTensors[0]->resize(desc);
         return SUCCESS;
     }
+
+    U32 infer_tmp_memory_size() override
+    {
+        U32 bytes = 0;
+        if (this->inputTensors[0].get_desc().dt != this->inputTensors[1].get_desc().dt) {
+            bytes += tensorNumElements(this->inputTensors[0].get_desc()) *
+                bytesOf(this->inputTensors[1].get_desc().dt);
+        }
+        return bytes;
+    }
+
 };
 
 #endif  // _COPY_CPU_H

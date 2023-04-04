@@ -13,7 +13,6 @@
 
 #include "cpu/arm/fp32/tensor_computing_fp32.h"
 #include "cpu/arm/transform_functions.h"
-#include "thread_affinity.h"
 
 EE convolution_gemm_V8(TensorDesc inputDesc,
     F32 *inArray,
@@ -70,6 +69,8 @@ EE convolution_gemm_V8(TensorDesc inputDesc,
         std::to_string(p.stride_h) + std::to_string(p.stride_w);
     U32 *padding_input_offsets =
         get_convolution_padding_input_offset<12, 8>(key, ih_pad, iw_pad, p, oh, ow, ohow);
+#else
+    std::vector<U32> padding_input_offsets(12 * OMP_NUM_THREADS);
 #endif
     for (U32 n = 0; n < in; n++) {
         F32 *inArray_pad = convolution_input_padding_per_channel<F32, 8>(
@@ -81,16 +82,17 @@ EE convolution_gemm_V8(TensorDesc inputDesc,
 #endif
         for (I32 hw = 0; hw < ohow - 11; hw += 12) {
 #ifdef _USE_OPENMP
-            F32 *thread_in_pack = in_pack + 12 * K * omp_get_thread_num();
+            I32 thread_id = omp_get_thread_num();
 #else
-            F32 *thread_in_pack = in_pack;
+            I32 thread_id = 0;
 #endif
+            F32 *thread_in_pack = in_pack + 12 * K * thread_id;
             // pack input
             // NCHWc8 => NHWChw12 + im2col
 #ifdef _USE_CACHE
             U32 *padding_input_offset = padding_input_offsets + hw;
 #else
-            U32 padding_input_offset[12];
+            U32 *padding_input_offset = padding_input_offsets.data() + 12 * thread_id;
             convolution_padding_input_offset<12, 8>(
                 ih_pad, iw_pad, p, oh, ow, hw, padding_input_offset);
 #endif

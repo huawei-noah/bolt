@@ -17,7 +17,6 @@
 
 int preluTest(int argc, char **argv, DataType dt)
 {
-    // input dim
     U32 in = atoi(argv[1]);
     U32 ic = atoi(argv[2]);
     U32 ih = atoi(argv[3]);
@@ -88,23 +87,38 @@ int preluTest(int argc, char **argv, DataType dt)
 
     CHECK_STATUS(ocl_set_input(handle, input, inputDescGPU, inputCPU, tmpbuf, true));
     CHECK_STATUS(prelu(inputTensor, weightTensor, preluDesc, outputTensor, &archInfo));
-    /*warp up*/
-    UNI_INFO_LOG("warm up gpu:\n")
-    for (U32 i = 0; i < 2; i++) {
+
+    for (U32 i = 0; i < UT_WARMUP; i++) {
         CHECK_STATUS(gcl_run_kernelVec(handle));
     }
-    UNI_INFO_LOG("Run gpu:\n")
+    CHECK_STATUS(gcl_finish(handle));
+
+    double time = 0;
 #ifdef _DEBUG
-    CHECK_STATUS(gcl_run_kernelVec_timing(handle, 0, handle->kernelVec->size()));
+    for (I32 i = 0; i < UT_LOOPS; i++) {
+        CHECK_STATUS(gcl_run_kernelVec_timing(handle, 0, handle->kernelVec->size()));
+        time += handle->t_execute * 0.001;
+    }
 #else
-    CHECK_STATUS(gcl_run_kernelVec(handle));
+    double start = ut_time_ms();
+    for (I32 i = 0; i < UT_LOOPS; i++) {
+        CHECK_STATUS(gcl_run_kernelVec(handle));
+        CHECK_STATUS(gcl_finish(handle));
+    }
+    double end = ut_time_ms();
+    time = (end - start);
 #endif
+    time /= UT_LOOPS;
+
     CHECK_STATUS(ocl_get_output(handle, output, outputDescGPU, outputGPU, tmpbuf, true));
 
     char buffer[150];
     char params[120];
     sprintf(params, "(%u %u %u %u)->(%u %u %u %u)", in, ic, ih, iw, in, ic, ih, iw);
-    sprintf(buffer, "%20s, %80s", "prelu", params);
+    sprintf(buffer, "%20s, %80s", "PRelu", params);
+    double ops = tensorNumElements(inputDescGPU);
+    ut_log(dt, buffer, ops, time);
+
     CHECK_STATUS(gcl_finish(handle));
     CHECK_STATUS(gcl_clean_kernelVec(handle));
     free(outputGPU);

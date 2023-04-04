@@ -16,23 +16,21 @@
 
 inline EE activation_checkpara_mali_fp16(TensorDesc inputDesc)
 {
-    if (inputDesc.dt != DT_F16) {
-        return NOT_SUPPORTED;
-    }
     return SUCCESS;
 }
 
 inline EE activation_core_mali_fp16(GCLHandle_t handle,
     TensorDesc inputDesc,
     GCLMem_t input,
+    ActivationParamSpec p,
     TensorDesc outputDesc,
-    GCLMem_t output,
-    ActivationMode activationMode)
+    GCLMem_t output)
 {
+    DataType odt;
     U32 ow, oh, oc, on;
     U32 iw_str, ih_str, iw_off, ih_off;
     U32 ow_str, oh_str, ow_off, oh_off;
-    CHECK_STATUS(gclmem_get_desc_dim(output->desc, NULL, NULL, &on, &oc, &oh, &ow));
+    CHECK_STATUS(gclmem_get_desc_dim(output->desc, &odt, NULL, &on, &oc, &oh, &ow));
     CHECK_STATUS(gclmem_get_desc_padding(input->desc, &iw_str, &ih_str, NULL, &iw_off, &ih_off));
     CHECK_STATUS(gclmem_get_desc_padding(output->desc, &ow_str, &oh_str, NULL, &ow_off, &oh_off));
     cl_mem inbuf, outbuf;
@@ -41,7 +39,7 @@ inline EE activation_core_mali_fp16(GCLHandle_t handle,
     bool useNchwFormat = (input->desc.memFormat == DF_NCHW) ? true : false;
     char kernelName[128];
     KernelOpt kernelOpt;
-    CHECK_STATUS(set_activation_opt_mali(useNchwFormat, activationMode, DT_F16, input->desc.memType,
+    CHECK_STATUS(set_activation_opt_mali(useNchwFormat, p, odt, input->desc.memType,
         output->desc.memType, kernelName, &kernelOpt));
     Kernel kernel;
     U32 gs[3] = {1, 1, 1};
@@ -68,15 +66,13 @@ inline EE activation_core_mali_fp16(GCLHandle_t handle,
 EE activation_mali_fp16(GCLHandle_t handle,
     TensorDesc inputDesc,
     GCLMem_t input,
+    ActivationParamSpec p,
     TensorDesc outputDesc,
-    GCLMem_t output,
-    ActivationMode activationMode)
+    GCLMem_t output)
 {
     CHECK_STATUS(activation_checkpara_mali_fp16(inputDesc));
     if (input->mem != output->mem) {
         CHECK_STATUS(fill_output_zero(handle, output, outputDesc));
     }
-    CHECK_STATUS(
-        activation_core_mali_fp16(handle, inputDesc, input, outputDesc, output, activationMode));
-    return SUCCESS;
+    return activation_core_mali_fp16(handle, inputDesc, input, p, outputDesc, output);
 }

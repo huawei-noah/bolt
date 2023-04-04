@@ -100,8 +100,8 @@ EE fully_connected_infer_forward_algorithm_mali(GCLHandle_t handle,
     }
     GCLMemType imt = inputMemDesc.memType;
     GCLMemType omt = outputMemDesc.memType;
-    std::vector<I32> flag = build_fully_connected_forward_algorithm_flag(
-        inputDesc, filterDesc, imt, omt);
+    std::vector<I32> flag =
+        build_fully_connected_forward_algorithm_flag(inputDesc, filterDesc, imt, omt);
     if (gcl_get_runInfo_from_cache(handle, flag, forwardRunInfo)) {
         return SUCCESS;
     }
@@ -169,7 +169,7 @@ EE fully_connected_infer_forward_algorithm_mali(GCLHandle_t handle,
     MemFlags flags = CL_MEM_READ_WRITE;
     U32 fn_align = fn;
     for (U32 i = 0; i < vecH.size(); ++i) {
-        U32 j = ALIGN(fn, vecH[i]);
+        U32 j = UNI_ALIGN(fn, vecH[i]);
         if (fn_align < j) {
             fn_align = j;
         }
@@ -254,19 +254,15 @@ EE fully_connected_infer_forward_algorithm_mali(GCLHandle_t handle,
 EE fully_connected_transform_filter_bytes_mali(
     TensorDesc filterDesc, ForwardRunInfoMali_t forwardRunInfo, TensorDesc *ftmDesc)
 {
-    EE ret = SUCCESS;
+    EE ret = NOT_SUPPORTED;
     switch (filterDesc.dt) {
-        case DT_F16: {
+        case DT_F16:
+        case DT_F32: {
             ret = fully_connected_transform_filter_bytes_mali_fp16(
                 filterDesc, forwardRunInfo, ftmDesc);
             break;
         }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
     return ret;
@@ -279,19 +275,15 @@ EE fully_connected_transform_filter_mali(GCLHandle_t handle,
     GCLMem_t fltmem,
     ForwardRunInfoMali_t forwardRunInfo)
 {
-    EE ret = SUCCESS;
+    EE ret = NOT_SUPPORTED;
     switch (filterDesc.dt) {
-        case DT_F16: {
+        case DT_F16:
+        case DT_F32: {
             ret = fully_connected_transform_filter_mali_fp16(
                 handle, filterDesc, filter, fltmemDesc, fltmem, forwardRunInfo);
             break;
         }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
     return ret;
@@ -304,22 +296,8 @@ EE fully_connected_infer_forward_tmp_bytes_mali(TensorDesc inputDesc,
     U32 *bytes,
     ForwardRunInfoMali_t forwardRunInfo)
 {
-    EE ret = SUCCESS;
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = fully_connected_infer_forward_tmp_bytes_mali_fp16(
-                inputDesc, filterDesc, outputDesc, gclmemInputDesc, bytes, forwardRunInfo);
-            break;
-        }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return fully_connected_infer_forward_tmp_bytes_mali_fp16(
+        inputDesc, filterDesc, outputDesc, gclmemInputDesc, bytes, forwardRunInfo);
 }
 
 EE fully_connected_mali(GCLHandle_t handle,
@@ -335,22 +313,8 @@ EE fully_connected_mali(GCLHandle_t handle,
     GCLMem_t output,
     ForwardRunInfoMali_t forwardRunInfo)
 {
-    EE ret = SUCCESS;
-    ret = fully_connected_checkpara_mali(
-        handle, inputDesc, input, filterDesc, filter, bias, outputDesc, output);
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = fully_connected_mali_fp16(handle, inputDesc, input, filterDesc, filter, biasDesc,
-                bias, tmpBytes, tmp, outputDesc, output, forwardRunInfo);
-            break;
-        }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    CHECK_STATUS(fully_connected_checkpara_mali(
+        handle, inputDesc, input, filterDesc, filter, bias, outputDesc, output));
+    return fully_connected_mali_fp16(handle, inputDesc, input, filterDesc, filter, biasDesc, bias,
+        tmpBytes, tmp, outputDesc, output, forwardRunInfo);
 }

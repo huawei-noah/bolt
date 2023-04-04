@@ -18,6 +18,7 @@
 #else
 #include <string.h>
 #endif
+#include <string>
 
 #include "error.h"
 
@@ -56,11 +57,23 @@ inline void UNI_STRCPY(char *dst, const char *src)
 }
 
 #ifdef _USE_SECURE_C
+#define UNI_FSCANF fscanf_s
 #define UNI_SSCANF sscanf_s
 #define UNI_SNPRINTF snprintf_truncated_s
 #else
+#define UNI_FSCANF fscanf
 #define UNI_SSCANF sscanf
 #define UNI_SNPRINTF snprintf
 #endif
 
+inline std::string ptr2Str(const void *p)
+{
+    char b[64];
+#ifdef _USE_SECURE_C
+    sprintf_s(b, 64, "%p", p);
+#else
+    sprintf(b, "%p", p);
+#endif
+    return std::string(b);
+}
 #endif

@@ -178,10 +178,16 @@ T gcd(T u, T v)
 #ifdef _USE_OPENMP
 struct OpenMPController {
     bool useOmp;
-    void checkAndSetOpenMP(I32 ohow, I32 threshold, I32 blockNums)
+    void checkAndSetOpenMP(I32 ohow, I32 threshold, I32 blockNums, I32 computeBlock, I32 thresholdB)
     {
-#ifdef _WIN32 
-        if (ohow < threshold && blockNums < OMP_NUM_THREADS) {
+#ifdef _WIN32
+        if ((ohow < 8) && (blockNums < (OMP_NUM_THREADS * 8))) {
+            useOmp = false;
+        }
+        if ((ohow < threshold) && (blockNums < (OMP_NUM_THREADS * 2))) {
+            useOmp = false;
+        }
+        if ((OMP_NUM_THREADS > 4) && (computeBlock < thresholdB)) {
             useOmp = false;
         }
 #endif

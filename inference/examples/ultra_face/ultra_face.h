@@ -131,7 +131,7 @@ inline void bounding_boxes_generator(
     }
 }
 
-inline void nms(std::vector<FaceInfo> &input, std::vector<FaceInfo> &output, int type)
+inline int nms(std::vector<FaceInfo> &input, std::vector<FaceInfo> &output, int type)
 {
     std::sort(input.begin(), input.end(),
         [](const FaceInfo &a, const FaceInfo &b) { return a.score > b.score; });
@@ -196,9 +196,10 @@ inline void nms(std::vector<FaceInfo> &input, std::vector<FaceInfo> &output, int
             }
             default: {
                 printf("wrong type of nms.");
-                exit(-1);
+                return 1;
             }
         }
     }
+    return 0;
 }
 #endif

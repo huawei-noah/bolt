@@ -52,7 +52,7 @@ class ClipOptimizer : public OPOptimizer {
                         "encounter unoptimize Clip layer(no Clip): %s\n", spec->ops[i].name);
                     continue;
                 }
-                int opIndex1 = nextOpIndexes[0].first;
+		        int opIndex1 = nextOpIndexes[0].first;
 
                 spec->ops[opIndex0].ps.clip_spec.min = UNI_MAX(
                     spec->ops[opIndex0].ps.clip_spec.min, spec->ops[opIndex1].ps.clip_spec.min);

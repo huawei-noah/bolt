@@ -24,6 +24,10 @@ int eltwiseTest(int argc, char **argv, DataType dt)
     U32 ic = atoi(argv[3]);
     U32 ih = atoi(argv[4]);
     U32 iw = atoi(argv[5]);
+    DataFormat idf = DF_NCHW;
+    if (ic % 8 == 0) {
+        idf = DF_NCHWC8;
+    }
 
     U32 len = in * ic * ih * iw;
     EltwiseMode eltwiseMode = ELTWISE_MAX;
@@ -34,7 +38,7 @@ int eltwiseTest(int argc, char **argv, DataType dt)
     std::vector<void *> input(num);
     std::vector<Tensor> inTensors(num);
     std::vector<Tensor *> inTensorPtr(num);
-    TensorDesc inDesc = tensor4df(dt, DF_NCHWC8, in, ic, ih, iw);
+    TensorDesc inDesc = tensor4df(dt, idf, in, ic, ih, iw);
     Tensor outTensor;
     for (U32 i = 0; i < num; i++) {
         input[i] = (void *)ut_input_v(len, dt, UT_INIT_RANDOM);
@@ -44,7 +48,7 @@ int eltwiseTest(int argc, char **argv, DataType dt)
         inTensorPtr[i] = &inTensors[i];
     }
 
-    CHECK_STATUS(eltwise_infer_output_size(inTensorPtr, &outTensor, &UT_CPU_ARCHINFO));
+    CHECK_STATUS(eltwise_infer_output_size(inTensorPtr, eltwiseDesc, &outTensor, &UT_CPU_ARCHINFO));
     CHECK_REQUIREMENT(len == outTensor.length());
     outTensor.alloc();
     Tensor outTensorRef;
@@ -64,7 +68,7 @@ int eltwiseTest(int argc, char **argv, DataType dt)
 
         // check
         ut_check_v(get_ptr_from_tensor(outTensor, CPU_GENERAL),
-            get_ptr_from_tensor(outTensorRef, CPU_GENERAL), len, dt, 1, __FILE__, __LINE__);
+            get_ptr_from_tensor(outTensorRef, CPU_GENERAL), len, dt, 1);
     }
 
     // benchmark

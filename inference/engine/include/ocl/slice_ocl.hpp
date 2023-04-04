@@ -44,8 +44,7 @@ public:
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
         this->needSetKernelVec = true;
-        CHECK_STATUS(slice_infer_output_size(inTensors[0], this->p, outTensors, &this->archInfo));
-        return SUCCESS;
+        return slice_infer_output_size(inTensors[0], this->p, outTensors, &this->archInfo);
     }
 
     U32 infer_tmp_memory_size() override

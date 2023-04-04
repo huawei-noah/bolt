@@ -36,9 +36,12 @@ target_compile_features(Training-API PUBLIC cxx_std_17)
 target_link_libraries(Training-API
         PUBLIC
         Raul
-        ${uni_library}
         ${model_spec_library}
+        ${uni_library}
         )
+if (ANDROID)
+    target_link_libraries(Training-API PUBLIC log)
+endif()
 
 target_compile_definitions(Training-API
         PUBLIC

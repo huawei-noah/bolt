@@ -54,8 +54,8 @@ for((i=1;i<deviceNum;i++)); do
             var=${var//.*/}
             var=${dname}_${var}
             ./bin2char bin/$dname/$file src/${var}${cpp} ${dname}
-            echo "extern CU32 "${var}"_len;" >> $srcPath/$InlineHead
-            echo "extern CU8  "${var}"[];" >> $srcPath/$InlineHead
+            echo "extern const U32 "${var}"_len;" >> $srcPath/$InlineHead
+            echo "extern const U8  "${var}"[];" >> $srcPath/$InlineHead
             echo >> $srcPath/$InlineHead
             echo "    put(\""${var}"\", {"${var}", "${var}"_len});" >> $srcPath/$InlineCpp
         done

@@ -22,7 +22,7 @@ public:
     {
         this->p = p;
     }
-
+~PreAllocatedMemory(){}
     OperatorType get_type() override
     {
         return OT_PreAllocatedMemory;

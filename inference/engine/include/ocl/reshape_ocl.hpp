@@ -18,7 +18,10 @@
 
 class ReshapeOCL : public Reshape {
 public:
-    ReshapeOCL(DataType dt, ReshapeParamSpec p) : Reshape(dt, p)
+    ReshapeOCL(){INIT_GPU_INFO(nullptr)}
+
+    ReshapeOCL(DataType dt, ReshapeParamSpec p)
+        : Reshape(dt, p)
     {
         INIT_GPU_INFO(nullptr)
     }
@@ -45,11 +48,7 @@ public:
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
         this->needSetKernelVec = true;
-
-        CHECK_STATUS(
-            reshape_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo));
-
-        return SUCCESS;
+        return reshape_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo);
     }
 
     U32 infer_tmp_memory_size() override

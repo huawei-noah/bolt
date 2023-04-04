@@ -25,5 +25,7 @@ public enum DataType {
     FP32,   ///< 32 bit float
     FP16,   ///< 16 bit float
     INT32,  ///< 32 bit integer
-    UINT32  ///< 32 bit unsigned char
+    UINT32, ///< 32 bit unsigned char
+    INT8,   ///< 8 bit integer
+    UINT8   ///< 8 bit unsigned char
 }

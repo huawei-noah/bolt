@@ -14,7 +14,7 @@
 #ifndef _IMAGE_CONTAINER_H
 #define _IMAGE_CONTAINER_H
 
-#include "tensor_desc.h"
+#include "tensor.hpp"
 #include "image_manager.hpp"
 
 class ImageContainer : public ImageManager {

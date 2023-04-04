@@ -54,20 +54,22 @@ EE expand_infer_forward_tmp_bytes(
 {
     TensorDesc outputDesc = outputTensor.get_desc();
     TensorDesc inputDesc = inputTensor.get_desc();
+    EE ret = NOT_SUPPORTED;
     if (IS_GPU(archInfo->arch)) {
 #ifdef _USE_GPU
         GCLMemDesc gclmemInputDesc = ocl_get_desc(inputTensor);
         GCLMemDesc gclmemOutputDesc = ocl_get_desc(outputTensor);
-        CHECK_STATUS(expand_infer_forward_tmp_bytes_mali(
-            inputDesc, outputDesc, gclmemInputDesc, gclmemOutputDesc, bytes));
+        ret = expand_infer_forward_tmp_bytes_mali(
+            inputDesc, outputDesc, gclmemInputDesc, gclmemOutputDesc, bytes);
 #endif
     } else {
         *bytes = 0;
-        if (outputDesc.df != inputDesc.df) {
+        if (!isSameDataFormat(outputDesc.df, inputDesc.df)) {
             *bytes += tensorNumBytes(outputDesc);
         }
+        ret = SUCCESS;
     }
-    return SUCCESS;
+    return ret;
 }
 
 void expand_copy_kernel(U32 dims,
@@ -130,35 +132,48 @@ EE expand(
     void *tmp = get_ptr_from_tensor(tmpTensor, arch);
     TensorDesc inputDesc = inputTensor.get_desc();
     TensorDesc outputDesc = outputTensor.get_desc();
-    if (outputDesc.df != inputDesc.df) {
-        output = tmp;
-    }
+    EE ret = NOT_SUPPORTED;
     if (IS_GPU(arch)) {
 #ifdef _USE_GPU
-        CHECK_STATUS(expand_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc,
-            (GCLMem_t)input, p, (GCLMem_t)tmp, outputDesc, (GCLMem_t)output));
+        ret = expand_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc, (GCLMem_t)input, p,
+            (GCLMem_t)tmp, outputDesc, (GCLMem_t)output);
 #endif
     } else {
-        DataFormat idf = inputDesc.df;
-        DataType idt = inputDesc.dt;
-        CHECK_REQUIREMENT(idf == DF_NCHW || idf == DF_MTK || idf == DF_NORMAL);
-        U32 lastDims = 0;
-        U32 minCopySize = bytesOf(idt);
-        for (U32 i = 0; i < outputDesc.nDims; ++i) {
-            if (i >= inputDesc.nDims || inputDesc.dims[i] == 1) {
-                break;
+        auto outBytes = tensorNumBytes(outputDesc);
+        auto inBytes = tensorNumBytes(inputDesc);
+        if (!isSameDataFormat(outputDesc.df, inputDesc.df)) {
+            output = tmp;
+            if (outBytes == inBytes) {
+                output = input;
             }
-            lastDims = i + 1;
-            minCopySize *= inputDesc.dims[i];
         }
-
-        expand_copy_kernel((outputDesc.nDims - 1), inputDesc.nDims, outputDesc.nDims,
-            inputDesc.dims, outputDesc.dims, (U8 *)input, (U8 *)output, idt, lastDims, minCopySize);
-        if (outputDesc.df != inputDesc.df) {
+        if (outBytes == inBytes) {
+            if (output != input) {
+                UNI_MEMCPY(output, input, outBytes);
+            }
+        } else {
+            CHECK_REQUIREMENT(isSameDataFormat(inputDesc.df, DF_NCHW));
+            U32 lastDims = 0;
+            DataType idt = inputDesc.dt;
+            U32 minCopySize = bytesOf(idt);
+            for (U32 i = 0; i < outputDesc.nDims; ++i) {
+                if (i >= inputDesc.nDims || inputDesc.dims[i] == 1) {
+                    break;
+                }
+                lastDims = i + 1;
+                minCopySize *= inputDesc.dims[i];
+            }
+            expand_copy_kernel((outputDesc.nDims - 1), inputDesc.nDims, outputDesc.nDims,
+                inputDesc.dims, outputDesc.dims, (U8 *)input, (U8 *)output, idt, lastDims,
+                minCopySize);
+        }
+        ret = SUCCESS;
+        if (!isSameDataFormat(outputDesc.df, inputDesc.df)) {
             TensorDesc oldDesc = outputDesc;
             oldDesc.df = inputDesc.df;
-            transformFormat(oldDesc, output, outputDesc, get_ptr_from_tensor(outputTensor, arch));
+            ret = transformFormat(
+                oldDesc, output, outputDesc, get_ptr_from_tensor(outputTensor, arch));
         }
     }
-    return SUCCESS;
+    return ret;
 }

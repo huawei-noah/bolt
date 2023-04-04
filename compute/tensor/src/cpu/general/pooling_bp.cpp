@@ -11,9 +11,6 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include <float.h>
-#include "error.h"
-
 #include "cpu/general/tensor_computing_general.h"
 
 template <typename T>
@@ -39,11 +36,12 @@ EE pooling_bp(
                         if (!p.count_include_pad) {
                             poolSize = (hend - hstart) * (wend - wstart);
                         }
+                        U32 in_off = (((n * ic + c) * ih + h) * iw + w) * alignSize + j;
+                        F32 value = input[in_off] / poolSize;
                         for (int x = hstart; x < hend; x++) {
                             for (int y = wstart; y < wend; y++) {
-                                U32 in_off = ((((n * ic + c) * ih) + h) * iw + w) * alignSize + j;
-                                U32 out_off = ((((n * ic + c) * oh) + x) * ow + y) * alignSize + j;
-                                output[out_off] += input[in_off] / poolSize;
+                                U32 out_off = (((n * ic + c) * oh + x) * ow + y) * alignSize + j;
+                                output[out_off] += value;
                             }
                         }
                     }
@@ -72,6 +70,7 @@ EE pooling_bp_general(
     if (idf != DF_NCHWC8 || odf != idf) {
         CHECK_STATUS(NOT_MATCH);
     }
+    UNI_MEMSET(output, 0, tensorNumBytes(outputDesc));
     EE ret = SUCCESS;
     switch (idt) {
 #ifdef _USE_FP32

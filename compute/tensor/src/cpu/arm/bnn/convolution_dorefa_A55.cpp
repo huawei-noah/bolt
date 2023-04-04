@@ -61,7 +61,7 @@ EE convolution_dorefa_A55(TensorDesc inputDesc,
 
     U32 ih_pad = ih + paddingT + paddingB;
     U32 iw_pad = iw + paddingL + paddingR;
-    U32 ohow = oh * ow;
+    I32 ohow = oh * ow;
     U32 ihiw = ih_pad * iw_pad;
 
     BIN8 *inArray = ((BIN8 *)tmp) + ic * ihiw + 8 * fh * fw * ic;  // ic has been divided by 8
@@ -69,7 +69,7 @@ EE convolution_dorefa_A55(TensorDesc inputDesc,
         transformFromHalf(DT_BIN01, input + n * ic * ih * iw * 8, inArray, ic * ih * iw * 8);
         BIN8 *inArray_pad = convolution_input_padding_per_channel<BIN8, 1>(
             n, ic, 1, ih, iw, convParamSpec, inArray, (BIN8 *)tmp);
-        for (U32 hw = 0; hw < ohow - 7; hw += 8) {
+        for (I32 hw = 0; hw < ohow - 7; hw += 8) {
             const F16 *s0 = scaleArray;
             const F16 *s1 = scaleArray + 8;
             const F16 *b0 = biasArray;
@@ -411,7 +411,7 @@ EE convolution_dorefa_A55(TensorDesc inputDesc,
         // ohow_remainder % 8 / 4
         U32 ohow_s = (ohow / 8) * 8;
 
-        for (U32 hw = ohow_s; hw < ohow - 3; hw += 4) {
+        for (I32 hw = ohow_s; hw < ohow - 3; hw += 4) {
             const F16 *s0 = scaleArray;
             const F16 *s1 = scaleArray + 8;
             const F16 *b0 = biasArray;
@@ -646,7 +646,7 @@ EE convolution_dorefa_A55(TensorDesc inputDesc,
         }
         // ohow_reminder % 4
         ohow_s = (ohow / 4) * 4;
-        for (U32 hw = ohow_s; hw < ohow; hw++) {
+        for (I32 hw = ohow_s; hw < ohow; hw++) {
             const F16 *s0 = scaleArray;
             const F16 *s1 = scaleArray + 8;
             const F16 *b0 = biasArray;

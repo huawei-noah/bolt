@@ -142,10 +142,10 @@
         SET_BIAS_VAL(bias_val, val); \
     }
 #else
-#define SET_BIAS(val, off, bias)                       \
-    {                                                  \
-        T4 bias_val = read_imageh(bias, sampler, off); \
-        SET_BIAS_VAL(bias_val, val);                   \
+#define SET_BIAS(val, off, bias)                      \
+    {                                                 \
+        T4 bias_val = READ_IMAGE(bias, sampler, off); \
+        SET_BIAS_VAL(bias_val, val);                  \
     }
 #endif
 

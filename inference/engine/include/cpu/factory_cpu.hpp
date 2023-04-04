@@ -50,11 +50,11 @@
 #include "attention_mask.hpp"
 #include "relative_position_embedding.hpp"
 #include "relative_shift.hpp"
-#include "detection_output.hpp"
-#include "prior_box.hpp"
+#include "cpu/detection_output_cpu.hpp"
+#include "cpu/prior_box_cpu.hpp"
 #include "yolov3_detection_output.hpp"
 #include "cpu/channel_resize_cpu.hpp"
-#include "cpu/l2normalization_cpu.hpp"
+#include "cpu/l2norm_cpu.hpp"
 #include "cpu/tile_cpu.hpp"
 #include "cpu/prelu_cpu.hpp"
 #include "cpu/tfslice_cpu.hpp"
@@ -76,7 +76,7 @@
 #include "cpu/quantizelinear_cpu.hpp"
 #include "cpu/grid_sample_cpu.hpp"
 #include "cpu/onehot_cpu.hpp"
-#include "cpu/cumsum_cpu.hpp"
+#include "cpu/cum_cpu.hpp"
 #include "cpu/non_max_suppression_cpu.hpp"
 #include "cpu/constant_of_shape_cpu.hpp"
 #include "cpu/non_zero_cpu.hpp"
@@ -84,6 +84,14 @@
 #include "cpu/range_cpu.hpp"
 #include "cpu/depth2space_cpu.hpp"
 #include "cpu/space2depth_cpu.hpp"
+#include "cpu/einsum_cpu.hpp"
+#include "cpu/unpooling_cpu.hpp"
+#include "cpu/random_cpu.hpp"
+#include "cpu/flatten_cpu.hpp"
+#include "cpu/convert_color_cpu.hpp"
+#include "cpu/bilateral_slice_apply_cpu.hpp"
+#include "cpu/lut_preprocess_cpu.hpp"
+#include "cpu/lut_cpu.hpp"
 
 class FactoryCPU : public Factory {
 public:
@@ -97,41 +105,9 @@ public:
         return std::shared_ptr<Operator>(cep);
     }
 
-    std::shared_ptr<Operator> createDeconvolution(
-        DataType dt, ConvolutionParamSpec p, ActivationParamSpec activationDesc) override
-    {
-        auto cep = new DeconvolutionCPU(dt, p, activationDesc);
-        return std::shared_ptr<Operator>(cep);
-    }
-
     std::shared_ptr<Operator> createPooling(PoolingParamSpec p) override
     {
         auto cep = (Pooling *)(new PoolingCPU(p));
-        return std::shared_ptr<Operator>(cep);
-    }
-
-    std::shared_ptr<Operator> createFullyConnected(
-        DataType dt, FullyConnectedParamSpec p, U32 numInput) override
-    {
-        auto cep = (FullyConnected *)(new FullyConnectedCPU(dt, p, numInput));
-        return std::shared_ptr<Operator>(cep);
-    }
-
-    std::shared_ptr<Operator> createSoftmax(DataType dt, SoftmaxParamSpec p) override
-    {
-        auto cep = new SoftmaxCPU(dt, p);
-        return std::shared_ptr<Operator>(cep);
-    }
-
-    std::shared_ptr<Operator> createLogSoftmax(DataType dt, SoftmaxParamSpec p) override
-    {
-        auto cep = new LogSoftmaxCPU(dt, p);
-        return std::shared_ptr<Operator>(cep);
-    }
-
-    std::shared_ptr<Operator> createConcat(ConcatParamSpec p) override
-    {
-        auto cep = (Concat *)(new ConcatCPU(p));
         return std::shared_ptr<Operator>(cep);
     }
 
@@ -144,6 +120,64 @@ public:
     std::shared_ptr<Operator> createEltwise(EltwiseParamSpec eltwiseDesc) override
     {
         auto cep = (Eltwise *)new EltwiseCPU(eltwiseDesc);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createChannelResize(DataType dt, ChannelResizeParamSpec p) override
+    {
+        auto cep = new ChannelResizeCPU(dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createFullyConnected(
+        DataType dt, FullyConnectedParamSpec p, U32 numInput) override
+    {
+        auto cep = (FullyConnected *)(new FullyConnectedCPU(dt, p, numInput));
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createReshape(DataType dt, ReshapeParamSpec p) override
+    {
+        auto cep = (Reshape *)(new ReshapeCPU(dt, p));
+        return std::shared_ptr<Operator>(cep);
+    }
+
+#ifdef _USE_INT8
+    std::shared_ptr<Operator> createQuantizeLinear(DataType dt, QuantizeLinearParamSpec p) override
+    {
+        auto cep = new QuantizeLinearCPU(dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+#endif
+#ifndef _USE_LITE
+    std::shared_ptr<Operator> createConcat(ConcatParamSpec p) override
+    {
+        auto cep = (Concat *)(new ConcatCPU(p));
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createFlatten(FlattenParamSpec p) override
+    {
+        auto cep = new FlattenCPU(p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createDeconvolution(
+        DataType dt, ConvolutionParamSpec p, ActivationParamSpec activationDesc) override
+    {
+        auto cep = new DeconvolutionCPU(dt, p, activationDesc);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createSoftmax(DataType dt, SoftmaxParamSpec p) override
+    {
+        auto cep = new SoftmaxCPU(dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createLogSoftmax(DataType dt, SoftmaxParamSpec p) override
+    {
+        auto cep = new LogSoftmaxCPU(dt, p);
         return std::shared_ptr<Operator>(cep);
     }
 
@@ -187,12 +221,6 @@ public:
         DataType dt, LayerNormParamSpec p, U32 weightNum) override
     {
         auto cep = (LayerNorm *)(new LayerNormCPU(dt, p, weightNum));
-        return std::shared_ptr<Operator>(cep);
-    }
-
-    std::shared_ptr<Operator> createReshape(DataType dt, ReshapeParamSpec p) override
-    {
-        auto cep = (Reshape *)(new ReshapeCPU(dt, p));
         return std::shared_ptr<Operator>(cep);
     }
 
@@ -271,7 +299,7 @@ public:
 
     std::shared_ptr<Operator> createBilateralSliceApply(BilateralSliceApplyParamSpec p) override
     {
-        OP_UNSUP(1, p);
+        auto cep = (Repeat *)new BilateralSliceApplyCPU(p);
         return std::shared_ptr<Operator>(cep);
     }
 
@@ -341,13 +369,13 @@ public:
 
     std::shared_ptr<Operator> createPriorBox(DataType dt, PriorBoxParamSpec p) override
     {
-        auto cep = new PriorBox(dt, p);
+        auto cep = new PriorBoxCPU(dt, p);
         return std::shared_ptr<Operator>(cep);
     }
 
     std::shared_ptr<Operator> createDetectionOutput(DataType dt, DetectionOutputParamSpec p) override
     {
-        auto cep = new DetectionOutput(dt, p);
+        auto cep = new DetectionOutputCPU(dt, p);
         return std::shared_ptr<Operator>(cep);
     }
 
@@ -358,15 +386,9 @@ public:
         return std::shared_ptr<Operator>(cep);
     }
 
-    std::shared_ptr<Operator> createChannelResize(DataType dt, ChannelResizeParamSpec p) override
+    std::shared_ptr<Operator> createL2Norm(DataType dt) override
     {
-        auto cep = new ChannelResizeCPU(dt, p);
-        return std::shared_ptr<Operator>(cep);
-    }
-
-    std::shared_ptr<Operator> createL2Normalization(DataType dt) override
-    {
-        auto cep = new L2NormalizationCPU(dt);
+        auto cep = new L2NormCPU(dt);
         return std::shared_ptr<Operator>(cep);
     }
 
@@ -474,12 +496,6 @@ public:
         return std::shared_ptr<Operator>(cep);
     }
 
-    std::shared_ptr<Operator> createQuantizeLinear(DataType dt, QuantizeLinearParamSpec p) override
-    {
-        auto cep = new QuantizeLinearCPU(dt, p);
-        return std::shared_ptr<Operator>(cep);
-    }
-
     std::shared_ptr<Operator> createGridSample(DataType dt, GridSampleParamSpec p) override
     {
         auto cep = new GridSampleCPU(dt, p);
@@ -492,9 +508,9 @@ public:
         return std::shared_ptr<Operator>(cep);
     }
 
-    std::shared_ptr<Operator> createCumSum(DataType dt, CumSumParamSpec p) override
+    std::shared_ptr<Operator> createCum(DataType dt, CumParamSpec p) override
     {
-        auto cep = new CumSumCPU(dt, p);
+        auto cep = new CumCPU(dt, p);
         return std::shared_ptr<Operator>(cep);
     }
 
@@ -522,5 +538,42 @@ public:
         auto cep = new RangeCPU(dt, p);
         return std::shared_ptr<Operator>(cep);
     }
+
+    std::shared_ptr<Operator> createEinsum(DataType dt, EinsumParamSpec p) override
+    {
+        auto cep = new EinsumCPU(dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createUnPooling(PoolingParamSpec p) override
+    {
+        auto cep = new UnPoolingCPU(p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createRandom(RandomParamSpec p) override
+    {
+        auto cep = new RandomCPU(p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createConvertColor(DataType dt, ConvertColorParamSpec p) override
+    {
+        auto cep = new ConvertColorCPU(dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createLutPreprocess(DataType dt) override
+    {
+        auto cep = new LutPreprocessCPU(dt);
+        return std::shared_ptr<Operator>(cep);
+    }
+
+    std::shared_ptr<Operator> createLut(DataType dt, LutParamSpec p) override
+    {
+        auto cep = new LutCPU(dt, p);
+        return std::shared_ptr<Operator>(cep);
+    }
+#endif
 };
 #endif  // _FACTORY_CPU_H

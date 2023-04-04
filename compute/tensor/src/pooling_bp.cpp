@@ -21,7 +21,7 @@
 #ifdef _USE_X86
 #include "cpu/x86/tensor_computing_x86.h"
 #endif
-// only support average pooling now
+
 EE pooling_bp(
     Tensor inputTensor, PoolingParamSpec poolingParamSpec, Tensor outputTensor, ArchInfo_t archInfo)
 {

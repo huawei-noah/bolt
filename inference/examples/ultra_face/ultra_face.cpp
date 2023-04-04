@@ -36,7 +36,7 @@ void print_ultraface_usage()
               << std::endl;
 }
 
-void parse_options(int argc, char *argv[])
+int parse_options(int argc, char *argv[])
 {
     std::cout << "\nPlease enter this command './benchmark --help' to get more usage "
                  "information.\n";
@@ -44,7 +44,7 @@ void parse_options(int argc, char *argv[])
     for (std::string arg : lineArgs) {
         if (arg == "--help" || arg == "-help" || arg == "--h" || arg == "-h") {
             print_ultraface_usage();
-            exit(-1);
+            return 1;
         }
     }
 
@@ -61,11 +61,12 @@ void parse_options(int argc, char *argv[])
                 inputData = std::string(optarg);
                 break;
             default:
-                std::cout << "Input option gets error, please check the params meticulously.\n";
+                std::cerr << "Input option gets error, please check the params meticulously.\n";
                 print_ultraface_usage();
-                exit(-1);
+                return 1;
         }
     }
+    return 0;
 }
 
 std::map<std::string, std::shared_ptr<Tensor>> get_output(
@@ -89,9 +90,11 @@ std::map<std::string, std::shared_ptr<Tensor>> get_output(
 
 int main(int argc, char *argv[])
 {
-    prior_boxes_generator(320, 240, 0.7, 0.3);  // debug check the size of prior
-    parse_options(argc, argv);
+    if (0 != parse_options(argc, argv)) {
+        return 1;
+    }
 
+    prior_boxes_generator(320, 240, 0.7, 0.3);  // debug check the size of prior
     int last_gang_index = inputData.find_last_of('/');
     int last_dot_index = inputData.find_last_of('.');
     std::string prefix_str = inputData.substr(0, last_gang_index + 1);
@@ -102,8 +105,8 @@ int main(int argc, char *argv[])
 
     VideoCapture cap(inputData);
     if (!cap.isOpened()) {
-        std::cout << "Cannot open the video file. \n";
-        return -1;
+        std::cerr << "Cannot open the video file. \n";
+        return 1;
     } else {
         std::cout << "Successfully open the video! \n\n";
     }

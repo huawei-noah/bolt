@@ -40,23 +40,46 @@ EE convolution_infer_forward_algorithm_x86(TensorDesc inputDesc,
         return SUCCESS;
     }
 
-    DataType idt, fdt, odt;
-    DataFormat idf, fdf, odf;
-    U32 in, ic, ih, iw;
-    U32 fn, fc, fh, fw;
-    U32 on, oc, oh, ow;
-    CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-    CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
     U32 group = convParamSpec.group;
     U32 strideH = convParamSpec.stride_h;
     U32 strideW = convParamSpec.stride_w;
+    U32 strideT = convParamSpec.stride_t;
     U32 paddingT = convParamSpec.pad_top;
     U32 paddingB = convParamSpec.pad_bottom;
     U32 paddingL = convParamSpec.pad_left;
     U32 paddingR = convParamSpec.pad_right;
+    U32 paddingF = convParamSpec.pad_before;
+    U32 paddingA = convParamSpec.pad_after;
     U32 dilateH = convParamSpec.dilatedRate_h;
     U32 dilateW = convParamSpec.dilatedRate_w;
+    U32 dilateT = convParamSpec.dilatedRate_t;
+
+    DataType idt, fdt, odt;
+    DataFormat idf, fdf, odf;
+    U32 in, ic, it, ih, iw;
+    U32 fn, fc, ft, fh, fw;
+    U32 on, oc, ot, oh, ow;
+    if (tensorIs4d(inputDesc)) {
+        CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+        CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
+        CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
+        it = ft = 1;
+    } else if (tensorIs5d(inputDesc)) {
+        CHECK_STATUS(tensor5dGet(inputDesc, &idt, &idf, &in, &ic, &it, &ih, &iw));
+        CHECK_STATUS(tensor5dGet(filterDesc, &fdt, &fdf, &fn, &fc, &ft, &fh, &fw));
+        CHECK_STATUS(tensor5dGet(outputDesc, &odt, &odf, &on, &oc, &ot, &oh, &ow));
+        if ((ft != 1 && fh != 1 && fw != 1) || (paddingF != 0) || (paddingA != 0) ||
+            (dilateT > 1) || (strideT > 1)) {
+            return NOT_SUPPORTED;
+        }
+    } else {
+        return NOT_SUPPORTED;
+    }
+
+    if ((fh == 1) && (fw == 1) && (ft == 1)) {
+        *algorithm = CONVOLUTION_ALGORITHM_POINTWISE;
+        return SUCCESS;
+    }
 
     if ((targetDataType != DT_I8) && (targetDataType != DT_U8_Q) &&
         ((idf != DF_NCHWC8) || (ic / group % 8 != 0))) {
@@ -64,17 +87,16 @@ EE convolution_infer_forward_algorithm_x86(TensorDesc inputDesc,
         return SUCCESS;
     }
 
-    if ((targetDataType == DT_F32) && (idf == DF_NCHWC8) && (group == 1) && (fh == 3) &&
-        (fw == 3) && (dilateH == 1) && (dilateW == 1) && (oh > 8) && (ow > 8) && (strideH == 1) &&
-        (strideW == 1)) {
+#ifndef _USE_X86_ARM_CONSISTENCY
+    if ((targetDataType == DT_F32) && (idf == DF_NCHWC8) && (group == 1) && (fh == 3) && (fw == 3) &&
+        (dilateH == 1) && (dilateW == 1) && (oh * ow >= 64) && (strideH == 1) && (strideW == 1)) {
         *algorithm = CONVOLUTION_ALGORITHM_WINOGRAD;
+        if ((OMP_NUM_THREADS > 1) && ((I32)oh / 4 < OMP_NUM_THREADS)) {
+            *algorithm = CONVOLUTION_ALGORITHM_DIRECT;
+        }
         return SUCCESS;
     }
-
-    if ((fh == 1) && (fw == 1)) {
-        *algorithm = CONVOLUTION_ALGORITHM_POINTWISE;
-        return SUCCESS;
-    }
+#endif
 
     *algorithm = CONVOLUTION_ALGORITHM_DIRECT;
     return SUCCESS;
@@ -92,8 +114,28 @@ EE convolution_transform_filter_bytes_x86(TensorDesc filterDesc,
 
     DataType fdt;
     DataFormat fdf;
-    U32 fn, fc, fh, fw;
-    CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
+    U32 fn, fc, ft, fh, fw;
+    if (tensorIs4d(filterDesc)) {
+        CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
+        ft = 1;
+    } else if (tensorIs5d(filterDesc)) {
+        U32 pb = convParamSpec.pad_before;
+        U32 pa = convParamSpec.pad_after;
+        U32 st = convParamSpec.stride_t;
+        U32 dt = convParamSpec.dilatedRate_t;
+        CHECK_STATUS(tensor5dGet(filterDesc, &fdt, &fdf, &fn, &fc, &ft, &fh, &fw));
+        if ((ft != 1 && fh != 1 && fw != 1) || (pb != 0) || (pa != 0) || (st > 1) || (dt > 1)) {
+            return NOT_SUPPORTED;
+        }
+        if (ft == 1) {
+            fh *= ft;
+        } else {
+            fw *= fh;
+            fh = ft;
+        }
+    } else {
+        return NOT_SUPPORTED;
+    }
     U32 fnAlignSize = 8;
     U32 fnGroupSize = fn / convParamSpec.group;
     U32 fnPadding = (fnGroupSize / fnAlignSize + ((fnGroupSize % fnAlignSize) == 0 ? 0 : 1)) *
@@ -118,7 +160,7 @@ EE convolution_transform_filter_bytes_x86(TensorDesc filterDesc,
     }
     *bytes *= bytesOf(fdt);
     if (fdt == DT_I8) {
-        fnAlignSize = 4;
+        fnAlignSize = 16;
         *bytes /= fcPadding;
         fcPadding = (fc + fnAlignSize - 1) / fnAlignSize * fnAlignSize;
         *bytes = *bytes * fcPadding + fn * bytesOf(DT_I32);  //offsetC
@@ -211,8 +253,11 @@ EE convolution_x86(TensorDesc inputDesc,
     U32 dataChannelAxis = inputDesc.nDims - 2;
     U32 filterChannelAxis = filterDesc.nDims - 1;
     U32 biasChannelAxis = 0;
-    if (group > 1) {
-        CHECK_REQUIREMENT(inputDesc.dims[batchAxis] == 1);
+    U32 outerBatch = 1;
+    if (group > 1 && inputDesc.dims[batchAxis] > 1) {
+        outerBatch = inputDesc.dims[batchAxis];
+        inputDesc.dims[batchAxis] = 1;
+        outputDesc.dims[batchAxis] = 1;
     }
     U32 icGroupSize = inputDesc.dims[dataChannelAxis] / group;
 
@@ -229,6 +274,42 @@ EE convolution_x86(TensorDesc inputDesc,
         inputTransform = input;
     }
 
+    if (tensorIs5d(filterDesc)) {
+        CHECK_REQUIREMENT(tensorIs5d(inputDesc));
+        CHECK_REQUIREMENT(tensorIs5d(outputDesc));
+
+        DataType idt, fdt, odt;
+        DataFormat idf, fdf, odf;
+        U32 in, ic, it, ih, iw;
+        U32 fn, fc, ft, fh, fw;
+        U32 on, oc, ot, oh, ow;
+        U32 pb = convParamSpec.pad_before;
+        U32 pa = convParamSpec.pad_after;
+        U32 st = convParamSpec.stride_t;
+        U32 dt = convParamSpec.dilatedRate_t;
+        CHECK_STATUS(tensor5dGet(inputDesc, &idt, &idf, &in, &ic, &it, &ih, &iw));
+        CHECK_STATUS(tensor5dGet(filterDesc, &fdt, &fdf, &fn, &fc, &ft, &fh, &fw));
+        CHECK_STATUS(tensor5dGet(outputDesc, &odt, &odf, &on, &oc, &ot, &oh, &ow));
+        if ((ft != 1 && fh != 1 && fw != 1) || (pb != 0) || (pa != 0) || (st > 1) || (dt > 1)) {
+            return NOT_SUPPORTED;
+        }
+        if (ft == 1) {
+            fh *= ft;
+            ih *= it;
+            oh *= ot;
+        } else {
+            fw *= fh;
+            iw *= ih;
+            ow *= oh;
+            fh = ft;
+            ih = it;
+            oh = ot;
+        }
+        filterDesc = tensor4df(fdt, fdf, fn, fc, fh, fw);
+        inputDesc = tensor4df(idt, idf, in, ic, ih, iw);
+        outputDesc = tensor4df(odt, odf, on, oc, oh, ow);
+    }
+
     TensorDesc tmpInputDesc = inputDesc;
     tmpInputDesc.dims[dataChannelAxis] /= group;
     TensorDesc tmpOutputDesc = outputDesc;
@@ -241,34 +322,41 @@ EE convolution_x86(TensorDesc inputDesc,
     TensorDesc paddingFilterDesc = tmpFilterDesc;
     paddingFilterDesc.dims[filterChannelAxis] = (tmpFilterDesc.dims[filterChannelAxis] + 7) / 8 * 8;
 
+    U32 inputTile = tensorNumBytes(tmpInputDesc);
+    U32 filterTile = tensorNumBytes(paddingFilterDesc);
+    U32 biasTile = tensorNumBytes(tmpBiasDesc);
+    U32 outputTile = tensorNumBytes(tmpOutputDesc);
+
     EE ret = SUCCESS;
-    for (U32 g = 0; g < group; g++) {
-        void *tmpInput = (U8 *)inputTransform + g * tensorNumBytes(tmpInputDesc);
-        const void *tmpFilter = (U8 *)filter + g * tensorNumBytes(paddingFilterDesc);
-        const void *tmpBias = (U8 *)bias + g * tensorNumBytes(tmpBiasDesc);
-        void *tmpOutput = (U8 *)output + g * tensorNumBytes(tmpOutputDesc);
-        switch (filterDesc.dt) {
+    for (U32 b = 0; b < outerBatch; ++b) {
+        for (U32 g = 0; g < group; g++) {
+            void *tmpInput = (U8 *)inputTransform + g * inputTile + b * group * inputTile;
+            const void *tmpFilter = (U8 *)filter + g * filterTile;
+            const void *tmpBias = (U8 *)bias + g * biasTile;
+            void *tmpOutput = (U8 *)output + g * outputTile + b * group * outputTile;
+            switch (filterDesc.dt) {
 #ifdef _USE_FP32
-            case DT_F32: {
-                ret = convolution_fp32(tmpInputDesc, (F32 *)tmpInput, (F32 *)eltwiseInput,
-                    tmpFilterDesc, (F32 *)tmpFilter, convParamSpec, algorithm, tmpBiasDesc,
-                    (F32 *)tmpBias, tmpBytes, tmp, tmpOutputDesc, (F32 *)tmpOutput, activationDesc,
-                    arch);
-                break;
-            }
+                case DT_F32: {
+                    ret = convolution_fp32(tmpInputDesc, (F32 *)tmpInput, (F32 *)eltwiseInput,
+                        tmpFilterDesc, (F32 *)tmpFilter, convParamSpec, algorithm, tmpBiasDesc,
+                        (F32 *)tmpBias, tmpBytes, tmp, tmpOutputDesc, (F32 *)tmpOutput,
+                        activationDesc, arch);
+                    break;
+                }
 #endif
 #ifdef _USE_INT8
-            case DT_I8: {
-                ret = convolution_int8(tmpInputDesc, (UINT8 *)tmpInput, (F32 *)eltwiseInput,
-                    tmpFilterDesc, (INT8 *)tmpFilter, convParamSpec, algorithm, tmpBiasDesc,
-                    (F32 *)tmpBias, tmpBytes, tmp, tmpOutputDesc, tmpOutput, (F32 *)scale,
-                    activationDesc, arch);
-                break;
-            }
+                case DT_I8: {
+                    ret = convolution_int8(tmpInputDesc, (UINT8 *)tmpInput, (F32 *)eltwiseInput,
+                        tmpFilterDesc, (INT8 *)tmpFilter, convParamSpec, algorithm, tmpBiasDesc,
+                        (F32 *)tmpBias, tmpBytes, tmp, tmpOutputDesc, tmpOutput, (F32 *)scale,
+                        activationDesc, arch);
+                    break;
+                }
 #endif
-            default:
-                ret = NOT_SUPPORTED;
-                break;
+                default:
+                    ret = NOT_SUPPORTED;
+                    break;
+            }
         }
     }
     return ret;

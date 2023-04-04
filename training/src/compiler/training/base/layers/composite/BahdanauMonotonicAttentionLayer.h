@@ -26,7 +26,6 @@ namespace raul
  *
  * This layer produce Bahdanau-style attention.
  *
- * Implementation follows https://texar-pytorch.readthedocs.io/en/latest/code/core.html#bahdanauattention
  *
  * Inputs:
  *     1. Query  [batch, 1, 1, decoder_output_size]

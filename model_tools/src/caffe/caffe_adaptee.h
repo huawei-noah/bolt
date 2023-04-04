@@ -27,7 +27,9 @@ public:
     {}
 
     ~CaffeAdaptee()
-    {}
+    {
+        google::protobuf::ShutdownProtobufLibrary();
+    }
 
 protected:
     // read prototxt
@@ -66,15 +68,15 @@ protected:
     OperatorType convert_caffe_type(std::string inputType)
     {
         std::map<std::string, OperatorType> operatorMap = {{"Convolution", OT_Conv},
-            {"Deconvolution", OT_Deconvolution}, {"L2Norm", OT_L2Normalization},
-            {"BatchNorm", OT_BatchNorm}, {"Scale", OT_Scale}, {"Eltwise", OT_Eltwise},
-            {"InnerProduct", OT_FC}, {"Pooling", OT_Pooling}, {"ReLU", OT_Relu},
-            {"ReLU6", OT_Relu6}, {"HSwish", OT_HSwish}, {"Sigmoid", OT_Sigmoid},
-            {"HSigmoid", OT_HSigmoid}, {"Softmax", OT_Softmax}, {"Concat", OT_Concat},
-            {"Embed", OT_Embedding}, {"Gelu", OT_Gelu}, {"LayerNorm", OT_LayerNorm},
-            {"MatMul", OT_MatMul}, {"Power", OT_Power}, {"Reshape", OT_Reshape},
-            {"Slice", OT_Slice}, {"Attention", OT_Attention}, {"Input", OT_Input}, {"LSTM", OT_RNN},
-            {"TanH", OT_TanH}, {"SoftmaxWithLoss", OT_SoftmaxWithLoss}, {"Squeeze", OT_Squeeze},
+            {"Deconvolution", OT_Deconvolution}, {"L2Norm", OT_L2Norm}, {"BatchNorm", OT_BatchNorm},
+            {"Scale", OT_Scale}, {"Eltwise", OT_Eltwise}, {"InnerProduct", OT_FC},
+            {"Pooling", OT_Pooling}, {"ReLU", OT_Relu}, {"ReLU6", OT_Relu6}, {"HSwish", OT_HSwish},
+            {"Sigmoid", OT_Sigmoid}, {"HSigmoid", OT_HSigmoid}, {"Softmax", OT_Softmax},
+            {"Concat", OT_Concat}, {"Embed", OT_Embedding}, {"Gelu", OT_Gelu},
+            {"LayerNorm", OT_LayerNorm}, {"MatMul", OT_MatMul}, {"Power", OT_Power},
+            {"Reshape", OT_Reshape}, {"Slice", OT_Slice}, {"Attention", OT_Attention},
+            {"Input", OT_Input}, {"LSTM", OT_RNN}, {"TanH", OT_TanH},
+            {"SoftmaxWithLoss", OT_SoftmaxWithLoss}, {"Squeeze", OT_Squeeze},
             {"Unsqueeze", OT_Unsqueeze}, {"Reduction", OT_Reduction}, {"ArgMax", OT_ArgMax},
             {"PreAllocatedMemory", OT_PreAllocatedMemory}, {"SharedWeight", OT_SharedWeight},
             {"Copy", OT_Copy}, {"Check", OT_Check}, {"Repeat", OT_Repeat}, {"Interp", OT_Resize},
@@ -82,10 +84,13 @@ protected:
             {"RelativePositionEmbed", OT_RelativePositionEmbedding},
             {"RelativeShift", OT_RelativeShift}, {"Dropout", OT_Dropout}, {"Flatten", OT_Reshape},
             {"Permute", OT_Transpose}, {"Clip", OT_Clip}, {"PriorBox", OT_PriorBox},
-            {"DetectionOutput", OT_DetectionOutput},
+            {"DetectionOutput", OT_DetectionOutput}, {"LogSoftmax", OT_LogSoftmax},
             {"Yolov3DetectionOutput", OT_Yolov3DetectionOutput}, {"Mish", OT_Mish},
-            {"PReLU", OT_PRelu}, {"Tile", OT_Tile}, {"Pad", OT_Pad}, {"SoftPlus", OT_SoftPlus},
-            {"Exp", OT_Exp}, {"AbsVal", OT_Abs}, {"Silence", OT_None}};
+            {"PReLU", OT_PRelu}, {"Tile", OT_Tile}, {"Pad", OT_Pad}, {"SoftPlus", OT_Softplus},
+            {"Exp", OT_Exp}, {"AbsVal", OT_Abs}, {"Silence", OT_None},
+            {"BilateralSliceApply", OT_BilateralSliceApply}, {"ConvertColor", OT_ConvertColor},
+            {"Cum", OT_Cum}, {"OneHot", OT_OneHot}, {"LutPreprocess", OT_LutPreprocess},
+            {"Lut", OT_Lut}, {"Resize", OT_Resize}};
         if (operatorMap.find(inputType) == operatorMap.end()) {
             UNI_ERROR_LOG("operator name:%s type:%s not supported.\n", this->layer.name().c_str(),
                 inputType.c_str());
@@ -217,6 +222,54 @@ protected:
         return ret;
     }
 
+    DataType get_type(const caffe::DataType &dt)
+    {
+        DataType ret;
+        switch (dt) {
+            case caffe::DataType::FLOAT32:
+            case caffe::DataType::FLOAT16:
+                ret = DT_F32;
+                break;
+            case caffe::DataType::UINT32:
+                ret = DT_U32;
+                break;
+            case caffe::DataType::INT32:
+                ret = DT_I32;
+                break;
+            case caffe::DataType::UINT8:
+                ret = DT_U8;
+                break;
+            case caffe::DataType::INT8:
+                ret = DT_I8;
+                break;
+            default: {
+                const google::protobuf::EnumDescriptor *descriptor = caffe::DataType_descriptor();
+                UNI_ERROR_LOG("can not process operator name:%s %s type memory.\n",
+                    this->layer.name().c_str(), descriptor->FindValueByNumber(dt)->name().c_str());
+            }
+        }
+        return ret;
+    }
+
+    DataFormat get_format(const caffe::DataFormat &df)
+    {
+        DataFormat ret;
+        switch (df) {
+            case caffe::DataFormat::NHWC:
+                ret = DF_NHWC;
+                break;
+            case caffe::DataFormat::NCHW:
+                ret = DF_NCHW;
+                break;
+            default: {
+                const google::protobuf::EnumDescriptor *descriptor = caffe::DataFormat_descriptor();
+                UNI_ERROR_LOG("can not process operator name:%s %s format memory.\n",
+                    this->layer.name().c_str(), descriptor->FindValueByNumber(df)->name().c_str());
+            }
+        }
+        return ret;
+    }
+
     // the first loop can specify the input info and output info
     EE adapt_operators(ModelSpec *ms) override
     {
@@ -320,7 +373,6 @@ protected:
             ms->input_dims[i].dt = DT_F32;
             ms->input_dims[i].df = getTensorDefaultDataFormat(ms->input_dims[i].nDims);
         }
-
         for (int i = 0; i < proto.output_size(); i++) {
             std::string name = proto.output(i);
             if (outputCounts.find(name) == outputCounts.end()) {
@@ -371,8 +423,9 @@ protected:
         for (int i = 0; i < proto.layer_size(); i++) {
             this->layer = proto.layer(i);
             std::string layerName = layer.name();
-            UNI_DEBUG_LOG("process operator name:%s weight.\n", layerName.c_str());
             std::string layerType = layer.type();
+            UNI_DEBUG_LOG(
+                "process operator name:%s type:%s weight.\n", layerName.c_str(), layerType.c_str());
 
             if (layerType == "Input") {
                 std::string dataName = layerName;
@@ -388,6 +441,8 @@ protected:
                     ms->input_dims[inNamesIndex].dims[ms->input_dims[inNamesIndex].nDims - 1 - j] =
                         layer.input_param().shape(0).dim(j);
                 }
+                ms->input_dims[inNamesIndex].dt = get_type(layer.input_param().type());
+                ms->input_dims[inNamesIndex].df = get_format(layer.input_param().format());
                 inNamesIndex++;
             } else if (layerType == "Convolution" || layerType == "InnerProduct" ||
                 layerType == "BatchNorm" || layerType == "Embed" || layerType == "LSTM" ||
@@ -421,7 +476,10 @@ protected:
                 net_copy_blob(
                     wsPtr, weightIndex, net, netLayerId, blobNum, convert_caffe_type(layerType));
                 weightIndex++;
-            } else if (layerType == "MatMul" && sharedWeightCounts.count(layer.bottom(1))) {
+            } else if (layerType == "MatMul" &&
+                (layer.bottom_size() > 0 &&
+                    sharedWeightCounts.find(layer.bottom(1)) != sharedWeightCounts.end() &&
+                    sharedWeightCounts.count(layer.bottom(1)))) {
                 int netLayerId = net_search_layerId(net, layerName);
                 CHECK_REQUIREMENT(netLayerId >= 0);
                 str_copy(wsPtr[weightIndex].op_name, layerName.c_str(), layerName.length());
@@ -442,11 +500,43 @@ protected:
         ParameterSpec ps;
         ResizeParamSpec p;
         UNI_MEMSET(&p, 0, sizeof(p));
-        auto cp = layer.interp_param();
-        p.sizes[0] = cp.height();
-        p.sizes[1] = cp.width();
-        p.num_sizes = 2;
-        p.num_scales = 0;
+        if (this->op == "Interp") {
+            auto cp = layer.interp_param();
+            if (cp.has_zoom_factor()) {
+                p.zoom_factor = cp.zoom_factor();
+                if (cp.has_pad_beg()) {
+                    p.pad_begin = cp.pad_beg();
+                }
+                if (cp.has_pad_end()) {
+                    p.pad_end = cp.pad_end();
+                }
+            } else {
+                p.sizes[0] = cp.height();
+                p.sizes[1] = cp.width();
+                p.num_sizes = 2;
+            }
+            p.mode = RESIZE_LINEAR;
+        } else {
+            auto cp = layer.resize_param();
+            U32 h = cp.height();
+            U32 w = cp.width();
+            F32 hs = cp.height_scale();
+            F32 ws = cp.width_scale();
+            if (h != 0 && w != 0) {
+                p.num_sizes = 2;
+                p.sizes[0] = h;
+                p.sizes[1] = w;
+            }
+            if (hs != 0 && ws != 0) {
+                p.num_scales = 2;
+                p.scales[0] = hs;
+                p.scales[1] = ws;
+            }
+            caffe::Interp_mode mode = (caffe::Interp_mode)(cp.interp_mode()[0]);
+            p.mode = get_interp_mode(mode);
+            p.trans_mode = COORDINATE_TRANS_ALIGN_CORNERS;
+            p.round_mode = ROUND_FLOOR;
+        }
         ps.resize_spec = p;
         return ps;
     }
@@ -676,33 +766,60 @@ protected:
         return ps;
     }
 
+    EltwiseMode get_eltwise_mode(const caffe::EltwiseOp &op)
+    {
+        EltwiseMode ret;
+        switch (op) {
+            case caffe::EltwiseOp::PROD:
+                ret = ELTWISE_PROD;
+                break;
+            case caffe::EltwiseOp::SUM:
+                ret = ELTWISE_SUM;
+                break;
+            case caffe::EltwiseOp::MAX:
+                ret = ELTWISE_MAX;
+                break;
+            case caffe::EltwiseOp::DIV:
+                ret = ELTWISE_DIV;
+                break;
+            default: {
+                const google::protobuf::EnumDescriptor *descriptor = caffe::EltwiseOp_descriptor();
+                UNI_ERROR_LOG("can not process operator name:%s %s.\n", this->layer.name().c_str(),
+                    descriptor->FindValueByNumber(op)->name().c_str());
+            }
+        }
+        return ret;
+    }
+
+    ResizeMode get_interp_mode(const caffe::Interp_mode &op)
+    {
+        ResizeMode ret;
+        switch (op) {
+            case caffe::Interp_mode::LINEAR:
+                ret = RESIZE_LINEAR;
+                break;
+            case caffe::Interp_mode::NEAREST:
+                ret = RESIZE_NEAREST;
+                break;
+            case caffe::Interp_mode::CUBIC:
+                ret = RESIZE_CUBIC;
+                break;
+            default: {
+                const google::protobuf::EnumDescriptor *descriptor = caffe::Interp_mode_descriptor();
+                UNI_ERROR_LOG("can not process operator name:%s %s.\n", this->layer.name().c_str(),
+                    descriptor->FindValueByNumber(op)->name().c_str());
+            }
+        }
+        return ret;
+    }
+
     ParameterSpec adapt_Eltwise() override
     {
         ParameterSpec ps;
         EltwiseParamSpec p;
         UNI_MEMSET(&p, 0, sizeof(p));
         auto cp = layer.eltwise_param();
-        auto op = cp.operation();
-        switch (op) {
-            case caffe::EltwiseParameter_EltwiseOp_PROD:
-                p.mode = ELTWISE_PROD;
-                break;
-            case caffe::EltwiseParameter_EltwiseOp_SUM:
-                p.mode = ELTWISE_SUM;
-                break;
-            case caffe::EltwiseParameter_EltwiseOp_MAX:
-                p.mode = ELTWISE_MAX;
-                break;
-            case caffe::EltwiseParameter_EltwiseOp_DIV:
-                p.mode = ELTWISE_DIV;
-                break;
-            default: {
-                const google::protobuf::EnumDescriptor *descriptor =
-                    caffe::EltwiseParameter::EltwiseOp_descriptor();
-                UNI_ERROR_LOG("can not map operator name:%s %s to Eltwise.\n",
-                    this->layer.name().c_str(), descriptor->FindValueByNumber(op)->name().c_str());
-            }
-        }
+        p.mode = get_eltwise_mode(cp.operation());
         U32 bytes = cp.coeff_size() * sizeof(F32);
         p.sum_spec.num_coeff = cp.coeff_size();
         UNI_MEMCPY(p.sum_spec.coeff, cp.coeff().data(), bytes);
@@ -994,24 +1111,7 @@ protected:
             p.desc.dims[p.desc.nDims - 1 - iter] = cp.shape().dim(iter);
         }
         p.desc.df = getTensorDefaultDataFormat(p.desc.nDims);
-        auto dt = cp.data_type();
-        switch (dt) {
-            case caffe::PreAllocatedMemoryParameter_DataType_FLOAT32:
-                p.desc.dt = DT_F32;
-                break;
-            case caffe::PreAllocatedMemoryParameter_DataType_UINT32:
-                p.desc.dt = DT_U32;
-                break;
-            case caffe::PreAllocatedMemoryParameter_DataType_INT32:
-                p.desc.dt = DT_I32;
-                break;
-            default: {
-                const google::protobuf::EnumDescriptor *descriptor =
-                    caffe::PreAllocatedMemoryParameter::DataType_descriptor();
-                UNI_ERROR_LOG("can not process operator name:%s %s type memory.\n",
-                    this->layer.name().c_str(), descriptor->FindValueByNumber(dt)->name().c_str());
-            }
-        }
+        p.desc.dt = get_type(cp.data_type());
         p.value = cp.value();
         ps.preallocated_memory_spec = p;
         return ps;
@@ -1029,24 +1129,7 @@ protected:
             p.desc.dims[p.desc.nDims - 1 - iter] = cp.shape().dim(iter);
         }
         p.desc.df = getTensorDefaultDataFormat(p.desc.nDims);
-        auto dt = cp.data_type();
-        switch (dt) {
-            case caffe::SharedWeightParameter_DataType_FLOAT32:
-                p.desc.dt = DT_F32;
-                break;
-            case caffe::SharedWeightParameter_DataType_UINT32:
-                p.desc.dt = DT_U32;
-                break;
-            case caffe::SharedWeightParameter_DataType_INT32:
-                p.desc.dt = DT_I32;
-                break;
-            default: {
-                const google::protobuf::EnumDescriptor *descriptor =
-                    caffe::SharedWeightParameter::DataType_descriptor();
-                UNI_ERROR_LOG("can not process operator name:%s %s type weight.\n",
-                    this->layer.name().c_str(), descriptor->FindValueByNumber(dt)->name().c_str());
-            }
-        }
+        p.desc.dt = get_type(cp.data_type());
         ps.shared_weight_spec = p;
         return ps;
     }
@@ -1195,6 +1278,11 @@ protected:
             p.variances[1] = cp.variance(0);
             p.variances[2] = cp.variance(0);
             p.variances[3] = cp.variance(0);
+        } else {
+            p.variances[0] = 0.1;
+            p.variances[1] = 0.1;
+            p.variances[2] = 0.1;
+            p.variances[3] = 0.1;
         }
         p.image_w = 0;
         p.image_h = 0;
@@ -1307,6 +1395,89 @@ protected:
             UNI_ERROR_LOG("can not process operator name:%s base!=-1(e), scale!=1, shift!=0.\n",
                 this->layer.name().c_str());
         }
+        return ps;
+    }
+
+    ParameterSpec adapt_BilateralSliceApply() override
+    {
+        ParameterSpec ps;
+        BilateralSliceApplyParamSpec p;
+        UNI_MEMSET(&p, 0, sizeof(p));
+        std::string mode = layer.bilateral_slice_apply_param().mode();
+        if (mode == "null") {
+            p.mode = BILATERAL_SLICE_APPLY_NULL;
+            if (layer.bottom_size() != 3) {
+                UNI_ERROR_LOG("BilateralSliceApply need 3 inputs(input, grid, guide) under mode == "
+                              "'null'. If you want to integrate guide calculation into big "
+                              "operator, you can use 'conv' mode and that need 2 inputs.\n");
+            } else {
+                UNI_WARNING_LOG("We provide BilateralSliceApply big operator by using 'conv' mode, "
+                                "It's relatively faster than 'null' mode.\n");
+            }
+        } else {
+            if (layer.bottom_size() != 2) {
+                UNI_ERROR_LOG("BilateralSliceApply only need 2 inputs(input, grid) under mode == "
+                              "'conv'. If you don't want to integrate guide calculation into big "
+                              "operator, you can use 'null' mode and that need 3 inputs.\n");
+            } else {
+                UNI_WARNING_LOG("BilateralSliceApply will use inner guide calculation function. If "
+                                "you want to change implementation, you can modify "
+                                "compute/image/src/gpu/mali/cl/bilateral_slice_apply_c12.cl for "
+                                "GPU, or compute/image/src/cpu/bilateral_slice_apply.cpp for "
+                                "CPU.\n");
+            }
+            p.mode = BILATERAL_SLICE_APPLY_CONV;
+        }
+        ps.bilateral_slice_apply_spec = p;
+        return ps;
+    }
+
+    ParameterSpec adapt_ConvertColor() override
+    {
+        ParameterSpec ps;
+        ConvertColorParamSpec p;
+        UNI_MEMSET(&p, 0, sizeof(p));
+        p.src = get_color(layer.convert_color_param().src());
+        p.dst = get_color(layer.convert_color_param().dst());
+        p.dt = get_type(layer.convert_color_param().dt());
+        ps.convert_color_spec = p;
+        return ps;
+    }
+
+    ParameterSpec adapt_Cum() override
+    {
+        ParameterSpec ps;
+        CumParamSpec p;
+        UNI_MEMSET(&p, 0, sizeof(p));
+        p.mode = get_eltwise_mode(layer.cum_param().operation());
+        p.exclusive = layer.cum_param().exclusive();
+        p.reverse = layer.cum_param().reverse();
+        p.axis = layer.cum_param().axis();
+        ps.cum_spec = p;
+        return ps;
+    }
+
+    ParameterSpec adapt_OneHot() override
+    {
+        ParameterSpec ps;
+        OneHotParamSpec p;
+        UNI_MEMSET(&p, 0, sizeof(p));
+        p.axis = layer.onehot_param().axis();
+        p.depth = layer.onehot_param().depth();
+        p.values[0] = layer.onehot_param().off_value();
+        p.values[1] = layer.onehot_param().on_value();
+        ps.onehot_spec = p;
+        return ps;
+    }
+
+    ParameterSpec adapt_Lut() override
+    {
+        ParameterSpec ps;
+        LutParamSpec p;
+        UNI_MEMSET(&p, 0, sizeof(p));
+        p.type = get_color(layer.lut_param().type());
+        p.mode = get_interp_mode(layer.lut_param().mode());
+        ps.lut_spec = p;
         return ps;
     }
 

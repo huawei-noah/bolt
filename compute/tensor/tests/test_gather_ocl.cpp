@@ -56,7 +56,6 @@ int gatherTest(int argc, char **argv, DataType dt)
     GatherParamSpec p;
     p.axis = axis;
     p.element_level = false;
-    p.index_scalar = true;
 
     TensorDesc inputDesc, indexDesc, outputDesc;
     inputDesc = createDesc(iDim, dt, in, ic, ih, iw);
@@ -136,18 +135,27 @@ int gatherTest(int argc, char **argv, DataType dt)
     CHECK_STATUS(ocl_set_input(handle, index, indexDesc, indexCpu, tmpbuf, true));
     CHECK_STATUS(gather(inputTensor, indexTensor, p, tmpTensor, outputTensor, &archInfo));
 
-    /*warp up*/
-    UNI_INFO_LOG("warm up gpu:\n")
-    for (U32 i = 0; i < 2; i++) {
+    for (U32 i = 0; i < UT_WARMUP; i++) {
         CHECK_STATUS(gcl_run_kernelVec(handle));
     }
-    UNI_INFO_LOG("Run gpu:\n")
+    CHECK_STATUS(gcl_finish(handle));
+
+    double time = 0;
 #ifdef _DEBUG
-    CHECK_STATUS(gcl_run_kernelVec_timing(handle, 0, handle->kernelVec->size()));
-    double time = handle->t_execute * 0.001;
+    for (I32 i = 0; i < UT_LOOPS; i++) {
+        CHECK_STATUS(gcl_run_kernelVec_timing(handle, 0, handle->kernelVec->size()));
+        time += handle->t_execute * 0.001;
+    }
 #else
-    CHECK_STATUS(gcl_run_kernelVec(handle));
+    double start = ut_time_ms();
+    for (I32 i = 0; i < UT_LOOPS; i++) {
+        CHECK_STATUS(gcl_run_kernelVec(handle));
+        CHECK_STATUS(gcl_finish(handle));
+    }
+    double end = ut_time_ms();
+    time = (end - start);
 #endif
+    time /= UT_LOOPS;
 
     CHECK_STATUS(ocl_get_output(handle, output, outputDesc, outputGpu, tmpbuf, true));
     char buffer[150];
@@ -156,12 +164,10 @@ int gatherTest(int argc, char **argv, DataType dt)
     tensorSelectGet(outputDesc, NULL, NULL, &on, &oc, &oh, &ow);
     sprintf(params, "(%u %u %u %u)->(%u %u %u %u)", in, ic, ih, iw, on, oc, oh, ow);
     sprintf(buffer, "%20s, %80s", "gather", params);
-#ifdef _DEBUG
     double ops = ow * oh * oc * on;
-    ut_log(dt, buffer, ops, time / UT_LOOPS);
-#endif
+    ut_log(dt, buffer, ops, time);
 
-    ut_check_a(outputGpu, get_ptr_from_tensor(outputTensorCpu, CPU_GENERAL), on * oc * ow * oh, dt);
+    ut_check_v(outputGpu, get_ptr_from_tensor(outputTensorCpu, CPU_GENERAL), on * oc * ow * oh, dt, 0.1);
 
     CHECK_STATUS(gcl_finish(handle));
     CHECK_STATUS(gcl_clean_kernelVec(handle));

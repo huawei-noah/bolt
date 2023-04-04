@@ -49,7 +49,6 @@ inline EE transpose_checkpara_mali(
     if (handle == nullptr || input == nullptr || output == nullptr) {
         return NULL_POINTER;
     }
-
     if (inputDesc.nDims != outputDesc.nDims) {
         return NOT_SUPPORTED;
     }
@@ -62,18 +61,8 @@ EE transpose_infer_forward_tmp_bytes_mali(TensorDesc inputDesc,
     GCLMemDesc_t gclmemOutputDesc,
     U32 *bytes)
 {
-    EE ret = SUCCESS;
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = transpose_infer_forward_tmp_bytes_mali_fp16(
-                inputDesc, outputDesc, gclmemInputDesc, gclmemOutputDesc, bytes);
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return transpose_infer_forward_tmp_bytes_mali_fp16(
+        inputDesc, outputDesc, gclmemInputDesc, gclmemOutputDesc, bytes);
 }
 
 EE transpose_mali(GCLHandle_t handle,
@@ -84,16 +73,6 @@ EE transpose_mali(GCLHandle_t handle,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
-    EE ret = SUCCESS;
     CHECK_STATUS(transpose_checkpara_mali(handle, inputDesc, input, outputDesc, output));
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = transpose_mali_fp16(handle, inputDesc, input, outputDesc, output, tmpbuf, p.axes);
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return transpose_mali_fp16(handle, inputDesc, input, outputDesc, output, tmpbuf, p.axes);
 }

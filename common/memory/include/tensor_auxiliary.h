@@ -87,4 +87,16 @@ inline std::vector<T> get_data_from_tensor_ptrs(std::vector<Tensor *> tensors, A
     }
     return result;
 }
+
+inline void update_desc_from_tensor(Tensor *tensor)
+{
+    TensorDesc desc = tensor->get_desc();
+    if (tensorIsShape(desc) && tensor->get_mem_type() == CPUMem) {
+        I32 *p = (I32 *)get_ptr_from_tensor(*tensor, CPU_GENERAL);
+        for (U32 i = 0; i < tensorNumElements(desc); i++) {
+            desc.dims[desc.nDims + i] = p[i];
+        }
+    }
+    tensor->resize(desc);
+}
 #endif

@@ -16,7 +16,6 @@
 #include "tensor_desc.h"
 #include "gcl_common.h"
 #include "mem_trans_opt.h"
-#include "padding_opt.h"
 
 EE ocl_data_trans_form(GCLHandle_t handle,
     GCLMem_t input,

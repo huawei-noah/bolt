@@ -15,7 +15,7 @@
 
 inline EE topk_checkpara_mali_fp16(TensorDesc inputDesc, TensorDesc outputDesc)
 {
-    if (inputDesc.dt != DT_F16 && inputDesc.dt != outputDesc.dt) {
+    if (inputDesc.dt != outputDesc.dt) {
         return NOT_SUPPORTED;
     }
     return SUCCESS;
@@ -31,6 +31,7 @@ inline EE topk_core_mali_fp16(GCLHandle_t handle,
     TensorDesc outputIndicesDesc,
     GCLMem_t outputIndices)
 {
+    DataType idt = input->desc.dt;
     U32 iw_str, ih_str, ic_str, iw_off, ih_off;
     U32 ow_str, oh_str, oc_str, ow_off, oh_off;
     CHECK_STATUS(gclmem_get_desc_padding(input->desc, &iw_str, &ih_str, &ic_str, &iw_off, &ih_off));
@@ -69,23 +70,23 @@ inline EE topk_core_mali_fp16(GCLHandle_t handle,
         U32 sub_off = 0;
         Mem sub[4];
         Mem sub_id[4];
-        U32 num = ALIGN(len, 16);
-        U32 size = num * bytesOf(DT_F16);
+        U32 num = UNI_ALIGN(len, 16);
+        U32 size = num * bytesOf(idt);
         CHECK_STATUS(gcl_create_sub_buffer(size, &sub_off, tmpbuf, &sub[0]));
         CHECK_STATUS(gcl_create_sub_buffer(size, &sub_off, tmpbuf, &sub_id[0]));
 
         num = ((len + 15) / 16 + 1) / 2 * 16;
-        size = num * bytesOf(DT_F16);
+        size = num * bytesOf(idt);
         CHECK_STATUS(gcl_create_sub_buffer(size, &sub_off, tmpbuf, &sub[1]));
         CHECK_STATUS(gcl_create_sub_buffer(size, &sub_off, tmpbuf, &sub_id[1]));
 
         num = (num / 16 + 1) / 2 * 16;
-        size = num * bytesOf(DT_F16);
+        size = num * bytesOf(idt);
         CHECK_STATUS(gcl_create_sub_buffer(size, &sub_off, tmpbuf, &sub[2]));
         CHECK_STATUS(gcl_create_sub_buffer(size, &sub_off, tmpbuf, &sub_id[2]));
 
         num = (num / 16 + 1) / 2 * 16;
-        size = num * bytesOf(DT_F16);
+        size = num * bytesOf(idt);
         CHECK_STATUS(gcl_create_sub_buffer(size, &sub_off, tmpbuf, &sub[3]));
         CHECK_STATUS(gcl_create_sub_buffer(size, &sub_off, tmpbuf, &sub_id[3]));
 
@@ -109,7 +110,7 @@ inline EE topk_core_mali_fp16(GCLHandle_t handle,
             U32 out_off = 0;
             U32 out_val_num = 16;
             kernelName = "topk_merge_" + modeName;
-            Mem merge_in, merge_out, merge_in_id, merge_out_id;
+            Mem merge_in, merge_out, merge_in_id, merge_out_id = NULL;
             gs[0] = (len + 15) / 16;
             ls[0] = 0;
             while (gs[0] > 1) {
@@ -170,8 +171,9 @@ EE topk_infer_forward_tmp_bytes_mali_fp16(
     TensorDesc inputDesc, TopKParamSpec p, TensorDesc outputDesc, U32 *bytes)
 {
     UNUSED(outputDesc);
+    DataType idt = inputDesc.dt;
     U32 totalNum = tensorNumElements(inputDesc);
-    U32 axis = p.axis;
+    I32 axis = p.axis;
     if (axis < 0) {
         axis += inputDesc.nDims;
     }
@@ -179,14 +181,14 @@ EE topk_infer_forward_tmp_bytes_mali_fp16(
     U32 len = inputDesc.dims[axis];
 
     U32 tmpBytes = 0;
-    U32 num = ALIGN(len, 16);
-    tmpBytes += ALIGN(num * bytesOf(DT_F16), BUFFER_ALIGN_BASE) * 2;
+    U32 num = UNI_ALIGN(len, 16);
+    tmpBytes += UNI_ALIGN(num * bytesOf(idt), BUFFER_ALIGN_BASE) * 2;
     num = ((len + 15) / 16 + 1) / 2 * 16;
-    tmpBytes += ALIGN(num * bytesOf(DT_F16), BUFFER_ALIGN_BASE) * 2;
+    tmpBytes += UNI_ALIGN(num * bytesOf(idt), BUFFER_ALIGN_BASE) * 2;
     num = (num / 16 + 1) / 2 * 16;
-    tmpBytes += ALIGN(num * bytesOf(DT_F16), BUFFER_ALIGN_BASE) * 2;
+    tmpBytes += UNI_ALIGN(num * bytesOf(idt), BUFFER_ALIGN_BASE) * 2;
     num = (num / 16 + 1) / 2 * 16;
-    tmpBytes += ALIGN(num * bytesOf(DT_F16), BUFFER_ALIGN_BASE) * 2;
+    tmpBytes += UNI_ALIGN(num * bytesOf(idt), BUFFER_ALIGN_BASE) * 2;
 
     tmpBytes *= (totalNum / len);
     *bytes = tmpBytes;

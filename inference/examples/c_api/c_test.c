@@ -17,12 +17,15 @@
 #include <string.h>
 #include "../../examples/c_api/c_test.h"
 
-char *modelPath = (char *)"";
+char *modelPath = NULL;
+char *inputDataPath = NULL;
 AFFINITY_TYPE affinity = CPU_HIGH_PERFORMANCE;
+char *affinityPolicyName = (char *)"CPU";
 char *algorithmMapPath = NULL;
 int loopTime = 1;
+int warmUp = 10;
+int threadsNum = 1;
 int useFileStream = 0;
-char *algorithmMapName = (char *)"";
 
 double GetTimeMs()
 {
@@ -34,79 +37,111 @@ double GetTimeMs()
 
 void PrintHelp()
 {
-    printf("-m <boltModelPath>:      the file path for .bolt model\n");
-    printf("-a <affinityPolicyName>: the arch used to run model, default to be "
-           "CPU_HIGH_PERFORMANCE\n");
-    printf("                         this value can be {CPU_HIGH_PERFORMANCE, CPU_LOW_POWER, "
-           "GPU}\n");
-    printf("-p <algorithmMapPath>:   the file path to store algoirthmFileName, default to be "
-           "program run path \n");
-    printf("-l <loopTime>:           the loopTime to run set_input + run + get_output, default to "
-           "be 1\n");
-    printf("-f <useFileStream>:      use file stream c api to read .bolt and algo file content, "
-           "default to be 0\n");
-    printf("                         this value can be {0, 1}\n");
-    printf("-n <algorithmMapName>:   the algorithm map name\n");
-    printf("                         you can get this file name from algorithmMapPath after run "
-           "this program once\n");
+    printf("usage: ./exe -m <boltModelPath> -i [inputDataPath] -a [affinityPolicyName] -p "
+           "[algorithmMapPath] -l [loopTime] -w [warmTime] -t [threadsNum]\n"
+           "\nParameter description: (<> must be filled with exact value, [] is optional)\n"
+           "1. -m <boltModelPath>: Bolt model file path on disk.\n"
+           "2. -i [inputDataPath]: Input data file path on disk.\n"
+           "    If not set input data path, benchmark will use fake data.\n"
+           "    If model only have one input, you can directly pass file path, currently support "
+           ".txt and "
+           ".bin format. File only contains data and split with space or newline.\n"
+           "    If model have multiple inputs, you can pass directory path, benchmark will search "
+           "input_name.txt in directory and read it.\n"
+           "    If you want to change model input size, you can pass directory path with a "
+           "shape.txt file "
+           "in that directory. shape.txt need to be write in this format.\n"
+           "        input_name0 1 3 224 224\n"
+           "        input_name1 1 224 224\n"
+           "3. -a [affinityPolicyName]: Affinity policy. you can choose one of "
+           "{CPU_AFFINITY_HIGH_PERFORMANCE, CPU_AFFINITY_LOW_POWER, CPU, GPU}. default: %s.\n"
+           "4. -p [algorithmMapPath]: Algorithm configration path.\n"
+           "5. -l [loopTime]: Loop running times. default: %d.\n"
+           "6. -w [warmTime]: Warm up times. default: %d.\n"
+           "7. -t [threadsNum]: Parallel threads num. default: %d.\n"
+           "8. -f [useFileStream]: Use model and algorithm map file stream. default: %d.\n"
+           "Example:\n"
+           "    ./exe -m /local/models/resnet50_f16.bolt\n"
+           "    ./exe -m /local/models/resnet50_f16.bolt -i ./input.txt\n"
+           "    ./exe -m /local/models/resnet50_f16.bolt -i ./data/\n"
+           "Note:\n    If you want to profiling network and get execution time of each layer, please rebuild Bolt with --profile option.\n",
+        affinityPolicyName, loopTime, warmUp, threadsNum, useFileStream);
 }
 
-void ParseOptions(int argc, char *argv[])
+int ParseOptions(int argc, char *argv[])
 {
     if (argc < 2) {
         PrintHelp();
-        exit(-1);
+        return 1;
     }
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "-h") == 0 || strcmp(argv[i], "--h") == 0 ||
             strcmp(argv[i], "-help") == 0 || strcmp(argv[i], "--help") == 0) {
             PrintHelp();
-            exit(-1);
+            return 1;
         }
     }
+
     int option;
-    const char *optionstring = "m:a:p:l:f:n:";
+    const char *optionstring = "m:i:a:p:l:w:t:f:";
     while ((option = getopt(argc, argv, optionstring)) != -1) {
         switch (option) {
             case 'm':
                 printf("option is -m <boltModelPath>, value is: %s\n", optarg);
                 modelPath = optarg;
                 break;
+            case 'i':
+                printf("option is -i [inputDataPath], value is: %s\n", optarg);
+                inputDataPath = optarg;
+                break;
             case 'a':
                 printf("option is -a [affinityPolicyName], value is: %s\n", optarg);
-                if (strcmp(optarg, "CPU_HIGH_PERFORMANCE") == 0) {
-                    affinity = CPU_HIGH_PERFORMANCE;
-                } else if (strcmp(optarg, "CPU_LOW_POWER") == 0) {
-                    affinity = CPU_LOW_POWER;
-                } else if (strcmp(optarg, "GPU") == 0) {
-                    affinity = GPU;
-                } else {
-                    PrintHelp();
-                    exit(-1);
-                }
-                break;
-            case 'p':
-                printf("option is -p [algorithmMapPath], value is: %s\n", optarg);
-                algorithmMapPath = optarg;
+                affinityPolicyName = optarg;
                 break;
             case 'l':
                 printf("option is -l [loopTime], value is: %s\n", optarg);
                 loopTime = atoi(optarg);
                 break;
+            case 'w':
+                printf("option is -w [warmTime], value is: %s\n", optarg);
+                warmUp = atoi(optarg);
+                break;
+            case 't':
+                printf("option is -t [threadsNum], value is: %s\n", optarg);
+                threadsNum = atoi(optarg);
+                break;
+            case 'p':
+                printf("option is -p [algorithmMapPath], value is: %s\n", optarg);
+                algorithmMapPath = optarg;
+                break;
             case 'f':
                 printf("option is -f [useFileStream], value is: %s\n", optarg);
                 useFileStream = atoi(optarg);
                 break;
-            case 'n':
-                printf("option is -n [algorithmMapName], value is: %s\n", optarg);
-                algorithmMapName = optarg;
-                break;
             default:
                 PrintHelp();
-                exit(-1);
+                return 1;
         }
     }
     fflush(stdout);
+    if (modelPath == NULL) {
+        printf("Please give an valid bolt model path.\n");
+        PrintHelp();
+        return 1;
+    }
+    if (strcmp(affinityPolicyName, "CPU_AFFINITY_HIGH_PERFORMANCE") == 0) {
+        affinity = CPU_HIGH_PERFORMANCE;
+    } else if (strcmp(affinityPolicyName, "CPU_AFFINITY_LOW_POWER") == 0) {
+        affinity = CPU_LOW_POWER;
+    } else if (strcmp(affinityPolicyName, "CPU") == 0) {
+        affinity = CPU;
+    } else if (strcmp(affinityPolicyName, "GPU") == 0) {
+        affinity = GPU;
+    } else {
+        PrintHelp();
+        return 1;
+    }
+    return 0;
 }
 
 char *BuildFileStream(const char *fileName)
@@ -134,98 +169,4 @@ char *BuildFileStream(const char *fileName)
     }
     fclose(file);
     return bytes;
-}
-
-void InitTensor(int num,
-    char **name,
-    const int *n,
-    const int *c,
-    const int *h,
-    const int *w,
-    const DATA_TYPE *dt,
-    const DATA_FORMAT *df,
-    void **data,
-    float value)
-{
-    for (int i = 0; i < num; i++) {
-        int length = n[i] * c[i] * h[i] * w[i];
-        switch (dt[i]) {
-            case FP_32: {
-                float *ptr = (float *)data[i];
-                for (int i = 0; i < length; i++) {
-                    ptr[i] = value;
-                }
-                break;
-            }
-#ifdef _USE_FP16
-            case FP_16: {
-                __fp16 *ptr = (__fp16 *)data[i];
-                for (int i = 0; i < length; i++) {
-                    ptr[i] = value;
-                }
-                break;
-            }
-#endif
-            default:
-                printf("[ERROR] unsupported data precision in %s\n", __func__);
-                exit(1);
-        }
-    }
-}
-
-void PrintTensor(int num,
-    char **name,
-    const int *n,
-    const int *c,
-    const int *h,
-    const int *w,
-    const DATA_TYPE *dt,
-    const DATA_FORMAT *df,
-    void **data,
-    const char *printPrefix,
-    int printElementNum)
-{
-    for (int i = 0; i < num; i++) {
-        printf("%sname:%s type:%s format:%s(%d,%d,%d,%d) data:", printPrefix, name[i],
-            GetDataTypeString()[dt[i]], GetDataFormatString()[df[i]], n[i], c[i], h[i], w[i]);
-        int length = n[i] * c[i] * h[i] * w[i];
-        if (length > printElementNum) {
-            length = printElementNum;
-        }
-        if (data[i] == NULL) {
-            printf("\n");
-            continue;
-        }
-        for (int j = 0; j < length; j++) {
-            switch (dt[i]) {
-                case FP_32: {
-                    float *ptr = (float *)data[i];
-                    printf("%f ", ptr[j]);
-                    break;
-                }
-                case INT_32: {
-                    int *ptr = (int *)data[i];
-                    printf("%d ", ptr[j]);
-                    break;
-                }
-                case UINT_32: {
-                    unsigned *ptr = (unsigned *)data[i];
-                    printf("%d ", ptr[j]);
-                    break;
-                }
-#ifdef _USE_FP16
-                case FP_16: {
-                    __fp16 *ptr = (__fp16 *)data[i];
-                    printf("%f ", ptr[j]);
-                    break;
-                }
-#endif
-                default:
-                    printf("[ERROR] can not process data type in %s.\n", __func__);
-                    exit(1);
-            }
-        }
-        printf("\n");
-    }
-    fflush(stdout);
 }

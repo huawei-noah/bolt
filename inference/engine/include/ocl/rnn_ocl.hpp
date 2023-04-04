@@ -38,7 +38,7 @@ public:
         tmpTensors[0] = this->temp;
         get_tmp_image(0, bytes + 1, &tmpTensors[1]);
         CHECK_STATUS(rnn(this->inputTensors, this->weightTensors, this->biasTensors, this->p,
-            tmpTensors, this->outputTensors, &this->archInfo));
+            tmpTensors, this->outputTensors, nullptr, &this->archInfo));
     }
 
     EE infer_forward_algorithm(std::shared_ptr<AlgorithmMap> algorithmMap) override
@@ -49,6 +49,7 @@ public:
         I32 algo[10];
         U32 algoNum = (this->p.num_projection > 0) ? 10 : 7;
         std::string name = this->name + std::to_string(get_type());
+        EE ret = SUCCESS;
         if (algorithmMap->getAlgorithmInfoFromMap(name, algo, algoNum)) {
             this->runInfo.algorithm = (ConvolutionForwardAlgorithm)algo[0];
             this->runInfo.best_h[0] = algo[1];
@@ -63,8 +64,8 @@ public:
                 this->runInfo.best_k[2] = algo[9];
             }
         } else {
-            CHECK_STATUS(rnn_infer_forward_algorithm(this->inputTensors[0], this->weightTensors,
-                this->biasTensors, this->p, this->outputTensors[0], &this->archInfo));
+            ret = rnn_infer_forward_algorithm(this->inputTensors[0], this->weightTensors,
+                this->biasTensors, this->p, this->outputTensors[0], &this->archInfo);
             algo[0] = this->runInfo.algorithm;
             algo[1] = this->runInfo.best_h[0];
             algo[2] = this->runInfo.best_c[0];
@@ -79,7 +80,7 @@ public:
             }
             algorithmMap->setAlgorithmInfoToMap(name, algo, algoNum);
         }
-        return SUCCESS;
+        return ret;
     }
 
     EE infer_output_tensors_size(
@@ -91,8 +92,7 @@ public:
         for (U32 i = 0; i < inputDesc.nDims - 3; ++i) {
             xDim *= inputDesc.dims[i];
         }
-        CHECK_STATUS(rnn_infer_output_size(inTensors, this->p, outTensors, &this->archInfo));
-        return SUCCESS;
+        return rnn_infer_output_size(inTensors, this->p, outTensors, &this->archInfo);
     }
 
     U32 infer_tmp_memory_size() override
@@ -106,35 +106,34 @@ public:
         return bytes[0];
     }
 
-    EE alloc_wtm_memory() override
+    EE alloc_wtm_memory()
     {
         TensorDesc ftmDesc[3];
         CHECK_STATUS(
             rnn_transform_filter_bytes(this->weightTensors, this->p, ftmDesc, &this->archInfo));
-        this->wtmType = OCLMem;
-        this->wtm = std::shared_ptr<Tensor>(new Tensor(this->wtmType));
+        this->wtm = std::shared_ptr<Tensor>(new Tensor(OCLMem));
         this->wtm->resize(ftmDesc[0]);
         CHECK_STATUS(set_wtm_image(ftmDesc[0]));
         this->wtm->alloc();
-        this->wtm_gemv = std::shared_ptr<Tensor>(new Tensor(this->wtmType));
+        this->wtm_gemv = std::shared_ptr<Tensor>(new Tensor(OCLMem));
         this->wtm_gemv->resize(ftmDesc[1]);
         this->wtm_gemv->alloc();
         if (this->p.num_projection > 0) {
-            this->wtm_pro = std::shared_ptr<Tensor>(new Tensor(this->wtmType));
+            this->wtm_pro = std::shared_ptr<Tensor>(new Tensor(OCLMem));
             this->wtm_pro->resize(ftmDesc[2]);
             this->wtm_pro->alloc();
         }
 
         if (this->p.bi_direction) {
-            this->wtm_bi = std::shared_ptr<Tensor>(new Tensor(this->wtmType));
+            this->wtm_bi = std::shared_ptr<Tensor>(new Tensor(OCLMem));
             this->wtm_bi->resize(ftmDesc[0]);
             CHECK_STATUS(set_wtm_image(ftmDesc[0], &wtm_bi));
             this->wtm_bi->alloc();
-            this->wtm_gemv_bi = std::shared_ptr<Tensor>(new Tensor(this->wtmType));
+            this->wtm_gemv_bi = std::shared_ptr<Tensor>(new Tensor(OCLMem));
             this->wtm_gemv_bi->resize(ftmDesc[1]);
             this->wtm_gemv_bi->alloc();
             if (this->p.num_projection > 0) {
-                this->wtm_pro_bi = std::shared_ptr<Tensor>(new Tensor(this->wtmType));
+                this->wtm_pro_bi = std::shared_ptr<Tensor>(new Tensor(OCLMem));
                 this->wtm_pro_bi->resize(ftmDesc[2]);
                 this->wtm_pro_bi->alloc();
             }

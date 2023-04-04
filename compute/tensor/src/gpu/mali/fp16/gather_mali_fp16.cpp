@@ -20,9 +20,6 @@ inline EE gather_checkpara_mali_fp16(
     if (inputDesc.dt != outputDesc.dt) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
-    if (outputDesc.dt != DT_F16) {
-        CHECK_STATUS(NOT_SUPPORTED);
-    }
     if (indexDesc.dt != DT_I32 && indexDesc.dt != DT_U32) {
         CHECK_STATUS(NOT_MATCH);
     }
@@ -162,13 +159,13 @@ EE gather_infer_forward_tmp_bytes_mali_fp16(TensorDesc inputDesc,
     int gatherMode = getGatherMode(p);
     U32 size = 0;
     if (needReshapeInput(inputDesc, gclmemInputDesc, gatherMode)) {
-        size += ALIGN(tensorNumBytes(inputDesc), BUFFER_ALIGN_BASE);
+        size += UNI_ALIGN(tensorNumBytes(inputDesc), BUFFER_ALIGN_BASE);
     }
     if (indexDesc.df == DF_NCHWC4) {
-        size += ALIGN(tensorNumBytes(indexDesc), BUFFER_ALIGN_BASE);
+        size += UNI_ALIGN(tensorNumBytes(indexDesc), BUFFER_ALIGN_BASE);
     }
     if (needReshapeOutput(outputDesc, gclmemOutputDesc, gatherMode)) {
-        size += ALIGN(tensorNumBytes(outputDesc), BUFFER_ALIGN_BASE);
+        size += UNI_ALIGN(tensorNumBytes(outputDesc), BUFFER_ALIGN_BASE);
     }
     *bytes = size;
     return SUCCESS;

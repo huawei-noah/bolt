@@ -19,7 +19,7 @@ EE depthwise_pointwise_convolution_direct_V8(TensorDesc inputDesc,
     const F32 *dwFilterArray,
     TensorDesc pwFilterDesc,
     const F32 *pwFilterArray,
-    ConvolutionParamSpec convParamSpec,
+    ConvolutionParamSpec p,
     TensorDesc dwBiasDesc,
     const F32 *dwBiasArray,
     TensorDesc pwBiasDesc,
@@ -41,15 +41,6 @@ EE depthwise_pointwise_convolution_direct_V8(TensorDesc inputDesc,
     CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
     CHECK_STATUS(tensor4dGet(dwFilterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
     CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
-    U32 strideH = convParamSpec.stride_h;
-    U32 strideW = convParamSpec.stride_w;
-    U32 paddingT = convParamSpec.pad_top;
-    U32 paddingB = convParamSpec.pad_bottom;
-    U32 paddingL = convParamSpec.pad_left;
-    U32 paddingR = convParamSpec.pad_right;
-    U32 dilateH = convParamSpec.dilatedRate_h;
-    U32 dilateW = convParamSpec.dilatedRate_w;
-
     if (dwFilterDesc.df != DF_NCHWC8) {
         CHECK_STATUS(NOT_MATCH);
     }
@@ -57,34 +48,38 @@ EE depthwise_pointwise_convolution_direct_V8(TensorDesc inputDesc,
         CHECK_STATUS(NOT_MATCH);
     }
 
+    EE ret = SUCCESS;
     oc /= 8;
     ic /= 8;
-    U32 ih_pad = ih + paddingT + paddingB;
-    U32 iw_pad = iw + paddingL + paddingR;
+    U32 ih_pad = ih + p.pad_top + p.pad_bottom;
+    U32 iw_pad = iw + p.pad_left + p.pad_right;
     U32 ihiw = ih * iw;
     I32 ohow = oh * ow;
     F32 *pwArray = (F32 *)tmp + ic * ih_pad * iw_pad * 8;
     for (U32 n = 0; n < in; n++) {
         F32 *inArray_pad = (F32 *)tmp;
-        F32 *inArray_pad_mov = inArray_pad;
-        F32 *inArray_mov = inArray + n * ic * ihiw * 8;
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
         for (U32 c = 0; c < ic; c++) {
-            if (paddingT > 0) {
-                UNI_MEMSET(inArray_pad_mov, 0, paddingT * iw_pad * 8 * bytesOf(fdt));
-                inArray_pad_mov += paddingT * iw_pad * 8;
+            F32 *inArray_mov = inArray + (n * ic + c) * ihiw * 8;
+            F32 *inArray_pad_mov = inArray_pad + c * ih_pad * iw_pad * 8;
+            if (p.pad_top > 0) {
+                UNI_MEMSET(inArray_pad_mov, 0, p.pad_top * iw_pad * 8 * bytesOf(fdt));
+                inArray_pad_mov += p.pad_top * iw_pad * 8;
             }
-            for (U32 h = paddingT; h < ih_pad - paddingB; h++) {
-                UNI_MEMSET(inArray_pad_mov, 0, paddingL * 8 * bytesOf(fdt));
-                inArray_pad_mov += paddingL * 8;
+            for (U32 h = p.pad_top; h < ih_pad - p.pad_bottom; h++) {
+                UNI_MEMSET(inArray_pad_mov, 0, p.pad_left * 8 * bytesOf(fdt));
+                inArray_pad_mov += p.pad_left * 8;
                 UNI_MEMCPY(inArray_pad_mov, inArray_mov, iw * 8 * bytesOf(fdt));
                 inArray_pad_mov += iw * 8;
                 inArray_mov += iw * 8;
-                UNI_MEMSET(inArray_pad_mov, 0, paddingR * 8 * bytesOf(fdt));
-                inArray_pad_mov += paddingR * 8;
+                UNI_MEMSET(inArray_pad_mov, 0, p.pad_right * 8 * bytesOf(fdt));
+                inArray_pad_mov += p.pad_right * 8;
             }
-            if (paddingB > 0) {
-                UNI_MEMSET(inArray_pad_mov, 0, paddingB * iw_pad * 8 * bytesOf(fdt));
-                inArray_pad_mov += paddingB * iw_pad * 8;
+            if (p.pad_bottom > 0) {
+                UNI_MEMSET(inArray_pad_mov, 0, p.pad_bottom * iw_pad * 8 * bytesOf(fdt));
+                inArray_pad_mov += p.pad_bottom * iw_pad * 8;
             }
 
             // dw_conv
@@ -93,22 +88,22 @@ EE depthwise_pointwise_convolution_direct_V8(TensorDesc inputDesc,
             const F32 *f = dwFilterArray + c * fh * fw * 8;
             // ohow / 8
             for (I32 hw = 0; hw < ohow - 7; hw += 8) {
-                U32 in_h_0 = hw / ow * strideH;
-                U32 in_w_0 = hw % ow * strideW;
-                U32 in_h_1 = (hw + 1) / ow * strideH;
-                U32 in_w_1 = (hw + 1) % ow * strideW;
-                U32 in_h_2 = (hw + 2) / ow * strideH;
-                U32 in_w_2 = (hw + 2) % ow * strideW;
-                U32 in_h_3 = (hw + 3) / ow * strideH;
-                U32 in_w_3 = (hw + 3) % ow * strideW;
-                U32 in_h_4 = (hw + 4) / ow * strideH;
-                U32 in_w_4 = (hw + 4) % ow * strideW;
-                U32 in_h_5 = (hw + 5) / ow * strideH;
-                U32 in_w_5 = (hw + 5) % ow * strideW;
-                U32 in_h_6 = (hw + 6) / ow * strideH;
-                U32 in_w_6 = (hw + 6) % ow * strideW;
-                U32 in_h_7 = (hw + 7) / ow * strideH;
-                U32 in_w_7 = (hw + 7) % ow * strideW;
+                U32 in_h_0 = hw / ow * p.stride_h;
+                U32 in_w_0 = hw % ow * p.stride_w;
+                U32 in_h_1 = (hw + 1) / ow * p.stride_h;
+                U32 in_w_1 = (hw + 1) % ow * p.stride_w;
+                U32 in_h_2 = (hw + 2) / ow * p.stride_h;
+                U32 in_w_2 = (hw + 2) % ow * p.stride_w;
+                U32 in_h_3 = (hw + 3) / ow * p.stride_h;
+                U32 in_w_3 = (hw + 3) % ow * p.stride_w;
+                U32 in_h_4 = (hw + 4) / ow * p.stride_h;
+                U32 in_w_4 = (hw + 4) % ow * p.stride_w;
+                U32 in_h_5 = (hw + 5) / ow * p.stride_h;
+                U32 in_w_5 = (hw + 5) % ow * p.stride_w;
+                U32 in_h_6 = (hw + 6) / ow * p.stride_h;
+                U32 in_w_6 = (hw + 6) % ow * p.stride_w;
+                U32 in_h_7 = (hw + 7) / ow * p.stride_h;
+                U32 in_w_7 = (hw + 7) % ow * p.stride_w;
 
                 __asm__ __volatile__("ldr q14, [%[b]]\n"
                                      "ldr q15, [%[b], #16]\n"
@@ -134,7 +129,8 @@ EE depthwise_pointwise_convolution_direct_V8(TensorDesc inputDesc,
                 for (U32 fh_idx = 0; fh_idx < fh; fh_idx++) {
                     for (U32 fw_idx = 0; fw_idx < fw; fw_idx++) {
                         const F32 *f_0 = f + fh_idx * fw * 8 + fw_idx * 8;
-                        F32 *in_idx = in_pad + fh_idx * dilateH * iw_pad * 8 + fw_idx * dilateW * 8;
+                        F32 *in_idx = in_pad + fh_idx * p.dilatedRate_h * iw_pad * 8 +
+                            fw_idx * p.dilatedRate_w * 8;
                         F32 *in_0 = in_idx + in_h_0 * iw_pad * 8 + in_w_0 * 8;
                         F32 *in_1 = in_idx + in_h_1 * iw_pad * 8 + in_w_1 * 8;
                         F32 *in_2 = in_idx + in_h_2 * iw_pad * 8 + in_w_2 * 8;
@@ -354,7 +350,8 @@ EE depthwise_pointwise_convolution_direct_V8(TensorDesc inputDesc,
                         break;
                     }
                     default:
-                        return NOT_SUPPORTED;
+                        ret = NOT_SUPPORTED;
+                        break;
                 }
 
                 if (pwFilterArray != nullptr) {
@@ -436,14 +433,14 @@ EE depthwise_pointwise_convolution_direct_V8(TensorDesc inputDesc,
             // ohow_reminder % 8 / 4
             U32 ohow_s = (ohow / 8) * 8;
             for (I32 hw = ohow_s; hw < ohow - 3; hw += 4) {
-                U32 in_h_0 = hw / ow * strideH;
-                U32 in_w_0 = hw % ow * strideW;
-                U32 in_h_1 = (hw + 1) / ow * strideH;
-                U32 in_w_1 = (hw + 1) % ow * strideW;
-                U32 in_h_2 = (hw + 2) / ow * strideH;
-                U32 in_w_2 = (hw + 2) % ow * strideW;
-                U32 in_h_3 = (hw + 3) / ow * strideH;
-                U32 in_w_3 = (hw + 3) % ow * strideW;
+                U32 in_h_0 = hw / ow * p.stride_h;
+                U32 in_w_0 = hw % ow * p.stride_w;
+                U32 in_h_1 = (hw + 1) / ow * p.stride_h;
+                U32 in_w_1 = (hw + 1) % ow * p.stride_w;
+                U32 in_h_2 = (hw + 2) / ow * p.stride_h;
+                U32 in_w_2 = (hw + 2) % ow * p.stride_w;
+                U32 in_h_3 = (hw + 3) / ow * p.stride_h;
+                U32 in_w_3 = (hw + 3) % ow * p.stride_w;
 
                 __asm__ __volatile__(
                     "ldr q14, [%[b]]\n"
@@ -463,7 +460,8 @@ EE depthwise_pointwise_convolution_direct_V8(TensorDesc inputDesc,
                 for (U32 fh_idx = 0; fh_idx < fh; fh_idx++) {
                     for (U32 fw_idx = 0; fw_idx < fw; fw_idx++) {
                         const F32 *f_0 = f + fh_idx * fw * 8 + fw_idx * 8;
-                        F32 *in_idx = in_pad + fh_idx * dilateH * iw_pad * 8 + fw_idx * dilateW * 8;
+                        F32 *in_idx = in_pad + fh_idx * p.dilatedRate_h * iw_pad * 8 +
+                            fw_idx * p.dilatedRate_w * 8;
                         F32 *in_0 = in_idx + in_h_0 * iw_pad * 8 + in_w_0 * 8;
                         F32 *in_1 = in_idx + in_h_1 * iw_pad * 8 + in_w_1 * 8;
                         F32 *in_2 = in_idx + in_h_2 * iw_pad * 8 + in_w_2 * 8;
@@ -593,7 +591,8 @@ EE depthwise_pointwise_convolution_direct_V8(TensorDesc inputDesc,
                         break;
                     }
                     default:
-                        return NOT_SUPPORTED;
+                        ret = NOT_SUPPORTED;
+                        break;
                 }
 
                 if (pwFilterArray != nullptr) {
@@ -644,8 +643,8 @@ EE depthwise_pointwise_convolution_direct_V8(TensorDesc inputDesc,
             // ohow_reminder % 4
             ohow_s = (ohow / 4) * 4;
             for (I32 hw = ohow_s; hw < ohow; hw++) {
-                U32 in_h_0 = hw / ow * strideH;
-                U32 in_w_0 = hw % ow * strideW;
+                U32 in_h_0 = hw / ow * p.stride_h;
+                U32 in_w_0 = hw % ow * p.stride_w;
 
                 __asm__ __volatile__("ldr q0, [%[b]]\n"
                                      "ldr q1, [%[b], #16]\n"
@@ -656,7 +655,8 @@ EE depthwise_pointwise_convolution_direct_V8(TensorDesc inputDesc,
                 for (U32 fh_idx = 0; fh_idx < fh; fh_idx++) {
                     for (U32 fw_idx = 0; fw_idx < fw; fw_idx++) {
                         const F32 *f_0 = f + fh_idx * fw * 8 + fw_idx * 8;
-                        F32 *in_idx = in_pad + fh_idx * dilateH * iw_pad * 8 + fw_idx * dilateW * 8;
+                        F32 *in_idx = in_pad + fh_idx * p.dilatedRate_h * iw_pad * 8 +
+                            fw_idx * p.dilatedRate_w * 8;
                         F32 *in_0 = in_idx + in_h_0 * iw_pad * 8 + in_w_0 * 8;
                         __asm__ __volatile__("ldp q14, q15, [%[f0]]\n"
                                              "ldp q16, q17, [%[in0]]\n"
@@ -720,7 +720,8 @@ EE depthwise_pointwise_convolution_direct_V8(TensorDesc inputDesc,
                         break;
                     }
                     default:
-                        return NOT_SUPPORTED;
+                        ret = NOT_SUPPORTED;
+                        break;
                 }
 
                 F32 *out_ptr;
@@ -739,12 +740,16 @@ EE depthwise_pointwise_convolution_direct_V8(TensorDesc inputDesc,
         if (pwFilterArray == nullptr) {
             continue;
         }
+
         // pw_conv
         // ohow / 8
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
         for (I32 hw = 0; hw < ohow - 7; hw += 8) {
+            F32 *in_pack = pwArray + hw * ic * 8;
             const F32 *b0 = pwBiasArray;
             const F32 *b1 = b0 + 4;
-            F32 *in_pack = pwArray + hw * ic * 8;
             const F32 *f_o0c0 = pwFilterArray;
             for (I32 o = 0; o < I32(oc); o++) {
                 F32 *in_hw0 = in_pack;
@@ -1257,5 +1262,5 @@ EE depthwise_pointwise_convolution_direct_V8(TensorDesc inputDesc,
             }
         }
     }
-    return SUCCESS;
+    return ret;
 }

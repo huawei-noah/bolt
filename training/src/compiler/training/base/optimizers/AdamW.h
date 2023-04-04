@@ -56,7 +56,6 @@ namespace raul::optimizers
  *
  *  @see
  *  - Ilya Loshchilov, Frank Hutter, “Decoupled Weight Decay Regularization” arXiv:1711.05101 [cs], Nov. 2017.
- *  - https://pytorch.org/docs/master/optim.html?highlight=adamw#torch.optim.AdamW
  */
 struct AdamW : public Optimizer
 {

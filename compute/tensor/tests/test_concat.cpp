@@ -95,8 +95,7 @@ int concatTest(int argc, char **argv, DataType dt)
         CHECK_STATUS(concat(inTensors, p, tmpTensor, outTensor, &UT_CPU_ARCHINFO));
 
         // check
-        ut_check_v(get_ptr_from_tensor(outTensor, CPU_GENERAL), outputRef, in_len, dt, 0, __FILE__,
-            __LINE__);
+        ut_check_v(get_ptr_from_tensor(outTensor, CPU_GENERAL), outputRef, in_len, dt, 0);
     }
 
     // benchmark

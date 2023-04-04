@@ -45,7 +45,7 @@ public:
         TensorDesc vDesc[2];
         wDesc[0] = this->filterDesc;
         U32 filterNum = 1;
-        DataType dtNoQ = (this->dt == DT_F16_8Q) ? DT_F16 : this->dt;
+        DataType dtNoQ = noQuantDataType(this->dt);
         switch (this->p.convolution_type) {
             case CONVOLUTION_POINTWISE: {
                 if (this->p.num_outputs_origin == 1) {
@@ -55,8 +55,8 @@ public:
                         wDesc[0].dims[3] = this->p.num_outputs;
                     }
                 }
-                vDesc[0] = tensor1d(dtNoQ,
-                    this->p.num_outputs);  // bias data type should be the same as input and output
+                // bias data type should be the same as input and output
+                vDesc[0] = tensor1d(dtNoQ, this->p.num_outputs);
                 ((MaliPara_t)(this->archInfo.archPara))->forwardRunInfo->algorithm =
                     CONVOLUTION_ALGORITHM_NULL;
                 break;
@@ -154,13 +154,13 @@ public:
         auto filterTensor = this->weightTensors[0];
         auto outputTensor = this->outputTensors[0];
         ConvolutionPolicy policy = CONVOLUTION_TUNNING;
-        DataType targetType = DT_F16;
+        DataType targetType = noQuantDataType(this->dt);
         I32 algo[7];
         std::string name =
             this->name + std::to_string(get_type()) + std::to_string(this->p.convolution_type);
         switch (this->p.convolution_type) {
             case CONVOLUTION_POINTWISE: {
-                if (this->dt == DT_F16_8Q) {
+                if (isQuantMixDataType(this->dt)) {
                     targetType = DT_I8;
                 }
                 if (algorithmMap->getAlgorithmInfoFromMap(name, algo, 4)) {
@@ -280,7 +280,7 @@ public:
         if (this->p.num_outputs_origin == 1 && this->tensorPos[0] != -2) {
             numFiltersOcl = 1;  // spe case for output channel = 1
         }
-        DataType targetType = DT_F16;  // Default DT_F16
+        DataType targetType = noQuantDataType(this->dt);
 
         if (this->p.convolution_type == CONVOLUTION_DILATION) {
             this->p.convolution_type = CONVOLUTION_POINTWISE;
@@ -362,7 +362,7 @@ public:
         return bytes[0];
     }
 
-    EE alloc_wtm_memory() override
+    EE alloc_wtm_memory()
     {
         auto filterTensor = this->weightTensors[0];
         bool needTransBiasImgToBuf = false;
@@ -427,11 +427,13 @@ public:
     EE transform_filter() override
     {
         auto filterTensor = this->weightTensors[0];
-        if (DT_F16_8Q == this->dt && CONVOLUTION_POINTWISE == this->p.convolution_type &&
-            CONVOLUTION_ALGORITHM_WINOGRAD == this->pwAlg) {  // int8 winograd
+        // int8 winograd
+        if (isQuantMixDataType(this->dt) && CONVOLUTION_POINTWISE == this->p.convolution_type &&
+            CONVOLUTION_ALGORITHM_WINOGRAD == this->pwAlg) {
             return NOT_SUPPORTED;
-        } else if (DT_F16_8Q == this->dt &&
-            CONVOLUTION_POINTWISE == this->p.convolution_type) {  // int8 tilegemm
+            // int8 tilegemm
+        } else if (isQuantMixDataType(this->dt) &&
+            CONVOLUTION_POINTWISE == this->p.convolution_type) {
             return NOT_SUPPORTED;
         } else {  // All other cases
             CHECK_STATUS(alloc_wtm_memory());
@@ -459,7 +461,7 @@ public:
                 }
             }
         }
-        this->weightTensors[0] = *this->get_wtm();
+        this->weightTensors[0] = *(this->wtm.get());
         return SUCCESS;
     }
 

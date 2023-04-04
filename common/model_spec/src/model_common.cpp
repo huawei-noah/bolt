@@ -13,6 +13,7 @@
 
 #include "model_common.h"
 #include "uni.h"
+#include "string_functions.h"
 
 OperatorSpec mt_create_operator(const char *name, OperatorType type, U32 num_inputs, U32 num_outputs)
 {
@@ -80,6 +81,25 @@ WeightSpec mt_create_weight(
     return newWeight;
 }
 
+EE mt_insert_weight(ModelSpec *ms, WeightSpec *newWeight, int num)
+{
+    if (nullptr == ms) {
+        return NULL_POINTER;
+    }
+    WeightSpec *weightList =
+        (WeightSpec *)mt_malloc(sizeof(WeightSpec) * (ms->num_weight_specs + num));
+    for (int i = 0; i < ms->num_weight_specs; i++) {
+        weightList[i] = ms->ws[i];
+    }
+    for (int i = 0; i < num; ++i) {
+        weightList[ms->num_weight_specs + i] = newWeight[i];
+    }
+    delete ms->ws;
+    ms->ws = weightList;
+    ms->num_weight_specs += num;
+    return SUCCESS;
+}
+
 bool isDeprecatedOp(OperatorType opType)
 {
     return (opType == OT_None) ? true : false;
@@ -98,59 +118,12 @@ bool isDeprecatedOpWeight(const ModelSpec *spec, int index)
     }
 }
 
-EE str_copy(I8 *dst, const I8 *src, I32 srcLen, I32 dstLen)
-{
-    //UNI_MEMSET(dst, 0, dstLen);
-    //I32 copyLen = UNI_MIN(srcLen, dstLen);
-    //UNI_MEMCPY(dst, src, copyLen);
-    UNI_MEMSET(dst, 0, dstLen);
-    I32 copyLen = NAME_LEN - 1;
-    if (copyLen > srcLen) {
-        copyLen = srcLen;
-    }
-    UNI_MEMCPY(dst, src, copyLen * sizeof(I8));
-    return SUCCESS;
-}
-
-std::string concat_dir_file(std::string dir, std::string file)
-{
-    std::string ret;
-    if (!dir.empty()) {
-        int len = dir.size();
-        char &last = dir.at(len - 1);
-        if ('/' != last) {
-            ret = dir + '/';
-        } else {
-            ret = dir;
-        }
-        ret += file;
-    } else {
-        ret = file;
-    }
-
-    return ret;
-}
-
-std::vector<std::string> string_parser(std::string s, std::string delimiter)
-{
-    std::vector<std::string> res;
-    size_t pos = 0;
-    std::string token;
-    while ((pos = s.find(delimiter)) != std::string::npos) {
-        token = s.substr(0, pos);
-        res.push_back(token);
-        s.erase(0, pos + delimiter.length());
-    }
-    res.push_back(s);
-    return res;
-}
-
 void modify_ms_inputs_and_outputs(
     ModelSpec *ms, std::string modifiedInputs, std::string modifiedOutputs)
 {
     std::map<std::string, std::string> modifiedStrMap;
     if (modifiedInputs.length() > 0) {
-        std::vector<std::string> modified_input_names = string_parser(modifiedInputs, ",");
+        std::vector<std::string> modified_input_names = split(modifiedInputs, ",");
         if ((I32)(modified_input_names.size()) != ms->num_inputs) {
             UNI_ERROR_LOG("input names not match, please check your params meticulously.\n");
         }
@@ -161,7 +134,7 @@ void modify_ms_inputs_and_outputs(
         }
     }
     if (modifiedOutputs.length() > 0) {
-        std::vector<std::string> modified_output_names = string_parser(modifiedOutputs, ",");
+        std::vector<std::string> modified_output_names = split(modifiedOutputs, ",");
         if ((I32)(modified_output_names.size()) != ms->num_outputs) {
             UNI_ERROR_LOG("output names not match, please check your params meticulously.\n");
         }

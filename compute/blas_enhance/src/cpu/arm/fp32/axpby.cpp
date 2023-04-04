@@ -13,21 +13,22 @@
 
 #include "cpu/arm/fp32/blas_fp32.h"
 
-EE axpby_fp32(U32 len, F32 a, const F32 *x, F32 b, F32 *y)
+EE axpby_fp32(I32 len, F32 a, const F32 *x, F32 b, F32 *y)
 {
-    EE ret = SUCCESS;
     float32x4_t alpha = vdupq_n_f32(a);
     float32x4_t beta = vdupq_n_f32(b);
-    I32 i = 0;
-    for (; i < ((I32)len) - 3; i += 4) {
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
+#endif
+    for (I32 i = 0; i < len - 3; i += 4) {
         float32x4_t out = vld1q_f32(y + i);
         float32x4_t in = vld1q_f32(x + i);
         out = vmulq_f32(out, beta);
         out = vmlaq_f32(out, alpha, in);
         vst1q_f32(y + i, out);
     }
-    for (; i < (I32)len; i++) {
+    for (I32 i = len / 4 * 4; i < len; i++) {
         y[i] = a * x[i] + b * y[i];
     }
-    return ret;
+    return SUCCESS;
 }

@@ -62,7 +62,7 @@ inline EE set_conv_direct_opt_mali(U32 fw,
     U32 workEntriesPerThread,
     U32 workFiltersPerThread,
     bool useNoBiasMode,
-    ActivationMode activeMode,
+    ActivationParamSpec activeMode,
     DataType dt,
     GCLMemType inputMemType,
     GCLMemType outputMemType,
@@ -104,13 +104,13 @@ inline EE set_conv_direct_opt_mali(U32 fw,
     bool useBasicReg = true;
     U32 FWH = fw * fh;
     U32 FWHT = fw * fh * ft;
-    U32 IN = ON;
-    U32 LN = IN - 1;
+    U32 in = ON;
+    U32 LN = in - 1;
     U32 UN = LN;
     if (!useQualcomm) {
         if (fh == 1) {
-            IN = ON;
-            LN = IN;
+            in = ON;
+            LN = in;
             UN = 0;
         } else {
             if (sh == 1) {
@@ -123,8 +123,8 @@ inline EE set_conv_direct_opt_mali(U32 fw,
                 }
             }
             if (!useBasicReg) {
-                IN = (ON - 1) * sh + fh;
-                LN = IN;
+                in = (ON - 1) * sh + fh;
+                LN = in;
                 UN = LN - 1;
             }
         }
@@ -133,7 +133,7 @@ inline EE set_conv_direct_opt_mali(U32 fw,
     CHECK_STATUS(set_value_define_opt(fw, "FW", opt));
     CHECK_STATUS(set_value_define_opt(fh, "FH", opt));
     CHECK_STATUS(set_value_define_opt(ON, "ON", opt));
-    CHECK_STATUS(set_value_define_opt(IN, "IN", opt));
+    CHECK_STATUS(set_value_define_opt(in, "IN", opt));
     CHECK_STATUS(set_value_define_opt(LN, "LN", opt));
     CHECK_STATUS(set_value_define_opt(LN, "UN", opt));
     CHECK_STATUS(set_value_define_opt(KN, "KN", opt));
@@ -182,7 +182,7 @@ inline EE set_conv_direct_multi_batch_opt_mali(U32 fw,
     U32 workEntriesPerThread,
     U32 workFiltersPerThread,
     U32 workBatchesPerThread,
-    ActivationMode activeMode,
+    ActivationParamSpec activeMode,
     DataType dt,
     GCLMemType inputMemType,
     GCLMemType outputMemType,
@@ -212,21 +212,21 @@ inline EE set_conv_direct_multi_batch_opt_mali(U32 fw,
 
     bool useBasicReg = true;
     U32 FWH = fw * fh;
-    U32 IN, LN, UN;
+    U32 in, LN, UN;
     if (fh == 1) {
-        IN = ON;
-        LN = IN;
+        in = ON;
+        LN = in;
         UN = 0;
     } else {
-        IN = ON;
-        LN = IN - 1;
+        in = ON;
+        LN = in - 1;
         UN = LN;
     }
 
     CHECK_STATUS(set_value_define_opt(fw, "FW", opt));
     CHECK_STATUS(set_value_define_opt(fh, "FH", opt));
     CHECK_STATUS(set_value_define_opt(ON, "ON", opt));
-    CHECK_STATUS(set_value_define_opt(IN, "IN", opt));
+    CHECK_STATUS(set_value_define_opt(in, "IN", opt));
     CHECK_STATUS(set_value_define_opt(LN, "LN", opt));
     CHECK_STATUS(set_value_define_opt(LN, "UN", opt));
     CHECK_STATUS(set_value_define_opt(KN, "KN", opt));
@@ -277,7 +277,7 @@ inline EE set_conv_direct_reuse_w_opt_mali(U32 fw,
     U32 workEntriesPerThread,
     U32 workFiltersPerThread,
     bool useNoBiasMode,
-    ActivationMode activeMode,
+    ActivationParamSpec activeMode,
     DataType dt,
     GCLMemType inputMemType,
     GCLMemType outputMemType,
@@ -303,13 +303,13 @@ inline EE set_conv_direct_reuse_w_opt_mali(U32 fw,
         CHECK_STATUS(NOT_SUPPORTED);
     }
 
-    U32 IN = ON;
-    U32 LN = IN;
+    U32 in = ON;
+    U32 LN = in;
 
     CHECK_STATUS(set_value_define_opt(fw, "FW", opt));
     CHECK_STATUS(set_value_define_opt(fh, "FH", opt));
     CHECK_STATUS(set_value_define_opt(ON, "ON", opt));
-    CHECK_STATUS(set_value_define_opt(IN, "IN", opt));
+    CHECK_STATUS(set_value_define_opt(in, "IN", opt));
     CHECK_STATUS(set_value_define_opt(LN, "LN", opt));
     CHECK_STATUS(set_value_define_opt(KN, "KN", opt));
     CHECK_STATUS(set_activation_define_opt(activeMode, opt));
@@ -347,7 +347,7 @@ inline EE set_conv_direct_nchw_to_nchwc4_opt_mali(U32 fw,
     U32 ft,
     U32 sw,
     U32 workEntriesPerThread,
-    ActivationMode activeMode,
+    ActivationParamSpec activeMode,
     DataType dt,
     GCLMemType inputMemType,
     GCLMemType outputMemType,
@@ -382,18 +382,18 @@ inline EE set_conv_direct_nchw_to_nchwc4_opt_mali(U32 fw,
         CHECK_STATUS(NOT_SUPPORTED);
     }
 
-    U32 IN, FWH, FWHT;
-    IN = (ON - 1) * sw + fw;
+    U32 in, FWH, FWHT;
+    in = (ON - 1) * sw + fw;
     FWH = fw * fh;
     FWHT = fw * fh * ft;
-    if (IN < 1 || IN > 16 * sw) {
+    if (in < 1 || in > 16 * sw) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
 
     CHECK_STATUS(set_value_define_opt(fw, "FW", opt));
     CHECK_STATUS(set_value_define_opt(fh, "FH", opt));
     CHECK_STATUS(set_value_define_opt(ON, "ON", opt));
-    CHECK_STATUS(set_value_define_opt(IN, "IN", opt));
+    CHECK_STATUS(set_value_define_opt(in, "IN", opt));
     if (ft == 1) {
         CHECK_STATUS(set_value_define_opt(FWH, "FWH", opt));
     } else {
@@ -433,7 +433,7 @@ inline EE set_conv_direct_dila_opt_mali(U32 fw,
     U32 dh,
     U32 workEntriesPerThread,
     U32 workFiltersPerThread,
-    ActivationMode activeMode,
+    ActivationParamSpec activeMode,
     DataType dt,
     GCLMemType inputMemType,
     GCLMemType outputMemType,
@@ -470,23 +470,23 @@ inline EE set_conv_direct_dila_opt_mali(U32 fw,
         CHECK_STATUS(NOT_SUPPORTED);
     }
 
-    U32 IN = ON;
+    U32 in = ON;
     U32 FWH = fw * fh;
-    U32 LN = IN;
+    U32 LN = in;
     U32 UN = 0;
     if (dh == 2) {
         if (sh == 2) {
-            LN = IN - 1;
+            LN = in - 1;
             UN = LN;
         } else {
-            LN = IN - 2;
+            LN = in - 2;
         }
     }
 
     CHECK_STATUS(set_value_define_opt(fw, "FW", opt));
     CHECK_STATUS(set_value_define_opt(fh, "FH", opt));
     CHECK_STATUS(set_value_define_opt(ON, "ON", opt));
-    CHECK_STATUS(set_value_define_opt(IN, "IN", opt));
+    CHECK_STATUS(set_value_define_opt(in, "IN", opt));
     CHECK_STATUS(set_value_define_opt(LN, "LN", opt));
     CHECK_STATUS(set_value_define_opt(KN, "KN", opt));
     CHECK_STATUS(set_value_define_opt(FWH, "FWH", opt));
@@ -518,7 +518,7 @@ inline EE set_conv_direct_sh1_fn_spe_opt_mali(U32 fw,
     U32 fh,
     U32 workEntriesPerThread,
     bool useNchwFormat,
-    ActivationMode activeMode,
+    ActivationParamSpec activeMode,
     DataType dt,
     GCLMemType inputMemType,
     GCLMemType outputMemType,
@@ -541,13 +541,13 @@ inline EE set_conv_direct_sh1_fn_spe_opt_mali(U32 fw,
     kernelOpt->kernelDataType = dt;
     char *opt = kernelOpt->option;
 
-    U32 IN = ON - 1 + fh;
-    U32 LN = IN;
+    U32 in = ON - 1 + fh;
+    U32 LN = in;
     U32 UN = LN - 1;
     CHECK_STATUS(set_value_define_opt(fw, "FW", opt));
     CHECK_STATUS(set_value_define_opt(fh, "FH", opt));
     CHECK_STATUS(set_value_define_opt(ON, "ON", opt));
-    CHECK_STATUS(set_value_define_opt(IN, "IN", opt));
+    CHECK_STATUS(set_value_define_opt(in, "IN", opt));
     CHECK_STATUS(set_value_define_opt(LN, "LN", opt));
     CHECK_STATUS(set_value_define_opt(UN, "UN", opt));
     CHECK_STATUS(set_activation_define_opt(activeMode, opt));

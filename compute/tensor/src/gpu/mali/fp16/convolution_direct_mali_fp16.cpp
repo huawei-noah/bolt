@@ -40,7 +40,7 @@ inline EE trans_input_nchw_to_img(GCLHandle_t handle,
     inputTran.desc.dims[0] = descNchwImg.dims[0];  //move left padding zero into img
     inputTran.desc.dims[1] = descNchwImg.dims[1];
     inputTran.desc.offset[0] -= convParamSpec.pad_left;
-    if (inputTran.desc.offset[0] < 0) {
+    if ((I32)inputTran.desc.offset[0] < 0) {
         CHECK_STATUS(NOT_MATCH);
     }
     GCLMem inputImg;
@@ -73,7 +73,7 @@ inline EE direct_core_nchw_to_nchwc4_mali_fp16(GCLHandle_t handle,
     GCLMem_t tmpBuf,
     TensorDesc outputDesc,
     GCLMem_t output,
-    ActivationMode activationMode)
+    ActivationParamSpec activationMode)
 {
     cl_mem inbuf, biasmem, outbuf, fltbuf;
     inbuf = input->mem;
@@ -82,6 +82,7 @@ inline EE direct_core_nchw_to_nchwc4_mali_fp16(GCLHandle_t handle,
     outbuf = output->mem;
     GCLMemType imt = input->desc.memType;
     GCLMemType omt = output->desc.memType;
+    DataType dt;
     DataFormat df;
     U32 iw, ih, it, ic;
     U32 fw, fh, fn, ft, sw, sh, st, pw, ph, pt;
@@ -97,7 +98,7 @@ inline EE direct_core_nchw_to_nchwc4_mali_fp16(GCLHandle_t handle,
     pw = convParamSpec.pad_left;
     pt = convParamSpec.pad_before;
 
-    tensorSelectGet(inputDesc, NULL, &df, NULL, &ic, &ih, &iw, &it);
+    tensorSelectGet(inputDesc, &dt, &df, NULL, &ic, &ih, &iw, &it);
     tensorSelectGet(outputDesc, NULL, NULL, &on, &oc, &oh, &ow, &ot);
     fn = oc;
     inDims = inputDesc.nDims;
@@ -134,7 +135,7 @@ inline EE direct_core_nchw_to_nchwc4_mali_fp16(GCLHandle_t handle,
         CHECK_STATUS(NOT_SUPPORTED);
     }
     CHECK_STATUS(set_conv_direct_nchw_to_nchwc4_opt_mali(
-        fw, fh, ft, sw, item_w, activationMode, DT_F16, imt, omt, kernelName, &kernelOpt));
+        fw, fh, ft, sw, item_w, activationMode, dt, imt, omt, kernelName, &kernelOpt));
     CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
     if (ot > 1) {
         CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, iwh_str, ic_str, iw_off, ih_off, ow_str,
@@ -168,7 +169,7 @@ inline EE direct_core_fn_spe(GCLHandle_t handle,
     GCLMem_t tmpBuf,
     TensorDesc outputDesc,
     GCLMem_t output,
-    ActivationMode activationMode)
+    ActivationParamSpec activationMode)
 {
     UNUSED(biasDesc);
     UNUSED(tmpBytes);
@@ -178,6 +179,7 @@ inline EE direct_core_fn_spe(GCLHandle_t handle,
     fltbuf = filter->mem;
     biasmem = bias->mem;
     outbuf = output->mem;
+    DataType dt;
     U32 iw, ih;
     U32 fw, fh, fn, sw, sh, pw, ph;
     U32 ow, oh, oc, on;
@@ -187,7 +189,7 @@ inline EE direct_core_fn_spe(GCLHandle_t handle,
     sh = convParamSpec.stride_h;
     ph = convParamSpec.pad_top;
     pw = convParamSpec.pad_left;
-    tensorSelectGet(inputDesc, NULL, NULL, NULL, NULL, &ih, &iw);
+    tensorSelectGet(inputDesc, &dt, NULL, NULL, NULL, &ih, &iw);
     tensorSelectGet(outputDesc, NULL, NULL, &on, &oc, &oh, &ow);
     fn = oc;
 
@@ -209,8 +211,8 @@ inline EE direct_core_fn_spe(GCLHandle_t handle,
     bool useNchw = true;
     char kernelName[128];
     KernelOpt kernelOpt;
-    CHECK_STATUS(set_conv_direct_sh1_fn_spe_opt_mali(fw, fh, item_h, useNchw, activationMode,
-        DT_F16, input->desc.memType, output->desc.memType, kernelName, &kernelOpt));
+    CHECK_STATUS(set_conv_direct_sh1_fn_spe_opt_mali(fw, fh, item_h, useNchw, activationMode, dt,
+        input->desc.memType, output->desc.memType, kernelName, &kernelOpt));
     U32 gs[3] = {ow, (oh + item_h - 1) / item_h, 1};
     U32 ls[3] = {0, 0, 0};
     U32 dim = 2;
@@ -240,7 +242,7 @@ inline EE direct_core_gemv(GCLHandle_t handle,
     GCLMem_t tmpBuf,
     TensorDesc outputDesc,
     GCLMem_t output,
-    ActivationMode activationMode)
+    ActivationParamSpec activationMode)
 {
     U32 tmpOff = 0;
     CHECK_STATUS(gemv(handle, inputDesc, outputDesc, activationMode, true, &tmpOff, tmpBuf, input,
@@ -261,13 +263,14 @@ inline EE direct_core_mali_fp16(GCLHandle_t handle,
     GCLMem_t tmpBuf,
     TensorDesc outputDesc,
     GCLMem_t output,
-    ActivationMode activationMode)
+    ActivationParamSpec activationMode)
 {
     cl_mem inbuf, biasmem, outbuf, fltbuf;
     inbuf = input->mem;
     fltbuf = filter->mem;
     biasmem = bias->mem;
     outbuf = output->mem;
+    DataType dt;
     U32 iw, ih, ic, in, it;
     U32 fw, fh, ft, sw, sh, st, pw, ph, pt;
     U32 ow, oh, oc, on, ot;
@@ -280,7 +283,7 @@ inline EE direct_core_mali_fp16(GCLHandle_t handle,
     ph = convParamSpec.pad_top;
     pw = convParamSpec.pad_left;
     pt = convParamSpec.pad_before;
-    tensorSelectGet(inputDesc, NULL, NULL, &in, &ic, &ih, &iw, &it);
+    tensorSelectGet(inputDesc, &dt, NULL, &in, &ic, &ih, &iw, &it);
     tensorSelectGet(outputDesc, NULL, NULL, &on, &oc, &oh, &ow, &ot);
     if (on > 1 && ot > 1) {
         CHECK_STATUS(NOT_SUPPORTED);
@@ -313,9 +316,8 @@ inline EE direct_core_mali_fp16(GCLHandle_t handle,
     if ((item_h >> 8) > 0) {
         U32 item_w = item_h >> 8;
         item_k = item_k >> 2;
-        CHECK_STATUS(
-            set_conv_direct_reuse_w_opt_mali(fw, fh, ft, sw, item_w, item_k, false, activationMode,
-                DT_F16, input->desc.memType, output->desc.memType, kernelName, &kernelOpt));
+        CHECK_STATUS(set_conv_direct_reuse_w_opt_mali(fw, fh, ft, sw, item_w, item_k, false,
+            activationMode, dt, input->desc.memType, output->desc.memType, kernelName, &kernelOpt));
         gs[0] = (ow + item_w - 1) / item_w;
         gs[1] = oh;
         gs[2] = (oc + 3) / 4 * on / item_k;
@@ -326,7 +328,7 @@ inline EE direct_core_mali_fp16(GCLHandle_t handle,
         U32 h = item_h & 15;
         U32 k = item_k >> 2;
         CHECK_STATUS(set_conv_direct_multi_batch_opt_mali(fw, fh, ft, sh, h, k, n, activationMode,
-            DT_F16, input->desc.memType, output->desc.memType, kernelName, &kernelOpt));
+            dt, input->desc.memType, output->desc.memType, kernelName, &kernelOpt));
         gs[0] = ow;
         gs[1] = (oh + h - 1) / h;
         gs[2] = oc_str / k * ((on + n - 1) / n);
@@ -334,7 +336,7 @@ inline EE direct_core_mali_fp16(GCLHandle_t handle,
     } else {
         item_k = item_k >> 2;
         CHECK_STATUS(set_conv_direct_opt_mali(fw, fh, ft, sh, item_h, item_k, false, activationMode,
-            DT_F16, input->desc.memType, output->desc.memType, kernelName, &kernelOpt));
+            dt, input->desc.memType, output->desc.memType, kernelName, &kernelOpt));
         gs[0] = ow;
         gs[1] = (oh + item_h - 1) / item_h;
         gs[2] = (oc + 3) / 4 * on / item_k * ot;
@@ -377,7 +379,7 @@ inline EE direct_dila_core_mali_fp16(GCLHandle_t handle,
     GCLMem_t tmpBuf,
     TensorDesc outputDesc,
     GCLMem_t output,
-    ActivationMode activationMode)
+    ActivationParamSpec activationMode)
 {
     if (input->desc.memFormat != DF_NCHWC4) {
         CHECK_STATUS(NOT_SUPPORTED);
@@ -390,6 +392,7 @@ inline EE direct_dila_core_mali_fp16(GCLHandle_t handle,
     fltbuf = filter->mem;
     biasmem = bias->mem;
     outbuf = output->mem;
+    DataType dt;
     U32 iw, ih, ic, in;
     U32 fw, fh, sw, sh, pw, ph, dw, dh;
     U32 ow, oh, oc, on;
@@ -401,7 +404,7 @@ inline EE direct_dila_core_mali_fp16(GCLHandle_t handle,
     ph = convParamSpec.pad_top;
     dw = convParamSpec.dilatedRate_w;
     dh = convParamSpec.dilatedRate_h;
-    tensorSelectGet(inputDesc, NULL, NULL, &in, &ic, &ih, &iw);
+    tensorSelectGet(inputDesc, &dt, NULL, &in, &ic, &ih, &iw);
     tensorSelectGet(outputDesc, NULL, NULL, &on, &oc, &oh, &ow);
 
     U32 item_h = forwardRunInfo->best_h[0];
@@ -430,8 +433,8 @@ inline EE direct_dila_core_mali_fp16(GCLHandle_t handle,
     U32 ls[3] = {0, 0, 0};
     U32 dim = 3;
     Kernel kernel;
-    CHECK_STATUS(set_conv_direct_dila_opt_mali(fw, fh, sh, dh, item_h, item_k, activationMode,
-        DT_F16, input->desc.memType, output->desc.memType, kernelName, &kernelOpt));
+    CHECK_STATUS(set_conv_direct_dila_opt_mali(fw, fh, sh, dh, item_h, item_k, activationMode, dt,
+        input->desc.memType, output->desc.memType, kernelName, &kernelOpt));
     CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
     CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ihw_str, ic_str, iw_off, ih_off, ow_str, ohw_str,
         o_off, oh, oc, sw, dw, dh, in_str, on_str, gs[0], gs[1], inbuf, fltbuf, biasmem, outbuf));
@@ -445,11 +448,12 @@ inline EE direct_dila_core_mali_fp16(GCLHandle_t handle,
 
 inline TensorDesc transform_filter_desc(TensorDesc filterDesc, U32 item_c, U32 item_k)
 {
+    DataType fdt;
     U32 fw, fh, fc, fn, ft;
-    tensorSelectGet(filterDesc, NULL, NULL, &fn, &fc, &fh, &fw, &ft);
+    tensorSelectGet(filterDesc, &fdt, NULL, &fn, &fc, &fh, &fw, &ft);
     TensorDesc desc;
     desc.df = DF_NCHW;
-    desc.dt = DT_F16;
+    desc.dt = fdt;
     desc.nDims = 4;
     desc.dims[3] = 1;
     if (item_k == 0) {
@@ -500,7 +504,7 @@ EE convolution_direct_transform_filter_mali_fp16(GCLHandle_t handle,
             transWH = false;
         }
         CHECK_STATUS(set_conv_direct_trans_flt(
-            item_c, item_k, transWH, DT_F16, fltmem->desc.memType, kernelName, &kernelOpt));
+            item_c, item_k, transWH, fdt, fltmem->desc.memType, kernelName, &kernelOpt));
         gs[0] = fwht;
         gs[1] = (fc + item_c - 1) / item_c;
         gs[2] = (fn + item_k - 1) / item_k * item_k;
@@ -533,8 +537,8 @@ inline GCLMemDesc convolution_get_input_nchwc4_desc(TensorDesc inputDesc,
     U32 ow = outputDesc.dims[0];
     U32 oh = outputDesc.dims[1];
     U32 w_align = ow;
-    U32 h_align = ALIGN(oh, item_h);
-    U32 in_align = ALIGN(in, item_n);
+    U32 h_align = UNI_ALIGN(oh, item_h);
+    U32 in_align = UNI_ALIGN(in, item_n);
     calPaddingVal(inputDesc, filterDesc, convParamSpec, w_align, h_align, in_align, useNchwMode,
         &pl, &pr, &pt, &pb, &pa, &pf);
     inputDesc.df = DF_NCHWC4;
@@ -625,7 +629,7 @@ EE convolution_direct_mali_fp16(GCLHandle_t handle,
     GCLMem_t tmpBuf,
     TensorDesc outputDesc,
     GCLMem_t output,
-    ActivationMode activationMode)
+    ActivationParamSpec activationMode)
 {
     U32 fw, sw, sh, dw, dh, ic;
     fw = convParamSpec.kernel_w;

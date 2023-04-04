@@ -26,6 +26,9 @@ EE gather(Tensor dataTensor,
     Tensor outputTensor,
     ArchInfo_t archInfo)
 {
+    if (outputTensor.length() == 0) {
+        return SUCCESS;
+    }
     auto arch = archInfo->arch;
     EE ret = NOT_SUPPORTED;
     TensorDesc dataDesc = dataTensor.get_desc();
@@ -62,22 +65,28 @@ EE gather_infer_output_size(Tensor *dataTensor,
     TensorDesc indexDesc = indexTensor->get_desc();
     int axis = (p.axis + dataDesc.nDims) % dataDesc.nDims;
     axis = dataDesc.nDims - 1 - axis;
-    TensorDesc outputDesc = indexDesc;
+    TensorDesc outputDesc;
     if (p.axis == INT_MAX) {
+        outputDesc = dataDesc;
         int data_rank = dataDesc.nDims;
-        int k = indexDesc.dims[indexDesc.nDims - 1];
-        CHECK_REQUIREMENT(k <= data_rank);
-        int e = data_rank - p.batch_dims - k;
-        for (U32 i = 0; i < indexDesc.nDims; i++) {
-            outputDesc.dims[e + i] = indexDesc.dims[i];
+        int k = indexDesc.dims[0];
+        if (k <= data_rank) {
+            outputDesc.nDims = data_rank + indexDesc.nDims - k - 1;
+            int remain = dataDesc.nDims - p.batch_dims - k;
+            for (U32 i = 1; i < indexDesc.nDims; i++) {
+                outputDesc.dims[remain++] = indexDesc.dims[i];
+            }
+            for (int i = 0; i < p.batch_dims; i++) {
+                outputDesc.dims[outputDesc.nDims - 1 - i] = dataDesc.dims[dataDesc.nDims - 1 - i];
+            }
+        } else {
+            return NOT_MATCH;
         }
-        outputDesc.nDims = e + indexDesc.nDims;
     } else {
         outputDesc = indexDesc;
-        outputDesc.dt = dataDesc.dt;
         if (!p.element_level) {
             outputDesc = dataDesc;
-            if (tensorNumElements(indexDesc) == 1 && p.index_scalar) {
+            if (tensorNumElements(indexDesc) == 1 && indexDesc.df == DF_SCALAR) {
                 for (int i = axis; i < (int)outputDesc.nDims - 1; i++) {
                     outputDesc.dims[i] = outputDesc.dims[i + 1];
                 }
@@ -98,6 +107,7 @@ EE gather_infer_output_size(Tensor *dataTensor,
             }
         }
     }
+    outputDesc.dt = dataDesc.dt;
     if (IS_CPU(arch)) {
         if (outputDesc.df == DF_NCHWC8) {
             outputDesc.df = DF_NCHW;
@@ -111,7 +121,7 @@ EE gather_infer_output_size(Tensor *dataTensor,
     }
     EE ret = SUCCESS;
 #ifdef _USE_CPU
-    if (tensorIsShape(dataDesc)) {
+    if (IS_CPU(arch) && tensorIsShape(dataDesc) && tensorIsShape(indexDesc) && tensorIsShape(outputDesc)) {
         ret = gather_cpu(dataDesc, dataDesc.dims + dataDesc.nDims, indexDesc,
             indexDesc.dims + indexDesc.nDims, p, nullptr, outputDesc,
             outputDesc.dims + outputDesc.nDims);

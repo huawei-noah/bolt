@@ -29,7 +29,7 @@ inline EE deconv_gemm_core_mali_fp16(GCLHandle_t handle,
     GCLMem_t tmpBuf,
     TensorDesc outputDesc,
     GCLMem_t output,
-    ActivationMode activationMode)
+    ActivationParamSpec activationMode)
 {
     cl_mem inbuf, biasmem, outbuf, fltbuf, tmp;
     inbuf = input->mem;
@@ -37,6 +37,7 @@ inline EE deconv_gemm_core_mali_fp16(GCLHandle_t handle,
     biasmem = bias->mem;
     outbuf = output->mem;
     tmp = tmpBuf->mem;
+    DataType dt;
     U32 iw, ih, ic;
     U32 fn, fw, fh, fc, sw, sh, pw, ph;
     U32 ow, oh, oc, on;
@@ -46,7 +47,7 @@ inline EE deconv_gemm_core_mali_fp16(GCLHandle_t handle,
     pw = convParamSpec.pad_left;
     fw = convParamSpec.kernel_w;
     fh = convParamSpec.kernel_h;
-    tensorSelectGet(inputDesc, NULL, NULL, NULL, &ic, &ih, &iw);
+    tensorSelectGet(inputDesc, &dt, NULL, NULL, &ic, &ih, &iw);
     tensorSelectGet(outputDesc, NULL, NULL, &on, &oc, &oh, &ow);
     fc = oc;
     fn = ic;
@@ -86,7 +87,7 @@ inline EE deconv_gemm_core_mali_fp16(GCLHandle_t handle,
             gs[2] = (fc + 3) / 4 * fw * fh / item_c;
         }
         CHECK_STATUS(set_deconv_gemm_f2s2_opt(
-            item_c, item_h, reuseOnW, activationMode, DT_F16, imt, omt, kernelName, &kernelOpt));
+            item_c, item_h, reuseOnW, activationMode, dt, imt, omt, kernelName, &kernelOpt));
         CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
         CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ihw_str, ic_str, iw_off, ih_off, ow_str,
             ohw_str, o_off, edge, gs[0], gs[1], inbuf, fltbuf, biasmem, outbuf));
@@ -107,13 +108,13 @@ inline EE deconv_gemm_core_mali_fp16(GCLHandle_t handle,
         if ((item_h >> 8) > 0) {
             U32 item_w = item_h >> 8;
             CHECK_STATUS(set_conv_direct_reuse_w_opt_mali(1, 1, 1, 1, item_w, item_c, true,
-                ACTIVATION_NULL, DT_F16, imt, tmpBuf->desc.memType, kernelName, &kernelOpt));
+                {}, dt, imt, tmpBuf->desc.memType, kernelName, &kernelOpt));
             gs[0] = (tw + item_w - 1) / item_w;
             gs[1] = th;
             gs[2] = (tc + 3) / 4 / item_c;
         } else {
-            CHECK_STATUS(set_conv_direct_opt_mali(1, 1, 1, 1, item_h, item_c, true, ACTIVATION_NULL,
-                DT_F16, imt, tmpBuf->desc.memType, kernelName, &kernelOpt));
+            CHECK_STATUS(set_conv_direct_opt_mali(1, 1, 1, 1, item_h, item_c, true, {},
+                dt, imt, tmpBuf->desc.memType, kernelName, &kernelOpt));
             gs[0] = tw;
             gs[1] = (th + item_h - 1) / item_h;
             gs[2] = (tc + 3) / 4 / item_c;
@@ -132,7 +133,7 @@ inline EE deconv_gemm_core_mali_fp16(GCLHandle_t handle,
         gs[2] = (oc + 3) / 4;
         dim = 3;
         CHECK_STATUS(
-            set_common_opt(DT_F16, tmpBuf->desc.memType, omt, "col2im", kernelName, &kernelOpt));
+            set_common_opt(dt, tmpBuf->desc.memType, omt, "col2im", kernelName, &kernelOpt));
         CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
         CHECK_STATUS(gcl_set_kernelArgs(kernel, tw, th, fw, fh, pw, ph, sw, sh, ow_str, oh_str,
             o_off, ow, oh, gs[0], gs[1], tmp, biasmem, outbuf));
@@ -147,11 +148,12 @@ inline EE deconv_gemm_core_mali_fp16(GCLHandle_t handle,
 
 inline TensorDesc transform_filter_desc(TensorDesc filterDesc, U32 item_c, U32 item_k)
 {
+    DataType fdt;
     U32 fw, fh, fc, fn;
-    tensorSelectGet(filterDesc, NULL, NULL, &fn, &fc, &fh, &fw);
+    tensorSelectGet(filterDesc, &fdt, NULL, &fn, &fc, &fh, &fw);
     TensorDesc desc;
     desc.df = DF_NCHW;
-    desc.dt = DT_F16;
+    desc.dt = fdt;
     desc.nDims = 4;
     item_c = item_c >> 2;
     desc.dims[3] = 1;
@@ -189,7 +191,7 @@ EE deconvolution_gemm_transform_filter_mali_fp16(GCLHandle_t handle,
     Kernel kernel;
     KernelOpt kernelOpt;
     CHECK_STATUS(
-        set_deconv_gemm_trans_fltbuf(item_c, item_k, DT_F16, GCL_MEM_BUF, kernelName, &kernelOpt));
+        set_deconv_gemm_trans_fltbuf(item_c, item_k, fdt, GCL_MEM_BUF, kernelName, &kernelOpt));
     CHECK_STATUS(gcl_get_kernel_from_map(handle, kernelName, &kernel, &kernelOpt));
     CHECK_STATUS(gcl_set_kernelArgs(kernel, fw, fh, fwh, fwhc, fc, fn, filter->mem, fltmem->mem));
     U32 gs[2] = {fwh * ((fc + 3) / 4), (fn + 3) / 4};
@@ -230,7 +232,7 @@ EE deconvolution_gemm_mali_fp16(GCLHandle_t handle,
     GCLMem_t tmpBuf,
     TensorDesc outputDesc,
     GCLMem_t output,
-    ActivationMode activationMode)
+    ActivationParamSpec activationMode)
 {
     CHECK_STATUS(fill_output_zero(handle, output, outputDesc));
     CHECK_STATUS(

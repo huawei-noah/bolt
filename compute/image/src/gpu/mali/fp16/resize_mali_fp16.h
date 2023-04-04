@@ -15,10 +15,7 @@
 #define _RESIZE_MALI_FP16
 #include "image.h"
 
-EE resize_bilinear_mali_fp16(
-    GCLHandle_t handle, TensorDesc inputDesc, GCLMem_t input, TensorDesc outputDesc, GCLMem_t output);
-
-EE resize_nearest_mali_fp16(GCLHandle_t handle,
+EE resize_mali_fp16(GCLHandle_t handle,
     TensorDesc inputDesc,
     GCLMem_t input,
     ResizeParamSpec p,

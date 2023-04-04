@@ -53,34 +53,18 @@ std::shared_ptr<Tensor> get_resize_image(
     U32 transform[3];
     switch (targetImageFormat) {
         case RGB:
+        case RGB_SC:
+        case RGB_RAW:
+        case RGB_SC_RAW:
             transform[0] = 0;
             transform[1] = 1;
             transform[2] = 2;
             break;
         case BGR:
-            transform[0] = 2;
-            transform[1] = 1;
-            transform[2] = 0;
-            break;
         case BGR_SC_RAW:
             transform[0] = 2;
             transform[1] = 1;
             transform[2] = 0;
-            break;
-        case RGB_SC:
-            transform[0] = 0;
-            transform[1] = 1;
-            transform[2] = 2;
-            break;
-        case RGB_RAW:
-            transform[0] = 0;
-            transform[1] = 1;
-            transform[2] = 2;
-            break;
-        case RGB_SC_RAW:
-            transform[0] = 0;
-            transform[1] = 1;
-            transform[2] = 2;
             break;
         default:
             UNI_ERROR_LOG("unsupported image format\n");

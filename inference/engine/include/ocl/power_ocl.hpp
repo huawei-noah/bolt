@@ -45,11 +45,11 @@ public:
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
         this->needSetKernelVec = true;
-        CHECK_STATUS(power_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo));
-        if (check_tensors_image(inTensors) && inTensors[0] != outTensors[0]) {
-            CHECK_STATUS(set_tensors_image(outTensors, inTensors.size()));
+        EE ret = power_infer_output_size(inTensors[0], this->p, this->dt, outTensors[0], &this->archInfo);
+        if (ret == SUCCESS && check_tensors_image(inTensors) && inTensors[0] != outTensors[0]) {
+            ret = set_tensors_image(outTensors, inTensors.size());
         }
-        return SUCCESS;
+        return ret;
     }
 
     REGISTER_OCL_OPERATOR_RUN

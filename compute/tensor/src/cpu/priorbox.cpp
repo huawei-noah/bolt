@@ -63,14 +63,13 @@ static EE priorbox_kernel(DataType idt0,
         U32 num_maxsize = maxsizes.size();
         num_priorboxs = num_priorboxs + num_maxsize;
     }
-    int dim = layer_h * layer_w * num_priorboxs * 4;
     int idx = 0;
     for (U32 h = 0; h < layer_h; h++) {
         for (U32 w = 0; w < layer_w; w++) {
             F32 center_x = (w + offset) * stp_w;
             F32 center_y = (h + offset) * stp_h;
             F32 box_w, box_h;
-            for (int n = 0; n < (int)minsizes.size(); n++) {
+            for (U32 n = 0; n < minsizes.size(); n++) {
                 F32 minsize = minsizes[n];
                 box_w = box_h = minsize;
                 output[idx++] = (center_x - box_w / 2) / img_w;
@@ -78,7 +77,7 @@ static EE priorbox_kernel(DataType idt0,
                 output[idx++] = (center_x + box_w / 2) / img_w;
                 output[idx++] = (center_y + box_h / 2) / img_h;
 
-                if ((int)maxsizes.size() > 0) {
+                if (maxsizes.size() > 0) {
                     F32 maxsize = maxsizes[n];
                     box_w = box_h = sqrt(minsize * maxsize);
                     output[idx++] = (center_x - box_w / 2) / img_w;
@@ -87,7 +86,7 @@ static EE priorbox_kernel(DataType idt0,
                     output[idx++] = (center_y + box_h / 2) / img_h;
                 }
 
-                for (int a = 0; a < (int)ars.size(); a++) {
+                for (U32 a = 0; a < ars.size(); a++) {
                     F32 ar = ars[a];
                     box_w = minsize * sqrt(ar);
                     box_h = minsize / sqrt(ar);
@@ -105,6 +104,7 @@ static EE priorbox_kernel(DataType idt0,
             }
         }
     }
+    int dim = layer_h * layer_w * num_priorboxs * 4;
     EE ret = SUCCESS;
     if (clip) {
         ClipParamSpec p;

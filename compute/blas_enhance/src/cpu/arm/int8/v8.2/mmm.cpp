@@ -13,8 +13,6 @@
 
 #include "cpu/arm/int8/v8.2/mmm_v8.h"
 #include "cpu/arm/int8/blas_int8.h"
-#include "cpu/arm/int8/blas_matrix_transpose.h"
-#include "cpu/arm/blas_arm.h"
 
 EE mmm_int8(
     int M, int N, int K, bool transposeA, INT8 *matrix1, INT8 *matrix2, INT8 *tmp, I32 *result, Arch arch)
@@ -40,7 +38,7 @@ EE matrix_matrix_multiply_transform_rhsN_int8(TensorDesc desc, INT8 *src, INT8 *
     DataFormat df;
     U32 N, K;
     CHECK_STATUS(tensor2dGet(desc, &dt, &df, &K, &N));
-    U32 K4 = pad_to_4_multiple(K);
+    U32 K4 = UNI_ALIGN(K, 4);
     int i = 0;
     for (; i < (int)N - 11; i += 12) {
         matrix2_trans_m12(K, N, src + i, dst + i * K4);
@@ -63,7 +61,7 @@ EE matrix_matrix_multiply_transform_rhsT_int8(TensorDesc desc, INT8 *src, INT8 *
     DataFormat df;
     U32 N, K;
     CHECK_STATUS(tensor2dGet(desc, &dt, &df, &N, &K));
-    U32 K4 = pad_to_4_multiple(K);
+    U32 K4 = UNI_ALIGN(K, 4);
     int i = 0;
     for (; i < (int)N - 11; i += 12) {
         matrix1_trans_int8(12, K, K, src + i * K, dst + i * K4);

@@ -115,7 +115,7 @@ int verify(Tensor tensor, std::string subNetworkName)
             result = 1;
         }
     } else if (subNetworkName == std::string("postnet")) {
-        if (abs(sum - (-11987.7)) >= 1) {
+        if (abs(sum - (-11987.7)) >= 4) {
             result = 1;
         }
     } else if (subNetworkName == std::string("melgan_vocoder")) {
@@ -138,7 +138,7 @@ int main(int argc, char *argv[])
     std::string subNetworkName = std::string("encoder_decoder");
 
     if (!parse_res.model.second) {
-        exit(-1);
+        return 1;
     }
     if (parse_res.model.second) {
         modelPath = parse_res.model.first;

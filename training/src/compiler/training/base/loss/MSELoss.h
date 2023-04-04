@@ -26,7 +26,6 @@ namespace raul
  * Creates a criterion that measures the mean squared error (squared L2 norm)
  * between each element in the input x and target y
  * @see
- * https://en.wikipedia.org/wiki/Mean_squared_error
  */
 class MSELoss : public BasicLayer
 {

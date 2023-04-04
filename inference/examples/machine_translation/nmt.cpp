@@ -31,7 +31,7 @@ int main(int argc, char *argv[])
     char *algorithmMapPath = (char *)"";
 
     if (!parse_res.model.second) {
-        exit(-1);
+        return 1;
     }
     if (parse_res.model.second) {
         modelPath = parse_res.model.first;
@@ -97,7 +97,7 @@ int main(int argc, char *argv[])
 #ifdef _USE_GPU
         if (useGPU) {
             auto mem = (OclMemory *)output.get_memory();
-            if (!mem->check_mapped()) {
+            if (!mem->get_mapped()) {
                 Tensor outputMap = output.clone(false);
                 auto memMap = (OclMemory *)outputMap.get_memory();
                 memMap->mapped_alloc();

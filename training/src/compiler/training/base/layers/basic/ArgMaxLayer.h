@@ -27,8 +27,6 @@ namespace raul
  * If two outputs are supplied, the second will contain corresponding maximum values.
  * Axis should be specified: raul::Dimension::Default causes an exception.
  *
- * @see
- * https://pytorch.org/docs/master/generated/torch.max.html
  */
 
 using ArgMaxLayer = ArgExtremumLayer<ArgMax>;

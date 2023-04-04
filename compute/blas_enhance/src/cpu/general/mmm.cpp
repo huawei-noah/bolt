@@ -14,10 +14,11 @@
 #include "error.h"
 #include "cpu/general/blas_general.h"
 
-template <typename T1, typename T2>
+template <typename T1, typename T2, bool is_bf16 = false>
 inline void mmm(
     U32 N, U32 M, U32 K, bool transposeA, bool transposeB, T1 *matrixA, T1 *matrixB, T2 *matrixC)
 {
+    F32 a, b;
     for (U32 i = 0; i < M; i++) {
         for (U32 n = 0; n < N; n++) {
             F32 value = 0;
@@ -33,9 +34,19 @@ inline void mmm(
                 } else {
                     indexB = j * N + n;
                 }
-                value += matrixA[indexA] * matrixB[indexB];
+#ifdef _USE_MATRIX
+                if (is_bf16) {
+                    a = bfloat16ToFloat32(matrixA[indexA]);
+                    b = bfloat16ToFloat32(matrixB[indexB]);
+                } else
+#endif
+                {
+                    a = matrixA[indexA];
+                    b = matrixB[indexB];
+                }
+                value += a * b;
             }
-            matrixC[i * N + n] += value;
+            matrixC[i * N + n] += (T2)value;
         }
     }
 }
@@ -53,6 +64,13 @@ EE mmm_general(U32 matrixC_N,
     EE ret = SUCCESS;
     switch (dt) {
 #ifdef _USE_FP16
+#ifdef _USE_MATRIX
+        case DT_BF16: {
+            mmm<unsigned short, F16, true>(matrixC_N, matrixC_M, matrixA_K, transposeA, transposeB,
+                (unsigned short *)matrixAData, (unsigned short *)matrixBData, (F16 *)matrixCData);
+            break;
+        }
+#endif
         case DT_F16: {
             mmm<F16, F16>(matrixC_N, matrixC_M, matrixA_K, transposeA, transposeB,
                 (F16 *)matrixAData, (F16 *)matrixBData, (F16 *)matrixCData);

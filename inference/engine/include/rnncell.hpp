@@ -22,8 +22,9 @@ public:
     {
         this->dt = dt;
         this->p = p;
-        this->hasBias = false;
     }
+
+    ~RNNCell(){}
 
     OperatorType get_type() override
     {
@@ -34,6 +35,7 @@ public:
     RNNParamSpec p;
     U32 xDim;
     ClipParamSpec clipParam;
+    std::shared_ptr<F32> scales;
 };
 
 #endif  // _RNNCELL_H

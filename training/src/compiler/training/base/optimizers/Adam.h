@@ -75,9 +75,7 @@ struct Adam : public Optimizer
     bool m_use_simple_epsilon;
 };
 
-/**
- * https://arxiv.org/abs/2110.02861
- */
+
 struct AdamQuantized : public Optimizer
 {
     explicit AdamQuantized(size_t blockSize, const dtype alpha = 0.0001_dt, const dtype beta_1 = 0.9_dt, const dtype beta_2 = 0.999_dt, const dtype epsilon = 1e-8_dt, bool use_simple_epsilon = false);

@@ -13,20 +13,37 @@
 
 #include "cpu/tensor_computing_cpu.h"
 
+bool isSingleCStepMode(TensorDesc inputDesc, TfSliceParamSpec p)
+{
+    int nDims = inputDesc.nDims;
+    if (nDims < 3) {
+        return false;
+    }
+    for (int i = 0; i < nDims; ++i) {
+        int pi = nDims - 1 - i;
+        if ((i != nDims - 2) &&
+            (p.begin[pi] != 0 || p.end[pi] != int(inputDesc.dims[i]) || p.strides[pi] != 1)) {
+            return false;
+        }
+    }
+    return true;
+}
+
 EE tfslice_infer_output_size_cpu(TensorDesc inputDesc, TfSliceParamSpec p, TensorDesc *outputDesc)
 {
     if (nullptr == outputDesc) {
-        CHECK_STATUS(NULL_POINTER);
+        return NULL_POINTER;
     }
-    int *begin = p.begin;
-    int *end = p.end;
-    int *strides = p.strides;
-    char *beginMask = p.begin_mask;
-    char *endMask = p.end_mask;
+    auto begin = p.begin;
+    auto end = p.end;
+    auto strides = p.strides;
+    auto beginMask = p.begin_mask;
+    auto endMask = p.end_mask;
     U32 dimSize = inputDesc.nDims;
 
     CHECK_REQUIREMENT(dimSize == inputDesc.nDims);
     *outputDesc = inputDesc;
+
     for (U32 i = 0; i < dimSize; i++) {
         int axis = dimSize - 1 - i;
         int axisBegin = (beginMask[i] == 1) ? 0 : begin[i];
@@ -49,14 +66,88 @@ EE tfslice_infer_output_size_cpu(TensorDesc inputDesc, TfSliceParamSpec p, Tenso
         begin[i] = axisBegin;
         end[i] = axisEnd;
     }
-    if (inputDesc.df == DF_NCHWC8) {
+    if (inputDesc.df == DF_NCHWC4 || inputDesc.df == DF_NCHWC8 || inputDesc.df == DF_NCHWC16) {
+        int align = 1;
+        if (inputDesc.df == DF_NCHWC4) {
+            align = 4;
+        }
+        if (inputDesc.df == DF_NCHWC8) {
+            align = 8;
+        }
+        if (inputDesc.df == DF_NCHWC16) {
+            align = 16;
+        }
         int channelAxis = 1;
-        if (begin[channelAxis] % 8 != 0 || strides[channelAxis] != 1 ||
-            (end[channelAxis] - begin[channelAxis]) / strides[channelAxis] % 8 != 0) {
+        if (begin[channelAxis] % align != 0 || strides[channelAxis] != 1 ||
+            (end[channelAxis] - begin[channelAxis]) / strides[channelAxis] % align != 0) {
             outputDesc->df = DF_NCHW;
+        }
+        if (isSingleCStepMode(inputDesc, p)) {
+            if (inputDesc.df == DF_NCHWC4 && (outputDesc->dims[dimSize - 1 - channelAxis] % 4 == 0)) {
+                outputDesc->df = DF_NCHWC4;
+            }
+            if (inputDesc.df == DF_NCHWC8 && (outputDesc->dims[dimSize - 1 - channelAxis] % 8 == 0)) {
+                outputDesc->df = DF_NCHWC8;
+            }
+            if (inputDesc.df == DF_NCHWC16 &&
+                (outputDesc->dims[dimSize - 1 - channelAxis] % 16 == 0)) {
+                outputDesc->df = DF_NCHWC16;
+            }
         }
     }
     return SUCCESS;
+}
+
+template <typename T>
+void singleCStepMode(
+    TensorDesc inputDesc, T *input, int start, int stride, TensorDesc outputDesc, T *output)
+{
+    DataType idt;
+    DataFormat idf;
+    U32 in, ic, ih, iw;
+    if (tensorIs2d(inputDesc)) {
+        CHECK_STATUS(tensor2dGet(inputDesc, &idt, &idf, &in, &ic));
+        ih = iw = 1;
+    } else if (tensorIs3d(inputDesc)) {
+        CHECK_STATUS(tensor3dGet(inputDesc, &idt, &idf, &in, &ic, &ih));
+        iw = 1;
+    } else if (tensorIs4d(inputDesc)) {
+        CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+    } else {
+        UNI_ERROR_LOG("Slice currently on support 2/3/4 dim data.\n");
+    }
+    U32 ihiw = ih * iw;
+    U32 oc = outputDesc.dims[outputDesc.nDims - 2];
+    U32 icx = 1;
+    if (idf == DF_NCHWC8) {
+        icx = 8;
+    }
+    if (idf == DF_NCHWC16) {
+        icx = 16;
+    }
+    U32 ocx = 1;
+    if (outputDesc.df == DF_NCHWC8) {
+        ocx = 8;
+    }
+    if (outputDesc.df == DF_NCHWC16) {
+        ocx = 16;
+    }
+    int icc = ic / icx;
+    int occ = oc / ocx;
+    for (U32 n = 0, oidx = 0; n < in; ++n) {
+        for (int c = 0; c < occ; c++) {
+            for (U32 hw = 0; hw < ihiw; ++hw) {
+                for (U32 c8 = 0; c8 < ocx; ++c8, oidx++) {
+                    int ocidx = c * ocx + c8;
+                    int icidx = (ocidx * stride + start + ic) % ic;
+                    int ic0 = icidx / icx;
+                    int ic1 = icidx % icx;
+                    U32 iidx = ((n * icc + ic0) * ihiw + hw) * icx + ic1;
+                    output[oidx] = input[iidx];
+                }
+            }
+        }
+    }
 }
 
 #define TFSLICE_USE_RECURSIVE
@@ -67,9 +158,9 @@ inline static void recursive_tfslice(U8 *src,
     U8 *dst,
     U32 *dstDims,
     U32 dstNum,
-    int *begin,
-    int *end,
-    int *strides,
+    I32 *begin,
+    I32 *end,
+    I32 *strides,
     int i,
     int bound,
     int dimNum,
@@ -108,11 +199,14 @@ inline static void recursive_tfslice(U8 *src,
 EE tfslice_cpu(
     TensorDesc inputDesc, void *input, TfSliceParamSpec p, TensorDesc outputDesc, void *output)
 {
-    int *begin = p.begin;
-    int *end = p.end;
-    int *strides = p.strides;
-    char *beginMask = p.begin_mask;
-    char *endMask = p.end_mask;
+    if (tensorNumElements(outputDesc) == 0) {
+        return SUCCESS;
+    }
+    auto begin = p.begin;
+    auto end = p.end;
+    auto strides = p.strides;
+    auto beginMask = p.begin_mask;
+    auto endMask = p.end_mask;
     U32 dimSize = inputDesc.nDims;
     for (U32 i = 0; i < dimSize; i++) {
         int axis = dimSize - 1 - i;
@@ -132,24 +226,65 @@ EE tfslice_cpu(
         end[i] = axisEnd;
     }
 
+    if (isSingleCStepMode(inputDesc, p)) {
+        EE ret = SUCCESS;
+        switch (inputDesc.dt) {
+            case DT_F32: {
+                singleCStepMode<F32>(
+                    inputDesc, (F32 *)input, p.begin[1], p.strides[1], outputDesc, (F32 *)output);
+                break;
+            }
+#ifdef _USE_FP16
+            case DT_F16: {
+                singleCStepMode<F16>(
+                    inputDesc, (F16 *)input, p.begin[1], p.strides[1], outputDesc, (F16 *)output);
+                break;
+            }
+#endif
+            case DT_U32:
+            case DT_I32: {
+                singleCStepMode<I32>(
+                    inputDesc, (I32 *)input, p.begin[1], p.strides[1], outputDesc, (I32 *)output);
+                break;
+            }
+            case DT_I8:
+            case DT_U8:
+            case DT_U8_Q: {
+                singleCStepMode<INT8>(
+                    inputDesc, (INT8 *)input, p.begin[1], p.strides[1], outputDesc, (INT8 *)output);
+                break;
+            }
+            default:
+                ret = NOT_SUPPORTED;
+                break;
+        }
+        return ret;
+    }
+
     U32 num = tensorNumElements(outputDesc);
     U8 *dst = (U8 *)output;
     U32 elementSize = bytesOf(inputDesc.dt);
     int channelAxis = inputDesc.nDims - 2;
+    int cx = 1;
+    if (inputDesc.df == DF_NCHWC8) {
+        cx = 8;
+    } else if (inputDesc.df == DF_NCHWC16) {
+        cx = 16;
+    }
     if (inputDesc.df == outputDesc.df) {
         std::vector<U32> tmpInputDims(inputDesc.nDims), tmpOutputDims(outputDesc.nDims);
         UNI_MEMCPY(tmpInputDims.data(), inputDesc.dims, inputDesc.nDims * sizeof(U32));
         UNI_MEMCPY(tmpOutputDims.data(), outputDesc.dims, outputDesc.nDims * sizeof(U32));
         int startAxis = 0;
         int elementNum = 1;
-        if (inputDesc.df == DF_NCHWC8) {
-            elementNum *= 8;
-            begin[1] /= 8;
-            end[1] /= 8;
-            tmpInputDims[channelAxis] /= 8;
-            tmpOutputDims[channelAxis] /= 8;
-            tmpInputDims.insert(tmpInputDims.begin(), 8);
-            tmpOutputDims.insert(tmpOutputDims.begin(), 8);
+        if (cx > 1) {
+            elementNum *= cx;
+            begin[1] /= cx;
+            end[1] /= cx;
+            tmpInputDims[channelAxis] /= cx;
+            tmpOutputDims[channelAxis] /= cx;
+            tmpInputDims.insert(tmpInputDims.begin(), cx);
+            tmpOutputDims.insert(tmpOutputDims.begin(), cx);
 #ifndef TFSLICE_USE_RECURSIVE
             startAxis = 1;
 #endif
@@ -184,15 +319,15 @@ EE tfslice_cpu(
             UNI_MEMCPY(dst, src, tileSize);
         }
 #endif
-        if (inputDesc.df == DF_NCHWC8) {
-            begin[1] *= 8;
-            end[1] *= 8;
+        if (cx > 1) {
+            begin[1] *= cx;
+            end[1] *= cx;
         }
     } else {
-        CHECK_REQUIREMENT(inputDesc.df == DF_NCHWC8);
+        CHECK_REQUIREMENT(cx > 1);
         U32 tmpNDims = inputDesc.nDims + 1;
         std::vector<U32> tmpDims(tmpNDims);
-        tmpDims[0] = 8;
+        tmpDims[0] = cx;
         UNI_MEMCPY(&(tmpDims[1]), inputDesc.dims, inputDesc.nDims * sizeof(U32));
         for (U32 i = 0; i < num; i++, dst += elementSize) {
             std::vector<U32> localIndex = calculateLocalIndex(i, outputDesc.dims, outputDesc.nDims);
@@ -200,8 +335,8 @@ EE tfslice_cpu(
                 int reverseAxis = dimSize - 1 - j;
                 localIndex[j] = localIndex[j] * strides[reverseAxis] + begin[reverseAxis];
             }
-            int c8 = localIndex[channelAxis] % 8;
-            localIndex[channelAxis] /= 8;
+            int c8 = localIndex[channelAxis] % cx;
+            localIndex[channelAxis] /= cx;
             localIndex.insert(localIndex.begin(), c8);
             U32 index = calculateGlobalIndex(localIndex.data(), tmpDims.data(), tmpNDims);
             U8 *src = (U8 *)input + index * elementSize;

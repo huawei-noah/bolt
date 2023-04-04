@@ -55,7 +55,24 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
             }
             break;
         }
+        case ACTIVATION_ELU: {
+            __m256 alpha = _mm256_set1_ps(activationDesc.value[0]);
+            __m256 beta = _mm256_set1_ps(-activationDesc.value[0]);
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
+#endif
+            for (U32 i = 0; i < loops; i += 8) {
+                __m256 in = _mm256_loadu_ps(input + i);
+                __m256 out = _mm256_fmadd_ps(alpha, _mm256_exp_ps(in), beta);
+                __m256 mask = _mm256_cmp_ps(in, zero, _CMP_GE_OS);
+                _mm256_storeu_ps(output + i, _mm256_blendv_ps(out, in, mask));
+            }
+            break;
+        }
         case ACTIVATION_RELU6: {
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
+#endif
             for (U32 i = 0; i < loops; i += 8) {
                 __m256 in = _mm256_loadu_ps(input + i);
                 __m256 out = _mm256_max_ps(zero, in);
@@ -65,6 +82,9 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
             break;
         }
         case ACTIVATION_H_SIGMOID: {
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
+#endif
             for (U32 i = 0; i < loops; i += 8) {
                 __m256 in = _mm256_loadu_ps(input + i);
                 __m256 out = _mm256_add_ps(in, three);
@@ -91,6 +111,9 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
             break;
         }
         case ACTIVATION_H_SWISH_NODIV: {
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
+#endif
             for (U32 i = 0; i < loops; i += 8) {
                 __m256 in = _mm256_loadu_ps(input + i);
                 __m256 out = _mm256_add_ps(in, three);
@@ -102,24 +125,32 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
             break;
         }
         case ACTIVATION_GELU: {
-            __m256 vec0 = _mm256_set1_ps(sqrt(2 / 3.14159265358979323846));
+            __m256 vec0 = _mm256_set1_ps(sqrt(2 / 3.14159265358979323846) * 2);
             __m256 vec1 = _mm256_set1_ps(0.044715);
             __m256 vec2 = _mm256_set1_ps(0.5);
+            __m256 two_v = _mm256_set1_ps(2);
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
+#endif
             for (U32 i = 0; i < loops; i += 8) {
                 __m256 in = _mm256_loadu_ps(input + i);
                 __m256 out = _mm256_mul_ps(in, in);
-                out = _mm256_mul_ps(out, in);
-                out = _mm256_fmadd_ps(vec1, out, in);
-                out = _mm256_mul_ps(vec0, out);
-                out = _mm256_tanh_ps(out);
-                out = _mm256_add_ps(one, out);
-                out = _mm256_mul_ps(vec2, out);
-                out = _mm256_mul_ps(in, out);
+                __m256 tmp0 = _mm256_mul_ps(vec0, in);
+                __m256 x = _mm256_fmadd_ps(vec1, out, one);
+                __m256 tmp1 = _mm256_mul_ps(vec2, in);
+                out = _mm256_mul_ps(x, tmp0);
+                __m256 e_2G_v = _mm256_exp_ps(out);
+                __m256 result_v = _mm256_sub_ps(two_v,
+                    _mm256_div_ps(two_v, _mm256_add_ps(one, e_2G_v)));
+                out = _mm256_mul_ps(result_v, tmp1);
                 _mm256_storeu_ps(output + i, out);
             }
             break;
         }
         case ACTIVATION_TANH: {
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
+#endif
             for (U32 i = 0; i < loops; i += 8) {
                 __m256 in = _mm256_loadu_ps(input + i);
                 __m256 out = _mm256_tanh_ps(in);
@@ -128,6 +159,9 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
             break;
         }
         case ACTIVATION_SIGMOID: {
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
+#endif
             for (U32 i = 0; i < loops; i += 8) {
                 __m256 in = _mm256_loadu_ps(input + i);
                 __m256 out = _mm256_sigmod_ps(in);
@@ -147,6 +181,9 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
             break;
         }
         case ACTIVATION_MISH: {
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
+#endif
             for (U32 i = 0; i < loops; i += 8) {
                 __m256 in = _mm256_loadu_ps(input + i);
                 __m256 out = _mm256_mul_ps(
@@ -156,6 +193,9 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
             break;
         }
         case ACTIVATION_SOFTPLUS: {
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
+#endif
             for (U32 i = 0; i < loops; i += 8) {
                 __m256 in = _mm256_loadu_ps(input + i);
                 __m256 out = _mm256_log_ps(_mm256_add_ps(_mm256_exp_ps(in), one));
@@ -164,6 +204,9 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
             break;
         }
         case ACTIVATION_EXP: {
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
+#endif
             for (U32 i = 0; i < loops; i += 8) {
                 __m256 in = _mm256_loadu_ps(input + i);
                 __m256 out = _mm256_exp_ps(in);
@@ -172,6 +215,9 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
             break;
         }
         case ACTIVATION_ABS: {
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
+#endif
             for (U32 i = 0; i < loops; i += 8) {
                 __m256 in = _mm256_loadu_ps(input + i);
                 __m256 out = _mm256_andnot_ps(signm, in);
@@ -180,6 +226,9 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
             break;
         }
         case ACTIVATION_LOG: {
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
+#endif
             for (U32 i = 0; i < loops; i += 8) {
                 __m256 in = _mm256_loadu_ps(input + i);
                 __m256 out = _mm256_log_ps(in);
@@ -188,6 +237,9 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
             break;
         }
         case ACTIVATION_ROUND: {
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
+#endif
             for (U32 i = 0; i < loops; i += 8) {
                 __m256 in = _mm256_loadu_ps(input + i);
                 __m256 out = _mm256_round_ps(in, _MM_FROUND_TO_NEAREST_INT);
@@ -196,6 +248,9 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
             break;
         }
         case ACTIVATION_CEIL: {
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
+#endif
             for (U32 i = 0; i < loops; i += 8) {
                 __m256 in = _mm256_loadu_ps(input + i);
                 __m256 out = _mm256_ceil_ps(in);
@@ -204,6 +259,9 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
             break;
         }
         case ACTIVATION_FLOOR: {
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
+#endif
             for (U32 i = 0; i < loops; i += 8) {
                 __m256 in = _mm256_loadu_ps(input + i);
                 __m256 out = _mm256_floor_ps(in);
@@ -212,6 +270,9 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
             break;
         }
         case ACTIVATION_RECIPROCAL: {
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS) schedule(static)
+#endif
             for (U32 i = 0; i < loops; i += 8) {
                 __m256 in = _mm256_loadu_ps(input + i);
                 __m256 out = _mm256_div_ps(one, in);
@@ -222,6 +283,8 @@ inline EE activation_fp32(F32 *input, U32 len, ActivationParamSpec activationDes
         case ACTIVATION_SIGN:
         case ACTIVATION_NOT:
         case ACTIVATION_GREATER:
+        case ACTIVATION_SIN:
+        case ACTIVATION_COS:
         case ACTIVATION_NEG: {
             loops = 0;
             break;
@@ -426,6 +489,19 @@ inline F32 array_var_f32(const F32 *data, I32 len, F32 mean)
         sum_s += tmp * tmp;
     }
     return sum_s / len;
+}
+
+inline F32 array_var_i32(const I32 *data, I32 len)
+{
+    if (len <= 0) {
+        return 0;
+    }
+    I32 i = 0;
+    F32 sum_s = 1;
+    for (i = 0; i < len; i++) {
+        sum_s *= data[i];
+    }
+    return sum_s;
 }
 
 // array sum

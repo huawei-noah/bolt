@@ -68,23 +68,34 @@ public:
         ActivationParamSpec dwActivationParamSpec,
         ActivationParamSpec pwActivationParamSpec) = 0;
 
-    virtual std::shared_ptr<Operator> createDeconvolution(
-        DataType dt, ConvolutionParamSpec p, ActivationParamSpec activationDesc) = 0;
-
     virtual std::shared_ptr<Operator> createPooling(PoolingParamSpec p) = 0;
+
+    virtual std::shared_ptr<Operator> createActivation(ActivationParamSpec activationDesc) = 0;
+
+    virtual std::shared_ptr<Operator> createEltwise(EltwiseParamSpec eltwiseDesc) = 0;
+
+    virtual std::shared_ptr<Operator> createChannelResize(DataType dt, ChannelResizeParamSpec p) = 0;
 
     virtual std::shared_ptr<Operator> createFullyConnected(
         DataType dt, FullyConnectedParamSpec p, U32 numInput) = 0;
+
+    virtual std::shared_ptr<Operator> createReshape(DataType dt, ReshapeParamSpec p) = 0;
+
+#ifdef _USE_INT8
+    virtual std::shared_ptr<Operator> createQuantizeLinear(
+        DataType dt, QuantizeLinearParamSpec p) = 0;
+#endif
+#ifndef _USE_LITE
+    virtual std::shared_ptr<Operator> createConcat(ConcatParamSpec p) = 0;
+
+    virtual std::shared_ptr<Operator> createFlatten(FlattenParamSpec p) = 0;
 
     virtual std::shared_ptr<Operator> createSoftmax(DataType dt, SoftmaxParamSpec p) = 0;
 
     virtual std::shared_ptr<Operator> createLogSoftmax(DataType dt, SoftmaxParamSpec p) = 0;
 
-    virtual std::shared_ptr<Operator> createConcat(ConcatParamSpec p) = 0;
-
-    virtual std::shared_ptr<Operator> createActivation(ActivationParamSpec activationDesc) = 0;
-
-    virtual std::shared_ptr<Operator> createEltwise(EltwiseParamSpec eltwiseDesc) = 0;
+    virtual std::shared_ptr<Operator> createDeconvolution(
+        DataType dt, ConvolutionParamSpec p, ActivationParamSpec activationDesc) = 0;
 
     virtual std::shared_ptr<Operator> createScale(
         DataType dt, ScaleParamSpec p, int numChannels) = 0;
@@ -101,8 +112,6 @@ public:
 
     virtual std::shared_ptr<Operator> createLayerNorm(
         DataType dt, LayerNormParamSpec p, U32 weightNum) = 0;
-
-    virtual std::shared_ptr<Operator> createReshape(DataType dt, ReshapeParamSpec p) = 0;
 
     virtual std::shared_ptr<Operator> createResize(DataType dt, ResizeParamSpec p) = 0;
 
@@ -164,9 +173,7 @@ public:
     virtual std::shared_ptr<Operator> createYolov3DetectionOutput(
         DataType dt, Yolov3DetectionOutputParamSpec p) = 0;
 
-    virtual std::shared_ptr<Operator> createChannelResize(DataType dt, ChannelResizeParamSpec p) = 0;
-
-    virtual std::shared_ptr<Operator> createL2Normalization(DataType dt) = 0;
+    virtual std::shared_ptr<Operator> createL2Norm(DataType dt) = 0;
 
     virtual std::shared_ptr<Operator> createTile(DataType dt, TileParamSpec p) = 0;
 
@@ -203,14 +210,11 @@ public:
 
     virtual std::shared_ptr<Operator> createGAT(DataType dt, GATParamSpec p) = 0;
 
-    virtual std::shared_ptr<Operator> createQuantizeLinear(
-        DataType dt, QuantizeLinearParamSpec p) = 0;
-
     virtual std::shared_ptr<Operator> createGridSample(DataType dt, GridSampleParamSpec p) = 0;
 
     virtual std::shared_ptr<Operator> createOneHot(DataType dt, OneHotParamSpec p) = 0;
 
-    virtual std::shared_ptr<Operator> createCumSum(DataType dt, CumSumParamSpec p) = 0;
+    virtual std::shared_ptr<Operator> createCum(DataType dt, CumParamSpec p) = 0;
 
     virtual std::shared_ptr<Operator> createNonMaxSuppression(
         DataType dt, NonMaxSuppressionParamSpec p) = 0;
@@ -222,7 +226,20 @@ public:
 
     virtual std::shared_ptr<Operator> createRange(DataType dt, RangeParamSpec p) = 0;
 
-    std::shared_ptr<Operator> createOperators(OperatorSpec curOps,
+    virtual std::shared_ptr<Operator> createEinsum(DataType dt, EinsumParamSpec p) = 0;
+
+    virtual std::shared_ptr<Operator> createUnPooling(PoolingParamSpec p) = 0;
+
+    virtual std::shared_ptr<Operator> createRandom(RandomParamSpec p) = 0;
+
+    virtual std::shared_ptr<Operator> createConvertColor(DataType dt, ConvertColorParamSpec p) = 0;
+
+    virtual std::shared_ptr<Operator> createLutPreprocess(DataType dt) = 0;
+
+    virtual std::shared_ptr<Operator> createLut(DataType dt, LutParamSpec p) = 0;
+#endif
+
+    std::shared_ptr<Operator> createOperators(OperatorSpec op,
         DataType dt,
         std::map<std::string, U32> &operatorIndexMap,
         std::map<std::string, std::shared_ptr<Tensor>> *tensorMapPtr,
@@ -237,340 +254,381 @@ public:
 #endif
         }
         if (dt == DT_F16 || dt == DT_F16_8Q) {
-#ifndef _USE_FP16
+#if !(defined(_USE_FP16) || defined(_USE_GPU))
             UNI_ERROR_LOG("this library not support to inference float16/int8+float16, please "
                           "recompile with --fp16=on. Only Armv8.2+ cpu and gpu support.\n");
 #endif
         }
-        if (dt == DT_F32_8Q || dt == DT_F16_8Q) {
+        if (isQuantMixDataType(dt)) {
 #ifndef _USE_INT8
             UNI_ERROR_LOG("this library not support to inference int8, please recompile with "
                           "--int8=on. Only Armv7+ and x86 AVX512/AVX512-VNNI cpu support.\n");
 #endif
         }
-        OperatorType opType = curOps.type;
-        DataType dtNoQ = (dt == DT_F16_8Q) ? DT_F16 : ((dt == DT_F32_8Q) ? DT_F32 : dt);
-        std::string opName = curOps.name;
-        std::shared_ptr<Operator> op;
-        auto curPs = curOps.ps;
-        std::map<OperatorType, ActivationMode> activationMap = {{OT_Relu6, ACTIVATION_RELU6},
+        std::string name = op.name;
+        OperatorType type = op.type;
+        static std::map<OperatorType, ActivationMode> activations = {{OT_Relu6, ACTIVATION_RELU6},
             {OT_HSwish, ACTIVATION_H_SWISH}, {OT_HSwishNoDiv, ACTIVATION_H_SWISH_NODIV},
             {OT_Sigmoid, ACTIVATION_SIGMOID}, {OT_HSigmoid, ACTIVATION_H_SIGMOID},
             {OT_Gelu, ACTIVATION_GELU}, {OT_TanH, ACTIVATION_TANH}, {OT_Mish, ACTIVATION_MISH},
             {OT_Greater, ACTIVATION_GREATER}, {OT_Exp, ACTIVATION_EXP},
-            {OT_SoftPlus, ACTIVATION_SOFTPLUS}, {OT_Abs, ACTIVATION_ABS}, {OT_Sign, ACTIVATION_SIGN},
+            {OT_Softplus, ACTIVATION_SOFTPLUS}, {OT_Abs, ACTIVATION_ABS}, {OT_Sign, ACTIVATION_SIGN},
             {OT_Not, ACTIVATION_NOT}, {OT_Log, ACTIVATION_LOG}, {OT_Neg, ACTIVATION_NEG},
             {OT_Round, ACTIVATION_ROUND}, {OT_Floor, ACTIVATION_FLOOR}, {OT_Ceil, ACTIVATION_CEIL},
-            {OT_Swish, ACTIVATION_SWISH}, {OT_Reciprocal, ACTIVATION_RECIPROCAL}};
-        if (activationMap.find(opType) != activationMap.end()) {
-            ActivationParamSpec activationDesc;
-            activationDesc.mode = activationMap[opType];
-            return createActivation(activationDesc);
+            {OT_Swish, ACTIVATION_SWISH}, {OT_Reciprocal, ACTIVATION_RECIPROCAL},
+            {OT_Sin, ACTIVATION_SIN}, {OT_Cos, ACTIVATION_COS}};
+        if (activations.find(type) != activations.end()) {
+            ActivationParamSpec param;
+            param.mode = activations[type];
+            return createActivation(param);
         }
-        switch (opType) {
+        auto ps = op.ps;
+        std::shared_ptr<Operator> ret;
+        DataType dtNoQ = noQuantDataType(dt);
+        switch (type) {
             case OT_Conv: {
                 ActivationParamSpec dwActiveDesc;
                 ActivationParamSpec pwActiveDesc;
-                dwActiveDesc.mode = curPs.conv_spec.dw_activation_type;
-                pwActiveDesc.mode = curPs.conv_spec.pw_activation_type;
+                dwActiveDesc.mode = ps.conv_spec.dw_activation_type;
+                pwActiveDesc.mode = ps.conv_spec.pw_activation_type;
                 dwActiveDesc.value[0] = 0;
                 pwActiveDesc.value[0] = 0;
-                op = createConvolution(dt, curPs.conv_spec, dwActiveDesc, pwActiveDesc);
-                break;
-            }
-            case OT_Deconvolution: {
-                ActivationParamSpec activeDesc;
-                activeDesc.mode = curPs.conv_spec.pw_activation_type;
-                activeDesc.value[0] = 0;
-                op = createDeconvolution(dtNoQ, curPs.conv_spec, activeDesc);
-                break;
-            }
-            case OT_FC: {
-                op = createFullyConnected(dt, curPs.fc_spec, 0);
+                ret = createConvolution(dt, ps.conv_spec, dwActiveDesc, pwActiveDesc);
                 break;
             }
             case OT_Pooling: {
-                op = createPooling(curPs.pooling_spec);
-                break;
-            }
-            case OT_Softmax: {
-                op = createSoftmax(dtNoQ, curPs.softmax_spec);
-                break;
-            }
-            case OT_LogSoftmax: {
-                op = createLogSoftmax(dtNoQ, curPs.softmax_spec);
+                ret = createPooling(ps.pooling_spec);
                 break;
             }
             case OT_Relu: {
-                ActivationParamSpec activationDesc;
-                activationDesc.mode = ACTIVATION_RELU;
-                activationDesc.value[0] = curOps.ps.relu_spec.neg_slope;
-                op = createActivation(activationDesc);
+                ActivationParamSpec param;
+                param.mode = ACTIVATION_RELU;
+                param.value[0] = ps.relu_spec.neg_slope;
+                ret = createActivation(param);
                 break;
             }
-            case OT_Concat: {
-                op = createConcat(curPs.concat_spec);
+            case OT_Elu: {
+                ActivationParamSpec param;
+                param.mode = ACTIVATION_ELU;
+                param.value[0] = ps.relu_spec.neg_slope;
+                ret = createActivation(param);
                 break;
             }
             case OT_Eltwise: {
-                op = createEltwise(curOps.ps.eltwise_spec);
+                ret = createEltwise(ps.eltwise_spec);
                 break;
             }
-            case OT_Embedding: {
-                op = createEmbedding(dtNoQ, curPs.embed_spec);
+            case OT_ChannelResize: {
+                ret = createChannelResize(dt, ps.channel_resize_spec);
                 break;
             }
-            case OT_MatMul: {
-                op = createMatMul(dt, curPs.matmul_spec);
-                break;
-            }
-            case OT_Power: {
-                op = createPower(dt, curPs.power_spec);
-                break;
-            }
-            case OT_Scale: {
-                op = createScale(dtNoQ, curPs.scale_spec, 0);
-                break;
-            }
-            case OT_LayerNorm: {
-                op = createLayerNorm(dt, curPs.ln_spec, 0);
+            case OT_FC: {
+                ret = createFullyConnected(dt, ps.fc_spec, 0);
                 break;
             }
             case OT_Reshape: {
-                op = createReshape(dt, curPs.reshape_spec);
+                ret = createReshape(dt, ps.reshape_spec);
+                break;
+            }
+#ifdef _USE_INT8
+            case OT_QuantizeLinear: {
+                ret = createQuantizeLinear(dt, ps.quant_spec);
+                break;
+            }
+#endif
+#ifndef _USE_LITE
+            case OT_Concat: {
+                ret = createConcat(ps.concat_spec);
+                break;
+            }
+            case OT_Flatten: {
+                ret = createFlatten(ps.flatten_spec);
+                break;
+            }
+            case OT_Deconvolution: {
+                ActivationParamSpec param;
+                param.mode = ps.conv_spec.pw_activation_type;
+                param.value[0] = 0;
+                ret = createDeconvolution(dt, ps.conv_spec, param);
+                break;
+            }
+            case OT_Softmax: {
+                ret = createSoftmax(dtNoQ, ps.softmax_spec);
+                break;
+            }
+            case OT_LogSoftmax: {
+                ret = createLogSoftmax(dtNoQ, ps.softmax_spec);
+                break;
+            }
+            case OT_Embedding: {
+                ret = createEmbedding(dtNoQ, ps.embed_spec);
+                break;
+            }
+            case OT_MatMul: {
+                ret = createMatMul(dt, ps.matmul_spec);
+                break;
+            }
+            case OT_Power: {
+                ret = createPower(dt, ps.power_spec);
+                break;
+            }
+            case OT_Scale: {
+                ret = createScale(dtNoQ, ps.scale_spec, 0);
+                break;
+            }
+            case OT_LayerNorm: {
+                ret = createLayerNorm(dt, ps.ln_spec, 0);
                 break;
             }
             case OT_Resize: {
-                op = createResize(dt, curPs.resize_spec);
+                ret = createResize(dt, ps.resize_spec);
                 break;
             }
             case OT_Slice: {
-                op = createSlice(dt, curPs.slice_spec);
+                ret = createSlice(dt, ps.slice_spec);
                 break;
             }
             case OT_Transpose: {
-                op = createTranspose(dt, curPs.transpose_spec);
+                ret = createTranspose(dt, ps.transpose_spec);
                 break;
             }
             case OT_Attention: {
-                op = createAttention(dtNoQ, curPs.attention_spec);
+                ret = createAttention(dtNoQ, ps.attention_spec);
                 break;
             }
             case OT_Clip: {
-                op = createClip(dtNoQ, curPs.clip_spec);
+                ret = createClip(dtNoQ, ps.clip_spec);
                 break;
             }
             case OT_RNN: {
-                if (curPs.rnn_spec.steps >= 0) {
-                    op = createRNN(dt, curPs.rnn_spec);
+                if (ps.rnn_spec.steps >= 0) {
+                    ret = createRNN(dt, ps.rnn_spec);
                 } else {
-                    op = createRNNCell(dt, curPs.rnn_spec);
+                    ret = createRNNCell(dt, ps.rnn_spec);
                 }
                 break;
             }
             case OT_Squeeze: {
-                op = createSqueeze(dtNoQ, curPs.squeeze_spec);
+                ret = createSqueeze(dtNoQ, ps.squeeze_spec);
                 break;
             }
             case OT_Unsqueeze: {
-                op = createUnsqueeze(dtNoQ, curPs.unsqueeze_spec);
+                ret = createUnsqueeze(dtNoQ, ps.unsqueeze_spec);
                 break;
             }
             case OT_Reduction: {
-                op = createReduction(dtNoQ, curPs.reduction_spec);
+                ret = createReduction(dtNoQ, ps.reduction_spec);
                 break;
             }
             case OT_ArgMax: {
-                op = createArgMax(dtNoQ, curPs.argmax_spec);
+                ret = createArgMax(dtNoQ, ps.argmax_spec);
                 break;
             }
             case OT_PreAllocatedMemory: {
-                op = createPreAllocatedMemory(curOps.ps.preallocated_memory_spec);
+                ret = createPreAllocatedMemory(ps.preallocated_memory_spec);
                 break;
             }
             case OT_SharedWeight: {
-                SharedWeightParamSpec curSharedWeightParamSpec = curOps.ps.shared_weight_spec;
-                TensorDesc desc = curSharedWeightParamSpec.desc;
-                op = createSharedWeight(dtNoQ, desc, outputTensorsName[0], tensorMapPtr);
+                SharedWeightParamSpec param = ps.shared_weight_spec;
+                TensorDesc desc = param.desc;
+                ret = createSharedWeight(dtNoQ, desc, outputTensorsName[0], tensorMapPtr);
                 weightOpOutputNames->insert(outputTensorsName[0]);
                 break;
             }
             case OT_Repeat: {
-                op = createRepeat(dtNoQ, curPs.repeat_spec, operatorIndexMap[inputTensorsName[0]],
-                    operatorIndexMap[opName]);
+                ret = createRepeat(dtNoQ, ps.repeat_spec, operatorIndexMap[inputTensorsName[0]],
+                    operatorIndexMap[name]);
                 break;
             }
             case OT_Check: {
-                op = createCheck(dtNoQ, curPs.check_spec);
+                ret = createCheck(dtNoQ, ps.check_spec);
                 break;
             }
             case OT_Copy: {
-                op = createCopy(dtNoQ, curPs.copy_spec);
+                ret = createCopy(dtNoQ, ps.copy_spec);
                 break;
             }
             case OT_BilateralSliceApply: {
-                op = createBilateralSliceApply(curPs.bilateral_slice_apply_spec);
+                ret = createBilateralSliceApply(ps.bilateral_slice_apply_spec);
                 break;
             }
             case OT_Jump: {
-                op = createJump(
-                    dtNoQ, operatorIndexMap[inputTensorsName[0]], operatorIndexMap[opName]);
+                ret = createJump(
+                    dtNoQ, operatorIndexMap[inputTensorsName[0]], operatorIndexMap[name]);
                 break;
             }
             case OT_Space2Depth: {
-                op = createSpace2Depth(dt, curPs.space2depth_spec);
+                ret = createSpace2Depth(dt, ps.space2depth_spec);
                 break;
             }
             case OT_Depth2Space: {
-                op = createDepth2Space(dt, curPs.depth2space_spec);
+                ret = createDepth2Space(dt, ps.depth2space_spec);
                 break;
             }
             case OT_AttentionMask: {
-                op = createAttentionMask(dt, curPs.attention_mask_spec);
+                ret = createAttentionMask(dt, ps.attention_mask_spec);
                 break;
             }
             case OT_RelativePositionEmbedding: {
-                op = createRelativePositionEmbedding(dtNoQ, curPs.embed_spec);
+                ret = createRelativePositionEmbedding(dtNoQ, ps.embed_spec);
                 break;
             }
             case OT_RelativeShift: {
-                op = createRelativeShift(dt, curPs.relative_shift_spec);
+                ret = createRelativeShift(dt, ps.relative_shift_spec);
                 break;
             }
             case OT_Pad: {
-                op = createPadding(dt, curPs.pad_spec);
+                ret = createPadding(dt, ps.pad_spec);
                 break;
             }
             case OT_PriorBox: {
-                op = createPriorBox(dt, curPs.prior_box_spec);
+                ret = createPriorBox(dt, ps.prior_box_spec);
                 break;
             }
             case OT_DetectionOutput: {
-                op = createDetectionOutput(dt, curPs.detection_output_spec);
+                ret = createDetectionOutput(dt, ps.detection_output_spec);
                 break;
             }
             case OT_Yolov3DetectionOutput: {
-                op = createYolov3DetectionOutput(dt, curPs.yolov3_detection_output_spec);
+                ret = createYolov3DetectionOutput(dt, ps.yolov3_detection_output_spec);
                 break;
             }
-            case OT_ChannelResize: {
-                op = createChannelResize(dt, curPs.channel_resize_spec);
-                break;
-            }
-            case OT_L2Normalization: {
-                op = createL2Normalization(dt);
+            case OT_L2Norm: {
+                ret = createL2Norm(dt);
                 break;
             }
             case OT_PRelu: {
-                op = createPReLU(dt);
+                ret = createPReLU(dt);
                 break;
             }
             case OT_Tile: {
-                op = createTile(dt, curPs.tile_spec);
+                ret = createTile(dt, ps.tile_spec);
                 break;
             }
             case OT_TfSlice: {
-                op = createTfSlice(dt, curPs.tfslice_spec);
+                ret = createTfSlice(dt, ps.tfslice_spec);
                 break;
             }
             case OT_Splice: {
-                op = createSplice(dt, curPs.splice_spec);
+                ret = createSplice(dt, ps.splice_spec);
                 break;
             }
             case OT_Shape: {
-                op = createShape();
+                ret = createShape();
                 break;
             }
             case OT_Where: {
-                op = createWhere(dt);
+                ret = createWhere(dt);
                 break;
             }
             case OT_Tdnn: {
-                op = createTdnn(dt, curPs.tdnn_spec);
+                ret = createTdnn(dt, ps.tdnn_spec);
                 break;
             }
             case OT_BatchNorm: {
-                op = createBatchNorm(dt, curPs.bn_spec);
+                ret = createBatchNorm(dt, ps.bn_spec);
                 break;
             }
             case OT_TopK: {
-                op = createTopK(dt, curPs.topk_spec);
+                ret = createTopK(dt, ps.topk_spec);
                 break;
             }
             case OT_Cast: {
-                op = createCast(dt, curPs.cast_spec);
+                ret = createCast(dt, ps.cast_spec);
                 break;
             }
             case OT_InstanceNorm: {
-                op = createInstanceNorm(dt, curPs.in_spec);
+                ret = createInstanceNorm(dt, ps.in_spec);
                 break;
             }
             case OT_Expand: {
-                op = createExpand(dt, curPs.expand_spec);
+                ret = createExpand(dt, ps.expand_spec);
                 break;
             }
             case OT_Scatter: {
-                op = createScatter(dt, curPs.scatter_spec);
+                ret = createScatter(dt, ps.scatter_spec);
                 break;
             }
             case OT_Gather: {
-                op = createGather(dt, curPs.gather_spec);
+                ret = createGather(dt, ps.gather_spec);
                 break;
             }
             case OT_Select: {
-                op = createSelect(dt);
+                ret = createSelect(dt);
                 break;
             }
             case OT_GAT: {
-                op = createGAT(dt, curPs.gat_spec);
+                ret = createGAT(dt, ps.gat_spec);
                 break;
             }
             case OT_RoIAlign: {
-                op = createRoIAlign(dt, curPs.roialign_spec);
+                ret = createRoIAlign(dt, ps.roialign_spec);
                 break;
             }
             case OT_GenerateProposals: {
-                op = createGenerateProposals(dt, curPs.generate_proposals_spec);
-                break;
-            }
-            case OT_QuantizeLinear: {
-                op = createQuantizeLinear(dt, curPs.quant_spec);
+                ret = createGenerateProposals(dt, ps.generate_proposals_spec);
                 break;
             }
             case OT_GridSample: {
-                op = createGridSample(dt, curPs.grid_sample_spec);
+                ret = createGridSample(dt, ps.grid_sample_spec);
                 break;
             }
             case OT_OneHot: {
-                op = createOneHot(dt, curPs.onehot_spec);
+                ret = createOneHot(dt, ps.onehot_spec);
                 break;
             }
-            case OT_CumSum: {
-                op = createCumSum(dt, curPs.cumsum_spec);
+            case OT_Cum: {
+                ret = createCum(dt, ps.cum_spec);
                 break;
             }
             case OT_NonMaxSuppression: {
-                op = createNonMaxSuppression(dt, curPs.non_max_suppression_spec);
+                ret = createNonMaxSuppression(dt, ps.non_max_suppression_spec);
                 break;
             }
             case OT_ConstantOfShape: {
-                op = createConstantOfShape(dt, curPs.constant_of_shape_spec);
+                ret = createConstantOfShape(dt, ps.constant_of_shape_spec);
                 break;
             }
             case OT_NonZero: {
-                op = createNonZero(dt);
+                ret = createNonZero(dt);
                 break;
             }
             case OT_Range: {
-                op = createRange(dt, curPs.range_spec);
+                ret = createRange(dt, ps.range_spec);
                 break;
             }
+            case OT_Einsum: {
+                ret = createEinsum(dt, ps.einsum_spec);
+                break;
+            }
+            case OT_UnPooling: {
+                ret = createUnPooling(ps.pooling_spec);
+                break;
+            }
+            case OT_Random: {
+                ret = createRandom(ps.random_spec);
+                break;
+            }
+            case OT_ConvertColor: {
+                ret = createConvertColor(dt, ps.convert_color_spec);
+                break;
+            }
+            case OT_LutPreprocess: {
+                ret = createLutPreprocess(dt);
+                break;
+            }
+            case OT_Lut: {
+                ret = createLut(dt, ps.lut_spec);
+                break;
+            }
+#endif
             default: {
-                UNI_ERROR_LOG("can not create layer %s.\n", OperatorTypeName()[opType]);
+                UNI_ERROR_LOG(
+                    "can not create layer %s type:%s.\n", name.c_str(), OperatorTypeName()[type]);
                 break;
             }
         }
-        return op;
+        return ret;
     }
 };
 

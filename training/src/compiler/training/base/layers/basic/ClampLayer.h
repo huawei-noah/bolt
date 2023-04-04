@@ -25,8 +25,6 @@ namespace raul
  * @brief ClampLayer
  * Clamp all elements in input into the range [ min, max ] and return a resulting tensor
  *
- * @see
- * https://pytorch.org/docs/master/generated/torch.clamp.html
  */
 class ClampLayer : public BasicLayer
 {

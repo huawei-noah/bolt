@@ -12,27 +12,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "kernel_def.h"
-#define MANGLE_NAME_IMPL(base, FM, IT, OT) base##FM##IT##OT
-#define MANGLE_NAME(base, FM, IT, OT) MANGLE_NAME_IMPL(base, FM, IT, OT)
 
-#if defined(INPUT_F16)
-#define IT f16_to_
-#elif defined(INPUT_I32)
-#define IT i32_to_
-#endif
-
-#if defined(OUTPUT_F16)
-#define OT f16
-#elif defined(OUTPUT_I32)
-#define OT i32
-#endif
-
-#define FM
-#if defined(USE_NCHW)
-#define FM nchw_
-#endif
-
-__kernel void MANGLE_NAME(cast_, FM, IT, OT)(const int w,
+__kernel void KERNEL_NAME(const int w,
     const int iw_str,
     const int ih_str,
     const int i_off,
@@ -41,17 +22,8 @@ __kernel void MANGLE_NAME(cast_, FM, IT, OT)(const int w,
     const int o_off,
     const int bx,
     const int by,
-#if defined(INPUT_F16)
-    __global T *in,
-#elif defined(INPUT_I32)
-    __global int *in,
-#endif
-#if defined(OUTPUT_F16)
-    __global T *out
-#elif defined(OUTPUT_I32)
-    __global int *out
-#endif
-)
+    __global IT1 *in,
+    __global OT1 *out)
 {
     int idx = get_global_id(0);
     int idy = get_global_id(1);
@@ -59,18 +31,8 @@ __kernel void MANGLE_NAME(cast_, FM, IT, OT)(const int w,
     if (idx >= bx || idy >= by) {
         return;
     }
-#if defined(INPUT_F16)
-    T4 iv = 0;
-#elif defined(INPUT_I32)
-    int4 iv = 0;
-#endif
-
-#if defined(OUTPUT_F16)
-    T4 ov = 0;
-#elif defined(OUTPUT_I32)
-    int4 ov = 0;
-#endif
-
+    IT4 iv = 0;
+    OT4 ov;
 #if defined(USE_NCHW)
     LOAD_MEM_V4_C1_COMMON(iv, idx, idy, idz, iw_str, ih_str, i_off, w, in);
 #else

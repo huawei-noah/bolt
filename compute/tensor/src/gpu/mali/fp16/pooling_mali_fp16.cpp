@@ -24,7 +24,7 @@ inline EE pooling_checkpara_mali_fp16(GCLHandle_t handle,
     if (handle == nullptr || nullptr == input || nullptr == output) {
         return NULL_POINTER;
     }
-    if (inputDesc.dt != outputDesc.dt || inputDesc.dt != DT_F16) {
+    if (inputDesc.dt != outputDesc.dt) {
         return NOT_SUPPORTED;
     }
     if (inputDesc.df != outputDesc.df) {
@@ -39,7 +39,7 @@ inline EE pooling_checkpara_mali_fp16(GCLHandle_t handle,
     if (poolingParamSpec.pad_bottom >= poolingParamSpec.kernel_w) {
         return NOT_SUPPORTED;
     }
-    if (input->desc.memFormat != output->desc.memFormat || input->desc.memFormat != DF_NCHWC4) {
+    if (input->desc.memFormat != output->desc.memFormat) {
         return NOT_SUPPORTED;
     }
     return SUCCESS;
@@ -53,10 +53,11 @@ inline EE pooling_core_mali_fp16(GCLHandle_t handle,
     GCLMem_t output,
     GCLMem_t temp)
 {
+    DataType dt;
     DataFormat df;
     U32 iw, ih, ic, in, it;
     U32 ow, oh, oc, on, ot;
-    tensorSelectGet(inputDesc, NULL, &df, &in, &ic, &ih, &iw, &it);
+    tensorSelectGet(inputDesc, &dt, &df, &in, &ic, &ih, &iw, &it);
     tensorSelectGet(outputDesc, NULL, NULL, &on, &oc, &oh, &ow, &ot);
 
     cl_mem inbuf, outbuf, tmpbuf;
@@ -93,15 +94,15 @@ inline EE pooling_core_mali_fp16(GCLHandle_t handle,
     char kernelName[128];
     KernelOpt kernelOpt;
     PoolingMode mode = poolingParamSpec.mode;
-    if (oh == 1 && ow == 1 && iw > 7) {
+    if (df == DF_NCHWC4 && oh == 1 && ow == 1 && iw > 7) {
         if (ot > 1 || mode != POOLING_MEAN) {
             CHECK_STATUS(NOT_SUPPORTED);
         }
         gs[0] = iw;
         gs[1] = (oc + 3) / 4 * on;
         dim = 2;
-        CHECK_STATUS(set_common_opt(DT_F16, input->desc.memType, GCL_MEM_BUF,
-            "pooling_global_mean_h", kernelName, &kernelOpt));
+        CHECK_STATUS(set_common_opt(
+            dt, input->desc.memType, GCL_MEM_BUF, "pooling_global_mean_h", kernelName, &kernelOpt));
         CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
         CHECK_STATUS(gcl_set_kernelArgs(
             kernel, iw_str, ih_str * iw_str, i_off, iw, ih, gs[0], gs[1], inbuf, tmpbuf));
@@ -110,8 +111,8 @@ inline EE pooling_core_mali_fp16(GCLHandle_t handle,
         CHECK_STATUS(gcl_run_kernel(handle, kernel, dim, gs, ls, kernelName));
         handle->t_total += handle->t_execute;
 #endif
-        CHECK_STATUS(set_common_opt(DT_F16, GCL_MEM_BUF, output->desc.memType,
-            "pooling_global_mean_w", kernelName, &kernelOpt));
+        CHECK_STATUS(set_common_opt(dt, GCL_MEM_BUF, output->desc.memType, "pooling_global_mean_w",
+            kernelName, &kernelOpt));
         gs[0] = (oc + 3) / 4 * on;
         dim = 1;
         CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
@@ -128,10 +129,14 @@ inline EE pooling_core_mali_fp16(GCLHandle_t handle,
         }
         gs[0] = ow;
         gs[1] = oh;
-        gs[2] = (oc + 3) / 4 * ot * on;
+        if (df == DF_NCHWC4) {
+            gs[2] = (oc + 3) / 4 * ot * on;
+        } else {
+            gs[2] = oc * ot * on;
+        }
         dim = 3;
         CHECK_STATUS(set_pooling_opt_mali(
-            mode, DT_F16, input->desc.memType, output->desc.memType, kernelName, &kernelOpt));
+            mode, dt, df, input->desc.memType, output->desc.memType, kernelName, &kernelOpt));
         CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
         CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, iw_off, ih_off, ow_str, oh_str,
             o_off, iw, ih, ow, oh, sw, sh, pw, ph, kw, kh, (int)poolingParamSpec.count_include_pad,

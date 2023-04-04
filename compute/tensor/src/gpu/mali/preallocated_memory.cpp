@@ -23,23 +23,17 @@ inline EE preallocated_memory_checkpara_mali(
     if (handle == nullptr || nullptr == output) {
         return NULL_POINTER;
     }
-    if (outputDesc.dt != DT_F16 && outputDesc.dt != DT_I32) {
-        return NOT_SUPPORTED;
-    }
     return SUCCESS;
 }
 
 inline EE preallocated_memory_core_mali_fp16(
     GCLHandle_t handle, TensorDesc outputDesc, GCLMem_t output)
 {
-    CHECK_STATUS(ocl_fill_memory_zero(handle, output, 0));
-    return SUCCESS;
+    return ocl_fill_memory_zero(handle, output, 0);
 }
 
 EE preallocated_memory_mali(GCLHandle_t handle, TensorDesc outputDesc, GCLMem_t output)
 {
-    EE ret = SUCCESS;
     CHECK_STATUS(preallocated_memory_checkpara_mali(handle, outputDesc, output));
-    CHECK_STATUS(preallocated_memory_core_mali_fp16(handle, outputDesc, output));
-    return ret;
+    return preallocated_memory_core_mali_fp16(handle, outputDesc, output);
 }

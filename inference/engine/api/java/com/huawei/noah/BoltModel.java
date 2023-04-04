@@ -28,8 +28,9 @@ public final class BoltModel implements Cloneable {
     {
         loadLibrary("c++_shared", true);
         //loadLibrary("OpenCL", false);
-        loadLibrary("GLES_mali", false);
-        loadLibrary("BoltModel", false);
+        loadLibrary("GLES_mali", true);
+        loadLibrary("bolt", false);
+        loadLibrary("bolt_jni", false);
     }
 
     public BoltModel()
@@ -172,7 +173,7 @@ public final class BoltModel implements Cloneable {
      *
      * @return
      */
-    public void setRuntimeDevice(int cpuId, DeviceType device) throws FileNotFoundException
+    public void setRuntimeDevice(int cpuId, HardwareType device) throws FileNotFoundException
     {
         if (0 == this.modelAddr) {
             throw new FileNotFoundException();

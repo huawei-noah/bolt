@@ -78,11 +78,40 @@ EE pooling_c8_int8(const I32 &tstart,
     U8 *output,
     void *scale);
 
-EE concat_int8(std::vector<TensorDesc> inputDesc,
-    std::vector<void *> input,
-    F32 *inputScale,
-    int axis,
-    TensorDesc outputDesc,
+#if defined(_USE_FP16) || defined(__aarch64__)
+EE lstmcell_int8(TensorDesc xDesc,
+    const void *currentX,
+    const TensorDesc *filterDesc,
+    const void **filter,
+    const TensorDesc *biasDesc,
+    const void **bias,
+    F32 *scale,
+    void *state,
+    U32 tmpBytes,
+    void *tmp,
+    RNNParamSpec rnnParamSpec,
+    U32 batchStrideX,
+    U32 batchStrideH,
+    TensorDesc hDesc,
     void *output,
-    F32 *outputScale);
+    Arch arch);
+#endif
+
+EE rnncell_int8(TensorDesc xDesc,
+    const void *currentX,
+    const TensorDesc *filterDesc,
+    const void **filter,
+    const TensorDesc *biasDesc,
+    const void **bias,
+    F32 *scale,
+    void *state,
+    U32 tmpBytes,
+    void *tmp,
+    RNNParamSpec rnnParamSpec,
+    U32 batchStrideX,
+    U32 batchStrideH,
+    TensorDesc hDesc,
+    void *output,
+    Arch arch);
+
 #endif

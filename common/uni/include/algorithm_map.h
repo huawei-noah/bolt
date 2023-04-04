@@ -324,8 +324,6 @@ private:
         if (algoFileStream == nullptr || targetMap == nullptr) {
             CHECK_STATUS(NULL_POINTER);
         }
-        std::string nameString = "";
-        std::string infoString = "";
         char name[128];
         char info[128];
         U32 pos = be;
@@ -363,7 +361,7 @@ private:
         std::string fileName, std::string path, std::map<std::string, std::string> *targetMap)
     {
         std::string fullyFileName = path + fileName;
-        FILE *file = fopen(fullyFileName.c_str(), "r");
+        FILE *file = fopen(fullyFileName.c_str(), "rb");
         if (!file || feof(file)) {
             return false;
         }
@@ -415,7 +413,7 @@ private:
         }
         std::string fullyFileName = path + fileName;
         UNI_DEBUG_LOG("Write algorithm map file to %s...\n", fullyFileName.c_str());
-        FILE *file = fopen(fullyFileName.c_str(), "w");
+        FILE *file = fopen(fullyFileName.c_str(), "wb");
         U32 mapSize = targetMap.size();
         fwrite(&mapSize, sizeof(U32), 1, file);
         for (auto iter : targetMap) {

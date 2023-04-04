@@ -94,7 +94,7 @@ class NameGenerator
         , mNext(DEFAULT_COUNTER_VALUE)
     {
     }
-
+    ~NameGenerator(){}
     /**
      * @brief Generate the next name with prefix and incremented suffix
      *
@@ -136,6 +136,7 @@ class NameGenerator
      *
      * @param prefix New prefix
      */
+
     void setPrefix(const std::string& prefix) { mPrefix = prefix; }
 
   private:

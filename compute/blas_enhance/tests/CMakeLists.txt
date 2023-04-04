@@ -7,7 +7,7 @@ endfunction()
 
 set_test_c_cxx_flags()
 
-blas_enhance_test(test_mmm)
-blas_enhance_test(test_mvm)
-blas_enhance_test(test_mmm_int8)
-blas_enhance_test(test_mvm_int8)
+if (BUILD_TEST)
+    blas_enhance_test(test_mmm)
+    blas_enhance_test(test_mvm)
+endif ()

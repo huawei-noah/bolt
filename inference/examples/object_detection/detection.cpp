@@ -34,7 +34,7 @@ int main(int argc, char *argv[])
     ImageFormat imageFormat = RGB;
     F32 scaleValue = 1;
     if (!parse_res.model.second) {
-        exit(-1);
+        return 1;
     }
     if (parse_res.model.second) {
         modelPath = parse_res.model.first;

@@ -12,34 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "cpu/image_cpu.h"
-#include "affinity_policy.h"
-
-template <RoundMode round_mode>
-inline static int round_d(float x)
-{
-    int ret = 0;
-    switch (round_mode) {
-        case ROUND_FLOOR:
-            ret = floor(x);
-            break;
-        case ROUND_CEIL:
-            ret = ceil(x);
-            break;
-        case ROUND_PREFER_FLOOR:
-            ret = round(x);
-            if (ret - x == 0.5) {
-                ret -= 1;
-            }
-            break;
-        case ROUND_PREFER_CEIL:
-            ret = round(x);
-            break;
-        default:
-            UNI_ERROR_LOG("Resize currently not support this round mode.\n");
-            break;
-    }
-    return ret;
-}
+#include "cpu/cpu_functions.h"
 
 template <typename IT, typename OT, CoordinateTransMode coordinate_transformation_mode, RoundMode round_mode>
 inline static EE resize_nearest_kernel(
@@ -51,79 +24,83 @@ inline static EE resize_nearest_kernel(
     U32 on, oc, oh, ow;
     CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
     CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
-
-    int ic_align = 1, oc_align = 1;
-    if (idf == DF_NCHWC8) {
-        ic_align = 8;
-    }
-    if (odf == DF_NCHWC8) {
-        oc_align = 8;
-    }
-    int ic_d = ic / ic_align;
-    int oc_d = oc / oc_align;
-
-    float hs0 = ih * 1.0 / oh;
-    float ws0 = iw * 1.0 / ow;
-    float hs1 = (ih - 1.0) / (oh - 1.0);
-    float ws1 = (iw - 1.0) / (ow - 1.0);
 #ifdef _USE_OPENMP
-#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#pragma omp parallel num_threads(OMP_NUM_THREADS)
 #endif
-    for (U32 o = 0; o < on * oc_d; o++) {
-        int n = o / oc_d;
-        int c = o % oc_d;
-        int dst = o * oh * ow * oc_align;
-        int srcX, srcY, src;
-        for (U32 h = 0; h < oh; h++) {
-            for (U32 w = 0; w < ow; w++) {
-                for (int k = 0; k < oc_align; k++, dst++) {
-                    switch (coordinate_transformation_mode) {
-                        case COORDINATE_TRANS_HALF_PIXEL: {
-                            srcX = round_d<round_mode>((h + 0.5) * hs0 - 0.5);
-                            srcY = round_d<round_mode>((w + 0.5) * ws0 - 0.5);
-                            if (srcX < 0) {
-                                srcX = 0;
+    {
+        int ic_align = 1, oc_align = 1;
+        if (idf == DF_NCHWC8) {
+            ic_align = 8;
+        }
+        if (odf == DF_NCHWC8) {
+            oc_align = 8;
+        }
+        int ic_d = ic / ic_align;
+        int oc_d = oc / oc_align;
+
+        float hs0 = ih * 1.0 / oh;
+        float ws0 = iw * 1.0 / ow;
+        float hs1 = (ih - 1.0) / (oh - 1.0);
+        float ws1 = (iw - 1.0) / (ow - 1.0);
+#ifdef _USE_OPENMP
+#pragma omp for
+#endif
+        for (U32 o = 0; o < on * oc_d; o++) {
+            int n = o / oc_d;
+            int c = o % oc_d;
+            int dst = o * oh * ow * oc_align;
+            int srcX, srcY, src;
+            for (U32 h = 0; h < oh; h++) {
+                for (U32 w = 0; w < ow; w++) {
+                    for (int k = 0; k < oc_align; k++, dst++) {
+                        switch (coordinate_transformation_mode) {
+                            case COORDINATE_TRANS_HALF_PIXEL: {
+                                srcX = round_d<round_mode>((h + 0.5) * hs0 - 0.5);
+                                srcY = round_d<round_mode>((w + 0.5) * ws0 - 0.5);
+                                if (srcX < 0) {
+                                    srcX = 0;
+                                }
+                                if (srcY < 0) {
+                                    srcY = 0;
+                                }
+                                break;
                             }
-                            if (srcY < 0) {
-                                srcY = 0;
+                            case COORDINATE_TRANS_PYTORCH_HALF_PIXEL: {
+                                srcX = oh > 1 ? round_d<round_mode>((h + 0.5) * hs0 - 0.5) : 0;
+                                srcY = ow > 1 ? round_d<round_mode>((w + 0.5) * ws0 - 0.5) : 0;
+                                if (srcX < 0) {
+                                    srcX = 0;
+                                }
+                                if (srcY < 0) {
+                                    srcY = 0;
+                                }
+                                break;
                             }
-                            break;
-                        }
-                        case COORDINATE_TRANS_PYTORCH_HALF_PIXEL: {
-                            srcX = oh > 1 ? round_d<round_mode>((h + 0.5) * hs0 - 0.5) : 0;
-                            srcY = ow > 1 ? round_d<round_mode>((w + 0.5) * ws0 - 0.5) : 0;
-                            if (srcX < 0) {
-                                srcX = 0;
+                            case COORDINATE_TRANS_ALIGN_CORNERS: {
+                                srcX = round_d<round_mode>(h * hs1);
+                                srcY = round_d<round_mode>(w * ws1);
+                                break;
                             }
-                            if (srcY < 0) {
-                                srcY = 0;
+                            case COORDINATE_TRANS_ASYMMETRIC: {
+                                srcX = round_d<round_mode>(h * hs0);
+                                srcY = round_d<round_mode>(w * ws0);
+                                break;
                             }
-                            break;
+                            default:
+                                UNI_ERROR_LOG("Resize currently not support this coordinate "
+                                              "transformation mode.\n");
+                                break;
                         }
-                        case COORDINATE_TRANS_ALIGN_CORNERS: {
-                            srcX = round_d<round_mode>(h * hs1);
-                            srcY = round_d<round_mode>(w * ws1);
-                            break;
+                        U32 cc = c * oc_align + k;
+                        if (idf == DF_NCHWC8) {
+                            U32 cc1 = cc / ic_align;
+                            U32 cc2 = cc % ic_align;
+                            src = (((n * ic_d + cc1) * ih + srcX) * iw + srcY) * ic_align + cc2;
+                        } else {
+                            src = ((n * ic + cc) * ih + srcX) * iw + srcY;
                         }
-                        case COORDINATE_TRANS_ASYMMETRIC: {
-                            srcX = round_d<round_mode>(h * hs0);
-                            srcY = round_d<round_mode>(w * ws0);
-                            break;
-                        }
-                        default:
-                            UNI_ERROR_LOG("Resize currently not support this coordinate "
-                                          "transformation mode.\n");
-                            break;
+                        outArray[dst] = (OT)inArray[src];
                     }
-                    U32 cc = c * oc_align + k;
-                    if (idf == DF_NCHWC8) {
-                        U32 cc1 = cc / ic_align;
-                        U32 cc2 = cc % ic_align;
-                        src = (((n * ic_d + cc1) * ih + srcX) * iw + srcY) * ic_align + cc2;
-                    } else {
-                        src = ((n * ic + cc) * ih + srcX) * iw + srcY;
-                    }
-                    outArray[dst] = (OT)inArray[src];
                 }
             }
         }

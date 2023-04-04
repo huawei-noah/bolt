@@ -61,13 +61,11 @@ public:
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
         this->needSetKernelVec = true;
-        CHECK_STATUS(concat_infer_output_size(inTensors, this->p, outTensors[0], &this->archInfo));
-        if (check_tensors_image(inTensors)) {
-            if (use_output_tensor_image(inTensors)) {
-                CHECK_STATUS(set_tensors_image(outTensors, inTensors.size()));
-            }
+        EE ret = concat_infer_output_size(inTensors, this->p, outTensors[0], &this->archInfo);
+        if (ret == SUCCESS && check_tensors_image(inTensors) && use_output_tensor_image(inTensors)) {
+            ret = set_tensors_image(outTensors, inTensors.size());
         }
-        return SUCCESS;
+        return ret;
     }
 
     U32 infer_tmp_memory_size() override

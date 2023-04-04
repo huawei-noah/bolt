@@ -37,20 +37,6 @@ EE clip_mali(GCLHandle_t handle,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
-    EE ret = SUCCESS;
     CHECK_STATUS(clip_checkpara_mali(handle, inputDesc, input, outputDesc, output));
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = clip_mali_fp16(handle, inputDesc, input, p, outputDesc, output);
-            break;
-        }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return clip_mali_fp16(handle, inputDesc, input, p, outputDesc, output);
 }

@@ -29,16 +29,11 @@ EE cast_infer_output_size(
     TensorDesc outputDesc = outputTensor->get_desc();
     outputDesc = inputDesc;
     outputDesc.dt = p.dt;
-    if (IS_GPU(archInfo->arch)) {
-#ifdef _USE_GPU
-        if (outputDesc.dt != DT_I32 && outputDesc.dt != DT_F16) {
-            CHECK_STATUS(NOT_SUPPORTED);
-        }
-#endif
-    }
+    EE ret = SUCCESS;
 #ifdef _USE_CPU
-    if (tensorIsShape(inputDesc)) {
-        outputDesc.dt = DT_U32;
+    if (IS_CPU(archInfo->arch) && tensorIsShape(inputDesc) && tensorIsShape(outputDesc)) {
+        ret = cast_cpu(inputDesc, inputDesc.dims + inputDesc.nDims, outputDesc,
+            outputDesc.dims + outputDesc.nDims);
     }
 #endif
     outputTensor->resize(outputDesc);

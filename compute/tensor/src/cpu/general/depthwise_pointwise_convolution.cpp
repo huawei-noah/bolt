@@ -80,33 +80,29 @@ inline EE depthwise_pointwise_convolution(TensorDesc inputDesc,
     } else {
         pwArray = outArray;
     }
-    U32 ic8 = ic;
-    U32 oc8 = oc;
     U32 icx = 1;
     U32 ocx = 1;
     if (idf == DF_NCHWC16) {
         icx = 16;
-        ic8 /= 16;
     } else if (idf == DF_NCHWC8) {
         icx = 8;
-        ic8 /= 8;
     }
     if (odf == DF_NCHWC16) {
         ocx = 16;
-        oc8 /= 16;
     } else if (odf == DF_NCHWC8) {
         ocx = 8;
-        oc8 /= 8;
     }
-    for (U32 n = 0, pw_off = 0; n < in; n++) {
+    U32 ic8 = ic / icx;
+    U32 oc8 = oc / ocx;
+    for (U32 n = 0; n < in; n++) {
         // dw conv
-        for (U32 c = 0; c < ic; c++) {
+        for (U32 c = 0, pw_off = 0; c < ic; c++) {
             for (U32 h = 0; h < oh; h++) {
                 for (U32 w = 0; w < ow; w++, pw_off++) {
                     T3 value = dwBiasArray[c];
                     for (U32 fh_idx = 0; fh_idx < fh; fh_idx++) {
+                        I32 ih_idx = h * strideH - paddingT + fh_idx * dilatedRateH;
                         for (U32 fw_idx = 0; fw_idx < fw; fw_idx++) {
-                            I32 ih_idx = h * strideH - paddingT + fh_idx * dilatedRateH;
                             I32 iw_idx = w * strideW - paddingL + fw_idx * dilatedRateW;
                             if (ih_idx >= 0 && ih_idx < (I32)ih && iw_idx >= 0 && iw_idx < (I32)iw) {
                                 U32 i_off;
@@ -139,7 +135,7 @@ inline EE depthwise_pointwise_convolution(TensorDesc inputDesc,
                 for (U32 hw = 0; hw < oh * ow; hw++) {
                     T3 value = pwBiasArray[o];
                     for (U32 c = 0; c < ic; c++) {
-                        U32 pw_off = (n * ic + c) * oh * ow + hw;
+                        U32 pw_off = c * oh * ow + hw;
                         value += pwArray[pw_off] * pwFilterArray[o * ic + c];
                     }
                     CHECK_STATUS(

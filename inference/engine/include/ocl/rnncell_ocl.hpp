@@ -41,7 +41,7 @@ public:
         Tensor hTensor = this->outputTensors[0];
 
         CHECK_STATUS(rnncell(xTensor, this->weightTensors, this->biasTensors, stateTensor, this->p,
-            this->xDim, this->p.num_outputs, 0, this->temp, hTensor, &this->archInfo));
+            this->xDim, this->p.num_outputs, 0, this->temp, hTensor, nullptr, &this->archInfo));
     }
 
     EE infer_forward_algorithm(std::shared_ptr<AlgorithmMap> algorithmMap) override
@@ -49,6 +49,7 @@ public:
         if (this->p.bi_direction) {
             UNI_ERROR_LOG("gpu not support bi-direction rnn.\n");
         }
+        EE ret = SUCCESS;
         OCLContext::getInstance().handle.get()->kernelVec = &this->opKernelVec;
         Tensor xTensor = this->inputTensors[0];
         Tensor stateTensor = this->inputTensors[1];
@@ -71,8 +72,8 @@ public:
                 this->runInfo.best_k[0] = algo[6];
             }
         } else {
-            CHECK_STATUS(rnncell_infer_forward_algorithm(xTensor, filterTensor, biasTensor,
-                stateTensor, this->p, this->xDim, this->p.num_outputs, hTensor, &this->archInfo));
+            ret = rnncell_infer_forward_algorithm(xTensor, filterTensor, biasTensor, stateTensor,
+                this->p, this->xDim, this->p.num_outputs, hTensor, &this->archInfo);
             algo[0] = this->runInfo.algorithm;
             algo[1] = this->runInfo.best_h[0];
             algo[2] = this->runInfo.best_c[0];
@@ -84,7 +85,7 @@ public:
             }
             algorithmMap->setAlgorithmInfoToMap(name, algo, algoNum);
         }
-        return SUCCESS;
+        return ret;
     }
 
     EE infer_output_tensors_size(
@@ -97,8 +98,7 @@ public:
         U32 iB, iX;
         CHECK_STATUS(tensor2dGet(inDim, &dt, &df, &iB, &iX));
         this->xDim = iX;
-        CHECK_STATUS(rnncell_infer_output_size(inTensors, this->p, outTensors[0], &this->archInfo));
-        return SUCCESS;
+        return rnncell_infer_output_size(inTensors, this->p, outTensors[0], &this->archInfo);
     }
 
     U32 infer_tmp_memory_size() override
@@ -109,17 +109,16 @@ public:
         return bytes;
     }
 
-    EE alloc_wtm_memory() override
+    EE alloc_wtm_memory()
     {
         TensorDesc ftmDesc[2];
         CHECK_STATUS(
             rnncell_transform_filter_bytes(this->weightTensors, this->p, ftmDesc, &this->archInfo));
-        this->wtmType = OCLMem;
-        this->wtm = std::shared_ptr<Tensor>(new Tensor(this->wtmType));
+        this->wtm = std::shared_ptr<Tensor>(new Tensor(OCLMem));
         this->wtm->resize(ftmDesc[0]);
         this->wtm->alloc();
         if (this->p.num_projection > 0) {
-            this->wtm_pro = std::shared_ptr<Tensor>(new Tensor(this->wtmType));
+            this->wtm_pro = std::shared_ptr<Tensor>(new Tensor(OCLMem));
             this->wtm_pro->resize(ftmDesc[1]);
             this->wtm_pro->alloc();
         }
@@ -137,12 +136,12 @@ public:
             filterTensors.push_back(this->weightTensors[1]);
             ftmTensors.push_back(this->wtm_pro.get());
         }
-        CHECK_STATUS(rnncell_transform_filter(filterTensors, this->p, ftmTensors, &this->archInfo));
-        this->weightTensors[0] = *this->get_wtm();
+        EE ret = rnncell_transform_filter(filterTensors, this->p, ftmTensors, &this->archInfo);
+        this->weightTensors[0] = *(this->wtm.get());
         if (this->p.num_projection > 0) {
             this->weightTensors[1] = *wtm_pro.get();
         }
-        return SUCCESS;
+        return ret;
     }
 
     EE infer_weight_desc() override

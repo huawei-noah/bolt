@@ -12,10 +12,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "kernel_def.h"
-#define MANGLE_NAME_IMPL(base, IOM, DT) base##IOM##DT
-#define MANGLE_NAME(base, IOM, DT) MANGLE_NAME_IMPL(base, IOM, DT)
 
-__kernel void MANGLE_NAME(fill_memory_zero_vec4_, IOM, DT)(
+__kernel void KERNEL_NAME(
     const int len, const int offset, const int bx, const int by, KERNEL_MEM data)
 {
 #if defined(USE_OUTPUT_IMG)

@@ -35,7 +35,7 @@ __kernel void MANGLE_NAME(conv_invgemm_col2img_, IOM, AM)(const int iw,
     const int idy = get_global_id(1);
     const int idz = get_global_id(2);
     const ushort c_pitch = (oc + 3) >> 2;
-    const int idc = idz % c_pitch; 
+    const int idc = idz % c_pitch;
     if (idx >= bx || idy >= by) {
         return;
     }
@@ -67,7 +67,7 @@ __kernel void MANGLE_NAME(conv_invgemm_col2img_, IOM, AM)(const int iw,
     int in_str_h = iw * (ih * fw - 1);
     int in_off_w = in_wx + in_wy * ih * iw;
     int in_str_w = ih * iw - 1;
-    T4 sum = read_imageh(bias, sampler, idc);
+    T4 sum = READ_IMAGE(bias, sampler, idc);
 
     for (int i = 0; i < in_hl; i++) {
         for (int j = 0; j < in_wl; j++) {

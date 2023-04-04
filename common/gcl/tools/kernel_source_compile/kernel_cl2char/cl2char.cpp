@@ -374,7 +374,7 @@ inline std::string produce_option_source(std::string name, OptionInfo optionInfo
 
 int main()
 {
-    CI8 *boltEnv = getenv("BOLT_ROOT");
+    const char *boltEnv = getenv("BOLT_ROOT");
     if (boltEnv == NULL) {
         UNI_ERROR_LOG("BOLT_ROOT env value has not been set successfully\n");
     };

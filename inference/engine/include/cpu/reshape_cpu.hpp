@@ -18,6 +18,9 @@
 
 class ReshapeCPU : public Reshape {
 public:
+    ReshapeCPU()
+    {}
+
     ReshapeCPU(DataType dt, ReshapeParamSpec p) : Reshape(dt, p)
     {}
 

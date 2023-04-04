@@ -31,7 +31,6 @@ public:
     void run() override
     {
         Tensor inputTensor = this->inputTensors[0];
-        Tensor outputTensor = this->outputTensors[0];
 
         U8 *state = (U8 *)get_ptr_from_tensor(this->temp, this->archInfo.arch);
         TensorDesc desc = inputTensor.get_desc();
@@ -39,6 +38,15 @@ public:
         I32 num = p.bi_direction ? 2 : 1;
         I32 column = this->p.num_projection > 0 ? this->p.num_projection : this->p.num_outputs;
         U32 ch_size = (this->p.num_outputs + column) * bytesOf(desc.dt);
+#if defined(_USE_INT8)
+        if (isQuantMixDataType(this->dt)) {
+            TensorDesc inputDesc = inputTensor.get_desc();
+            if (DT_I8 != inputDesc.dt && DT_U8_Q != inputDesc.dt && featureScale.size() > 0 &&
+                featureScale[0][0] > 0) {
+                this->scales.get()[0] = featureScale[0][0];
+            }
+        }
+#endif
         if (this->inputTensors.size() == 1) {
             // bi-direction rnn has forward-states and backward-states
             UNI_MEMSET(state, 0, batch * num * ch_size);
@@ -66,7 +74,7 @@ public:
 
         std::vector<Tensor> tmpTensor(1, this->temp);
         CHECK_STATUS(rnn(this->inputTensors, this->weightTensors, this->biasTensors, this->p,
-            tmpTensor, this->outputTensors, &this->archInfo));
+            tmpTensor, this->outputTensors, this->scales.get(), &this->archInfo));
 
         if (this->outputTensors.size() == 2) {
             UNI_MEMCPY(get_ptr_from_tensor(this->outputTensors[1], this->archInfo.arch), state,
@@ -75,12 +83,14 @@ public:
             U8 *h = (U8 *)get_ptr_from_tensor(this->outputTensors[1], this->archInfo.arch);
             U8 *c = (U8 *)get_ptr_from_tensor(this->outputTensors[2], this->archInfo.arch);
             U32 c_size = column * bytesOf(desc.dt);
-            U32 output_h_tile = tensorNumBytes(this->outputTensors[1].get_desc()) / batch;
-            U32 output_c_tile = tensorNumBytes(this->outputTensors[2].get_desc()) / batch;
-            for (int i = 0; i < batch; i++) {
-                U8 *ptr = state + i * ch_size;
-                UNI_MEMCPY(c + output_c_tile * i, ptr, output_c_tile);
-                UNI_MEMCPY(h + output_h_tile * i, ptr + c_size, output_h_tile);
+            U32 output_h_tile = tensorNumBytes(this->outputTensors[1].get_desc()) / batch / num;
+            U32 output_c_tile = tensorNumBytes(this->outputTensors[2].get_desc()) / batch / num;
+            for (int i = 0, k = 0; i < batch; i++) {
+                for (int j = 0; j < num; j++, k++) {
+                    U8 *ptr = state + k * ch_size;
+                    UNI_MEMCPY(c + k * output_c_tile, ptr, output_c_tile);
+                    UNI_MEMCPY(h + k * output_h_tile, ptr + c_size, output_h_tile);
+                }
             }
         }
     }

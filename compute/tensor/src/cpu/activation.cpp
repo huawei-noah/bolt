@@ -19,6 +19,7 @@ EE activation_cpu(TensorDesc inputDesc,
     ActivationParamSpec activationDesc,
     TensorDesc outputDesc,
     void *output,
+    F32 *scale,
     Arch arch)
 {
     if (nullptr == input || nullptr == output) {
@@ -28,5 +29,5 @@ EE activation_cpu(TensorDesc inputDesc,
     U32 len = tensorNumElements(inputDesc);
     CHECK_REQUIREMENT(len == tensorNumElements(outputDesc));
     ArrayActivationFunction activation_func = get_array_activation_function(arch);
-    return activation_func(idt, input, len, activationDesc, output);
+    return activation_func(idt, input, len, activationDesc, output, scale);
 }

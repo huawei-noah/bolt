@@ -17,17 +17,24 @@ set_test_c_cxx_flags()
 
 include_flow()
 
-engine_test(benchmark benchmark/benchmark.cpp)
-install(TARGETS benchmark
-        RUNTIME DESTINATION examples)
 if (BUILD_TEST)
-    engine_test(c_image_classification "c_api/c_image_classification.c;c_api/c_common.c;c_api/c_test.c")
-    engine_test(c_input_method "c_api/c_input_method.c;c_api/c_common.c;c_api/c_test.c")
+    engine_test(benchmark benchmark/benchmark.cpp)
+    install(TARGETS benchmark RUNTIME DESTINATION examples)
+    if (USE_API_PYTHON)
+        install(FILES benchmark/benchmark.py
+                DESTINATION examples)
+    endif()
+endif ()
+if (BUILD_EXAMPLE)
+    engine_test(c_image_classification "c_api/c_image_classification.c;c_api/c_test.c")
+    engine_test(c_input_method "c_api/c_input_method.c;c_api/c_test.c")
+    engine_test(c_set_inout "c_api/c_set_inout.c;c_api/c_test.c")
     engine_test(bert bert/bert.cpp)
     engine_test(tinybert bert/tinybert.cpp)
     engine_test(classification image_classification/classification.cpp)
     engine_test(nmt machine_translation/nmt.cpp)
     engine_test(nmt_tsc machine_translation/nmt_tsc.cpp)
+    engine_test(nmt_en-cs machine_translation/nmt_en-cs.cpp)
     engine_test(tsc_ssru machine_translation/tsc_ssru.cpp)
     engine_test(asr_rnnt automatic_speech_recognition/asr_rnnt.cpp)
     engine_test(asr_convolution_transformer automatic_speech_recognition/asr_convolution_transformer.cpp)
@@ -37,6 +44,14 @@ if (BUILD_TEST)
     engine_test(tinybert_onnx bert/tinybert_onnx.cpp)
     engine_test(tinyGPT tinyGPT/tinyGPT.cpp)
     engine_test(slide_tdnn voice_wake_up/slide_tdnn.cpp)
+    if (USE_API_CPP)
+        include_directories(${BOLT_ROOT}/inference/engine/api/c)
+        link_directories(${CMAKE_BINARY_DIR})
+        engine_test(cpp_test cpp_api/cpp_test.cpp)
+        target_link_libraries(cpp_test bolt_cpp bolt)
+        install(TARGETS cpp_test
+                RUNTIME DESTINATION examples)
+    endif ()
     if (EXISTS ${OpenCV_CMAKE_PATH})
         engine_test(ultra_face ultra_face/ultra_face.cpp)
         engine_test(u2net image_matting/u2net.cpp)
@@ -48,6 +63,7 @@ if (BUILD_TEST)
                     tinybert
                     tinybert_onnx
                     nmt
+                    nmt_en-cs
                     tsc_ssru
                     asr_rnnt
                     asr_convolution_transformer
@@ -55,6 +71,7 @@ if (BUILD_TEST)
                     vad
                     c_image_classification
                     c_input_method
+                    c_set_inout
             RUNTIME DESTINATION examples)
 
     if (USE_FLOW)
@@ -67,5 +84,5 @@ if (BUILD_TEST)
                         flow_dlaWOdcn
                         flow_facesr
                 RUNTIME DESTINATION examples)
-    endif (USE_FLOW)
-endif (BUILD_TEST)
+    endif ()
+endif ()

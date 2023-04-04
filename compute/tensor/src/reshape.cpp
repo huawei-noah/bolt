@@ -30,16 +30,23 @@ EE reshape_infer_output_size(
     }
     TensorDesc inputDesc = inputTensor->get_desc();
     TensorDesc outputDesc = outputTensor->get_desc();
-    CHECK_STATUS(reshape_infer_output_size_cpu(inputDesc, p, &outputDesc));
+    EE ret = reshape_infer_output_size_cpu(inputDesc, p, &outputDesc);
     if (IS_GPU(archInfo->arch)) {
 #ifdef _USE_GPU
         if (outputDesc.df == DF_NCHWC4) {
             outputDesc.df = DF_NCHW;
         }
 #endif
+    } else {
+#ifdef _USE_CPU
+        if (ret == SUCCESS && tensorIsShape(inputDesc) && tensorIsShape(outputDesc)) {
+            ret = reshape_cpu(inputDesc, inputDesc.dims + inputDesc.nDims, outputDesc,
+                outputDesc.dims + outputDesc.nDims);
+        }
+#endif
     }
     outputTensor->resize(outputDesc);
-    return SUCCESS;
+    return ret;
 }
 
 EE reshape_infer_forward_tmp_bytes(
@@ -69,7 +76,9 @@ EE reshape(Tensor inputTensor, Tensor tmpTensor, Tensor outputTensor, ArchInfo_t
     void *input = get_ptr_from_tensor(inputTensor, arch);
     TensorDesc outputDesc = outputTensor.get_desc();
     void *output = get_ptr_from_tensor(outputTensor, arch);
-
+    if (input == output) {
+        return SUCCESS;
+    }
     EE ret = NOT_SUPPORTED;
     if (IS_GPU(arch)) {
 #ifdef _USE_GPU

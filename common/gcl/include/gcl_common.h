@@ -17,12 +17,11 @@
 #include "uni.h"
 #include "tensor_desc.h"
 #include "gcl_kernel_type.h"
-#include "CL/cl.h"
+#include <CL/opencl.h>
 #include <map>
 #include <unordered_map>
 #include <vector>
 #include <string>
-#include <iostream>
 /**
  * @file
  */
@@ -46,7 +45,7 @@ typedef cl_event Event;
 typedef cl_mem_flags MemFlags;
 typedef cl_image_format ImgFormat;
 
-inline CI8 *map_cl_error_2_string(cl_int err)
+inline const char *map_cl_error_2_string(cl_int err)
 {
     switch (err) {
         ERROR_CASE(CL_SUCCESS);
@@ -132,7 +131,7 @@ inline CI8 *map_cl_error_2_string(cl_int err)
 
 #define map_cl_error_2_ee(err)                                                \
     {                                                                         \
-        if (err == 0) {                                                       \
+        if (err == CL_SUCCESS) {                                              \
             return SUCCESS;                                                   \
         } else {                                                              \
             UNI_ERROR_LOG("GCLAPI error: %s.\n", map_cl_error_2_string(err)); \
@@ -181,12 +180,12 @@ typedef struct {
 typedef ForwardRunInfoMali *ForwardRunInfoMali_t;
 
 struct GCLHandle {
-    Platform *platforms;
-    U32 numPlatform;
+    Platform *platforms = NULL;
+    U32 numPlatform = 0;
     U32 platformId;
 
-    Device *devices;
-    U32 numDevice;
+    Device *devices = NULL;
+    U32 numDevice = 0;
     U32 deviceId;
     cl_device_type deviceType;
     U32 device_max_ls_size[3];
@@ -201,9 +200,9 @@ struct GCLHandle {
     bool existProfilingQueue;
 
     Event eventObj;
-    Event *eventPtr;
-    U32 numWaitEvents;
-    Event *waitEvents;
+    Event *eventPtr = NULL;
+    U32 numWaitEvents = 0;
+    Event *waitEvents = NULL;
     double t_execute;
     double t_total;
 
@@ -212,22 +211,22 @@ struct GCLHandle {
     std::map<std::string, Program> programMap;
     std::map<std::vector<I32>, ForwardRunInfoMali> runInfoCache;
     std::map<std::string, std::vector<U32>> kernelLSCache;
-    std::vector<GCLKernelInfo> *kernelVec;
+    std::vector<GCLKernelInfo> *kernelVec = NULL;
     std::string curOpName;
-    void *kernel_source;
-    void *kernel_binmap_handle;
-    void *kernel_binmap;
+    void *kernel_source = NULL;
+    void *kernel_binmap_handle = NULL;
+    void *kernel_binmap = NULL;
     bool useBinMap;
     std::string common_source_opt;
     std::string common_source_ext;
     Program source_head[1];
-    CI8 *source_head_name[1];
+    const char *source_head_name[1];
 };
 
 typedef struct GCLHandle *GCLHandle_t;
 
 struct GCLHandleConfig {
-    CI8 *deviceBinmapName;
+    const char *deviceBinmapName;
 };
 
 typedef GCLHandleConfig *GCLHandleConfig_t;

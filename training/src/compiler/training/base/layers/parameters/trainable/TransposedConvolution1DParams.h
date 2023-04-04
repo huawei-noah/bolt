@@ -35,8 +35,6 @@ namespace raul
  * @param paramBias enable or disable bias usagee
  * @param paramQuantizeWeights enable or disable weights quantization
  *
- * @see
- * https://pytorch.org/docs/master/generated/torch.nn.ConvTranspose1d.html
  */
 
 struct TransposedConvolution1DParams : public Convolution1DParams

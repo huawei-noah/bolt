@@ -45,6 +45,7 @@ class NotImplemented : public BasicImpl
     }
     void forwardComputeImpl(NetworkMode) {}
     void backwardComputeImpl() {}
+ ~NotImplemented(){}
 };
 
 class DummyImpl : public BasicImpl
@@ -54,8 +55,10 @@ class DummyImpl : public BasicImpl
     DummyImpl(T&)
     {
     }
+    ~DummyImpl(){}
     void forwardComputeImpl(NetworkMode) {}
     void backwardComputeImpl() {}
+
 };
 
 } // raul namespace

@@ -32,7 +32,7 @@ int main(int argc, char *argv[])
     int loopTime = 1;
 
     if (!parse_res.model.second) {
-        exit(-1);
+        return 1;
     }
     if (parse_res.model.second) {
         modelPath = parse_res.model.first;
@@ -46,7 +46,6 @@ int main(int argc, char *argv[])
     if (parse_res.loopTime.second) {
         loopTime = parse_res.loopTime.first;
     }
-    bool useGPU = std::string(affinityPolicyName) == std::string("GPU");
     std::shared_ptr<CNN> pipelineBase;
     UNI_PROFILE(pipelineBase = createPipeline(affinityPolicyName, modelPath, algorithmMapPath),
         std::string("bolt::prepare"), std::string("prepare"));
@@ -354,7 +353,7 @@ int main(int argc, char *argv[])
     U32 outputNum = decoder_output.length();
     for (U32 i = 0; i < outputNum; ++i) {
         if (decoder_output.element(i) != trueRes[i]) {
-            UNI_CI_LOG("ERROR: Get Wrong Result!\n");
+            UNI_ERROR_LOG("ERROR: Get Wrong Result!\n");
         }
     }
     UNI_CI_LOG("avg_time: %fms/sequence\n", 1.0 * totalTime / loopTime);

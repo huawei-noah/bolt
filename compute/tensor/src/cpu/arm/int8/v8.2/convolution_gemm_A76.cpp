@@ -79,6 +79,7 @@ EE convolution_gemm_A76(TensorDesc inputDesc,
     U32 ihiw = ih_pad * iw_pad;
 
     I32 *biasScaled = (I32 *)(in_pad + ic * ihiw * 8 + 12 * fh * fw * ic * 8);  // Initialize
+    UNI_MEMSET(biasScaled, 0, (oc * 8 + oc * 8 * oh * ow) * bytesOf(DT_I32));
 
     // double start, end;
     I32 max_i32[4] = {0};  // To record max I32 values
@@ -1421,48 +1422,58 @@ EE convolution_gemm_A76(TensorDesc inputDesc,
 
     EE ret = SUCCESS;
     if (out_f16_bool == 0) {
-        I32 factor;
-        F32 scale_o;
-
-        if (1 == scale_known_bool) {
-            scale_o = (*outputScale / *inputScale) / *filterScale;
-            factor = 127 * 16777216 / max_i32[0];
+        if (outputDesc.dt == DT_F32) {
+            U32 num_v = oc * ohow * 8;  // Number of q-form vectors
+            I32 *out_buf = biasScaled + oc * 8;
+            F32 *out_f = (F32 *)output;
+            F32 scale_o = (*inputScale) * (*filterScale);
+            F32 factor = 1 / scale_o;
+            for (U32 i = 0; i < num_v; ++i) {
+                out_f[i] = out_buf[i] * factor;
+            }
         } else {
-            I32 max = max_i32[0];
-            I32 min = min_i32[0];
-            for (U32 i = 1; i < 4; i++) {
-                if (max < max_i32[i]) {
-                    max = max_i32[i];
-                }
-                if (min > min_i32[i]) {
-                    min = min_i32[i];
-                }
-            }
+            I32 factor;
+            F32 scale_o;
 
-            if (max == 0 && min == 0) {
-                return NOT_SUPPORTED;
-            }
-
-            if (max > 0 && min < 0) {
-                I32 factor_max = 127 * 16777216 / max;
-                I32 factor_min = -127 * 16777216 / min;
-                factor = (factor_max < factor_min) ? factor_max : factor_min;
-                scale_o = (factor_max < factor_min) ? (127.0 / max) : (-127.0 / min);
-            } else if (max > 0) {
-                factor = 127 * 16777216 / max;
-                scale_o = 127.0 / max;
+            if (1 == scale_known_bool) {
+                scale_o = (*outputScale / *inputScale) / *filterScale;
+                factor = 127 * 16777216 / max_i32[0];
             } else {
-                factor = -127 * 16777216 / min;
-                scale_o = -127.0 / min;
+                I32 max = max_i32[0];
+                I32 min = min_i32[0];
+                for (U32 i = 1; i < 4; i++) {
+                    if (max < max_i32[i]) {
+                        max = max_i32[i];
+                    }
+                    if (min > min_i32[i]) {
+                        min = min_i32[i];
+                    }
+                }
+
+                if (max == 0 && min == 0) {
+                    return NOT_SUPPORTED;
+                }
+
+                if (max > 0 && min < 0) {
+                    I32 factor_max = 127 * 16777216 / max;
+                    I32 factor_min = -127 * 16777216 / min;
+                    factor = (factor_max < factor_min) ? factor_max : factor_min;
+                    scale_o = (factor_max < factor_min) ? (127.0 / max) : (-127.0 / min);
+                } else if (max > 0) {
+                    factor = 127 * 16777216 / max;
+                    scale_o = 127.0 / max;
+                } else {
+                    factor = -127 * 16777216 / min;
+                    scale_o = -127.0 / min;
+                }
+                *outputScale = (*inputScale) * (*filterScale) * scale_o;
             }
-            *outputScale = (*inputScale) * (*filterScale) * scale_o;
+
+            I32 *out_buf = biasScaled + oc * 8;
+            INT8 *out_q = (INT8 *)output;
+            U32 num_v = tensorNumElements(outputDesc) / 4;
+            quantize_I32(num_v, out_buf, factor, out_q);
         }
-
-        U32 num_v = oc * ohow * 2;  // Number of q-form vectors
-        I32 *out_buf = biasScaled + oc * 8;
-        INT8 *out_q = (INT8 *)output;
-
-        ret = quantize_I32(num_v, out_buf, factor, scale_o, out_q);
     }
     return ret;
 }

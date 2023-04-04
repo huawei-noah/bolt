@@ -52,18 +52,7 @@ inline EE roialign_checkpara_mali(GCLHandle_t handle,
 EE roialign_infer_forward_tmp_bytes_mali(
     TensorDesc inputDesc, GCLMemDesc gclmemInputDesc, TensorDesc outputDesc, U32 *bytes)
 {
-    EE ret = SUCCESS;
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = roialign_infer_forward_tmp_bytes_mali_fp16(
-                inputDesc, gclmemInputDesc, outputDesc, bytes);
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return roialign_infer_forward_tmp_bytes_mali_fp16(inputDesc, gclmemInputDesc, outputDesc, bytes);
 }
 
 EE roialign_mali(GCLHandle_t handle,
@@ -74,22 +63,8 @@ EE roialign_mali(GCLHandle_t handle,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
-    EE ret = SUCCESS;
     CHECK_STATUS(roialign_checkpara_mali(
         handle, inputDescs, inputs, roiAlignParamSpec, tmpbuf, outputDesc, output));
-    switch (inputDescs[0].dt) {
-        case DT_F16: {
-            ret = roialign_mali_fp16(
-                handle, inputDescs, inputs, roiAlignParamSpec, tmpbuf, outputDesc, output);
-            break;
-        }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return roialign_mali_fp16(
+        handle, inputDescs, inputs, roiAlignParamSpec, tmpbuf, outputDesc, output);
 }

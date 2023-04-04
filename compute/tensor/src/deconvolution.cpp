@@ -52,7 +52,15 @@ inline EE deconvolution_infer_output_size_cpu(TensorDesc inputDesc,
         ow = fw + strideW * (iw - 1) - paddingL - paddingR + convParamSpec.output_pad_w;
     }
 
-    *outputDesc = tensor4df(targetDataType, DF_NCHWC8, in, fc, oh, ow);
+    DataFormat odf = DF_NCHWC8;
+    if ((idt == DT_U8_Q) && (fc > 8)) {
+#ifdef _USE_AVX512_VNNI
+        odf = DF_NCHWC16;
+#else
+        odf = DF_NCHWC8;
+#endif
+    }
+    *outputDesc = tensor4df(targetDataType, odf, in, fc, oh, ow);
     return SUCCESS;
 }
 
@@ -117,7 +125,7 @@ EE deconvolution_infer_forward_algorithm(Tensor inputTensor,
         GCLMemDesc gclmemInputDesc = ocl_get_desc(inputTensor);
         GCLMemDesc gclmemOutputDesc = ocl_get_desc(outputTensor);
         ret = deconvolution_infer_forward_algorithm_mali(((MaliPara_t)(archInfo->archPara))->handle,
-            inputDesc, filterDesc, convParamSpec, outputDesc, policy, activationDesc.mode,
+            inputDesc, filterDesc, convParamSpec, outputDesc, policy, activationDesc,
             gclmemInputDesc, gclmemOutputDesc, ((MaliPara_t)(archInfo->archPara))->forwardRunInfo);
 #endif
     }
@@ -251,7 +259,7 @@ EE deconvolution(Tensor inputTensor,
     if (IS_GENERAL(arch)) {
 #ifdef _USE_GENERAL
         ret = deconvolution_general(inputDesc, input, filterDesc, filter, convParamSpec, scaleDesc,
-            scale, biasDesc, bias, outputDesc, output, activationDesc);
+            scale, biasDesc, bias, tmpBytes, tmp, outputDesc, output, activationDesc);
 #endif
 #if defined(_USE_NEON) || defined(_USE_X86)
     } else if (IS_X86(arch) || IS_ARM(arch)) {
@@ -265,7 +273,7 @@ EE deconvolution(Tensor inputTensor,
             (GCLMem_t)input, filterDesc, (GCLMem_t)filter, convParamSpec,
             ((MaliPara_t)(archInfo->archPara))->forwardRunInfo, scaleDesc, (GCLMem_t)scale,
             biasDesc, (GCLMem_t)bias, tmpBytes, (GCLMem_t)tmp, outputDesc, (GCLMem_t)output,
-            activationDesc.mode);
+            activationDesc);
 #endif
     }
     return ret;

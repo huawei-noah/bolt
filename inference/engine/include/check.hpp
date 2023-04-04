@@ -14,16 +14,16 @@
 #ifndef _CHECK_H
 #define _CHECK_H
 
-#include "weight_operator.hpp"
+#include "operator.hpp"
 
-class Check : public WeightOperator {
+class Check : public Operator {
 public:
     Check(DataType dt, CheckParamSpec p)
     {
         this->dt = dt;
         this->p = p;
     }
-
+    ~Check(){}
     OperatorType get_type() override
     {
         return OT_Check;

@@ -47,6 +47,8 @@ EE deconvolution_general(TensorDesc inputDesc,
     const void *scale,
     TensorDesc biasDesc,
     const void *bias,
+    U32 tmpBytes,
+    void *tmp,
     TensorDesc outputDesc,
     void *output,
     ActivationParamSpec activationDesc);
@@ -132,8 +134,13 @@ EE rnncell_general(TensorDesc xDesc,
     TensorDesc hDesc,
     void *currentH);
 
-EE transpose_general(
-    TensorDesc inputDesc, const void *input, U32 *dim, TensorDesc outputDesc, void *output);
+EE transpose_general(TensorDesc inputDesc,
+    U32 *inDim,
+    const void *input,
+    U32 *dim,
+    TensorDesc outputDesc,
+    U32 *outDim,
+    void *output);
 
 EE scale_general(TensorDesc inputDesc,
     void *input,
@@ -157,7 +164,7 @@ EE check_general(TensorDesc inputDescA,
     TensorDesc outputDesc,
     void *output);
 
-EE layer_normalization_general(TensorDesc inputDesc,
+EE layer_norm_general(TensorDesc inputDesc,
     void *input,
     LayerNormParamSpec p,
     void *alpha,
@@ -186,6 +193,16 @@ EE dequantize_general(TensorDesc qDesc,
     TensorDesc dDesc,
     void *data);
 
-EE cumsum_general(
-    TensorDesc inputDesc, const void *input, CumSumParamSpec p, TensorDesc outputDesc, void *output);
+EE cum_general(
+    TensorDesc inputDesc, const void *input, CumParamSpec p, TensorDesc outputDesc, void *output);
+
+template <typename T>
+EE decode_priorbox_general(const T *location,
+    const T *priorbox,
+    const T *variance,
+    I32 num_total_priorbox,
+    T *xmin,
+    T *ymin,
+    T *xmax,
+    T *ymax);
 #endif

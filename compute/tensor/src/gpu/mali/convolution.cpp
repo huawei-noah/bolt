@@ -68,17 +68,16 @@ inline void convolution_produce_algos_paras(TensorDesc inputDesc,
     }
     algoNumIndex->push_back(vecH->size());
 
-    if (fw == 3 && fh == 3 && ft == 1 && sw == 1 && sh == 1 && dw == 1 && dh == 1 
-        && idf != DF_NCHW && odf != DF_NCHW && ic > 32 && fn >= 128 && ih > 64 && iw > 64)
-    {
+    if (fw == 3 && fh == 3 && ft == 1 && sw == 1 && sh == 1 && dw == 1 && dh == 1 &&
+        idf != DF_NCHW && odf != DF_NCHW) {
         convolutionAlgorithms->push_back(CONVOLUTION_ALGORITHM_WINOGRAD);
         GCLMemType mt = (check_qualcomm_device()) ? GCL_MEM_IMG_3D : GCL_MEM_BUF;
         get_gemm_tn_cal_scheme(vecH, vecC, vecK, mt, mt, GCL_MEM_BUF);
         algoNumIndex->push_back(vecH->size());
     }
 
-    if (sw == 1 && sh == 1 && dw == 1 && dh == 1 && fw * fh > 1 && ft == 1
-        && idf != DF_NCHW && odf != DF_NCHW && ic > iw * 4 && ic > ih * 4) {
+    if (sw == 1 && sh == 1 && dw == 1 && dh == 1 && fw * fh > 1 && ft == 1 && idf != DF_NCHW &&
+        odf != DF_NCHW && ic > iw * 4 && ic > ih * 4) {
         convolutionAlgorithms->push_back(CONVOLUTION_ALGORITHM_INVGEMM);
         CHECK_STATUS(get_conv_direct_cal_scheme(vecH, vecC, vecK, 1, 1, fn));
         algoNumIndex->push_back(vecH->size());
@@ -101,12 +100,12 @@ inline void infer_align_val(ConvolutionForwardAlgorithm algo,
     U32 n_val = *n_align;
     if (useNchwMode) {
         if (algo == CONVOLUTION_ALGORITHM_WINOGRAD) {
-            w_val = ALIGN(w_val, 4);
-            h_val = ALIGN(h_val, 4);
+            w_val = UNI_ALIGN(w_val, 4);
+            h_val = UNI_ALIGN(h_val, 4);
         } else {
             for (U32 i = 0; i < algoNum; i++) {
                 U32 item_w = vecH[i];
-                w_val = std::max(ALIGN(ow, item_w), w_val);
+                w_val = std::max(UNI_ALIGN(ow, item_w), w_val);
             }
         }
     } else {
@@ -118,9 +117,9 @@ inline void infer_align_val(ConvolutionForwardAlgorithm algo,
             if ((item_h >> 4) > 0) {
                 U32 item_n = item_h >> 4;
                 item_h = item_h & 15;
-                n_val = std::max(ALIGN(in, item_n), n_val);
+                n_val = std::max(UNI_ALIGN(in, item_n), n_val);
             }
-            h_val = std::max(ALIGN(oh, item_h), h_val);
+            h_val = std::max(UNI_ALIGN(oh, item_h), h_val);
         }
     }
     *w_align = w_val;
@@ -178,9 +177,8 @@ EE convolution_padding_input_mali(TensorDesc inputDesc,
     U32 h_align = oh;
     U32 n_align = in;
     for (U32 i = 0; i < convolutionAlgorithms.size(); i++) {
-        infer_align_val(
-            convolutionAlgorithms[i], algoNumIndex[i], useNchwMode, 
-            vecH, ow, oh, in, &w_align, &h_align, &n_align);
+        infer_align_val(convolutionAlgorithms[i], algoNumIndex[i], useNchwMode, vecH, ow, oh, in,
+            &w_align, &h_align, &n_align);
     }
 
     U32 pl = 0;
@@ -205,7 +203,7 @@ EE convolution_infer_forward_algorithm_mali(GCLHandle_t handle,
     GCLMemDesc inputMemDesc,
     GCLMemDesc outputMemDesc,
     ConvolutionPolicy policy,
-    ActivationMode activationMode,
+    ActivationParamSpec activationMode,
     ForwardRunInfoMali_t forwardRunInfo)
 {
     if (forwardRunInfo == nullptr) {
@@ -321,8 +319,8 @@ EE convolution_infer_forward_algorithm_mali(GCLHandle_t handle,
         if (useImg) {
             if (CHECK_MEET_IMAGE_LIMITS(stride[0] / 4, stride[1], stride[2])) {
                 stride[0] = stride[0] / 4;
-                CHECK_STATUS(gclmem_set_desc_padding(
-                    &filterImg->desc, stride, offset, dt, DF_NCHW, GCL_MEM_IMG_3D, CL_MEM_READ_WRITE));
+                CHECK_STATUS(gclmem_set_desc_padding(&filterImg->desc, stride, offset, dt, DF_NCHW,
+                    GCL_MEM_IMG_3D, CL_MEM_READ_WRITE));
                 useWinoFltImg = true;
             }
         }
@@ -354,8 +352,7 @@ EE convolution_infer_forward_algorithm_mali(GCLHandle_t handle,
         tmpDir[0] = tmpbuf;
         tmpWino[0] = tmpbuf;
         tmpInv[0] = tmpbuf;
-        if (check_qualcomm_device() && 
-            maxBytes[1] > 0 && maxBytes[2] > 0 && maxBytes[3] > 0) {
+        if (check_qualcomm_device() && maxBytes[1] > 0 && maxBytes[2] > 0 && maxBytes[3] > 0) {
             tmpImgA->desc.memType = GCL_MEM_IMG_3D;
             tmpImgA->desc.stride[0] = maxBytes[1];
             tmpImgA->desc.stride[1] = maxBytes[2];
@@ -363,9 +360,8 @@ EE convolution_infer_forward_algorithm_mali(GCLHandle_t handle,
             gcl_create_memory(handle, tmpImgA);
             tmpDir[0] = tmpImgA;
             tmpWino[1] = tmpImgA;
-        } 
-        if (check_qualcomm_device() && 
-            maxBytes[4] > 0 && maxBytes[5] > 0 && maxBytes[6] > 0) {
+        }
+        if (check_qualcomm_device() && maxBytes[4] > 0 && maxBytes[5] > 0 && maxBytes[6] > 0) {
             tmpImgB->desc.memType = GCL_MEM_IMG_3D;
             tmpImgB->desc.stride[0] = maxBytes[4];
             tmpImgB->desc.stride[1] = maxBytes[5];
@@ -382,9 +378,8 @@ EE convolution_infer_forward_algorithm_mali(GCLHandle_t handle,
         double invGemmCol2ImgTime = DBL_MAX;
         U32 runKernelBe = 0;
         U32 runKernelEnd = 0;
-        ForwardRunInfoMali bestRunInfo;
-        ForwardRunInfoMali bestRunInfoWinograd;
-        ForwardRunInfoMali bestRunInfoInvGemm;
+        ForwardRunInfoMali bestRunInfo, bestRunInfoWinograd, bestRunInfoInvGemm;
+        UNI_MEMSET(&bestRunInfo, 0, sizeof(bestRunInfo));
         GCLMem_t fltMem = filter;
         tmp[0] = tmpDir[0];
         for (U32 i = 0; i < algosNum; i++) {
@@ -504,21 +499,7 @@ EE convolution_infer_forward_algorithm_mali(GCLHandle_t handle,
 EE convolution_transform_filter_bytes_mali(
     TensorDesc filterDesc, ForwardRunInfoMali_t forwardRunInfo, TensorDesc *ftmDesc)
 {
-    EE ret = SUCCESS;
-    switch (filterDesc.dt) {
-        case DT_F16: {
-            ret = convolution_transform_filter_bytes_mali_fp16(filterDesc, forwardRunInfo, ftmDesc);
-            break;
-        }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return convolution_transform_filter_bytes_mali_fp16(filterDesc, forwardRunInfo, ftmDesc);
 }
 
 EE convolution_transform_filter_mali(GCLHandle_t handle,
@@ -529,19 +510,15 @@ EE convolution_transform_filter_mali(GCLHandle_t handle,
     TensorDesc *fltmemDesc,
     GCLMem_t fltmem)
 {
-    EE ret = SUCCESS;
+    EE ret = NOT_SUPPORTED;
     switch (filterDesc.dt) {
-        case DT_F16: {
+        case DT_F16:
+        case DT_F32: {
             ret = convolution_transform_filter_mali_fp16(
                 handle, filterDesc, filter, forwardRunInfo, fltmemDesc, fltmem, tmp);
             break;
         }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
     return ret;
@@ -554,19 +531,15 @@ EE convolution_infer_forward_tmp_bytes_mali(TensorDesc inputDesc,
     ForwardRunInfoMali_t forwardRunInfo,
     U32 *bytes)
 {
-    EE ret = SUCCESS;
+    EE ret = NOT_SUPPORTED;
     switch (inputDesc.dt) {
-        case DT_F16: {
+        case DT_F16:
+        case DT_F32: {
             ret = convolution_infer_forward_tmp_bytes_mali_fp16(
                 inputDesc, filterDesc, outputDesc, convParamSpec, forwardRunInfo, bytes);
             break;
         }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
     return ret;
@@ -586,24 +559,20 @@ EE convolution_mali(GCLHandle_t handle,
     std::vector<GCLMem_t> tmpBuf,
     TensorDesc outputDesc,
     GCLMem_t output,
-    ActivationMode activationMode)
+    ActivationParamSpec activationMode)
 {
     UNUSED(scaleDesc);
     UNUSED(scale);
-    EE ret = SUCCESS;
+    EE ret = NOT_SUPPORTED;
     switch (inputDesc.dt) {
-        case DT_F16: {
+        case DT_F16:
+        case DT_F32: {
             ret = convolution_mali_fp16(handle, inputDesc, input, filterDesc, filter, convParamSpec,
                 forwardRunInfo, biasDesc, bias, tmpBytes, tmpBuf, outputDesc, output,
                 activationMode);
             break;
         }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
     return ret;

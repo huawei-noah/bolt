@@ -69,18 +69,7 @@ EE slice_infer_forward_tmp_bytes_mali(TensorDesc inputDesc,
     std::vector<TensorDesc> outputDesc,
     U32 *bytes)
 {
-    EE ret = SUCCESS;
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = slice_infer_forward_tmp_bytes_mali_fp16(
-                inputDesc, gclmemInputDesc, p, outputDesc, bytes);
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return slice_infer_forward_tmp_bytes_mali_fp16(inputDesc, gclmemInputDesc, p, outputDesc, bytes);
 }
 
 EE slice_mali(GCLHandle_t handle,
@@ -91,16 +80,6 @@ EE slice_mali(GCLHandle_t handle,
     std::vector<TensorDesc> outputDesc,
     std::vector<void *> *output)
 {
-    EE ret = SUCCESS;
     CHECK_STATUS(slice_checkpara_mali(handle, inputDesc, input, p, outputDesc, output));
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = slice_mali_fp16(handle, inputDesc, input, p, tmpbuf, outputDesc, output);
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return slice_mali_fp16(handle, inputDesc, input, p, tmpbuf, outputDesc, output);
 }

@@ -26,7 +26,7 @@ public:
         this->jumpOperatorIndex = jumpOperatorIndex;
         this->nextOperatorIndex = currentOperatorIndex + 1;
     }
-
+    ~Repeat(){}
     OperatorType get_type() override
     {
         return OT_Repeat;

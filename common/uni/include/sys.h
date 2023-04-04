@@ -19,8 +19,10 @@
 #endif
 #define IS_GENERAL(arch) (arch == CPU_GENERAL)
 #define IS_X86_AVX512(arch) (arch == X86_AVX512)
-#define IS_X86_AVX2(arch) ((arch == X86_AVX2) || IS_X86_AVX512(arch))
-#define IS_X86(arch) (IS_X86_AVX2(arch) || IS_X86_AVX512(arch))
+#define IS_X86_AVXVNNI(arch) (arch == X86_AVXVNNI)
+#define IS_X86_AVX2(arch) ((arch == X86_AVX2) || IS_X86_AVX512(arch) || IS_X86_AVXVNNI(arch))
+#define IS_X86_VNNI(arch) (IS_X86_AVX512(arch) || IS_X86_AVXVNNI(arch))
+#define IS_X86(arch) (IS_X86_AVX2(arch) || IS_X86_AVX512(arch) || IS_X86_AVXVNNI(arch))
 #define IS_ARM_V7(arch) (arch == ARM_V7)
 #define IS_ARM_V8(arch) (arch == ARM_V8)
 #define IS_ARM_A55(arch) (arch == ARM_A55)
@@ -48,7 +50,8 @@ typedef enum {
     ARM_A76 = 6,
     QUALCOMM = 7,
     X86_AVX2 = 8,
-    X86_AVX512 = 9
+    X86_AVX512 = 9,
+    X86_AVXVNNI = 10
 } Arch;
 
 inline const char *const *ArchName()

@@ -35,18 +35,6 @@
 #define ADD_IN_OFF in_off += ihw_str;
 #endif
 
-#if (FH == 1)
-#define LOAD_FILTER(index, val)              \
-    {                                        \
-        val = vload16(flt_off + index, flt); \
-    }
-#else
-#define LOAD_FILTER(index, val)                       \
-    {                                                 \
-        val = vload16(flt_off + k * KN + index, flt); \
-    }
-#endif
-
 #if defined(USE_OUTPUT_IMG)
 #define STORE_OUTPUT_ARRAY(val)                                                    \
     {                                                                              \
@@ -77,7 +65,7 @@ __kernel void MANGLE_NAME(conv_direct_sh1_, IOM, AM, BM, FW, FH, ON, KN)(const i
     const int bx,
     const int by,
     READ_ONLY_KERNEL_MEM in,
-    __global T *flt,
+    __global const T16 *flt,
     __read_only image1d_t bias,
     KERNEL_MEM out)
 {
@@ -114,16 +102,16 @@ __kernel void MANGLE_NAME(conv_direct_sh1_, IOM, AM, BM, FW, FH, ON, KN)(const i
 #if (FH == 1)
         for (uchar j = 0; j < FW; ++j) {
             LOAD_INPUT_ARRAY;
-            LOAD_FILTER(0, flt_val);
+            flt_val = flt[flt_off];
             DIRECT_CONV_CAL_CORE_S1(in_val, flt_val, out_val[0]);
 #if (KN > 1)
-            LOAD_FILTER(1, flt_val);
+            flt_val = flt[flt_off + 1];
             DIRECT_CONV_CAL_CORE_S1(in_val, flt_val, out_val[1]);
 #endif
 #if (KN > 2)
-            LOAD_FILTER(2, flt_val);
+            flt_val = flt[flt_off + 2];
             DIRECT_CONV_CAL_CORE_S1(in_val, flt_val, out_val[2]);
-            LOAD_FILTER(3, flt_val);
+            flt_val = flt[flt_off + 3];
             DIRECT_CONV_CAL_CORE_S1(in_val, flt_val, out_val[3]);
 #endif
             flt_off += KN;
@@ -135,16 +123,16 @@ __kernel void MANGLE_NAME(conv_direct_sh1_, IOM, AM, BM, FW, FH, ON, KN)(const i
 #if defined(BASIC_REG)
                 LOAD_REST_MEM;
 #endif
-                LOAD_FILTER(0, flt_val);
+                flt_val = flt[flt_off + k * KN];
                 DIRECT_CONV_CAL_CORE_S1(in_val, flt_val, out_val[0]);
 #if (KN > 1)
-                LOAD_FILTER(1, flt_val);
+                flt_val = flt[flt_off + k * KN + 1];
                 DIRECT_CONV_CAL_CORE_S1(in_val, flt_val, out_val[1]);
 #endif
 #if (KN > 2)
-                LOAD_FILTER(2, flt_val);
+                flt_val = flt[flt_off + k * KN + 2];
                 DIRECT_CONV_CAL_CORE_S1(in_val, flt_val, out_val[2]);
-                LOAD_FILTER(3, flt_val);
+                flt_val = flt[flt_off + k * KN + 3];
                 DIRECT_CONV_CAL_CORE_S1(in_val, flt_val, out_val[3]);
 #endif
                 UPDATE_REG(in_val);

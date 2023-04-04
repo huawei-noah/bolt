@@ -128,7 +128,7 @@ EE depthwise_pointwise_convolution_infer_forward_tmp_bytes_arm(TensorDesc inputD
             *bytes = ic * oh * ow;
             break;
         case DEPTHWISE_POINTWISE_CONVOLUTION_ALGORITHM_3X3S1P1:
-            *bytes = ic * oh * ow + ic * 8;
+            *bytes = ic * oh * ow + ic * 8 * OMP_NUM_THREADS;
             break;
         default: {
             ret = NOT_MATCH;

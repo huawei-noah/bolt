@@ -56,8 +56,7 @@ int transposeTest(int argc, char **argv, DataType dt)
         CHECK_STATUS(transpose(outputTensor1, p_inv, blankTensor, outputTensor2, &UT_CPU_ARCHINFO));
 
         // check
-        ut_check_v(input, get_ptr_from_tensor(outputTensor2, CPU_GENERAL), len, dt, 0.0001,
-            __FILE__, __LINE__);
+        ut_check_v(input, get_ptr_from_tensor(outputTensor2, CPU_GENERAL), len, dt, 0.0001);
     }
 
     double time_start = ut_time_ms();

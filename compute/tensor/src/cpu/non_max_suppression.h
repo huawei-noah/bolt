@@ -50,6 +50,7 @@ inline std::vector<I32> nms_pickedboxes(const std::vector<BoxRect> &boxes, F32 n
         areas[i] = width * height;
     }
     std::vector<I32> picked;
+    picked.reserve(n);
     for (I32 i = 0; i < n; i++) {
         const BoxRect &a = boxes[i];
         bool keep = true;

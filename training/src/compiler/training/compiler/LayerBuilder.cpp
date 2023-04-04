@@ -35,5 +35,4 @@ LayerMem BasicLayerBuilder::build(NetworkParameters& networkParameters) const
 {
     return mConstr(networkParameters, mParams);
 }
-
 } // namespace raul

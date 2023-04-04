@@ -60,12 +60,12 @@ public:
         if (this->p.group != 1) {
             return NOT_SUPPORTED;
         }
-        CHECK_STATUS(
-            channel_resize_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo));
-        if (check_tensors_image(inTensors)) {
-            CHECK_STATUS(set_tensors_image(outTensors, inTensors.size()));
+        EE ret =
+            channel_resize_infer_output_size(inTensors[0], this->p, outTensors[0], &this->archInfo);
+        if (ret == SUCCESS && check_tensors_image(inTensors)) {
+            ret = set_tensors_image(outTensors, inTensors.size());
         }
-        return SUCCESS;
+        return ret;
     }
 
     REGISTER_OCL_OPERATOR_RUN

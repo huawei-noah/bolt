@@ -1,5 +1,6 @@
 #!/bin/bash
 
+wget_flag=""      # when encountering network problems, please set wget_flag="--no-check-certificate"
 script_name=$0
 script_dir=$(cd `dirname ${script_name}` && pwd)
 current_dir=${PWD}
@@ -85,6 +86,8 @@ echo "[INFO] generate environment file to ${env_file}..."
 rm -rf ${env_file}
 
 echo "#!/bin/bash
+inner_script_dir=\$(cd -- \"\$( dirname -- \"\${BASH_SOURCE[0]}\" )\" &> /dev/null && pwd)
+
 cmake_env_options=\"\"
 " >> ${env_file}
 
@@ -92,12 +95,10 @@ CMAKE_OPTIONS="${CMAKE_OPTIONS} -DCMAKE_INSTALL_LIBDIR=lib"
 if [[ ${cmake_options} =~ USE_CAFFE=ON || ${cmake_options} =~ USE_ONNX=ON || ${cmake_options} =~ USE_FLOW=ON ]]; then
     PROTOC_ROOT=${work_dir}/protoc
     protobuf_version="3.14.0"
-    protobuf_cmake_options=""
-    if [[ ${target} =~ linux-aarch64 ]]; then
+    if [[ ${host} != ${target} && ${target} =~ linux-aarch64 ]]; then
         protobuf_version="3.1.0"
-    else
-        protobuf_cmake_options="-DWITH_PROTOC=${PROTOC_ROOT}/bin/protoc -Dprotobuf_BUILD_PROTOC_BINARIES=OFF"
     fi
+    protobuf_cmake_options="-DWITH_PROTOC=${PROTOC_ROOT}/bin/protoc -Dprotobuf_BUILD_PROTOC_BINARIES=OFF"
     # download prebuilt protoc
     if [ ! -f "${PROTOC_ROOT}/bin/protoc" ]; then
         echo "[INFO] build protoc in ${PROTOC_ROOT}..."
@@ -113,9 +114,11 @@ if [[ ${cmake_options} =~ USE_CAFFE=ON || ${cmake_options} =~ USE_ONNX=ON || ${c
         if [[ ${host} =~ macos-x86_64 ]] ; then
             protoc_platform="osx-x86_64"
         fi
+        if [[ ${host} =~ linux-aarch64 ]] ; then
+            protoc_platform="linux-aarch_64"
+        fi
         if [ ! -f "${script_dir}/sources/protoc-${protobuf_version}-${protoc_platform}.zip" ]; then
-	    echo "${script_dir}/sources/protoc-${protobuf_version}-${protoc_platform}.zip"
-            wget --no-check-certificate https://github.com/protocolbuffers/protobuf/releases/download/v${protobuf_version}/protoc-${protobuf_version}-${protoc_platform}.zip > ${log_file} || exit 1
+            wget ${wget_flag} https://github.com/protocolbuffers/protobuf/releases/download/v${protobuf_version}/protoc-${protobuf_version}-${protoc_platform}.zip > ${log_file} || exit 1
             cp protoc-${protobuf_version}-${protoc_platform}.zip ${script_dir}/sources/
         else
             cp ${script_dir}/sources/protoc-${protobuf_version}-${protoc_platform}.zip .
@@ -133,7 +136,7 @@ if [[ ${cmake_options} =~ USE_CAFFE=ON || ${cmake_options} =~ USE_ONNX=ON || ${c
         cd ${Protobuf_ROOT}
         if [ ! -d "./protobuf-${protobuf_version}" ]; then
             if [ ! -f "${script_dir}/sources/protobuf-${protobuf_version}.tar.gz" ]; then
-                wget --no-check-certificate https://github.com/protocolbuffers/protobuf/archive/v${protobuf_version}.tar.gz > ${log_file} || exit 1
+                wget ${wget_flag} https://github.com/protocolbuffers/protobuf/archive/v${protobuf_version}.tar.gz > ${log_file} || exit 1
                 mv v${protobuf_version}.tar.gz protobuf-${protobuf_version}.tar.gz
                 cp protobuf-${protobuf_version}.tar.gz ${script_dir}/sources/
             else
@@ -163,7 +166,7 @@ if [[ ${cmake_options} =~ USE_CAFFE=ON || ${cmake_options} =~ USE_ONNX=ON || ${c
         cd ../../
         rm -rf protobuf-${protobuf_version}.tar.gz protobuf-${protobuf_version}
     fi
-    echo "export Protobuf_ROOT=${Protobuf_ROOT}
+    echo "export Protobuf_ROOT=\${inner_script_dir}/${platform}/protobuf
 if [[ ! -d \"\${Protobuf_ROOT}/bin\" || ! -d \"\${Protobuf_ROOT}/lib\" ]]; then
     echo \"[ERROR] Protobuf not install success\"
     exit 1
@@ -183,7 +186,7 @@ if [[ ${cmake_options} =~ USE_TFLITE=ON ]]; then
         mkdir -p ${FlatBuffers_ROOT}
         cd ${FlatBuffers_ROOT}
         if [ ! -d "${script_dir}/sources/flatbuffers" ]; then
-            wget --no-check-certificate https://github.com/google/flatbuffers/archive/v1.12.0.zip > ${log_file} || exit 1
+            wget ${wget_flag} https://github.com/google/flatbuffers/archive/v1.12.0.zip > ${log_file} || exit 1
             unzip v1.12.0.zip > ${log_file} || exit 1
             cp -r flatbuffers-1.12.0/include .
             rm -rf v1.12.0.zip flatbuffers-1.12.0 
@@ -193,7 +196,7 @@ if [[ ${cmake_options} =~ USE_TFLITE=ON ]]; then
         fi
     fi
     echo "
-export FlatBuffers_ROOT=${FlatBuffers_ROOT}
+export FlatBuffers_ROOT=\${inner_script_dir}/${platform}/flatbuffers
 if [[ ! -d \"\${FlatBuffers_ROOT}/include/flatbuffers\" ]]; then
     echo \"[ERROR] FlatBuffers not install success\"
     exit 1
@@ -209,7 +212,7 @@ cmake_env_options=\"\${cmake_env_options} -DFlatBuffers_ROOT=\${FlatBuffers_ROOT
         mkdir -p ${TFLite_ROOT}
         cd ${TFLite_ROOT}
         if [ ! -d "${script_dir}/sources/tflite" ]; then
-            wget --no-check-certificate https://raw.githubusercontent.com/tensorflow/tensorflow/v1.15.0/tensorflow/lite/schema/schema_generated.h > ${log_file} || exit 1
+            wget ${wget_flag} https://raw.githubusercontent.com/tensorflow/tensorflow/v1.15.0/tensorflow/lite/schema/schema_generated.h > ${log_file} || exit 1
             mkdir include
             mkdir include/tensorflow
             mkdir include/tensorflow/lite
@@ -221,7 +224,7 @@ cmake_env_options=\"\${cmake_env_options} -DFlatBuffers_ROOT=\${FlatBuffers_ROOT
         fi
     fi
     echo "
-export TFLite_ROOT=${TFLite_ROOT}
+export TFLite_ROOT=\${inner_script_dir}/${platform}/tflite
 if [[ ! -f \"\${TFLite_ROOT}/include/tensorflow/lite/schema/schema_generated.h\" ]]; then
     echo \"[ERROR] TFLite not install success\"
     exit 1
@@ -239,8 +242,8 @@ if [[ ${cmake_options} =~ USE_GPU=ON ]]; then
         cd ${OpenCL_ROOT}
         rm -rf *
         cp -r ${script_dir}/sources/opencl/* . || exit 1
-        if [ ! -f "./include/CL/cl.h" ]; then
-            wget --no-check-certificate https://github.com/KhronosGroup/OpenCL-Headers/archive/v2020.06.16.zip > ${log_file} || exit 1
+        if [ ! -f "./include/CL/opencl.h" ]; then
+            wget ${wget_flag} https://github.com/KhronosGroup/OpenCL-Headers/archive/v2020.06.16.zip > ${log_file} || exit 1
             unzip v2020.06.16.zip > ${log_file} || exit 1
             mkdir -p include
             cp -r OpenCL-Headers-2020.06.16/CL include/
@@ -255,10 +258,10 @@ if [[ ${cmake_options} =~ USE_GPU=ON ]]; then
         rm -rf build src CMakeLists.txt
     fi
     echo "
-export OpenCL_ROOT=${OpenCL_ROOT}" >> ${env_file}
-    if [[ ! -f "${OpenCL_ROOT}/lib/libOpenCL.so" ]]; then
+export OpenCL_ROOT=\${inner_script_dir}/${platform}/opencl" >> ${env_file}
+    if [[ ! -f "${OpenCL_ROOT}/lib/*OpenCL*" ]]; then
         echo "
-if [[ ! -d \"\${OpenCL_ROOT}/include\" || ! -f \"\${OpenCL_ROOT}/lib/libOpenCL.so\" ]]; then
+if [[ ! -d \"\${OpenCL_ROOT}/include\" || \`ls ${OpenCL_ROOT}/lib/*OpenCL*\` == \"\" ]]; then
     echo \"[ERROR] OpenCL not install success\"
     exit 1
 fi
@@ -267,23 +270,23 @@ cmake_env_options=\"\${cmake_env_options} -DOpenCL_ROOT=\${OpenCL_ROOT}\"
     fi
 fi
 
-if [[ ${cmake_options} =~ BUILD_TEST=ON ]]; then
+if [[ ${cmake_options} =~ BUILD_EXAMPLE=ON ]]; then
     JPEG_ROOT=${work_dir}/jpeg
     # download and build jpeg
     if [ ! -d "${JPEG_ROOT}/lib" ]; then
         echo "[INFO] build jpeg in ${JPEG_ROOT}..."
         mkdir -p ${JPEG_ROOT}
         cd ${JPEG_ROOT}
-        if [ ! -d "./jpeg-9c" ]; then
-            if [ ! -f "${script_dir}/sources/jpegsrc.v9c.tar.gz" ]; then
-                wget --no-check-certificate http://www.ijg.org/files/jpegsrc.v9c.tar.gz > ${log_file} || exit 1
-                cp jpegsrc.v9c.tar.gz ${script_dir}/sources/
+        if [ ! -d "./jpeg-9e" ]; then
+            if [ ! -f "${script_dir}/sources/jpegsrc.v9e.tar.gz" ]; then
+                wget ${wget_flag} http://www.ijg.org/files/jpegsrc.v9e.tar.gz > ${log_file} || exit 1
+                cp jpegsrc.v9e.tar.gz ${script_dir}/sources/
             else
-                cp ${script_dir}/sources/jpegsrc.v9c.tar.gz .
+                cp ${script_dir}/sources/jpegsrc.v9e.tar.gz .
             fi
-            tar xzf jpegsrc.v9c.tar.gz > ${log_file} || exit 1
+            tar xzf jpegsrc.v9e.tar.gz > ${log_file} || exit 1
         fi
-        cd jpeg-9c
+        cd jpeg-9e
         if [ ! -f "./configure" ]; then
             ./autogen.sh || exit 1
         fi
@@ -291,10 +294,10 @@ if [[ ${cmake_options} =~ BUILD_TEST=ON ]]; then
         ${MAKE} -j${build_threads} >> ${log_file}
         ${MAKE} install >> ${log_file} || exit 1
         cd ..
-        rm -rf jpeg-9c jpegsrc.v9c.tar.gz
+        rm -rf jpeg-9c jpegsrc.v9e.tar.gz
     fi
     echo "
-export JPEG_ROOT=${JPEG_ROOT}
+export JPEG_ROOT=\${inner_script_dir}/${platform}/jpeg
 export LD_LIBRARY_PATH=\${JPEG_ROOT}/lib:\$LD_LIBRARY_PATH
 if [[ ! -d \"\${JPEG_ROOT}/lib\" ]]; then
     echo \"[ERROR] Jpeg not install success\"
@@ -314,7 +317,7 @@ if [[ ${cmake_options} =~ USE_CAFFE=ON || ${cmake_options} =~ USE_ONNX=ON || ${c
         cd ${JSONCPP_ROOT}
         if [ ! -d "./jsoncpp-1.9.4" ]; then
             if [ ! -f "${script_dir}/sources/jsoncpp-1.9.4.zip" ]; then
-                wget --no-check-certificate https://github.com/open-source-parsers/jsoncpp/archive/refs/tags/1.9.4.zip > ${log_file} || exit 1
+                wget ${wget_flag} https://github.com/open-source-parsers/jsoncpp/archive/refs/tags/1.9.4.zip > ${log_file} || exit 1
                 mv 1.9.4.zip jsoncpp-1.9.4.zip || exit 1
                 cp jsoncpp-1.9.4.zip ${script_dir}/sources/
             else
@@ -331,7 +334,7 @@ if [[ ${cmake_options} =~ USE_CAFFE=ON || ${cmake_options} =~ USE_ONNX=ON || ${c
         rm -rf jsoncpp-1.9.4*
     fi
     echo "
-export JSONCPP_ROOT=${JSONCPP_ROOT}
+export JSONCPP_ROOT=\${inner_script_dir}/${platform}/jsoncpp
 export LD_LIBRARY_PATH=\${JSONCPP_ROOT}/lib:\$LD_LIBRARY_PATH
 if [[ ! -d \"\${JSONCPP_ROOT}/lib\" ]]; then
     echo \"[ERROR] Jsoncpp not install success\"
@@ -350,7 +353,7 @@ if [[ ${cmake_options} =~ USE_FLOW=ON && ${cmake_options} =~ BUILD_TEST=ON ]]; t
         cd ${FFTS_ROOT}
         if [ ! -d "./ffts-master" ]; then
             if [ ! -f "${script_dir}/sources/ffts-master.zip" ]; then
-                wget --no-check-certificate https://codeload.github.com/anthonix/ffts/zip/master > ${log_file} || exit 1
+                wget ${wget_flag} https://codeload.github.com/anthonix/ffts/zip/master > ${log_file} || exit 1
 		mv master ffts-master.zip || exit 1
                 cp ffts-master.zip ${script_dir}/sources/
             else
@@ -384,7 +387,7 @@ if [[ ${cmake_options} =~ USE_FLOW=ON && ${cmake_options} =~ BUILD_TEST=ON ]]; t
         rm -rf ffts-master*
     fi
     echo "
-export FFTS_ROOT=${FFTS_ROOT}
+export FFTS_ROOT=\${inner_script_dir}/${platform}/ffts
 export LD_LIBRARY_PATH=\${FFTS_ROOT}/lib:\$LD_LIBRARY_PATH
 if [[ ! -d \"\${FFTS_ROOT}/lib\" ]]; then
     echo \"[ERROR] FFTS not install success\"
@@ -394,7 +397,7 @@ cmake_env_options=\"\${cmake_env_options} -DFFTS_ROOT=\${FFTS_ROOT}\"
 " >> ${env_file}
 fi
 
-if [[ ${cmake_options} =~ BUILD_TEST=ON && "${CC}" != "arm-apple-darwin11-clang" ]]; then
+if [[ ${cmake_options} =~ BUILD_TEST=ON && ${cmake_options} =~ USE_OPENCV=ON && "${CC}" != "arm-apple-darwin11-clang" ]]; then
     OpenCV_ROOT=${work_dir}/opencv
     search_opencv_cmake=""
     if [[ -d ${OpenCV_ROOT} ]]; then
@@ -412,7 +415,7 @@ if [[ ${cmake_options} =~ BUILD_TEST=ON && "${CC}" != "arm-apple-darwin11-clang"
                 fi
             fi
             if [ ! -f "${script_dir}/sources/opencv-4.5.2.zip" ]; then
-                wget --no-check-certificate https://github.com/opencv/opencv/archive/refs/tags/4.5.2.zip > ${log_file} || exit 1
+                wget ${wget_flag} https://github.com/opencv/opencv/archive/refs/tags/4.5.2.zip > ${log_file} || exit 1
                 mv 4.5.2.zip opencv-4.5.2.zip || exit 1
                 cp opencv-4.5.2.zip ${script_dir}/sources/
             else
@@ -469,7 +472,8 @@ if [[ ${cmake_options} =~ USE_SECURE_C=ON ]]; then
         if [ ! -d "./huawei_secure_c" ]; then
             if [ ! -f "${script_dir}/sources/huawei_secure_c-master.zip" ]; then
                 wget --no-check-certificate  > ${log_file} || exit 1
-                git clone https://gitee.com/Janisa/huawei_secure_c || exit 1
+                echo "please download <huawei_secure_c> from a safety website."
+                exit 1
             else
                 cp ${script_dir}/sources/huawei_secure_c-master.zip . || exit 1
                 unzip huawei_secure_c-master.zip > ${log_file} || exit 1
@@ -488,7 +492,7 @@ if [[ ${cmake_options} =~ USE_SECURE_C=ON ]]; then
         rm -rf huawei_secure_c
     fi
     echo "
-export SecureC_ROOT=${SecureC_ROOT}" >> ${env_file}
+export SecureC_ROOT=\${inner_script_dir}/${platform}/secure_c" >> ${env_file}
     if [[ ! -d "${SecureC_ROOT}/include" || ! -d "${SecureC_ROOT}/lib" ]]; then
         echo "
 if [[ ! -d \"\${SecureC_ROOT}/include\" || ! -d \"\${SecureC_ROOT}/lib\" ]]; then

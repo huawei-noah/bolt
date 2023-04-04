@@ -770,8 +770,11 @@ class Operators:
         results = np.array(results)
         shape = results.shape
         results = results.reshape([1, shape[0], -1])
+        state = np.array(state)
+        state = state.reshape([1, -1])
         Operators.print_data(results, name)
-        return results
+        Operators.print_data(state, "state")
+        return results, state
 
     @staticmethod
     def bi_rnn(mode, inputs, w, b, projection, projection_bias, zoneout_cell, zoneout_output, name):
@@ -793,39 +796,47 @@ class Operators:
         else:
             fpb = projection_bias[0]
             bpb = projection_bias[1]
-        inputs = np.reshape(inputs, [-1, inputs.shape[-1]])
-        fw_state_length = fw.shape[0] // 4
-        if (fp is not None):
-            fw_state_length += fp.shape[0]
-        else:
-            fw_state_length += fw.shape[0] // 4
-        bw_state_length = bw.shape[0] // 4
-        if (bp is not None):
-            bw_state_length += bp.shape[0]
-        else:
-            bw_state_length += bw.shape[0] // 4
-        fw_state = np.zeros([1, fw_state_length])
-        bw_state = np.zeros([1, bw_state_length])
-        loops = inputs.shape[0]
-        fw_results = []
-        for i in range(loops):
-            fw_result, fw_state = Operators.rnn(mode, inputs[i], fw_state, fw, fb, fp, fpb,
-                zoneout_cell, zoneout_output, None, None, False)
-            fw_results.append(fw_result)
-        bw_results = []
-        for i in range(loops):
-            bw_result, bw_state = Operators.rnn(mode, inputs[loops-1-i], bw_state, bw, bb, bp, bpb,
-                zoneout_cell, zoneout_output, None, None, False)
-            bw_results.append(bw_result)
+        batch = inputs.shape[0]
+        loops = inputs.shape[1]
         results = []
-        for i in range(loops):
-            result = np.concatenate([fw_results[i], bw_results[loops-1-i]], 1)
-            results.append(result)
+        state = []
+        for n in range(batch):
+            sx = np.reshape(inputs[n], [-1, inputs.shape[-1]])
+            fw_state_length = fw.shape[0] // 4
+            if (fp is not None):
+                fw_state_length += fp.shape[0]
+            else:
+                fw_state_length += fw.shape[0] // 4
+            bw_state_length = bw.shape[0] // 4
+            if (bp is not None):
+                bw_state_length += bp.shape[0]
+            else:
+                bw_state_length += bw.shape[0] // 4
+            fw_state = np.zeros([1, fw_state_length])
+            bw_state = np.zeros([1, bw_state_length])
+            fw_results = []
+            for i in range(loops):
+                fw_result, fw_state = Operators.rnn(mode, sx[i], fw_state, fw, fb, fp, fpb,
+                    zoneout_cell, zoneout_output, None, None, False)
+                fw_results.append(fw_result)
+            bw_results = []
+            for i in range(loops):
+                bw_result, bw_state = Operators.rnn(mode, sx[loops-1-i], bw_state, bw, bb, bp, bpb,
+                    zoneout_cell, zoneout_output, None, None, False)
+                bw_results.append(bw_result)
+            tmp = []
+            for i in range(loops):
+                result = np.concatenate([fw_results[i], bw_results[loops-1-i]], 1)
+                tmp.append(result)
+            results.append(np.array(tmp))
+            state.append([fw_state, bw_state])
         results = np.array(results)
-        shape = results.shape
-        results = results.reshape([1, shape[0], -1])
+        results = results.reshape([batch, loops, -1])
+        state = np.array(state)
+        state = state.reshape([batch, -1])
         Operators.print_data(results, name)
-        return results
+        Operators.print_data(state, "state")
+        return results, state
 
     @staticmethod
     def argmax(inputs, axis, name):
@@ -989,5 +1000,37 @@ class Operators:
         if (not Operators.calculate):
             return None;
         x = np.clip(_x, min_value, max_value)
+        Operators.print_data(x, name)
+        return x
+
+    @staticmethod
+    def cum(_x, operation, axis, exclusive, reverse, name):
+        if (not Operators.calculate):
+            return None;
+        if (reverse):
+            print("[ERROR] not support cum reverse")
+            return None
+        if (operation == 0):
+            x = np.cumprod(_x, axis)
+            if (exclusive):
+                x = x / _x
+        elif (operation == 1):
+            x = np.cumsum(_x, axis)
+            if (exclusive):
+                x = x - _x
+        else:
+            print("[ERROR] not support cum type:%d" % (operation))
+            return None
+        Operators.print_data(x, name)
+        return x
+
+    @staticmethod
+    def onehot(_x, axis, depth, off_value, on_value, name):
+        if (not Operators.calculate):
+            return None;
+        if (off_value != 0 or on_value != 1):
+            print("[ERROR] onehot only support 0/1")
+            exit(1)
+        x = np.eye(depth)[_x]
         Operators.print_data(x, name)
         return x

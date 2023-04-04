@@ -102,17 +102,7 @@ inline EE eltwise_checkpara_mali(GCLHandle_t handle,
 EE eltwise_infer_forward_tmp_bytes_mali(
     std::vector<TensorDesc> inputDesc, std::vector<GCLMemDesc> gclmemInputDesc, U32 *bytes)
 {
-    EE ret = SUCCESS;
-    switch (inputDesc[0].dt) {
-        case DT_F16: {
-            ret = eltwise_infer_forward_tmp_bytes_mali_fp16(inputDesc, gclmemInputDesc, bytes);
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return eltwise_infer_forward_tmp_bytes_mali_fp16(inputDesc, gclmemInputDesc, bytes);
 }
 
 EE eltwise_mali(GCLHandle_t handle,
@@ -123,17 +113,6 @@ EE eltwise_mali(GCLHandle_t handle,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
-    EE ret = SUCCESS;
     CHECK_STATUS(eltwise_checkpara_mali(handle, inputDesc, input, eltwiseDesc, outputDesc, output));
-    switch (inputDesc[0].dt) {
-        case DT_F16: {
-            ret = eltwise_mali_fp16(
-                handle, inputDesc, input, tmpbuf, outputDesc, output, eltwiseDesc);
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return eltwise_mali_fp16(handle, inputDesc, input, tmpbuf, outputDesc, output, eltwiseDesc);
 }

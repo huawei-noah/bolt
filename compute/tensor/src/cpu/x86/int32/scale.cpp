@@ -54,7 +54,10 @@ static EE scale_nchw_int32(
                     src = n * elements_per_channel + i;
                 }
                 __m256i in_vec = _mm256_loadu_si256((const __m256i *)(input + src));
-                __m256i out_vec = _mm256_add_epi32(_mm256_mul_epi32(alpha_vec, in_vec), beta_vec);
+                if (alpha != nullptr) {
+                    in_vec = _mm256_mul_epi32(alpha_vec, in_vec);
+                }
+                __m256i out_vec = _mm256_add_epi32(in_vec, beta_vec);
                 _mm256_storeu_si256((__m256i *)(output + dst), out_vec);
                 dst += 8;
             }

@@ -26,7 +26,6 @@ namespace raul
  * layer returns global minimum.
  *
  * @see
- * https://www.tensorflow.org/api_docs/python/tf/math/reduce_min
  */
 using ReduceMinLayer = ReduceExtremumLayer<raul::Min>;
 

@@ -30,32 +30,15 @@ public:
 
     void run() override
     {
-        Tensor inputATensor = this->inputTensors[0];
-        Tensor inputBTensor;
-        if (this->weightTensors.size() > 0) {
-            inputBTensor = this->weightTensors[0];
-        } else {
-            inputBTensor = this->inputTensors[1];
-        }
-        Tensor outputTensor = this->outputTensors[0];
-        CHECK_STATUS(check(inputATensor, inputBTensor, this->p, outputTensor, &this->archInfo));
+        CHECK_STATUS(check(this->inputTensors[0], this->inputTensors[1], this->p,
+            this->outputTensors[0], &this->archInfo));
     }
 
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
-        return check_infer_output_size(inTensors, outTensors[0], &this->archInfo);
-    }
-
-    EE infer_weight_desc() override
-    {
-        auto curOpWs = this->get_weightspec();
-        if (curOpWs.bytes_of_weight > 0) {
-            this->weightTensors = std::vector<Tensor>(1);
-            this->weightTensors[0].resize(
-                tensor2d(curOpWs.mdt, 1, curOpWs.bytes_of_weight / bytesOf(curOpWs.mdt)));
-        }
-        return SUCCESS;
+        return check_infer_output_size(
+            inTensors[0], inTensors[1], this->p, outTensors[0], &this->archInfo);
     }
 };
 

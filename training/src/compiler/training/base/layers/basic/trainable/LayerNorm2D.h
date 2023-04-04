@@ -26,7 +26,6 @@ namespace raul
  * @brief Layer Normalization
  *
  * An alternative technique to BatchNorm to normalize the distribution of layer outputs that performs exactly the same during training and inference.
- * @see https://arxiv.org/abs/1607.06450
  * This is a cummulative implementation - mean and variance are calculated along width and height
  * Weights and biases still have size = width
  */

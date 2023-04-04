@@ -38,8 +38,9 @@ void AffineQuantizer::quantize(TensorItr begin, TensorItr end)
 
 void AffineQuantizer::dequantize(TensorItr begin, TensorItr end)
 {
-    assert(mScale > 0.0_dt);
-    std::transform(begin, end, begin, [&](dtype x_dt) -> dtype {
+ 
+ if(mScale<=  0.0_dt){exit(0);}   
+	std::transform(begin, end, begin, [&](dtype x_dt) -> dtype {
         x_dt /= mScale;
         x_dt -= mOffset;
         return x_dt;

@@ -27,13 +27,10 @@ namespace raul
  * by using soft targets that are a weighted average of the hard targets and the uniform distribution over labels.
  * Smoothing the labels in this way prevents the network from becoming over-confident.
  *
- * Implementation accroding to one in ransformer (https://nlp.seas.harvard.edu/2018/04/03/attention.html#label-smoothing):
- *
  * Zero input vectors are a special case and are kept zero.
  *
  * Does nothing in Test Mode (as if smoothing is 0)
  *
- * @see https://arxiv.org/abs/1906.02629
  */
 class LabelSmoothing : public BasicLayer
 {

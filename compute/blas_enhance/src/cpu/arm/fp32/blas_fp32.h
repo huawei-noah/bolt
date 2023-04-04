@@ -14,85 +14,25 @@
 #ifndef _H_BLAS_FP32
 #define _H_BLAS_FP32
 
-#include "sys.h"
-
-#include "uni.h"
-#include "error.h"
 #include "tensor_desc.h"
+#include "uni.h"
 #include "arm_neon_expand.h"
-
-EE matrix_vector_multiply_transform_weight_fp32(TensorDesc desc, F32 *src, F32 *dst);
-
-void mvm_col_fp32(U32 row, U32 col, F32 *matrix, F32 *vector, F32 *result);
-
-void mvm_row_fp32(U32 row, U32 col, F32 *matrix, F32 *vector, F32 *result);
 
 EE mvm_fp32(U32 row, U32 col, DataFormat df, F32 *matrix, F32 *vector, F32 *result);
 
-void matrix_matrix_multiply_tmp_bytes_fp32(
-    U32 row1, U32 col1, U32 row2, U32 col2, DataType dt, U32 *bytes);
+void matrix_matrix_multiply_tmp_bytes_fp32(U32 M, U32 N, U32 K, DataFormat bdf, U32 *bytes);
+
+EE mmm_fp32(int M, int N, int K, bool transposeA, F32 *matrix1, F32 *matrix2, F32 *tmp, F32 *result);
+
+EE axpby_fp32(I32 len, F32 a, const F32 *x, F32 b, F32 *y);
+
+// preorder weight for mvm/mmm
+EE matrix_vector_multiply_transform_weight_fp32(TensorDesc desc, F32 *src, F32 *dst);
+
+void matrix_matrix_multiply_transform_rhs_bytes_fp32(
+    U32 M, U32 K, DataFormat bdf, U32 *bytes, U32 *rhsBytes);
 
 EE matrix_matrix_multiply_transform_rhsN_fp32(TensorDesc desc, F32 *src, F32 *dst);
 
 EE matrix_matrix_multiply_transform_rhsT_fp32(TensorDesc desc, F32 *src, F32 *dst);
-
-#ifdef __aarch64__
-EE mmm_fp32_V8(
-    int M, int N, int K, bool transposeA, F32 *matrix1, F32 *matrix2, F32 *tmp, F32 *result);
-#else
-EE mmm_fp32_V7(
-    int M, int N, int K, bool transposeA, F32 *matrix1, F32 *matrix2, F32 *tmp, F32 *result);
-#endif
-
-EE axpby_fp32(U32 len, F32 a, const F32 *x, F32 b, F32 *y);
-
-inline void matrix1_trans(U32 size, U32 blockK, U32 K, F32 *src, F32 *dst)
-{
-    F32 *src1 = src;
-    for (U32 i = 0; i < blockK; i++) {
-        for (U32 j = 0; j < size; j++) {
-            src1 = src + j * K;
-            if (i % 16 == 0) {
-                __builtin_prefetch(src1 + 16);
-            }
-            *dst++ = *(src1 + i);
-        }
-    }
-}
-
-inline void matrix2_trans(U32 size, U32 blockK, U32 M, F32 *src, F32 *dst)
-{
-    for (U32 i = 0; i < blockK; i++) {
-        if (i % 16 == 0) {
-            __builtin_prefetch(src + 16);
-        }
-        UNI_MEMCPY(dst, src, size * sizeof(F32));
-        dst += size;
-        src += M;
-    }
-}
-
-inline void mvm_row_tail(U32 N, U32 K, F32 *matrix, F32 *vector, F32 *result)
-{
-    float32x4_t vec, res, mat;
-    U32 KTail = K % 4;
-    U32 KInner = K - KTail;
-
-    for (U32 i = 0; i < N; i++) {
-        res = vdupq_n_f32(0);
-
-        for (U32 j = 0; j < KInner; j += 4) {
-            vec = vld1q_f32(&vector[j]);
-            mat = vld1q_f32(&matrix[j + K * i]);
-            res = vfmaq_f32(res, vec, mat);
-        }
-        result[i] += vaddvq_f32(res);
-
-        if (KTail != 0) {
-            for (U32 p = 0; p < KTail; p++) {
-                result[i] += vector[p + KInner] * matrix[KInner + p + K * i];
-            }
-        }
-    }
-}
 #endif

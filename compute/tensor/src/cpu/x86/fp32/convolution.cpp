@@ -24,18 +24,54 @@ EE convolution_infer_forward_tmp_bytes_fp32(TensorDesc inputDesc,
     if (nullptr == bytes) {
         CHECK_STATUS(NULL_POINTER);
     }
-    DataType idt, fdt, odt;
-    DataFormat idf, fdf, odf;
-    U32 in, ic, ih, iw;
-    U32 fn, fc, fh, fw;
-    U32 on, oc, oh, ow;
-    CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
-    CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
-    CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
+
     U32 paddingT = convParamSpec.pad_top;
     U32 paddingB = convParamSpec.pad_bottom;
     U32 paddingL = convParamSpec.pad_left;
     U32 paddingR = convParamSpec.pad_right;
+    U32 paddingF = convParamSpec.pad_before;
+    U32 paddingA = convParamSpec.pad_after;
+    U32 strideH = convParamSpec.stride_h;
+    U32 strideW = convParamSpec.stride_w;
+    U32 strideT = convParamSpec.stride_t;
+    U32 dilateH = convParamSpec.dilatedRate_h;
+    U32 dilateW = convParamSpec.dilatedRate_w;
+    U32 dilateT = convParamSpec.dilatedRate_t;
+
+    DataType idt, fdt, odt;
+    DataFormat idf, fdf, odf;
+    U32 in, ic, it, ih, iw;
+    U32 fn, fc, ft, fh, fw;
+    U32 on, oc, ot, oh, ow;
+    if (tensorIs4d(inputDesc)) {
+        CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+        CHECK_STATUS(tensor4dGet(filterDesc, &fdt, &fdf, &fn, &fc, &fh, &fw));
+        CHECK_STATUS(tensor4dGet(outputDesc, &odt, &odf, &on, &oc, &oh, &ow));
+        it = ft = 1;
+    } else if (tensorIs5d(inputDesc)) {
+        CHECK_STATUS(tensor5dGet(inputDesc, &idt, &idf, &in, &ic, &it, &ih, &iw));
+        CHECK_STATUS(tensor5dGet(filterDesc, &fdt, &fdf, &fn, &fc, &ft, &fh, &fw));
+        CHECK_STATUS(tensor5dGet(outputDesc, &odt, &odf, &on, &oc, &ot, &oh, &ow));
+        if ((ft != 1 && fh != 1 && fw != 1) ||
+            (paddingF != 0) ||
+            (paddingA != 0) ||
+            (dilateT > 1) ||
+            (strideT > 1))
+        {
+            return NOT_SUPPORTED;
+        }
+        if (ft == 1) {
+            ih *= it;
+            oh *= ot;
+        } else {
+            iw *= ih;
+            ow *= oh;
+            ih = it;
+            oh = ot;
+        }
+    } else {
+        return NOT_SUPPORTED;
+    }
 
     U32 ih_pad = ih + paddingT + paddingB;
     U32 iw_pad = iw + paddingL + paddingR;
@@ -52,6 +88,9 @@ EE convolution_infer_forward_tmp_bytes_fp32(TensorDesc inputDesc,
             U32 strideH = convParamSpec.stride_h;
             U32 strideW = convParamSpec.stride_w;
             *bytes = oc + 32;
+            if ((idf == DF_NCHW) || (idf == DF_MTK) || (idf == DF_NORMAL)) {
+                *bytes += in * icPadding * ih * iw * bytesOf(idt);
+            }
             if (strideH > 1 || strideW > 1) {
                 U32 noStrideH = (ih + strideH - 1) / strideH;
                 U32 noStrideW = (iw + strideW - 1) / strideW;
@@ -66,7 +105,13 @@ EE convolution_infer_forward_tmp_bytes_fp32(TensorDesc inputDesc,
             U32 wSize = 3;
             U32 blockIcDim = 32;
             U32 blockOcDim = 32;
-            *bytes = 36 * blockIcDim * ((ow + 3) / 4 + 1) + (36 * blockOcDim + 36 * 36) * wSize;
+            *bytes = (36 * blockOcDim + 36 * 36) * wSize;
+            *bytes *= OMP_NUM_THREADS;
+#ifdef _USE_OPENMP
+            *bytes += 36 * blockIcDim * ((ow + 3) / 4 + 1) * ((oh + 3) / 4 + 1);
+#else
+            *bytes += 36 * blockIcDim * ((ow + 3) / 4 + 1);
+#endif
             break;
         }
         default:
@@ -121,9 +166,9 @@ EE convolution_fp32(TensorDesc inputDesc,
     if (!(odf == DF_NCHWC8)) {
         CHECK_STATUS(NOT_MATCH);
     }
-    if (!(ic == fc && oc == fn)) {
-        CHECK_STATUS(NOT_MATCH);
-    }
+    // if (!(ic == fc && oc == fn)) {
+    //     CHECK_STATUS(NOT_MATCH);
+    // }
 
     EE ret = SUCCESS;
     switch (algorithm) {

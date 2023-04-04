@@ -16,21 +16,6 @@
 
 #include "memory.hpp"
 
-inline void *CPUMemoryAlignedAlloc(size_t alignment, size_t bytes)
-{
-    void *ptr = (void **)UNI_OPERATOR_NEW(bytes + sizeof(void *) + alignment - 1);
-    CHECK_REQUIREMENT(ptr != NULL);
-    void **aligned_ptr =
-        (void **)(((uintptr_t)(ptr) + sizeof(void *) + alignment - 1) & ~(alignment - 1));
-    aligned_ptr[-1] = ptr;
-    return aligned_ptr;
-}
-
-inline void CPUMemoryAlignedfree(void *aligned_ptr)
-{
-    UNI_OPERATOR_DELETE(((void **)aligned_ptr)[-1]);
-}
-
 class CpuMemory : public Memory {
 public:
     CpuMemory()
@@ -67,19 +52,14 @@ public:
 
     void alloc() override
     {
-        auto size = this->bytes();
+        U32 size = this->bytes();
         if (!this->allocated && size > this->capacitySize) {
             this->capacitySize = size;
-            try {
 #ifndef _USE_X86
-                this->val = std::shared_ptr<U8>((U8 *)UNI_OPERATOR_NEW(size), UNI_OPERATOR_DELETE);
+            this->val = std::shared_ptr<U8>((U8 *)UNI_OPERATOR_NEW(size), UNI_OPERATOR_DELETE);
 #else
-                this->val = std::shared_ptr<U8>(
-                    (U8 *)CPUMemoryAlignedAlloc(64, size), CPUMemoryAlignedfree);
+            this->val = std::shared_ptr<U8>((U8 *)UNI_ALIGNED_MALLOC(64, size), UNI_ALIGNED_FREE);
 #endif
-            } catch (const std::bad_alloc &e) {
-                UNI_ERROR_LOG("CPU memory alloc %d bytes failed.\n", (int)size);
-            }
         }
         this->allocated = true;
     }
@@ -179,16 +159,25 @@ public:
 
     std::string string(U32 num, F32 factor) override
     {
-        U32 capacityNum = this->capacitySize / bytesOf(this->desc.dt);
-        std::string line = "desc:" + tensorDesc2Str(this->desc) + " data:";
-        for (U32 i = 0; i < num && i < capacityNum; i++) {
-            line = line + std::to_string(this->element(i) / factor) + " ";
+        std::string line = "desc:" + tensorDesc2Str(this->desc);
+        if (num > 0) {
+            line += " data:";
+            U32 capacityNum = this->capacitySize / bytesOf(this->desc.dt);
+            U32 length = UNI_MIN(tensorNumElements(this->desc), capacityNum);
+            std::vector<F32> tmp(length);
+            transformToFloat(this->desc.dt, this->get_ptr(), tmp.data(), length, factor);
+            F32 sum = 0;
+            for (U32 i = 0; i < length; i++) {
+                sum += tmp[i];
+                if (i < num) {
+                    line += std::to_string(tmp[i]) + " ";
+                }
+            }
+            line += " sum:" + std::to_string(sum);
         }
-        double sum = 0;
-        for (U32 i = 0; i < UNI_MIN(tensorNumElements(this->desc), capacityNum); i++) {
-            sum += this->element(i) / factor;
-        }
-        line += " sum:" + std::to_string(sum);
+#ifdef _USE_MEM_CHECK
+        line += " ptr:" + ptr2Str(this->val.get());
+#endif
         return line;
     }
 

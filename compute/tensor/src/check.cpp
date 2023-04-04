@@ -34,7 +34,7 @@ EE check(Tensor inputTensorA,
     void *output = get_ptr_from_tensor(outputTensor, arch);
     EE ret = NOT_SUPPORTED;
     if (IS_CPU(arch)) {
-#ifdef _USE_GENERAL
+#ifdef _USE_CPU
         ret = check_cpu(inputDescA, inputA, inputDescB, inputB, p, outputDesc, output);
 #endif
 #ifdef _USE_GPU
@@ -46,20 +46,47 @@ EE check(Tensor inputTensorA,
     return ret;
 }
 
-EE check_infer_output_size(
-    std::vector<Tensor *> inputTensor, Tensor *outputTensor, ArchInfo_t archInfo)
+EE check_infer_output_size(Tensor *inputTensorA,
+    Tensor *inputTensorB,
+    CheckParamSpec p,
+    Tensor *outputTensor,
+    ArchInfo_t archInfo)
 {
     if (outputTensor == nullptr) {
         CHECK_STATUS(NULL_POINTER);
     }
-    TensorDesc outputDesc = inputTensor[0]->get_desc();
-    if (inputTensor.size() > 1 && inputTensor[0]->length() < inputTensor[1]->length()) {
-        outputDesc = inputTensor[1]->get_desc();
+    TensorDesc desc0 = inputTensorA->get_desc();
+    TensorDesc desc1 = inputTensorB->get_desc();
+    TensorDesc outputDesc = desc0;
+    for (U32 i = 0; i < UNI_MIN(desc0.nDims, desc1.nDims); i++) {
+        int max_value = UNI_MAX(desc0.dims[i], desc1.dims[i]);
+        int min_value = UNI_MIN(desc0.dims[i], desc1.dims[i]);
+        if (min_value == 1) {
+            desc0.dims[i] = max_value;
+        } else {
+            desc0.dims[i] = min_value;
+        }
     }
+    if (desc0.nDims < desc1.nDims) {
+        for (U32 i = desc0.nDims; i < desc1.nDims; i++) {
+            desc0.dims[i] = desc1.dims[i];
+        }
+        desc0.nDims = desc1.nDims;
+    }
+    outputDesc = desc0;
     outputDesc.dt = DT_U8;
     if (IS_GPU(archInfo->arch)) {
         outputDesc.dt = DT_I32;
     }
+    EE ret = SUCCESS;
+#ifdef _USE_CPU
+    desc0 = inputTensorA->get_desc();
+    if (IS_CPU(archInfo->arch) && tensorIsShape(desc0) && tensorIsShape(desc1) &&
+        tensorIsShape(outputDesc)) {
+        ret = check_cpu(desc0, desc0.dims + desc0.nDims, desc1, desc1.dims + desc1.nDims, p,
+            outputDesc, outputDesc.dims + outputDesc.nDims);
+    }
+#endif
     outputTensor->resize(outputDesc);
-    return SUCCESS;
+    return ret;
 }

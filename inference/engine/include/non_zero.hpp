@@ -22,10 +22,11 @@ public:
     {
         this->dt = dt;
     }
-
+    ~NonZero(){}
     OperatorType get_type() override
     {
         return OT_NonZero;
     }
+    
 };
 #endif  // _NON_ZERO_H

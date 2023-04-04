@@ -28,8 +28,6 @@ namespace raul
  * beyond the last position are re-introduced at the first position or
  * can be replaced by specified value.
  *
- * @see
- * https://pytorch.org/docs/master/generated/torch.roll.html?highlight=roll#torch.roll
  */
 class RollLayer : public BasicLayer
 {

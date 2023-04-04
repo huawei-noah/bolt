@@ -58,8 +58,8 @@ int main(int argc, char *argv[])
     Graph_t *graph = NULL;
     const char *modelPath = "./lenet_sim_train.bolt";
     int target_size = 10;
-    create_general_training_model_from_bolt(
-        &graph, modelPath, batch_size, target_size, loss_type, false, nullptr, 0, nullptr);
+    create_graph_from_bolt(
+        modelPath, &graph, loss_type, batch_size, nullptr, 0, nullptr, target_size);
 
     // Second step: create optimizer
     // Current plan: create a simple sgd optimizer
@@ -83,7 +83,9 @@ int main(int argc, char *argv[])
     }
 
     // Fourth step: serialize the updated model
-    save_training_model(graph, modelPath, false);
+    save_graph(graph, modelPath, "./lenet_finetune.bolt");
+    delete_graph(graph);
+    delete_optimizer(sgd_optimizer);
     free(labels_ptr);
     free(images_ptr);
     return 0;

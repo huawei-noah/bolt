@@ -13,7 +13,6 @@
 
 #include <stdio.h>
 #include <string.h>
-#include "secure_c_wrapper.h"
 #include "../../examples/c_api/c_test.h"
 
 int main(int argc, char *argv[])
@@ -70,7 +69,7 @@ int main(int argc, char *argv[])
                     name = "state2";
                 } else {
                     printf("[ERROR] can not build output->input map for %s.\n", inputName[j]);
-                    exit(1);
+                    return 1;
                 }
                 int stateId = -1;
                 for (int k = 0; k < outputNum; k++) {
@@ -82,7 +81,7 @@ int main(int argc, char *argv[])
                 if (stateId == -1) {
                     printf("[ERROR] can not find last output %s for next input %s\n", name,
                         inputName[j]);
-                    exit(1);
+                    return 1;
                 }
                 if (i == 0) {
                     inputData[j] = lastOutputData[stateId];

@@ -40,7 +40,7 @@ EE depthwise_pointwise_convolution_transform_filter_x86(TensorDesc dwFilterDesc,
             break;
         }
 #endif
-#ifdef _USE_INT8
+#ifdef _USE_AVX512_VNNI
         case DT_I8: {
             ret = depthwise_pointwise_convolution_transform_filter_int8(dwFilterDesc,
                 (INT8 *)dwFilter, pwFilterDesc, (INT8 *)pwFilter, algorithm, dwFtmDesc,
@@ -104,7 +104,7 @@ EE depthwise_pointwise_convolution_x86(TensorDesc inputDesc,
             break;
         }
 #endif
-#ifdef _USE_INT8
+#ifdef _USE_AVX512_VNNI
         case DT_I8: {
             ret = depthwise_pointwise_convolution_int8(newInputDesc, (UINT8 *)newInput, (F32 *)eltwiseInput, dwFilterDesc,
                 (const INT8 *)dwFilter, pwFilterDesc, (const INT8 *)pwFilter, convParamSpec,

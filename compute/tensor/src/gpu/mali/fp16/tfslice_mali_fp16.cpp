@@ -12,10 +12,11 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "gpu/mali/fp16/tfslice_mali_fp16.h"
+#include "gpu/mali/cl/kernel_option/tfslice_opt.h"
 
 inline EE tfslice_checkpara_mali_fp16(TensorDesc inputDesc, TensorDesc outputDesc)
 {
-    if (inputDesc.dt != DT_F16 && inputDesc.dt != outputDesc.dt) {
+    if (inputDesc.dt != outputDesc.dt) {
         return NOT_SUPPORTED;
     }
     return SUCCESS;
@@ -29,11 +30,12 @@ inline EE tfslice_core_mali_fp16(GCLHandle_t handle,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
+    DataType dt;
     U32 iw, ih, ic, in;
     U32 ow, oh, oc, on;
     U32 iw_str, ih_str, ic_str, iw_off, ih_off, i_off;
     U32 ow_str, oh_str, oc_str, ow_off, oh_off, o_off;
-    CHECK_STATUS(gclmem_get_desc_dim(input->desc, NULL, NULL, &in, &ic, &ih, &iw));
+    CHECK_STATUS(gclmem_get_desc_dim(input->desc, &dt, NULL, &in, &ic, &ih, &iw));
     CHECK_STATUS(gclmem_get_desc_dim(output->desc, NULL, NULL, &on, &oc, &oh, &ow));
     CHECK_STATUS(gclmem_get_desc_padding(input->desc, &iw_str, &ih_str, &ic_str, &iw_off, &ih_off));
     CHECK_STATUS(gclmem_get_desc_padding(output->desc, &ow_str, &oh_str, &oc_str, &ow_off, &oh_off));
@@ -55,39 +57,51 @@ inline EE tfslice_core_mali_fp16(GCLHandle_t handle,
     }
     DataFormat imf = input->desc.memFormat;
     DataFormat omf = output->desc.memFormat;
-
-    Kernel kernel;
-    U32 gs[3] = {0, 0, 0};
-    U32 ls[3] = {0, 0, 0};
-    U32 dim = 3;
+    GCLMemType inputMemType = input->desc.memType;
+    GCLMemType outputMemType = output->desc.memType;
     Mem inMem = input->mem;
     Mem outMem = output->mem;
-    U32 sub_off = 0;
 
-    if (imf == DF_NCHWC4) {
-        GCLMem tMem;
-        GCLMemDesc desc = input->desc;
-        U32 str[3] = {iw, ih, ic * in};
-        U32 off[3] = {0, 0, 0};
-        MemFlags flag = CL_MEM_READ_WRITE;
-        CHECK_STATUS(gclmem_set_desc_padding(&desc, str, off, DT_F16, DF_NCHW, GCL_MEM_BUF, flag));
-        tMem.desc = desc;
-        tMem.mem = tmpbuf->mem;
-        CHECK_STATUS(ocl_data_trans_form(handle, input, &tMem, 0, 0, NCHWC4_TO_NCHW));
-        iw_str = iw;
-        ih_str = ih;
-        iw_off = 0;
-        ih_off = 0;
-        inMem = tmpbuf->mem;
+    U32 dim = 3;
+    U32 gs[3] = {0, 0, 0};
+    U32 ls[3] = {0, 0, 0};
+
+    bool useNchw = true;
+    if (imf == DF_NCHWC4 && omf == DF_NCHWC4) {
+        useNchw = false;
+        ic /= 4;
+        oc /= 4;
+        be[nDims - 2] /= 4;
+    } else {
+        if (imf == DF_NCHWC4) {
+            GCLMem tMem;
+            GCLMemDesc desc = input->desc;
+            U32 str[3] = {iw, ih, ic * in};
+            U32 off[3] = {0, 0, 0};
+            MemFlags flag = CL_MEM_READ_WRITE;
+            CHECK_STATUS(
+                gclmem_set_desc_padding(&desc, str, off, dt, DF_NCHW, GCL_MEM_BUF, flag));
+            tMem.desc = desc;
+            tMem.mem = tmpbuf->mem;
+            CHECK_STATUS(ocl_data_trans_form(handle, input, &tMem, 0, 0, NCHWC4_TO_NCHW));
+            iw_str = iw;
+            ih_str = ih;
+            iw_off = 0;
+            ih_off = 0;
+            inMem = tmpbuf->mem;
+        }
     }
-
     i_off = ih_off * iw_str + iw_off;
     o_off = oh_off * ow_str + ow_off;
     gs[0] = ow;
     gs[1] = oh;
     gs[2] = oc * on;
-    const char *kernelName = "tfslice_nchw";
-    CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel));
+    Kernel kernel;
+    KernelOpt kernelOpt;
+    char kernelName[128];
+    CHECK_STATUS(
+        set_tfslice_opt_mali(useNchw, dt, inputMemType, outputMemType, kernelName, &kernelOpt));
+    CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
     CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, ow_str, oh_str, i_off, o_off, ic, oc,
         be[0], be[1], be[2], be[3], stride[0], stride[1], stride[2], stride[3], gs[0], gs[1], inMem,
         outMem));
@@ -105,7 +119,7 @@ EE tfslice_infer_forward_tmp_bytes_mali_fp16(TensorDesc inputDesc,
     U32 *bytes)
 {
     U32 tmpBytes = 0;
-    if (gclmemInputDesc.memFormat == DF_NCHWC4) {
+    if (gclmemInputDesc.memFormat != gclmemOutputDesc.memFormat) {
         tmpBytes += tensorNumBytes(inputDesc);
     }
     *bytes = tmpBytes;

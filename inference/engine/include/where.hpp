@@ -22,11 +22,12 @@ public:
     {
         this->dt = dt;
     }
-
+    ~Where(){}
     OperatorType get_type() override
     {
         return OT_Where;
     }
+   
 };
 
 #endif  // _WHERE_H

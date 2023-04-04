@@ -26,11 +26,11 @@ class gcl_kernel_source {
 public:
     gcl_kernel_source()
     {
-        UNI_DEBUG_LOG("gcl_kernel_source %p constructor\n", (char *)this);
+        UNI_DETAIL_LOG("gcl_kernel_source %p constructor\n", (char *)this);
     }
     ~gcl_kernel_source()
     {
-        UNI_DEBUG_LOG("gcl_kernel_source %p constructor\n", (char *)this);
+        UNI_DETAIL_LOG("gcl_kernel_source %p constructor\n", (char *)this);
     }
 
     std::unordered_map<std::string, KernelSource> &kernelSourceMap()

@@ -58,11 +58,12 @@ inline EE get_context_info(Context context, cl_context_info info, void **value, 
         if (NULL == len) {
             *len = size;
         }
-        void *data = malloc(size);
+        char *data = (char *)malloc(size + 1);
         if (NULL == data) {
             return ALLOC_FAILED;
         }
-        ret = clGetContextInfo(context, info, size, data, NULL);
+        data[size] = '\0';
+        ret = clGetContextInfo(context, info, size + 1, data, NULL);
         if (CL_SUCCESS == ret) {
             *value = data;
         } else {
@@ -95,15 +96,7 @@ inline EE create_command_queue_properties(
     *queue = clCreateCommandQueueWithProperties(context, device, properties, &ret);
     map_cl_error_2_ee(ret);
 }
-/*
-    inline EE create_command_queue(Context context, Device device,
-            cl_command_queue_properties properties, CommandQueue* queue) {
-        if(NULL == queue) return NULL_POINTER;
-        I32 ret;
- * queue = clCreateCommandQueue(context, device, properties, &ret);
-        map_cl_error_2_ee(ret);
-    }
- */
+
 /**
  * @brief get information of command queue
  *
@@ -123,10 +116,11 @@ inline EE get_command_queue_info(
         if (NULL != len) {
             *len = size;
         }
-        void *data = malloc(size);
+        char *data = (char *)malloc(size + 1);
         if (NULL == data) {
             return ALLOC_FAILED;
         }
+        data[size] = '\0';
         ret = clGetCommandQueueInfo(queue, info, size, data, NULL);
         if (CL_SUCCESS == ret) {
             *value = data;

@@ -15,7 +15,7 @@
 #include "cpu/x86/tensor_computing_x86.h"
 #endif
 
-template <typename T>
+template <typename T, int cx = 8>
 inline EE instance_norm_template(
     TensorDesc inputDesc, T *input, T *tmp, T *scale, T *bias, InstanceNormParamSpec p, T *output)
 {
@@ -30,7 +30,7 @@ inline EE instance_norm_template(
     axis = inputDesc.nDims - 1 - axis;
 
     // support axisDim != inputDesc.dims[axis]
-    I32 axisDim = (p.axis_dim > 0) ? p.axis_dim : inputDesc.dims[axis];
+    U32 axisDim = (p.axis_dim > 0) ? p.axis_dim : inputDesc.dims[axis];
 
     I32 loopInner = 1;
     for (I32 i = 0; i < axis; ++i) {
@@ -42,40 +42,68 @@ inline EE instance_norm_template(
         loopOuter *= inputDesc.dims[i];
     }
 
-    F32 tmpVal = 0;
-    F32 eps = 1e-6;
-    if (axisDim == (int)inputDesc.dims[axis]) {
-        for (I32 i = 0; i < loopOuter; i += 8) {
-            double mean[8] = {0};
-            for (I32 j = 0; j < loopInner; ++j) {
-                for (U32 ii = 0; ii < 8; ++ii) {
-                    mean[ii] += input[i * loopInner + j * 8 + ii];
+    // eps will cause some error after sqrt
+    const F32 eps = 1e-6;
+    if (axisDim == inputDesc.dims[axis]) {
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
+        for (I32 i = 0; i < loopOuter; i += cx) {
+            I32 offset = i * loopInner;
+            F32 mean[cx] = {0};
+            for (I32 j = 0, jj = offset; j < loopInner; ++j, jj += cx) {
+                for (U32 ii = 0; ii < cx; ++ii) {
+                    mean[ii] += input[jj + ii];
                 }
             }
-            for (U32 ii = 0; ii < 8; ++ii) {
+            for (U32 ii = 0; ii < cx; ++ii) {
                 mean[ii] = mean[ii] / loopInner;
             }
-            F32 var[8] = {0};
-            for (I32 j = 0; j < loopInner; ++j) {
-                for (U32 ii = 0; ii < 8; ++ii) {
-                    tmpVal = input[i * loopInner + j * 8 + ii] - mean[ii];
+            F32 var[cx] = {0};
+            for (I32 j = 0, jj = offset; j < loopInner; ++j, jj += cx) {
+                for (U32 ii = 0; ii < cx; ++ii) {
+                    F32 tmpVal = input[jj + ii] - mean[ii];
                     var[ii] += tmpVal * tmpVal;
                 }
             }
-            for (U32 ii = 0; ii < 8; ++ii) {
+            F32 *s = var;
+            F32 *b = mean;
+            for (U32 ii = 0; ii < cx; ++ii) {
                 var[ii] = sqrt(var[ii] / loopInner + eps);
+                int c = (i + ii) % axisDim;
+                s[ii] = scale[c] / var[ii];
+                b[ii] = bias[c] - s[ii] * mean[ii];
             }
-            for (I32 j = 0; j < loopInner; ++j) {
-                for (U32 ii = 0; ii < 8; ++ii) {
-                    output[i * loopInner + j * 8 + ii] = scale[(i + ii) % axisDim] *
-                            (input[i * loopInner + j * 8 + ii] - mean[ii]) / var[ii] +
-                        bias[(i + ii) % axisDim];
+            for (I32 j = 0, jj = offset; j < loopInner; ++j, jj += cx) {
+                for (U32 ii = 0; ii < cx; ++ii) {
+                    output[jj + ii] = s[ii] * input[jj + ii] + b[ii];
                 }
             }
         }
     } else {
         I32 loopInnerIn = loopInner * inputDesc.dims[axis] * 1.0f / axisDim;
         I32 loopOuterIn = loopOuter * axisDim * 1.0f / inputDesc.dims[axis];
+
+        if (loopOuterIn == 1) {
+            F32 mean = 0;
+            F32 var = 0;
+            for (I32 j = 0; j < loopInnerIn; ++j) {
+                mean += input[j];
+            }
+            mean = mean / loopInnerIn;
+
+            for (I32 j = 0; j < loopInnerIn; ++j) {
+                F32 tmpVal = input[j] - mean;
+                var += tmpVal * tmpVal;
+            }
+            var = sqrt(var / loopInnerIn + eps);
+
+            for (I32 j = 0; j < loopInnerIn; ++j) {
+                output[j] = scale[0] * (input[j] - mean) / var + bias[0];
+            }
+            return SUCCESS;
+        }
+
         T *mean = tmp;
         T *var = tmp + loopOuterIn;
         T *tmpI = tmp + loopOuterIn * 2;
@@ -92,19 +120,21 @@ inline EE instance_norm_template(
         } else {
             return NOT_SUPPORTED;
         }
-        ic /= 8;
+        ic /= cx;
         for (U32 n = 0; n < in; n++) {
             for (U32 c = 0; c < ic; c++) {
                 for (U32 hw = 0; hw < ih * iw; hw++) {
-                    for (U32 c8 = 0; c8 < 8; c8++) {
-                        tmpI[n * ic * 8 * ih * iw + (c * 8 + c8) * ih * iw + hw] =
-                            input[n * ic * ih * iw * 8 + c * ih * iw * 8 + hw * 8 + c8];
+                    for (U32 c8 = 0; c8 < cx; c8++) {
+                        tmpI[n * ic * cx * ih * iw + (c * cx + c8) * ih * iw + hw] =
+                            input[n * ic * ih * iw * cx + c * ih * iw * cx + hw * cx + c8];
                     }
                 }
             }
         }
 
-        // get mean and var
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
         for (I32 i = 0; i < loopOuterIn; ++i) {
             mean[i] = 0;
             for (I32 j = 0; j < loopInnerIn; ++j) {
@@ -113,21 +143,22 @@ inline EE instance_norm_template(
             mean[i] = mean[i] / loopInnerIn;
             var[i] = 0;
             for (I32 j = 0; j < loopInnerIn; ++j) {
-                tmpVal = tmpI[i * loopInnerIn + j] - mean[i];
+                F32 tmpVal = tmpI[i * loopInnerIn + j] - mean[i];
                 var[i] += tmpVal * tmpVal;
             }
-            var[i] = sqrt(var[i] / loopInnerIn + eps);
+            var[i] = 1.0f / sqrt(var[i] / loopInnerIn + eps);
         }
 
-        // compute
-        I32 idx = 0;
-        for (I32 i = 0; i < loopOuter; i += 8) {
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
+        for (I32 i = 0; i < loopOuter; i += cx) {
             for (I32 j = 0; j < loopInner; ++j) {
-                for (I32 ii = 0; ii < 8; ++ii) {
-                    idx = ((i + ii) * loopInner + j) / loopInnerIn;
-                    output[i * loopInner + j * 8 + ii] = scale[idx % axisDim] *
-                            (tmpI[(i + ii) * loopInner + j] - mean[idx]) / var[idx] +
-                        bias[idx % axisDim];
+                for (I32 ii = 0; ii < cx; ++ii) {
+                    I32 idx = (((i + ii) * loopInner + j) / loopInnerIn) % axisDim;
+                    output[i * loopInner + j * cx + ii] =
+                        scale[idx] * (input[i * loopInner + j * cx + ii] - mean[idx]) * var[idx] +
+                        bias[idx];
                 }
             }
         }
@@ -145,9 +176,8 @@ EE instance_norm_infer_forward_tmp_bytes_cpu(
     axis = inputDesc.nDims - 1 - axis;
 
     // support axisDim != inputDesc.dims[axis]
-    I32 axisDim = (p.axis_dim > 0) ? p.axis_dim : inputDesc.dims[axis];
-
-    if (axisDim == (int)inputDesc.dims[axis]) {
+    U32 axisDim = (p.axis_dim > 0) ? p.axis_dim : inputDesc.dims[axis];
+    if (axisDim == inputDesc.dims[axis]) {
         *bytes = 0;
         return ret;
     }
@@ -164,15 +194,16 @@ EE instance_norm_infer_forward_tmp_bytes_cpu(
     }
     *bytes = loopOuter * loopInner * bytesOf(inputDesc.dt);
     *bytes += loopInner * 2 * bytesOf(inputDesc.dt);
-
     return ret;
 }
+
 EE instance_norm_cpu(TensorDesc inputDesc,
     void *input,
-    void *tmp,
     void *scale,
     void *bias,
     InstanceNormParamSpec p,
+    void *tmp,
+    TensorDesc outputDesc,
     void *output,
     Arch arch)
 {
@@ -200,14 +231,17 @@ EE instance_norm_cpu(TensorDesc inputDesc,
         for (U32 i = axis + 1; i < inputDesc.nDims; ++i) {
             loopOuter *= inputDesc.dims[i];
         }
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
         for (I32 i = 0; i < loopOuter; ++i) {
             I32 off = i * loopInner * bytesOf(idt);
             F32 mean = mean_func(idt, (U8 *)input + off, loopInner);
             F32 var = var_func(idt, (U8 *)input + off, loopInner, mean);
+            I32 c = i % axisDim;
             norm_scale_func(idt, (U8 *)input + off, (U8 *)output + off, loopInner, mean, var,
-                (U8 *)scale + i * bytesOf(idt), (U8 *)bias + i * bytesOf(idt));
+                (U8 *)scale + c * bytesOf(idt), (U8 *)bias + c * bytesOf(idt));
         }
-
         ret = SUCCESS;
     } else {
         if (IS_GENERAL(arch) || IS_ARM(arch)) {

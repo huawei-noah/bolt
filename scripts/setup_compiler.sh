@@ -40,7 +40,10 @@ setAndroidNDK() {
 androidNDKIsValid(){
     checkExe $1
     if [[ $? == 0 ]]; then
-        echo "[ERROR] please install Android NDK, and set shell environment ANDROID_NDK_ROOT or ANDROID_NDK_HOME to find it"
+        echo "[ERROR] please install Android NDK, and set shell environment ANDROID_NDK_ROOT or ANDROID_NDK_HOME to find it."
+        if [[ ${host} =~ windows ]]; then
+            echo "you may also need to add ANDROID_NDK_ROOT\\toolchains\\llvm\\prebuilt\\windows-x86_64\\bin to PATH variable."
+        fi
         exit 1
     fi
 }
@@ -99,21 +102,26 @@ fi
 if [[ "${RANLIB}" == "" ]]; then
     RANLIB=ranlib
 fi
+if [[ "${READELF}" == "" ]]; then
+    READELF=readelf
+fi
 
 if [[ "${target}" =~ "android" ]]; then
     setAndroidNDK
 fi
-if [[ "${target}" == "android-aarch64" ]]; then
+if [[ "${target}" =~ "android-aarch64" ]]; then
     CC="clang --target=aarch64-linux-android21"
     CXX="clang++ --target=aarch64-linux-android21"
     STRIP=aarch64-linux-android-strip
     AR=aarch64-linux-android-ar
     RANLIB=aarch64-linux-android-ranlib
+    READELF=aarch64-linux-android-readelf
     checkExe ${AR}
     if [[ $? == 0 ]]; then
         STRIP=llvm-strip
         AR=llvm-ar
         RANLIB=llvm-ranlib
+        READELF=llvm-readelf
     fi
     CONFIGURE_OPTIONS="--host=arm-linux --enable-neon"
     CCFLAGS="${CCFLAGS} --target=aarch64-linux-android21"
@@ -125,11 +133,13 @@ if [[ "${target}" == "android-armv7" ]]; then
     STRIP=arm-linux-androideabi-strip
     AR=arm-linux-androideabi-ar
     RANLIB=arm-linux-androideabi-ranlib
+    READELF=arm-linux-androideabi-readelf
     checkExe ${AR}
     if [[ $? == 0 ]]; then
         STRIP=llvm-strip
         AR=llvm-ar
         RANLIB=llvm-ranlib
+        READELF=llvm-readelf
     fi
     CONFIGURE_OPTIONS="--host=arm-linux "
     CCFLAGS="${CCFLAGS} --target=armv7a-linux-androideabi21"
@@ -141,16 +151,18 @@ if [[ "${target}" == "android-x86_64" ]]; then
     STRIP=x86_64-linux-android-strip
     AR=x86_64-linux-android-ar
     RANLIB=x86_64-linux-android-ranlib
+    READELF=x86_64-linux-android-readelf
     checkExe ${AR}
     if [[ $? == 0 ]]; then
         STRIP=llvm-strip
         AR=llvm-ar
         RANLIB=llvm-ranlib
+        READELF=llvm-readelf
     fi
     CONFIGURE_OPTIONS="--host=x86-linux"
     CCFLAGS="${CCFLAGS} --target=x86_64-linux-android21"
 fi
-if [[ "${target}" == "ios-aarch64" || "${target}" == "ios-armv7" ]]; then
+if [[ "${target}" =~ "ios-aarch64" || "${target}" == "ios-armv7" ]]; then
     if [[ ${host} =~ macos ]]; then
         if [[ "${IOS_SDK_ROOT}" == "" ]]; then
             IOS_SDK_ROOT=/Applications/Xcode.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS.sdk
@@ -164,7 +176,8 @@ if [[ "${target}" == "ios-aarch64" || "${target}" == "ios-armv7" ]]; then
         STRIP=/usr/bin/strip
         AR=/usr/bin/ar
         RANLIB=/usr/bin/ranlib
-        if [[ "${target}" == "ios-aarch64" ]]; then
+        READELF=/usr/bin/readelf
+        if [[ "${target}" =~ "ios-aarch64" ]]; then
             CCFLAGS="${CCFLAGS} -arch arm64"
         else
             CCFLAGS="${CCFLAGS} -arch armv7"
@@ -176,15 +189,17 @@ if [[ "${target}" == "ios-aarch64" || "${target}" == "ios-armv7" ]]; then
         STRIP=arm-apple-darwin11-strip
         AR=arm-apple-darwin11-ar
         RANLIB=arm-apple-darwin11-ranlib
+        READELF=arm-apple-darwin11-readelf
     fi
     CONFIGURE_OPTIONS="--host=arm-apple-darwin11"
 fi
-if [[ "${target}" == "linux-aarch64" ]]; then
+if [[ "${target}" == "linux-aarch64" || "${target}" == "linux-aarch64_v9" ]]; then
     CC=aarch64-linux-gnu-gcc
     CXX=aarch64-linux-gnu-g++
     STRIP=aarch64-linux-gnu-strip
     AR=aarch64-linux-gnu-ar
     RANLIB=aarch64-linux-gnu-ranlib
+    READELF=aarch64-linux-gnu-readelf
     CONFIGURE_OPTIONS="--host=arm-linux"
 fi
 if [[ ${target} =~ linux-arm ]]; then
@@ -196,6 +211,7 @@ if [[ "${target}" == "linux-arm_himix100" ]]; then
     STRIP=arm-himix100-linux-strip
     AR=arm-himix100-linux-ar
     RANLIB=arm-himix100-linux-ranlib
+    READELF=arm-himix100-linux-readelf
     CONFIGURE_OPTIONS="--host=arm-linux "
 fi
 if [[ "${target}" == "linux-arm_musleabi" ]]; then
@@ -204,17 +220,37 @@ if [[ "${target}" == "linux-arm_musleabi" ]]; then
     STRIP=arm-linux-musleabi-strip
     AR=arm-linux-musleabi-ar
     RANLIB=arm-linux-musleabi-ranlib
+    READELF=arm-linux-musleabi-readelf
     CONFIGURE_OPTIONS="--host=arm-linux "
 fi
 if [[ ${host} =~ linux ]]; then
     if [[ "${target}" == "windows-x86_64" || "${target}" == "windows-x86_64_avx2" ]]; then
-        CC=x86_64-w64-mingw32-gcc-posix
-        CXX=x86_64-w64-mingw32-g++-posix
+        CC=x86_64-w64-mingw32-gcc
+        CXX=x86_64-w64-mingw32-g++
         STRIP=x86_64-w64-mingw32-strip
         AR=x86_64-w64-mingw32-ar
         RANLIB=x86_64-w64-mingw32-ranlib
+        READELF=x86_64-w64-mingw32-readelf
         CONFIGURE_OPTIONS="--host=x86_64-windows "
     fi
+fi
+if [[ "${target}" == "windows-aarch64" ]]; then
+    CC=aarch64-w64-mingw32-gcc
+    CXX=aarch64-w64-mingw32-g++
+    STRIP=aarch64-w64-mingw32-strip
+    AR=aarch64-w64-mingw32-ar
+    RANLIB=aarch64-w64-mingw32-ranlib
+    READELF=aarch64-w64-mingw32-readelf
+    CONFIGURE_OPTIONS="--host=aarch64-windows "
+fi
+if [[ "${target}" == "windows-armv7" ]]; then
+    CC=armv7-w64-mingw32-gcc
+    CXX=armv7-w64-mingw32-g++
+    STRIP=armv7-w64-mingw32-strip
+    AR=armv7-w64-mingw32-ar
+    RANLIB=armv7-w64-mingw32-ranlib
+    READELF=armv7-w64-mingw32-readelf
+    CONFIGURE_OPTIONS="--host=armv7-windows "
 fi
 
 MAKE=make
@@ -224,8 +260,11 @@ if [[ ${host} =~ windows ]]; then
     CMAKE_GENERATOR="MinGW Makefiles"
 fi
 
-CMAKE_OPTIONS=""
+CMAKE_OPTIONS="${CMAKE_OPTIONS}"
 if [[ "${host}" != "${target}" ]]; then
+    if [[ ${target} =~ generic ]]; then
+        CMAKE_OPTIONS="${CMAKE_OPTIONS} -DCMAKE_SYSTEM_NAME=Generic"
+    fi
     if [[ ${target} =~ linux ]]; then
         CMAKE_OPTIONS="${CMAKE_OPTIONS} -DCMAKE_SYSTEM_NAME=Linux"
     fi
@@ -239,22 +278,24 @@ if [[ "${host}" != "${target}" ]]; then
         fi
     fi
     if [[ ${target} =~ windows ]]; then
-        CMAKE_OPTIONS="${CMAKE_OPTIONS} -DCMAKE_SYSTEM_NAME=Windows"
+        CMAKE_OPTIONS="${CMAKE_OPTIONS} -DCMAKE_SYSTEM_NAME=Windows -DWIN32=True"
     fi
     if [[ ! ${use_neon} =~ "off" && ( ${target} =~ armv7 || ${target} =~ arm_himix100 || ${target} =~ arm_musleabi ) ]]; then
         CMAKE_OPTIONS="${CMAKE_OPTIONS} -DCMAKE_SYSTEM_PROCESSOR=armv7-a"
-        CCFLAGS="${CCFLAGS} -mfpu=neon-vfpv4"
-        if [[ ${target} =~ hardfp ]]; then
-            CCFLAGS="-mfloat-abi=hardfp ${CCFLAGS}"
-        elif [[ ${target} =~ hard ]]; then
-            CCFLAGS="-mfloat-abi=hard ${CCFLAGS}"
-        else
-            CCFLAGS="-mfloat-abi=softfp ${CCFLAGS}"
-        fi
-        if [[ ${target} =~ armv7ve ]]; then
-            CCFLAGS="-march=armv7ve ${CCFLAGS} -mcpu=cortex-a7"
-        else
-            CCFLAGS="-march=armv7-a ${CCFLAGS}"
+        if [[ ! ${target} =~ blank ]]; then
+            CCFLAGS="${CCFLAGS} -mfpu=neon-vfpv4"
+            if [[ ${target} =~ hardfp ]]; then
+                CCFLAGS="-mfloat-abi=hardfp ${CCFLAGS}"
+            elif [[ ${target} =~ hard || ${target} =~ windows ]]; then
+                CCFLAGS="-mfloat-abi=hard ${CCFLAGS}"
+            else
+                CCFLAGS="-mfloat-abi=softfp ${CCFLAGS}"
+            fi
+            if [[ ${target} =~ armv7ve ]]; then
+                CCFLAGS="-march=armv7ve ${CCFLAGS} -mcpu=cortex-a7"
+            else
+                CCFLAGS="-march=armv7-a ${CCFLAGS}"
+            fi
         fi
     fi
     if [[ ${target} =~ aarch64 ]]; then
@@ -266,6 +307,11 @@ if [[ "${host}" != "${target}" ]]; then
 fi
 if [[ ${target} =~ blank && ${CC} =~ " " ]]; then
     CCFLAGS=`echo ${CC#* }`
+fi
+if [[ ! ${target} =~ "android" ]]; then
+    if [[ ${JNI_ROOT} == "" && ${JAVA_HOME} != "" && -d ${JAVA_HOME} ]]; then
+        CMAKE_OPTIONS="${CMAKE_OPTIONS} -DJNI_ROOT=${JAVA_HOME}"
+    fi
 fi
 
 exeIsValid ${CC}
@@ -281,6 +327,7 @@ export CXX="${CXX}"
 export AR="${AR}"
 export STRIP="${STRIP}"
 export MAKE="${MAKE}"
+export READELF="${READELF}"
 export CONFIGURE_OPTIONS="${CONFIGURE_OPTIONS}"
 export CMAKE_GENERATOR="${CMAKE_GENERATOR}"
 export CMAKE_OPTIONS="${CMAKE_OPTIONS} -DCMAKE_STRIP=`which ${STRIP}` -DCMAKE_RANLIB=`which ${RANLIB}`"

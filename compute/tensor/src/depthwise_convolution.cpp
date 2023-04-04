@@ -68,7 +68,9 @@ inline EE depthwise_convolution_infer_output_size_cpu(TensorDesc inputDesc,
     if ((idt == DT_U8_Q || idf == DF_NCHWC16) && ic % 16 == 0) {
         odf = DF_NCHWC16;
     }
-
+#if defined(_USE_LITE) && !defined(_USE_NEON)
+    odf = DF_NCHW;
+#endif
     *outputDesc = tensor4df(targetDataType, odf, in, ic, oh, ow);
     return SUCCESS;
 }
@@ -146,7 +148,7 @@ EE depthwise_convolution_infer_forward_algorithm(Tensor inputTensor,
         ret = depthwise_convolution_infer_forward_algorithm_mali(
             ((MaliPara_t)(archInfo->archPara))->handle, inputDesc, filterDesc, outputDesc,
             gclmemInputDesc, gclmemOutputDesc, convParamSpec, policy,
-            depthwiseActivationParamSpec.mode, ((MaliPara_t)(archInfo->archPara))->forwardRunInfo);
+            depthwiseActivationParamSpec, ((MaliPara_t)(archInfo->archPara))->forwardRunInfo);
 #endif
     }
     return ret;
@@ -308,7 +310,7 @@ EE depthwise_convolution(Tensor inputTensor,
         ret = depthwise_convolution_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc,
             (GCLMem_t)input, filterDesc, (GCLMem_t)filter, convParamSpec,
             ((MaliPara_t)(archInfo->archPara))->forwardRunInfo, biasDesc, (GCLMem_t)bias, tmpBytes,
-            (GCLMem_t)tmp, outputDesc, (GCLMem_t)output, depthwiseActivationParamSpec.mode);
+            (GCLMem_t)tmp, outputDesc, (GCLMem_t)output, depthwiseActivationParamSpec);
 #endif
     }
     return ret;

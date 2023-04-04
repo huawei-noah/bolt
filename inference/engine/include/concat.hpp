@@ -22,7 +22,7 @@ public:
     {
         this->p = p;
     }
-
+    ~Concat(){}
     OperatorType get_type() override
     {
         return OT_Concat;

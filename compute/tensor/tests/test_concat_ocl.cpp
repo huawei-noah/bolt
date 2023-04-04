@@ -105,27 +105,36 @@ int concatTest(int argc, char **argv, DataType dt)
 
     CHECK_STATUS(concat(inputTensor, p, tmpTensor, outputTensor, &archInfo));
 
-    /*warp up*/
-    for (U32 i = 0; i < 2; i++) {
+    for (U32 i = 0; i < UT_WARMUP; i++) {
         CHECK_STATUS(gcl_run_kernelVec(handle));
     }
+    CHECK_STATUS(gcl_finish(handle));
 
+    double time = 0;
 #ifdef _DEBUG
-    CHECK_STATUS(gcl_run_kernelVec_timing(handle, 0, handle->kernelVec->size()));
-    double time = handle->t_execute * 0.001;
+    for (I32 i = 0; i < UT_LOOPS; i++) {
+        CHECK_STATUS(gcl_run_kernelVec_timing(handle, 0, handle->kernelVec->size()));
+        time += handle->t_execute * 0.001;
+    }
 #else
-    CHECK_STATUS(gcl_run_kernelVec(handle));
+    double start = ut_time_ms();
+    for (I32 i = 0; i < UT_LOOPS; i++) {
+        CHECK_STATUS(gcl_run_kernelVec(handle));
+        CHECK_STATUS(gcl_finish(handle));
+    }
+    double end = ut_time_ms();
+    time = (end - start);
 #endif
-    CHECK_STATUS(ocl_get_output(handle, output, outputDesc, output_gpu, tmpbuf, true));
+    time /= UT_LOOPS;
 
     char buffer[150];
     char params[120];
     sprintf(params, "%d (*)/%u=(%u %u %u %u)", num, p.axis, on, oc, oh, ow);
     sprintf(buffer, "%20s, %80s", "Concat", params);
-#ifdef _DEBUG
     double ops = 1.0 * on * oc * oh * ow;
     ut_log(dt, buffer, ops, time);
-#endif
+
+    CHECK_STATUS(ocl_get_output(handle, output, outputDesc, output_gpu, tmpbuf, true));
     for (int i = 0; i < num; i++) {
         inputTensorCpu[i].alloc();
         inputDesc[i].df = DF_NCHW;
@@ -140,7 +149,7 @@ int concatTest(int argc, char **argv, DataType dt)
 
     Tensor tmpTensorCpu;
     CHECK_STATUS(concat(inputTensorCpu, p, tmpTensorCpu, outputTensorCpu, &UT_SERIAL_ARCHINFO));
-    ut_check_a(output_gpu, get_ptr_from_tensor(outputTensorCpu, CPU_GENERAL), on * oc * ow * oh, dt);
+    ut_check_v(output_gpu, get_ptr_from_tensor(outputTensorCpu, CPU_GENERAL), on * oc * ow * oh, dt, 0.3);
 
     CHECK_STATUS(gcl_finish(handle));
     CHECK_STATUS(gcl_clean_kernelVec(handle));
@@ -151,8 +160,6 @@ int concatTest(int argc, char **argv, DataType dt)
 
 int main(int argc, char **argv)
 {
-#ifdef _USE_FP16
     concatTest(argc, argv, DT_F16);
-#endif
     return 0;
 }

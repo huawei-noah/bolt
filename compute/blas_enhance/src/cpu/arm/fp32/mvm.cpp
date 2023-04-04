@@ -11,8 +11,8 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#include "error.h"
 #include "cpu/arm/fp32/blas_fp32.h"
+#include "cpu/arm/fp32/kernels_fp32.h"
 
 EE matrix_vector_multiply_transform_weight_fp32(TensorDesc desc, F32 *src, F32 *dst)
 {

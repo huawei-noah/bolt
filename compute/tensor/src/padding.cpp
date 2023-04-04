@@ -47,7 +47,7 @@ EE padding(Tensor inputTensor, PadParamSpec padParamSpec, Tensor outputTensor, A
     if (IS_GPU(arch)) {
 #ifdef _USE_GPU
         ret = padding_mali(((MaliPara_t)(archInfo->archPara))->handle, inputDesc,
-            (const GCLMem_t)input, padParamSpec, outputDesc, (GCLMem_t)output);
+            (GCLMem_t)input, padParamSpec, outputDesc, (GCLMem_t)output);
 #endif
 #ifdef _USE_CPU
     } else {

@@ -62,9 +62,12 @@ int int8PoolingTest(int argc, char **argv, DataType dt)
     CHECK_STATUS(quantize(inputTensorRef, &inputTensor, &inputScale, &UT_CPU_ARCHINFO));
     inputTensor.set_scale(inputScale);
 
+    std::vector<Tensor> outputTensors = {outputTensor};
+    std::vector<Tensor> outputTensorsRef = {outputTensorRef};
+
     Tensor tmpTensor;
     if (UT_CHECK) {
-        CHECK_STATUS(pooling(inputTensor, p, tmpTensor, outputTensor, &UT_CPU_ARCHINFO));
+        CHECK_STATUS(pooling(inputTensor, p, tmpTensor, outputTensors, &UT_CPU_ARCHINFO));
         F32 outputScale = outputTensor.get_scale();
         INT8 *output = (INT8 *)get_ptr_from_tensor(outputTensor, CPU_GENERAL);
         U8 *out_d = ut_input_v(output_len, dt, UT_INIT_ZERO);
@@ -85,18 +88,17 @@ int int8PoolingTest(int argc, char **argv, DataType dt)
             }
         }
 
-        CHECK_STATUS(pooling(inputTensorRef, p, tmpTensor, outputTensorRef, &UT_SERIAL_ARCHINFO));
+        CHECK_STATUS(pooling(inputTensorRef, p, tmpTensor, outputTensorsRef, &UT_SERIAL_ARCHINFO));
 
         // check
-        ut_check_v(out_d, get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), output_len, dt, 0.05,
-            __FILE__, __LINE__);
+        ut_check_v(out_d, get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), output_len, dt, 0.05);
         free(out_d);
     }
 
     // benchmark
     double time_start = ut_time_ms();
     for (int iter = 0; iter < UT_LOOPS; iter++) {
-        CHECK_STATUS(pooling(inputTensor, p, tmpTensor, outputTensor, &UT_CPU_ARCHINFO));
+        CHECK_STATUS(pooling(inputTensor, p, tmpTensor, outputTensors, &UT_CPU_ARCHINFO));
     }
     double time_end = ut_time_ms();
     double time = (time_end - time_start) / UT_LOOPS;
@@ -125,7 +127,9 @@ int int8PoolingTest(int argc, char **argv, DataType dt)
 int main(int argc, char **argv)
 {
 #ifdef _USE_INT8
+#ifdef _USE_FP16
     int8PoolingTest(argc, argv, DT_F16);
+#endif
 #endif
     return 0;
 }

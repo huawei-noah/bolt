@@ -19,8 +19,8 @@
 #include "gpu/mali/tensor_computing_mali.h"
 #endif
 
-inline EE slice_infer_output_size_cpu(
-    TensorDesc inputDesc, SliceParamSpec p, std::vector<TensorDesc>& outputDesc)
+inline EE slice_infer_output_size_kernel(
+    TensorDesc inputDesc, SliceParamSpec p, std::vector<TensorDesc>& outputDesc, Arch arch)
 {
     U32 num = outputDesc.size();
     int axis = (p.axis + inputDesc.nDims) % inputDesc.nDims;
@@ -71,8 +71,12 @@ inline EE slice_infer_output_size_cpu(
         outputDesc[i].dims[target_axis] = next_point - prev_point;
     }
 
+    int cAlign = 8;
+    if (IS_GPU(arch)) {
+        cAlign = 4;
+    }
     for (U32 i = 0; i < num; i++) {
-        if ((cDim >= 0) && (outputDesc[i].dims[cDim] % 8 != 0)) {
+        if ((cDim >= 0) && (outputDesc[i].dims[cDim] % cAlign != 0)) {
             if (outputDesc[i].nDims >= 4) {
                 outputDesc[i].df = DF_NCHW;
             } else if (outputDesc[i].nDims == 3) {
@@ -87,7 +91,7 @@ inline EE slice_infer_output_size_cpu(
 
     EE ret = SUCCESS;
 #ifdef _USE_CPU
-    if (tensorIsShape(inputDesc)) {
+    if (IS_CPU(arch) && tensorIsShape(inputDesc)) {
         std::vector<void *> output(num);
         for (U32 i = 0; i < num; i++) {
             output[i] = outputDesc[i].dims + outputDesc[i].nDims;
@@ -106,17 +110,18 @@ EE slice_infer_output_size(
     }
     TensorDesc inputDesc = inputTensor->get_desc();
     std::vector<TensorDesc> outputDesc = get_desc_from_tensor_ptrs(outputTensor);
-    EE ret = slice_infer_output_size_cpu(inputDesc, p, outputDesc);
-    if (IS_GPU(archInfo->arch)) {
+    auto arch = archInfo->arch;
+    EE ret = slice_infer_output_size_kernel(inputDesc, p, outputDesc, arch);
 #ifdef _USE_GPU
+    if (IS_GPU(arch) && ret == SUCCESS) {
         OclMemory *inputMem = (OclMemory *)inputTensor->get_memory();
         std::vector<OclMemory *> outputMems;
         for (U32 i = 0; i < outputTensor.size(); i++) {
             outputMems.push_back((OclMemory *)outputTensor[i]->get_memory());
         }
         ret = slice_padding_input_mali(inputDesc, p, &outputDesc, inputMem, outputMems);
-#endif
     }
+#endif
     for (U32 i = 0; i < outputTensor.size(); i++) {
         outputTensor[i]->resize(outputDesc[i]);
     }

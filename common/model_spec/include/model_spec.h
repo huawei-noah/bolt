@@ -15,21 +15,25 @@
 #define _H_MODEL_SPEC
 
 #include "parameter_spec.h"
+#ifdef _WIN32
+#include <windows.h>
+#include <pthread.h>
+#endif
 
-static const int sg_boltVersion = 20220126;
-static const int sg_magicNumber = 1141119;
+static const I32 sg_boltVersion = 20220831;
+static const I32 sg_magicNumber = 1141119;
 
 #pragma pack(8)
-typedef struct {
+typedef struct OperatorSpec {
     I8 name[NAME_LEN];
-    OperatorType type;
-    U32 num_inputs;
-    I8 **input_tensors_name;
-    U32 num_outputs;
-    I8 **output_tensors_name;
-    I32 *tensor_positions;
-    U32 num_quant_feature;
-    QuantSpec *feature_scale;
+    OperatorType type = OT_None;
+    U32 num_inputs = 0;
+    I8 **input_tensors_name = NULL;
+    U32 num_outputs = 0;
+    I8 **output_tensors_name = NULL;
+    I32 *tensor_positions = NULL;
+    U32 num_quant_feature = 0;
+    QuantSpec *feature_scale = NULL;
     ParameterSpec ps;
 } OperatorSpec;
 
@@ -37,59 +41,66 @@ typedef struct WeightSpec {
     I8 op_name[NAME_LEN];
     DataType mdt = DT_U8;
     U32 bytes_of_weight = 0;
-    U8 *weight;
+    U8 *weight = NULL;
     U32 bytes_of_vec = 0;
-    U8 *vec;
+    U8 *vec = NULL;
     // Merged FC may have multiple weight scales
-    U32 num_quant_scale;
-    QuantSpec *weight_scale;
+    U32 num_quant_scale = 0;
+    QuantSpec *weight_scale = NULL;
 } WeightSpec;
 
-typedef struct {
+typedef struct OperatorRelationshipMapEntry {
     I8 op[NAME_LEN];
-    U32 num_inputs;
-    I8 **input_op_names;
-    U32 num_outputs;
-    I8 **output_op_names;
+    U32 num_inputs = 0;
+    I8 **input_op_names = NULL;
+    U32 num_outputs = 0;
+    I8 **output_op_names = NULL;
 } OperatorRelationshipMapEntry;
 
-typedef struct {
-    I32 fd;
-    I8 *bytes;
-    U32 fileLength;
-    bool useFileStream;
+typedef struct ModelFileDescriptor {
+    U8 *content = NULL;
+    size_t length = 0;
+    bool stream_mode = false;
+#ifdef _WIN32
+    HANDLE file;
+    HANDLE map;
+    pthread_t thread;
+#else
+    I32 file;
+#endif
 } ModelFileDescriptor;
 
-typedef struct {
+typedef struct ModelSpec{
     I32 version;
     I32 magic_number;
 
     I8 model_name[NAME_LEN];
     DataType dt;
 
-    I32 num_inputs;
-    I8 **input_names;
-    TensorDesc *input_dims;
+    I32 num_inputs = 0;
+    I8 **input_names = NULL;
+    TensorDesc *input_dims = NULL;
 
-    I32 num_outputs;
-    I8 **output_names;
+    I32 num_outputs = 0;
+    I8 **output_names = NULL;
 
-    I32 num_operator_specs;
-    OperatorSpec *ops;
+    I32 num_operator_specs = 0;
+    OperatorSpec *ops = NULL;
 
-    I32 num_weight_specs;
-    WeightSpec *ws;
+    I32 num_weight_specs = 0;
+    WeightSpec *ws = NULL;
 
-    I32 num_op_tensor_entries;
-    OperatorRelationshipMapEntry *op_relationship_entries;
+    I32 num_op_tensor_entries = 0;
+    OperatorRelationshipMapEntry *op_relationship_entries = NULL;
 
-    ModelFileDescriptor *mfd;
+    ModelFileDescriptor *file = NULL;
 } ModelSpec;
 #pragma pack()
 
 EE mt_create_model(ModelSpec *spec);
-EE serialize_model_to_file(const ModelSpec *spec, const char *fn);
-EE deserialize_model_from_file(const char *fn, ModelSpec *spec, bool useFileStream = false);
+EE serialize_model_to_file(const ModelSpec *spec, const char *filePath);
+EE deserialize_model_from_file(
+    const char *filePath, ModelSpec *spec, DataType targetDt, bool useFileStream = false);
 EE mt_destroy_model(ModelSpec *spec);
 
 #include "model_print.h"

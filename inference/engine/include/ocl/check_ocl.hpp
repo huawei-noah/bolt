@@ -35,17 +35,16 @@ public:
     inline void run_prepare()
     {
         OCLContext::getInstance().handle.get()->curOpName = this->get_name();
-        Tensor inputATensor = this->inputTensors[0];
-        Tensor inputBTensor = this->inputTensors[1];
-        Tensor outputTensor = this->outputTensors[0];
-        CHECK_STATUS(check(inputATensor, inputBTensor, this->p, outputTensor, &this->archInfo));
+        CHECK_STATUS(check(this->inputTensors[0], this->inputTensors[1], this->p,
+            this->outputTensors[0], &this->archInfo));
     }
 
     EE infer_output_tensors_size(
         std::vector<Tensor *> inTensors, std::vector<Tensor *> outTensors) override
     {
         this->needSetKernelVec = true;
-        return check_infer_output_size(inTensors, outTensors[0], &this->archInfo);
+        return check_infer_output_size(
+            inTensors[0], inTensors[1], this->p, outTensors[0], &this->archInfo);
     }
     REGISTER_OCL_OPERATOR_RUN
 };

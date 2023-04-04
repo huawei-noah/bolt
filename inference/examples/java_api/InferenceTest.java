@@ -616,9 +616,13 @@ public final class InferenceTest {
         classification(outputPrefix, affinity,
             prefix + "/caffe_models/squeezenet/squeezenet" + modelSuffix, "data", dt,
             image_3x224x224, 255, 310);
+        int id = 506;
+        if (affinity == AffinityType.GPU) {
+            id = 688;
+        }
         classification(outputPrefix, affinity,
             prefix + "/caffe_models/resnet50/resnet50" + modelSuffix, "data", dt, image_3x224x224,
-            255, 506);
+            255, id);
         classification(outputPrefix, affinity,
             prefix + "/caffe_models/fingerprint_resnet18/fingerprint_resnet18" + modelSuffix,
             "Data", dt, image_2x188x188, 1, 0);
@@ -652,7 +656,7 @@ public final class InferenceTest {
         int[] image_3x224x224 = {3, 224, 224};
         int[] image_2x188x188 = {2, 188, 188};
         classification(outputPrefix, affinity,
-            prefix + "/onnx_models/birealnet18/birealnet18_f16.bolt", "0", DataType.FP16,
+            prefix + "/onnx_models/birealnet18/birealnet18_f16_b.bolt", "0", DataType.FP16,
             image_3x224x224, 255, 565);
         classification(outputPrefix, affinity,
             prefix + "/caffe_models/squeezenet/squeezenet_int8_q.bolt", "data", DataType.FP16,
@@ -669,14 +673,14 @@ public final class InferenceTest {
         }
         String rootPath = args[1];
         if (args[0].equals("x86_HOST")) {
-            testSuites0(rootPath, outputPrefix, AffinityType.CPU_HIGH_PERFORMANCE, DataType.FP32);
+            testSuites0(rootPath, outputPrefix, AffinityType.CPU, DataType.FP32);
         } else {
-            testSuites0(rootPath, outputPrefix, AffinityType.CPU_HIGH_PERFORMANCE, DataType.FP32);
-            testSuites0(rootPath, outputPrefix, AffinityType.CPU_HIGH_PERFORMANCE, DataType.FP16);
-            testSuites1(rootPath, outputPrefix, AffinityType.CPU_HIGH_PERFORMANCE);
-            testSuites0(rootPath, outputPrefix, AffinityType.CPU_LOW_POWER, DataType.FP32);
-            testSuites0(rootPath, outputPrefix, AffinityType.CPU_LOW_POWER, DataType.FP16);
-            testSuites1(rootPath, outputPrefix, AffinityType.CPU_LOW_POWER);
+            testSuites0(rootPath, outputPrefix, AffinityType.CPU, DataType.FP32);
+            testSuites0(rootPath, outputPrefix, AffinityType.CPU, DataType.FP16);
+            testSuites1(rootPath, outputPrefix, AffinityType.CPU);
+            testSuites0(rootPath, outputPrefix, AffinityType.CPU, DataType.FP32);
+            testSuites0(rootPath, outputPrefix, AffinityType.CPU, DataType.FP16);
+            testSuites1(rootPath, outputPrefix, AffinityType.CPU);
             testSuites0(rootPath, outputPrefix, AffinityType.GPU, DataType.FP16);
         }
     }

@@ -19,6 +19,7 @@
 #include "tensor_desc.h"
 #include "parameter_spec.h"
 #include "tensor_transpose.h"
+#include "shape_infer.h"
 
 EE rnn_transform_filter_cpu(const TensorDesc *filterDescs,
     const void **filterArray,
@@ -66,6 +67,7 @@ EE rnn_cpu(TensorDesc inputDesc,
     const void *input,
     const TensorDesc *filterDesc,
     const void **filter,
+    U32 filterNum,
     const TensorDesc *biasDesc,
     const void **bias,
     float *scale,
@@ -98,8 +100,6 @@ EE padding_cpu(TensorDesc inputDesc,
     TensorDesc outputDesc,
     void *output);
 
-EE reshape_infer_output_size_cpu(TensorDesc inputDesc, ReshapeParamSpec p, TensorDesc *outputDesc);
-
 EE reshape_cpu(TensorDesc inputDesc, void *input, TensorDesc outputDesc, void *output);
 
 EE depthwise_convolution_transform_filter_bytes_cpu(
@@ -125,8 +125,13 @@ EE split_cpu(TensorDesc inputDesc,
     std::vector<TensorDesc> outputDesc,
     std::vector<void *> *output);
 
-EE transpose_cpu(
-    TensorDesc inputDesc, const void *input, U32 *dim, TensorDesc outputDesc, void *output);
+EE transpose_cpu(TensorDesc inputDesc,
+    U32 *inDim,
+    const void *input,
+    U32 *dim,
+    TensorDesc outputDesc,
+    U32 *outDim,
+    void *output);
 
 EE reduction_cpu(TensorDesc inputDesc,
     const void *input,
@@ -153,9 +158,10 @@ EE concat_cpu(std::vector<TensorDesc> inputDesc,
     void *tmp,
     TensorDesc outputDesc,
     void *output,
-    void *outputScale);
+    void *outputScale,
+    Arch arch);
 
-EE l2normalization_cpu(
+EE l2norm_cpu(
     TensorDesc inputDesc, const void *input, TensorDesc outputDesc, void *output, Arch arch);
 
 EE power_cpu(TensorDesc inputDesc,
@@ -168,8 +174,8 @@ EE power_cpu(TensorDesc inputDesc,
 EE slice_cpu(TensorDesc inputDesc,
     void *input,
     SliceParamSpec p,
-    std::vector<TensorDesc>& outputDesc,
-    std::vector<void *>& output);
+    std::vector<TensorDesc> &outputDesc,
+    std::vector<void *> &output);
 
 EE priorbox_cpu(std::vector<TensorDesc> inputDesc,
     PriorBoxParamSpec priorBoxParamSpec,
@@ -188,7 +194,8 @@ EE detectionoutput_cpu(std::vector<TensorDesc> inputDesc,
     std::vector<void *> input,
     DetectionOutputParamSpec detectionOutputParamSpec,
     TensorDesc outputDesc,
-    void *output);
+    void *output,
+    Arch arch);
 
 EE deconvolution_infer_forward_algorithm_cpu(TensorDesc inputDesc,
     TensorDesc filterDesc,
@@ -228,7 +235,7 @@ EE deconvolution_cpu(TensorDesc inputDesc,
     ConvolutionParamSpec convParamSpec,
     ConvolutionForwardAlgorithm algorithm,
     TensorDesc scaleDesc,
-    const void *scale,
+    void *scale,
     TensorDesc biasDesc,
     const void *bias,
     U32 tmpBytes,
@@ -280,6 +287,7 @@ EE activation_cpu(TensorDesc inputDesc,
     ActivationParamSpec activationDesc,
     TensorDesc outputDesc,
     void *output,
+    F32 *scale,
     Arch arch);
 
 EE yolov3detectionoutput_cpu(std::vector<TensorDesc> inputDesc,
@@ -293,7 +301,7 @@ EE argmax_cpu(
     TensorDesc inputDesc, const void *input, ArgMaxParamSpec p, TensorDesc outputDesc, void *output);
 
 EE quantize_cpu(
-    TensorDesc dDesc, const void *data, TensorDesc *qDesc, void *qData, F32 *scale, Arch arch);
+    TensorDesc dDesc, const void *data, TensorDesc *qDesc, void *qData, F32 *scale, Arch arch, int mode=0);
 
 EE scatter_cpu(TensorDesc dataDesc,
     const void *data,
@@ -320,10 +328,11 @@ EE instance_norm_infer_forward_tmp_bytes_cpu(
 
 EE instance_norm_cpu(TensorDesc inputDesc,
     void *input,
-    void *tmp,
     void *scale,
     void *bias,
     InstanceNormParamSpec p,
+    void *tmp,
+    TensorDesc outputDesc,
     void *output,
     Arch arch);
 
@@ -376,6 +385,30 @@ EE space2depth_cpu(
 EE depth2space_cpu(
     TensorDesc inputDesc, void *input, Depth2SpaceParamSpec p, TensorDesc outputDesc, void *output);
 
-EE scale_cpu(
-    TensorDesc inputDesc, void *input, void *alpha, void *beta, ScaleParamSpec p, TensorDesc outputDesc, void *output, Arch arch);
+EE scale_cpu(TensorDesc inputDesc,
+    void *input,
+    void *alpha,
+    void *beta,
+    ScaleParamSpec p,
+    TensorDesc outputDesc,
+    void *output,
+    Arch arch);
+
+EE requantize_cpu(TensorDesc inputDesc,
+    INT8 *input,
+    F32 inputScale,
+    TensorDesc outputDesc,
+    INT8 *output,
+    F32 outputScale,
+    Arch arch);
+
+EE bilateral_slice_apply_cpu(TensorDesc inputDesc,
+    const void *input,
+    TensorDesc guideDesc,
+    const void *guide,
+    TensorDesc gridDesc,
+    const void *grid,
+    BilateralSliceApplyParamSpec p,
+    TensorDesc outputDesc,
+    void *output);
 #endif

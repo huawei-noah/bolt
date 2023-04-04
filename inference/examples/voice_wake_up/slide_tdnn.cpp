@@ -39,7 +39,7 @@ void print_tdnn_usage()
               << std::endl;
 }
 
-void parse_options(int argc, char *argv[])
+int parse_options(int argc, char *argv[])
 {
     std::cout << "\nPlease enter this command './slide_tdnn --help' to get more usage "
                  "information.\n";
@@ -47,7 +47,7 @@ void parse_options(int argc, char *argv[])
     for (std::string arg : lineArgs) {
         if (arg == "--help" || arg == "-help" || arg == "--h" || arg == "-h") {
             print_tdnn_usage();
-            exit(-1);
+            return 1;
         }
     }
 
@@ -74,9 +74,10 @@ void parse_options(int argc, char *argv[])
             default:
                 std::cout << "Input option gets error, please check the params meticulously.\n";
                 print_tdnn_usage();
-                exit(-1);
+                return 1;
         }
     }
+    return 0;
 }
 
 std::map<std::string, std::shared_ptr<U8>> create_tensors_from_path(
@@ -92,7 +93,7 @@ std::map<std::string, std::shared_ptr<U8>> create_tensors_from_path(
         inputDescs.push_back(curDesc);
     }
     std::vector<Tensor> input;
-    if (string_end_with(inputData, ".txt")) {
+    if (endswith(inputData, ".txt")) {
         input = load_txt(inputData, inputDescs);
     } else {
         input = load_bin(inputData, sourceDataTypes, inputDescs);
@@ -139,7 +140,9 @@ std::map<std::string, std::shared_ptr<Tensor>> get_output(
 int main(int argc, char *argv[])
 {
     UNI_TIME_INIT
-    parse_options(argc, argv);
+    if (0 != parse_options(argc, argv)) {
+        return 1;
+    }
 
     // 1: set up the pipeline
     auto pipeline = createPipeline(affinityPolicyName, modelPath, algorithmMapPath);

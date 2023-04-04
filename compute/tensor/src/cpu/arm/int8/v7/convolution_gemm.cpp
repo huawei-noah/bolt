@@ -88,24 +88,20 @@ EE convolution_gemm_v7(TensorDesc inputDesc,
 
         // quantize input if necessary
         if (idt == DT_F32) {
-            // start = get_current_time_int8();
             F32 *in = ((F32 *)input) + n * ic * ih * iw * 8;
-            inArray = in_pad + ic * ihiw * 8 +
-                12 * fh * fw * ic * 8;  // After the space for padding and packing
+            // After the space for padding and packing
+            inArray = in_pad + ic * ihiw * 8 + 12 * fh * fw * ic * 8;
 
-            U32 numData = ic * ih * iw * 8;
+            I32 numData = ic * ih * iw * 8;
             if (*inputScale > 0) {
                 scale_i = *inputScale;
             } else {
                 F32 minmax[2] = {1, -1};
-                CHECK_STATUS(array_minmax_value_arm(idt, in, numData, 3, minmax));
+                CHECK_STATUS(array_minmax_value_f32(in, numData, 3, minmax));
                 F32 absMax = UNI_MAX(UNI_ABS(minmax[0]), UNI_ABS(minmax[1]));
                 scale_i = 127.0 / absMax;
             }
-            for (U32 i = 0; i < numData; i++) {
-                F32 temp = in[i] * scale_i;
-                inArray[i] = round_towards_zero(temp, (*inputScale) != scale_i);
-            }
+            array_scale_round_f32(in, inArray, numData, scale_i, true);
             *inputScale = scale_i;
         } else {
             scale_i = *inputScale;
@@ -121,7 +117,6 @@ EE convolution_gemm_v7(TensorDesc inputDesc,
             if (ACTIVATION_RELU6 != activationDesc.mode) {
                 thresholdN = thresholdP * -1;
             }
-
             for (U32 i = 0; i < 4; i++) {
                 max_i32[i] = thresholdP;
                 min_i32[i] = thresholdN;
@@ -133,9 +128,7 @@ EE convolution_gemm_v7(TensorDesc inputDesc,
                 biasScaled += ic * ih * iw * 8 / bytesOf(DT_I32);  // After the quantized input
             }
             F32 scale = (*inputScale) * (*filterScale);
-            for (U32 i = 0; i < oc * 8; i++) {
-                biasScaled[i] = round(scale * biasArray[i]);
-            }
+            array_scale_round_f32_i32(biasArray, biasScaled, oc * 8, scale, true);
         }
 
         F32 factor_s = 1.0 / ((F32)scale_i) / ((F32)(*filterScale));
@@ -603,14 +596,9 @@ EE convolution_gemm_v7(TensorDesc inputDesc,
             *outputScale = (*inputScale) * (*filterScale) * scale_o;
         }
 
-        U32 num_v = oc * ohow * 2;  // Number of q-form vectors
         I32 *out_buf = biasScaled + oc * 8;
         INT8 *out_q = (INT8 *)output;
-
-        //ret = quantize_I32(num_v, out_buf, factor, scale_o, out_q);
-        for (U32 i = 0; i < tensorNumElements(outputDesc); i++) {
-            out_q[i] = out_buf[i] * scale_o;
-        }
+        array_scale_round_i32(out_buf, out_q, tensorNumElements(outputDesc), scale_o, true);
     }
     return ret;
 }

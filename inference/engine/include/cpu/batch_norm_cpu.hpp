@@ -45,11 +45,10 @@ public:
     int get_channels_num()
     {
         int ret = 0;
-        auto curOpWs = this->get_weightspec();
-        if (0 != curOpWs.bytes_of_weight) {
-            ret = curOpWs.bytes_of_weight / UNI_MAX(1, bytesOf(curOpWs.mdt));
-        } else if (0 != curOpWs.bytes_of_vec) {
-            ret = curOpWs.bytes_of_vec / UNI_MAX(1, bytesOf(curOpWs.mdt));
+        if (0 != this->ws.bytes_of_weight) {
+            ret = this->ws.bytes_of_weight / UNI_MAX(1, bytesOf(this->ws.mdt));
+        } else if (0 != this->ws.bytes_of_vec) {
+            ret = this->ws.bytes_of_vec / UNI_MAX(1, bytesOf(this->ws.mdt));
         }
         return ret;
     }

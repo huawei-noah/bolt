@@ -3,7 +3,7 @@
 class Operator {
 public:
     Operator();
-
+    ~Operator(){}
     virtual std::vector<TensorDesc> inferOutputSize(
         std::vector<TensorDesc> inputDescs, void *paramaters) = 0;
 

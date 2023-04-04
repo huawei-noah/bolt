@@ -12,19 +12,8 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "kernel_def.h"
-#define MANGLE_NAME_IMPL(base, IOM, FM, DT) base##IOM##FM##DT
-#define MANGLE_NAME(base, IOM, FM, DT) MANGLE_NAME_IMPL(base, IOM, FM, DT)
 
-#define FM
-#define DT
-#if defined(USE_I32)
-#define DT _i32
-#endif
-#if defined(USE_NCHW)
-#define FM nchw
-#endif
-
-__kernel void MANGLE_NAME(power_, IOM, FM, DT)(const int iw_str,
+__kernel void KERNEL_NAME(const int iw_str,
     const int ih_str,
     const int ow_str,
     const int oh_str,
@@ -33,12 +22,20 @@ __kernel void MANGLE_NAME(power_, IOM, FM, DT)(const int iw_str,
     const int w,
     const int bx,
     const int by,
-    const int has_power,
     const float alp,
     const float bet,
     float power,
-    READ_ONLY_KERNEL_MEM input,
-    KERNEL_MEM output)
+#if defined(USE_INPUT_IMG)
+    __read_only image3d_t input,
+#else
+    __global const IT1 *input,
+#endif
+#if defined(USE_OUTPUT_IMG)
+    __write_only image3d_t output
+#else
+    __global OT1 *output
+#endif
+)
 {
     int idx = get_global_id(0);
     int idy = get_global_id(1);
@@ -46,26 +43,26 @@ __kernel void MANGLE_NAME(power_, IOM, FM, DT)(const int iw_str,
     if (idx >= bx || idy >= by) {
         return;
     }
-    T4 val = 0;
+    IT4 iv = 0;
+    OT4 ov;
 #if defined(USE_NCHW)
-    LOAD_MEM_V4_C1_COMMON(val, idx, idy, idz, iw_str, ih_str, i_off, w, input);
+    LOAD_MEM_V4_C1_COMMON(iv, idx, idy, idz, iw_str, ih_str, i_off, w, input);
 #else
-    LOAD_MEM_V4_COMMON(val, idx, idy, idz, iw_str, ih_str, i_off, input);
+    LOAD_MEM_V4_COMMON(iv, idx, idy, idz, iw_str, ih_str, i_off, input);
 #endif
-    val.x = (T)(((float)val.x) * alp + bet);
-    val.y = (T)(((float)val.y) * alp + bet);
-    val.z = (T)(((float)val.z) * alp + bet);
-    val.w = (T)(((float)val.w) * alp + bet);
-    if (has_power) {
-        val.x = pow((float)val.x, power);
-        val.y = pow((float)val.y, power);
-        val.z = pow((float)val.z, power);
-        val.w = pow((float)val.w, power);
-    }
+
+    ov.x = iv.x;
+    ov.y = iv.y;
+    ov.z = iv.z;
+    ov.w = iv.w;
+    ov = FMA(ov, alp, bet);
+#if defined(HAS_POW)
+    ov = pow(ov, power);
+#endif
 
 #if defined(USE_NCHW)
-    STORE_MEM_V4_C1_COMMON(val, idx, idy, idz, ow_str, oh_str, o_off, w, output);
+    STORE_MEM_V4_C1_COMMON(ov, idx, idy, idz, ow_str, oh_str, o_off, w, output);
 #else
-    STORE_MEM_V4_COMMON(val, idx, idy, idz, ow_str, oh_str, o_off, output);
+    STORE_MEM_V4_COMMON(ov, idx, idy, idz, ow_str, oh_str, o_off, output);
 #endif
 }

@@ -26,13 +26,12 @@ Model::Model(AffinityPolicy affinityPolicy, DataType dt, std::string name)
             this->deviceInfo.schedule = QUALCOMM;
         }
 #else
-        UNI_ERROR_LOG("This library not support ARM MALI/Qualcomm GPU, please rebuild library "
-                      "with --gpu option.\n");
-        exit(1);
+        UNI_ERROR_LOG("This library not support GPU, please rebuild library with --gpu option.\n");
 #endif
     }
     algorithmMap = std::shared_ptr<AlgorithmMap>(
         new AlgorithmMap(this->deviceInfo.schedule, name, deviceName, dt));
+    UNI_DEBUG_LOG("Inference use %s.\n", ArchName()[this->deviceInfo.schedule])
 }
 
 void Model::set_runtime_device(int cpuId, int threadId)
@@ -131,10 +130,11 @@ std::string Model::get_name()
     return this->name;
 }
 
-void Model::loadAlgorithmMap(CI8 *path, bool useFileStream)
+void Model::loadAlgorithmMap(const char *path, bool useFileStream)
 {
+    UNI_DEBUG_LOG("load algorithm map...\n");
     std::string algoName = this->algorithmMap->getAlgorithmFileName();
-    CI8 *algoInfo = nullptr;
+    const char *algoInfo = nullptr;
     if (IS_GPU(this->deviceInfo.schedule)) {
 #ifdef _USE_GPU
         algoInfo = gcl_get_algorithm_info(OCLContext::getInstance().handle.get(), algoName);
@@ -148,6 +148,7 @@ void Model::loadAlgorithmMap(CI8 *path, bool useFileStream)
     } else if (path) {
         this->algorithmMap->loadAlgorithmMapFromFile(path);
     }
+    UNI_DEBUG_LOG("load algorithm map end.\n");
 }
 
 void Model::saveAlgorithmMapToFile(std::string algorithmMapPath)
@@ -164,5 +165,4 @@ void Model::set_device_info(AffinityPolicy affinityPolicy)
     this->deviceInfo.affinityPolicy = affinityPolicy;
     this->deviceInfo.schedule = ARM_A76;
 #endif
-    UNI_DEBUG_LOG("Inference use %s.\n", ArchName()[this->deviceInfo.schedule])
 }

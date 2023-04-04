@@ -23,7 +23,7 @@ public:
         this->dt = dt;
         this->p = p;
     }
-
+    ~Range(){}
     OperatorType get_type() override
     {
         return OT_Range;

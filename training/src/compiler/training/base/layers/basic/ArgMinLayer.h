@@ -27,8 +27,6 @@ namespace raul
  * If two outputs are supplied, the second will contain corresponding minimum values.
  * Axis should be specified: raul::Dimension::Default causes an exception.
  *
- * @see
- * https://pytorch.org/docs/master/generated/torch.min.html#torch.min
  */
 
 using ArgMinLayer = ArgExtremumLayer<ArgMin>;

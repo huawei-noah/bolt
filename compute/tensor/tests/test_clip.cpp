@@ -31,7 +31,7 @@ int clipTest(int argc, char **argv, DataType dt)
 
     Tensor outputTensor;
     Tensor outputTensorRef;
-    CHECK_STATUS(clip_infer_output_size(&inputTensor, &outputTensor, &UT_CPU_ARCHINFO));
+    CHECK_STATUS(clip_infer_output_size(&inputTensor, p, &outputTensor, &UT_CPU_ARCHINFO));
     outputTensor.alloc();
     outputTensorRef.resize(outputTensor.get_desc());
     outputTensorRef.alloc();
@@ -44,8 +44,7 @@ int clipTest(int argc, char **argv, DataType dt)
 
         // check
         ut_check_v(get_ptr_from_tensor(outputTensor, CPU_GENERAL),
-            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), outputTensor.length(), dt, 0,
-            __FILE__, __LINE__);
+            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), outputTensor.length(), dt, 0);
     }
 
     // benchmark

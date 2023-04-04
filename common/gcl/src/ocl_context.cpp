@@ -16,7 +16,7 @@
 
 OCLContext::OCLContext()
 {
-    UNI_DEBUG_LOG("OCLContext %p constructor start\n", (char *)this);
+    UNI_DETAIL_LOG("OCLContext %p constructor...\n", (char *)this);
     this->handle = std::shared_ptr<GCLHandle>(new GCLHandle());
     this->handle->platformId = 0;
     this->handle->deviceId = 0;
@@ -38,7 +38,7 @@ OCLContext::OCLContext()
     this->handle->existProfilingQueue = false;
     this->handle->useQualcommDev = false;
     CHECK_STATUS(get_platforms(&(this->handle->numPlatform), &(this->handle->platforms)));
-    CHECK_STATUS(platform_get_devices(this->handle->platforms[this->handle->platformId],
+    CHECK_STATUS(get_devices(this->handle->platforms[this->handle->platformId],
         this->handle->deviceType, &this->handle->numDevice, &this->handle->devices));
     CHECK_STATUS(create_context(this->handle->platforms[this->handle->platformId],
         this->handle->numDevice, this->handle->devices, &this->handle->context));
@@ -62,12 +62,12 @@ OCLContext::OCLContext()
     CHECK_STATUS(
         gcl_get_device_max_work_group(this->handle.get(), &this->handle->device_max_work_group));
 
-    UNI_DEBUG_LOG("OCLContext %p constructor end\n", (char *)this);
+    UNI_DETAIL_LOG("OCLContext %p constructor end.\n", (char *)this);
 }
 
 OCLContext::~OCLContext()
 {
-    UNI_DEBUG_LOG("OCLContext %p deconstructor start\n", (char *)this);
+    UNI_DETAIL_LOG("OCLContext %p deconstructor...\n", (char *)this);
     if (this->handle->platforms == nullptr) {
         return;
     }
@@ -80,10 +80,12 @@ OCLContext::~OCLContext()
     }
     if (this->handle->useBinMap) {
         delete (gcl_kernel_binmap *)this->handle->kernel_binmap;
-        dlclose(this->handle->kernel_binmap_handle);
     } else {
         CHECK_STATUS(release_program(this->handle->source_head[0]));
         delete (gcl_kernel_source *)this->handle->kernel_source;
+    }
+    if (this->handle->kernel_binmap_handle) {
+        dlclose(this->handle->kernel_binmap_handle);
     }
     this->handle->kernelMap.clear();
     if (this->handle->existProfilingQueue) {
@@ -95,7 +97,7 @@ OCLContext::~OCLContext()
     CHECK_STATUS(release_device(this->handle->devices[this->handle->deviceId]));
     free(this->handle->devices);
     free(this->handle->platforms);
-    UNI_DEBUG_LOG("OCLContext %p deconstructor end\n", (char *)this);
+    UNI_DETAIL_LOG("OCLContext %p deconstructor end.\n", (char *)this);
 }
 
 void OCLContext::setDeviceName()
@@ -162,27 +164,33 @@ void OCLContext::setDeviceName()
 
 void OCLContext::registerBinaryKernelMap()
 {
-    std::string libKernelBinName = "lib" + this->handle->deviceName + "_map.so";
-    char *err;
+    std::string libKernelBinName = gcl_get_kernelbin_name(this->handle->deviceName);
     void *dvm_handle = dlopen(libKernelBinName.c_str(), RTLD_LAZY);
+    this->handle->useBinMap = false;
+    this->handle->kernel_binmap = NULL;
+    this->handle->kernel_binmap_handle = NULL;
     if (dvm_handle) {
         std::string func = "create_" + this->handle->deviceName + "_kernelbin_map";
         gcl_kernel_binmap *(*create_kernelbin_map)();
         dlerror();
         create_kernelbin_map = (gcl_kernel_binmap * (*)()) dlsym(dvm_handle, func.c_str());
-        if ((err = dlerror()) != NULL) {
+        const char *err = dlerror();
+        if (err != NULL) {
             UNI_ERROR_LOG(
                 "Get %s in %s failed, error %s\n", func.c_str(), libKernelBinName.c_str(), err);
             dlclose(dvm_handle);
         }
         gcl_kernel_binmap *kernel_binmap = create_kernelbin_map();
-        this->handle->kernel_binmap = (void *)kernel_binmap;
-        this->handle->useBinMap = true;
+        if (kernel_binmap->binMap().size() > 0) {
+            this->handle->useBinMap = true;
+            this->handle->kernel_binmap = (void *)kernel_binmap;
+        } else {
+            delete kernel_binmap;
+        }
         this->handle->kernel_binmap_handle = dvm_handle;
     } else {
-        err = dlerror();
-        UNI_DEBUG_LOG("try to dlopen %s failed, %s, create kernel from source code\n",
-            libKernelBinName.c_str(), err);
+        UNI_DEBUG_LOG("try to dlopen %s failed %s, create kernel from source code\n",
+            libKernelBinName.c_str(), dlerror());
     }
 }
 
@@ -208,8 +216,9 @@ void OCLContext::registerSourceKernelMap()
         head_source->data, this->handle->source_head));
 }
 
+static OCLContext _instance;
+
 OCLContext &OCLContext::getInstance()
 {
-    static OCLContext _instance;
     return _instance;
 }

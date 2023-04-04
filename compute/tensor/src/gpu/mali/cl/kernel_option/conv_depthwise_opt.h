@@ -37,7 +37,7 @@ inline EE set_conv_depthwise_opt_mali(U32 fw,
     U32 fh,
     U32 sh,
     U32 workEntriesPerThread,
-    ActivationMode activeMode,
+    ActivationParamSpec activeMode,
     bool outputNchwMode,
     DataType dt,
     GCLMemType inputMemType,
@@ -67,10 +67,10 @@ inline EE set_conv_depthwise_opt_mali(U32 fw,
         CHECK_STATUS(NOT_SUPPORTED);
     }
 
-    U32 IN, LN, UN, FWH;
+    U32 in, LN, UN, FWH;
     bool useBasicReg = true;
-    IN = ON;
-    LN = IN - 1;
+    in = ON;
+    LN = in - 1;
     UN = LN;
     FWH = fw * fh;
     if (!useQualcomm) {
@@ -92,8 +92,8 @@ inline EE set_conv_depthwise_opt_mali(U32 fw,
             CHECK_STATUS(NOT_SUPPORTED);
         }
         if (!useBasicReg) {
-            IN = (ON - 1) * sh + fh;
-            LN = IN;
+            in = (ON - 1) * sh + fh;
+            LN = in;
             UN = LN - 1;
         }
     }
@@ -101,7 +101,7 @@ inline EE set_conv_depthwise_opt_mali(U32 fw,
     CHECK_STATUS(set_value_define_opt(fw, "FW", opt));
     CHECK_STATUS(set_value_define_opt(fh, "FH", opt));
     CHECK_STATUS(set_value_define_opt(ON, "ON", opt));
-    CHECK_STATUS(set_value_define_opt(IN, "IN", opt));
+    CHECK_STATUS(set_value_define_opt(in, "IN", opt));
     CHECK_STATUS(set_value_define_opt(LN, "LN", opt));
     CHECK_STATUS(set_value_define_opt(UN, "UN", opt));
     CHECK_STATUS(set_value_define_opt(FWH, "FWH", opt));
@@ -134,7 +134,7 @@ inline EE set_conv_depthwise_dila_opt_mali(U32 fw,
     U32 sh,
     U32 dh,
     U32 workEntriesPerThread,
-    ActivationMode activeMode,
+    ActivationParamSpec activeMode,
     bool outputNchwMode,
     DataType dt,
     GCLMemType inputMemType,
@@ -171,22 +171,22 @@ inline EE set_conv_depthwise_dila_opt_mali(U32 fw,
         CHECK_STATUS(NOT_SUPPORTED);
     }
 
-    U32 IN = ON;
+    U32 in = ON;
     U32 FWH = fw * fh;
-    U32 LN = IN;
+    U32 LN = in;
     U32 UN = 0;
     if (dh == 2) {
         if (sh == 2) {
-            LN = IN - 1;
+            LN = in - 1;
             UN = LN;
         } else {
-            LN = IN - 2;
+            LN = in - 2;
         }
     }
     CHECK_STATUS(set_value_define_opt(fw, "FW", opt));
     CHECK_STATUS(set_value_define_opt(fh, "FH", opt));
     CHECK_STATUS(set_value_define_opt(ON, "ON", opt));
-    CHECK_STATUS(set_value_define_opt(IN, "IN", opt));
+    CHECK_STATUS(set_value_define_opt(in, "IN", opt));
     CHECK_STATUS(set_value_define_opt(LN, "LN", opt));
     CHECK_STATUS(set_value_define_opt(FWH, "FWH", opt));
     CHECK_STATUS(set_activation_define_opt(activeMode, opt));

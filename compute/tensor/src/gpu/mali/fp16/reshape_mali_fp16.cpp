@@ -18,9 +18,6 @@ inline EE reshape_checkpara_mali_fp16(TensorDesc inputDesc, TensorDesc outputDes
     if (inputDesc.dt != outputDesc.dt) {
         return NOT_SUPPORTED;
     }
-    if (outputDesc.dt != DT_F16) {
-        return NOT_SUPPORTED;
-    }
     return SUCCESS;
 }
 
@@ -31,11 +28,12 @@ inline EE reshape_core_mali_fp16(GCLHandle_t handle,
     GCLMem_t output,
     GCLMem_t tmpbuf)
 {
+    DataType idt;
     U32 iw, ih, ic, in, it;
     U32 ow, oh, oc, on, ot;
     U32 iw_str, ih_str, ic_str, iw_off, ih_off;
     U32 ow_str, oh_str, oc_str, ow_off, oh_off;
-    tensorSelectGet(inputDesc, NULL, NULL, &in, &ic, &ih, &iw, &it);
+    tensorSelectGet(inputDesc, &idt, NULL, &in, &ic, &ih, &iw, &it);
     tensorSelectGet(outputDesc, NULL, NULL, &on, &oc, &oh, &ow, &ot);
     get_gclmem_dim(input->desc, &iw_str, &ih_str, &ic_str, &iw_off, &ih_off);
     get_gclmem_dim(output->desc, &ow_str, &oh_str, &oc_str, &ow_off, &oh_off);
@@ -83,7 +81,7 @@ inline EE reshape_core_mali_fp16(GCLHandle_t handle,
         U32 str[3] = {iw, ih, ic * it * in};
         U32 off[3] = {0, 0, 0};
         MemFlags flag = CL_MEM_READ_WRITE;
-        CHECK_STATUS(gclmem_set_desc_padding(&desc, str, off, DT_F16, DF_NCHW, GCL_MEM_BUF, flag));
+        CHECK_STATUS(gclmem_set_desc_padding(&desc, str, off, idt, DF_NCHW, GCL_MEM_BUF, flag));
         tMem.desc = desc;
         if (use3dMode) {
             CHECK_STATUS(ocl_data_trans_form_3d(handle, input, &tMem, 0, 0, type));
@@ -97,7 +95,7 @@ inline EE reshape_core_mali_fp16(GCLHandle_t handle,
         U32 str[3] = {ow, oh, oc * ot * on};
         U32 off[3] = {0, 0, 0};
         MemFlags flag = CL_MEM_READ_WRITE;
-        CHECK_STATUS(gclmem_set_desc_padding(&desc, str, off, DT_F16, DF_NCHW, GCL_MEM_BUF, flag));
+        CHECK_STATUS(gclmem_set_desc_padding(&desc, str, off, idt, DF_NCHW, GCL_MEM_BUF, flag));
         tMem.desc = desc;
         CHECK_STATUS(ocl_data_trans_form(handle, &tMem, output, 0, 0, NCHW_TO_NCHW));
     }

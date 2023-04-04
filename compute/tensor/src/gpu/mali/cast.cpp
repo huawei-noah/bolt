@@ -38,17 +38,6 @@ inline EE cast_checkpara_mali(
     return SUCCESS;
 }
 
-inline void set_dt_name(TensorDesc desc, char *name)
-{
-    DataType dt = desc.dt;
-    if (dt == DT_F16) {
-        UNI_STRCPY(name, "f16");
-    } else if (dt == DT_I32) {
-        UNI_STRCPY(name, "i32");
-    } else {
-        CHECK_STATUS(NOT_SUPPORTED);
-    }
-}
 inline EE cast_core_mali_fp16(GCLHandle_t handle,
     TensorDesc inputDesc,
     GCLMem_t input,
@@ -73,7 +62,7 @@ inline EE cast_core_mali_fp16(GCLHandle_t handle,
     U32 gs[3];
     U32 ls[3] = {0, 0, 0};
     U32 dim = 3;
-    bool useNchw = (input->desc.memFormat == DF_NCHW) ? true : false;
+    bool useNchw = (input->desc.memFormat != DF_NCHWC4) ? true : false;
     if (useNchw) {
         gs[0] = (w + 3) / 4;
         gs[1] = h;
@@ -102,9 +91,8 @@ EE cast_mali(GCLHandle_t handle,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
-    EE ret = SUCCESS;
     CHECK_STATUS(cast_checkpara_mali(handle, inputDesc, input, outputDesc, output));
     CHECK_STATUS(fill_output_zero(handle, output, outputDesc));
     CHECK_STATUS(cast_core_mali_fp16(handle, inputDesc, input, p, outputDesc, output));
-    return ret;
+    return SUCCESS;
 }

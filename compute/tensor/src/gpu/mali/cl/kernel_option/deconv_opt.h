@@ -112,7 +112,7 @@ inline EE get_deconv_gemm_scheme(
 inline EE set_deconv_gemm_f2s2_opt(U32 workChannelsPerThread,
     U32 workEntriesPerThread,
     bool reuseOnW,
-    ActivationMode activeMode,
+    ActivationParamSpec activeMode,
     DataType dt,
     GCLMemType inputMemType,
     GCLMemType outputMemType,
@@ -138,10 +138,10 @@ inline EE set_deconv_gemm_f2s2_opt(U32 workChannelsPerThread,
         std::to_string(ON) + std::to_string(KN);
     UNI_STRCPY(kernelName, kernel.c_str());
     UNI_STRCPY(kernelOpt->sourceName, source.c_str());
-    U32 IN = ON;
+    U32 in = ON;
     U32 LN = ON;
     CHECK_STATUS(set_value_define_opt(ON, "ON", opt));
-    CHECK_STATUS(set_value_define_opt(IN, "IN", opt));
+    CHECK_STATUS(set_value_define_opt(in, "IN", opt));
     CHECK_STATUS(set_value_define_opt(LN, "LN", opt));
     CHECK_STATUS(set_value_define_opt(KN, "KN", opt));
     CHECK_STATUS(set_activation_define_opt(activeMode, opt));

@@ -163,7 +163,7 @@ EE depthwise_pointwise_convolution_infer_forward_algorithm(Tensor inputTensor,
         ret = depthwise_pointwise_convolution_infer_forward_algorithm_mali(
             ((MaliPara_t)(archInfo->archPara))->handle, inputDesc, dwFilterDesc, pwFilterDesc,
             outputDesc, gclmemInputDesc, gclmemOutputDesc, convParamSpec, policy,
-            depthwiseActivationParamSpec.mode, pointwiseActivationParamSpec.mode,
+            depthwiseActivationParamSpec, pointwiseActivationParamSpec,
             ((MaliPara_t)(archInfo->archPara))->forwardRunInfo);
 #endif
     }
@@ -404,7 +404,7 @@ EE depthwise_pointwise_convolution(std::vector<Tensor> inputTensors,
             inputDesc, (GCLMem_t)input, dwFilterDesc, pwFilterDesc, (GCLMem_t)dwFilter,
             (GCLMem_t)pwFilter, convParamSpec, ((MaliPara_t)(archInfo->archPara))->forwardRunInfo,
             dwBiasDesc, pwBiasDesc, (GCLMem_t)dwBias, (GCLMem_t)pwBias, tmpBytes, tmpVec, outputDesc,
-            (GCLMem_t)output, depthwiseActivationParamSpec.mode, pointwiseActivationParamSpec.mode);
+            (GCLMem_t)output, depthwiseActivationParamSpec, pointwiseActivationParamSpec);
 #endif
     }
 

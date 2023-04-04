@@ -42,7 +42,7 @@ public:
     virtual void run_till_breakpoint(U32 opIdx);
 #endif
 
-    void loadAlgorithmMap(CI8 *path, bool useFileStream = false);
+    void loadAlgorithmMap(const char *path, bool useFileStream = false);
 
     void saveAlgorithmMapToFile(std::string algorithmMapPath);
 

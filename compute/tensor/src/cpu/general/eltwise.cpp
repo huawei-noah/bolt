@@ -74,7 +74,7 @@ EE eltwise_general(DataType dataType,
     void *output,
     EltwiseMode eltwiseMode)
 {
-    EE ret = SUCCESS;
+    EE ret = NOT_SUPPORTED;
     switch (dataType) {
 #ifdef _USE_FP32
         case DT_F32: {
@@ -92,8 +92,15 @@ EE eltwise_general(DataType dataType,
             ret = eltwise_general_kernel<U8>(input, inputSize, num, len, output, eltwiseMode);
             break;
         }
+        case DT_U32: {
+            ret = eltwise_general_kernel<U32>(input, inputSize, num, len, output, eltwiseMode);
+            break;
+        }
+        case DT_I32: {
+            ret = eltwise_general_kernel<I32>(input, inputSize, num, len, output, eltwiseMode);
+            break;
+        }
         default:
-            ret = NOT_SUPPORTED;
             break;
     }
     return ret;

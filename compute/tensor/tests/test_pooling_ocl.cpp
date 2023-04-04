@@ -14,27 +14,6 @@
 #include "tensor_computing.h"
 #include "ut_util_ocl.h"
 
-void NCHWC8_to_NCHW(F16 *input_cpu, F16 *input_cpu_nchw, U32 ih, U32 iw, U32 ic)
-{
-    int index_c = 0;
-    int index_hw = 0;
-    int channel_k = 0;
-    for (int i = 0; i < (int)(ic * ih * iw);) {
-        index_c = i % (ih * iw);
-        index_hw = i / (ih * iw);
-        for (int k = 0; k < 8; k++) {
-            if (index_hw % 8 == 0) {
-                channel_k = index_hw * (ih * iw);
-            }
-            if (index_c == 0) {
-                for (int j = 0; j < (int)(ih * iw); j++) {
-                    input_cpu_nchw[i++] = input_cpu[channel_k + k + j * 8];
-                }
-            }
-        }
-    }
-}
-
 int poolingTest(int argc, char **argv, DataType dt)
 {
     CHECK_REQUIREMENT(argc == 18);
@@ -70,21 +49,19 @@ int poolingTest(int argc, char **argv, DataType dt)
 
     TensorDesc inputDescCpu, inputDescGpu;
     if (it == 1) {
-        inputDescCpu = tensor4df(dt, DF_NCHWC8, in, ic, ih, iw);
+        inputDescCpu = tensor4df(dt, DF_NCHW, in, ic, ih, iw);
         inputDescGpu = tensor4df(dt, DF_NCHWC4, in, ic, ih, iw);
     } else {
-        inputDescCpu = tensor5df(dt, DF_NCHWC8, in, ic, it, ih, iw);
+        inputDescCpu = tensor5df(dt, DF_NCHW, in, ic, it, ih, iw);
         inputDescGpu = tensor5df(dt, DF_NCHWC4, in, ic, it, ih, iw);
     }
     TensorDesc output_desc_cpu, output_desc_gpu;
     U32 input_len = tensorNumElements(inputDescCpu);
-    U8 *input_cpu_nchwc8 = ut_input_v(input_len, dt, UT_INIT_RANDOM);
-    U8 *input_cpu_nchw = ut_input_v(input_len, dt, UT_INIT_ZERO);
-    NCHWC8_to_NCHW((F16 *)input_cpu_nchwc8, (F16 *)input_cpu_nchw, ih, iw, ic);
+    U8 *input_cpu_nchw = ut_input_v(input_len, dt, UT_INIT_RANDOM);
     Tensor inputTensorCpu;
     inputTensorCpu.resize(inputDescCpu);
     inputTensorCpu.alloc();
-    UNI_MEMCPY(get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), input_cpu_nchwc8,
+    UNI_MEMCPY(get_ptr_from_tensor(inputTensorCpu, CPU_GENERAL), input_cpu_nchw,
         tensorNumBytes(inputDescCpu));
 
     Tensor outputTensorCpu;
@@ -93,7 +70,8 @@ int poolingTest(int argc, char **argv, DataType dt)
         pooling_infer_output_size(&inputTensorCpu, p, &outputTensorCpu, &UT_SERIAL_ARCHINFO));
 
     outputTensorCpu.alloc();
-    CHECK_STATUS(pooling(inputTensorCpu, p, tmpTensorCpu, outputTensorCpu, &UT_SERIAL_ARCHINFO));
+    std::vector<Tensor> outputTensorsCpu = {outputTensorCpu};
+    CHECK_STATUS(pooling(inputTensorCpu, p, tmpTensorCpu, outputTensorsCpu, &UT_SERIAL_ARCHINFO));
 
     TensorDesc outputDescCpu = outputTensorCpu.get_desc();
     DataType odt;
@@ -104,11 +82,8 @@ int poolingTest(int argc, char **argv, DataType dt)
     } else if (tensorIs5d(outputDescCpu)) {
         CHECK_STATUS(tensor5dGet(outputDescCpu, &odt, &odf, &on, &oc, &ot, &oh, &ow));
     }
-
     U32 output_len = outputTensorCpu.length();
-    U8 *output_cpu_nchw = ut_input_v(output_len, dt, UT_INIT_ZERO);
-    NCHWC8_to_NCHW((F16 *)get_ptr_from_tensor(outputTensorCpu, CPU_GENERAL), (F16 *)output_cpu_nchw,
-        oh, ow, oc);
+    auto output_cpu_nchw = get_ptr_from_tensor(outputTensorCpu, CPU_GENERAL);
 
     std::shared_ptr<GCLHandle> handleSharedPtr = OCLContext::getInstance().handle;
     GCLHandle_t handle = handleSharedPtr.get();
@@ -147,21 +122,31 @@ int poolingTest(int argc, char **argv, DataType dt)
     GCLMem_t tmpbuf = alloc_bytes(tmpTensor, maxBytes);
 
     CHECK_STATUS(ocl_set_input(handle, input, inputDescGpu, input_cpu_nchw, tmpbuf, true));
-    CHECK_STATUS(pooling(inputTensor, p, tmpTensor, outputTensor, &archInfo));
+    std::vector<Tensor> outputTensors = {outputTensor};
+    CHECK_STATUS(pooling(inputTensor, p, tmpTensor, outputTensors, &archInfo));
 
-    /*warp up*/
-    UNI_INFO_LOG("warm up gpu:\n")
-    for (U32 i = 0; i < 2; i++) {
+    for (U32 i = 0; i < UT_WARMUP; i++) {
         CHECK_STATUS(gcl_run_kernelVec(handle));
     }
+    CHECK_STATUS(gcl_finish(handle));
 
-    UNI_INFO_LOG("Run:\n")
+    double time = 0;
 #ifdef _DEBUG
-    CHECK_STATUS(gcl_run_kernelVec_timing(handle, 0, handle->kernelVec->size()));
-    double time = handle->t_execute * 0.001;
+    for (I32 i = 0; i < UT_LOOPS; i++) {
+        CHECK_STATUS(gcl_run_kernelVec_timing(handle, 0, handle->kernelVec->size()));
+        time += handle->t_execute * 0.001;
+    }
 #else
-    CHECK_STATUS(gcl_run_kernelVec(handle));
+    double start = ut_time_ms();
+    for (I32 i = 0; i < UT_LOOPS; i++) {
+        CHECK_STATUS(gcl_run_kernelVec(handle));
+        CHECK_STATUS(gcl_finish(handle));
+    }
+    double end = ut_time_ms();
+    time = (end - start);
 #endif
+    time /= UT_LOOPS;
+
     CHECK_STATUS(ocl_get_output(handle, output, outputDesc, output_gpu, tmpbuf, true));
 
     char buffer[150];
@@ -169,15 +154,11 @@ int poolingTest(int argc, char **argv, DataType dt)
     sprintf(params, "(%u %u %u %u %u)/(%u %u %u)=(%u %u %u %u %u)", in, ic, it, ih, iw, p.kernel_t,
         p.kernel_h, p.kernel_w, on, oc, ot, oh, ow);
     sprintf(buffer, "%20s, %80s", "Pooling", params);
-#ifdef _DEBUG
     double ops = 1.0 * output_len * p.kernel_t * p.kernel_h * p.kernel_w;
     ut_log(dt, buffer, ops, time);
-#endif
 
-    ut_check_a(output_gpu, output_cpu_nchw, on * oc * ot * ow * oh, dt);
-    free(input_cpu_nchwc8);
+    ut_check_v(output_gpu, output_cpu_nchw, on * oc * ot * ow * oh, dt, 0.3);
     free(input_cpu_nchw);
-    free(output_cpu_nchw);
     free(output_gpu);
     CHECK_STATUS(gcl_finish(handle));
     CHECK_STATUS(gcl_clean_kernelVec(handle));
@@ -186,8 +167,6 @@ int poolingTest(int argc, char **argv, DataType dt)
 
 int main(int argc, char **argv)
 {
-#ifdef _USE_FP16
     poolingTest(argc, argv, DT_F16);
-#endif
     return 0;
 }

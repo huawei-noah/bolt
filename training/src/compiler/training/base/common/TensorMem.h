@@ -71,6 +71,7 @@ class TensorMem
         mSize = mMem.size();
     }
 
+    ~TensorMem(){}
     INLINE void resize(size_t size, dt* data)
     {
         if (mAllocationMode == AllocationMode::STANDARD)

@@ -43,7 +43,7 @@ void print_benchmark_usage()
               << std::endl;
 }
 
-void parse_options(int argc, char *argv[])
+int parse_options(int argc, char *argv[])
 {
     std::cout << "\nPlease enter this command './benchmark --help' to get more usage "
                  "information.\n";
@@ -51,7 +51,7 @@ void parse_options(int argc, char *argv[])
     for (std::string arg : lineArgs) {
         if (arg == "--help" || arg == "-help" || arg == "--h" || arg == "-h") {
             print_benchmark_usage();
-            exit(-1);
+            return 1;
         }
     }
 
@@ -86,9 +86,10 @@ void parse_options(int argc, char *argv[])
             default:
                 std::cout << "Input option gets error, please check the params meticulously.\n";
                 print_benchmark_usage();
-                exit(-1);
+                return 1;
         }
     }
+    return 0;
 }
 
 template <typename T>
@@ -103,7 +104,9 @@ inline std::shared_ptr<CNN> createPipelineTinyGPT(
     const char *affinityPolicyName, const char *modelPath, const char *algorithmMapPath = "")
 {
     ModelSpec ms;
-    CHECK_STATUS(deserialize_model_from_file(modelPath, &ms));
+    AffinityPolicy affinityPolicy = thread_affinity_get_policy_by_name(affinityPolicyName);
+    DataType targetDt = getTargetDtFromAffinity(affinityPolicy);
+    CHECK_STATUS(deserialize_model_from_file(modelPath, &ms, targetDt));
     for (int i = 0; i < ms.num_inputs; i++) {
         std::string curInputName = std::string(ms.input_names[i]);
         if (curInputName == "input_ids" || curInputName == "position_ids") {
@@ -114,7 +117,7 @@ inline std::shared_ptr<CNN> createPipelineTinyGPT(
                                            // ms.input_dims[i].dims[1] = 16;  // set2
         }
     }
-    std::shared_ptr<CNN> pipeline = createPipelinefromMs(affinityPolicyName, &ms, algorithmMapPath);
+    std::shared_ptr<CNN> pipeline = createPipelinefromMs(affinityPolicy, &ms, algorithmMapPath);
     CHECK_STATUS(mt_destroy_model(&ms));
     return pipeline;
 }
@@ -248,7 +251,9 @@ std::map<std::string, std::shared_ptr<Tensor>> get_output(
 int main(int argc, char *argv[])
 {
     UNI_TIME_INIT
-    parse_options(argc, argv);
+    if (0 != parse_options(argc, argv)) {
+        return 1;
+    }
 
     // 1: set up the pipeline
     auto pipeline = createPipelineTinyGPT(affinityPolicyName, modelPath, algorithmMapPath);

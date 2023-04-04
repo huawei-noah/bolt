@@ -23,7 +23,7 @@ public:
         this->dt = dt;
         this->p = p;
     }
-
+    ~Softmax(){}
     OperatorType get_type() override
     {
         return OT_Softmax;

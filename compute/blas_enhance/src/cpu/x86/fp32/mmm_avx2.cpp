@@ -12,7 +12,7 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "cpu/x86/fp32/blas_fp32.h"
-#include "thread_affinity.h"
+#include "blas_enhance.h"
 
 #define UNROLL_K 4
 #define UNROLL_N 24
@@ -20,6 +20,102 @@
 #define BOLCK_M_DIM 1024
 #define BOLCK_K_DIM 1024
 #define align_addr(addr, unit) (((uintptr_t)addr + unit - 1) / unit * unit)
+
+void matrix_matrix_multiply_transform_rhs_bytes_fp32(
+    U32 N, U32 K, DataFormat bdf, U32 *bytes, U32 *rhsBytes)
+{
+    U32 matrix = 0;
+    U32 pad = 0;
+    if (bdf != matrix_matrix_multiply_rhs_format(DT_F32)) {
+        matrix = UNI_ALIGN(N, 8) * K * bytesOf(DT_F32);
+        pad = matrix + 32;
+    }
+    if (rhsBytes != nullptr) {
+        *rhsBytes = matrix;
+    }
+    if (bytes != nullptr) {
+        *bytes = pad;
+    }
+}
+
+void matrix_matrix_multiply_tmp_bytes_fp32(
+    U32 N, U32 M, U32 K, DataFormat adf, DataFormat bdf, U32 *bytes)
+{
+    matrix_matrix_multiply_transform_rhs_bytes_fp32(N, K, bdf, bytes, nullptr);
+    *bytes += M * K * bytesOf(DT_F32);
+    *bytes += 32;
+}
+
+EE matrix_matrix_multiply_transform_rhsN_fp32(TensorDesc desc, F32 *src, F32 *dst)
+{
+    DataType dt;
+    DataFormat df;
+    U32 N, K;
+    CHECK_STATUS(tensor2dGet(desc, &dt, &df, &K, &N));
+    F32 unrollSize[4] = {4, 8, 16, 24};
+    U32 resN = N % UNROLL_N;
+    U32 edgeBlockNSizeIdx = (resN > 4) ? ((resN + 7) / 8) : 0;
+    U32 edgeBlockNSize = (resN > 0) ? unrollSize[edgeBlockNSizeIdx] : 0;
+    I32 blockNNum = N / UNROLL_N + (resN > 0);
+    U32 blockKNum = (K + BOLCK_K_DIM - 1) / BOLCK_K_DIM;
+    I32 alginedN = (blockNNum - 1) * UNROLL_N + edgeBlockNSize;
+    if (edgeBlockNSize == 0) {
+        alginedN += UNROLL_N;
+    }
+    U32 loopNum = blockKNum * blockNNum;
+
+    // buffer addr algined to 32
+    F32 *packB = (F32 *)align_addr(dst, 32);
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
+    for (U32 l = 0; l < loopNum; ++l) {
+        U32 bk = l / blockNNum * BOLCK_K_DIM;
+        U32 blockSizeK = UNI_MIN(BOLCK_K_DIM, K - bk);
+        U32 un = (l % blockNNum) * UNROLL_N;
+        U32 unrollSizeN = UNI_MAX(UNI_MIN(UNROLL_N, N - un), edgeBlockNSize);
+        F32 *curB = packB + bk * alginedN + un * blockSizeK;
+        matrix2_trans_w(
+            unrollSizeN, UNI_MIN(N - un, unrollSizeN), blockSizeK, N, src + bk * N + un, curB);
+    }
+    return SUCCESS;
+}
+
+EE matrix_matrix_multiply_transform_rhsT_fp32(TensorDesc desc, F32 *src, F32 *dst)
+{
+    DataType dt;
+    DataFormat df;
+    U32 N, K;
+    CHECK_STATUS(tensor2dGet(desc, &dt, &df, &N, &K));
+    F32 unrollSize[4] = {4, 8, 16, 24};
+    U32 resN = N % UNROLL_N;
+    U32 edgeBlockNSizeIdx = (resN > 4) ? ((resN + 7) / 8) : 0;
+    U32 edgeBlockNSize = (resN > 0) ? unrollSize[edgeBlockNSizeIdx] : 0;
+    I32 blockNNum = N / UNROLL_N + (resN > 0);
+    U32 blockKNum = (K + BOLCK_K_DIM - 1) / BOLCK_K_DIM;
+    I32 alginedN = (blockNNum - 1) * UNROLL_N + edgeBlockNSize;
+    if (edgeBlockNSize == 0) {
+        alginedN += UNROLL_N;
+    }
+    U32 loopNum = blockKNum * blockNNum;
+
+    // buffer addr aligned to 32
+    F32 *packB = (F32 *)align_addr(dst, 32);
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
+    for (U32 l = 0; l < loopNum; ++l) {
+        U32 bk = l / blockNNum * BOLCK_K_DIM;
+        U32 blockSizeK = UNI_MIN(BOLCK_K_DIM, K - bk);
+        U32 un = (l % blockNNum) * UNROLL_N;
+        U32 unrollSizeN = UNI_MAX(UNI_MIN(UNROLL_N, N - un), edgeBlockNSize);
+        F32 *curB = packB + bk * alginedN + un * blockSizeK;
+        matrix1_trans_w(
+            unrollSizeN, UNI_MIN(N - un, unrollSizeN), blockSizeK, K, src + bk + un * K, curB);
+    }
+
+    return SUCCESS;
+}
 
 typedef void (*kernel_func)(U32 um,
     U32 un,
@@ -410,7 +506,7 @@ typedef void (*kernel_func)(U32 um,
                          "jg 2b                                        \n\t" \
                          "3:                                           \n\t" \
                          "shl $2, %%rax                                \n\t" \
-                         store_##m##x24_##edge(%%rax)                               \
+                         store_##m##x24_##edge(%%rax)                        \
                          : [B] "+r" (matrixB),                               \
                            [A0] "+r" (matrixA),                              \
                            [A1] "+r" (A1),                                   \
@@ -418,8 +514,8 @@ typedef void (*kernel_func)(U32 um,
                            [A3] "+r" (A3),                                   \
                            [C] "+r" (matrixC)                                \
                          : "a"((I64)N),                                      \
-                           [bk] "r" (bk),                                     \
-                           [mask] "r" (mask)                                     \
+                           [bk] "r" (bk),                                    \
+                           [mask] "r" (mask)                                 \
                          : "%ecx",                                           \
                            "%ymm0", "%ymm1", "%ymm2", "%ymm3", "%ymm4",      \
                            "%ymm5", "%ymm6", "%ymm7", "%ymm8", "%ymm9",      \
@@ -559,19 +655,19 @@ mmm_mxn_asm(3, 4, 3)
 mmm_mxn_asm(2, 4, 2)
 mmm_mxn_asm(1, 4, 1)
 
-// clang-format on
+    // clang-format on
 
-void mmm_avx2_n_mtail(U32 um,
-    U32 un,
-    U32 bk,
-    F32 *matrixA,
-    F32 *matrixB,
-    F32 *matrixC,
-    U32 N,
-    I32 *mask,
-    F32 *A1,
-    F32 *A2,
-    F32 *A3)
+    void mmm_avx2_n_mtail(U32 um,
+        U32 un,
+        U32 bk,
+        F32 *matrixA,
+        F32 *matrixB,
+        F32 *matrixC,
+        U32 N,
+        I32 *mask,
+        F32 *A1,
+        F32 *A2,
+        F32 *A3)
 {
     F32 *ar[4] = {matrixA, A1, A2, A3};
     for (U32 i = 0; i < um; ++i) {
@@ -581,66 +677,6 @@ void mmm_avx2_n_mtail(U32 um,
             }
         }
     }
-}
-
-void matrix_matrix_multiply_tmp_bytes_fp32(
-    U32 row1, U32 col1, U32 row2, U32 col2, DataType dt, U32 *bytes)
-{
-    *bytes = row1 * col1 + (col2 + 7) / 8 * 8 * row2;
-    *bytes *= sizeof(dt);
-    *bytes += 32;
-}
-
-EE matrix_matrix_multiply_transform_rhsN_fp32(TensorDesc desc, F32 *src, F32 *dst)
-{
-    DataType dt;
-    DataFormat df;
-    U32 N, K, blockSizeK, unrollSizeN;
-    CHECK_STATUS(tensor2dGet(desc, &dt, &df, &K, &N));
-    F32 unrollSize[4] = {4, 8, 16, 24};
-    U32 resN = N % UNROLL_N;
-    U32 edgeBlockNSizeIdx = (resN > 4) ? ((resN + 7) / 8) : 0;
-    U32 edgeBlockNSize = unrollSize[edgeBlockNSizeIdx];
-
-    // buffer addr algined to 32
-    F32 *packB = (F32 *)align_addr(dst, 32);
-    for (U32 bk = 0; bk < K; bk += blockSizeK) {
-        blockSizeK = UNI_MIN(BOLCK_K_DIM, K - bk);
-        for (U32 un = 0; un < N; un += unrollSizeN) {
-            unrollSizeN = UNI_MAX(UNI_MIN(UNROLL_N, N - un), edgeBlockNSize);
-            matrix2_trans_w(
-                unrollSizeN, UNI_MIN(N - un, unrollSizeN), blockSizeK, N, src + un, packB);
-            packB += unrollSizeN * blockSizeK;
-        }
-        src += blockSizeK * N;
-    }
-    return SUCCESS;
-}
-
-EE matrix_matrix_multiply_transform_rhsT_fp32(TensorDesc desc, F32 *src, F32 *dst)
-{
-    DataType dt;
-    DataFormat df;
-    U32 N, K, blockSizeK, unrollSizeN;
-    CHECK_STATUS(tensor2dGet(desc, &dt, &df, &N, &K));
-    F32 unrollSize[4] = {4, 8, 16, 24};
-    U32 resN = N % UNROLL_N;
-    U32 edgeBlockNSizeIdx = (resN > 4) ? ((resN + 7) / 8) : 0;
-    U32 edgeBlockNSize = unrollSize[edgeBlockNSizeIdx];
-
-    // buffer addr aligned to 32
-    F32 *packB = (F32 *)align_addr(dst, 32);
-    for (U32 bk = 0; bk < K; bk += blockSizeK) {
-        blockSizeK = UNI_MIN(BOLCK_K_DIM, K - bk);
-        for (U32 un = 0; un < N; un += unrollSizeN) {
-            unrollSizeN = UNI_MAX(UNI_MIN(UNROLL_N, N - un), edgeBlockNSize);
-            matrix1_trans_w(
-                unrollSizeN, UNI_MIN(N - un, unrollSizeN), blockSizeK, K, src + un * K, packB);
-            packB += unrollSizeN * blockSizeK;
-        }
-        src += blockSizeK;
-    }
-    return SUCCESS;
 }
 
 EE mmm_avx2_fp32(
@@ -675,8 +711,8 @@ EE mmm_avx2_fp32(
 #ifdef _USE_OPENMP
     int in_parallel = omp_in_parallel();
 #pragma omp parallel num_threads(OMP_NUM_THREADS) if (in_parallel == 0)
-    {
 #endif
+    {
         I32 blockSizeK = 0;
         for (int k = 0; k < K; k += blockSizeK) {
             blockSizeK = UNI_MIN(BOLCK_K_DIM, K - k);
@@ -685,7 +721,7 @@ EE mmm_avx2_fp32(
             }
 
 #ifdef _USE_OPENMP
-#pragma omp for
+#pragma omp for schedule(static)
 #endif
             for (int mnIdx = 0; mnIdx < blockNum; ++mnIdx) {
                 I32 j = mnIdx / mainBlockNum * BOLCK_M_DIM;
@@ -714,12 +750,10 @@ EE mmm_avx2_fp32(
                 }
 
                 kernel[unrollSizeM - 1][(blockSizeN >> 3) + (blockSizeN > 3)](unrollSizeM,
-                    blockSizeN, blockSizeK, curA, curB, result + (m + j) * N + n, N, maskPtr,
-                    A1, A2, A3);
+                    blockSizeN, blockSizeK, curA, curB, result + (m + j) * N + n, N, maskPtr, A1,
+                    A2, A3);
             }
         }
-#ifdef _USE_OPENMP
     }
-#endif
     return SUCCESS;
 }

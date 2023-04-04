@@ -76,11 +76,13 @@ public:
     {
         this->needSetKernelVec = true;
         this->iter = 0;
+        EE ret = SUCCESS;
         if (this->p.axis >= 0) {
             int axisIndex = 0;
             if (inTensors.size() > 2) {
                 axisIndex = 2;
             } else {
+                ret = NOT_SUPPORTED;
                 UNI_ERROR_LOG("set to use axis feature of Repeat must meet input tensors >= 3 "
                               "requirement\n");
             }
@@ -95,7 +97,7 @@ public:
         TensorDesc inDesc = inTensor->get_desc();
         U32 length = tensorNumElements(inDesc);
         hostVal = std::shared_ptr<I32>(new I32(length));
-        return SUCCESS;
+        return ret;
     }
 
     REGISTER_OCL_OPERATOR_RUN

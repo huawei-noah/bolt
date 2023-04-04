@@ -22,7 +22,7 @@ public:
     {
         this->dt = dt;
     }
-
+    ~Select(){}
     OperatorType get_type() override
     {
         return OT_Select;

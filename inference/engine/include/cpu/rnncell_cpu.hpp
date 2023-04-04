@@ -36,14 +36,15 @@ public:
         Tensor hTensor = this->outputTensors[0];
         Tensor tmpTensor = this->temp;
         U32 tmpOffset = 0;
-        if (this->featureScale.size() > 1) {
+        if ((featureScale.size() > 1) && (featureScale[0][0] > 0)) {
             tmpTensor.resize(xTensor.get_desc());
             CHECK_STATUS(clip(xTensor, this->clipParam, tmpTensor, &this->archInfo));
             xTensor = tmpTensor;
             tmpOffset = xTensor.bytes();
+            *this->scales = featureScale[0][0];
         }
         CHECK_STATUS(rnncell(xTensor, this->weightTensors, this->biasTensors, stateTensor, this->p,
-            this->xDim, this->p.num_outputs, tmpOffset, tmpTensor, hTensor, &this->archInfo));
+            this->xDim, this->p.num_outputs, tmpOffset, tmpTensor, hTensor, this->scales.get(), &this->archInfo));
     }
 
     EE infer_output_tensors_size(
@@ -65,9 +66,9 @@ public:
         CHECK_STATUS(rnncell_infer_forward_tmp_bytes(this->inputTensors[0], this->weightTensors[0],
             this->outputTensors[0], this->p, &bytes, &this->archInfo));
 
-        if (featureScale.size() > 1) {
-            CHECK_REQUIREMENT(featureScale[0][0] > 0);
-            CHECK_REQUIREMENT(featureScale[0][0] == featureScale[1][0]);
+        if ((featureScale.size() > 1) && (featureScale[0][0] > 0)) {
+            // CHECK_REQUIREMENT(featureScale[0][0] > 0);
+            // CHECK_REQUIREMENT(featureScale[0][0] == featureScale[1][0]);
             this->clipParam.max = 127.0 / featureScale[0][0];
             this->clipParam.min = -1 * this->clipParam.max;
             bytes += this->inputTensors[0].bytes();
@@ -88,14 +89,35 @@ public:
             ftmTensors[i].alloc();
             tmpFilter[i] = &ftmTensors[i];
         }
+
+        F32 *scalePtr = nullptr;
+#ifdef _USE_INT8
+        this->scales = std::shared_ptr<F32>((F32 *)operator new((filter_num + 2) * bytesOf(DT_F32)));
+        scalePtr = this->scales.get();
+        UNI_MEMSET(scalePtr, 0, (filter_num + 2) * bytesOf(DT_F32));
+
+        if (featureScale.size() > 0) {
+            scalePtr[0] = featureScale[0][0];
+            scalePtr[filter_num + 1] = featureScale.back()[0];
+        }
+
+        for (I32 i = 0; i < filter_num; i++) {
+            if (weightTensors[i].get_desc().dt == DT_I8) {
+                ftmTensors[i].set_scale(this->weightTensors[i].get_scale());
+            }
+            scalePtr[i + 1] = ftmTensors[i].get_scale();
+        }
+#endif
+
         CHECK_STATUS(rnn_transform_filter(
-            this->weightTensors, this->p, this->temp, tmpFilter, &this->archInfo));
+            this->weightTensors, this->p, this->temp, tmpFilter, &this->archInfo, scalePtr));
         this->weightTensors = ftmTensors;
         return SUCCESS;
     }
 
     EE infer_weight_desc() override
     {
+        DataType weightDt = this->ws.mdt;
         int directions = (this->p.bi_direction) ? 2 : 1;
         int weightNum, biasNum, column;
         if (this->p.num_projection > 0) {
@@ -123,10 +145,10 @@ public:
         U32 filterRow = gates * column;
         U32 filterCol = this->xDim + this->p.num_outputs;
         std::vector<TensorDesc> weight_desc(2), bias_desc(2);
-        weight_desc[0] = tensor2df(this->dt, DF_NK, filterRow, filterCol);
-        weight_desc[1] = tensor2df(this->dt, DF_NK, this->p.num_outputs, this->p.num_projection);
-        bias_desc[0] = tensor1d(this->dt, filterRow);
-        bias_desc[1] = tensor1d(this->dt, this->p.num_outputs);
+        weight_desc[0] = tensor2df(weightDt, DF_NK, filterRow, filterCol);
+        weight_desc[1] = tensor2df(weightDt, DF_NK, this->p.num_outputs, this->p.num_projection);
+        bias_desc[0] = tensor1d(noQuantDataType(this->dt), filterRow);
+        bias_desc[1] = tensor1d(noQuantDataType(this->dt), this->p.num_outputs);
         this->weightTensors = std::vector<Tensor>(directions * weightNum);
         this->biasTensors = std::vector<Tensor>(directions * biasNum);
         for (int i = 0, wid = 0, vid = 0; i < directions; i++) {

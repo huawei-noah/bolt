@@ -54,7 +54,10 @@ EE depthwise_pointwise_convolution_3x3s1p1_A55(TensorDesc inputDesc,
     F16 *pwArray = (F16 *)tmp;
 
     for (U32 n = 0; n < in; n++) {
-        // dw_conv + padding
+// dw_conv + padding
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
         for (U32 c = 0; c < ic; c++) {
             const F16 *b = dwBiasArray + c * 8;
             F16 *in_c = inArray + c * ih * iw * 8;
@@ -1122,12 +1125,18 @@ EE depthwise_pointwise_convolution_3x3s1p1_A55(TensorDesc inputDesc,
                 "x3");
         }
 
-        // pw_conv
+// pw_conv
+#ifdef _USE_OPENMP
+#pragma omp parallel for num_threads(OMP_NUM_THREADS)
+#endif
         for (I32 hw = 0; hw < ohow - 7; hw += 8) {
             const F16 *b0 = pwBiasArray;
             const F16 *b1 = b0 + 8;
             const F16 *f_o0c0 = pwFilterArray;
             F16 *in_pack = pwArray + ohow * ic * 8;
+#ifdef _USE_OPENMP
+            in_pack = in_pack + ic * 8 * 8 * omp_get_thread_num();
+#endif
             // pack input
             // NCHWc8 => NHWChw8
             for (U32 c = 0; c < ic; c++) {

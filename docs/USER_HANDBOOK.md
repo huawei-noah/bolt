@@ -192,7 +192,7 @@ Example: Run mobilenet_v1 for image classification with CPU
       
       - CPU_AFFINITY_LOW_POWER, Bolt will look for a low-frequency core.
       
-      - GPU, Bolt will run the model on MALI GPU.
+      - GPU, Bolt will run the model on GPU.
 
    - -p/--algoPath: The file path to save algorithm selection result info, it is strongly recommended to be set when use GPU.
 
@@ -400,7 +400,7 @@ More usage information can be find in [DEVELOPER.md](./DEVELOPER.md#time-series-
 
 ### How to reduce gpu inference overhead
 
-Bolt support ARM GPU inference with OpenCL, but there are a big overhead that is caused by compiling OpenCL kernel source code and selecting optimal algorithm.
+Bolt support GPU inference with OpenCL, but there are a big overhead that is caused by compiling OpenCL kernel source code and selecting optimal algorithm.
 
 They can be optimized by preparing some files in advance. Inference can directly use prepared files. 
 You can refer [REDUCE_GPU_PREPARE_TIME.md](./REDUCE_GPU_PREPARE_TIME.md) for more details.

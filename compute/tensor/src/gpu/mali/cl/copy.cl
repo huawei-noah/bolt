@@ -11,15 +11,9 @@
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
-#define MANGLE_NAME_IMPL(base, BIND, DT) base##BIND##DT
-#define MANGLE_NAME(base, BIND, DT) MANGLE_NAME_IMPL(base, BIND, DT)
+#include "kernel_def.h"
 
-#define BIND
-#if defined(USE_BLOCK_INDEX)
-#define BIND with_block_index_
-#endif
-
-__kernel void MANGLE_NAME(copy_, BIND, DT)(const int s_len,
+__kernel void KERNEL_NAME(const int s_len,
     const int d_len,
     int s_off,
     int d_off,

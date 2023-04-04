@@ -154,36 +154,23 @@ int roialignTest(int argc, char *argv[], DataType dt)
     }
     CHECK_STATUS(roialign(inTensors, p, tmpTensor, outTensor, &archInfo));
 
-    /*warp up*/
-    UNI_INFO_LOG("warm up gpu:\n")
-    for (U32 i = 0; i < 2; i++) {
-        CHECK_STATUS(gcl_run_kernelVec(handle));
-    }
-
-#ifdef _DEBUG
-    CHECK_STATUS(gcl_finish(handle));
     double time = 0;
-    double min_time = DBL_MAX;
-    double max_time = 0;
-    U32 loop = 1;
-    for (U32 i = 0; i < loop; i++) {
+#ifdef _DEBUG
+    for (I32 i = 0; i < UT_LOOPS; i++) {
         CHECK_STATUS(gcl_run_kernelVec_timing(handle, 0, handle->kernelVec->size()));
-        double t = handle->t_execute * 0.001;
-        if (t < min_time)
-            min_time = t;
-        if (t > max_time)
-            max_time = t;
-        time += t;
+        time += handle->t_execute * 0.001;
     }
-    time = (time - min_time - max_time) / (loop - 2);
-    UNI_INFO_LOG("min_time = %lf\n", min_time);
-    UNI_INFO_LOG("max_time = %lf\n", max_time);
-    UNI_INFO_LOG("avg_time = %lf\n", time);
-    time = min_time;
 #else
-    CHECK_STATUS(gcl_run_kernelVec(handle));
+    double start = ut_time_ms();
+    for (I32 i = 0; i < UT_LOOPS; i++) {
+        CHECK_STATUS(gcl_run_kernelVec(handle));
+        CHECK_STATUS(gcl_finish(handle));
+    }
+    double end = ut_time_ms();
+    time = (end - start);
 #endif
-    CHECK_STATUS(ocl_get_output(handle, output, outputDesc, output_gpu, tmpbuf, true));
+    time /= UT_LOOPS;
+
     char buffer[150];
     char params[120];
     on = outputDesc.dims[outputDesc.nDims - 1];
@@ -191,12 +178,12 @@ int roialignTest(int argc, char *argv[], DataType dt)
     sprintf(params, "(%u %u %u %u) * (%u %u) * (%u) * (%u %u) = (%u %u %u %u)", in, ic, ih, iw,
         roiNum, roiSize, batchIndex, oh, ow, on, oc, oh, ow);
     sprintf(buffer, "%20s, %80s", "Roialign", params);
-#ifdef _DEBUG
     double ops = 1.0 * tensorNumElements(outputDesc);
     ut_log(dt, buffer, ops, time);
-#endif
-    ut_check_a(output_gpu, get_ptr_from_tensor(outTensorCpu, CPU_GENERAL),
-        tensorNumElements(outputDesc), dt);
+
+    CHECK_STATUS(ocl_get_output(handle, output, outputDesc, output_gpu, tmpbuf, true));
+    ut_check_v(output_gpu, get_ptr_from_tensor(outTensorCpu, CPU_GENERAL),
+        tensorNumElements(outputDesc), dt, 0.3);
     CHECK_STATUS(gcl_finish(handle));
     CHECK_STATUS(gcl_clean_kernelVec(handle));
     for (U32 i = 0; i < num; i++) {
@@ -208,8 +195,6 @@ int roialignTest(int argc, char *argv[], DataType dt)
 
 int main(int argc, char **argv)
 {
-#ifdef _USE_FP16
     roialignTest(argc, argv, DT_F16);
-#endif
     return 0;
 }

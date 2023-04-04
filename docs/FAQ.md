@@ -8,7 +8,7 @@
 
 * **How to use 1-bit BNN?**
 
-    Bolt converts 0/1, -1/1 float weight to 1-bit bolt model. If you want to run 1-bit network, you can set model conversion precision to "BNN_FP16".
+    Bolt converts 0/1, -1/1 float weight to 1-bit bolt model. If you want to run 1-bit network, you can set model conversion precision to "BNN".
 
 * **Restrictions for 1-bit BNN?**
 
@@ -52,7 +52,7 @@
 
     Set *JNI_ROOT* shell environment variable, jni.h and jni_md.h are under <JNI_ROOT>/include or <JNI_ROOT>/include/linux directory.
 
-    Run Bolt build and install script. You will see *-D_USE_JNI* in cmake C/C++ compiler flags output information.
+    Run Bolt build and install script. You will see *-D_USE_API_JAVA* in cmake C/C++ compiler flags output information.
 
 * **Time clock error on MacOS.**
 
@@ -86,3 +86,18 @@
     ```
 
     This is because program doesn't have execute priviledge. you can give it priviledge by using *chmod +x ./XXX_program*.
+
+* **fatal: unable to access 'https://xxxxxxxxx': SSL certificate problem: unable to get local issuer certificate**
+
+    You can disable ssl check by using command.
+    ```
+    git config --global http.sslVerify false
+    ```
+
+* **error while loading shared libraries: libOpenCL.dll: cannot open shared object file: No such file or directory**
+
+    You can use windows system library /c/Windows/System32/OpenCL.dll, copy id to current directory and rename it to libOpenCL.dll.
+    ```
+    cp /c/Windows/System32/OpenCL.dll ./libOpenCL.dll
+    export LD_LIBRARY_PATH=./
+    ```

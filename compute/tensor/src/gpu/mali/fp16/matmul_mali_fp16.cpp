@@ -18,8 +18,7 @@
 inline EE matmul_checkpara_mali_fp16(
     TensorDesc matrixADesc, TensorDesc matrixBDesc, TensorDesc matrixCDesc)
 {
-    if (matrixADesc.dt != matrixBDesc.dt || matrixADesc.dt != matrixCDesc.dt ||
-        matrixADesc.dt != DT_F16) {
+    if (matrixADesc.dt != matrixBDesc.dt || matrixADesc.dt != matrixCDesc.dt) {
         return NOT_MATCH;
     }
     return SUCCESS;
@@ -74,17 +73,17 @@ inline void get_process_matmul_input_tmp_bytes(TensorDesc desc,
                 memPtr = &tmpOclMem;
                 memPtr->resize(desc);
                 U32 w = desc.dims[0];
-                U32 pr = ALIGN(w, alignVal) - w;
+                U32 pr = UNI_ALIGN(w, alignVal) - w;
                 memPtr->padding(0, pr, 0, 0);
                 U32 bytes = memPtr->bytes();
-                (*tmpBufSize) += ALIGN(bytes, BUFFER_ALIGN_BASE);
+                (*tmpBufSize) += UNI_ALIGN(bytes, BUFFER_ALIGN_BASE);
             }
             return;
         }
         memPtr = &tmpOclMem;
         memPtr->resize(desc);
         U32 bytes = memPtr->bytes();
-        (*tmpBufSize) += ALIGN(bytes, BUFFER_ALIGN_BASE);
+        (*tmpBufSize) += UNI_ALIGN(bytes, BUFFER_ALIGN_BASE);
     }
 
     if (needReshape) {
@@ -95,12 +94,12 @@ inline void get_process_matmul_input_tmp_bytes(TensorDesc desc,
             desc.dims[1] = w;
             tmpOclMem.resize(desc);
             U32 bytes = tmpOclMem.bytes();
-            (*tmpBufSize) += ALIGN(bytes, BUFFER_ALIGN_BASE);
+            (*tmpBufSize) += UNI_ALIGN(bytes, BUFFER_ALIGN_BASE);
             curTrans = !curTrans;
         } else if (gclmemDesc.num != tensorNumElements(desc)) {
             tmpOclMem.resize(desc);
             U32 bytes = tmpOclMem.bytes();
-            (*tmpBufSize) += ALIGN(bytes, BUFFER_ALIGN_BASE);
+            (*tmpBufSize) += UNI_ALIGN(bytes, BUFFER_ALIGN_BASE);
         }
         desc = descReshaped;
     }
@@ -140,10 +139,10 @@ inline void get_process_matmul_input_tmp_bytes(TensorDesc desc,
         if (!useImg) {
             memPtr = &tmpOclMem;
             memPtr->resize(desc);
-            U32 pr = ALIGN(h, alignVal) - h;
+            U32 pr = UNI_ALIGN(h, alignVal) - h;
             memPtr->padding(0, pr, 0, 0);
             U32 bytes = memPtr->bytes();
-            (*tmpBufSize) += ALIGN(bytes, BUFFER_ALIGN_BASE);
+            (*tmpBufSize) += UNI_ALIGN(bytes, BUFFER_ALIGN_BASE);
         }
     }
 }
@@ -177,7 +176,7 @@ inline EE process_matmul_input(GCLHandle_t handle,
             }
             memPtr->resize(desc);
             U32 w = desc.dims[0];
-            U32 pr = ALIGN(w, alignVal) - w;
+            U32 pr = UNI_ALIGN(w, alignVal) - w;
             memPtr->padding(0, pr, 0, 0);
             matrixTran->desc = memPtr->get_desc();
             if (tmpImg) {
@@ -240,7 +239,7 @@ inline EE process_matmul_input(GCLHandle_t handle,
         desc.dims[1] = w;
         memPtr = (tmpImg) ? (OclMemory *)(&tmpOclImg) : &tmpOclMem;
         memPtr->resize(desc);
-        U32 pr = ALIGN(h, alignVal) - h;
+        U32 pr = UNI_ALIGN(h, alignVal) - h;
         memPtr->padding(0, pr, 0, 0);
         matrixTran->desc = memPtr->get_desc();
         if (tmpImg) {
@@ -363,7 +362,7 @@ inline EE matmul_tn_core_mali_fp16(GCLHandle_t handle,
     U32 ls[3] = {0, 0, 0};
     U32 dim = 3;
 
-    CHECK_STATUS(set_gemm_tn_opt_mali(item_a, item_b, biasMode, false, ACTIVATION_NULL, DT_F16,
+    CHECK_STATUS(set_gemm_tn_opt_mali(item_a, item_b, biasMode, false, {}, dt,
         matrixAMemType, matrixBMemType, matrixCMemType, kernelName, &kernelOpt));
     CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
     CHECK_STATUS(gcl_set_kernelArgs(kernel, M, N, K, A_str, B_str, C_str, A_off, B_off, C_off,
@@ -408,7 +407,7 @@ EE matmul_infer_forward_tmp_bytes_mali_fp16(TensorDesc matrixADesc,
     }
     if (needReshapeA || needReshapeB) {
         if (tensorNumElements(matrixCDesc) != gclmemMatrixCDesc.num) {
-            bufSize += ALIGN(tensorNumBytes(matrixCDesc), BUFFER_ALIGN_BASE);
+            bufSize += UNI_ALIGN(tensorNumBytes(matrixCDesc), BUFFER_ALIGN_BASE);
         }
     }
     bytes[0] = bufSize;

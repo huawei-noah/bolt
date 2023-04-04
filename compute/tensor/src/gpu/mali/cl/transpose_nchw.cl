@@ -10,9 +10,8 @@
 // WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR
 // COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
 #include "kernel_def.h"
-#define MANGLE_NAME_IMPL(base, IOM, DN) base##IOM##DN
-#define MANGLE_NAME(base, IOM, DN) MANGLE_NAME_IMPL(base, IOM, DN)
 
 #if (DN <= 2)
 #define SWAP_ID_CORE(id, dim, d0, n0) \
@@ -233,7 +232,7 @@
     SWAP_ID_CORE(od5, dim5, id0 << 2, 0, id1, 1, id2, 2, id3, 3, id4, 4, id5, 5, id6, 6);
 #endif
 
-__kernel void MANGLE_NAME(transpose_nchw_, IOM, DN)(const int iw_str,
+__kernel void KERNEL_NAME(const int iw_str,
     const int ih_str,
     const int ow_str,
     const int oh_str,

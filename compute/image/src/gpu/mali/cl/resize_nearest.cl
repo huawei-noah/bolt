@@ -12,99 +12,77 @@
 // OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 #include "kernel_def.h"
-#define MANGLE_NAME_IMPL(base, IOM, FM, MODE) base##IOM##FM##MODE
-#define MANGLE_NAME(base, IOM, FM, MODE) MANGLE_NAME_IMPL(base, IOM, FM, MODE)
 
-#define FM
-#if defined(USE_NCHW)
-#define FM nchw
-#endif
 #if defined(USE_HALF_PIXEL)
-#define MODE _half_pixel
-#elif defined(USE_PYTORCH_HALF_PIXEL)
-#define MODE _pytorch_half_pixel
-#elif defined(USE_ALIGN_CORNERS)
-#define MODE _align_corners
-#elif defined(USE_ASYMMETRIC)
-#define MODE _asymmetric
-#endif
-#if defined(USE_HALF_PIXEL) || defined(USE_PYTORCH_HALF_PIXEL)
-#define CALCOORD(id, od, rat)                             \
-    {                                                     \
-        id = ((float)od + (float)0.5) * rat - (float)0.5; \
-        id = max(id, 0);                                  \
+#define CALCOORD(ret, x, iw, ow, r0, r1)               \
+    {                                                  \
+        ret = max(0.f, ((float)x + 0.5f) * r0 - 0.5f); \
     }
-#elif defined(USE_ALIGN_CORNERS) || defined(USE_ASYMMETRIC)
-#define CALCOORD(id, od, rat) \
-    {                         \
-        id = od * rat;        \
+#elif defined(USE_PYTORCH_HALF_PIXEL)
+#define CALCOORD(ret, x, iw, ow, r0, r1)                                \
+    {                                                                   \
+        ret = (ow > 1) ? max(0.f, (((float)x + 0.5f) * r0 - 0.5f)) : 0; \
+    }
+#elif defined(USE_ALIGN_CORNERS)
+#define CALCOORD(ret, x, iw, ow, r0, r1) \
+    {                                    \
+        ret = x * r1;                    \
+    }
+#elif defined(USE_ASYMMETRIC)
+#define CALCOORD(ret, x, iw, ow, r0, r1) \
+    {                                    \
+        ret = x * r0;                    \
     }
 #endif
 
-__kernel void MANGLE_NAME(resize_nearest_, IOM, FM, MODE)(const int iw_str,
+__kernel void KERNEL_NAME(const int iw_str,
     const int ih_str,
     const int i_off,
+    const int iw,
+    const int ih,
     const int ow_str,
     const int oh_str,
     const int o_off,
     const int ow,
     const int oh,
-    const int bx,
-    const int by,
-    const float ratiow,
-    const float ratioh,
-    READ_ONLY_KERNEL_MEM in,
-    KERNEL_MEM out)
-#if defined(USE_NCHW)
-{
-    int idx = get_global_id(0);
-    int idy = get_global_id(1);
-    int idz = get_global_id(2);
-    if (idx >= bx || idy >= by) {
-        return;
-    }
-    T val;
-    int ix;
-    int iy;
-    CALCOORD(ix, idx, ratiow);
-    CALCOORD(iy, idy, ratioh);
-
-#if defined(USE_PYTORCH_HALF_PIXEL)
-    if (ow == 1) {
-        ix = 0;
-    }
-    if (oh == 1) {
-        iy = 0;
-    }
-#endif
-    int in_off = (idz * ih_str + iy) * iw_str + ix + i_off;
-    val = in[in_off];
-    int out_off = (idz * oh_str + idy) * ow_str + idx + o_off;
-    out[out_off] = val;
-}
+    const float r0_w,
+    const float r0_h,
+    const float r1_w,
+    const float r1_h,
+#if defined(USE_NCHW) || defined(USE_NHWC)
+    __global const IT *input,
+    __global OT *output
 #else
+    READ_ONLY_KERNEL_MEM input,
+    KERNEL_MEM output
+#endif
+)
 {
     int idx = get_global_id(0);
     int idy = get_global_id(1);
     int idz = get_global_id(2);
-    if (idx >= bx || idy >= by) {
+    if (idx >= ow || idy >= oh) {
         return;
     }
-    T4 val = 0;
-    int ix;
-    int iy;
-    CALCOORD(ix, idx, ratiow);
-    CALCOORD(iy, idy, ratioh);
+    int ix, iy;
+    CALCOORD(ix, idx, iw, ow, r0_w, r1_w);
+    CALCOORD(iy, idy, ih, oh, r0_h, r1_h);
 
-#if defined(USE_PYTORCH_HALF_PIXEL)
-    if (ow == 1) {
-        ix = 0;
-    }
-    if (oh == 1) {
-        iy = 0;
-    }
+#if defined(USE_NCHW) || defined(USE_NHWC)
+    int in_off = (idz * ih_str + iy) * iw_str + ix + i_off;
+    int out_off = (idz * oh_str + idy) * ow_str + idx + o_off;
+#if defined(USE_NCHW)
+    output[out_off] = input[in_off];
+#else
+    in_off *= 3;
+    out_off *= 3;
+    output[out_off] = input[in_off];
+    output[out_off + 1] = input[in_off + 1];
+    output[out_off + 2] = input[in_off + 2];
 #endif
-    LOAD_MEM_V4_COMMON(val, ix, iy, idz, iw_str, ih_str, i_off, in);
-    STORE_MEM_V4_COMMON(val, idx, idy, idz, ow_str, oh_str, o_off, out);
+#else
+    IT4 val = 0;
+    LOAD_MEM_V4_COMMON(val, ix, iy, idz, iw_str, ih_str, i_off, input);
+    STORE_MEM_V4_COMMON(val, idx, idy, idz, ow_str, oh_str, o_off, output);
+#endif
 }
-#endif

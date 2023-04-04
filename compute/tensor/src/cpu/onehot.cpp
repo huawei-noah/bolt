@@ -58,6 +58,9 @@ EE onehot_cpu(
             ret = onehot_kernel<I32, F16>(inputDesc, (I32 *)input, p, outputDesc, (F16 *)output);
             break;
 #endif
+        case DT_I8:
+            ret = onehot_kernel<I32, I8>(inputDesc, (I32 *)input, p, outputDesc, (I8 *)output);
+            break;
         default:
             break;
     }

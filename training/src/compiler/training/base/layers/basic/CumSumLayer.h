@@ -25,8 +25,6 @@ namespace raul
  *
  * Returns the cumulative sum of elements of input in the dimension dim.
  *
- * @see
- * https://pytorch.org/docs/master/generated/torch.cumsum.html?highlight=cumsum#torch.cumsum
  */
 class CumSumLayer : public BasicLayer
 {

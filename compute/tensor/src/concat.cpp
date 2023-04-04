@@ -46,7 +46,7 @@ inline void processInputDescs(std::vector<TensorDesc> *inputDesc, I32 axis)
 }
 
 inline EE concat_infer_output_size_cpu(
-    std::vector<TensorDesc> inputDesc, ConcatParamSpec p, TensorDesc *outputDesc)
+    std::vector<TensorDesc> inputDesc, ConcatParamSpec p, TensorDesc *outputDesc, Arch arch)
 {
     if (inputDesc.size() < 1) {
         return NOT_MATCH;
@@ -71,7 +71,7 @@ inline EE concat_infer_output_size_cpu(
     axis = dim - 1 - axis;
     outputDesc->dims[axis] = 0;
 
-    int shapeCount = 0;
+    U32 shapeCount = 0;
     for (U32 i = 0; i < inputDesc.size(); i++) {
         if (inputDesc[i].nDims == 0) {
             continue;
@@ -104,15 +104,19 @@ inline EE concat_infer_output_size_cpu(
         outputDesc->df = DF_NCHW;
     }
 
+    if ((outputDesc->df == DF_NCHWC16) && (outputDesc->dims[channel] % 16 != 0)) {
+        outputDesc->df = DF_NCHW;
+    }
+
     EE ret = SUCCESS;
 #ifdef _USE_CPU
-    if (shapeCount > 0) {
+    if (IS_CPU(arch) && shapeCount == inputDesc.size() && tensorIsShape(*outputDesc)) {
         std::vector<void *> input(inputDesc.size());
         for (U32 i = 0; i < inputDesc.size(); i++) {
             input[i] = inputDesc[i].dims + inputDesc[i].nDims;
         }
         ret = concat_cpu(inputDesc, input, nullptr, p, nullptr, *outputDesc,
-            outputDesc->dims + outputDesc->nDims, nullptr);
+            outputDesc->dims + outputDesc->nDims, nullptr, arch);
     }
 #endif
     return ret;
@@ -127,7 +131,8 @@ EE concat_infer_output_size(
     std::vector<TensorDesc> inputDesc = get_desc_from_tensor_ptrs(inputTensor);
     TensorDesc outputDesc = outputTensor->get_desc();
     EE ret = NOT_SUPPORTED;
-    if (IS_GPU(archInfo->arch)) {
+    Arch arch = archInfo->arch;
+    if (IS_GPU(arch)) {
 #ifdef _USE_GPU
         std::vector<OclMemory *> inputMems;
         for (U32 i = 0; i < inputTensor.size(); i++) {
@@ -138,7 +143,7 @@ EE concat_infer_output_size(
 #endif
     } else {
         processInputDescs(&inputDesc, p.axis);
-        ret = concat_infer_output_size_cpu(inputDesc, p, &outputDesc);
+        ret = concat_infer_output_size_cpu(inputDesc, p, &outputDesc, arch);
     }
     outputTensor->resize(outputDesc);
     return ret;
@@ -186,7 +191,7 @@ EE concat(std::vector<Tensor> inputTensor,
 #ifdef _USE_CPU
         processInputDescs(&inputDesc, p.axis);
         ret = concat_cpu(
-            inputDesc, input, inputScale.data(), p, tmp, outputDesc, output, &outputScale);
+            inputDesc, input, inputScale.data(), p, tmp, outputDesc, output, &outputScale, arch);
 #endif
 #ifdef _USE_GPU
     } else if (IS_GPU(arch)) {

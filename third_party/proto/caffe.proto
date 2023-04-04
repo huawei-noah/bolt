@@ -495,7 +495,84 @@ message LayerParameter {
   optional Yolov3DetectionOutputParameter yolov3_detection_output_param = 174;
   optional MishParameter mish_param = 175;
   optional SoftPlusParameter softplus_param = 176;
+  optional BilateralSliceApplyParameter bilateral_slice_apply_param = 177;
+  optional ConvertColorParameter convert_color_param = 178;
+  optional CumParameter cum_param = 179;
+  optional OneHotParameter onehot_param = 180;
+
+  optional LutPreprocessParameter lut_preprocess_param = 181;
+  optional LutParameter lut_param = 182;
+  optional ResizeParameter resize_param = 183;
   // <=== modified by Huawei Technologies Co., Ltd. in 2019 
+}
+
+enum DataType {
+  FLOAT32 = 0;
+  INT32 = 1;
+  UINT32 = 2;
+  INT8 = 3;
+  UINT8 = 4;
+  FLOAT16 = 5;
+}
+
+enum DataFormat {
+  NCHW = 0;
+  NHWC = 1;
+}
+
+enum EltwiseOp {
+  PROD = 0;
+  SUM = 1;
+  MAX = 2;
+  DIV = 3;
+}
+
+enum Interp_mode { //Same as in OpenCV
+  LINEAR = 1;
+  AREA = 2;
+  NEAREST = 3;
+  CUBIC = 4;
+  LANCZOS4 = 5;
+}
+
+// Message that store parameters used by LutPreprocessLayer
+message LutPreprocessParameter {
+}
+
+// Message that store parameters used by LutLayer
+message LutParameter {
+  optional string type = 1 [default = "YUV_NV21"];
+  optional Interp_mode mode = 2 [default = CUBIC];
+}
+
+// Message that store parameters used by OneHotLayer
+message OneHotParameter {
+  optional int32 axis = 1;
+  optional int32 depth = 2;
+  optional float off_value = 3 [default = 0];
+  optional float on_value = 4 [default = 1];
+}
+
+// Message that store parameters used by CumLayer
+message CumParameter {
+  optional EltwiseOp operation = 1 [default = SUM];
+  optional bool exclusive = 2 [default = false];
+  optional bool reverse = 3 [default = false];
+  optional int32 axis = 4;
+}
+
+// Message that store parameters used by BilateralSliceApplyLayer
+message BilateralSliceApplyParameter {
+  // mode for guide calculation. null: use precalculated guide; conv: calculate guide from image.
+  optional string mode = 1 [default = "null"];
+}
+
+// Message that store parameters used by ConvertColorLayer
+message ConvertColorParameter {
+  // mode for color:YUV_NV21, RGB_0_255, RGB_0_1.
+  optional string src = 1 [default = "YUV_NV21"];
+  optional string dst = 2 [default = "RGB_0_255"];
+  optional DataType dt = 3 [default = UINT8];
 }
 
 // Message that store parameters used by PriorBoxLayer
@@ -569,14 +646,7 @@ message ResizeParameter {
   // (would use it them to the corresponding channel)
   repeated float pad_value = 6;
 
-  enum Interp_mode { //Same as in OpenCV
-    LINEAR = 1;
-    AREA = 2;
-    NEAREST = 3;
-    CUBIC = 4;
-    LANCZOS4 = 5;
-  }
-  //interpolation for resizing
+  //interpolation for for resizing
   repeated Interp_mode interp_mode = 7;
 }
 
@@ -668,22 +738,12 @@ message PermuteParameter {
 }
 
 message PreAllocatedMemoryParameter {
-  enum DataType {
-    FLOAT32 = 0;
-    INT32 = 1;
-    UINT32 = 2;
-  }
   optional DataType data_type = 1;
   optional BlobShape shape = 2;
   optional float value = 3 [default = 0];
 }
 
 message SharedWeightParameter {
-  enum DataType {
-    FLOAT32 = 0;
-    INT32 = 1;
-    UINT32 = 2;
-  }
   optional DataType data_type = 1;
   optional BlobShape shape = 2;
 }
@@ -733,8 +793,12 @@ message LSTMParameter {
 }
 
 message InterpParameter {
-  required uint32 height = 1;
-  required uint32 width = 2;
+  optional uint32 height = 1;
+  optional uint32 width = 2;
+
+  optional float zoom_factor = 3;
+  optional int32 pad_beg = 4;
+  optional int32 pad_end = 5;
 }
 
 message JumpParameter {
@@ -1064,12 +1128,6 @@ message DummyDataParameter {
 }
 
 message EltwiseParameter {
-  enum EltwiseOp {
-    PROD = 0;
-    SUM = 1;
-    MAX = 2;
-    DIV = 3;
-  }
   optional EltwiseOp operation = 1 [default = SUM]; // element-wise operation
   repeated float coeff = 2; // blob-wise coefficient for SUM operation
 
@@ -1210,6 +1268,8 @@ message InputParameter {
   // Define 1 shape to set the same shape for every top.
   // Define no shape to defer to reshaping manually.
   repeated BlobShape shape = 1;
+  optional DataType type = 2 [default = FLOAT32];
+  optional DataFormat format = 3 [default = NCHW];
 }
 
 // Message that stores parameters used by LogLayer

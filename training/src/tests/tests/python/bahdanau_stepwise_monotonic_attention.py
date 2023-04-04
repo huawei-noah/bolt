@@ -44,13 +44,11 @@ def _bahdanau_score(
     as described in:
     Dzmitry Bahdanau, Kyunghyun Cho, Yoshua Bengio.
     "Neural Machine Translation by Jointly Learning to Align and Translate."
-    ICLR 2015. https://arxiv.org/abs/1409.0473
     The second is the normalized form.  This form is inspired by the
     weight normalization article:
     Tim Salimans, Diederik P. Kingma.
     "Weight Normalization: A Simple Reparameterization to Accelerate
      Training of Deep Neural Networks."
-    https://arxiv.org/abs/1602.07868
     To enable the second form, set please pass in attention_g and attention_b.
     Args:
       processed_query: Tensor, shape `[batch_size, num_units]` to compare to
@@ -104,9 +102,6 @@ def _maybe_mask_score(
     score_mask_values = score_mask_value * tf.ones_like(score)
     return tf.where(memory_mask, score, score_mask_values)
 
-
-# Reference implementation for https://arxiv.org/abs/1906.00672
-# from https://gist.github.com/dy-octa/38a7638f75c21479582d7391490df37c
 def monotonic_stepwise_attention(p_choose_i, previous_attention, mode):
     # p_choose_i, previous_alignments, previous_score: [batch_size, memory_size]
     # p_choose_i: probability to keep attended to the last attended entry i

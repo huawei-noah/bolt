@@ -14,6 +14,22 @@
 #ifndef _KERNEL_DEF
 #define _KERNEL_DEF
 
+#define UNI_F16_MAX 65504.0f
+#define UNI_F16_MIN -65504.f
+
+// y = a*x+b = FMA(a,x,b)
+#define FMA mad
+
+#if defined(USE_NCHW)
+#define VECTOR T
+#define LOAD_VECTOR(v, offset, mem) v = mem[offset];
+#define STORE_VECTOR(v, offset, mem) mem[offset] = v;
+#else
+#define VECTOR T4
+#define LOAD_VECTOR(v, offset, mem) LOAD_MEM_V4(v, offset, mem)
+#define STORE_VECTOR(v, offset, mem) STORE_MEM_V4(v, offset, mem)
+#endif
+
 __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP | CLK_FILTER_NEAREST;
 /*
  * READ IMAGE
@@ -436,70 +452,70 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
 
 #define MUL_REG_NORMAL_ARRAY1(a, b, reg) \
     {                                    \
-        reg[0] = a * reg[0] + b;         \
+        reg[0] = FMA(a, reg[0], b);      \
     }
 
 #define MUL_REG_NORMAL_ARRAY2(a, b, reg) \
     {                                    \
-        reg[0] = a * reg[0] + b;         \
-        reg[1] = a * reg[1] + b;         \
+        reg[0] = FMA(a, reg[0], b);      \
+        reg[1] = FMA(a, reg[1], b);      \
     }
 
 #define MUL_REG_NORMAL_ARRAY3(a, b, reg) \
     {                                    \
-        reg[0] = a * reg[0] + b;         \
-        reg[1] = a * reg[1] + b;         \
-        reg[2] = a * reg[2] + b;         \
+        reg[0] = FMA(a, reg[0], b);      \
+        reg[1] = FMA(a, reg[1], b);      \
+        reg[2] = FMA(a, reg[2], b);      \
     }
 
 #define MUL_REG_NORMAL_ARRAY4(a, b, reg) \
     {                                    \
-        reg[0] = a * reg[0] + b;         \
-        reg[1] = a * reg[1] + b;         \
-        reg[2] = a * reg[2] + b;         \
-        reg[3] = a * reg[3] + b;         \
+        reg[0] = FMA(a, reg[0], b);      \
+        reg[1] = FMA(a, reg[1], b);      \
+        reg[2] = FMA(a, reg[2], b);      \
+        reg[3] = FMA(a, reg[3], b);      \
     }
 
 #define MUL_REG_NORMAL_ARRAY5(a, b, reg) \
     {                                    \
-        reg[0] = a * reg[0] + b;         \
-        reg[1] = a * reg[1] + b;         \
-        reg[2] = a * reg[2] + b;         \
-        reg[3] = a * reg[3] + b;         \
-        reg[4] = a * reg[4] + b;         \
+        reg[0] = FMA(a, reg[0], b);      \
+        reg[1] = FMA(a, reg[1], b);      \
+        reg[2] = FMA(a, reg[2], b);      \
+        reg[3] = FMA(a, reg[3], b);      \
+        reg[4] = FMA(a, reg[4], b);      \
     }
 
 #define MUL_REG_NORMAL_ARRAY6(a, b, reg) \
     {                                    \
-        reg[0] = a * reg[0] + b;         \
-        reg[1] = a * reg[1] + b;         \
-        reg[2] = a * reg[2] + b;         \
-        reg[3] = a * reg[3] + b;         \
-        reg[4] = a * reg[4] + b;         \
-        reg[5] = a * reg[5] + b;         \
+        reg[0] = FMA(a, reg[0], b);      \
+        reg[1] = FMA(a, reg[1], b);      \
+        reg[2] = FMA(a, reg[2], b);      \
+        reg[3] = FMA(a, reg[3], b);      \
+        reg[4] = FMA(a, reg[4], b);      \
+        reg[5] = FMA(a, reg[5], b);      \
     }
 
 #define MUL_REG_NORMAL_ARRAY7(a, b, reg) \
     {                                    \
-        reg[0] = a * reg[0] + b;         \
-        reg[1] = a * reg[1] + b;         \
-        reg[2] = a * reg[2] + b;         \
-        reg[3] = a * reg[3] + b;         \
-        reg[4] = a * reg[4] + b;         \
-        reg[5] = a * reg[5] + b;         \
-        reg[6] = a * reg[6] + b;         \
+        reg[0] = FMA(a, reg[0], b);      \
+        reg[1] = FMA(a, reg[1], b);      \
+        reg[2] = FMA(a, reg[2], b);      \
+        reg[3] = FMA(a, reg[3], b);      \
+        reg[4] = FMA(a, reg[4], b);      \
+        reg[5] = FMA(a, reg[5], b);      \
+        reg[6] = FMA(a, reg[6], b);      \
     }
 
 #define MUL_REG_NORMAL_ARRAY8(a, b, reg) \
     {                                    \
-        reg[0] = a * reg[0] + b;         \
-        reg[1] = a * reg[1] + b;         \
-        reg[2] = a * reg[2] + b;         \
-        reg[3] = a * reg[3] + b;         \
-        reg[4] = a * reg[4] + b;         \
-        reg[5] = a * reg[5] + b;         \
-        reg[6] = a * reg[6] + b;         \
-        reg[7] = a * reg[7] + b;         \
+        reg[0] = FMA(a, reg[0], b);      \
+        reg[1] = FMA(a, reg[1], b);      \
+        reg[2] = FMA(a, reg[2], b);      \
+        reg[3] = FMA(a, reg[3], b);      \
+        reg[4] = FMA(a, reg[4], b);      \
+        reg[5] = FMA(a, reg[5], b);      \
+        reg[6] = FMA(a, reg[6], b);      \
+        reg[7] = FMA(a, reg[7], b);      \
     }
 
 #define ADD_REG_ARRAY4(reg0, reg1) \
@@ -521,112 +537,109 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
 /*
  * DOT
  */
-#define DOT_A4B16C4(a, b, c)                                        \
-    {                                                               \
-        c.x += (a.x * b.s0 + a.y * b.s1 + a.z * b.s2 + a.w * b.s3); \
-        c.y += (a.x * b.s4 + a.y * b.s5 + a.z * b.s6 + a.w * b.s7); \
-        c.z += (a.x * b.s8 + a.y * b.s9 + a.z * b.sa + a.w * b.sb); \
-        c.w += (a.x * b.sc + a.y * b.sd + a.z * b.se + a.w * b.sf); \
+#define DOT_A4B16C4(a, b, c)      \
+    {                             \
+        c = FMA(a.x, b.s048c, c); \
+        c = FMA(a.y, b.s159d, c); \
+        c = FMA(a.z, b.s26ae, c); \
+        c = FMA(a.w, b.s37bf, c); \
     }
 
-#define DOT_A4B4C1(a, b, c)                                       \
-    {                                                             \
-        c += (a.x * b.s0 + a.y * b.s1 + a.z * b.s2 + a.w * b.s3); \
+#define DOT_A4B4C1(a, b, c) \
+    {                       \
+        c += dot(a, b);     \
     }
 
 #define DOT_A4B4C4(a, b, c) \
     {                       \
-        c.x += a.x * b.x;   \
-        c.y += a.y * b.y;   \
-        c.z += a.z * b.z;   \
-        c.w += a.w * b.w;   \
+        c = FMA(a, b, c);   \
     }
 
-#define DOT_A2B2C1(a, b, c)               \
-    {                                     \
-        c += (a.s0 * b.s0 + a.s1 * b.s1); \
+#define DOT_A2B2C1(a, b, c) \
+    {                       \
+        c += dot(a, b);     \
     }
 
-#define DOT_A8B8C1(a, b, c)                                           \
-    {                                                                 \
-        c += (a.s0 * b.s0 + a.s1 * b.s1 + a.s2 * b.s2 + a.s3 * b.s3); \
-        c += (a.s4 * b.s4 + a.s5 * b.s5 + a.s6 * b.s6 + a.s7 * b.s7); \
+#define DOT_A8B8C1(a, b, c)         \
+    {                               \
+        c += dot(a.s0123, b.s0123); \
+        c += dot(a.s4567, b.s4567); \
     }
 
-#define DOT_A16B16C1(a, b, c)                                         \
-    {                                                                 \
-        c += (a.s0 * b.s0 + a.s1 * b.s1 + a.s2 * b.s2 + a.s3 * b.s3); \
-        c += (a.s4 * b.s4 + a.s5 * b.s5 + a.s6 * b.s6 + a.s7 * b.s7); \
-        c += (a.s8 * b.s8 + a.s9 * b.s9 + a.sa * b.sa + a.sb * b.sb); \
-        c += (a.sc * b.sc + a.sd * b.sd + a.se * b.se + a.sf * b.sf); \
+#define DOT_A16B16C1(a, b, c)       \
+    {                               \
+        c += dot(a.s0123, b.s0123); \
+        c += dot(a.s4567, b.s4567); \
+        c += dot(a.s89ab, b.s89ab); \
+        c += dot(a.scdef, b.scdef); \
     }
 
 #define DOT_A_NORMAL_B1C1_ARRAY(a, b, c) \
     {                                    \
-        c[0] += a * b[0];                \
+        c[0] = FMA(a, b[0], c[0]);       \
     }
 
 #define DOT_A_NORMAL_B2C2_ARRAY(a, b, c) \
     {                                    \
-        c[0] += a * b[0];                \
-        c[1] += a * b[1];                \
+        c[0] = FMA(a, b[0], c[0]);       \
+        c[1] = FMA(a, b[1], c[1]);       \
     }
 
 #define DOT_A_NORMAL_B3C3_ARRAY(a, b, c) \
     {                                    \
-        c[0] += a * b[0];                \
-        c[1] += a * b[1];                \
-        c[2] += a * b[2];                \
+        c[0] = FMA(a, b[0], c[0]);       \
+        c[1] = FMA(a, b[1], c[1]);       \
+        c[2] = FMA(a, b[2], c[2]);       \
     }
 
 #define DOT_A_NORMAL_B4C4_ARRAY(a, b, c) \
     {                                    \
-        c[0] += a * b[0];                \
-        c[1] += a * b[1];                \
-        c[2] += a * b[2];                \
-        c[3] += a * b[3];                \
+        c[0] = FMA(a, b[0], c[0]);       \
+        c[1] = FMA(a, b[1], c[1]);       \
+        c[2] = FMA(a, b[2], c[2]);       \
+        c[3] = FMA(a, b[3], c[3]);       \
     }
 
 #define DOT_A_NORMAL_B5C5_ARRAY(a, b, c) \
     {                                    \
-        c[0] += a * b[0];                \
-        c[1] += a * b[1];                \
-        c[2] += a * b[2];                \
-        c[3] += a * b[3];                \
-        c[4] += a * b[4];                \
+        c[0] = FMA(a, b[0], c[0]);       \
+        c[1] = FMA(a, b[1], c[1]);       \
+        c[2] = FMA(a, b[2], c[2]);       \
+        c[3] = FMA(a, b[3], c[3]);       \
+        c[4] = FMA(a, b[4], c[4]);       \
     }
 
 #define DOT_A_NORMAL_B6C6_ARRAY(a, b, c) \
     {                                    \
-        c[0] += a * b[0];                \
-        c[1] += a * b[1];                \
-        c[2] += a * b[2];                \
-        c[3] += a * b[3];                \
-        c[4] += a * b[4];                \
-        c[5] += a * b[5];                \
+        c[0] = FMA(a, b[0], c[0]);       \
+        c[1] = FMA(a, b[1], c[1]);       \
+        c[2] = FMA(a, b[2], c[2]);       \
+        c[3] = FMA(a, b[3], c[3]);       \
+        c[4] = FMA(a, b[4], c[4]);       \
+        c[5] = FMA(a, b[5], c[5]);       \
     }
 
 #define DOT_A_NORMAL_B7C7_ARRAY(a, b, c) \
     {                                    \
-        c[0] += a * b[0];                \
-        c[1] += a * b[1];                \
-        c[2] += a * b[2];                \
-        c[3] += a * b[3];                \
-        c[4] += a * b[4];                \
-        c[5] += a * b[5];                \
-        c[6] += a * b[6];                \
+        c[0] = FMA(a, b[0], c[0]);       \
+        c[1] = FMA(a, b[1], c[1]);       \
+        c[2] = FMA(a, b[2], c[2]);       \
+        c[3] = FMA(a, b[3], c[3]);       \
+        c[4] = FMA(a, b[4], c[4]);       \
+        c[5] = FMA(a, b[5], c[5]);       \
+        c[6] = FMA(a, b[6], c[6]);       \
     }
 
 #define DOT_A_NORMAL_B8C8_ARRAY(a, b, c) \
     {                                    \
-        c[0] += a * b[0];                \
-        c[1] += a * b[1];                \
-        c[2] += a * b[2];                \
-        c[3] += a * b[3];                \
-        c[4] += a * b[4];                \
-        c[5] += a * b[5];                \
-        c[6] += a * b[6];                \
-        c[7] += a * b[7];                \
+        c[0] = FMA(a, b[0], c[0]);       \
+        c[1] = FMA(a, b[1], c[1]);       \
+        c[2] = FMA(a, b[2], c[2]);       \
+        c[3] = FMA(a, b[3], c[3]);       \
+        c[4] = FMA(a, b[4], c[4]);       \
+        c[5] = FMA(a, b[5], c[5]);       \
+        c[6] = FMA(a, b[6], c[6]);       \
+        c[7] = FMA(a, b[7], c[7]);       \
     }
 
 #if defined(USE_V2)
@@ -723,67 +736,35 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
 #if defined(USE_RELU)
 #define ACTIVATION_V4(v)    \
     {                       \
-        v.x = fmax(v.x, 0); \
-        v.y = fmax(v.y, 0); \
-        v.z = fmax(v.z, 0); \
-        v.w = fmax(v.w, 0); \
+        v = fmax(v, (T4)0); \
     }
-
-#define ACTIVATION_V8(v)      \
-    {                         \
-        v.s0 = fmax(v.s0, 0); \
-        v.s1 = fmax(v.s1, 0); \
-        v.s2 = fmax(v.s2, 0); \
-        v.s3 = fmax(v.s3, 0); \
-        v.s4 = fmax(v.s4, 0); \
-        v.s5 = fmax(v.s5, 0); \
-        v.s6 = fmax(v.s6, 0); \
-        v.s7 = fmax(v.s7, 0); \
+#define ACTIVATION_V8(v)    \
+    {                       \
+        v = fmax(v, (T8)0); \
     }
-
-#define ACTIVATION_V16(v)     \
-    {                         \
-        v.s0 = fmax(v.s0, 0); \
-        v.s1 = fmax(v.s1, 0); \
-        v.s2 = fmax(v.s2, 0); \
-        v.s3 = fmax(v.s3, 0); \
-        v.s4 = fmax(v.s4, 0); \
-        v.s5 = fmax(v.s5, 0); \
-        v.s6 = fmax(v.s6, 0); \
-        v.s7 = fmax(v.s7, 0); \
-        v.s8 = fmax(v.s8, 0); \
-        v.s9 = fmax(v.s9, 0); \
-        v.sa = fmax(v.sa, 0); \
-        v.sb = fmax(v.sb, 0); \
-        v.sc = fmax(v.sc, 0); \
-        v.sd = fmax(v.sd, 0); \
-        v.se = fmax(v.se, 0); \
-        v.sf = fmax(v.sf, 0); \
+#define ACTIVATION_V16(v)    \
+    {                        \
+        v = fmax(v, (T16)0); \
     }
-
-#define ACTIVATION_V1(v) \
-    {                    \
-        v = fmax(v, 0);  \
+#define ACTIVATION_V1(v)   \
+    {                      \
+        v = fmax(v, (T)0); \
     }
-
 #define ACTIVATION_ARRAY1(v)  \
     {                         \
         v[0] = fmax(v[0], 0); \
     }
-
 #define ACTIVATION_ARRAY2(v)  \
     {                         \
         v[0] = fmax(v[0], 0); \
         v[1] = fmax(v[1], 0); \
     }
-
 #define ACTIVATION_ARRAY3(v)  \
     {                         \
         v[0] = fmax(v[0], 0); \
         v[1] = fmax(v[1], 0); \
         v[2] = fmax(v[2], 0); \
     }
-
 #define ACTIVATION_ARRAY4(v)  \
     {                         \
         v[0] = fmax(v[0], 0); \
@@ -791,7 +772,6 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         v[2] = fmax(v[2], 0); \
         v[3] = fmax(v[3], 0); \
     }
-
 #define ACTIVATION_ARRAY5(v)  \
     {                         \
         v[0] = fmax(v[0], 0); \
@@ -800,7 +780,6 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         v[3] = fmax(v[3], 0); \
         v[4] = fmax(v[4], 0); \
     }
-
 #define ACTIVATION_ARRAY6(v)  \
     {                         \
         v[0] = fmax(v[0], 0); \
@@ -810,7 +789,6 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         v[4] = fmax(v[4], 0); \
         v[5] = fmax(v[5], 0); \
     }
-
 #define ACTIVATION_ARRAY7(v)  \
     {                         \
         v[0] = fmax(v[0], 0); \
@@ -821,7 +799,6 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         v[5] = fmax(v[5], 0); \
         v[6] = fmax(v[6], 0); \
     }
-
 #define ACTIVATION_ARRAY8(v)  \
     {                         \
         v[0] = fmax(v[0], 0); \
@@ -832,6 +809,85 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         v[5] = fmax(v[5], 0); \
         v[6] = fmax(v[6], 0); \
         v[7] = fmax(v[7], 0); \
+    }
+#elif defined(USE_LEAKY_RELU)
+#define ACTIVATION_V4(v)           \
+    {                              \
+        v = fmax(v, v * (T)alpha); \
+    }
+
+#define ACTIVATION_V8(v)           \
+    {                              \
+        v = fmax(v, v * (T)alpha); \
+    }
+
+#define ACTIVATION_V16(v)          \
+    {                              \
+        v = fmax(v, v * (T)alpha); \
+    }
+#define ACTIVATION_V1(v)           \
+    {                              \
+        v = fmax(v, v * (T)alpha); \
+    }
+#define ACTIVATION_ARRAY1(v)                \
+    {                                       \
+        v[0] = fmax(v[0], v[0] * (T)alpha); \
+    }
+#define ACTIVATION_ARRAY2(v)                \
+    {                                       \
+        v[0] = fmax(v[0], v[0] * (T)alpha); \
+        v[1] = fmax(v[1], v[1] * (T)alpha); \
+    }
+#define ACTIVATION_ARRAY3(v)                \
+    {                                       \
+        v[0] = fmax(v[0], v[0] * (T)alpha); \
+        v[1] = fmax(v[1], v[1] * (T)alpha); \
+        v[2] = fmax(v[2], v[2] * (T)alpha); \
+    }
+#define ACTIVATION_ARRAY4(v)                \
+    {                                       \
+        v[0] = fmax(v[0], v[0] * (T)alpha); \
+        v[1] = fmax(v[1], v[1] * (T)alpha); \
+        v[2] = fmax(v[2], v[2] * (T)alpha); \
+        v[3] = fmax(v[3], v[3] * (T)alpha); \
+    }
+#define ACTIVATION_ARRAY5(v)                \
+    {                                       \
+        v[0] = fmax(v[0], v[0] * (T)alpha); \
+        v[1] = fmax(v[1], v[1] * (T)alpha); \
+        v[2] = fmax(v[2], v[2] * (T)alpha); \
+        v[3] = fmax(v[3], v[3] * (T)alpha); \
+        v[4] = fmax(v[4], v[4] * (T)alpha); \
+    }
+#define ACTIVATION_ARRAY6(v)                \
+    {                                       \
+        v[0] = fmax(v[0], v[0] * (T)alpha); \
+        v[1] = fmax(v[1], v[1] * (T)alpha); \
+        v[2] = fmax(v[2], v[2] * (T)alpha); \
+        v[3] = fmax(v[3], v[3] * (T)alpha); \
+        v[4] = fmax(v[4], v[4] * (T)alpha); \
+        v[5] = fmax(v[5], v[5] * (T)alpha); \
+    }
+#define ACTIVATION_ARRAY7(v)                \
+    {                                       \
+        v[0] = fmax(v[0], v[0] * (T)alpha); \
+        v[1] = fmax(v[1], v[1] * (T)alpha); \
+        v[2] = fmax(v[2], v[2] * (T)alpha); \
+        v[3] = fmax(v[3], v[3] * (T)alpha); \
+        v[4] = fmax(v[4], v[4] * (T)alpha); \
+        v[5] = fmax(v[5], v[5] * (T)alpha); \
+        v[6] = fmax(v[6], v[6] * (T)alpha); \
+    }
+#define ACTIVATION_ARRAY8(v)                \
+    {                                       \
+        v[0] = fmax(v[0], v[0] * (T)alpha); \
+        v[1] = fmax(v[1], v[1] * (T)alpha); \
+        v[2] = fmax(v[2], v[2] * (T)alpha); \
+        v[3] = fmax(v[3], v[3] * (T)alpha); \
+        v[4] = fmax(v[4], v[4] * (T)alpha); \
+        v[5] = fmax(v[5], v[5] * (T)alpha); \
+        v[6] = fmax(v[6], v[6] * (T)alpha); \
+        v[7] = fmax(v[7], v[7] * (T)alpha); \
     }
 #elif defined(USE_RELU6)
 #define ACTIVATION_V4(v)              \
@@ -1380,6 +1436,30 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         v.s1 = exp(v.s1); \
         v.s2 = exp(v.s2); \
         v.s3 = exp(v.s3); \
+    }
+#elif defined(USE_FLOOR)
+#define ACTIVATION_V4(v)    \
+    {                       \
+        v.s0 = floor(v.s0); \
+        v.s1 = floor(v.s1); \
+        v.s2 = floor(v.s2); \
+        v.s3 = floor(v.s3); \
+    }
+#elif defined(USE_CEIL)
+#define ACTIVATION_V4(v)   \
+    {                      \
+        v.s0 = ceil(v.s0); \
+        v.s1 = ceil(v.s1); \
+        v.s2 = ceil(v.s2); \
+        v.s3 = ceil(v.s3); \
+    }
+#elif defined(USE_ROUND)
+#define ACTIVATION_V4(v)    \
+    {                       \
+        v.s0 = round(v.s0); \
+        v.s1 = round(v.s1); \
+        v.s2 = round(v.s2); \
+        v.s3 = round(v.s3); \
     }
 #else
 #define ACTIVATION_V1(v) \
@@ -2403,13 +2483,6 @@ __constant sampler_t sampler = CLK_NORMALIZED_COORDS_FALSE | CLK_ADDRESS_CLAMP |
         GEMM_CALCORE_X(a[0], b, c[0]); \
         GEMM_CALCORE_X(a[1], b, c[1]); \
     }
-
-#define GEMM_MUL_C(a, b, reg)          \
-    {                                  \
-        GEMM_MUL_C_X(a, b, reg[0])     \
-        {                              \
-            GEMM_MUL_C_X(a, b, reg[1]) \
-            {}
 
 #define GEMM_MUL_C(a, b, reg)       \
     {                               \

@@ -249,9 +249,8 @@ void mvm_row_avx_4_32(U32 bk, U32 lda, F32 *matrix, F32 *vector, F32 *result)
                          :
                          : "r"(bk), "r"(matrix), "r"(vector), "r"(result), "r"(lda)
                          : "%eax", "%rax", "%ecx", "%rdx", "%r9", "%r10", "%ymm0", "%ymm1", "%ymm2",
-                         "%ymm3", "%ymm4", "%ymm6", "%ymm8", "%ymm10", "%ymm12", "%ymm13", "%ymm14",
-                         "%ymm15", "%xmm0", "%xmm1", "%xmm2", "%xmm3", "%xmm4", "%xmm6", "%xmm8",
-                         "%xmm10", "%xmm12", "memory");
+                         "%ymm3", "%ymm4", "%ymm6", "%ymm7", "%ymm8", "%ymm9", "%ymm10",  "%ymm11",
+                         "%ymm12", "%ymm13", "%ymm14", "%ymm15", "memory");
 }
 
 void mvm_row_avx_2_32(U32 bk, U32 lda, F32 *matrix, F32 *vector, F32 *result)
@@ -404,9 +403,9 @@ void mvm_row_avx_2_32(U32 bk, U32 lda, F32 *matrix, F32 *vector, F32 *result)
                          "vmovss %%xmm1, 0x4(%3)                            \n\t"
                          :
                          : "r"(bk), "r"(matrix), "r"(vector), "r"(result), "r"(lda)
-                         : "%eax", "%rax", "%ecx", "%rdx", "%r9", "%r10", "%ymm0", "%ymm1", "%ymm4",
-                         "%ymm6", "%ymm12", "%ymm13", "%xmm0", "%xmm1", "%xmm4", "%xmm6", "%xmm12",
-                         "%xmm13", "memory");
+                         : "%eax", "%rax", "%ecx", "%rdx", "%r9", "%r10", "%ymm0", "%ymm1", "%ymm2",
+                         "%ymm3", "%ymm4", "%ymm6", "%ymm7", "%ymm8", "%ymm9", "%ymm10",  "%ymm11",
+                         "%ymm12", "%ymm13", "%ymm14", "%ymm15", "memory");
 }
 
 void mvm_row_avx_1_32(U32 bk, U32 lda, F32 *matrix, F32 *vector, F32 *result)
@@ -517,8 +516,9 @@ void mvm_row_avx_1_32(U32 bk, U32 lda, F32 *matrix, F32 *vector, F32 *result)
                          "vmovss %%xmm0, (%3)                               \n\t"
                          :
                          : "r"(bk), "r"(matrix), "r"(vector), "r"(result), "r"(lda)
-                         : "%eax", "%rax", "%ecx", "%rdx", "%r9", "%r10", "%ymm0", "%ymm4",
-                         "%ymm12", "%ymm13", "%xmm0", "%xmm4", "%xmm12", "memory");
+                         : "%eax", "%rax", "%ecx", "%rdx", "%r9", "%r10", "%ymm0", "%ymm1", "%ymm2",
+                         "%ymm3", "%ymm4", "%ymm6", "%ymm7", "%ymm8", "%ymm9", "%ymm10",  "%ymm11",
+                         "%ymm12", "%ymm13", "%ymm14", "%ymm15", "memory");
 }
 
 void mvm_row_fp32(U32 numRows, U32 numColumns, F32 *matrix, F32 *vector, F32 *result)

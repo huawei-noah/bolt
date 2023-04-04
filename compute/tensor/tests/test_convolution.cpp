@@ -131,8 +131,7 @@ int convolutionTest(int argc, char *argv[], DataType dt)
             tmpTensors, outputTensorRef, activationDesc, &UT_SERIAL_ARCHINFO));
         // check
         ut_check_v(get_ptr_from_tensor(outputTensor, CPU_GENERAL),
-            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), outputTensor.length(), dt, 5,
-            __FILE__, __LINE__);
+            get_ptr_from_tensor(outputTensorRef, CPU_GENERAL), outputTensor.length(), dt, 5);
     }
 
     // benchmark

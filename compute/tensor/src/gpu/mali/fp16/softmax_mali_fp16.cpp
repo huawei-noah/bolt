@@ -19,9 +19,6 @@ inline EE softmax_checkpara_mali_fp16(TensorDesc inputDesc, TensorDesc outputDes
     if (inputDesc.dt != outputDesc.dt) {
         return NOT_SUPPORTED;
     }
-    if (outputDesc.dt != DT_F16) {
-        return NOT_SUPPORTED;
-    }
     return SUCCESS;
 }
 
@@ -49,8 +46,9 @@ inline EE softmax_core_mali_fp16(GCLHandle_t handle,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
+    DataType idt;
     U32 iw, ih, ic, in;
-    tensorSelectGet(inputDesc, NULL, NULL, &in, &ic, &ih, &iw);
+    tensorSelectGet(inputDesc, &idt, NULL, &in, &ic, &ih, &iw);
     U32 iw_str, ih_str, ic_str, iw_off, ih_off, ihw_str, i_off;
     U32 ow_str, oh_str, ow_off, oh_off, ohw_str, o_off;
     gclmem_get_desc_padding(input->desc, &iw_str, &ih_str, &ic_str, &iw_off, &ih_off);
@@ -72,7 +70,7 @@ inline EE softmax_core_mali_fp16(GCLHandle_t handle,
     U32 gs[2];
     U32 ls[2] = {0, 0};
     U32 dim = 2;
-    U32 len;
+    U32 len = 0;
     bool useNchw = (input->desc.memFormat == DF_NCHWC4) ? false : true;
     bool matchCase = matchVecCase(input->desc);
     if (matchCase) {
@@ -91,7 +89,7 @@ inline EE softmax_core_mali_fp16(GCLHandle_t handle,
     }
     if (matchCase) {
         CHECK_STATUS(set_softmax_vec_reduce_opt_mali(
-            useNchw, DT_F16, input->desc, output->desc, kernelName, &kernelOpt));
+            useNchw, idt, input->desc, output->desc, kernelName, &kernelOpt));
         CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
         U32 d4 = (len + 3) / 4;
         U32 e4 = ((len & 3) == 0) ? 4 : (len & 3);
@@ -118,8 +116,8 @@ inline EE softmax_core_mali_fp16(GCLHandle_t handle,
     if (axisTran != 0 && axisTran != 1 && axisTran != 2) {
         CHECK_STATUS(NOT_SUPPORTED);
     }
-    CHECK_STATUS(set_softmax_opt_mali(axisTran, useNchw, DT_F16, input->desc.memType,
-        output->desc.memType, kernelName, &kernelOpt));
+    CHECK_STATUS(set_softmax_opt_mali(
+        axisTran, useNchw, idt, input->desc.memType, output->desc.memType, kernelName, &kernelOpt));
     CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
     if (axisTran == 0) {
         if (useNchw) {

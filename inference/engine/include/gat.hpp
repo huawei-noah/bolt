@@ -23,12 +23,12 @@ public:
         this->dt = dt;
         this->p = p;
     }
-
+    ~GAT(){}
     OperatorType get_type() override
     {
         return OT_GAT;
     }
-
+ 
 protected:
     GATParamSpec p;
 };

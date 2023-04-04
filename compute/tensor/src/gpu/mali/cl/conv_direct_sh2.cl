@@ -70,7 +70,7 @@ __kernel void MANGLE_NAME(conv_direct_sh2_, IOM, AM, BM, FW, FH, ON, KN)(const i
     const int bx,
     const int by,
     READ_ONLY_KERNEL_MEM in,
-    __global const T *flt,
+    __global const T16 *flt,
     __read_only image1d_t bias,
     KERNEL_MEM out)
 {
@@ -107,16 +107,16 @@ __kernel void MANGLE_NAME(conv_direct_sh2_, IOM, AM, BM, FW, FH, ON, KN)(const i
 #if (FH == 1)
         for (uchar j = 0; j < FW; ++j) {
             LOAD_INPUT_ARRAY_STEP(0, 2);
-            flt_val = vload16(flt_off, flt);
+            flt_val = flt[flt_off];
             DIRECT_CONV_CAL_CORE_S1(in_val, flt_val, out_val[0]);
 #if (KN > 1)
-            flt_val = vload16(flt_off + 1, flt);
+            flt_val = flt[flt_off + 1];
             DIRECT_CONV_CAL_CORE_S1(in_val, flt_val, out_val[1]);
 #endif
 #if (KN > 2)
-            flt_val = vload16(flt_off + 2, flt);
+            flt_val = flt[flt_off + 2];
             DIRECT_CONV_CAL_CORE_S1(in_val, flt_val, out_val[2]);
-            flt_val = vload16(flt_off + 3, flt);
+            flt_val = flt[flt_off + 3];
             DIRECT_CONV_CAL_CORE_S1(in_val, flt_val, out_val[3]);
 #endif
             flt_off += KN;
@@ -127,16 +127,16 @@ __kernel void MANGLE_NAME(conv_direct_sh2_, IOM, AM, BM, FW, FH, ON, KN)(const i
             LOAD_INPUT_ARRAY_STEP(0, 2);
             for (uchar k = 0; k < FH; k += 2) {
                 LOAD_REST_MEM;
-                flt_val = vload16(flt_off + k * KN, flt);
+                flt_val = flt[flt_off + k * KN];
                 DIRECT_CONV_CAL_CORE_S1(in_val, flt_val, out_val[0]);
 #if (KN > 1)
-                flt_val = vload16(flt_off + k * KN + 1, flt);
+                flt_val = flt[flt_off + k * KN + 1];
                 DIRECT_CONV_CAL_CORE_S1(in_val, flt_val, out_val[1]);
 #endif
 #if (KN > 2)
-                flt_val = vload16(flt_off + k * KN + 2, flt);
+                flt_val = flt[flt_off + k * KN + 2];
                 DIRECT_CONV_CAL_CORE_S1(in_val, flt_val, out_val[2]);
-                flt_val = vload16(flt_off + k * KN + 3, flt);
+                flt_val = flt[flt_off + k * KN + 3];
                 DIRECT_CONV_CAL_CORE_S1(in_val, flt_val, out_val[3]);
 #endif
                 UPDATE_REG(in_val);
@@ -144,16 +144,16 @@ __kernel void MANGLE_NAME(conv_direct_sh2_, IOM, AM, BM, FW, FH, ON, KN)(const i
             LOAD_INPUT_ARRAY_STEP(1, 2);
             for (uchar k = 1; k < FH; k += 2) {
                 LOAD_REST_MEM;
-                flt_val = vload16(flt_off + k * KN, flt);
+                flt_val = flt[flt_off + k * KN];
                 DIRECT_CONV_CAL_CORE_S1(in_val, flt_val, out_val[0])
 #if (KN > 1)
-                flt_val = vload16(flt_off + k * KN + 1, flt);
+                flt_val = flt[flt_off + k * KN + 1];
                 DIRECT_CONV_CAL_CORE_S1(in_val, flt_val, out_val[1]);
 #endif
 #if (KN > 2)
-                flt_val = vload16(flt_off + k * KN + 2, flt);
+                flt_val = flt[flt_off + k * KN + 2];
                 DIRECT_CONV_CAL_CORE_S1(in_val, flt_val, out_val[2]);
-                flt_val = vload16(flt_off + k * KN + 3, flt);
+                flt_val = flt[flt_off + k * KN + 3];
                 DIRECT_CONV_CAL_CORE_S1(in_val, flt_val, out_val[3]);
 #endif
                 UPDATE_REG(in_val);
@@ -161,16 +161,16 @@ __kernel void MANGLE_NAME(conv_direct_sh2_, IOM, AM, BM, FW, FH, ON, KN)(const i
 #else
             LOAD_INPUT_ARRAY_STEP(0, 1);
             for (uchar k = 0; k < FH; ++k) {
-                flt_val = vload16(flt_off + k * KN, flt);
+                flt_val = flt[flt_off + k * KN];
                 DIRECT_CONV_CAL_CORE_S2(in_val, flt_val, out_val[0]);
 #if (KN > 1)
-                flt_val = vload16(flt_off + k * KN + 1, flt);
+                flt_val = flt[flt_off + k * KN + 1];
                 DIRECT_CONV_CAL_CORE_S2(in_val, flt_val, out_val[1]);
 #endif
 #if (KN > 2)
-                flt_val = vload16(flt_off + k * KN + 2, flt);
+                flt_val = flt[flt_off + k * KN + 2];
                 DIRECT_CONV_CAL_CORE_S2(in_val, flt_val, out_val[2]);
-                flt_val = vload16(flt_off + k * KN + 3, flt);
+                flt_val = flt[flt_off + k * KN + 3];
                 DIRECT_CONV_CAL_CORE_S2(in_val, flt_val, out_val[3]);
 #endif
                 UPDATE_REG(in_val);

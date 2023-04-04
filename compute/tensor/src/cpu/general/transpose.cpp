@@ -13,8 +13,13 @@
 
 #include "cpu/general/tensor_computing_general.h"
 
-EE transpose_general(
-    TensorDesc inputDesc, const void *input, U32 *dim, TensorDesc outputDesc, void *output)
+EE transpose_general(TensorDesc inputDesc,
+    U32 *inDim,
+    const void *input,
+    U32 *dim,
+    TensorDesc outputDesc,
+    U32 *outDim,
+    void *output)
 {
     if (nullptr == input || nullptr == output || nullptr == dim) {
         CHECK_STATUS(NULL_POINTER);
@@ -31,13 +36,13 @@ EE transpose_general(
     for (U32 i = 0; i < outputSize; i++) {
         U32 outputIndex = i;
         for (U32 j = 0; j < outputDim; j++) {
-            U32 value = outputIndex % outputDesc.dims[j];
-            outputIndex /= outputDesc.dims[j];
+            U32 value = outputIndex % outDim[j];
+            outputIndex /= outDim[j];
             inputLocalIndex[inputDim - 1 - dim[outputDim - 1 - j]] = value;
         }
         U32 inputIndex = 0;
         for (U32 j = inputDim - 1; j > 0; j--) {
-            inputIndex = (inputIndex + inputLocalIndex[j]) * inputDesc.dims[j - 1];
+            inputIndex = (inputIndex + inputLocalIndex[j]) * inDim[j - 1];
         }
         inputIndex += inputLocalIndex[0];
         UNI_MEMCPY(output_ptr + i * bytesOf(outputDesc.dt),

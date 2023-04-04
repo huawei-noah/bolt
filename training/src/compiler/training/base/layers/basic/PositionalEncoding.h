@@ -26,7 +26,6 @@ namespace raul
  *
  * The layer encodes information about symbol position in sequence (e.g. word position in sentence) into its embedding vector.
  *
- * @see https://kazemnejad.com/blog/transformer_architecture_positional_encoding/
  */
 class PositionalEncoding : public BasicLayer
 {

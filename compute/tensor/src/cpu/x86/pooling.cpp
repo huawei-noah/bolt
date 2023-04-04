@@ -24,7 +24,8 @@ EE pooling_x86(TensorDesc inputDesc,
     PoolingParamSpec poolingParamSpec,
     void *scale,
     TensorDesc outputDesc,
-    void *output)
+    void *output,
+    void *idx)
 {
     EE ret = SUCCESS;
     switch (inputDesc.dt) {
@@ -33,13 +34,13 @@ EE pooling_x86(TensorDesc inputDesc,
             UNUSED(scale);
             if (inputDesc.df == DF_NCHWC8) {
                 ret = pooling_fp32(
-                    inputDesc, (const F32 *)input, poolingParamSpec, outputDesc, (F32 *)output);
+                    inputDesc, (const F32 *)input, poolingParamSpec, outputDesc, (F32 *)output, (I32 *)idx);
             } else if (inputDesc.df == DF_NCHWC16) {
                 ret = pooling_c16_fp32(
                     inputDesc, (const F32 *)input, poolingParamSpec, outputDesc, (F32 *)output);
-            } else if (inputDesc.df == DF_NCHW) {
+            } else if (inputDesc.df == DF_NCHW || inputDesc.df == DF_MTK || inputDesc.df == DF_NORMAL) {
                 ret = pooling_nchw_fp32(
-                    inputDesc, (const F32 *)input, poolingParamSpec, outputDesc, (F32 *)output);
+                    inputDesc, (const F32 *)input, poolingParamSpec, outputDesc, (F32 *)output, (I32 *)idx);
             } else {
                 ret = NOT_SUPPORTED;
             }
@@ -48,12 +49,8 @@ EE pooling_x86(TensorDesc inputDesc,
 #endif
 #ifdef _USE_INT8
         case DT_U8_Q: {
-            if (inputDesc.df == DF_NCHWC16) {
-                ret = pooling_c16_uint8(inputDesc, (const UINT8 *)input, poolingParamSpec,
-                    outputDesc, (UINT8 *)output, scale);
-            } else {
-                ret = NOT_SUPPORTED;
-            }
+            ret = pooling_uint8(inputDesc, (const UINT8 *)input, poolingParamSpec,
+                outputDesc, (UINT8 *)output, scale);
             break;
         }
 #endif

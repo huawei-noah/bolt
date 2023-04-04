@@ -14,8 +14,17 @@ SHARED_LIBRARY_SUFFIX=${8}
 STATIC_LIBRARY_PREFIX=${9}
 STATIC_LIBRARY_SUFFIX=${10}
 build_dir=${11}
+SHARED_LIBRARY=${12}
 
 CXXFLAGS=`echo ${CXXFLAGS} | sed 's/-fPIC//g'`
+if [[ ${SHARED_LIBRARY} == "OFF" ]]; then
+    if [[ ${CXX} =~ "g++" ]]; then
+        CXXFLAGS="${CXXFLAGS} -static-libgcc"
+        if [[ ${SYSTEM} == "Windows" ]]; then
+            CXXFLAGS="${CXXFLAGS} -static"
+        fi
+    fi
+fi
 NEWCXXFLAGS=`echo ${CXXFLAGS} | sed 's/-static-libstdc++//g'`
 NEWCXXFLAGS=`echo ${NEWCXXFLAGS} | sed 's/-static-libgcc//g'`
 NEWCXXFLAGS=`echo ${NEWCXXFLAGS} | sed 's/-static//g'`
@@ -50,17 +59,17 @@ searchFiles() {
 original_dir=${PWD}
 cd ${build_dir}
 allObjs=`find . -name "*${OBJ_FILE_SUFFIX}"`
-skip_list=("static" "model_tools" "tests" "tools" "examples" "flow" "data_loader" "training" "model_calibration")
+skip_list=("static" "model_tools" "tests" "tools" "examples" "flow" "data_loader" "training" "model_calibration" "bolt_cpp" "bolt_python")
 searchFiles
 jniLibraryObjs=${objs}
 
 allObjs=`find . -name "*${OBJ_FILE_SUFFIX}" | grep "static.dir"`
-skip_list=("tests" "tools" "examples" "BoltModel_Jni" "flow" "data_loader" "training" "model_calibration")
+skip_list=("tests" "tools" "examples" "flow" "data_loader" "training" "model_calibration" "bolt_jni" "bolt_cpp" "bolt_python")
 searchFiles
 staticLibraryObjs=${objs}
 
 allObjs=`find . -name "*${OBJ_FILE_SUFFIX}"`
-skip_list=("static" "tests" "tools" "examples" "BoltModel_Jni" "flow" "data_loader" "training" "model_calibration")
+skip_list=("static" "tests" "tools" "examples" "flow" "data_loader" "training" "model_calibration" "bolt_jni" "bolt_cpp" "bolt_python")
 searchFiles
 sharedLibraryObjs=${objs}
 
@@ -110,10 +119,10 @@ if [[ -f "${gcl_kernel_source_library}" && ${CXXFLAGS} =~ -D_USE_GPU ]]; then
         echo "[ERROR] please source third_party/<target>.sh before make."
         exit 1
     fi
-    LDFLAGS="${LDFLAGS} -L${OpenCL_ROOT}/lib -lOpenCL"
+    LDFLAGS="${LDFLAGS} ${OpenCL_ROOT}/lib/${SHARED_LIBRARY_PREFIX}OpenCL${SHARED_LIBRARY_SUFFIX}"
 fi
 
-if [[ ${apple_toolchain} == true ]]; then
+if [[ ${apple_toolchain} == true || ${SYSTEM} =~ Windows ]]; then
     BoltModel_write_so_name=""
     bolt_write_so_name=""
 else
@@ -124,20 +133,28 @@ if [[ ${SYSTEM} =~ Windows ]]; then
     BoltModel_write_so_name="${BoltModel_write_so_name} -Wl,--out-implib=BoltModel.lib"
     bolt_write_so_name="${bolt_write_so_name} -Wl,--out-implib=bolt.lib"
 fi
-${CXX} ${CXXFLAGS} -shared -o ${BoltModel_shared_library} ${jniLibraryObjs} ${LDFLAGS} ${BoltModel_write_so_name} &> .build_log.txt
-if [[ $? -ne 0 ]]; then
-    ${CXX} ${NEWCXXFLAGS} -shared -o ${BoltModel_shared_library} ${jniLibraryObjs} ${LDFLAGS} ${BoltModel_write_so_name} || exit 1
+if [[ ! ${SYSTEM} =~ Generic ]]; then
+    ${CXX} ${CXXFLAGS} -shared -o ${BoltModel_shared_library} ${jniLibraryObjs} ${LDFLAGS} ${BoltModel_write_so_name} &> .build_log.txt
+    if [[ $? -ne 0 ]]; then
+        ${CXX} ${NEWCXXFLAGS} -shared -o ${BoltModel_shared_library} ${jniLibraryObjs} ${LDFLAGS} ${BoltModel_write_so_name} || exit 1
+    fi
+    ${CXX} ${CXXFLAGS} -shared -o ${bolt_shared_library} ${sharedLibraryObjs} ${LDFLAGS} ${bolt_write_so_name} &> .build_log.txt
+    if [[ $? -ne 0 ]]; then
+        ${CXX} ${NEWCXXFLAGS} -shared -o ${bolt_shared_library} ${sharedLibraryObjs} ${LDFLAGS} ${bolt_write_so_name} || exit 1
+    fi
+    if [[ ! ${CXXFLAGS} =~ -D_DEBUG && ${apple_toolchain} == "false" ]]; then
+        ${STRIP} ${BoltModel_shared_library} &> .build_log.txt
+        ${STRIP} ${bolt_shared_library} &> .build_log.txt
+    fi
+else
+    touch ${BoltModel_shared_library}
+    touch ${bolt_shared_library}
 fi
-${CXX} ${CXXFLAGS} -shared -o ${bolt_shared_library} ${sharedLibraryObjs} ${LDFLAGS} ${bolt_write_so_name} &> .build_log.txt
-if [[ $? -ne 0 ]]; then
-    ${CXX} ${NEWCXXFLAGS} -shared -o ${bolt_shared_library} ${sharedLibraryObjs} ${LDFLAGS} ${bolt_write_so_name} || exit 1
+${AR} -rc ${bolt_static_library} ${staticLibraryObjs} > .build_log.txt || exit 1
+if [[ ! ${CXXFLAGS} =~ -D_DEBUG && ${apple_toolchain} == "false" && ${SYSTEM} != "Windows" ]]; then
+    ${STRIP} -g -S -d --strip-debug --strip-unneeded ${bolt_static_library} &> .build_log.txt
 fi
-rm .build_log.txt
-${AR} -rc ${bolt_static_library} ${staticLibraryObjs} || exit 1
 
-if [[ ! ${CXXFLAGS} =~ -D_DEBUG && ${apple_toolchain} == "false" ]]; then
-    ${STRIP} ${BoltModel_shared_library} || exit 1
-    ${STRIP} ${bolt_shared_library} || exit 1
-    #${STRIP} -g -S -d --strip-debug --strip-unneeded ${bolt_static_library} || exit 1
-fi
+rm .build_log.txt
+
 cd ${original_dir}

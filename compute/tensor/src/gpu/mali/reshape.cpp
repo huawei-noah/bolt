@@ -33,18 +33,8 @@ EE reshape_infer_forward_tmp_bytes_mali(TensorDesc inputDesc,
     GCLMemDesc gclmemOutputDesc,
     U32 *bytes)
 {
-    EE ret = SUCCESS;
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = reshape_infer_forward_tmp_bytes_mali_fp16(
-                inputDesc, outputDesc, gclmemInputDesc, gclmemOutputDesc, bytes);
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return reshape_infer_forward_tmp_bytes_mali_fp16(
+        inputDesc, outputDesc, gclmemInputDesc, gclmemOutputDesc, bytes);
 }
 
 EE reshape_mali(GCLHandle_t handle,
@@ -54,16 +44,6 @@ EE reshape_mali(GCLHandle_t handle,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
-    EE ret = SUCCESS;
     CHECK_STATUS(reshape_checkpara_mali(handle, inputDesc, input, outputDesc, output));
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = reshape_mali_fp16(handle, inputDesc, input, outputDesc, output, tmpbuf);
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return reshape_mali_fp16(handle, inputDesc, input, outputDesc, output, tmpbuf);
 }

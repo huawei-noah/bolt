@@ -14,43 +14,25 @@
 #ifndef _H_C_TEST
 #define _H_C_TEST
 
-#include "../../examples/c_api/c_common.h"
+#include <stdlib.h>
+
+#include "../api/c/bolt.h"
+#include "../api/c/bolt_simplify.h"
 
 extern char *modelPath;
+extern char *inputDataPath;
 extern AFFINITY_TYPE affinity;
 extern char *algorithmMapPath;
 extern int loopTime;
+extern int warmUp;
+extern int threadsNum;
 extern int useFileStream;
-extern char *algorithmMapName;
 
 double GetTimeMs();
 
 void PrintHelp();
 
-void ParseOptions(int argc, char *argv[]);
-
-void InitTensor(int num,
-    char **name,
-    const int *n,
-    const int *c,
-    const int *h,
-    const int *w,
-    const DATA_TYPE *dt,
-    const DATA_FORMAT *df,
-    void **data,
-    float value);
-
-void PrintTensor(int num,
-    char **name,
-    const int *n,
-    const int *c,
-    const int *h,
-    const int *w,
-    const DATA_TYPE *dt,
-    const DATA_FORMAT *df,
-    void **data,
-    const char *printPrefix,
-    int printElementNum);
+int ParseOptions(int argc, char *argv[]);
 
 char *BuildFileStream(const char *fileName);
 #endif

@@ -47,32 +47,11 @@ EE pooling_mali(GCLHandle_t handle,
     GCLMem_t output)
 {
     UNUSED(scale);
-    EE ret = SUCCESS;
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = pooling_mali_fp16(
-                handle, inputDesc, input, poolingParamSpec, outputDesc, output, temp);
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return pooling_mali_fp16(handle, inputDesc, input, poolingParamSpec, outputDesc, output, temp);
 }
 
 EE pooling_infer_forward_tmp_bytes_mali(
     TensorDesc inputDesc, U32 *bytes, ForwardRunInfoMali_t forwardRunInfo)
 {
-    EE ret = SUCCESS;
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = pooling_infer_forward_tmp_bytes_mali_fp16(inputDesc, bytes, forwardRunInfo);
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return pooling_infer_forward_tmp_bytes_mali_fp16(inputDesc, bytes, forwardRunInfo);
 }

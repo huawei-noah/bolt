@@ -33,22 +33,8 @@ EE expand_infer_forward_tmp_bytes_mali(TensorDesc inputDesc,
     GCLMemDesc gclmemOutputDesc,
     U32 *bytes)
 {
-    EE ret = SUCCESS;
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = expand_infer_forward_tmp_bytes_mali_fp16(
-                inputDesc, outputDesc, gclmemInputDesc, gclmemOutputDesc, bytes);
-            break;
-        }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return expand_infer_forward_tmp_bytes_mali_fp16(
+        inputDesc, outputDesc, gclmemInputDesc, gclmemOutputDesc, bytes);
 }
 
 EE expand_mali(GCLHandle_t handle,
@@ -59,20 +45,6 @@ EE expand_mali(GCLHandle_t handle,
     TensorDesc outputDesc,
     GCLMem_t output)
 {
-    EE ret = SUCCESS;
     CHECK_STATUS(expand_checkpara_mali(handle, inputDesc, input, outputDesc, output));
-    switch (inputDesc.dt) {
-        case DT_F16: {
-            ret = expand_mali_fp16(handle, inputDesc, input, p, tmpbuf, outputDesc, output);
-            break;
-        }
-        case DT_I8: {
-            ret = NOT_SUPPORTED;
-            break;
-        }
-        default:
-            ret = NOT_SUPPORTED;
-            break;
-    }
-    return ret;
+    return expand_mali_fp16(handle, inputDesc, input, p, tmpbuf, outputDesc, output);
 }

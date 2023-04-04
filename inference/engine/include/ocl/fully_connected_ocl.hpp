@@ -36,15 +36,14 @@ public:
 
     EE infer_weight_desc() override
     {
-        auto curOpWs = this->get_weightspec();
-        if (curOpWs.bytes_of_weight > 0) {
+        if (this->ws.bytes_of_weight > 0) {
             TensorDesc weightDesc =
                 tensor2df(this->dt, DF_NORMAL, this->p.num_outputs, this->numInput);
             Tensor modelWeightTensor = Tensor(OCLMem);
             modelWeightTensor.resize(weightDesc);
             this->weightTensors.push_back(modelWeightTensor);
         }
-        if (curOpWs.bytes_of_vec > 0) {
+        if (this->ws.bytes_of_vec > 0) {
             TensorDesc biasDesc = tensor1d(this->dt, this->p.num_outputs);
             Tensor modelVectorTensor = Tensor(OCLMem);
             modelVectorTensor.resize(biasDesc);
@@ -65,21 +64,22 @@ public:
             CONVOLUTION_ALGORITHM_NULL;
         I32 algo[4];
         std::string name = this->name + std::to_string(get_type());
+        EE ret = SUCCESS;
         if (algorithmMap->getAlgorithmInfoFromMap(name, algo, 4)) {
             this->runInfo.algorithm = (ConvolutionForwardAlgorithm)algo[0];
             this->runInfo.best_h[0] = algo[1];
             this->runInfo.best_c[0] = algo[2];
             this->runInfo.best_k[0] = algo[3];
         } else {
-            CHECK_STATUS(fully_connected_infer_forward_algorithm(
-                inputTensor, filterTensor, outputTensor, &this->archInfo));
+            ret = fully_connected_infer_forward_algorithm(
+                inputTensor, filterTensor, outputTensor, &this->archInfo);
             algo[0] = this->runInfo.algorithm;
             algo[1] = this->runInfo.best_h[0];
             algo[2] = this->runInfo.best_c[0];
             algo[3] = this->runInfo.best_k[0];
             algorithmMap->setAlgorithmInfoToMap(name, algo, 4);
         }
-        return SUCCESS;
+        return ret;
     }
 
     inline void run_prepare()
@@ -121,18 +121,18 @@ public:
             tensor2df(this->dt, DF_NORMAL, this->p.num_outputs, this->numInput);
         Tensor filterTensor = Tensor(OCLMem);
         filterTensor.resize(filterDesc2D);
-        CHECK_STATUS(fully_connected_infer_output_size(
-            inTensors[0], filterTensor, outTensors[0], &this->archInfo));
+        EE ret = fully_connected_infer_output_size(
+            inTensors[0], filterTensor, outTensors[0], &this->archInfo);
         U32 row = tensorNumElements(inputDesc) / this->numInput;
-        if (row > 1 && check_tensors_image(inTensors)) {
-            CHECK_STATUS(set_tensors_image(outTensors, inTensors.size()));
+        if (ret == SUCCESS && check_tensors_image(inTensors) && row > 1) {
+            ret = set_tensors_image(outTensors, inTensors.size());
         }
         if (inTensors.size() > 1) {
             auto biasMem = (OclMemory *)inTensors[1]->get_memory();
             biasMem->padding(0, 8, 0, 0);
         }
         CHECK_REQUIREMENT(this->p.num_slices == 1);
-        return SUCCESS;
+        return ret;
     }
 
     U32 infer_tmp_memory_size() override
@@ -149,23 +149,24 @@ public:
         return bytes[0];
     }
 
-    EE alloc_wtm_memory() override
+    EE alloc_wtm_memory()
     {
         Tensor filterTensor = this->weightTensors[0];
         Tensor outputTensor = this->outputTensors[0];
         TensorDesc outputDesc = outputTensor.get_desc();
         TensorDesc ftmDesc;
 
-        CHECK_STATUS(
-            fully_connected_transform_filter_bytes(filterTensor, &ftmDesc, &this->archInfo));
-        this->wtm = std::shared_ptr<Tensor>(new Tensor(OCLMem));
-        this->wtm->resize(ftmDesc);
-        U32 row = outputDesc.dims[1];
-        if (row > 1) {
-            CHECK_STATUS(set_wtm_image(ftmDesc));
+        EE ret = fully_connected_transform_filter_bytes(filterTensor, &ftmDesc, &this->archInfo);
+        if (ret == SUCCESS) {
+            this->wtm = std::shared_ptr<Tensor>(new Tensor(OCLMem));
+            this->wtm->resize(ftmDesc);
+            U32 row = outputDesc.dims[1];
+            if (row > 1) {
+                CHECK_STATUS(set_wtm_image(ftmDesc));
+            }
+            this->wtm->alloc();
         }
-        this->wtm->alloc();
-        return SUCCESS;
+        return ret;
     }
 
     EE transform_filter() override
@@ -173,11 +174,13 @@ public:
         Tensor inputTensor = this->inputTensors[0];
         Tensor filterTensor = this->weightTensors[0];
         CHECK_REQUIREMENT(this->p.num_slices == 1);
-        CHECK_STATUS(alloc_wtm_memory());
-        CHECK_STATUS(fully_connected_transform_filter(
-            inputTensor, filterTensor, this->wtm.get(), &this->archInfo));
-        this->weightTensors[0] = *this->get_wtm();
-        return SUCCESS;
+        EE ret = alloc_wtm_memory();
+        if (ret == SUCCESS) {
+            ret = fully_connected_transform_filter(
+                inputTensor, filterTensor, this->wtm.get(), &this->archInfo);
+            this->weightTensors[0] = *(this->wtm.get());
+        }
+        return ret;
     }
 
     REGISTER_OCL_OPERATOR_RUN

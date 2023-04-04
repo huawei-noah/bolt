@@ -39,11 +39,10 @@ public:
         OCLContext::getInstance().handle.get()->curOpName = this->get_name();
         Tensor inputTensor = this->inputTensors[0];
         Tensor gridTensor = this->inputTensors[1];
-        Tensor outputTensor = this->outputTensors[0];
-
-        if (this->p.mode == BSLICE_APPLY_NULL) {
+        if (this->p.mode == BILATERAL_SLICE_APPLY_NULL) {
             this->guideTensor = this->inputTensors[2];
         }
+        Tensor outputTensor = this->outputTensors[0];
         CHECK_STATUS(bilateral_slice_apply(
             inputTensor, guideTensor, gridTensor, p, this->temp, outputTensor, &this->archInfo));
     }
@@ -54,20 +53,9 @@ public:
         this->needSetKernelVec = true;
         auto inTensor = inTensors[0];
         auto gridTensor = inTensors[1];
-        auto inDim = inTensor->get_desc();
-        DataType dt;
-        DataFormat df;
-        U32 width;
-        U32 height;
-        U32 numChannels;
-        U32 num;
-        CHECK_STATUS(tensor4dGet(inDim, &dt, &df, &num, &numChannels, &height, &width));
-        TensorDesc guideDesc = tensor4df(DT_F16, df, num, 1, height, width);
-        this->guideTensor.resize(guideDesc);
-
-        CHECK_STATUS(bilateral_slice_apply_infer_output_size(
-            inTensor, &guideTensor, gridTensor, p, outTensors[0], &this->archInfo));
-        return SUCCESS;
+        this->update_guide(inTensors);
+        return bilateral_slice_apply_infer_output_size(
+            inTensor, &guideTensor, gridTensor, p, outTensors[0], &this->archInfo);
     }
 
     U32 infer_tmp_memory_size() override
@@ -79,8 +67,6 @@ public:
     }
 
     REGISTER_OCL_OPERATOR_RUN
-private:
-    Tensor guideTensor;
 };
 
 #endif  // _BILATERAL_SLICE_APPLY_OCL_H

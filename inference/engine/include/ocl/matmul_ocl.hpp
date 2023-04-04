@@ -63,21 +63,22 @@ public:
             CONVOLUTION_ALGORITHM_NULL;
         I32 algo[4];
         std::string name = this->name + std::to_string(get_type());
+        EE ret = SUCCESS;
         if (algorithmMap->getAlgorithmInfoFromMap(name, algo, 4)) {
             this->runInfo.algorithm = (ConvolutionForwardAlgorithm)algo[0];
             this->runInfo.best_h[0] = algo[1];
             this->runInfo.best_c[0] = algo[2];
             this->runInfo.best_k[0] = algo[3];
         } else {
-            CHECK_STATUS(matmul_infer_forward_algorithm(matrixATensor, this->p.transpose_a,
-                matrixBTensor, this->p.transpose_b, matrixCTensor, &this->archInfo));
+            ret = matmul_infer_forward_algorithm(matrixATensor, this->p.transpose_a, matrixBTensor,
+                this->p.transpose_b, matrixCTensor, &this->archInfo);
             algo[0] = this->runInfo.algorithm;
             algo[1] = this->runInfo.best_h[0];
             algo[2] = this->runInfo.best_c[0];
             algo[3] = this->runInfo.best_k[0];
             algorithmMap->setAlgorithmInfoToMap(name, algo, 4);
         }
-        return SUCCESS;
+        return ret;
     }
 
     EE infer_output_tensors_size(
@@ -85,12 +86,12 @@ public:
     {
         this->needSetKernelVec = true;
         CHECK_REQUIREMENT(inTensors.size() == 2);
-        CHECK_STATUS(matmul_infer_output_size(inTensors[0], this->p.transpose_a, inTensors[1],
-            this->p.transpose_b, outTensors[0], &this->archInfo));
-        if (check_tensors_image(inTensors)) {
-            CHECK_STATUS(set_tensors_image(outTensors, inTensors.size()));
+        EE ret = matmul_infer_output_size(inTensors[0], this->p.transpose_a, inTensors[1],
+            this->p.transpose_b, outTensors[0], &this->archInfo);
+        if (ret == SUCCESS && check_tensors_image(inTensors)) {
+            ret = set_tensors_image(outTensors, inTensors.size());
         }
-        return SUCCESS;
+        return ret;
     }
 
     U32 infer_tmp_memory_size() override
