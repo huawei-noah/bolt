@@ -400,7 +400,7 @@ void gemmCPUImpl(OPENBLAS_CONST CBLAS_TRANSPOSE transA,
         TensorDesc matrixCDesc = tensor1d(DT_F16, static_cast<U32>(n));
         if (0 == beta)
         {
-            memset(c, 0, tensorNumBytes(matrixCDesc));
+            memset(static_cast<void*>(c), 0, tensorNumBytes(matrixCDesc));
         }
         CHECK_STATUS(matrix_vector_multiply(matrixBDesc, b + bOffset, matrixADesc, a, 0, nullptr, matrixCDesc, c, nullptr, get_cpu_arch()));
     }
@@ -410,7 +410,7 @@ void gemmCPUImpl(OPENBLAS_CONST CBLAS_TRANSPOSE transA,
         TensorDesc matrixCDesc = tensor1d(DT_F16, static_cast<U32>(m));
         if (0 == beta)
         {
-            memset(c, 0, tensorNumBytes(matrixCDesc));
+            memset(static_cast<void*>(c), 0, tensorNumBytes(matrixCDesc));
         }
         CHECK_STATUS(matrix_vector_multiply(matrixADesc, a, matrixBDesc, b + bOffset, 0, nullptr, matrixCDesc, c, nullptr, get_cpu_arch()));
     }
@@ -422,7 +422,7 @@ void gemmCPUImpl(OPENBLAS_CONST CBLAS_TRANSPOSE transA,
         vector<char> tmp(bytes);
         if (0 == beta)
         {
-            memset(c, 0, tensorNumBytes(matrixCDesc));
+            memset(static_cast<void*>(c), 0, tensorNumBytes(matrixCDesc));
         }
         CHECK_STATUS(matrix_matrix_multiply(matrixADesc, a, matrixBDesc, b + bOffset, bytes, tmp.data(), matrixCDesc, c, nullptr, get_cpu_arch()));
     }
