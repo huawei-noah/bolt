@@ -16,7 +16,7 @@ and this project adheres to [Semantic Versioning](<https://semver.org/spec/v2.0.
 - Support Intel Desktop GPU (float16 and float32)
 - Support Windows on arm platform
 - Support more operators : Random, Sin, Cos, Einsum, Elu, UnPooling, Flatten, ConvertColor, BilateralSliceApply, Lut
-- Support more networks : ViTAE, CMT, EfficientFormer, hdrnet, 3dLut, ConvTT, Wenet, NFM, AFM, ONN, wide&deep, DeepFM, MMOE, etc
+- Support more networks : ViTAE, CMT, EfficientFormer, ConvTT, Wenet, NFM, AFM, ONN, wide&deep, DeepFM, MMOE, etc
 - Improve multi-threads parallel inference performance on CPU
 - Add simple chinese deployment guide
 - Support model file compatibility
