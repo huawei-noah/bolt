@@ -141,7 +141,6 @@ int FreeTensor(
         c, h, w, dt, df, data);
     int ret = 0;
     if (num > 0) {
-        FreeTensorDesc(num, name, n, c, h, w, dt, df);
         for (int i = 0; i < num; i++) {
             UNI_FREE(data[i]);
         }

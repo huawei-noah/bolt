@@ -35,8 +35,8 @@
     }
 #endif
 
-#if OT == uchar
-#define func convert_uchar_sat
+#if defined(OUTPUT_UCHAR)
+#define func convert_uchar_sat_rte
 #else
 #define func
 #endif
@@ -80,8 +80,8 @@ __kernel void KERNEL_NAME(const int iw_str,
     tblr.y = min(tblr.x + 1, iw - 1);  // R
     tblr.z = max(0, (int)floor(iy));   // T
     tblr.w = min(tblr.z + 1, ih - 1);  // B
-    T dif1 = ix - tblr.x;              // C-L
-    T dif2 = iy - tblr.z;              // C-T
+    T dif1 = ix - (float)tblr.x;              // C-L
+    T dif2 = iy - (float)tblr.z;              // C-T
 
 #if defined(USE_NCHW) || defined(USE_NHWC)
     int x = (idz * ih_str + tblr.z) * iw_str + tblr.x + i_off;  // TL_off
