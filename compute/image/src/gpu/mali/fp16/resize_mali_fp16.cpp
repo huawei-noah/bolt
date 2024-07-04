@@ -30,15 +30,22 @@ inline EE resize_core_mali_fp16(GCLHandle_t handle,
     GCLMem_t output)
 {
     DataType idt, odt;
+    DataFormat idf;
     U32 iw, ih, ic, in;
     U32 ow, oh, oc, on;
-    tensorSelectGet(inputDesc, &idt, NULL, &in, &ic, &ih, &iw);
+    tensorSelectGet(inputDesc, &idt, idf, &in, &ic, &ih, &iw);
     tensorSelectGet(outputDesc, &odt, NULL, &on, &oc, &oh, &ow);
 
     U32 iw_str, ih_str, iw_off, ih_off, i_off;
     U32 ow_str, oh_str, ow_off, oh_off, o_off;
     get_gclmem_dim(input->desc, &iw_str, &ih_str, NULL, &iw_off, &ih_off);
     get_gclmem_dim(output->desc, &ow_str, &oh_str, NULL, &ow_off, &oh_off);
+    if (iw_str < iw) {
+        ih_str = ih;
+        iw_str = iw;
+        oh_str = oh;
+        ow_str = ow;
+    }
     cl_mem inbuf = input->mem;
     cl_mem outbuf = output->mem;
     GCLMemType inputMemType = input->desc.memType;
@@ -53,9 +60,9 @@ inline EE resize_core_mali_fp16(GCLHandle_t handle,
     U32 dim = 3;
     U32 gs[3] = {ow, oh, 0};
     U32 ls[3] = {0, 0, 0};
-    if (input->desc.df == DF_NCHWC4) {
+    if (idf == DF_NCHWC4) {
         gs[2] = (oc + 3) / 4 * on;
-    } else if (input->desc.df == DF_NHWC) {
+    } else if (idf == DF_NHWC) {
         gs[2] = on;
     } else {
         gs[2] = oc * on;
@@ -64,8 +71,8 @@ inline EE resize_core_mali_fp16(GCLHandle_t handle,
     Kernel kernel;
     KernelOpt kernelOpt;
     char kernelName[128];
-    CHECK_STATUS(set_resize_opt_mali(
-        p, input->desc.df, idt, odt, inputMemType, outputMemType, kernelName, &kernelOpt));
+    CHECK_STATUS(
+        set_resize_opt_mali(p, idf, idt, odt, inputMemType, outputMemType, kernelName, &kernelOpt));
     CHECK_STATUS(gcl_create_kernel(handle, kernelName, &kernel, &kernelOpt));
     CHECK_STATUS(gcl_set_kernelArgs(kernel, iw_str, ih_str, i_off, iw, ih, ow_str, oh_str, o_off,
         ow, oh, r0_w, r0_h, r1_w, r1_h, inbuf, outbuf));

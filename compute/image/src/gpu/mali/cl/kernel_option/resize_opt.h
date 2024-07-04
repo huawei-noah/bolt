@@ -12,11 +12,14 @@ inline EE set_resize_opt_mali(ResizeParamSpec p,
     char *kernelName,
     KernelOpt *kernelOpt)
 {
-#ifdef _USE_FP16
-    kernelOpt->kernelDataType = DT_F16;
-#else
-    kernelOpt->kernelDataType = DT_F32;
-#endif
+    DataType dt = idt;
+    if (bytesOf(odt) > bytesOf(idt)) {
+        dt = odt;
+    }
+    if (bytesOf(dt) < 2) {
+        dt = DT_F32;
+    }
+    kernelOpt->kernelDataType = dt;
     char *opt = kernelOpt->option;
     std::string source;
     if (p.mode == RESIZE_NEAREST) {
@@ -55,9 +58,13 @@ inline EE set_resize_opt_mali(ResizeParamSpec p,
     } else {
         CHECK_STATUS(add_macro(opt, "USE_NCHW"));
     }
+    if (odt == DT_U8) {
+        CHECK_STATUS(add_macro(opt, "OUTPUT_UCHAR"));
+    }
     std::string idtName = gcl_get_type(idt);
     std::string odtName = gcl_get_type(odt);
     CHECK_STATUS(add_macro(opt, "IT", idtName));
+    CHECK_STATUS(add_macro(opt, "IT4", idtName + "4"));
     CHECK_STATUS(add_macro(opt, "OT", odtName));
     CHECK_STATUS(add_macro_type(opt, kernelOpt->kernelDataType));
     CHECK_STATUS(add_macro_io(opt, inputMemType, outputMemType));

@@ -28,6 +28,14 @@
 #include "cpu/x86/image_x86.h"
 #endif
 
+static bool is_implicit_nhwc(TensorDesc desc) {
+    bool ret = false;
+    if (desc.df == DF_NCHW && desc.dims[0] == 3 && desc.dims[1] > 3 && desc.dims[2] > 3) {
+        ret = true;
+    }
+    return ret;
+}
+
 // params is a pointer to either the target size or the resize ratios
 // When paramDT specifies DT_U32, params should point to target sizes (height and width)
 // When paramDT specifies DT_F32, params should point to resize ratios
@@ -37,10 +45,18 @@ EE resize_infer_output_size_cpu(TensorDesc inputDesc, ResizeParamSpec p, TensorD
     DataFormat idf, odf;
     U32 in, ic, ih, iw = 1;
     U32 oh, ow = 1;
+    bool nhwc = false;
     if (tensorIs3d(inputDesc)) {
         CHECK_STATUS(tensor3dGet(inputDesc, &idt, &idf, &in, &ic, &ih));
     } else if (tensorIs4d(inputDesc)) {
         CHECK_STATUS(tensor4dGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw));
+        nhwc = is_implicit_nhwc(inputDesc);
+        if (nhwc) {
+            int t = iw;
+            iw = ih;
+            ih = ic;
+            ic = t;
+        }
     } else {
         UNI_ERROR_LOG("can support to resize %d-dim tensor.\n", inputDesc.nDims);
     }
@@ -77,7 +93,11 @@ EE resize_infer_output_size_cpu(TensorDesc inputDesc, ResizeParamSpec p, TensorD
     if (tensorIs3d(inputDesc)) {
         *outputDesc = tensor3df(idt, odf, in, ic, oh);
     } else if (tensorIs4d(inputDesc)) {
-        *outputDesc = tensor4df(idt, odf, in, ic, oh, ow);
+        if (nhwc) {
+            *outputDesc = tensor4df(idt, odf, in, oh, ow, ic);
+        } else {
+            *outputDesc = tensor4df(idt, odf, in, ic, oh, ow);
+        }
     }
     return SUCCESS;
 }
@@ -201,6 +221,34 @@ EE resize_nearest(TensorDesc inputDesc,
     return ret;
 }
 
+static bool update(TensorDesc &inputDesc, TensorDesc &outputDesc) {
+    bool ret = false;
+    if (is_implicit_nhwc(inputDesc) && inputDesc.dims[0] == outputDesc.dims[0]) {
+        TensorDesc desc0 = inputDesc;
+        U32 v = inputDesc.dims[0];
+        for (U32 i = 0; i < inputDesc.nDims; i++) {
+            inputDesc.dims[i - 1] = inputDesc.dims[i];
+        }
+        inputDesc.dims[inputDesc.nDims - 2] = v;
+        inputDesc.df = DF_NCHW;
+
+        TensorDesc desc1 = outputDesc;
+        v = outputDesc.dims[0];
+        for (U32 i = 1; i < outputDesc.nDims; i++) {
+            outputDesc.dims[i - 1] = outputDesc.dims[i];
+        }
+        outputDesc.dims[outputDesc.nDims - 2] = v;
+        outputDesc.df = DF_NHWC;
+
+        UNI_DEBUG_LOG("change input from %s -> %s.\n", tensorDesc2Str(desc0).c_str(),
+            tensorDesc2Str(inputDesc).c_str());
+        UNI_DEBUG_LOG("change output from %s -> %s.\n", tensorDesc2Str(desc1).c_str(),
+            tensorDesc2Str(outputDesc).c_str());
+        ret = true;
+    }
+    return ret;
+}
+
 EE resize(
     Tensor inputTensor, ResizeParamSpec p, Tensor tmpTensor, Tensor outputTensor, ArchInfo_t archInfo)
 {
@@ -210,6 +258,7 @@ EE resize(
     TensorDesc outputDesc = outputTensor.get_desc();
     void *output = get_ptr_from_tensor(outputTensor, arch);
     void *tmp = get_ptr_from_tensor(tmpTensor, arch);
+    update(inputDesc, outputDesc);
 
     if (inputDesc.nDims == 3) {
         for (int i = inputDesc.nDims; i > 0; i--) {
