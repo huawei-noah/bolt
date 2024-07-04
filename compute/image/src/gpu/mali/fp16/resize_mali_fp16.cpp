@@ -33,7 +33,7 @@ inline EE resize_core_mali_fp16(GCLHandle_t handle,
     DataFormat idf;
     U32 iw, ih, ic, in;
     U32 ow, oh, oc, on;
-    tensorSelectGet(inputDesc, &idt, idf, &in, &ic, &ih, &iw);
+    tensorSelectGet(inputDesc, &idt, &idf, &in, &ic, &ih, &iw);
     tensorSelectGet(outputDesc, &odt, NULL, &on, &oc, &oh, &ow);
 
     U32 iw_str, ih_str, iw_off, ih_off, i_off;
