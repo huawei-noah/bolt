@@ -219,7 +219,7 @@ public:
 
     bool isNotNaiveRelu(OperatorSpec *op)
     {
-        return ((op->type == OT_Relu) && (op->ps.relu_spec.neg_slope != 0));
+        return ((op->type == OT_Relu && op->ps.relu_spec.neg_slope != 0) || op->type == OT_Relu6);
     }
 
     bool isAvgPooling(OperatorSpec *op)

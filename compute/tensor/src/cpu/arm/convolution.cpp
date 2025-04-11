@@ -351,7 +351,7 @@ EE convolution_infer_forward_tmp_bytes_arm(TensorDesc inputDesc,
             if (fdt == DT_I8) {
                 *bytes += ic * it * ih * iw;
             }
-            if ((odt == DT_I8) || (odt == DT_F32)) {
+            if (odt != DT_I32) {
                 // scaled bias + results before quantization
                 *bytes += (oc + on * oc * ot * oh * ow) * bytesOf(DT_I32);
             }
